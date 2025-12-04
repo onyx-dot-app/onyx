@@ -1,3 +1,5 @@
+# Note, this file and all SavedSearchSettings things are not being used in live code paths (at least at the time of this comment)
+# Kept around as it may be useful in the future
 from typing import cast
 
 from onyx.configs.constants import KV_SEARCH_SETTINGS

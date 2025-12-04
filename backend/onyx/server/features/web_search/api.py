@@ -4,7 +4,6 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
-from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.db.web_search import fetch_active_web_content_provider
@@ -43,6 +42,9 @@ from shared_configs.enums import WebSearchProviderType
 
 router = APIRouter(prefix="/web-search")
 logger = setup_logger()
+
+
+DOCUMENT_CITATION_NUMBER_EMPTY_VALUE = -1
 
 
 def _get_active_search_provider(

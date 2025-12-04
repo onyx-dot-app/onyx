@@ -1,10 +1,13 @@
-import type { SVGProps } from "react";
+import { IconProps } from "@/icons";
 
-const SvgCheckSquare = (props: SVGProps<SVGSVGElement>) => (
+const SvgCheckSquare = ({ size, ...props }: IconProps) => (
   <svg
+    width={size}
+    height={size}
     viewBox="0 0 16 16"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
+    stroke="currentColor"
     {...props}
   >
     <g clipPath="url(#clip0_604_4473)">

@@ -269,9 +269,8 @@ def create_update_persona(
             system_prompt=create_persona_request.system_prompt,
             task_prompt=create_persona_request.task_prompt,
             datetime_aware=create_persona_request.datetime_aware,
-            icon_color=create_persona_request.icon_color,
-            icon_shape=create_persona_request.icon_shape,
             uploaded_image_id=create_persona_request.uploaded_image_id,
+            icon_name=create_persona_request.icon_name,
             display_priority=create_persona_request.display_priority,
             remove_image=create_persona_request.remove_image,
             search_start_date=create_persona_request.search_start_date,
@@ -738,9 +737,8 @@ def upsert_persona(
     tool_ids: list[int] | None = None,
     persona_id: int | None = None,
     commit: bool = True,
-    icon_color: str | None = None,
-    icon_shape: int | None = None,
     uploaded_image_id: str | None = None,
+    icon_name: str | None = None,
     display_priority: int | None = None,
     is_visible: bool = True,
     remove_image: bool | None = None,
@@ -841,10 +839,9 @@ def upsert_persona(
         existing_persona.starter_messages = starter_messages
         existing_persona.deleted = False  # Un-delete if previously deleted
         existing_persona.is_public = is_public
-        existing_persona.icon_color = icon_color
-        existing_persona.icon_shape = icon_shape
         if remove_image or uploaded_image_id:
             existing_persona.uploaded_image_id = uploaded_image_id
+        existing_persona.icon_name = icon_name
         existing_persona.is_visible = is_visible
         existing_persona.search_start_date = search_start_date
         existing_persona.labels = labels or []
@@ -905,9 +902,8 @@ def upsert_persona(
             llm_model_version_override=llm_model_version_override,
             starter_messages=starter_messages,
             tools=tools or [],
-            icon_shape=icon_shape,
-            icon_color=icon_color,
             uploaded_image_id=uploaded_image_id,
+            icon_name=icon_name,
             display_priority=display_priority,
             is_visible=is_visible,
             search_start_date=search_start_date,

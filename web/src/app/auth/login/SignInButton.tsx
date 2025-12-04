@@ -3,7 +3,7 @@
 import Button from "@/refresh-components/buttons/Button";
 import { AuthType } from "@/lib/constants";
 import { FcGoogle } from "react-icons/fc";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 
 interface SignInButtonProps {
   authorizeUrl: string;
@@ -15,7 +15,7 @@ export default function SignInButton({
   authType,
 }: SignInButtonProps) {
   let button: React.ReactNode;
-  let icon: React.FunctionComponent<SvgProps> | undefined;
+  let icon: React.FunctionComponent<IconProps> | undefined;
 
   if (authType === AuthType.GOOGLE_OAUTH || authType === AuthType.CLOUD) {
     button = "Continue with Google";

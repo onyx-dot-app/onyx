@@ -1,12 +1,12 @@
 import { ReactNode } from "react";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 
 export interface StepSidebarProps {
   children: ReactNode;
   buttonName: string;
-  buttonIcon: React.FunctionComponent<SvgProps>;
+  buttonIcon: React.FunctionComponent<IconProps>;
   buttonHref: string;
 }
 

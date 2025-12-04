@@ -1,7 +1,6 @@
 "use client";
 import { use } from "react";
 
-import { GroupsIcon } from "@/components/icons/icons";
 import { GroupDisplay } from "./GroupDisplay";
 import { useSpecificUserGroup } from "./hook";
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -9,6 +8,7 @@ import { useConnectorStatus, useUsers } from "@/lib/hooks";
 import { useRouter } from "next/navigation";
 import { BackButton } from "@/components/BackButton";
 import { AdminPageTitle } from "@/components/admin/Title";
+import SvgUsers from "@/icons/users";
 
 const Page = (props: { params: Promise<{ groupId: string }> }) => {
   const params = use(props.params);
@@ -55,10 +55,7 @@ const Page = (props: { params: Promise<{ groupId: string }> }) => {
     <div className="mx-auto container">
       <BackButton />
 
-      <AdminPageTitle
-        title={userGroup.name || "Unknown"}
-        icon={<GroupsIcon size={32} />}
-      />
+      <AdminPageTitle title={userGroup.name || "Unknown"} icon={SvgUsers} />
 
       {userGroup ? (
         <GroupDisplay

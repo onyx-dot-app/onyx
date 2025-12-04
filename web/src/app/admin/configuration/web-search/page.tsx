@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import dynamic from "next/dynamic";
 import {
   useEffect,
   useMemo,
@@ -32,6 +31,7 @@ import SvgArrowRightCircle from "@/icons/arrow-right-circle";
 import RawModal from "@/refresh-components/RawModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgX from "@/icons/x";
+import SvgGlobe from "@/icons/globe";
 
 type WebSearchProviderType = "google_pse" | "serper" | "exa";
 type WebContentProviderType = "firecrawl" | "onyx_web_crawler" | (string & {});
@@ -805,7 +805,7 @@ export default function Page() {
       <div className="container mx-auto">
         <AdminPageTitle
           title="Web Search"
-          icon={<GlobeIcon size={32} className="my-auto" />}
+          icon={SvgGlobe}
           includeDivider={false}
         />
         <Callout type="danger" title="Failed to load web search settings">
@@ -825,7 +825,7 @@ export default function Page() {
       <div className="container mx-auto">
         <AdminPageTitle
           title="Web Search"
-          icon={<GlobeIcon size={32} className="my-auto" />}
+          icon={SvgGlobe}
           includeDivider={false}
         />
         <div className="mt-8">

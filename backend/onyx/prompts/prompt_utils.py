@@ -1,17 +1,10 @@
-from collections.abc import Sequence
 from datetime import datetime
 from typing import cast
 
 from langchain_core.messages import BaseMessage
 
-from onyx.chat.models import LlmDoc
-from onyx.chat.models import PromptConfig
-from onyx.configs.chat_configs import LANGUAGE_HINT
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.models import InferenceChunk
-from onyx.db.models import Persona
 from onyx.prompts.chat_prompts import ADDITIONAL_INFO
-from onyx.prompts.chat_prompts import CITATION_REMINDER
 from onyx.prompts.chat_prompts import COMPANY_DESCRIPTION_BLOCK
 from onyx.prompts.chat_prompts import COMPANY_NAME_BLOCK
 from onyx.prompts.constants import CODE_BLOCK_PAT
@@ -64,12 +57,6 @@ def replace_current_datetime_tag(
     )
 
 
-def build_date_time_string() -> str:
-    return ADDITIONAL_INFO.format(
-        datetime_info=_BASIC_TIME_STR.format(datetime_info=get_current_llm_day_time())
-    )
-
-
 def handle_onyx_date_awareness(
     prompt_str: str,
     # We always replace the pattern [[CURRENT_DATETIME]] if it shows up
@@ -92,7 +79,11 @@ def handle_onyx_date_awareness(
         return prompt_with_datetime
 
     if datetime_aware:
-        return prompt_str + build_date_time_string()
+        return prompt_str + ADDITIONAL_INFO.format(
+            datetime_info=_BASIC_TIME_STR.format(
+                datetime_info=get_current_llm_day_time()
+            )
+        )
 
     return prompt_str
 
@@ -118,22 +109,6 @@ def get_company_context() -> str | None:
     except Exception as e:
         logger.error(f"Error handling company awareness: {e}")
         return None
-
-
-def build_task_prompt_reminders(
-    prompt: Persona | PromptConfig,
-    use_language_hint: bool,
-    citation_str: str = CITATION_REMINDER,
-    language_hint_str: str = LANGUAGE_HINT,
-) -> str:
-    base_task = (
-        prompt.reminder
-        if isinstance(prompt, PromptConfig)
-        else prompt.task_prompt or ""
-    )
-    citation_or_nothing = citation_str
-    language_hint_or_nothing = language_hint_str.lstrip() if use_language_hint else ""
-    return base_task + citation_or_nothing + language_hint_or_nothing
 
 
 # Maps connector enum string to a more natural language representation for the LLM
@@ -178,25 +153,6 @@ def build_doc_context_str(
             context_str += f"Updated: {update_str}\n"
     context_str += f"{CODE_BLOCK_PAT.format(content.strip())}\n\n\n"
     return context_str
-
-
-def build_complete_context_str(
-    context_docs: Sequence[LlmDoc | InferenceChunk],
-    include_metadata: bool = True,
-) -> str:
-    context_str = ""
-    for ind, doc in enumerate(context_docs, start=1):
-        context_str += build_doc_context_str(
-            semantic_identifier=doc.semantic_identifier,
-            source_type=doc.source_type,
-            content=doc.content,
-            metadata_dict=doc.metadata,
-            updated_at=doc.updated_at,
-            ind=ind,
-            include_metadata=include_metadata,
-        )
-
-    return context_str.strip()
 
 
 _PER_MESSAGE_TOKEN_BUFFER = 7

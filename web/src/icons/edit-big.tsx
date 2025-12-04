@@ -1,10 +1,13 @@
-import * as React from "react";
-import type { SVGProps } from "react";
-const SvgEditBig = (props: SVGProps<SVGSVGElement>) => (
+import { IconProps } from "@/icons";
+
+const SvgEditBig = ({ size, ...props }: IconProps) => (
   <svg
+    width={size}
+    height={size}
     viewBox="0 0 16 16"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
+    stroke="currentColor"
     {...props}
   >
     <path
