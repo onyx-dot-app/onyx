@@ -9,6 +9,7 @@ import { SlackBotTable } from "./SlackBotTable";
 import { useSlackBots } from "./[bot-id]/hooks";
 import { ValidSources } from "@/lib/types";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
+import { DOCS_ADMINS_PATH } from "@/lib/constants";
 
 const Main = () => {
   const {
@@ -60,7 +61,7 @@ const Main = () => {
         Follow the{" "}
         <a
           className="text-blue-500 hover:underline"
-          href="https://docs.onyx.app/admin/getting_started/slack_bot_setup"
+          href={`${DOCS_ADMINS_PATH}/getting_started/slack_bot_setup`}
           target="_blank"
           rel="noopener noreferrer"
         >
