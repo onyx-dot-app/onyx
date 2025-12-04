@@ -86,7 +86,8 @@ export default function CustomAgentAvatar({
     trimmedName && trimmedName.length > 0
       ? trimmedName[0]!.toUpperCase()
       : undefined;
-  if (firstLetter) {
+  const validFirstLetter = !!firstLetter && /^[a-zA-Z]$/.test(firstLetter);
+  if (validFirstLetter) {
     return (
       <SvgOctagonWrapper size={size}>
         <Text as="span" style={{ fontSize: size * 0.5 }}>
