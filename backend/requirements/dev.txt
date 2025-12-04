@@ -250,6 +250,7 @@ numpy==1.26.4
     #   pandas-stubs
     #   shapely
     #   voyageai
+onyx-devtools==0.0.1
 openai==2.8.1
     # via
     #   litellm

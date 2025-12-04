@@ -175,6 +175,7 @@ dev = [
     "ipykernel==6.29.5",
     "release-tag==0.4.3",
     "zizmor==1.18.0",
+    "onyx-devtools==0.0.1",
 ]
 
 # Enterprise Edition features
