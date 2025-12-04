@@ -1,8 +1,8 @@
+"use client";
+
 import React, { useState, useEffect, useCallback } from "react";
 import { InputPrompt } from "@/app/chat/interfaces";
 import Button from "@/refresh-components/buttons/Button";
-import { PlusIcon } from "@/components/icons/icons";
-import { Textarea } from "@/components/ui/textarea";
 import Title from "@/components/ui/title";
 import Text from "@/components/ui/text";
 import { usePopup } from "@/components/admin/connectors/Popup";
@@ -18,6 +18,8 @@ import { SourceChip } from "../components/input/ChatInputBar";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgX from "@/icons/x";
 import SvgMoreHorizontal from "@/icons/more-horizontal";
+import InputTextArea from "@/refresh-components/inputs/InputTextArea";
+import SvgPlus from "@/icons/plus";
 
 export default function InputPrompts() {
   const [inputPrompts, setInputPrompts] = useState<InputPrompt[]>([]);
@@ -180,19 +182,19 @@ export default function InputPrompts() {
 
       {isCreatingNew ? (
         <div className="space-y-2 border p-4 rounded-md mt-4">
-          <Textarea
+          <InputTextArea
             placeholder="Prompt Shortcut (e.g. Summarize)"
             value={newPrompt.prompt || ""}
-            onChange={(e) =>
-              setNewPrompt({ ...newPrompt, prompt: e.target.value })
+            onChange={(event) =>
+              setNewPrompt({ ...newPrompt, prompt: event.target.value })
             }
             className="resize-none"
           />
-          <Textarea
+          <InputTextArea
             placeholder="Actual Prompt (e.g. Summarize the uploaded document and highlight key points.)"
             value={newPrompt.content || ""}
-            onChange={(e) =>
-              setNewPrompt({ ...newPrompt, content: e.target.value })
+            onChange={(event) =>
+              setNewPrompt({ ...newPrompt, content: event.target.value })
             }
             className="resize-none"
           />
@@ -204,8 +206,11 @@ export default function InputPrompts() {
           </div>
         </div>
       ) : (
-        <Button onClick={() => setIsCreatingNew(true)} className="w-full mt-4">
-          <PlusIcon size={14} className="mr-2" />
+        <Button
+          onClick={() => setIsCreatingNew(true)}
+          className="w-full mt-4"
+          leftIcon={SvgPlus}
+        >
           Create New Prompt
         </Button>
       )}
@@ -270,16 +275,19 @@ const PromptCard: React.FC<PromptCardProps> = ({
           </div>
           <div className="flex">
             <div className="flex-grow mr-4">
-              <Textarea
+              <InputTextArea
                 value={localPrompt}
-                onChange={(e) => handleLocalEdit("prompt", e.target.value)}
+                onChange={(event) =>
+                  handleLocalEdit("prompt", event.target.value)
+                }
                 className="mb-2 resize-none"
                 placeholder="Prompt"
               />
-              <Textarea
+              <InputTextArea
                 value={localContent}
-                onChange={(e) => handleLocalEdit("content", e.target.value)}
-                className="resize-vertical min-h-[100px]"
+                onChange={(event) =>
+                  handleLocalEdit("content", event.target.value)
+                }
                 placeholder="Content"
               />
             </div>

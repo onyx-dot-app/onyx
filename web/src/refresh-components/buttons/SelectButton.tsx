@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect, useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 import Text from "@/refresh-components/texts/Text";
 import SvgChevronDownSmall from "@/icons/chevron-down-small";
 
@@ -92,7 +92,7 @@ export interface SelectButtonProps {
 
   // Content
   children: string;
-  leftIcon: React.FunctionComponent<SvgProps>;
+  leftIcon: React.FunctionComponent<IconProps>;
   rightChevronIcon?: boolean;
   onClick?: () => void;
   className?: string;

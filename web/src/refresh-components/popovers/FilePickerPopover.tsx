@@ -8,7 +8,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn, noProp } from "@/lib/utils";
-import UserFilesModalContent from "@/components/modals/UserFilesModalContent";
+import UserFilesModal from "@/components/modals/UserFilesModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import {
   ProjectFile,
@@ -26,6 +26,8 @@ import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import Text from "@/refresh-components/texts/Text";
 import { MAX_FILES_TO_SHOW } from "@/lib/constants";
 import SvgLoader from "@/icons/loader";
+import { isImageFile } from "@/lib/utils";
+import SvgImage from "@/icons/image";
 
 const getFileExtension = (fileName: string): string => {
   const idx = fileName.lastIndexOf(".");
@@ -70,7 +72,9 @@ function FileLineItem({
           ? ({ className }) => (
               <SvgLoader className={cn(className, "animate-spin")} />
             )
-          : SvgFileText
+          : isImageFile(projectFile.name)
+            ? SvgImage
+            : SvgFileText
       }
       rightChildren={
         <div className="h-[1rem] flex flex-col justify-center">
@@ -273,7 +277,7 @@ export default function FilePickerPopover({
       />
 
       <recentFilesModal.Provider>
-        <UserFilesModalContent
+        <UserFilesModal
           title="Recent Files"
           description="Upload files or pick from your recent files."
           icon={SvgFiles}
@@ -286,7 +290,6 @@ export default function FilePickerPopover({
           }}
           handleUploadChange={handleUploadChange}
           onView={onFileClick}
-          onClose={() => recentFilesModal.toggle(false)}
           selectedFileIds={selectedFileIds}
           onDelete={handleDeleteFile}
         />

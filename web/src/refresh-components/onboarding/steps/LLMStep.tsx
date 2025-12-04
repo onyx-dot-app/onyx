@@ -3,17 +3,17 @@ import SvgCpu from "@/icons/cpu";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import SvgExternalLink from "@/icons/external-link";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import LLMProvider from "../components/LLMProvider";
 import { OnboardingActions, OnboardingState, OnboardingStep } from "../types";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
-import { PROVIDER_ICON_MAP } from "../constants";
 import LLMConnectionModal, {
   LLMConnectionModalProps,
 } from "@/refresh-components/onboarding/components/LLMConnectionModal";
 import { cn } from "@/lib/utils";
 import SvgCheckCircle from "@/icons/check-circle";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 
 type LLMStepProps = {
   state: OnboardingState;
@@ -51,8 +51,7 @@ const StackedProviderIcons = ({ providers }: StackedProviderIconsProps) => {
   return (
     <div className="flex items-center">
       {providers.slice(0, 3).map((provider, index) => {
-        const IconComponent = PROVIDER_ICON_MAP[provider];
-        if (!IconComponent) return null;
+        const IconComponent = getProviderIcon(provider);
 
         return (
           <div
@@ -91,9 +90,10 @@ const LLMStepInner = ({
   disabled,
 }: LLMStepProps) => {
   const isLoading = !llmDescriptors || llmDescriptors.length === 0;
-  const modal = useCreateModal();
+
   const [llmConnectionModalProps, setLlmConnectionModalProps] =
     useState<LLMConnectionModalProps | null>(null);
+  const modal = useCreateModal();
 
   if (
     onboardingState.currentStep === OnboardingStep.LlmSetup ||
@@ -146,9 +146,12 @@ const LLMStepInner = ({
               </div>
             ))
           ) : (
-            <modal.Provider>
+            <>
               {llmConnectionModalProps && (
-                <LLMConnectionModal {...llmConnectionModalProps} />
+                <LLMConnectionModal
+                  {...llmConnectionModalProps}
+                  modal={modal}
+                />
               )}
 
               {llmDescriptors.map((llmDescriptor) => (
@@ -161,13 +164,15 @@ const LLMStepInner = ({
                     onboardingActions={onboardingActions}
                     title={llmDescriptor.title}
                     subtitle={llmDescriptor.display_name}
-                    icon={PROVIDER_ICON_MAP[llmDescriptor.name]}
+                    icon={getProviderIcon(llmDescriptor.name)}
                     llmDescriptor={llmDescriptor}
                     disabled={disabled}
                     isConnected={onboardingState.data.llmProviders?.some(
                       (provider) => provider === llmDescriptor.name
                     )}
                     onClick={setLlmConnectionModalProps}
+                    onOpenModal={() => modal.toggle(true)}
+                    modal={modal}
                   />
                 </div>
               ))}
@@ -183,9 +188,11 @@ const LLMStepInner = ({
                     (provider) => provider === "custom"
                   )}
                   onClick={setLlmConnectionModalProps}
+                  onOpenModal={() => modal.toggle(true)}
+                  modal={modal}
                 />
               </div>
-            </modal.Provider>
+            </>
           )}
         </div>
       </div>

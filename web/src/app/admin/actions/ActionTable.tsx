@@ -56,71 +56,79 @@ export function ActionsTable({
         </TableHeader>
         <TableBody>
           {/* Render MCP Servers first */}
-          {sortedMcpServers.map((server) => (
-            <TableRow key={`mcp-${server.id}`}>
-              <TableCell>
-                <div className="flex items-center gap-2">
-                  {isAdmin || server.owner === user?.email ? (
+          {sortedMcpServers.map((server) => {
+            const canModifyServer = isAdmin || server.owner === user?.email;
+            return (
+              <TableRow key={`mcp-${server.id}`}>
+                <TableCell>
+                  <div className="flex items-center gap-2">
                     <IconButton
                       icon={SvgEdit}
                       tertiary
+                      disabled={!canModifyServer}
+                      tooltip={
+                        canModifyServer
+                          ? "Edit MCP server"
+                          : "Only the creator or an admin can edit this server"
+                      }
                       onClick={() => {
+                        if (!canModifyServer) return;
                         router.push(
                           `/admin/actions/edit-mcp?server_id=${server.id}`
                         );
                       }}
                     />
-                  ) : null}
-                  <Text
-                    mainUiBody
-                    text04
-                    className="whitespace-normal break-words"
-                  >
-                    {server.name}
-                  </Text>
-                </div>
-              </TableCell>
-              <TableCell className="whitespace-normal break-words max-w-2xl">
-                <Text text03>{`MCP Server - ${server.server_url}`}</Text>
-              </TableCell>
-              <TableCell className="whitespace-nowrap">
-                <div className="flex items-center gap-2">
-                  <SvgServer
-                    stroke="currentColor"
-                    className="size-4 text-text-03"
-                  />
-                  <Text text03>MCP Server</Text>
-                </div>
-              </TableCell>
-              <TableCell className="whitespace-nowrap">
-                <div className="flex items-center">
-                  {isAdmin || server.owner === user?.email ? (
-                    <IconButton
-                      icon={SvgTrash}
-                      tertiary
-                      onClick={async () => {
-                        const confirmDelete = window.confirm(
-                          "Delete this MCP server and all its tools and configs? This cannot be undone."
-                        );
-                        if (!confirmDelete) return;
-                        const response = await deleteMCPServer(server.id);
-                        if (response.data?.success) {
-                          router.refresh();
-                        } else {
-                          setPopup({
-                            message: `Failed to delete MCP server - ${response.error}`,
-                            type: "error",
-                          });
-                        }
-                      }}
+                    <Text
+                      mainUiBody
+                      text04
+                      className="whitespace-normal break-words"
+                    >
+                      {server.name}
+                    </Text>
+                  </div>
+                </TableCell>
+                <TableCell className="whitespace-normal break-words max-w-2xl">
+                  <Text text03>{`MCP Server - ${server.server_url}`}</Text>
+                </TableCell>
+                <TableCell className="whitespace-nowrap">
+                  <div className="flex items-center gap-2">
+                    <SvgServer
+                      stroke="currentColor"
+                      className="size-4 text-text-03"
                     />
-                  ) : (
-                    <Text text03>-</Text>
-                  )}
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
+                    <Text text03>MCP Server</Text>
+                  </div>
+                </TableCell>
+                <TableCell className="whitespace-nowrap">
+                  <div className="flex items-center">
+                    {isAdmin || server.owner === user?.email ? (
+                      <IconButton
+                        icon={SvgTrash}
+                        tertiary
+                        onClick={async () => {
+                          const confirmDelete = window.confirm(
+                            "Delete this MCP server and all its tools and configs? This cannot be undone."
+                          );
+                          if (!confirmDelete) return;
+                          const response = await deleteMCPServer(server.id);
+                          if (response.data?.success) {
+                            router.refresh();
+                          } else {
+                            setPopup({
+                              message: `Failed to delete MCP server - ${response.error}`,
+                              type: "error",
+                            });
+                          }
+                        }}
+                      />
+                    ) : (
+                      <Text text03>-</Text>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            );
+          })}
 
           {/* Render regular tools */}
           {sortedTools.map((tool) => {

@@ -3,7 +3,7 @@ import React, { useState, useEffect } from "react";
 import { FieldArray, ArrayHelpers, ErrorMessage, useField } from "formik";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import { UserGroup, UserRole } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
 import {
@@ -140,7 +140,6 @@ export function AccessTypeGroupSelector({
                           key={userGroup.id}
                           primary
                           action={isSelected}
-                          type="button"
                           leftIcon={SvgUsers}
                           onClick={() => {
                             if (isSelected) {

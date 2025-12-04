@@ -1,11 +1,13 @@
-import * as React from "react";
-import type { SVGProps } from "react";
+import { IconProps } from "@/icons";
 
-const SvgStep3End = (props: SVGProps<SVGSVGElement>) => (
+const SvgStep3End = ({ size, ...props }: IconProps) => (
   <svg
+    width={size}
+    height={size}
     viewBox="0 0 15 15"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
+    stroke="currentColor"
     {...props}
   >
     <path

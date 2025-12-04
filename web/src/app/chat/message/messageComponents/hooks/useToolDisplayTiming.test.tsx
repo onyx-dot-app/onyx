@@ -240,7 +240,7 @@ describe("useToolDisplayTiming", () => {
 
   describe("Edge Cases", () => {
     test("handles empty tool groups", () => {
-      const toolGroups: { ind: number; packets: any[] }[] = [];
+      const toolGroups: { turn_index: number; packets: any[] }[] = [];
 
       const { result } = renderHook(() =>
         useToolDisplayTiming(toolGroups, false, false)

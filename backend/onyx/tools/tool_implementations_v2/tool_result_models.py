@@ -37,3 +37,23 @@ class LlmOpenUrlResult(BaseCiteableToolResult):
 
     type: Literal["open_url"] = "open_url"
     content: str
+
+
+class PythonExecutionFile(BaseModel):
+    """File generated during Python execution"""
+
+    filename: str
+    file_link: str
+
+
+class LlmPythonExecutionResult(BaseModel):
+    """Result from Python code execution"""
+
+    type: Literal["python_execution"] = "python_execution"
+
+    stdout: str
+    stderr: str
+    exit_code: int | None
+    timed_out: bool
+    generated_files: list[PythonExecutionFile]
+    error: str | None = None

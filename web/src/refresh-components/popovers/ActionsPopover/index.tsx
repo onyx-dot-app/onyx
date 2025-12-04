@@ -8,15 +8,16 @@ import {
   PopoverMenu,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import ToggleList, {
-  ToggleListItem,
-} from "@/refresh-components/popovers/ActionsPopover/ToggleList";
+import SwitchList, {
+  SwitchListItem,
+} from "@/refresh-components/popovers/ActionsPopover/SwitchList";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import {
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
 } from "@/lib/tools/interfaces";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
+import { useForcedTools } from "@/lib/hooks/useForcedTools";
+import { useAssistantPreferences } from "@/app/chat/hooks/useAssistantPreferences";
 import { useUser } from "@/components/user/UserProvider";
 import { FilterManager, useSourcePreferences } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";
@@ -26,7 +27,8 @@ import { MCPApiKeyModal } from "@/components/chat/MCPApiKeyModal";
 import { ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import { useAvailableTools } from "@/lib/hooks/useAvailableTools";
+import { useCCPairs } from "@/lib/hooks/useCCPairs";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgSliders from "@/icons/sliders";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -135,20 +137,18 @@ export default function ActionsPopover({
   });
 
   // Get the assistant preference for this assistant
-  const {
-    agentPreferences: assistantPreferences,
-    setSpecificAgentPreferences: setSpecificAssistantPreferences,
-    forcedToolIds,
-    setForcedToolIds,
-  } = useAgentsContext();
+  const { assistantPreferences, setSpecificAssistantPreferences } =
+    useAssistantPreferences();
+  const { forcedToolIds, setForcedToolIds } = useForcedTools();
 
-  const { isAdmin, isCurator } = useUser();
+  const { user, isAdmin, isCurator } = useUser();
 
-  const { availableTools, ccPairs } = useChatContext();
+  const { tools: availableTools } = useAvailableTools();
+  const { ccPairs } = useCCPairs();
   const availableToolIds = availableTools.map((tool) => tool.id);
 
   // Check if there are any connectors available
-  const hasNoConnectors = ccPairs.length === 0;
+  const hasNoConnectors = !ccPairs || ccPairs.length === 0;
 
   const assistantPreference = assistantPreferences?.[selectedAssistant.id];
   const disabledToolIds = assistantPreference?.disabled_tool_ids || [];
@@ -207,12 +207,17 @@ export default function ActionsPopover({
 
   // Fetch MCP servers for the assistant on mount
   useEffect(() => {
-    const fetchMCPServers = async () => {
-      if (selectedAssistant == null || selectedAssistant.id == null) return;
+    if (selectedAssistant == null || selectedAssistant.id == null) return;
 
+    const abortController = new AbortController();
+
+    const fetchMCPServers = async () => {
       try {
         const response = await fetch(
-          `/api/mcp/servers/persona/${selectedAssistant.id}`
+          `/api/mcp/servers/persona/${selectedAssistant.id}`,
+          {
+            signal: abortController.signal,
+          }
         );
         if (response.ok) {
           const data = await response.json();
@@ -231,11 +236,18 @@ export default function ActionsPopover({
           });
         }
       } catch (error) {
+        if (abortController.signal.aborted) {
+          return;
+        }
         console.error("Error fetching MCP servers:", error);
       }
     };
 
     fetchMCPServers();
+
+    return () => {
+      abortController.abort();
+    };
   }, [selectedAssistant?.id]);
 
   // No separate MCP tool loading; tools already exist in selectedAssistant.tools
@@ -413,7 +425,7 @@ export default function ActionsPopover({
     selectedMcpServer.auth_type !== MCPAuthenticationType.NONE &&
     isActiveServerAuthenticated;
 
-  const mcpToggleItems: ToggleListItem[] = selectedMcpTools.map((tool) => ({
+  const mcpToggleItems: SwitchListItem[] = selectedMcpTools.map((tool) => ({
     id: tool.id.toString(),
     label: tool.display_name || tool.name,
     description: tool.description,
@@ -463,7 +475,7 @@ export default function ActionsPopover({
 
   const configuredSources = getConfiguredSources(availableSources);
 
-  const sourceToggleItems: ToggleListItem[] = configuredSources.map(
+  const sourceToggleItems: SwitchListItem[] = configuredSources.map(
     (source) => ({
       id: source.uniqueKey,
       label: source.displayName,
@@ -556,7 +568,7 @@ export default function ActionsPopover({
   );
 
   const toolsView = (
-    <ToggleList
+    <SwitchList
       items={sourceToggleItems}
       searchPlaceholder="Search Filters"
       allDisabled={allSourcesDisabled}
@@ -569,7 +581,7 @@ export default function ActionsPopover({
   );
 
   const mcpView = (
-    <ToggleList
+    <SwitchList
       items={mcpToggleItems}
       searchPlaceholder={`Search ${selectedMcpServer?.name ?? "server"} tools`}
       allDisabled={mcpAllDisabled}

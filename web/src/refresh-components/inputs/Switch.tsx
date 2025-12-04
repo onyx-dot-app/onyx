@@ -1,76 +1,76 @@
 "use client";
 
-import * as React from "react";
-import * as SwitchPrimitives from "@radix-ui/react-switch";
-
+import React, { useState } from "react";
 import { cn } from "@/lib/utils";
 
-interface BaseSwitchProps
-  extends React.ComponentPropsWithoutRef<typeof SwitchPrimitives.Root> {
-  size?: "sm" | "md" | "lg";
+export interface SwitchProps
+  extends Omit<React.ComponentPropsWithoutRef<"button">, "onChange"> {
+  // Switch variants
+  disabled?: boolean;
+
+  checked?: boolean;
+  defaultChecked?: boolean;
+  onCheckedChange?: (checked: boolean) => void;
 }
+const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
+  (
+    {
+      disabled,
 
-function switchInner(
-  { className, size = "sm", ...props }: BaseSwitchProps,
-  ref: React.ForwardedRef<React.ComponentRef<typeof SwitchPrimitives.Root>>
-) {
-  const sizeClasses = {
-    sm: "h-4 w-8",
-    md: "h-5 w-10",
-    lg: "h-6 w-12",
-  };
+      checked: controlledChecked,
+      defaultChecked,
+      onCheckedChange,
 
-  const thumbSizeClasses = {
-    sm: "h-3 w-3",
-    md: "h-4 w-4",
-    lg: "h-5 w-5",
-  };
+      className,
+      onClick,
+      ...props
+    },
+    ref
+  ) => {
+    const [uncontrolledChecked, setUncontrolledChecked] = useState(
+      defaultChecked ?? false
+    );
 
-  const translateClasses = {
-    sm: "data-[state=checked]:translate-x-4",
-    md: "data-[state=checked]:translate-x-5",
-    lg: "data-[state=checked]:translate-x-6",
-  };
+    const isControlled = controlledChecked !== undefined;
+    const checked = isControlled ? controlledChecked : uncontrolledChecked;
 
-  return (
-    <SwitchPrimitives.Root
-      ref={ref}
-      className={cn(
-        "peer group inline-flex shrink-0 cursor-pointer rounded-full " +
-          "border-2 border-transparent transition-colors " +
-          // 1) default
-          "data-[state=checked]:bg-action-link-05 data-[state=unchecked]:bg-background-tint-03 " +
-          // 2) hover
-          "hover:data-[state=checked]:bg-action-link-04 hover:data-[state=unchecked]:bg-background-tint-04 " +
-          // 3) disabled
-          "disabled:cursor-not-allowed " +
-          "disabled:data-[state=checked]:bg-action-link-03 disabled:data-[state=unchecked]:bg-background-neutral-04 " +
-          // 4) focused
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-background-tint-04 focus-visible:ring-offset-0 " +
-          // 5) focused + hover
-          "data-[state=unchecked]:hover:focus-visible:border-background-tint-03 " +
-          sizeClasses[size],
-        className
-      )}
-      {...props}
-    >
-      <SwitchPrimitives.Thumb
+    function handleClick(event: React.MouseEvent<HTMLButtonElement>) {
+      if (disabled) return;
+
+      const newChecked = !checked;
+
+      if (!isControlled) setUncontrolledChecked(newChecked);
+      onClick?.(event);
+      onCheckedChange?.(newChecked);
+    }
+
+    return (
+      <button
+        ref={ref}
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        data-state={checked ? "checked" : "unchecked"}
         className={cn(
-          "pointer-events-none block rounded-full shadow-lg ring-0 transition-transform " +
-            "bg-background-neutral-00 [--background-neutral-00:var(--grey-00)] " +
-            "data-[state=unchecked]:translate-x-0 " +
-            "group-data-[disabled]:bg-background-neutral-03 " +
-            thumbSizeClasses[size],
-          translateClasses[size]
+          "peer inline-flex h-[1.125rem] w-[2rem] shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline-none",
+          disabled ? "switch-disabled" : "switch-normal",
+          className
         )}
-      />
-    </SwitchPrimitives.Root>
-  );
-}
+        disabled={disabled}
+        onClick={handleClick}
+        {...props}
+      >
+        <span
+          data-state={checked ? "checked" : "unchecked"}
+          className={cn(
+            "pointer-events-none block h-[0.875rem] w-[0.875rem] rounded-full ring-0 transition-transform data-[state=checked]:translate-x-[15px] data-[state=unchecked]:translate-x-[1px]",
+            disabled ? "switch-thumb-disabled" : "switch-thumb"
+          )}
+        />
+      </button>
+    );
+  }
+);
+Switch.displayName = "Switch";
 
-export const Switch = React.forwardRef<
-  React.ComponentRef<typeof SwitchPrimitives.Root>,
-  BaseSwitchProps
->(switchInner);
-
-Switch.displayName = SwitchPrimitives.Root.displayName;
+export default Switch;

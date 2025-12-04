@@ -13,12 +13,17 @@ export function isToolPacket(
 ) {
   let toolPacketTypes = [
     PacketType.SEARCH_TOOL_START,
-    PacketType.SEARCH_TOOL_DELTA,
+    PacketType.SEARCH_TOOL_QUERIES_DELTA,
+    PacketType.SEARCH_TOOL_DOCUMENTS_DELTA,
+    PacketType.PYTHON_TOOL_START,
+    PacketType.PYTHON_TOOL_DELTA,
     PacketType.CUSTOM_TOOL_START,
     PacketType.CUSTOM_TOOL_DELTA,
     PacketType.REASONING_START,
     PacketType.REASONING_DELTA,
     PacketType.FETCH_TOOL_START,
+    PacketType.FETCH_TOOL_URLS,
+    PacketType.FETCH_TOOL_DOCUMENTS,
   ];
   if (includeSectionEnd) {
     toolPacketTypes.push(PacketType.SECTION_END);
@@ -29,7 +34,16 @@ export function isToolPacket(
 export function isDisplayPacket(packet: Packet) {
   return (
     packet.obj.type === PacketType.MESSAGE_START ||
-    packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START
+    packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START ||
+    packet.obj.type === PacketType.PYTHON_TOOL_START
+  );
+}
+
+export function isSearchToolPacket(packet: Packet): boolean {
+  return (
+    packet.obj.type === PacketType.SEARCH_TOOL_START ||
+    packet.obj.type === PacketType.SEARCH_TOOL_QUERIES_DELTA ||
+    packet.obj.type === PacketType.SEARCH_TOOL_DOCUMENTS_DELTA
   );
 }
 
@@ -41,7 +55,8 @@ export function isFinalAnswerComing(packets: Packet[]) {
   return packets.some(
     (packet) =>
       packet.obj.type === PacketType.MESSAGE_START ||
-      packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START
+      packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START ||
+      packet.obj.type === PacketType.PYTHON_TOOL_START
   );
 }
 
@@ -50,43 +65,44 @@ export function isFinalAnswerComplete(packets: Packet[]) {
   const messageStartPacket = packets.find(
     (packet) =>
       packet.obj.type === PacketType.MESSAGE_START ||
-      packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START
+      packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START ||
+      packet.obj.type === PacketType.PYTHON_TOOL_START
   );
 
   if (!messageStartPacket) {
     return false;
   }
 
-  // Check if there's a corresponding SECTION_END with the same index
+  // Check if there's a corresponding SECTION_END with the same turn_index
   return packets.some(
     (packet) =>
       packet.obj.type === PacketType.SECTION_END &&
-      packet.ind === messageStartPacket.ind
+      packet.turn_index === messageStartPacket.turn_index
   );
 }
 
-export function groupPacketsByInd(
+export function groupPacketsByTurnIndex(
   packets: Packet[]
-): { ind: number; packets: Packet[] }[] {
+): { turn_index: number; packets: Packet[] }[] {
   /*
-  Group packets by ind. Ordered from lowest ind to highest ind.
+  Group packets by turn_index. Ordered from lowest turn_index to highest turn_index.
   */
   const groups = packets.reduce((acc: Map<number, Packet[]>, packet) => {
-    const ind = packet.ind;
-    if (!acc.has(ind)) {
-      acc.set(ind, []);
+    const turn_index = packet.turn_index;
+    if (!acc.has(turn_index)) {
+      acc.set(turn_index, []);
     }
-    acc.get(ind)!.push(packet);
+    acc.get(turn_index)!.push(packet);
     return acc;
   }, new Map());
 
-  // Convert to array and sort by ind (lowest to highest)
+  // Convert to array and sort by turn_index (lowest to highest)
   return Array.from(groups.entries())
-    .map(([ind, packets]) => ({
-      ind,
+    .map(([turn_index, packets]) => ({
+      turn_index,
       packets,
     }))
-    .sort((a, b) => a.ind - b.ind);
+    .sort((a, b) => a.turn_index - b.turn_index);
 }
 
 export function getTextContent(packets: Packet[]) {

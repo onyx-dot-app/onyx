@@ -2,7 +2,7 @@ import ReactMarkdown from "react-markdown";
 import { LoadingAnimation } from "@/components/Loading";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import Text from "@/refresh-components/texts/Text";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import Button from "@/refresh-components/buttons/Button";
 import { Form, Formik } from "formik";
 import type { FormikProps } from "formik";
@@ -23,6 +23,10 @@ import {
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { dynamicProviderConfigs, fetchModels } from "./utils";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
+import {
+  isValidAzureTargetUri,
+  parseAzureTargetUri,
+} from "@/lib/azureTargetUri";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
@@ -223,26 +227,8 @@ export function LLMProviderUpdateForm({
             .required("Target URI is required")
             .test(
               "valid-target-uri",
-              "Target URI must be a valid URL with api-version query parameter and the deployment name in the path",
-              (value) => {
-                if (!value) return false;
-                try {
-                  const url = new URL(value);
-                  const hasApiVersion = !!url.searchParams
-                    .get("api-version")
-                    ?.trim();
-
-                  // Check if the path contains a deployment name
-                  const pathMatch = url.pathname.match(
-                    /\/openai\/deployments\/([^\/]+)/
-                  );
-                  const hasDeploymentName = pathMatch && pathMatch[1];
-
-                  return hasApiVersion && !!hasDeploymentName;
-                } catch {
-                  return false;
-                }
-              }
+              "Target URI must be a valid URL with api-version query parameter and either a deployment name in the path or /openai/responses",
+              (value) => (value ? isValidAzureTargetUri(value) : false)
             )
         : Yup.string(),
     ...(llmProviderDescriptor.custom_config_keys
@@ -310,16 +296,13 @@ export function LLMProviderUpdateForm({
 
         if (llmProviderDescriptor.name === "azure" && target_uri) {
           try {
-            const url = new URL(target_uri);
+            const { url, apiVersion, deploymentName } =
+              parseAzureTargetUri(target_uri);
             finalApiBase = url.origin; // Only use origin (protocol + hostname + port)
-            finalApiVersion = url.searchParams.get("api-version") || "";
+            finalApiVersion = apiVersion;
 
-            // Extract deployment name from path: /openai/deployments/{deployment-name}/...
-            const pathMatch = url.pathname.match(
-              /\/openai\/deployments\/([^\/]+)/
-            );
-            if (pathMatch && pathMatch[1]) {
-              finalDeploymentName = pathMatch[1];
+            if (deploymentName) {
+              finalDeploymentName = deploymentName;
             }
           } catch (error) {
             // This should not happen due to validation, but handle gracefully
@@ -487,7 +470,7 @@ export function LLMProviderUpdateForm({
                 small={firstTimeConfiguration}
                 name="target_uri"
                 label="Target URI"
-                placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
+                placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview OR .../openai/responses?api-version=..."
                 subtext="The complete target URI for your deployment from the Azure AI portal."
               />
             ) : (
@@ -756,7 +739,7 @@ export function LLMProviderUpdateForm({
             {testError && <Text className="text-error mt-2">{testError}</Text>}
 
             <div className="flex w-full mt-4 gap-2">
-              <Button disabled={isTesting}>
+              <Button type="submit" disabled={isTesting}>
                 {isTesting ? (
                   <Text inverted>
                     <LoadingAnimation text="Testing" />

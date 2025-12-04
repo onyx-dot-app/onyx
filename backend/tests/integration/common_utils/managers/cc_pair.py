@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import requests
 
-import generated.onyx_openapi_client.onyx_openapi_client as api
+import generated.onyx_openapi_client.onyx_openapi_client as api  # type: ignore[import]
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
@@ -132,6 +132,22 @@ class CCPairManager:
         result = requests.put(
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/status",
             json={"status": "PAUSED"},
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
+        )
+        result.raise_for_status()
+
+    @staticmethod
+    def unpause_cc_pair(
+        cc_pair: DATestCCPair,
+        user_performing_action: DATestUser | None = None,
+    ) -> None:
+        result = requests.put(
+            url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/status",
+            json={"status": "ACTIVE"},
             headers=(
                 user_performing_action.headers
                 if user_performing_action
@@ -345,6 +361,13 @@ class CCPairManager:
                 if not fetched_cc_pair.in_progress:
                     continue
 
+                if fetched_cc_pair.docs_indexed < num_docs:
+                    print(
+                        f"Indexing in progress: cc_pair={cc_pair.id} "
+                        f"docs_indexed={fetched_cc_pair.docs_indexed} num_docs={num_docs}"
+                    )
+                    continue
+
                 if fetched_cc_pair.docs_indexed >= num_docs:
                     print(
                         "Indexed at least the requested number of docs: "
@@ -361,7 +384,8 @@ class CCPairManager:
                 )
 
             print(
-                f"Indexing in progress waiting: cc_pair={cc_pair.id} elapsed={elapsed:.2f} timeout={timeout}s"
+                f"Indexing in progress waiting: cc_pair={cc_pair.id} "
+                f"elapsed={elapsed:.2f} timeout={timeout}s"
             )
             time.sleep(5)
 

@@ -5,7 +5,7 @@ import {
   TabsTrigger,
   TabsContent,
 } from "@/refresh-components/tabs/tabs";
-import { DynamicProviderFields } from "./DynamicProviderFields";
+import DynamicProviderFields from "./DynamicProviderFields";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 
 type ProviderTabConfig = {
@@ -22,7 +22,6 @@ type Props = {
   llmDescriptor: WellKnownLLMProviderDescriptor;
   tabConfig: ProviderTabConfig;
   modelOptions: Array<{ label: string; value: string }>;
-  onApiKeyBlur: (apiKey: string) => void;
   showApiMessage: boolean;
   apiStatus: "idle" | "loading" | "success" | "error";
   errorMessage: string;
@@ -31,7 +30,6 @@ type Props = {
   canFetchModels: boolean;
   activeTab: string;
   setActiveTab: (tabId: string) => void;
-  testModelChangeWithApiKey: (modelName: string) => Promise<void>;
   modelsApiStatus: "idle" | "loading" | "success" | "error";
   modelsErrorMessage: string;
   showModelsApiErrorMessage: boolean;
@@ -42,7 +40,6 @@ export const LLMConnectionFieldsWithTabs: React.FC<Props> = ({
   llmDescriptor,
   tabConfig,
   modelOptions,
-  onApiKeyBlur,
   showApiMessage,
   apiStatus,
   errorMessage,
@@ -51,14 +48,13 @@ export const LLMConnectionFieldsWithTabs: React.FC<Props> = ({
   canFetchModels,
   activeTab,
   setActiveTab,
-  testModelChangeWithApiKey,
   modelsApiStatus,
   modelsErrorMessage,
   showModelsApiErrorMessage,
   disabled = false,
 }) => {
   return (
-    <Tabs value={activeTab} onValueChange={setActiveTab}>
+    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
       <TabsList className="w-full">
         {tabConfig.tabs.map((tab) => (
           <TabsTrigger key={tab.id} value={tab.id} className="flex-1">
@@ -67,21 +63,19 @@ export const LLMConnectionFieldsWithTabs: React.FC<Props> = ({
         ))}
       </TabsList>
       {tabConfig.tabs.map((tab) => (
-        <TabsContent key={tab.id} value={tab.id}>
-          <div className="flex flex-col gap-4">
+        <TabsContent key={tab.id} value={tab.id} className="w-full">
+          <div className="flex flex-col gap-4 w-full">
             <DynamicProviderFields
               llmDescriptor={llmDescriptor}
               fields={tab.fields}
               modelOptions={modelOptions}
               fieldOverrides={tab.fieldOverrides}
-              onApiKeyBlur={onApiKeyBlur}
               showApiMessage={showApiMessage}
               apiStatus={apiStatus}
               errorMessage={errorMessage}
               onFetchModels={onFetchModels}
               isFetchingModels={isFetchingModels}
               canFetchModels={canFetchModels}
-              testModelChangeWithApiKey={testModelChangeWithApiKey}
               modelsApiStatus={modelsApiStatus}
               modelsErrorMessage={modelsErrorMessage}
               showModelsApiErrorMessage={showModelsApiErrorMessage}

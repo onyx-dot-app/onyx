@@ -37,6 +37,19 @@ export async function getOAuthConfigs(): Promise<OAuthConfig[]> {
   return await response.json();
 }
 
+export async function getOAuthConfig(id: number): Promise<OAuthConfig> {
+  const response = await fetch(`/api/admin/oauth-config/${id}`);
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      errorData.detail || `Failed to fetch OAuth config: ${response.statusText}`
+    );
+  }
+
+  return await response.json();
+}
+
 export async function updateOAuthConfig(
   id: number,
   updates: OAuthConfigUpdate

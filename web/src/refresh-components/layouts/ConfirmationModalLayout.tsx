@@ -1,12 +1,12 @@
 import React from "react";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
-import DefaultModalLayout from "./DefaultModalLayout";
+import Modal from "@/refresh-components/Modal";
 import { useModalClose } from "../contexts/ModalContext";
 
 export interface ConfirmationModalProps {
-  icon: React.FunctionComponent<SvgProps>;
+  icon: React.FunctionComponent<IconProps>;
   title: string;
   children?: React.ReactNode;
 
@@ -27,22 +27,25 @@ export default function ConfirmationModalLayout({
   const onClose = useModalClose(externalOnClose);
 
   return (
-    <DefaultModalLayout icon={icon} title={title} onClose={onClose} mini>
-      <div className="p-4">
-        {typeof children === "string" ? (
-          <Text text03>{children}</Text>
-        ) : (
-          children
-        )}
-      </div>
-      <div className="flex flex-row w-full items-center justify-end p-4 gap-2">
-        {!hideCancel && (
-          <Button secondary onClick={onClose} type="button">
-            Cancel
-          </Button>
-        )}
-        {submit}
-      </div>
-    </DefaultModalLayout>
+    <Modal open onOpenChange={(isOpen) => !isOpen && onClose?.()}>
+      <Modal.Content mini>
+        <Modal.Header icon={icon} title={title} onClose={onClose} />
+        <Modal.Body className="p-4">
+          {typeof children === "string" ? (
+            <Text text03>{children}</Text>
+          ) : (
+            children
+          )}
+        </Modal.Body>
+        <Modal.Footer className="w-full p-4 gap-2">
+          {!hideCancel && (
+            <Button secondary onClick={onClose} type="button">
+              Cancel
+            </Button>
+          )}
+          {submit}
+        </Modal.Footer>
+      </Modal.Content>
+    </Modal>
   );
 }

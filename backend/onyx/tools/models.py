@@ -1,26 +1,52 @@
-from collections.abc import Callable
-from datetime import datetime
+from __future__ import annotations
+
 from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from pydantic import model_validator
-from sqlalchemy.orm import Session
 
-from onyx.configs.constants import DocumentSource
-from onyx.context.search.enums import SearchType
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import QueryExpansions
-from shared_configs.model_server_models import Embedding
+from onyx.chat.emitter import Emitter
+from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
+from onyx.configs.chat_configs import NUM_RETURNED_HITS
+from onyx.configs.constants import MessageType
+from onyx.context.search.models import SearchDoc
+from onyx.context.search.models import SearchDocsResponse
+from onyx.server.query_and_chat.streaming_models import GeneratedImage
+from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
+
+
+class CustomToolUserFileSnapshot(BaseModel):
+    file_ids: list[str]  # References to saved images or CSVs
+
+
+class CustomToolCallSummary(BaseModel):
+    tool_name: str
+    response_type: str  # e.g., 'json', 'image', 'csv', 'graph'
+    tool_result: Any  # The response data
 
 
 class ToolResponse(BaseModel):
-    id: str | None = None
-    response: Any = None
+    # Rich response is for the objects that are returned but not directly used by the LLM
+    # these typically need to be saved to the database to load things in the UI (usually both)
+    rich_response: (
+        # This comes from image generation, image needs to be saved and the packet about it's location needs to be emitted
+        FinalImageGenerationResponse
+        # This comes from internal search / web search, search docs need to be saved, already emitted by the tool
+        | SearchDocsResponse
+        # This comes from open url, web content needs to be saved, maybe this can be consolidated too
+        # | WebContentResponse
+        # This comes from custom tools, tool result needs to be saved
+        | CustomToolCallSummary
+        | None  # If nothing needs to be persisted outside of the string value passed to the LLM
+    )
+    # This is the final string that needs to be wrapped in a tool call response message and concatenated to the history
+    llm_facing_response: str
 
 
 class ToolCallKickoff(BaseModel):
+    tool_call_id: str
     tool_name: str
     tool_args: dict[str, Any]
 
@@ -53,40 +79,89 @@ class ToolCallFinalResult(ToolCallKickoff):
     level_question_num: int | None = None
 
 
+class ChatMinimalTextMessage(BaseModel):
+    message: str
+    message_type: MessageType
+
+
 class DynamicSchemaInfo(BaseModel):
     chat_session_id: UUID | None
     message_id: int | None
 
 
-class SearchQueryInfo(BaseModel):
-    predicted_search: SearchType | None
-    final_filters: IndexFilters
-    recency_bias_multiplier: float
+class WebSearchToolOverrideKwargs(BaseModel):
+    # To know what citation number to start at for constructing the string to the LLM
+    starting_citation_num: int
+
+
+class OpenURLToolOverrideKwargs(BaseModel):
+    # To know what citation number to start at for constructing the string to the LLM
+    starting_citation_num: int
+    citation_mapping: dict[str, int]
 
 
 # None indicates that the default value should be used
 class SearchToolOverrideKwargs(BaseModel):
+    # To know what citation number to start at for constructing the string to the LLM
+    starting_citation_num: int
+    # This is needed because the LLM won't be able to do a really detailed semantic query well
     original_query: str | None = None
-    force_no_rerank: bool | None = None
-    alternate_db_session: Session | None = None
-    retrieved_sections_callback: Callable[[list[InferenceSection]], None] | None = None
-    skip_query_analysis: bool | None = None
-    precomputed_query_embedding: Embedding | None = None
-    precomputed_is_keyword: bool | None = None
-    precomputed_keywords: list[str] | None = None
-    user_file_ids: list[UUID] | None = None
-    project_id: int | None = None
-    document_sources: list[DocumentSource] | None = None
-    time_cutoff: datetime | None = None
-    expanded_queries: QueryExpansions | None = None
-    kg_entities: list[str] | None = None
-    kg_relationships: list[str] | None = None
-    kg_terms: list[str] | None = None
-    kg_sources: list[str] | None = None
-    kg_chunk_id_zero_only: bool | None = False
+    message_history: list[ChatMinimalTextMessage] | None = None
+    memories: list[str] | None = None
+    user_info: str | None = None
 
-    class Config:
-        arbitrary_types_allowed = True
+    # Number of results to return in the richer object format so that it can be rendered in the UI
+    num_hits: int | None = NUM_RETURNED_HITS
+    # Number of chunks (token approx) to include in the string to the LLM
+    max_llm_chunks: int | None = MAX_CHUNKS_FED_TO_CHAT
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
+class ChatFile(BaseModel):
+    """File from a chat session that can be passed to tools."""
+
+    filename: str
+    content: bytes
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
+class PythonToolOverrideKwargs(BaseModel):
+    """Override kwargs for the Python/Code Interpreter tool."""
+
+    chat_files: list[ChatFile] = []
+
+
+class SearchToolRunContext(BaseModel):
+    emitter: Emitter
+
+    model_config = {"arbitrary_types_allowed": True}
+
+
+class ImageGenerationToolRunContext(BaseModel):
+    emitter: Emitter
+
+    model_config = {"arbitrary_types_allowed": True}
+
+
+class CustomToolRunContext(BaseModel):
+    emitter: Emitter
+
+    model_config = {"arbitrary_types_allowed": True}
+
+
+class ToolCallInfo(BaseModel):
+    parent_tool_call_id: str | None  # None if attached to the Chat Message directly
+    turn_index: int
+    tool_name: str
+    tool_call_id: str
+    tool_id: int
+    reasoning_tokens: str | None
+    tool_call_arguments: dict[str, Any]
+    tool_call_response: str
+    search_docs: list[SearchDoc] | None = None
+    generated_images: list[GeneratedImage] | None = None
 
 
 CHAT_SESSION_ID_PLACEHOLDER = "CHAT_SESSION_ID"

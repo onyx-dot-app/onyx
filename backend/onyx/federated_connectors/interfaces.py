@@ -3,8 +3,8 @@ from abc import abstractmethod
 from typing import Any
 from typing import Dict
 
+from onyx.context.search.models import ChunkIndexRequest
 from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import SearchQuery
 from onyx.federated_connectors.models import CredentialField
 from onyx.federated_connectors.models import EntityField
 from onyx.federated_connectors.models import OAuthResult
@@ -34,16 +34,34 @@ class FederatedConnector(ABC):
 
         Returns:
             True if entities are valid, False otherwise
+
+        Note: This method is used for backward compatibility with document-set level entities.
+        For connector-level config validation, use validate_config() instead.
         """
+
+    def validate_config(self, config: Dict[str, Any]) -> bool:
+        """
+        Validate that the provided config matches the expected structure.
+
+        This is an alias for validate_entities() to provide clearer semantics
+        when validating connector-level configuration.
+
+        Args:
+            config: Dictionary of configuration to validate
+
+        Returns:
+            True if config is valid, False otherwise
+        """
+        return self.validate_entities(config)
 
     @classmethod
     @abstractmethod
-    def entities_schema(cls) -> Dict[str, EntityField]:
+    def configuration_schema(cls) -> Dict[str, EntityField]:
         """
-        Return the specification of what entities are available for this connector.
+        Return the specification of what configuration fields are available for this connector.
 
         Returns:
-            Dictionary where keys are entity names and values are EntityField objects
+            Dictionary where keys are configuration field names and values are EntityField objects
             describing the expected structure and constraints.
         """
 
@@ -83,7 +101,7 @@ class FederatedConnector(ABC):
     @abstractmethod
     def search(
         self,
-        query: SearchQuery,
+        query: ChunkIndexRequest,
         entities: dict[str, Any],
         access_token: str,
         limit: int | None = None,
@@ -96,7 +114,7 @@ class FederatedConnector(ABC):
 
         Args:
             query: The search query
-            entities: The entities to search within (validated by validate())
+            entities: Connector-level config (entity filtering configuration)
             access_token: The OAuth access token
             limit: Maximum number of results to return
             slack_event_context: Slack-specific context (only used by Slack bot)

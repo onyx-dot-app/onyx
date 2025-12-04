@@ -3,7 +3,7 @@
 import Text from "@/refresh-components/texts/Text";
 import { Persona } from "./interfaces";
 import { useRouter } from "next/navigation";
-import { CustomCheckbox } from "@/components/CustomCheckbox";
+import Checkbox from "@/refresh-components/inputs/Checkbox";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useState, useMemo, useEffect } from "react";
 import { UniqueIdentifier } from "@dnd-kit/core";
@@ -185,7 +185,7 @@ export function PersonasTable({
 
           const title = isDefault
             ? "Remove Featured Assistant"
-            : "Set Featurd Assistant";
+            : "Set Featured Assistant";
           const buttonText = isDefault ? "Remove Feature" : "Set as Featured";
           const text = isDefault
             ? `Are you sure you want to remove the featured status of ${personaToToggleDefault.name}?`
@@ -255,7 +255,9 @@ export function PersonasTable({
                 onClick={() => {
                   openDefaultModal(persona);
                 }}
-                className={`px-1 py-0.5 rounded flex hover:bg-accent-background-hovered cursor-pointer select-none w-fit`}
+                className={`
+                  px-1 py-0.5 rounded flex hover:bg-accent-background-hovered cursor-pointer select-none w-fit items-center gap-2
+                  `}
               >
                 <div className="my-auto flex-none w-22">
                   {!persona.is_default_persona ? (
@@ -264,9 +266,7 @@ export function PersonasTable({
                     "Featured"
                   )}
                 </div>
-                <div className="ml-1 my-auto">
-                  <CustomCheckbox checked={persona.is_default_persona} />
-                </div>
+                <Checkbox checked={persona.is_default_persona} />
               </div>,
               <div
                 key="is_visible"
@@ -284,18 +284,18 @@ export function PersonasTable({
                     });
                   }
                 }}
-                className={`px-1 py-0.5 rounded flex hover:bg-accent-background-hovered cursor-pointer select-none w-fit`}
+                className={`
+                  px-1 py-0.5 rounded flex hover:bg-accent-background-hovered cursor-pointer select-none w-fit items-center gap-2
+                  `}
               >
-                <div className="my-auto w-12">
+                <div className="my-auto w-fit">
                   {!persona.is_visible ? (
                     <div className="text-error">Hidden</div>
                   ) : (
                     "Visible"
                   )}
                 </div>
-                <div className="ml-1 my-auto">
-                  <CustomCheckbox checked={persona.is_visible} />
-                </div>
+                <Checkbox checked={persona.is_visible} />
               </div>,
               <div key="edit" className="flex">
                 <div className="mr-auto my-auto">

@@ -5,6 +5,9 @@ metadata:
   name: {{ include "onyx.fullname" . }}-slackbot
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
+    {{- with .Values.slackbot.deploymentLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 spec:
   selector:
     matchLabels:
@@ -21,6 +24,9 @@ spec:
       {{- end }}
       labels:
         {{- include "onyx.labels" . | nindent 8 }}
+        {{- with .Values.slackbot.deploymentLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
         {{- with .Values.slackbot.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -34,6 +40,14 @@ spec:
         {{- toYaml .Values.slackbot.podSecurityContext | nindent 8 }}
       {{- with .Values.slackbot.nodeSelector }}
       nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.slackbot.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.slackbot.tolerations }}
+      tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:

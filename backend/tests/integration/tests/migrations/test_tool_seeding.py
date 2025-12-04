@@ -44,10 +44,10 @@ def test_tool_seeding_migration() -> None:
         )
         tools = result.fetchall()
 
-        # Should have all 5 builtin tools
+        # Should have all 6 builtin tools
         assert (
-            len(tools) == 5
-        ), f"Should have created exactly 5 builtin tools, got {len(tools)}"
+            len(tools) == 7
+        ), f"Should have created exactly 7 builtin tools, got {len(tools)}"
 
         # Check SearchTool
         search_tool = next((t for t in tools if t[1] == "SearchTool"), None)
@@ -84,3 +84,11 @@ def test_tool_seeding_migration() -> None:
         assert (
             kg_tool[5] is None
         ), "KnowledgeGraphTool should not have a user_id (builtin)"
+
+        # Check PythonTool
+        python_tool = next((t for t in tools if t[1] == "PythonTool"), None)
+        assert python_tool is not None, "PythonTool should exist"
+        assert (
+            python_tool[2] == "Code Interpreter"
+        ), "PythonTool display name should be 'Code Interpreter'"
+        assert python_tool[5] is None, "PythonTool should not have a user_id (builtin)"

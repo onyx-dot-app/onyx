@@ -11,28 +11,33 @@ export const truncateString = (str: string, maxLength: number) => {
 };
 
 /**
- * Custom URL transformer function for ReactMarkdown
- * Allows specific protocols to be used in markdown links
- * We use this with the urlTransform prop in ReactMarkdown
+ * Custom URL transformer function for ReactMarkdown.
+ * Only allows a small, safe set of protocols and strips everything else.
+ * Returning null removes the href attribute entirely.
  */
-export function transformLinkUri(href: string) {
-  if (!href) return href;
+export function transformLinkUri(href: string): string | null {
+  if (!href) return null;
 
-  const url = href.trim();
+  const trimmedHref = href.trim();
+  if (!trimmedHref) return null;
+
   try {
-    const parsedUrl = new URL(url);
-    if (
-      ALLOWED_URL_PROTOCOLS.some((protocol) =>
-        parsedUrl.protocol.startsWith(protocol)
-      )
-    ) {
-      return url;
+    const parsedUrl = new URL(trimmedHref);
+    const protocol = parsedUrl.protocol.toLowerCase();
+
+    if (ALLOWED_URL_PROTOCOLS.some((allowed) => allowed === protocol)) {
+      return trimmedHref;
     }
+
+    return null;
   } catch {
-    // If it's not a valid URL with protocol, return the original href
-    return href;
+    // Allow relative URLs, but drop anything that looks like a protocol-prefixed link
+    if (/^[a-zA-Z][a-zA-Z\d+.-]*:\S*/.test(trimmedHref)) {
+      return null;
+    }
+
+    return trimmedHref;
   }
-  return href;
 }
 
 export function isSubset(parent: string[], child: string[]): boolean {

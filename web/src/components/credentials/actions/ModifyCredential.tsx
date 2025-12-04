@@ -4,17 +4,14 @@ import Button from "@/refresh-components/buttons/Button";
 import Text from "@/components/ui/text";
 import { Badge } from "@/components/ui/badge";
 import { AccessType } from "@/lib/types";
-import {
-  EditIcon,
-  NewChatIcon,
-  SwapIcon,
-  TrashIcon,
-} from "@/components/icons/icons";
+import { EditIcon, NewChatIcon, SwapIcon } from "@/components/icons/icons";
 import {
   ConfluenceCredentialJson,
   Credential,
 } from "@/lib/connectors/credentials";
 import { Connector } from "@/lib/connectors/connectors";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgTrash from "@/icons/trash";
 
 const CredentialSelectionTable = ({
   credentials,
@@ -117,15 +114,13 @@ const CredentialSelectionTable = ({
                     {new Date(credential.time_updated).toLocaleString()}
                   </td>
                   <td className="pt-3 flex gap-x-2 content-center mt-auto">
-                    <button
-                      disabled={selected || !editable}
+                    <IconButton
                       onClick={async () => {
                         onDeleteCredential(credential);
                       }}
-                      className="disabled:opacity-20 enabled:cursor-pointer my-auto"
-                    >
-                      <TrashIcon />
-                    </button>
+                      disabled={selected || !editable}
+                      icon={SvgTrash}
+                    />
                     {onEditCredential && (
                       <button
                         disabled={!editable}

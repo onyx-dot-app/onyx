@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, memo, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/texts/Text";
@@ -31,8 +32,9 @@ import SvgEditBig from "@/icons/edit-big";
 import SvgMoreHorizontal from "@/icons/more-horizontal";
 import Settings from "@/sections/sidebar/Settings/Settings";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
+import { useChatSessions } from "@/lib/hooks/useChatSessions";
+import { useProjects } from "@/lib/hooks/useProjects";
+import { useAgents, usePinnedAgentsWithDetails } from "@/lib/hooks/useAgents";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
 import SvgFolderPlus from "@/icons/folder-plus";
 import SvgOnyxOctagon from "@/icons/onyx-octagon";
@@ -58,8 +60,10 @@ import { ChatSession } from "@/app/chat/interfaces";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
 import { useUser } from "@/components/user/UserProvider";
 import SvgSettings from "@/icons/settings";
-import { useAppFocus } from "@/lib/hooks";
+import useAppFocus from "@/hooks/useAppFocus";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import useScreenSize from "@/hooks/useScreenSize";
+import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -120,15 +124,56 @@ function RecentsSection({ chatSessions }: RecentsSectionProps) {
   );
 }
 
-function AppSidebarInner() {
+interface AppSidebarInnerProps {
+  folded: boolean;
+  onFoldClick: () => void;
+}
+
+function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
   const route = useAppRouter();
-  const { pinnedAgents, setPinnedAgents, currentAgent } = useAgentsContext();
-  const { folded, setFolded } = useAppSidebarContext();
-  const { chatSessions, refreshChatSessions } = useChatContext();
+  const searchParams = useSearchParams();
   const combinedSettings = useSettingsContext();
-  const { refreshCurrentProjectDetails, fetchProjects, currentProjectId } =
-    useProjectsContext();
   const { popup, setPopup } = usePopup();
+
+  // Use SWR hooks for data fetching
+  const {
+    chatSessions,
+    refreshChatSessions,
+    isLoading: isLoadingChatSessions,
+  } = useChatSessions();
+  const {
+    projects,
+    refreshProjects,
+    isLoading: isLoadingProjects,
+  } = useProjects();
+  const { agents, isLoading: isLoadingAgents } = useAgents();
+  const {
+    pinnedAgents,
+    updatePinnedAgents,
+    isLoading: isLoadingPinnedAgents,
+  } = usePinnedAgentsWithDetails();
+
+  // Wait for ALL dynamic data before showing any sections
+  const isLoadingDynamicContent =
+    isLoadingChatSessions ||
+    isLoadingProjects ||
+    isLoadingAgents ||
+    isLoadingPinnedAgents;
+
+  // Still need some context for stateful operations
+  const { refreshCurrentProjectDetails, currentProjectId } =
+    useProjectsContext();
+
+  // Derive current agent from URL params
+  const currentAgentIdRaw = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
+  const currentAgentId = currentAgentIdRaw ? parseInt(currentAgentIdRaw) : null;
+  const currentAgent = useMemo(
+    () =>
+      currentAgentId
+        ? agents.find((agent) => agent.id === currentAgentId) || null
+        : null,
+    [agents, currentAgentId]
+  );
 
   // State for custom agent modal
   const [pendingMoveChatSession, setPendingMoveChatSession] =
@@ -138,7 +183,6 @@ function AppSidebarInner() {
   >(null);
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
     useState(false);
-  const { projects } = useProjectsContext();
 
   const [visibleAgents, currentAgentIsPinned] = useMemo(
     () => buildVisibleAgents(pinnedAgents, currentAgent),
@@ -167,27 +211,44 @@ function AppSidebarInner() {
       if (!over) return;
       if (active.id === over.id) return;
 
-      setPinnedAgents((prev) => {
-        const activeIndex = visibleAgentIds.findIndex(
-          (agentId) => agentId === active.id
-        );
-        const overIndex = visibleAgentIds.findIndex(
-          (agentId) => agentId === over.id
-        );
+      const activeIndex = visibleAgentIds.findIndex(
+        (agentId) => agentId === active.id
+      );
+      const overIndex = visibleAgentIds.findIndex(
+        (agentId) => agentId === over.id
+      );
 
-        if (currentAgent && !currentAgentIsPinned) {
-          // This is the case in which the user is dragging the UNPINNED agent and moving it to somewhere else in the list.
-          // This is an indication that we WANT to pin this agent!
-          if (activeIndex === visibleAgentIds.length - 1) {
-            const prevWithVisible = [...prev, currentAgent];
-            return arrayMove(prevWithVisible, activeIndex, overIndex);
-          }
+      let newPinnedAgents: MinimalPersonaSnapshot[];
+
+      if (currentAgent && !currentAgentIsPinned) {
+        // This is the case in which the user is dragging the UNPINNED agent and moving it to somewhere else in the list.
+        // This is an indication that we WANT to pin this agent!
+        if (activeIndex === visibleAgentIds.length - 1) {
+          const pinnedWithCurrent = [...pinnedAgents, currentAgent];
+          newPinnedAgents = arrayMove(
+            pinnedWithCurrent,
+            activeIndex,
+            overIndex
+          );
+        } else {
+          // Use visibleAgents to ensure the indices match with `visibleAgentIds`
+          newPinnedAgents = arrayMove(visibleAgents, activeIndex, overIndex);
         }
+      } else {
+        // Use visibleAgents to ensure the indices match with `visibleAgentIds`
+        newPinnedAgents = arrayMove(visibleAgents, activeIndex, overIndex);
+      }
 
-        return arrayMove(prev, activeIndex, overIndex);
-      });
+      updatePinnedAgents(newPinnedAgents);
     },
-    [visibleAgentIds, setPinnedAgents, currentAgent, currentAgentIsPinned]
+    [
+      visibleAgentIds,
+      visibleAgents,
+      pinnedAgents,
+      updatePinnedAgents,
+      currentAgent,
+      currentAgentIsPinned,
+    ]
   );
 
   // Perform the actual move
@@ -202,14 +263,14 @@ function AppSidebarInner() {
           targetProjectId,
           refreshChatSessions,
           refreshCurrentProjectDetails,
-          fetchProjects,
+          fetchProjects: refreshProjects,
           currentProjectId,
         },
         setPopup
       );
       const projectRefreshPromise = currentProjectId
         ? refreshCurrentProjectDetails()
-        : fetchProjects();
+        : refreshProjects();
       await Promise.all([refreshChatSessions(), projectRefreshPromise]);
     } catch (error) {
       console.error("Failed to move chat:", error);
@@ -284,7 +345,7 @@ function AppSidebarInner() {
             await removeChatSessionFromProject(chatSession.id);
             const projectRefreshPromise = currentProjectId
               ? refreshCurrentProjectDetails()
-              : fetchProjects();
+              : refreshProjects();
             await Promise.all([refreshChatSessions(), projectRefreshPromise]);
           } catch (error) {
             console.error("Failed to remove chat from project:", error);
@@ -296,7 +357,7 @@ function AppSidebarInner() {
       currentProjectId,
       refreshChatSessions,
       refreshCurrentProjectDetails,
-      fetchProjects,
+      refreshProjects,
       setPopup,
     ]
   );
@@ -382,10 +443,6 @@ function AppSidebarInner() {
     [folded, isAdmin, isCurator]
   );
 
-  if (!combinedSettings) {
-    return null;
-  }
-
   return (
     <>
       {popup}
@@ -426,14 +483,15 @@ function AppSidebarInner() {
         />
       )}
 
-      <SidebarWrapper folded={folded} setFolded={setFolded}>
+      <SidebarWrapper folded={folded} onFoldClick={onFoldClick}>
         <SidebarBody footer={settingsButton} actionButton={newSessionButton}>
+          {/* When folded, show icons immediately without waiting for data */}
           {folded ? (
             <>
               {moreAgentsButton}
               {newProjectButton}
             </>
-          ) : (
+          ) : isLoadingDynamicContent ? null : (
             <>
               {/* Agents */}
               <DndContext
@@ -479,7 +537,7 @@ function AppSidebarInner() {
                   {projects.map((project) => (
                     <ProjectFolderButton key={project.id} project={project} />
                   ))}
-                  {newProjectButton}
+                  {projects.length === 0 && newProjectButton}
                 </SidebarSection>
 
                 {/* Recents */}
@@ -493,7 +551,45 @@ function AppSidebarInner() {
   );
 }
 
-const AppSidebar = memo(AppSidebarInner);
-AppSidebar.displayName = "AppSidebar";
+const MemoizedAppSidebarInner = memo(AppSidebarInner);
+MemoizedAppSidebarInner.displayName = "AppSidebar";
 
-export default AppSidebar;
+export default function AppSidebar() {
+  const { folded, setFolded } = useAppSidebarContext();
+  const { isMobile } = useScreenSize();
+
+  if (!isMobile)
+    return (
+      <MemoizedAppSidebarInner
+        folded={folded}
+        onFoldClick={() => setFolded((prev) => !prev)}
+      />
+    );
+
+  return (
+    <>
+      <div
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 transition-transform duration-200",
+          folded ? "-translate-x-full" : "translate-x-0"
+        )}
+      >
+        <MemoizedAppSidebarInner
+          folded={false}
+          onFoldClick={() => setFolded(true)}
+        />
+      </div>
+
+      {/* Hitbox to close the sidebar if anything outside of it is touched */}
+      <div
+        className={cn(
+          "fixed inset-0 z-40 bg-mask-03 backdrop-blur-03 transition-opacity duration-200",
+          folded
+            ? "opacity-0 pointer-events-none"
+            : "opacity-100 pointer-events-auto"
+        )}
+        onClick={() => setFolded(true)}
+      />
+    </>
+  );
+}

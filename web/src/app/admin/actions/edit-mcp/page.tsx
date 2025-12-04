@@ -6,23 +6,16 @@ import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { BackButton } from "@/components/BackButton";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { ToolIcon } from "@/components/icons/icons";
-import { FiLink, FiCheck } from "react-icons/fi";
 import CardSection from "@/components/admin/CardSection";
 import { TextFormField } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
-
 import { usePopup } from "@/components/admin/connectors/Popup";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import Text from "@/components/ui/text";
+import { useAuthType } from "@/lib/hooks";
+import { AuthType } from "@/lib/constants";
 import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
@@ -36,12 +29,13 @@ import {
   MCPFormValues,
   MCPAuthTemplate,
   MCPServerDetail,
+  MCPTool,
 } from "@/components/admin/actions/interfaces";
 import { ToolList } from "@/components/admin/actions/ToolList";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import SvgCheck from "@/icons/check";
-import SvgExternalLink from "@/icons/external-link";
 import SvgLink from "@/icons/link";
+import SvgActions from "@/icons/actions";
 
 const validationSchema = Yup.object().shape({
   name: Yup.string().required("Name is required"),
@@ -54,10 +48,13 @@ const validationSchema = Yup.object().shape({
       MCPAuthenticationType.NONE,
       MCPAuthenticationType.API_TOKEN,
       MCPAuthenticationType.OAUTH,
+      MCPAuthenticationType.PT_OAUTH,
     ])
     .required("Authentication type is required"),
   auth_performer: Yup.string().when("auth_type", {
-    is: (auth_type: string) => auth_type !== MCPAuthenticationType.NONE,
+    is: (auth_type: string) =>
+      auth_type !== MCPAuthenticationType.NONE &&
+      auth_type !== MCPAuthenticationType.PT_OAUTH,
     then: (schema) =>
       schema
         .oneOf([
@@ -89,6 +86,11 @@ export default function NewMCPToolPage() {
   const searchParams = useSearchParams();
   const { popup, setPopup } = usePopup();
 
+  // Check if OAuth is enabled for the Onyx instance
+  const authType = useAuthType();
+  const isOAuthEnabled =
+    authType === AuthType.OIDC || authType === AuthType.GOOGLE_OAUTH;
+
   const [loading, setLoading] = useState(false);
 
   const [oauthConnected, setOauthConnected] = useState(false);
@@ -105,6 +107,7 @@ export default function NewMCPToolPage() {
     oauth_client_secret: "",
   });
   const fetchedServerRef = useRef<string | null>(null);
+  const [initialDbTools, setInitialDbTools] = useState<MCPTool[] | null>(null);
 
   // We no longer probe by listing tools; OAuth connection state
   // is inferred from presence of return data in sessionStorage.
@@ -187,6 +190,61 @@ export default function NewMCPToolPage() {
 
     fetchServerData();
   }, [serverId]); // Only depend on the memoized server ID
+
+  useEffect(() => {
+    if (!serverId) {
+      setInitialDbTools(null);
+      return;
+    }
+
+    setInitialDbTools(null);
+    let cancelled = false;
+
+    const loadExistingTools = async () => {
+      try {
+        const response = await fetch(
+          `/api/admin/mcp/server/${serverId}/db-tools`
+        );
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+        const data = await response.json();
+        const mappedTools: MCPTool[] = (data.tools || []).map(
+          (tool: {
+            name: string;
+            description?: string;
+            display_name?: string;
+          }) => ({
+            name: tool.name,
+            description: tool.description,
+            displayName: tool.display_name,
+          })
+        );
+        if (cancelled) {
+          return;
+        }
+        setInitialDbTools(mappedTools);
+        if (mappedTools.length > 0) {
+          const currentUrl = new URL(window.location.href);
+          if (currentUrl.searchParams.get("listing_tools") !== "true") {
+            currentUrl.searchParams.set("listing_tools", "true");
+            router.replace(currentUrl.toString());
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load MCP server tools:", error);
+        if (!cancelled) {
+          setInitialDbTools([]);
+        }
+      }
+    };
+
+    loadExistingTools();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [serverId, router]);
 
   const handleOAuthConnect = async (values: MCPFormValues) => {
     setCheckingOAuthStatus(true);
@@ -274,7 +332,7 @@ export default function NewMCPToolPage() {
 
       <AdminPageTitle
         title={verbRoot + "e MCP Server Actions"}
-        icon={<ToolIcon size={32} className="my-auto" />}
+        icon={SvgActions}
       />
 
       <Text className="mb-4">
@@ -329,26 +387,26 @@ export default function NewMCPToolPage() {
                         />
                         <div>
                           <Label htmlFor="transport">Transport</Label>
-                          <Select
+                          <InputSelect
                             value={values.transport}
                             onValueChange={(value) =>
                               setFieldValue("transport", value)
                             }
+                            className="mt-1"
                           >
-                            <SelectTrigger className="mt-1">
-                              <SelectValue placeholder="Select transport" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem
+                            <InputSelect.Trigger placeholder="Select transport" />
+
+                            <InputSelect.Content>
+                              <InputSelect.Item
                                 value={MCPTransportType.STREAMABLE_HTTP}
                               >
                                 Streamable HTTP
-                              </SelectItem>
-                              <SelectItem value={MCPTransportType.SSE}>
+                              </InputSelect.Item>
+                              <InputSelect.Item value={MCPTransportType.SSE}>
                                 SSE
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
+                              </InputSelect.Item>
+                            </InputSelect.Content>
+                          </InputSelect>
                         </div>
                       </div>
                     </div>
@@ -362,71 +420,99 @@ export default function NewMCPToolPage() {
                       <div className="space-y-4">
                         <div>
                           <Label htmlFor="auth_type">Authentication Type</Label>
-                          <Select
-                            value={values.auth_type}
-                            onValueChange={(value) => {
-                              setFieldValue("auth_type", value);
-                              // For OAuth, we only support per-user auth. Force performer accordingly.
-                              if (value === MCPAuthenticationType.OAUTH) {
-                                setFieldValue(
-                                  "auth_performer",
-                                  MCPAuthenticationPerformer.PER_USER
-                                );
-                              }
-                            }}
-                          >
-                            <SelectTrigger className="mt-1">
-                              <SelectValue placeholder="Select authentication type" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value={MCPAuthenticationType.NONE}>
-                                None
-                              </SelectItem>
-                              <SelectItem
-                                value={MCPAuthenticationType.API_TOKEN}
-                              >
-                                API Token
-                              </SelectItem>
-                              <SelectItem value={MCPAuthenticationType.OAUTH}>
-                                OAuth
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                          {errors.auth_type && touched.auth_type && (
-                            <div className="text-red-500 text-sm mt-1">
-                              {errors.auth_type}
-                            </div>
-                          )}
+                          <div data-testid="auth-type-select">
+                            <InputSelect
+                              value={values.auth_type}
+                              onValueChange={(value) => {
+                                setFieldValue("auth_type", value);
+                                if (value === MCPAuthenticationType.OAUTH) {
+                                  setFieldValue(
+                                    "auth_performer",
+                                    MCPAuthenticationPerformer.PER_USER
+                                  );
+                                }
+                              }}
+                              className="mt-1"
+                            >
+                              <InputSelect.Trigger placeholder="Select authentication type" />
+
+                              <InputSelect.Content>
+                                <InputSelect.Item
+                                  value={MCPAuthenticationType.NONE}
+                                >
+                                  None
+                                </InputSelect.Item>
+                                <InputSelect.Item
+                                  value={MCPAuthenticationType.API_TOKEN}
+                                >
+                                  API Token
+                                </InputSelect.Item>
+                                <InputSelect.Item
+                                  value={MCPAuthenticationType.OAUTH}
+                                >
+                                  OAuth
+                                </InputSelect.Item>
+                                {isOAuthEnabled && (
+                                  <InputSelect.Item
+                                    value={MCPAuthenticationType.PT_OAUTH}
+                                  >
+                                    Pass-through OAuth
+                                  </InputSelect.Item>
+                                )}
+                              </InputSelect.Content>
+                            </InputSelect>
+                            {errors.auth_type && touched.auth_type && (
+                              <div className="text-red-500 text-sm mt-1">
+                                {errors.auth_type}
+                              </div>
+                            )}
+                            {values.auth_type ===
+                              MCPAuthenticationType.PT_OAUTH && (
+                              <Text className="text-sm text-subtle mt-2">
+                                The user&apos;s OAuth token from their Onyx
+                                login will be passed to the MCP server as the
+                                Authorization header.
+                              </Text>
+                            )}
+                          </div>
                         </div>
 
                         {values.auth_type !== MCPAuthenticationType.NONE &&
-                          values.auth_type !== MCPAuthenticationType.OAUTH && (
+                          values.auth_type !== MCPAuthenticationType.OAUTH &&
+                          values.auth_type !==
+                            MCPAuthenticationType.PT_OAUTH && (
                             <div>
                               <Label htmlFor="auth_performer">
                                 Who performs authentication?
                               </Label>
-                              <Select
-                                value={values.auth_performer}
-                                onValueChange={(value) =>
-                                  setFieldValue("auth_performer", value)
-                                }
-                              >
-                                <SelectTrigger className="mt-1">
-                                  <SelectValue placeholder="Select authentication performer" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem
-                                    value={MCPAuthenticationPerformer.ADMIN}
-                                  >
-                                    Admin (shared credentials)
-                                  </SelectItem>
-                                  <SelectItem
-                                    value={MCPAuthenticationPerformer.PER_USER}
-                                  >
-                                    Per-user (individual credentials)
-                                  </SelectItem>
-                                </SelectContent>
-                              </Select>
+
+                              <div data-testid="auth-performer-select">
+                                <InputSelect
+                                  value={values.auth_performer}
+                                  onValueChange={(value) =>
+                                    setFieldValue("auth_performer", value)
+                                  }
+                                  className="mt-1"
+                                >
+                                  <InputSelect.Trigger placeholder="Select authentication performer" />
+
+                                  <InputSelect.Content>
+                                    <InputSelect.Item
+                                      value={MCPAuthenticationPerformer.ADMIN}
+                                    >
+                                      Admin (shared credentials)
+                                    </InputSelect.Item>
+                                    <InputSelect.Item
+                                      value={
+                                        MCPAuthenticationPerformer.PER_USER
+                                      }
+                                    >
+                                      Per-user (individual credentials)
+                                    </InputSelect.Item>
+                                  </InputSelect.Content>
+                                </InputSelect>
+                              </div>
+
                               {errors.auth_performer &&
                                 touched.auth_performer && (
                                   <div className="text-red-500 text-sm mt-1">
@@ -473,7 +559,6 @@ export default function NewMCPToolPage() {
                     {values.auth_type === MCPAuthenticationType.OAUTH && (
                       <div className="flex items-center gap-2">
                         <Button
-                          type="button"
                           onClick={() => handleOAuthConnect(values)}
                           disabled={
                             checkingOAuthStatus ||
@@ -488,6 +573,7 @@ export default function NewMCPToolPage() {
                                 ? SvgCheck
                                 : SvgLink
                           }
+                          data-testid="connect-oauth-button"
                         >
                           {checkingOAuthStatus
                             ? "Connecting..."
@@ -503,6 +589,7 @@ export default function NewMCPToolPage() {
                       verbRoot={verbRoot}
                       serverId={serverId ? parseInt(serverId) : undefined}
                       oauthConnected={oauthConnected}
+                      initialDbTools={initialDbTools}
                       setPopup={setPopup}
                     />
                   </div>

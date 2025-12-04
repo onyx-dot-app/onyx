@@ -1,6 +1,5 @@
 "use client";
 
-import { GroupsIcon } from "@/components/icons/icons";
 import { UserGroupsTable } from "./UserGroupsTable";
 import { UserGroupCreationForm } from "./UserGroupCreationForm";
 import { usePopup } from "@/components/admin/connectors/Popup";
@@ -11,6 +10,7 @@ import { AdminPageTitle } from "@/components/admin/Title";
 
 import { useUser } from "@/components/user/UserProvider";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
+import SvgUsers from "@/icons/users";
 
 const Main = () => {
   const { popup, setPopup } = usePopup();
@@ -83,10 +83,7 @@ const Main = () => {
 const Page = () => {
   return (
     <div className="mx-auto container">
-      <AdminPageTitle
-        title="Manage User Groups"
-        icon={<GroupsIcon size={32} />}
-      />
+      <AdminPageTitle title="Manage User Groups" icon={SvgUsers} />
 
       <Main />
     </div>
