@@ -15,19 +15,9 @@ import { MdOutlineCreditCard } from "react-icons/md";
 import {
   ClipboardIcon,
   NotebookIconSkeleton,
-  ConnectorIconSkeleton,
-  ToolIconSkeleton,
-  GroupsIconSkeleton,
-  KeyIconSkeleton,
-  DatabaseIconSkeleton,
-  SettingsIconSkeleton,
   PaintingIconSkeleton,
   SlackIconSkeleton,
-  DocumentSetIconSkeleton,
-  AssistantsIconSkeleton,
-  DocumentIcon2,
   BrainIcon,
-  GlobeIcon,
 } from "@/components/icons/icons";
 import OnyxLogo from "@/icons/onyx-logo";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
@@ -44,6 +34,13 @@ import SvgGlobe from "@/icons/globe";
 import SvgActivity from "@/icons/activity";
 import SvgBarChart from "@/icons/bar-chart";
 import SvgSettings from "@/icons/settings";
+import SvgKey from "@/icons/key";
+import SvgUploadCloud from "@/icons/upload-cloud";
+import SvgFolder from "@/icons/folder";
+import SvgActions from "@/icons/actions";
+import SvgUser from "@/icons/user";
+import SvgFileText from "@/icons/file-text";
+import SvgServer from "@/icons/server";
 
 const connectors_items = () => [
   {
@@ -53,7 +50,7 @@ const connectors_items = () => [
   },
   {
     name: "Add Connector",
-    icon: ConnectorIconSkeleton,
+    icon: SvgUploadCloud,
     link: "/admin/add-connector",
   },
 ];
@@ -61,7 +58,7 @@ const connectors_items = () => [
 const document_management_items = () => [
   {
     name: "Document Sets",
-    icon: DocumentSetIconSkeleton,
+    icon: SvgFolder,
     link: "/admin/documents/sets",
   },
   {
@@ -97,14 +94,14 @@ const custom_assistants_items = (
       },
       {
         name: "Actions",
-        icon: ToolIconSkeleton,
+        icon: SvgActions,
         link: "/admin/actions",
       }
     );
   } else {
     items.push({
       name: "Actions",
-      icon: ToolIconSkeleton,
+      icon: SvgActions,
       link: "/admin/actions",
     });
   }
@@ -147,7 +144,7 @@ const collections = (
           items: [
             {
               name: "Groups",
-              icon: GroupsIconSkeleton,
+              icon: SvgUsers,
               link: "/admin/groups",
             },
           ],
@@ -186,7 +183,7 @@ const collections = (
               : []),
             {
               name: "Document Processing",
-              icon: DocumentIcon2,
+              icon: SvgFileText,
               link: "/admin/configuration/document-processing",
             },
             ...(kgExposed
@@ -205,21 +202,21 @@ const collections = (
           items: [
             {
               name: "Users",
-              icon: SvgUsers,
+              icon: SvgUser,
               link: "/admin/users",
             },
             ...(enableEnterprise
               ? [
                   {
                     name: "Groups",
-                    icon: GroupsIconSkeleton,
+                    icon: SvgUsers,
                     link: "/admin/groups",
                   },
                 ]
               : []),
             {
               name: "API Keys",
-              icon: KeyIconSkeleton,
+              icon: SvgKey,
               link: "/admin/api-key",
             },
             {
@@ -243,7 +240,7 @@ const collections = (
                     ? [
                         {
                           name: "Query History",
-                          icon: DatabaseIconSkeleton,
+                          icon: SvgServer,
                           link: "/admin/performance/query-history",
                         },
                       ]

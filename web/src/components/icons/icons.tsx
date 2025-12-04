@@ -4,37 +4,21 @@ import { JSX } from "react";
 import Image from "next/image";
 import { StaticImageData } from "next/image";
 
-import {
-  ArrowSquareOutIcon as ArrowSquareOut,
-  BrainIcon as Brain,
-  GearIcon as Gear,
-  LinkIcon as Link,
-  LinkBreakIcon as LinkBreak,
-  PlugIcon as Plug,
-  QuestionIcon as Question,
-  TrashIcon as Trash,
-  XSquareIcon as XSquare,
-} from "@phosphor-icons/react";
+import { BrainIcon as Brain } from "@phosphor-icons/react";
 
 import {
   FiAlertCircle,
   FiAlertTriangle,
-  FiBarChart2,
   FiChevronDown,
-  FiChevronLeft,
-  FiChevronRight,
-  FiChevronUp,
   FiChevronsDown,
   FiChevronsUp,
   FiClipboard,
-  FiCopy,
   FiCpu,
   FiEdit2,
   FiFile,
   FiGlobe,
   FiInfo,
   FiMail,
-  FiThumbsDown,
   FiThumbsUp,
 } from "react-icons/fi";
 
@@ -250,33 +234,6 @@ export const ArtAsistantIcon = ({
     </svg>
   );
 };
-export const AssistantsIconSkeleton = ({
-  size,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return (
-    <svg
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-      xmlns="http://www.w3.org/2000/svg"
-      width="200"
-      height="200"
-      viewBox="0 0 24 24"
-    >
-      <g
-        fill="none"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.5"
-      >
-        <path d="M8.88 21.25h9.87a2.5 2.5 0 0 0 2.5-2.5v-3.63a2.5 2.5 0 0 0-2.5-2.48h-1.27m-6.1 6.09l6.1-6.11l1.87-1.87a2.49 2.49 0 0 0 0-3.53l-2.57-2.57a2.49 2.49 0 0 0-3.53 0l-1.87 1.87" />
-        <path d="M8.88 2.75H5.25a2.5 2.5 0 0 0-2.5 2.5v13.5a2.5 2.5 0 0 0 2.5 2.5h3.63a2.5 2.5 0 0 0 2.5-2.5V5.25a2.5 2.5 0 0 0-2.5-2.5" />
-        <path d="M7.065 18.594a1.594 1.594 0 1 0 0-3.188a1.594 1.594 0 0 0 0 3.188" />
-      </g>
-    </svg>
-  );
-};
 export const BookmarkIcon = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -377,94 +334,6 @@ export const ChevronDownIcon = createIcon(FiChevronDown);
 export const ChevronsDownIcon = createIcon(FiChevronsDown);
 export const ChevronsUpIcon = createIcon(FiChevronsUp);
 export const ClipboardIcon = createIcon(FiClipboard);
-export const ConnectorIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return (
-    <svg
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-      xmlns="http://www.w3.org/2000/svg"
-      width="200"
-      height="200"
-      viewBox="0 0 16 16"
-    >
-      <path
-        fill="currentColor"
-        fillRule="evenodd"
-        d="M4.5 13a3.5 3.5 0 0 1-1.41-6.705a3.5 3.5 0 0 1 6.63-2.171a2.5 2.5 0 0 1 3.197 3.018A3.001 3.001 0 0 1 12 13zm.72-5.03a.75.75 0 0 0 1.06 1.06l.97-.97v2.69a.75.75 0 0 0 1.5 0V8.06l.97.97a.75.75 0 1 0 1.06-1.06L8.53 5.72a.75.75 0 0 0-1.06 0z"
-        clipRule="evenodd"
-      />
-    </svg>
-  );
-};
-export const ConnectorIconSkeleton = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return (
-    <svg
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-      xmlns="http://www.w3.org/2000/svg"
-      width="200"
-      height="200"
-      viewBox="0 0 24 24"
-    >
-      <path
-        fill="none"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.5"
-        d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 0 1-1.41-8.775a5.25 5.25 0 0 1 10.233-2.33a3 3 0 0 1 3.758 3.848A3.752 3.752 0 0 1 18 19.5H6.75Z"
-      />
-    </svg>
-  );
-};
-export const DatabaseIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return (
-    <svg
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-      xmlns="http://www.w3.org/2000/svg"
-      width="200"
-      height="200"
-      viewBox="0 0 14 14"
-    >
-      <path
-        fill="currentColor"
-        fillRule="evenodd"
-        d="M.552 2.278c0-.155.077-.368.357-.63c.28-.262.722-.527 1.319-.762C3.418.416 5.105.112 7 .112c1.895 0 3.582.304 4.772.774c.597.235 1.038.5 1.32.762c.28.262.356.475.356.63c0 .155-.077.368-.357.63c-.28.261-.722.526-1.319.762c-1.19.47-2.877.774-4.772.774c-1.895 0-3.582-.304-4.772-.774c-.597-.236-1.038-.5-1.32-.763c-.28-.261-.356-.474-.356-.63Zm12.96 1.89a6.317 6.317 0 0 1-1.281.665c-1.37.54-3.22.86-5.231.86c-2.012 0-3.861-.32-5.231-.86a6.315 6.315 0 0 1-1.281-.666v3.178c.056.085.135.178.246.279c.29.263.745.53 1.36.766c1.224.471 2.959.776 4.906.776c1.947 0 3.682-.305 4.907-.776c.614-.237 1.069-.503 1.359-.766c.11-.101.19-.194.246-.28zM.488 11.208V8.993c.341.213.732.4 1.156.564c1.402.539 3.295.859 5.356.859c2.06 0 3.954-.32 5.356-.86a6.821 6.821 0 0 0 1.156-.563v2.216C13.512 12.749 10.597 14 7 14C3.403 14 .488 12.75.488 11.209Z"
-        clipRule="evenodd"
-      />
-    </svg>
-  );
-};
-export const DatabaseIconSkeleton = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return (
-    <svg
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-      xmlns="http://www.w3.org/2000/svg"
-      width="200"
-      height="200"
-      viewBox="0 0 24 24"
-    >
-      <g fill="none" stroke="currentColor" strokeWidth="1.5">
-        <path strokeLinecap="round" d="M4 18V6m16 0v12" />
-        <path d="M12 10c4.418 0 8-1.79 8-4s-3.582-4-8-4s-8 1.79-8 4s3.582 4 8 4Zm8 2c0 2.21-3.582 4-8 4s-8-1.79-8-4m16 6c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
-      </g>
-    </svg>
-  );
-};
 export const DexpandTwoIcon = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -512,30 +381,6 @@ export const DocumentIcon2 = ({
     </svg>
   );
 };
-export const DocumentSetIconSkeleton = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return (
-    <svg
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-      xmlns="http://www.w3.org/2000/svg"
-      width="200"
-      height="200"
-      viewBox="0 0 24 24"
-    >
-      <path
-        fill="none"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.5"
-        d="M21.25 9.883v7.698a3.083 3.083 0 0 1-3.083 3.083H5.833a3.083 3.083 0 0 1-3.083-3.083V6.419a3.083 3.083 0 0 1 3.083-3.083h3.084a3.083 3.083 0 0 1 2.57 1.377l.873 1.326a1.748 1.748 0 0 0 1.449.77h4.358a3.084 3.084 0 0 1 3.083 3.074"
-      />
-    </svg>
-  );
-};
 export const DownloadCSVIcon = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -563,28 +408,6 @@ export const EditIcon = createIcon(FiEdit2);
 export const EmailIcon = createIcon(FiMail);
 
 //  COMPANY LOGOS
-export const EmbeddingIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return (
-    <svg
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-      xmlns="http://www.w3.org/2000/svg"
-      width="200"
-      height="200"
-      viewBox="0 0 24 24"
-    >
-      <path
-        fill="currentColor"
-        fillRule="evenodd"
-        d="M2.25 5.25a3 3 0 0 1 3-3h13.5a3 3 0 0 1 3 3V15a3 3 0 0 1-3 3h-3v.257c0 .597.237 1.17.659 1.591l.621.622a.75.75 0 0 1-.53 1.28h-9a.75.75 0 0 1-.53-1.28l.621-.622a2.25 2.25 0 0 0 .659-1.59V18h-3a3 3 0 0 1-3-3V5.25Zm1.5 0v7.5a1.5 1.5 0 0 0 1.5 1.5h13.5a1.5 1.5 0 0 0 1.5-1.5v-7.5a1.5 1.5 0 0 0-1.5-1.5H5.25a1.5 1.5 0 0 0-1.5 1.5Z"
-        clipRule="evenodd"
-      />
-    </svg>
-  );
-};
 export const ExpandTwoIcon = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -609,29 +432,6 @@ export const ExpandTwoIcon = ({
   );
 };
 export const FileIcon = createIcon(FiFile);
-export const FileIcon2 = ({
-  size = 16,
-  className = defaultTailwindCSSBlue,
-}: IconProps) => {
-  return (
-    <svg
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-      xmlns="http://www.w3.org/2000/svg"
-      width="200"
-      height="200"
-      viewBox="0 0 14 14"
-    >
-      <path
-        fill="none"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M12.5 12.5a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1h5l5 5Zm-8-8h2m-2 3h5m-5 3h5"
-      />
-    </svg>
-  );
-};
 export const FileOptionIcon = ({
   size = 24,
   className = defaultTailwindCSS,
@@ -654,26 +454,6 @@ export const FileOptionIcon = ({
   );
 };
 export const GlobeIcon = createIcon(FiGlobe);
-export const GroupsIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return (
-    <svg
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-      xmlns="http://www.w3.org/2000/svg"
-      width="200"
-      height="200"
-      viewBox="0 0 16 16"
-    >
-      <path
-        fill="currentColor"
-        d="M8.5 4.5a2.5 2.5 0 1 1-5 0a2.5 2.5 0 0 1 5 0m2.4 7.506c.11.542-.348.994-.9.994H2c-.553 0-1.01-.452-.902-.994a5.002 5.002 0 0 1 9.803 0M14.002 12h-1.59a2.556 2.556 0 0 0-.04-.29a6.476 6.476 0 0 0-1.167-2.603a3.002 3.002 0 0 1 3.633 1.911c.18.522-.283.982-.836.982M12 8a2 2 0 1 0 0-4a2 2 0 0 0 0 4"
-      />
-    </svg>
-  );
-};
 export const GroupsIconSkeleton = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -700,52 +480,6 @@ export const GroupsIconSkeleton = ({
   );
 };
 export const InfoIcon = createIcon(FiInfo);
-export const KeyIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return (
-    <svg
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-      xmlns="http://www.w3.org/2000/svg"
-      width="200"
-      height="200"
-      viewBox="0 0 20 20"
-    >
-      <path
-        fill="currentColor"
-        fillRule="evenodd"
-        d="M8 7a5 5 0 1 1 3.61 4.804l-1.903 1.903A1 1 0 0 1 9 14H8v1a1 1 0 0 1-1 1H6v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-2a1 1 0 0 1 .293-.707L8.196 8.39A5.002 5.002 0 0 1 8 7Zm5-3a.75.75 0 0 0 0 1.5A1.5 1.5 0 0 1 14.5 7A.75.75 0 0 0 16 7a3 3 0 0 0-3-3Z"
-        clipRule="evenodd"
-      />
-    </svg>
-  );
-};
-export const KeyIconSkeleton = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return (
-    <svg
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-      xmlns="http://www.w3.org/2000/svg"
-      width="200"
-      height="200"
-      viewBox="0 0 24 24"
-    >
-      <path
-        fill="none"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.5"
-        d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z"
-      />
-    </svg>
-  );
-};
 export const MacIcon = ({
   size = 16,
   className = "my-auto flex flex-shrink-0 ",
@@ -982,26 +716,6 @@ export const PaintingIconSkeleton = ({
     </svg>
   );
 };
-export const PlusIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return (
-    <svg
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-      xmlns="http://www.w3.org/2000/svg"
-      width="200"
-      height="200"
-      viewBox="0 0 16 16"
-    >
-      <path
-        fill="currentColor"
-        d="M8.75 3.75a.75.75 0 0 0-1.5 0v3.5h-3.5a.75.75 0 0 0 0 1.5h3.5v3.5a.75.75 0 0 0 1.5 0v-3.5h3.5a.75.75 0 0 0 0-1.5h-3.5z"
-      />
-    </svg>
-  );
-};
 export const QuestionMarkIcon = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -1030,26 +744,6 @@ export const RobotIcon = ({
 }: IconProps) => {
   return <FaRobot size={size} className={className} />;
 };
-export const SettingsIconSkeleton = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return (
-    <svg
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-      xmlns="http://www.w3.org/2000/svg"
-      width="200"
-      height="200"
-      viewBox="0 0 24 24"
-    >
-      <g fill="none" stroke="currentColor" strokeWidth="1.5">
-        <path strokeLinecap="round" d="M4 18V6m16 0v12" />
-        <path d="M12 10c4.418 0 8-1.79 8-4s-3.582-4-8-4s-8 1.79-8 4s3.582 4 8 4Zm8 2c0 2.21-3.582 4-8 4s-8-1.79-8-4m16 6c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
-      </g>
-    </svg>
-  );
-};
 export const SwapIcon = ({
   size = 16,
   className = defaultTailwindCSS,
@@ -1075,61 +769,6 @@ export const SwapIcon = ({
       </g>
     </svg>
   );
-};
-export const ThumbsUpIcon = createIcon(FiThumbsUp);
-export const ToolIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return (
-    <svg
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-      xmlns="http://www.w3.org/2000/svg"
-      width="200"
-      height="200"
-      viewBox="0 0 24 24"
-    >
-      <path
-        fill="currentColor"
-        fillRule="evenodd"
-        d="M12 6.75a5.25 5.25 0 0 1 6.775-5.025a.75.75 0 0 1 .313 1.248l-3.32 3.319a2.248 2.248 0 0 0 1.941 1.939l3.318-3.319a.75.75 0 0 1 1.248.313a5.25 5.25 0 0 1-5.472 6.756c-1.018-.086-1.87.1-2.309.634L7.344 21.3A3.298 3.298 0 1 1 2.7 16.657l8.684-7.151c.533-.44.72-1.291.634-2.309A5.342 5.342 0 0 1 12 6.75ZM4.117 19.125a.75.75 0 0 1 .75-.75h.008a.75.75 0 0 1 .75.75v.008a.75.75 0 0 1-.75.75h-.008a.75.75 0 0 1-.75-.75v-.008Z"
-        clipRule="evenodd"
-      />
-    </svg>
-  );
-};
-export const ToolIconSkeleton = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return (
-    <svg
-      style={{ width: `${size}px`, height: `${size}px` }}
-      className={`w-[${size}px] h-[${size}px] ` + className}
-      xmlns="http://www.w3.org/2000/svg"
-      width="200"
-      height="200"
-      viewBox="0 0 24 24"
-    >
-      <g
-        fill="none"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.5"
-      >
-        <path d="M21.75 6.75a4.5 4.5 0 0 1-4.884 4.484c-1.076-.091-2.264.071-2.95.904l-7.152 8.684a2.548 2.548 0 1 1-3.586-3.586l8.684-7.152c.833-.686.995-1.874.904-2.95a4.5 4.5 0 0 1 6.336-4.486l-3.276 3.276a3.004 3.004 0 0 0 2.25 2.25l3.276-3.276c.256.565.398 1.192.398 1.852Z" />
-        <path d="M4.867 19.125h.008v.008h-.008v-.008Z" />
-      </g>
-    </svg>
-  );
-};
-export const TrashIcon = ({
-  size = 16,
-  className = defaultTailwindCSS,
-}: IconProps) => {
-  return <Trash size={size} className={className} />;
 };
 export const TriangleAlertIcon = createIcon(FiAlertTriangle);
 export const UsersIcon = ({
