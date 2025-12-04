@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import Button from "@/refresh-components/buttons/Button";
+import IconButton from "@/refresh-components/buttons/IconButton";
 import {
   Table,
   TableBody,
@@ -302,13 +303,13 @@ export function InlineFileManagement({
                   >
                     {isEditing && (
                       <TableCell>
-                        <button
+                        <IconButton
+                          icon={SvgX}
+                          danger
+                          internal
                           onClick={() => handleRemoveNewFile(index)}
-                          className="h-4 w-4 flex items-center justify-center rounded hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
-                          title="Remove this file"
-                        >
-                          <SvgX className="h-4 w-4 stroke-red-600 dark:stroke-red-400" />
-                        </button>
+                          tooltip="Remove file"
+                        />
                       </TableCell>
                     )}
                     <TableCell className="font-medium">
