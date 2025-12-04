@@ -38,7 +38,7 @@ from onyx.llm.message_types import ToolCall
 from onyx.llm.message_types import ToolMessage
 from onyx.llm.message_types import UserMessageWithParts
 from onyx.llm.message_types import UserMessageWithText
-from onyx.llm.prompt_cache.utils import apply_prompt_caching_to_agent_messages
+from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.utils import model_needs_formatting_reenabled
 from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER
 from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
@@ -525,13 +525,21 @@ def run_llm_step(
     llm_msg_history = translate_history_to_llm_format(history)
 
     # Apply prompt caching: cache invariant prefix (system + history) when supported by the provider.
-    if isinstance(llm_msg_history, list):
-        llm_msg_history = cast(
-            list[ChatCompletionMessage],
-            apply_prompt_caching_to_agent_messages(
-                messages=llm_msg_history,
-                llm=llm,
-            ),
+    if isinstance(llm_msg_history, list) and llm_msg_history:
+        cacheable_prefix: LanguageModelInput | None
+        suffix: LanguageModelInput
+        if len(llm_msg_history) > 1:
+            cacheable_prefix = llm_msg_history[:-1]
+            suffix = llm_msg_history[-1:]
+        else:
+            cacheable_prefix = None
+            suffix = llm_msg_history
+
+        llm_msg_history, _ = process_with_prompt_cache(
+            llm=llm,
+            cacheable_prefix=cacheable_prefix,
+            suffix=suffix,
+            continuation=False,
         )
 
     # Uncomment the line below to log the entire message history to the console

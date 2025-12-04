@@ -1,18 +1,15 @@
+# pyright: reportMissingTypeStubs=false
 """Utility functions for prompt caching."""
 
 from collections.abc import Callable
 from collections.abc import Sequence
 from typing import cast
-from typing import TYPE_CHECKING
 
 from onyx.llm.interfaces import LanguageModelInput
-from onyx.llm.interfaces import LLM
 from onyx.llm.message_types import ChatCompletionMessage
 from onyx.llm.message_types import UserMessageWithText
 from onyx.utils.logger import setup_logger
 
-if TYPE_CHECKING:
-    from onyx.agents.agent_sdk.message_types import AgentSDKMessage
 
 logger = setup_logger()
 
@@ -129,74 +126,3 @@ def prepare_messages_with_cacheable_transform(
     return combine_messages_with_continuation(
         prefix_msgs, suffix_msgs, continuation, was_prefix_string
     )
-
-
-def apply_prompt_caching_to_agent_messages(
-    messages: list["AgentSDKMessage"],
-    llm: LLM,
-) -> list["AgentSDKMessage"]:
-    """Apply prompt caching to agent SDK messages.
-
-    MINIMAL MODIFICATIONS ONLY: This function adds cache control parameters where needed,
-    but otherwise returns messages unchanged.
-
-    For OpenAI/Vertex (implicit caching): Messages pass through unchanged
-    For Anthropic: Adds cache_control parameter to the last cacheable message
-
-    Args:
-        messages: List of agent SDK messages (system, history, current user message)
-        llm: The LLM instance (used to determine provider)
-
-    Returns:
-        List of agent SDK messages with minimal caching modifications
-    """
-    from onyx.llm.prompt_cache.providers.factory import get_provider_adapter
-
-    if not messages:
-        return messages
-
-    provider_adapter = get_provider_adapter(llm.config.model_provider)
-
-    # For providers that don't support caching or use implicit caching (OpenAI, Vertex),
-    # return messages unchanged
-    if not provider_adapter.supports_caching():
-        return messages
-
-    # Check if this provider needs explicit cache control (Anthropic)
-    # For now, only Anthropic needs explicit cache_control parameters
-    if llm.config.model_provider != "anthropic":
-        # OpenAI and Vertex use implicit caching, no modifications needed
-        return messages
-
-    # For Anthropic: Add cache_control to the last message before the final user message
-    # Find the last user message
-    last_user_msg_idx = -1
-    for i in range(len(messages) - 1, -1, -1):
-        if messages[i].get("role") == "user":  # type: ignore
-            last_user_msg_idx = i
-            break
-
-    if last_user_msg_idx <= 0:
-        # No user message or it's the first message, no caching
-        return messages
-
-    # Add cache_control to the message just before the last user message
-    cache_breakpoint_idx = last_user_msg_idx - 1
-
-    # Create a shallow copy of messages to avoid mutating the input
-    result_messages = list(messages)
-
-    # Add cache_control to the breakpoint message
-    breakpoint_msg = dict(result_messages[cache_breakpoint_idx])
-
-    # For Anthropic, add cache_control as a top-level field
-    breakpoint_msg["cache_control"] = {"type": "ephemeral"}  # type: ignore
-
-    result_messages[cache_breakpoint_idx] = breakpoint_msg  # type: ignore
-
-    logger.debug(
-        f"Added cache_control to message at index {cache_breakpoint_idx} "
-        f"for provider {llm.config.model_provider}"
-    )
-
-    return result_messages
