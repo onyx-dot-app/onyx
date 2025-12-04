@@ -8,29 +8,29 @@ from onyx.db.models import Tool
 class ToolVisibilitySettings(BaseModel):
     """Configuration for tool visibility across different UI contexts."""
 
-    chat_selectable: bool  # Whether tool appears in chat input bar dropdown
-    agent_creation_selectable: (
-        bool  # Whether tool appears in agent creation/default behavior pages
+    chat_selectable: bool = True  # Whether tool appears in chat input bar dropdown
+    agent_creation_selectable: bool = (
+        True  # Whether tool appears in agent creation/default behavior pages
     )
-    default_enabled: bool  # Whether tool is enabled by default
-    expose_to_frontend: bool  # Whether tool should be sent to frontend at all
+    default_enabled: bool = False  # Whether tool is enabled by default
+    expose_to_frontend: bool = True  # Whether tool should be sent to frontend at all
 
 
 # Centralized configuration for tool visibility across different contexts
 # This allows for easy extension with new tools that need custom visibility rules
 TOOL_VISIBILITY_CONFIG: dict[str, ToolVisibilitySettings] = {
-    "OpenURLTool": {
-        "chat_selectable": False,
-        "agent_creation_selectable": True,
-        "default_enabled": True,
-        "expose_to_frontend": True,
-    },
-    "OktaProfileTool": {
-        "chat_selectable": False,
-        "agent_creation_selectable": False,
-        "default_enabled": False,
-        "expose_to_frontend": False,  # Completely hidden from frontend
-    },
+    "OpenURLTool": ToolVisibilitySettings(
+        chat_selectable=False,
+        agent_creation_selectable=True,
+        default_enabled=True,
+        expose_to_frontend=True,
+    ),
+    "OktaProfileTool": ToolVisibilitySettings(
+        chat_selectable=False,
+        agent_creation_selectable=False,
+        default_enabled=False,
+        expose_to_frontend=False,  # Completely hidden from frontend
+    ),
     # Future tools can be added here with custom visibility rules
 }
 
@@ -42,7 +42,7 @@ def should_expose_tool_to_fe(tool: Tool) -> bool:
         return True
 
     config = TOOL_VISIBILITY_CONFIG.get(tool.in_code_tool_id)
-    return config.get("expose_to_frontend", True) if config else True
+    return config.expose_to_frontend if config else True
 
 
 def is_chat_selectable(tool: Tool) -> bool:
