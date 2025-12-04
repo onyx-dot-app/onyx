@@ -610,7 +610,7 @@ def expand_query_with_llm(query_text: str, llm: LLM) -> list[str]:
             logger.debug("No content keywords extracted from query expansion")
             return [""]
 
-        logger.info(
+        logger.debug(
             f"Expanded query into {len(rephrased_queries)} queries: {rephrased_queries}"
         )
         return rephrased_queries[:MAX_SLACK_QUERY_EXPANSIONS]

@@ -872,8 +872,12 @@ def build_request_details(
             channel_type=channel_type,
             channel_id=channel,
             user_id=sender_id or "unknown",
+            message_ts=message_ts,
         )
-        logger.info(f"build_request_details: Capturing Slack context: {slack_context}")
+        logger.info(
+            f"build_request_details: Capturing Slack context: "
+            f"channel_type={channel_type} channel_id={channel} message_ts={message_ts}"
+        )
 
         if thread_ts != message_ts and thread_ts is not None:
             thread_messages = read_slack_thread(
@@ -930,9 +934,11 @@ def build_request_details(
             channel_type=channel_type,
             channel_id=channel,
             user_id=sender,
+            message_ts=None,  # Slash commands don't have a message timestamp
         )
         logger.info(
-            f"build_request_details: Capturing Slack context for slash command: {slack_context}"
+            f"build_request_details: Capturing Slack context for slash command: "
+            f"channel_type={channel_type} channel_id={channel}"
         )
 
         single_msg = ThreadMessage(message=msg, sender=None, role=MessageType.USER)
