@@ -38,6 +38,8 @@ env:
   # LLMs
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  VERTEX_CREDENTIALS: ${{ secrets.VERTEX_CREDENTIALS }}
+  VERTEX_LOCATION: ${{ vars.VERTEX_LOCATION }}
 
   # Code Interpreter
   # TODO: debug why this is failing and enable
