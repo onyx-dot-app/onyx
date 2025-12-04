@@ -85,7 +85,7 @@ const slackMetadata = {
   baseSourceType: "slack",
 };
 
-const SOURCE_METADATA_MAP: SourceMap = {
+export const SOURCE_METADATA_MAP: SourceMap = {
   // Knowledge Base & Wikis
   confluence: {
     icon: ConfluenceIcon,
