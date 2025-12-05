@@ -80,7 +80,7 @@ uv sync --extra backend
 uv sync --extra backend --group dev
 
 # For backend with EE (shared + backend + ee)
-uv sync --extra backend --group ee
+uv sync --extra backend --extra ee
 
 # For model server (shared + model_server, NO backend deps!)
 uv sync --extra model_server
