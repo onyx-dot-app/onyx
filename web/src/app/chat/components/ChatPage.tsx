@@ -34,7 +34,8 @@ import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import { useUser } from "@/components/user/UserProvider";
 import NoAssistantModal from "@/components/modals/NoAssistantModal";
 import TextView from "@/components/chat/TextView";
-import { Modal } from "@/components/Modal";
+import Modal from "@/refresh-components/Modal";
+import SvgFileText from "@/icons/file-text";
 import { useSendMessageToParent } from "@/lib/extension/utils";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import { getSourceMetadata } from "@/lib/sources";
@@ -776,24 +777,32 @@ export default function ChatPage({
       {retrievalEnabled && documentSidebarVisible && settings?.isMobile && (
         <div className="md:hidden">
           <Modal
-            hideDividerForTitle
-            onOutsideClick={() => updateCurrentDocumentSidebarVisible(false)}
-            title="Sources"
+            open
+            onOpenChange={() => updateCurrentDocumentSidebarVisible(false)}
           >
-            {/* IMPORTANT: this is a memoized component, and it's very important
-            for performance reasons that this stays true. MAKE SURE that all function
-            props are wrapped in useCallback. */}
-            <DocumentResults
-              setPresentingDocument={setPresentingDocument}
-              modal={true}
-              closeSidebar={handleMobileDocumentSidebarClose}
-              selectedDocuments={selectedDocuments}
-              toggleDocumentSelection={toggleDocumentSelection}
-              clearSelectedDocuments={() => setSelectedDocuments([])}
-              // TODO (chris): fix
-              selectedDocumentTokens={0}
-              maxTokens={maxTokens}
-            />
+            <Modal.Content medium>
+              <Modal.Header
+                icon={SvgFileText}
+                title="Sources"
+                onClose={() => updateCurrentDocumentSidebarVisible(false)}
+              />
+              <Modal.Body>
+                {/* IMPORTANT: this is a memoized component, and it's very important
+                for performance reasons that this stays true. MAKE SURE that all function
+                props are wrapped in useCallback. */}
+                <DocumentResults
+                  setPresentingDocument={setPresentingDocument}
+                  modal={true}
+                  closeSidebar={handleMobileDocumentSidebarClose}
+                  selectedDocuments={selectedDocuments}
+                  toggleDocumentSelection={toggleDocumentSelection}
+                  clearSelectedDocuments={() => setSelectedDocuments([])}
+                  // TODO (chris): fix
+                  selectedDocumentTokens={0}
+                  maxTokens={maxTokens}
+                />
+              </Modal.Body>
+            </Modal.Content>
           </Modal>
         </div>
       )}

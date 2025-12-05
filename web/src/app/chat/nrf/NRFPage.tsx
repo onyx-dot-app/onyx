@@ -20,7 +20,8 @@ import {
   MaxShortcutsReachedModal,
   NewShortCutModal,
 } from "@/components/extension/Shortcuts";
-import { Modal } from "@/components/Modal";
+import Modal from "@/refresh-components/Modal";
+import SvgUser from "@/icons/user";
 import { useNightTime } from "@/lib/dateUtils";
 import { useFilters } from "@/lib/hooks";
 import { uploadFilesForChat } from "../services/lib";
@@ -318,33 +319,39 @@ export default function NRFPage({
       {!user &&
       authTypeMetadata.authType !== AuthType.DISABLED &&
       showLoginModal ? (
-        <Modal className="max-w-md mx-auto">
-          {authTypeMetadata.authType === AuthType.BASIC ? (
-            <LoginPage
-              authUrl={null}
-              authTypeMetadata={authTypeMetadata}
-              nextUrl="/nrf"
+        <Modal open onOpenChange={() => setShowLoginModal(false)}>
+          <Modal.Content small>
+            <Modal.Header
+              icon={SvgUser}
+              title="Welcome to Onyx"
+              onClose={() => setShowLoginModal(false)}
             />
-          ) : (
-            <div className="flex flex-col items-center">
-              <h2 className="text-center text-xl text-strong font-bold mb-4">
-                Welcome to Onyx
-              </h2>
-              <Button
-                className="w-full"
-                secondary
-                onClick={() => {
-                  if (window.top) {
-                    window.top.location.href = "/auth/login";
-                  } else {
-                    window.location.href = "/auth/login";
-                  }
-                }}
-              >
-                Log in
-              </Button>
-            </div>
-          )}
+            <Modal.Body>
+              {authTypeMetadata.authType === AuthType.BASIC ? (
+                <LoginPage
+                  authUrl={null}
+                  authTypeMetadata={authTypeMetadata}
+                  nextUrl="/nrf"
+                />
+              ) : (
+                <div className="flex flex-col items-center">
+                  <Button
+                    className="w-full"
+                    secondary
+                    onClick={() => {
+                      if (window.top) {
+                        window.top.location.href = "/auth/login";
+                      } else {
+                        window.location.href = "/auth/login";
+                      }
+                    }}
+                  >
+                    Log in
+                  </Button>
+                </div>
+              )}
+            </Modal.Body>
+          </Modal.Content>
         </Modal>
       ) : (
         (!llmProviders || llmProviders.length === 0) && (
