@@ -12,11 +12,7 @@ export default function NoAssistantModal() {
   return (
     <Modal open>
       <Modal.Content small>
-        <Modal.Header
-          icon={SvgUser}
-          title="No Assistant Available"
-          onClose={() => {}}
-        />
+        <Modal.Header icon={SvgUser} title="No Assistant Available" />
         <Modal.Body>
           <Text>
             You currently have no assistant configured. To use this feature, you
