@@ -354,14 +354,16 @@ def get_vision_capable_providers(
             provider_view = LLMProviderView.from_model(provider)
             _mask_provider_api_key(provider_view)
 
-            vision_provider_response = VisionProviderResponse(
-                **provider_view.model_dump(),
-                vision_models=vision_models,
+            vision_providers.append(
+                VisionProviderResponse(
+                    **provider_view.model_dump(),
+                    vision_models=vision_models,
+                )
             )
+
             logger.info(
                 f"Vision provider: {provider.provider} with models: {vision_models}"
             )
-            vision_providers.append(vision_provider_response)
 
     logger.info(f"Found {len(vision_providers)} vision-capable providers")
     return vision_providers
