@@ -5,12 +5,14 @@ import ActionCardHeader from "@/sections/actions/ActionCardHeader";
 import ToolsSection from "@/sections/actions/ToolsSection";
 import { cn } from "@/lib/utils";
 import { ActionStatus } from "@/lib/tools/types";
+import { IconProps } from "@/icons";
+import SvgServer from "@/icons/server";
 
 export interface ActionCardProps {
   // Core content
   title: string;
   description: string;
-  icon?: React.ReactNode;
+  icon?: React.FunctionComponent<IconProps>;
 
   // Status
   status: ActionStatus;
@@ -124,7 +126,7 @@ export default function ActionCard({
           <ActionCardHeader
             title={title}
             description={description}
-            icon={icon}
+            icon={icon || SvgServer}
             status={status}
             onEdit={onEdit}
             onRename={onRename}

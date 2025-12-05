@@ -37,7 +37,7 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 interface MCPAuthenticationModalProps {
   mcpServer: MCPServerWithStatus | null;
   skipOverlay?: boolean;
-  onSuccess?: () => void | Promise<void>;
+  onSuccess?: () => Promise<void>;
   setPopup?: (spec: PopupSpec) => void;
   mutateMcpServers?: () => Promise<void>;
 }

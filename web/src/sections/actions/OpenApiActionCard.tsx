@@ -95,12 +95,12 @@ export default function OpenApiActionCard({
     [updatingStatus, mutateOpenApiTools, tool.enabled, tool.id]
   );
 
-  const handleToggleTools = () => {
+  const handleToggleTools = useCallback(() => {
     setIsToolsExpanded((prev) => !prev);
     if (isToolsExpanded) {
       setSearchQuery("");
     }
-  };
+  }, [isToolsExpanded]);
 
   useEffect(() => {
     if (isDisconnected) {
@@ -114,25 +114,36 @@ export default function OpenApiActionCard({
   };
 
   // Build the actions component
-  const actionsComponent = (
-    <Actions
-      status={status}
-      serverName={tool.name}
-      toolCount={methodSpecs.length}
-      isToolsExpanded={isToolsExpanded}
-      onToggleTools={methodSpecs.length ? handleToggleTools : undefined}
-      onDisconnect={() => onOpenDisconnectModal?.(tool)}
-      onManage={onManage ? () => onManage(tool) : undefined}
-      onAuthenticate={() => {
-        onAuthenticate(tool);
-      }}
-      onReconnect={() => handleConnectionUpdate(true)}
-      onDelete={onDelete ? () => deleteModal.toggle(true) : undefined}
-    />
-  );
-
-  const icon = (
-    <SvgServer className="h-5 w-5 stroke-text-04" aria-hidden="true" />
+  const actionsComponent = useMemo(
+    () => (
+      <Actions
+        status={status}
+        serverName={tool.name}
+        toolCount={methodSpecs.length}
+        isToolsExpanded={isToolsExpanded}
+        onToggleTools={methodSpecs.length ? handleToggleTools : undefined}
+        onDisconnect={() => onOpenDisconnectModal?.(tool)}
+        onManage={onManage ? () => onManage(tool) : undefined}
+        onAuthenticate={() => {
+          onAuthenticate(tool);
+        }}
+        onReconnect={() => handleConnectionUpdate(true)}
+        onDelete={onDelete ? () => deleteModal.toggle(true) : undefined}
+      />
+    ),
+    [
+      deleteModal,
+      handleConnectionUpdate,
+      handleToggleTools,
+      isToolsExpanded,
+      methodSpecs.length,
+      onAuthenticate,
+      onDelete,
+      onManage,
+      onOpenDisconnectModal,
+      status,
+      tool,
+    ]
   );
 
   const handleRename = async (newName: string) => {
@@ -146,7 +157,7 @@ export default function OpenApiActionCard({
       <ActionCard
         title={tool.name}
         description={tool.description}
-        icon={icon}
+        icon={SvgServer}
         status={status}
         actions={actionsComponent}
         onRename={handleRename}

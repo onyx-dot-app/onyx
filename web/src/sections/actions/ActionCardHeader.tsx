@@ -7,11 +7,13 @@ import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgEdit from "@/icons/edit";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
+import { IconProps } from "@/icons";
+import Truncated from "@/refresh-components/texts/Truncated";
 
 interface ActionCardHeaderProps {
   title: string;
   description: string;
-  icon: React.ReactNode;
+  icon: React.FunctionComponent<IconProps>;
   status: ActionStatus;
   onEdit?: () => void;
   onRename?: (newName: string) => Promise<void>;
@@ -20,7 +22,7 @@ interface ActionCardHeaderProps {
 function ActionCardHeader({
   title,
   description,
-  icon,
+  icon: Icon,
   status,
   onEdit,
   onRename,
@@ -62,7 +64,7 @@ function ActionCardHeader({
           isConnected && "h-7 w-7 justify-center p-1"
         )}
       >
-        {icon}
+        <Icon size={20} className="h-5 w-5 stroke-text-04" />
       </div>
 
       <div className="flex flex-col items-start flex-1 min-w-0">
@@ -77,9 +79,9 @@ function ActionCardHeader({
                   className="text-text-04 font-main-content-emphasis"
                 />
               ) : (
-                <Text mainContentEmphasis text04 className="truncate">
+                <Truncated mainContentEmphasis text04 className="truncate">
                   {title}
-                </Text>
+                </Truncated>
               )}
               {showRenameIcon && (
                 <IconButton

@@ -10,6 +10,7 @@ import SvgArrowLeftDot from "@/icons/arrow-left-dot";
 import SvgArrowRightDot from "@/icons/arrow-right-dot";
 import SvgCornerRightUpDot from "@/icons/corner-right-up-dot";
 import SvgMinusCircle from "@/icons/minus-circle";
+import { IconProps } from "@/icons";
 
 type ToolItemVariant = "mcp" | "openapi";
 
@@ -58,7 +59,7 @@ export interface ToolItemProps {
   // Tool information
   name: string;
   description: string;
-  icon?: React.ReactNode;
+  icon?: React.FunctionComponent<IconProps>;
 
   // Tool state
   isAvailable?: boolean;
@@ -78,7 +79,7 @@ export interface ToolItemProps {
 const ToolItem: React.FC<ToolItemProps> = ({
   name,
   description,
-  icon,
+  icon: Icon,
   isAvailable = true,
   isEnabled = true,
   variant = "mcp",
@@ -154,14 +155,14 @@ const ToolItem: React.FC<ToolItemProps> = ({
       {/* Left Section: Icon and Content */}
       <div className="flex gap-1 items-start flex-1 min-w-0 pr-2">
         {/* Icon Container */}
-        {icon ? (
+        {Icon ? (
           <div
             className={cn(
               "flex items-center justify-center shrink-0",
               textOpacity
             )}
           >
-            {icon}
+            <Icon size={20} className="h-5 w-5 stroke-text-04" />
           </div>
         ) : (
           <div className="flex items-center justify-center h-5 w-5">

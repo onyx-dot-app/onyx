@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, {
+  useState,
+  useMemo,
+  useEffect,
+  useRef,
+  useCallback,
+} from "react";
 import SvgServer from "@/icons/server";
 import ActionCard from "@/sections/actions/ActionCard";
 import Actions from "@/sections/actions/Actions";
@@ -13,6 +19,7 @@ import { useServerTools } from "@/sections/actions/useServerTools";
 import { MCPServerStatus, MCPServerWithStatus } from "@/lib/tools/types";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { KeyedMutator } from "swr";
+import { IconProps } from "@/icons";
 
 export interface MCPActionCardProps {
   // Server identification
@@ -22,7 +29,7 @@ export interface MCPActionCardProps {
   // Core content
   title: string;
   description: string;
-  logo?: React.ReactNode;
+  logo?: React.FunctionComponent<IconProps>;
 
   // Status
   status: ActionStatus;
@@ -144,18 +151,14 @@ export default function MCPActionCard({
     return filtered;
   }, [tools, searchQuery, showOnlyEnabled]);
 
-  const icon = !isNotAuthenticated ? (
-    logo
-  ) : (
-    <SvgServer className="h-5 w-5 stroke-text-04" aria-hidden="true" />
-  );
+  const icon = isNotAuthenticated ? SvgServer : logo;
 
-  const handleToggleTools = () => {
+  const handleToggleTools = useCallback(() => {
     setIsToolsExpanded((prev) => !prev);
     if (isToolsExpanded) {
       setSearchQuery("");
     }
-  };
+  }, [isToolsExpanded]);
 
   const handleFold = () => {
     setIsToolsExpanded(false);
@@ -168,19 +171,34 @@ export default function MCPActionCard({
   };
 
   // Build the actions component
-  const actionsComponent = (
-    <Actions
-      status={status}
-      serverName={title}
-      onDisconnect={onDisconnect}
-      onManage={onManage}
-      onAuthenticate={onAuthenticate}
-      onReconnect={onReconnect}
-      onDelete={onDelete ? () => deleteModal.toggle(true) : undefined}
-      toolCount={toolCount}
-      isToolsExpanded={isToolsExpanded}
-      onToggleTools={handleToggleTools}
-    />
+  const actionsComponent = useMemo(
+    () => (
+      <Actions
+        status={status}
+        serverName={title}
+        onDisconnect={onDisconnect}
+        onManage={onManage}
+        onAuthenticate={onAuthenticate}
+        onReconnect={onReconnect}
+        onDelete={onDelete ? () => deleteModal.toggle(true) : undefined}
+        toolCount={toolCount}
+        isToolsExpanded={isToolsExpanded}
+        onToggleTools={handleToggleTools}
+      />
+    ),
+    [
+      deleteModal,
+      handleToggleTools,
+      isToolsExpanded,
+      onAuthenticate,
+      onDelete,
+      onDisconnect,
+      onManage,
+      onReconnect,
+      status,
+      title,
+      toolCount,
+    ]
   );
 
   const handleRename = async (newName: string) => {
@@ -252,7 +270,7 @@ export default function MCPActionCard({
           onClose={() => deleteModal.toggle(false)}
           onSubmit={async () => {
             if (!onDelete) return;
-            await onDelete();
+            onDelete();
             deleteModal.toggle(false);
           }}
         />
