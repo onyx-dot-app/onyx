@@ -41,7 +41,7 @@ export const OnyxApiKeyForm = ({
   );
 
   const { data: llmProviders } = useSWR<LLMProviderView[]>(
-    "/api/admin/llm/provider",
+    "/api/llm/provider",
     errorHandlingFetcher
   );
 
