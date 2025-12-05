@@ -180,7 +180,7 @@ dev = [
     "ipykernel==6.29.5",
     "release-tag==0.4.3",
     "zizmor==1.18.0",
-    "onyx-devtools==0.0.1",
+    "onyx-devtools==0.0.2",
     "manygo==0.2.0",
     "hatchling==1.28.0",
 ]
