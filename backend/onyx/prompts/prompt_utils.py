@@ -72,7 +72,7 @@ def replace_citation_guidance_tag(
         tuple[str, bool]: (prompt_with_replacement, should_append_fallback)
         - prompt_with_replacement: The prompt with placeholder replaced (or unchanged if not present)
         - should_append_fallback: True if citation guidance should be appended
-            (placeholder was not present and citations are needed)
+            (placeholder is not present and citations are needed)
     """
     placeholder_was_present = _CITATION_GUIDANCE_REPLACEMENT_PAT in prompt_str
 
