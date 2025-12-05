@@ -7,17 +7,18 @@ from uuid import UUID
 from pydantic import BaseModel
 from pydantic import Field
 
-from onyx.agents.agent_search.dr.enums import ResearchAnswerPurpose
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import QAFeedbackType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.context.search.models import SavedSearchDoc
+from onyx.context.search.models import SearchDoc
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import DocumentSource
 from onyx.server.documents.models import IndexAttemptSnapshot
 from onyx.server.documents.models import IndexingStatus
 from onyx.server.documents.models import InputType
+from onyx.server.query_and_chat.streaming_models import GeneratedImage
 
 """
 These data models are used to represent the data on the testing side of things.
@@ -163,7 +164,6 @@ class DATestChatMessage(BaseModel):
     chat_session_id: UUID
     parent_message_id: int | None
     message: str
-    research_answer_purpose: ResearchAnswerPurpose | None = None
     message_type: MessageType | None = None
     files: list | None = None
 
@@ -184,13 +184,6 @@ class ToolName(str, Enum):
     IMAGE_GENERATION = "generate_image"
 
 
-class GeneratedImage(BaseModel):
-    file_id: str
-    url: str
-    revised_prompt: str
-    shape: str | None = None
-
-
 class ToolResult(BaseModel):
     tool_name: ToolName
 
@@ -207,7 +200,7 @@ class ErrorResponse(BaseModel):
 class StreamedResponse(BaseModel):
     full_message: str
     assistant_message_id: int
-    top_documents: list[SavedSearchDoc]
+    top_documents: list[SearchDoc]
     used_tools: list[ToolResult]
     error: ErrorResponse | None = None
 

@@ -16,6 +16,7 @@ from onyx.db.tools import create_tool__no_commit
 from onyx.db.tools import delete_tool__no_commit
 from onyx.db.tools import get_tool_by_id
 from onyx.db.tools import get_tools
+from onyx.db.tools import get_tools_by_ids
 from onyx.db.tools import update_tool
 from onyx.server.features.tool.models import CustomToolCreate
 from onyx.server.features.tool.models import CustomToolUpdate
@@ -144,6 +145,57 @@ def delete_custom_tool(
     db_session.commit()
 
 
+class ToolStatusUpdateRequest(BaseModel):
+    tool_ids: list[int]
+    enabled: bool
+
+
+class ToolStatusUpdateResponse(BaseModel):
+    updated_count: int
+    tool_ids: list[int]
+
+
+@admin_router.patch("/status")
+def update_tools_status(
+    update_data: ToolStatusUpdateRequest,
+    db_session: Session = Depends(get_session),
+    user: User | None = Depends(current_curator_or_admin_user),
+) -> ToolStatusUpdateResponse:
+    """Enable or disable one or more tools.
+
+    Pass a single tool ID in the list to update one tool, or multiple IDs for
+    bulk updates.
+    """
+    if not update_data.tool_ids:
+        raise HTTPException(status_code=400, detail="No tool IDs provided")
+
+    tools = get_tools_by_ids(update_data.tool_ids, db_session)
+    tools_by_id = {tool.id: tool for tool in tools}
+
+    updated_tools = []
+    missing_tools = []
+
+    for tool_id in update_data.tool_ids:
+        tool = tools_by_id.get(tool_id)
+        if tool:
+            tool.enabled = update_data.enabled
+            updated_tools.append(tool_id)
+        else:
+            missing_tools.append(tool_id)
+
+    if missing_tools:
+        raise HTTPException(
+            status_code=404, detail=f"Tools with IDs {missing_tools} not found"
+        )
+
+    db_session.commit()
+
+    return ToolStatusUpdateResponse(
+        updated_count=len(updated_tools),
+        tool_ids=updated_tools,
+    )
+
+
 class ValidateToolRequest(BaseModel):
     definition: dict[str, Any]
 
@@ -165,6 +217,23 @@ def validate_tool(
 """Endpoints for all"""
 
 
+@router.get("/openapi")
+def list_openapi_tools(
+    db_session: Session = Depends(get_session),
+    _: User | None = Depends(current_user),
+) -> list[ToolSnapshot]:
+    tools = get_tools(db_session, only_openapi=True)
+
+    openapi_tools: list[ToolSnapshot] = []
+    for tool in tools:
+        if not should_expose_tool_to_fe(tool):
+            continue
+
+        openapi_tools.append(ToolSnapshot.from_model(tool))
+
+    return openapi_tools
+
+
 @router.get("/{tool_id}")
 def get_custom_tool(
     tool_id: int,
@@ -183,7 +252,7 @@ def list_tools(
     db_session: Session = Depends(get_session),
     _: User | None = Depends(current_user),
 ) -> list[ToolSnapshot]:
-    tools = get_tools(db_session, only_enabled=True)
+    tools = get_tools(db_session, only_enabled=True, only_connected_mcp=True)
 
     filtered_tools: list[ToolSnapshot] = []
     for tool in tools:

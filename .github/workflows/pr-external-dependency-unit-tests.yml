@@ -7,6 +7,9 @@ on:
   merge_group:
   pull_request:
     branches: [main]
+  push:
+    tags:
+      - "v*.*.*"
 
 permissions:
   contents: read
@@ -28,6 +31,9 @@ env:
   CONFLUENCE_USER_NAME: ${{ vars.CONFLUENCE_USER_NAME }}
   CONFLUENCE_ACCESS_TOKEN: ${{ secrets.CONFLUENCE_ACCESS_TOKEN }}
   CONFLUENCE_ACCESS_TOKEN_SCOPED: ${{ secrets.CONFLUENCE_ACCESS_TOKEN_SCOPED }}
+
+  # Jira
+  JIRA_ADMIN_API_TOKEN: ${{ secrets.JIRA_ADMIN_API_TOKEN }}
 
   # LLMs
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -162,7 +168,7 @@ jobs:
 
       - name: Upload Docker logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/upload-artifact@v5
         with:
           name: docker-logs-${{ matrix.test-dir }}
           path: docker-logs/

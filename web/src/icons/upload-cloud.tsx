@@ -1,11 +1,13 @@
-import * as React from "react";
-import type { SVGProps } from "react";
+import { IconProps } from "@/icons";
 
-const SvgUploadCloud = (props: SVGProps<SVGSVGElement>) => (
+const SvgUploadCloud = ({ size, ...props }: IconProps) => (
   <svg
+    width={size}
+    height={size}
     viewBox="0 0 16 14"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
+    stroke="currentColor"
     {...props}
   >
     <path

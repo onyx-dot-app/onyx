@@ -33,7 +33,6 @@ from onyx.configs.constants import MessageType
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.onyxbot_configs import NOTIFY_SLACKBOT_NO_ANSWER
 from onyx.configs.onyxbot_configs import ONYX_BOT_REPHRASE_MESSAGE
-from onyx.configs.onyxbot_configs import ONYX_BOT_RESPOND_EVERY_CHANNEL
 from onyx.connectors.slack.utils import expert_info_from_slack_id
 from onyx.context.search.retrieval.search_runner import (
     download_nltk_data,
@@ -873,8 +872,12 @@ def build_request_details(
             channel_type=channel_type,
             channel_id=channel,
             user_id=sender_id or "unknown",
+            message_ts=message_ts,
         )
-        logger.info(f"build_request_details: Capturing Slack context: {slack_context}")
+        logger.info(
+            f"build_request_details: Capturing Slack context: "
+            f"channel_type={channel_type} channel_id={channel} message_ts={message_ts}"
+        )
 
         if thread_ts != message_ts and thread_ts is not None:
             thread_messages = read_slack_thread(
@@ -931,9 +934,11 @@ def build_request_details(
             channel_type=channel_type,
             channel_id=channel,
             user_id=sender,
+            message_ts=None,  # Slash commands don't have a message timestamp
         )
         logger.info(
-            f"build_request_details: Capturing Slack context for slash command: {slack_context}"
+            f"build_request_details: Capturing Slack context for slash command: "
+            f"channel_type={channel_type} channel_id={channel}"
         )
 
         single_msg = ThreadMessage(message=msg, sender=None, role=MessageType.USER)
@@ -969,7 +974,6 @@ def apologize_for_fail(
 def process_message(
     req: SocketModeRequest,
     client: TenantSocketModeClient,
-    respond_every_channel: bool = ONYX_BOT_RESPOND_EVERY_CHANNEL,
     notify_no_answer: bool = NOTIFY_SLACKBOT_NO_ANSWER,
 ) -> None:
     tenant_id = get_current_tenant_id()
@@ -1104,7 +1108,7 @@ def _get_socket_client(
     slack_bot_tokens: SlackBotTokens, tenant_id: str, slack_bot_id: int
 ) -> TenantSocketModeClient:
     # For more info on how to set this up, checkout the docs:
-    # https://docs.onyx.app/admin/getting_started/slack_bot_setup
+    # https://docs.onyx.app/admins/getting_started/slack_bot_setup
 
     # use the retry handlers built into the slack sdk
     connection_error_retry_handler = ConnectionErrorRetryHandler()

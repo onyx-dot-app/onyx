@@ -9,7 +9,6 @@ from fastapi import HTTPException
 from fastapi import Response
 from fastapi import UploadFile
 from pydantic import BaseModel
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
@@ -25,6 +24,7 @@ from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.models import UserProject
 from onyx.db.persona import get_personas_by_ids
+from onyx.db.projects import get_project_token_count
 from onyx.db.projects import upload_files_to_user_files_with_indexing
 from onyx.server.features.projects.models import CategorizedFilesSnapshot
 from onyx.server.features.projects.models import ChatSessionRequest
@@ -547,20 +547,13 @@ def get_chat_session_project_token_count(
     if chat_session is None:
         raise HTTPException(status_code=404, detail="Chat session not found")
 
-    if chat_session.project_id is None:
-        return TokenCountResponse(total_tokens=0)
-
-    total_tokens = (
-        db_session.query(func.coalesce(func.sum(UserFile.token_count), 0))
-        .filter(
-            UserFile.user_id == user_id,
-            UserFile.projects.any(id=chat_session.project_id),
-        )
-        .scalar()
-        or 0
+    total_tokens = get_project_token_count(
+        project_id=chat_session.project_id,
+        user_id=user_id,
+        db_session=db_session,
     )
 
-    return TokenCountResponse(total_tokens=int(total_tokens))
+    return TokenCountResponse(total_tokens=total_tokens)
 
 
 @router.get("/session/{chat_session_id}/files")
@@ -602,7 +595,7 @@ def get_chat_session_project_files(
 
 
 @router.get("/{project_id}/token-count", response_model=TokenCountResponse)
-def get_project_token_count(
+def get_project_total_token_count(
     project_id: int,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
@@ -619,14 +612,10 @@ def get_project_token_count(
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    total_tokens = (
-        db_session.query(func.coalesce(func.sum(UserFile.token_count), 0))
-        .filter(
-            UserFile.user_id == user_id,
-            UserFile.projects.any(id=project_id),
-        )
-        .scalar()
-        or 0
+    total_tokens = get_project_token_count(
+        project_id=project_id,
+        user_id=user_id,
+        db_session=db_session,
     )
 
-    return TokenCountResponse(total_tokens=int(total_tokens))
+    return TokenCountResponse(total_tokens=total_tokens)

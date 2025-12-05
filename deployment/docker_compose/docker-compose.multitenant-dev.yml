@@ -50,7 +50,6 @@ services:
       - GEN_AI_MAX_TOKENS=${GEN_AI_MAX_TOKENS:-}
       - QA_TIMEOUT=${QA_TIMEOUT:-}
       - MAX_CHUNKS_FED_TO_CHAT=${MAX_CHUNKS_FED_TO_CHAT:-}
-      - DISABLE_LLM_CHOOSE_SEARCH=${DISABLE_LLM_CHOOSE_SEARCH:-}
       - DISABLE_LLM_QUERY_REPHRASE=${DISABLE_LLM_QUERY_REPHRASE:-}
       - DISABLE_GENERATIVE_AI=${DISABLE_GENERATIVE_AI:-}
       - DISABLE_LITELLM_STREAMING=${DISABLE_LITELLM_STREAMING:-}
@@ -161,7 +160,6 @@ services:
       - GEN_AI_MAX_TOKENS=${GEN_AI_MAX_TOKENS:-}
       - QA_TIMEOUT=${QA_TIMEOUT:-}
       - MAX_CHUNKS_FED_TO_CHAT=${MAX_CHUNKS_FED_TO_CHAT:-}
-      - DISABLE_LLM_CHOOSE_SEARCH=${DISABLE_LLM_CHOOSE_SEARCH:-}
       - DISABLE_LLM_QUERY_REPHRASE=${DISABLE_LLM_QUERY_REPHRASE:-}
       - DISABLE_GENERATIVE_AI=${DISABLE_GENERATIVE_AI:-}
       - GENERATIVE_MODEL_ACCESS_CHECK_FREQ=${GENERATIVE_MODEL_ACCESS_CHECK_FREQ:-}
@@ -235,7 +233,6 @@ services:
       - ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER=${ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER:-}
       - ONYX_BOT_FEEDBACK_VISIBILITY=${ONYX_BOT_FEEDBACK_VISIBILITY:-}
       - ONYX_BOT_DISPLAY_ERROR_MSGS=${ONYX_BOT_DISPLAY_ERROR_MSGS:-}
-      - ONYX_BOT_RESPOND_EVERY_CHANNEL=${ONYX_BOT_RESPOND_EVERY_CHANNEL:-}
       - NOTIFY_SLACKBOT_NO_ANSWER=${NOTIFY_SLACKBOT_NO_ANSWER:-}
       - ONYX_BOT_MAX_QPM=${ONYX_BOT_MAX_QPM:-}
       - ONYX_BOT_MAX_WAIT_TIME=${ONYX_BOT_MAX_WAIT_TIME:-}
@@ -312,7 +309,7 @@ services:
       context: ../../backend
       dockerfile: Dockerfile
     command: >
-      /bin/sh -c "if [ \"${MCP_SERVER_ENABLED}\" != \"True\" ] && [ \"${MCP_SERVER_ENABLED}\" != \"true\" ]; then
+      /bin/sh -c "if [ \"${MCP_SERVER_ENABLED:-}\" != \"True\" ] && [ \"${MCP_SERVER_ENABLED:-}\" != \"true\" ]; then
         echo 'MCP server is disabled (MCP_SERVER_ENABLED=false), skipping...';
         exit 0;
       else
@@ -353,7 +350,7 @@ services:
       context: ../../backend
       dockerfile: Dockerfile.model_server
     command: >
-      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER}\" = \"true\" ]; then
+      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER:-}\" = \"true\" ]; then
         echo 'Skipping service...';
         exit 0;
       else
@@ -382,7 +379,7 @@ services:
       context: ../../backend
       dockerfile: Dockerfile.model_server
     command: >
-      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER}\" = \"true\" ]; then
+      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER:-}\" = \"true\" ]; then
         echo 'Skipping service...';
         exit 0;
       else
@@ -517,7 +514,7 @@ services:
       - path: .env
         required: false
 
-    # Below is needed for the `docker-out-of-docker` execution mode 
+    # Below is needed for the `docker-out-of-docker` execution mode
     user: root
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock

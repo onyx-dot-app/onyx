@@ -6,6 +6,9 @@ concurrency:
 on:
   merge_group:
   pull_request: null
+  push:
+    tags:
+      - "v*.*.*"
 
 permissions:
   contents: read
@@ -13,7 +16,12 @@ permissions:
 jobs:
   quality-checks:
     # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-quality-checks"]
+    runs-on:
+      [
+        runs-on,
+        runner=1cpu-linux-arm64,
+        "run-id=${{ github.run_id }}-quality-checks",
+      ]
     timeout-minutes: 45
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
@@ -21,11 +29,20 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # ratchet:actions/setup-python@v6
+      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # ratchet:actions/setup-python@v6
         with:
           python-version: "3.11"
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # ratchet:hashicorp/setup-terraform@v3
+      - name: Setup node
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # ratchet:actions/setup-node@v4
+        with: # zizmor: ignore[cache-poisoning]
+          node-version: 22
+          cache: "npm"
+          cache-dependency-path: ./web/package-lock.json
+      - name: Install node dependencies
+        working-directory: ./web
+        run: npm ci
       - uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # ratchet:pre-commit/action@v3.0.1
         env:
           # uv-run is mypy's id and mypy is covered by the Python Checks which caches dependencies better.

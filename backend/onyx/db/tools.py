@@ -4,12 +4,16 @@ from typing import Type
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.constants import UNSET
 from onyx.db.constants import UnsetType
+from onyx.db.enums import MCPServerStatus
+from onyx.db.models import MCPServer
 from onyx.db.models import Tool
+from onyx.db.models import ToolCall
 from onyx.server.features.tool.models import Header
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_TYPES
 from onyx.utils.headers import HeaderItemDict
@@ -21,10 +25,32 @@ if TYPE_CHECKING:
 logger = setup_logger()
 
 
-def get_tools(db_session: Session, *, only_enabled: bool = False) -> list[Tool]:
+def get_tools(
+    db_session: Session,
+    *,
+    only_enabled: bool = False,
+    only_connected_mcp: bool = False,
+    only_openapi: bool = False,
+) -> list[Tool]:
     query = select(Tool)
+
+    if only_connected_mcp:
+        # Keep tools that either:
+        # 1. Don't have an MCP server (mcp_server_id IS NULL) - Non-MCP tools
+        # 2. Have an MCP server that is connected - Connected MCP tools
+        query = query.outerjoin(MCPServer, Tool.mcp_server_id == MCPServer.id).where(
+            or_(
+                Tool.mcp_server_id.is_(None),  # Non-MCP tools (built-in, custom)
+                MCPServer.status == MCPServerStatus.CONNECTED,  # MCP tools connected
+            )
+        )
+
     if only_enabled:
         query = query.where(Tool.enabled.is_(True))
+
+    if only_openapi:
+        query = query.where(Tool.openapi_schema.is_not(None))
+
     return list(db_session.scalars(query).all())
 
 
@@ -33,11 +59,21 @@ def get_tools_by_mcp_server_id(
     db_session: Session,
     *,
     only_enabled: bool = False,
+    order_by_id: bool = False,
 ) -> list[Tool]:
     query = select(Tool).where(Tool.mcp_server_id == mcp_server_id)
     if only_enabled:
         query = query.where(Tool.enabled.is_(True))
+    if order_by_id:
+        query = query.order_by(Tool.id)
     return list(db_session.scalars(query).all())
+
+
+def get_tools_by_ids(tool_ids: list[int], db_session: Session) -> list[Tool]:
+    if not tool_ids:
+        return []
+    stmt = select(Tool).where(Tool.id.in_(tool_ids))
+    return list(db_session.scalars(stmt).all())
 
 
 def get_tool_by_id(tool_id: int, db_session: Session) -> Tool:
@@ -163,3 +199,62 @@ def get_builtin_tool(
         raise RuntimeError(f"Tool type {tool_type.__name__} not found in the database.")
 
     return db_tool
+
+
+def create_tool_call_no_commit(
+    chat_session_id: UUID,
+    parent_chat_message_id: int | None,
+    turn_number: int,
+    tool_id: int,
+    tool_call_id: str,
+    tool_call_arguments: dict[str, Any],
+    tool_call_response: Any,
+    tool_call_tokens: int,
+    db_session: Session,
+    *,
+    parent_tool_call_id: int | None = None,
+    reasoning_tokens: str | None = None,
+    generated_images: list[dict] | None = None,
+    add_only: bool = True,
+) -> ToolCall:
+    """
+    Create a ToolCall entry in the database.
+
+    Args:
+        chat_session_id: The chat session ID
+        parent_chat_message_id: The parent chat message ID
+        turn_number: The turn number for this tool call
+        tool_id: The tool ID
+        tool_call_id: The tool call ID (string identifier from LLM)
+        tool_call_arguments: The tool call arguments
+        tool_call_response: The tool call response
+        tool_call_tokens: The number of tokens in the tool call arguments
+        db_session: The database session
+        parent_tool_call_id: Optional parent tool call ID (for nested tool calls)
+        reasoning_tokens: Optional reasoning tokens
+        generated_images: Optional list of generated image metadata for replay
+        commit: If True, commit the transaction; if False, flush only
+
+    Returns:
+        The created ToolCall object
+    """
+    tool_call = ToolCall(
+        chat_session_id=chat_session_id,
+        parent_chat_message_id=parent_chat_message_id,
+        parent_tool_call_id=parent_tool_call_id,
+        turn_number=turn_number,
+        tool_id=tool_id,
+        tool_call_id=tool_call_id,
+        reasoning_tokens=reasoning_tokens,
+        tool_call_arguments=tool_call_arguments,
+        tool_call_response=tool_call_response,
+        tool_call_tokens=tool_call_tokens,
+        generated_images=generated_images,
+    )
+
+    db_session.add(tool_call)
+    if not add_only:
+        db_session.add(tool_call)
+    else:
+        db_session.flush()
+    return tool_call

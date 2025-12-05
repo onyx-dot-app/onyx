@@ -1,19 +1,11 @@
 import copy
-import io
-import json
 import re
 from collections.abc import Callable
-from collections.abc import Iterator
 from functools import lru_cache
-from pathlib import Path
 from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
 
-from langchain.prompts.base import StringPromptValue
-from langchain.prompts.chat import ChatPromptValue
-from langchain.schema import PromptValue
-from langchain.schema.language_model import LanguageModelInput
 from langchain.schema.messages import AIMessage
 from langchain.schema.messages import BaseMessage
 from langchain.schema.messages import HumanMessage
@@ -24,24 +16,17 @@ from onyx.configs.app_configs import LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS
 from onyx.configs.app_configs import MAX_TOKENS_FOR_FULL_INCLUSION
 from onyx.configs.app_configs import USE_CHUNK_SUMMARY
 from onyx.configs.app_configs import USE_DOCUMENT_SUMMARY
-from onyx.configs.constants import MessageType
-from onyx.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from onyx.configs.model_configs import GEN_AI_MAX_TOKENS
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.configs.model_configs import GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import LLMProvider
 from onyx.db.models import ModelConfiguration
-from onyx.file_store.models import ChatFileType
-from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.interfaces import LLM
-from onyx.prompts.chat_prompts import CONTEXTUAL_RAG_TOKEN_ESTIMATE
-from onyx.prompts.chat_prompts import DOCUMENT_SUMMARY_TOKEN_ESTIMATE
-from onyx.prompts.constants import CODE_BLOCK_PAT
-from onyx.utils.b64 import get_image_type
-from onyx.utils.b64 import get_image_type_from_bytes
+from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_TOKEN_ESTIMATE
+from onyx.prompts.contextual_retrieval import DOCUMENT_SUMMARY_TOKEN_ESTIMATE
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import LOG_LEVEL
+from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
 
 
 if TYPE_CHECKING:
@@ -221,189 +206,6 @@ def litellm_exception_to_error_msg(
     return error_msg
 
 
-def _build_content(
-    message: str,
-    files: list[InMemoryChatFile] | None = None,
-) -> str:
-    """Applies all non-image files."""
-    if not files:
-        return message
-
-    text_files = [file for file in files if file.file_type.is_text_file()]
-
-    if not text_files:
-        return message
-
-    final_message_with_files = "FILES:\n\n"
-    for file in text_files:
-        file_content = _decode_text_file_content(file)
-        file_name_section = f"DOCUMENT: {file.filename}\n" if file.filename else ""
-        final_message_with_files += (
-            f"{file_name_section}{CODE_BLOCK_PAT.format(file_content.strip())}\n\n\n"
-        )
-
-    return final_message_with_files + message
-
-
-def _decode_text_file_content(file: InMemoryChatFile) -> str:
-    try:
-        return file.content.decode("utf-8")
-    except UnicodeDecodeError:
-        return _extract_non_utf8_text_file(file)
-
-
-def _extract_non_utf8_text_file(file: InMemoryChatFile) -> str:
-    """
-    Attempt to extract text from binary uploads (e.g., PDFs) while avoiding
-    unnecessary parsing for unsupported binaries.
-    """
-    from onyx.file_processing.extract_file_text import (
-        ACCEPTED_DOCUMENT_FILE_EXTENSIONS,
-        ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS,
-        extract_file_text,
-    )
-
-    candidate_extension = _infer_extension(file)
-    supported_extensions = set(
-        ACCEPTED_DOCUMENT_FILE_EXTENSIONS + ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS
-    )
-
-    if candidate_extension and candidate_extension in supported_extensions:
-        try:
-            extracted_text = extract_file_text(
-                io.BytesIO(file.content),
-                file.filename or str(file.file_id),
-                break_on_unprocessable=False,
-                extension=candidate_extension,
-            )
-            if extracted_text:
-                return extracted_text
-        except Exception:
-            logger.exception(
-                "Could not extract text content for file %s",
-                file.filename or file.file_id,
-            )
-
-    return _binary_file_placeholder(file)
-
-
-def _infer_extension(file: InMemoryChatFile) -> str | None:
-    """
-    Infer the most likely extension to drive downstream parsers.
-    Falls back to known file types and PDF magic bytes when necessary.
-    """
-    raw_bytes = file.content
-    if raw_bytes.startswith(b"%PDF") or raw_bytes.startswith(b"\xef\xbb\xbf%PDF"):
-        return ".pdf"
-
-    if file.filename:
-        extension = Path(file.filename).suffix.lower()
-        if extension:
-            return extension
-
-    if file.file_type == ChatFileType.CSV:
-        return ".csv"
-
-    if file.file_type == ChatFileType.PLAIN_TEXT:
-        return ".txt"
-
-    return None
-
-
-def _binary_file_placeholder(file: InMemoryChatFile) -> str:
-    image_type = get_image_type_from_bytes(file.content)
-    if image_type:
-        return f"[Binary image content ({image_type}) omitted]"
-    return f"[Binary file content - {file.file_type} format]"
-
-
-def build_content_with_imgs(
-    message: str,
-    files: list[InMemoryChatFile] | None = None,
-    img_urls: list[str] | None = None,
-    b64_imgs: list[str] | None = None,
-    message_type: MessageType = MessageType.USER,
-    exclude_images: bool = False,
-) -> str | list[str | dict[str, Any]]:  # matching Langchain's BaseMessage content type
-    files = files or []
-
-    # Only include image files for user messages
-    img_files = (
-        [file for file in files if file.file_type == ChatFileType.IMAGE]
-        if message_type == MessageType.USER
-        else []
-    )
-
-    img_urls = img_urls or []
-    b64_imgs = b64_imgs or []
-    message_main_content = _build_content(message, files)
-
-    if exclude_images or (not img_files and not img_urls):
-        return message_main_content
-
-    return cast(
-        list[str | dict[str, Any]],
-        [
-            {
-                "type": "text",
-                "text": message_main_content,
-            },
-        ]
-        + [
-            {
-                "type": "image_url",
-                "image_url": {
-                    "url": (
-                        f"data:{get_image_type_from_bytes(file.content)};"
-                        f"base64,{file.to_base64()}"
-                    ),
-                },
-            }
-            for file in img_files
-        ]
-        + [
-            {
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:{get_image_type(b64_img)};base64,{b64_img}",
-                },
-            }
-            for b64_img in b64_imgs
-        ]
-        + [
-            {
-                "type": "image_url",
-                "image_url": {
-                    "url": url,
-                },
-            }
-            for url in img_urls
-        ],
-    )
-
-
-def message_to_prompt_and_imgs(message: BaseMessage) -> tuple[str, list[str]]:
-    if isinstance(message.content, str):
-        return message.content, []
-
-    imgs = []
-    texts = []
-    for part in message.content:
-        if isinstance(part, dict):
-            if part.get("type") == "image_url":
-                img_url = part.get("image_url", {}).get("url")
-                if img_url:
-                    imgs.append(img_url)
-            elif part.get("type") == "text":
-                text = part.get("text")
-                if text:
-                    texts.append(text)
-        else:
-            texts.append(part)
-
-    return "".join(texts), imgs
-
-
 def dict_based_prompt_to_langchain_prompt(
     messages: list[dict[str, str]],
 ) -> list[BaseMessage]:
@@ -426,80 +228,11 @@ def dict_based_prompt_to_langchain_prompt(
     return prompt
 
 
-def str_prompt_to_langchain_prompt(message: str) -> list[BaseMessage]:
-    return [HumanMessage(content=message)]
-
-
-def convert_lm_input_to_basic_string(lm_input: LanguageModelInput) -> str:
-    """Heavily inspired by:
-    https://github.com/langchain-ai/langchain/blob/master/libs/langchain/langchain/chat_models/base.py#L86
-    """
-    prompt_value = None
-    if isinstance(lm_input, PromptValue):
-        prompt_value = lm_input
-    elif isinstance(lm_input, str):
-        prompt_value = StringPromptValue(text=lm_input)
-    elif isinstance(lm_input, list):
-        prompt_value = ChatPromptValue(messages=lm_input)
-
-    if prompt_value is None:
-        raise ValueError(
-            f"Invalid input type {type(lm_input)}. "
-            "Must be a PromptValue, str, or list of BaseMessages."
-        )
-
-    return prompt_value.to_string()
-
-
 def message_to_string(message: BaseMessage) -> str:
     if not isinstance(message.content, str):
         raise RuntimeError("LLM message not in expected format.")
 
     return message.content
-
-
-def message_generator_to_string_generator(
-    messages: Iterator[BaseMessage],
-) -> Iterator[str]:
-    for message in messages:
-        yield message_to_string(message)
-
-
-def should_be_verbose() -> bool:
-    return LOG_LEVEL == "debug"
-
-
-# estimate of the number of tokens in an image url
-# is correct when downsampling is used. Is very wrong when OpenAI does not downsample
-# TODO: improve this
-_IMG_TOKENS = 85
-
-
-def check_message_tokens(
-    message: BaseMessage, encode_fn: Callable[[str], list] | None = None
-) -> int:
-    if isinstance(message.content, str):
-        return check_number_of_tokens(message.content, encode_fn)
-
-    total_tokens = 0
-    for part in message.content:
-        if isinstance(part, str):
-            total_tokens += check_number_of_tokens(part, encode_fn)
-            continue
-
-        if part["type"] == "text":
-            total_tokens += check_number_of_tokens(part["text"], encode_fn)
-        elif part["type"] == "image_url":
-            total_tokens += _IMG_TOKENS
-
-    if isinstance(message, AIMessage) and message.tool_calls:
-        for tool_call in message.tool_calls:
-            total_tokens += check_number_of_tokens(
-                json.dumps(tool_call["args"]), encode_fn
-            )
-            total_tokens += check_number_of_tokens(tool_call["name"], encode_fn)
-
-    return total_tokens
 
 
 def check_number_of_tokens(
@@ -910,21 +643,31 @@ def is_true_openai_model(model_provider: str, model_name: str) -> bool:
     """
 
     # NOTE: not using the OPENAI_PROVIDER_NAME constant here due to circular import issues
-    if model_provider != "openai":
+    if model_provider != "openai" and model_provider != "litellm_proxy":
         return False
 
+    model_map = get_model_map()
+
+    def _check_if_model_name_is_openai_provider(model_name: str) -> bool:
+        return (
+            model_name in model_map
+            and model_map[model_name].get("litellm_provider") == "openai"
+        )
+
     try:
-        model_map = get_model_map()
+
         # Check if any model exists in litellm's registry with openai prefix
         # If it's registered as "openai/model-name", it's a real OpenAI model
         if f"openai/{model_name}" in model_map:
             return True
 
-        if (
-            model_name in model_map
-            and model_map[model_name].get("litellm_provider") == "openai"
-        ):
+        if _check_if_model_name_is_openai_provider(model_name):
             return True
+
+        if model_name.startswith("azure/"):
+            model_name_with_azure_removed = "/".join(model_name.split("/")[1:])
+            if _check_if_model_name_is_openai_provider(model_name_with_azure_removed):
+                return True
 
         return False
 

@@ -38,10 +38,8 @@ from onyx.db.models import IndexModelStatus
 from onyx.db.models import SearchSettings
 from onyx.db.models import UserTenantMapping
 from onyx.llm.llm_provider_options import ANTHROPIC_PROVIDER_NAME
-from onyx.llm.llm_provider_options import ANTHROPIC_VISIBLE_MODEL_NAMES
 from onyx.llm.llm_provider_options import get_anthropic_model_names
-from onyx.llm.llm_provider_options import OPEN_AI_MODEL_NAMES
-from onyx.llm.llm_provider_options import OPEN_AI_VISIBLE_MODEL_NAMES
+from onyx.llm.llm_provider_options import get_openai_model_names
 from onyx.llm.llm_provider_options import OPENAI_PROVIDER_NAME
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
@@ -275,7 +273,7 @@ def configure_default_api_keys(db_session: Session) -> None:
             model_configurations=[
                 ModelConfigurationUpsertRequest(
                     name=name,
-                    is_visible=name in ANTHROPIC_VISIBLE_MODEL_NAMES,
+                    is_visible=False,
                     max_input_tokens=None,
                 )
                 for name in get_anthropic_model_names()
@@ -302,10 +300,10 @@ def configure_default_api_keys(db_session: Session) -> None:
             model_configurations=[
                 ModelConfigurationUpsertRequest(
                     name=model_name,
-                    is_visible=model_name in OPEN_AI_VISIBLE_MODEL_NAMES,
+                    is_visible=False,
                     max_input_tokens=None,
                 )
-                for model_name in OPEN_AI_MODEL_NAMES
+                for model_name in get_openai_model_names()
             ],
             api_key_changed=True,
         )

@@ -21,8 +21,15 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"],
-      "@tests/*": ["./tests/*"]
+      "@/*": [
+        "./src/*"
+      ],
+      "@tests/*": [
+        "./tests/*"
+      ],
+      "@public/*": [
+        "./public/*"
+      ]
     }
   },
   "include": [

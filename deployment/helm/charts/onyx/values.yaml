@@ -144,6 +144,15 @@ indexCapability:
 config:
   envConfigMapName: env-configmap
 
+tooling:
+  pgInto:
+    # -- Mounts a small helper script into app pods that opens psql using the pod's POSTGRES_* env vars.
+    enabled: false
+    # -- Where to place the helper inside the container.
+    mountPath: /usr/local/bin/pginto
+    # -- Which client binary to call; change if your image uses a non-default path.
+    psqlBinary: psql
+
 serviceAccount:
   # Specifies whether a service account should be created
   create: false
@@ -165,6 +174,12 @@ nginx:
   controller:
     containerPort:
       http: 1024
+
+    # NOTE: When onyx-nginx-conf changes, nginx pods need to restart.
+    # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
+    # Workaround: Helm upgrade will restart if the following annotation value changes.
+    podAnnotations:
+      onyx.app/nginx-config-version: "1"
 
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
     extraEnvs:
@@ -684,6 +699,55 @@ slackbot:
   tolerations: []
   affinity: {}
 
+# Onyx Model Context Protocol (MCP) Server
+# Allows LLMs to use Onyx like invoking tools or accessing resources
+mcpServer:
+  enabled: false  # Disabled by default
+  replicaCount: 1
+  image:
+    repository: onyxdotapp/onyx-backend
+    tag: ""  # Overrides the image tag whose default is the chart appVersion.
+  # CORS origins for MCP clients (comma-separated)
+  # Example: "https://claude.ai,https://app.cursor.sh"
+  corsOrigins: ""
+  podAnnotations: {}
+  podLabels:
+    scope: onyx-backend
+    app: mcp-server
+  deploymentLabels:
+    app: mcp-server
+  containerPorts:
+    server: 8090
+  service:
+    type: ClusterIP
+    servicePort: 8090
+    targetPort: mcp-server-port
+    portName: mcp-server-port
+  podSecurityContext: {}
+  securityContext: {}
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  livenessProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  volumes: []
+  volumeMounts: []
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
 celery_worker_docfetching:
   replicaCount: 1
   autoscaling:
@@ -1005,7 +1069,6 @@ configMap:
   QA_TIMEOUT: "60"
   MAX_CHUNKS_FED_TO_CHAT: ""
   DISABLE_LLM_DOC_RELEVANCE: ""
-  DISABLE_LLM_CHOOSE_SEARCH: ""
   DISABLE_LLM_QUERY_REPHRASE: ""
   # Query Options
   DOC_TIME_DECAY: ""

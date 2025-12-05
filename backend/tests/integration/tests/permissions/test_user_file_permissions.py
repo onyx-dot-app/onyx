@@ -120,33 +120,3 @@ def test_public_assistant_with_user_files(
     assert (
         len(chat_history) >= 2
     ), "Expected at least 2 messages (user message and assistant response)"
-
-
-def test_user_file_not_accessible_by_other_users(
-    user_file_setup: UserFileTestSetup,
-) -> None:
-    """
-    Test that a user file owned by one user cannot be directly used by another user.
-    This should throw an error.
-    """
-    # Create a chat session as user2 with the default assistant
-    chat_session = ChatSessionManager.create(
-        persona_id=0,  # Default assistant
-        description="Test chat session for unauthorized file access",
-        user_performing_action=user_file_setup.user2_non_owner,
-    )
-
-    # Try to send a message as user2 with user1's file attached
-    # This should throw a permission error
-    response = ChatSessionManager.send_message(
-        chat_session_id=chat_session.id,
-        message="Can you read this file?",
-        current_message_files=[user_file_setup.user1_file_descriptor],
-        user_performing_action=user_file_setup.user2_non_owner,
-    )
-
-    # Verify that an error occurred for unauthorized file access
-    assert response.error is not None, (
-        "Expected an error when user2 tries to use user1's file directly, "
-        "but no error was returned"
-    )

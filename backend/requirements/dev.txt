@@ -171,6 +171,7 @@ h11==0.16.0
     # via
     #   httpcore
     #   uvicorn
+hatchling==1.28.0
 hf-xet==1.2.0 ; platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64'
     # via huggingface-hub
 httpcore==1.0.9
@@ -225,6 +226,7 @@ jupyter-core==5.9.1
     #   jupyter-client
 litellm==1.79.0
     # via onyx
+manygo==0.2.0
 markupsafe==3.0.3
     # via jinja2
 matplotlib-inline==0.2.1
@@ -250,6 +252,7 @@ numpy==1.26.4
     #   pandas-stubs
     #   shapely
     #   voyageai
+onyx-devtools==0.0.1
 openai==2.6.1
     # via
     #   litellm
@@ -259,6 +262,7 @@ packaging==24.2
     #   black
     #   google-cloud-aiplatform
     #   google-cloud-bigquery
+    #   hatchling
     #   huggingface-hub
     #   ipykernel
     #   pytest
@@ -268,7 +272,9 @@ parameterized==0.9.0
 parso==0.8.5
     # via jedi
 pathspec==0.12.1
-    # via black
+    # via
+    #   black
+    #   hatchling
 pexpect==4.9.0 ; sys_platform != 'emscripten' and sys_platform != 'win32'
     # via ipython
 platformdirs==4.5.0
@@ -277,7 +283,9 @@ platformdirs==4.5.0
     #   jupyter-core
     #   virtualenv
 pluggy==1.6.0
-    # via pytest
+    # via
+    #   hatchling
+    #   pytest
 pre-commit==3.2.2
 prometheus-client==0.21.0
     # via
@@ -368,6 +376,7 @@ referencing==0.36.2
     #   jsonschema-specifications
 regex==2025.11.3
     # via tiktoken
+release-tag==0.4.3
 reorder-python-imports-black==3.14.0
 requests==2.32.5
     # via
@@ -431,6 +440,8 @@ traitlets==5.14.3
     #   jupyter-client
     #   jupyter-core
     #   matplotlib-inline
+trove-classifiers==2025.12.1.14
+    # via hatchling
 types-beautifulsoup4==4.12.0.3
 types-html5lib==1.1.11.13
     # via types-beautifulsoup4
@@ -494,3 +505,4 @@ yarl==1.22.0
     # via aiohttp
 zipp==3.23.0
     # via importlib-metadata
+zizmor==1.18.0

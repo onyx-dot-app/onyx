@@ -1,7 +1,6 @@
-import * as React from "react";
-import type { SVGProps } from "react";
+import { IconProps } from "@/icons";
 
-const SvgOpenrouter = (props: SVGProps<SVGSVGElement>) => {
+const SvgOpenrouter = (props: IconProps) => {
   const { className, ...rest } = props;
   return (
     <svg

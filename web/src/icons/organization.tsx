@@ -1,9 +1,13 @@
-import type { SVGProps } from "react";
-const SvgOrganization = (props: SVGProps<SVGSVGElement>) => (
+import { IconProps } from "@/icons";
+
+const SvgOrganization = ({ size, ...props }: IconProps) => (
   <svg
+    width={size}
+    height={size}
     viewBox="0 0 16 16"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
+    stroke="currentColor"
     {...props}
   >
     <path

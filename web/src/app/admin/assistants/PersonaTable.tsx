@@ -88,8 +88,8 @@ export function PersonasTable({
       displayPriorityMap.set(personaId, ind);
     });
 
-    const response = await fetch("/api/admin/persona/display-priority", {
-      method: "PUT",
+    const response = await fetch("/api/admin/agents/display-priorities", {
+      method: "PATCH",
       headers: {
         "Content-Type": "application/json",
       },

@@ -10,11 +10,13 @@ from requests.models import Response
 
 from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SavedSearchDoc
+from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
+from onyx.server.query_and_chat.streaming_models import StreamingType
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestChatMessage
@@ -32,11 +34,12 @@ class StreamPacketObj(TypedDict, total=False):
     type: Literal[
         "message_start",
         "message_delta",
-        "internal_search_tool_start",
-        "internal_search_tool_delta",
-        "image_generation_tool_start",
-        "image_generation_tool_heartbeat",
-        "image_generation_tool_delta",
+        "search_tool_start",
+        "search_tool_queries_delta",
+        "search_tool_documents_delta",
+        "image_generation_start",
+        "image_generation_heartbeat",
+        "image_generation_final",
     ]
     content: str
     final_documents: list[dict[str, Any]]
@@ -53,7 +56,7 @@ class StreamPacketData(TypedDict, total=False):
     error: str
     stack_trace: str
     obj: StreamPacketObj
-    ind: int
+    turn_index: int
 
 
 class ChatSessionManager:
@@ -88,7 +91,6 @@ class ChatSessionManager:
         parent_message_id: int | None = None,
         user_performing_action: DATestUser | None = None,
         file_descriptors: list[FileDescriptor] | None = None,
-        current_message_files: list[FileDescriptor] | None = None,
         search_doc_ids: list[int] | None = None,
         retrieval_options: RetrievalDetails | None = None,
         query_override: str | None = None,
@@ -106,7 +108,6 @@ class ChatSessionManager:
             parent_message_id=parent_message_id,
             message=message,
             file_descriptors=file_descriptors or [],
-            current_message_files=current_message_files or [],
             search_doc_ids=search_doc_ids or [],
             retrieval_options=retrieval_options,
             rerank_settings=None,  # Can be added if needed
@@ -168,11 +169,12 @@ class ChatSessionManager:
             ],
         )
         ind_to_tool_use: dict[int, ToolResult] = {}
-        top_documents: list[SavedSearchDoc] = []
+        top_documents: list[SearchDoc] = []
         heartbeat_packets: list[StreamPacketData] = []
         full_message = ""
         assistant_message_id: int | None = None
         error = None
+        ind: int
         for data in response_data:
             if reserved_id := data.get("reserved_assistant_message_id"):
                 assistant_message_id = reserved_id
@@ -184,16 +186,27 @@ class ChatSessionManager:
             elif (
                 (data_obj := data.get("obj"))
                 and (packet_type := data_obj.get("type"))
-                and (ind := data.get("ind")) is not None
+                and (
+                    ind := cast(
+                        int,
+                        (
+                            data.get("ind")
+                            if data.get("ind") is not None
+                            else data.get("turn_index")
+                        ),
+                    )
+                )
+                is not None
             ):
-                if packet_type == "message_start":
+                packet_type_str = str(packet_type)
+                if packet_type_str == StreamingType.MESSAGE_START.value:
                     final_docs = data_obj.get("final_documents")
                     if isinstance(final_docs, list):
-                        top_documents = [SavedSearchDoc(**doc) for doc in final_docs]
+                        top_documents = [SearchDoc(**doc) for doc in final_docs]
                     full_message += data_obj.get("content", "")
-                elif packet_type == "message_delta":
+                elif packet_type_str == StreamingType.MESSAGE_DELTA.value:
                     full_message += data_obj["content"]
-                elif packet_type == "internal_search_tool_start":
+                elif packet_type_str == StreamingType.SEARCH_TOOL_START.value:
                     tool_name = (
                         ToolName.INTERNET_SEARCH
                         if data_obj.get("is_internet_search", False)
@@ -202,14 +215,14 @@ class ChatSessionManager:
                     ind_to_tool_use[ind] = ToolResult(
                         tool_name=tool_name,
                     )
-                elif packet_type == "image_generation_tool_start":
+                elif packet_type_str == StreamingType.IMAGE_GENERATION_START.value:
                     ind_to_tool_use[ind] = ToolResult(
                         tool_name=ToolName.IMAGE_GENERATION,
                     )
-                elif packet_type == "image_generation_tool_heartbeat":
+                elif packet_type_str == StreamingType.IMAGE_GENERATION_HEARTBEAT.value:
                     # Track heartbeat packets for debugging/testing
                     heartbeat_packets.append(data)
-                elif packet_type == "image_generation_tool_delta":
+                elif packet_type_str == StreamingType.IMAGE_GENERATION_FINAL.value:
                     from tests.integration.common_utils.test_models import (
                         GeneratedImage,
                     )
@@ -218,13 +231,21 @@ class ChatSessionManager:
                     ind_to_tool_use[ind].images.extend(
                         [GeneratedImage(**img) for img in images]
                     )
-                elif packet_type == "internal_search_tool_delta":
+                elif packet_type_str == StreamingType.SEARCH_TOOL_QUERIES_DELTA.value:
                     ind_to_tool_use[ind].queries.extend(data_obj.get("queries", []))
-
-                    documents = data_obj.get("documents", [])
-                    ind_to_tool_use[ind].documents.extend(
-                        [SavedSearchDoc(**doc) for doc in documents]
-                    )
+                elif packet_type_str == StreamingType.SEARCH_TOOL_DOCUMENTS_DELTA.value:
+                    docs = []
+                    for doc in data_obj.get("documents", []):
+                        if "db_doc_id" in doc:
+                            # Already a SavedSearchDoc format
+                            docs.append(SavedSearchDoc(**doc))
+                        else:
+                            # SearchDoc format - Convert to SavedSearchDoc
+                            search_doc = SearchDoc(**doc)
+                            docs.append(
+                                SavedSearchDoc.from_search_doc(search_doc, db_doc_id=0)
+                            )
+                    ind_to_tool_use[ind].documents.extend(docs)
         # If there's an error, assistant_message_id might not be present
         if not assistant_message_id and not error:
             raise ValueError("Assistant message id not found")
@@ -258,7 +279,6 @@ class ChatSessionManager:
                 chat_session_id=chat_session.id,
                 parent_message_id=msg.get("parent_message"),
                 message=msg["message"],
-                research_answer_purpose=msg.get("research_answer_purpose"),
                 message_type=msg.get("message_type"),
                 files=msg.get("files"),
             )

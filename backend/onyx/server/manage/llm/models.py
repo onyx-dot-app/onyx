@@ -7,6 +7,7 @@ from pydantic import field_validator
 
 from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import litellm_thinks_model_supports_image_input
+from onyx.llm.utils import model_is_reasoning_model
 
 
 if TYPE_CHECKING:
@@ -48,6 +49,7 @@ class LLMProviderDescriptor(BaseModel):
 
     name: str
     provider: str
+    provider_display_name: str  # Human-friendly name like "Claude (Anthropic)"
     default_model_name: str
     fast_default_model_name: str | None
     is_default_provider: bool | None
@@ -60,9 +62,13 @@ class LLMProviderDescriptor(BaseModel):
         cls,
         llm_provider_model: "LLMProviderModel",
     ) -> "LLMProviderDescriptor":
+        from onyx.llm.llm_provider_options import get_provider_display_name
+
+        provider = llm_provider_model.provider
         return cls(
             name=llm_provider_model.name,
-            provider=llm_provider_model.provider,
+            provider=provider,
+            provider_display_name=get_provider_display_name(provider),
             default_model_name=llm_provider_model.default_model_name,
             fast_default_model_name=llm_provider_model.fast_default_model_name,
             is_default_provider=llm_provider_model.is_default_provider,
@@ -180,6 +186,12 @@ class ModelConfigurationView(BaseModel):
     is_visible: bool
     max_input_tokens: int | None = None
     supports_image_input: bool
+    supports_reasoning: bool = False
+    display_name: str | None = None
+    provider_display_name: str | None = None
+    vendor: str | None = None
+    version: str | None = None
+    region: str | None = None
 
     @classmethod
     def from_model(
@@ -187,6 +199,25 @@ class ModelConfigurationView(BaseModel):
         model_configuration_model: "ModelConfigurationModel",
         provider_name: str,
     ) -> "ModelConfigurationView":
+
+        from onyx.llm.model_name_parser import parse_litellm_model_name
+
+        # Parse the model name to get display information
+        # Include provider prefix if not already present (enrichments use full keys like "vertex_ai/...")
+        # For OpenRouter, model names are like "anthropic/claude-3-5-haiku" but enrichment keys
+        # are "openrouter/anthropic/claude-3-5-haiku", so we need to prepend the provider
+        model_name = model_configuration_model.name
+        if provider_name and not model_name.startswith(f"{provider_name}/"):
+            model_name = f"{provider_name}/{model_name}"
+        parsed = parse_litellm_model_name(model_name)
+
+        # Include region in display name for Bedrock cross-region models
+        display_name = (
+            f"{parsed.display_name} ({parsed.region})"
+            if parsed.region
+            else parsed.display_name
+        )
+
         return cls(
             name=model_configuration_model.name,
             is_visible=model_configuration_model.is_visible,
@@ -204,6 +235,15 @@ class ModelConfigurationView(BaseModel):
                     model_configuration_model.name, provider_name
                 )
             ),
+            supports_reasoning=model_is_reasoning_model(
+                model_configuration_model.name, provider_name
+            ),
+            # Populate display fields from parsed model name
+            display_name=display_name,
+            provider_display_name=parsed.provider_display_name,
+            vendor=parsed.vendor,
+            version=parsed.version,
+            region=parsed.region,
         )
 
 

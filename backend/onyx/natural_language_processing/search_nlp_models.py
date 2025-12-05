@@ -31,7 +31,6 @@ from onyx.configs.model_configs import BATCH_SIZE_ENCODE_CHUNKS
 from onyx.configs.model_configs import (
     BATCH_SIZE_ENCODE_CHUNKS_FOR_API_EMBEDDING_SERVICES,
 )
-from onyx.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from onyx.connectors.models import ConnectorStopSignal
 from onyx.db.models import SearchSettings
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -46,7 +45,9 @@ from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.natural_language_processing.utils import tokenizer_trim_content
 from onyx.utils.logger import setup_logger
 from onyx.utils.search_nlp_models_utils import pass_aws_key
+from onyx.utils.timing import log_function_time
 from shared_configs.configs import API_BASED_EMBEDDING_TIMEOUT
+from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
 from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
 from shared_configs.configs import INDEXING_MODEL_SERVER_PORT
 from shared_configs.configs import INDEXING_ONLY
@@ -848,6 +849,7 @@ class EmbeddingModel:
 
         return embeddings
 
+    @log_function_time(print_only=True, debug_only=True)
     def encode(
         self,
         texts: list[str],
@@ -1066,6 +1068,17 @@ class InformationContentClassificationModel:
         self,
         queries: list[str],
     ) -> list[ContentClassificationPrediction]:
+        if os.environ.get("DISABLE_MODEL_SERVER", "").lower() == "true":
+            logger.info(
+                "DISABLE_MODEL_SERVER is set, returning default classifications"
+            )
+            return [
+                ContentClassificationPrediction(
+                    predicted_label=1, content_boost_factor=1.0
+                )
+                for _ in queries
+            ]
+
         response = requests.post(self.content_server_endpoint, json=queries)
         response.raise_for_status()
 
@@ -1092,6 +1105,14 @@ class ConnectorClassificationModel:
         query: str,
         available_connectors: list[str],
     ) -> list[str]:
+        # Check if model server is disabled
+        if os.environ.get("DISABLE_MODEL_SERVER", "").lower() == "true":
+            logger.info(
+                "DISABLE_MODEL_SERVER is set, returning all available connectors"
+            )
+            # Return all available connectors when model server is disabled
+            return available_connectors
+
         connector_classification_request = ConnectorClassificationRequest(
             available_connectors=available_connectors,
             query=query,

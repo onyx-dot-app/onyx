@@ -86,6 +86,7 @@ class MCPAuthenticationType(str, PyEnum):
     NONE = "NONE"
     API_TOKEN = "API_TOKEN"
     OAUTH = "OAUTH"
+    PT_OAUTH = "PT_OAUTH"  # Pass-Through OAuth
 
 
 class MCPTransport(str, PyEnum):
@@ -99,6 +100,14 @@ class MCPTransport(str, PyEnum):
 class MCPAuthenticationPerformer(str, PyEnum):
     ADMIN = "ADMIN"
     PER_USER = "PER_USER"
+
+
+class MCPServerStatus(str, PyEnum):
+    CREATED = "CREATED"  # Server created, needs auth configuration
+    AWAITING_AUTH = "AWAITING_AUTH"  # Auth configured, pending user authentication
+    FETCHING_TOOLS = "FETCHING_TOOLS"  # Auth complete, fetching tools
+    CONNECTED = "CONNECTED"  # Fully configured and connected
+    DISCONNECTED = "DISCONNECTED"  # Server disconnected, but not deleted
 
 
 # Consistent with Celery task statuses

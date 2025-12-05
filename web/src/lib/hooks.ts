@@ -40,7 +40,6 @@ import { useUser } from "@/components/user/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import { updateTemperatureOverrideForChatSession } from "@/app/chat/services/lib";
 import { useLLMProviders } from "./hooks/useLLMProviders";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";
 
@@ -546,9 +545,10 @@ export function useLlmManager(
 ): LlmManager {
   const { user } = useUser();
 
-  // Get all user-accessible providers from ChatContext (loaded server-side)
+  // Get all user-accessible providers via SWR (general providers - no persona filter)
   // This includes public + all restricted providers user can access via groups
-  const { llmProviders: allUserProviders } = useChatContext();
+  const { llmProviders: allUserProviders, isLoading: isLoadingAllProviders } =
+    useLLMProviders();
   // Fetch persona-specific providers to enforce RBAC restrictions per assistant
   // Only fetch if we have an assistant selected
   const personaId =
@@ -752,7 +752,7 @@ export function useLlmManager(
     }
   };
 
-  // Track if any provider exists from ChatContext (for onboarding checks)
+  // Track if any provider exists (for onboarding checks)
   const hasAnyProvider = (allUserProviders?.length ?? 0) > 0;
 
   return {
@@ -766,7 +766,9 @@ export function useLlmManager(
     liveAssistant: liveAssistant ?? null,
     maxTemperature,
     llmProviders,
-    isLoadingProviders: personaId !== undefined && isLoadingPersonaProviders,
+    isLoadingProviders:
+      isLoadingAllProviders ||
+      (personaId !== undefined && isLoadingPersonaProviders),
     hasAnyProvider,
   };
 }
@@ -778,7 +780,7 @@ export function useAuthType(): AuthType | null {
   );
 
   if (NEXT_PUBLIC_CLOUD_ENABLED) {
-    return "cloud";
+    return AuthType.CLOUD;
   }
 
   if (error || !data) {
@@ -852,255 +854,6 @@ export const fetchConnectorIndexingStatus = async (
 
   return response.json();
 };
-
-const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
-  // OpenAI models
-  "o1-2025-12-17": "o1 (December 2025)",
-  "o3-mini": "o3 Mini",
-  "o1-mini": "o1 Mini",
-  "o1-preview": "o1 Preview",
-  o1: "o1",
-  "gpt-5": "GPT 5",
-  "gpt-5-mini": "GPT 5 Mini",
-  "gpt-4.1": "GPT 4.1",
-  "gpt-4": "GPT 4",
-  "gpt-4o": "GPT 4o",
-  "o4-mini": "o4 Mini",
-  o3: "o3",
-  "gpt-4o-2024-08-06": "GPT 4o (Structured Outputs)",
-  "gpt-4o-mini": "GPT 4o Mini",
-  "gpt-4-0314": "GPT 4 (March 2023)",
-  "gpt-4-0613": "GPT 4 (June 2023)",
-  "gpt-4-32k-0314": "GPT 4 32k (March 2023)",
-  "gpt-4-turbo": "GPT 4 Turbo",
-  "gpt-4-turbo-preview": "GPT 4 Turbo (Preview)",
-  "gpt-4-1106-preview": "GPT 4 Turbo (November 2023)",
-  "gpt-4-vision-preview": "GPT 4 Vision (Preview)",
-  "gpt-3.5-turbo": "GPT 3.5 Turbo",
-  "gpt-3.5-turbo-0125": "GPT 3.5 Turbo (January 2024)",
-  "gpt-3.5-turbo-1106": "GPT 3.5 Turbo (November 2023)",
-  "gpt-3.5-turbo-16k": "GPT 3.5 Turbo 16k",
-  "gpt-3.5-turbo-0613": "GPT 3.5 Turbo (June 2023)",
-  "gpt-3.5-turbo-16k-0613": "GPT 3.5 Turbo 16k (June 2023)",
-  "gpt-3.5-turbo-0301": "GPT 3.5 Turbo (March 2023)",
-
-  // Amazon models
-  "amazon.nova-micro@v1": "Amazon Nova Micro",
-  "amazon.nova-lite@v1": "Amazon Nova Lite",
-  "amazon.nova-pro@v1": "Amazon Nova Pro",
-
-  // Meta models
-  "llama-3.2-90b-vision-instruct": "Llama 3.2 90B",
-  "llama-3.2-11b-vision-instruct": "Llama 3.2 11B",
-  "llama-3.3-70b-instruct": "Llama 3.3 70B",
-
-  // Microsoft models
-  "phi-3.5-mini-instruct": "Phi 3.5 Mini",
-  "phi-3.5-moe-instruct": "Phi 3.5 MoE",
-  "phi-3.5-vision-instruct": "Phi 3.5 Vision",
-  "phi-4": "Phi 4",
-
-  // Deepseek Models
-  "deepseek-r1": "DeepSeek R1",
-
-  // Anthropic models
-  "claude-3-opus-20240229": "Claude 3 Opus",
-  "claude-3-haiku-20240307": "Claude 3 Haiku",
-  "claude-2.0": "Claude 2.0",
-  "claude-3-5-sonnet-20240620": "Claude 3.5 Sonnet (June 2024)",
-  "claude-3-5-sonnet-20241022": "Claude 3.5 Sonnet",
-  "claude-3-7-sonnet-20250219": "Claude 3.7 Sonnet",
-  "claude-3-5-sonnet-v2@20241022": "Claude 3.5 Sonnet",
-  "claude-3.5-sonnet-v2@20241022": "Claude 3.5 Sonnet",
-  "claude-3-5-haiku-20241022": "Claude 3.5 Haiku",
-  "claude-3-5-haiku@20241022": "Claude 3.5 Haiku",
-  "claude-3.5-haiku@20241022": "Claude 3.5 Haiku",
-  "claude-3.7-sonnet@202502019": "Claude 3.7 Sonnet",
-  "claude-3-7-sonnet-202502019": "Claude 3.7 Sonnet",
-  "claude-sonnet-4-5-20250929": "Claude 4.5 Sonnet",
-  "claude-haiku-4-5-20251001": "Claude 4.5 Haiku",
-  "claude-opus-4-5-20251101": "Claude 4.5 Opus",
-  "claude-opus-4-1-20250805": "Claude 4.1 Opus",
-  "claude-opus-4-1": "Claude 4.1 Opus",
-  "claude-opus-4-20250514": "Claude 4 Opus",
-  "claude-4-opus-20250514": "Claude 4 Opus",
-  "claude-opus-4-5": "Claude 4.5 Opus (Latest)",
-  "claude-sonnet-4-5": "Claude 4.5 Sonnet (Latest)",
-  "claude-sonnet-4-20250514": "Claude 4 Sonnet",
-  "claude-4-sonnet-20250514": "Claude 4 Sonnet",
-  "claude-haiku-4-5": "Claude 4.5 Haiku (Latest)",
-  "claude-3-7-sonnet-latest": "Claude 3.7 Sonnet (Latest)",
-
-  // Google Models
-
-  // 3.0 pro models
-  "gemini-3-pro-preview": "Gemini 3 Pro (Preview)",
-
-  // 2.5 pro models
-  "gemini-2.5-pro": "Gemini 2.5 Pro",
-  "gemini-2.5-flash": "Gemini 2.5 Flash",
-  "gemini-2.5-flash-lite": "Gemini 2.5 Flash Lite",
-  // "gemini-2.5-pro-preview-05-06": "Gemini 2.5 Pro (Preview May 6th)",
-
-  // 2.0 flash lite models
-  "gemini-2.0-flash-lite": "Gemini 2.0 Flash Lite",
-  "gemini-2.0-flash-lite-001": "Gemini 2.0 Flash Lite (v1)",
-  // "gemini-2.0-flash-lite-preview-02-05": "Gemini 2.0 Flash Lite (Prv)",
-  // "gemini-2.0-pro-exp-02-05": "Gemini 2.0 Pro (Exp)",
-
-  // 2.0 flash models
-  "gemini-2.0-flash": "Gemini 2.0 Flash",
-  "gemini-2.0-flash-001": "Gemini 2.0 Flash (v1)",
-  "gemini-2.0-flash-exp": "Gemini 2.0 Flash (Experimental)",
-  // "gemini-2.5-flash-preview-05-20": "Gemini 2.5 Flash (Preview May 20th)",
-  // "gemini-2.0-flash-thinking-exp-01-02":
-  //   "Gemini 2.0 Flash Thinking (Experimental January 2nd)",
-  // "gemini-2.0-flash-thinking-exp-01-21":
-  //   "Gemini 2.0 Flash Thinking (Experimental January 21st)",
-
-  // 1.5 pro models
-  "gemini-1.5-pro": "Gemini 1.5 Pro",
-  "gemini-1.5-pro-latest": "Gemini 1.5 Pro (Latest)",
-  "gemini-1.5-pro-001": "Gemini 1.5 Pro (v1)",
-  "gemini-1.5-pro-002": "Gemini 1.5 Pro (v2)",
-
-  // 1.5 flash models
-  "gemini-1.5-flash": "Gemini 1.5 Flash",
-  "gemini-1.5-flash-002": "Gemini 1.5 Flash (v2)",
-  "gemini-1.5-flash-001": "Gemini 1.5 Flash (v1)",
-
-  // Mistral Models
-  "mistral-large-2411": "Mistral Large 24.11",
-  "mistral-large@2411": "Mistral Large 24.11",
-  "ministral-3b": "Ministral 3B",
-
-  // Bedrock models
-  "ai21.j2-mid-v1": "J2 Mid",
-  "ai21.j2-ultra-v1": "J2 Ultra",
-  "ai21.jamba-instruct-v1:0": "Jamba Instruct",
-  "amazon.titan-text-express-v1": "Titan Text Express",
-  "amazon.titan-text-lite-v1": "Titan Text Lite",
-  "anthropic.claude-3-5-sonnet-20240620-v1:0": "Claude 3.5 Sonnet v1",
-  "anthropic.claude-3-5-sonnet-20241022-v2:0": "Claude 3.5 Sonnet v2",
-  "anthropic.claude-3-haiku-20240307-v1:0": "Claude 3 Haiku",
-  "anthropic.claude-3-opus-20240229-v1:0": "Claude 3 Opus",
-  "anthropic.claude-3-sonnet-20240229-v1:0": "Claude 3 Sonnet",
-  "anthropic.claude-3-7-sonnet-20250219-v1:0": "Claude 3.7 Sonnet",
-  "anthropic.claude-haiku-4-5-20251001-v1:0": "Claude 4.5 Haiku",
-  "anthropic.claude-instant-v1": "Claude Instant",
-  "anthropic.claude-v1": "Claude v1",
-  "anthropic.claude-v2:1": "Claude v2.1",
-  "cohere.command-light-text-v14": "Command Light Text",
-  "cohere.command-r-plus-v1:0": "Command R Plus",
-  "cohere.command-r-v1:0": "Command R",
-  "cohere.command-text-v14": "Command Text",
-  "global.anthropic.claude-sonnet-4-5-20250929-v1:0":
-    "Claude 4.5 Sonnet (Global)",
-  "global.anthropic.claude-sonnet-4-20250514-v1:0": "Claude 4 Sonnet (Global)",
-  "meta.llama2-13b-chat-v1": "Llama 2 13B",
-  "meta.llama2-70b-chat-v1": "Llama 2 70B",
-  "meta.llama3-1-70b-instruct-v1:0": "Llama 3.1 70B",
-  "meta.llama3-1-8b-instruct-v1:0": "Llama 3.1 8B",
-  "meta.llama3-2-1b-instruct-v1:0": "Llama 3.2 1B",
-  "meta.llama3-2-11b-instruct-v1:0": "Llama 3.2 11B",
-  "meta.llama3-2-3b-instruct-v1:0": "Llama 3.2 3B",
-  "meta.llama3-2-90b-instruct-v1:0": "Llama 3.2 90B",
-  "meta.llama3-70b-instruct-v1:0": "Llama 3 70B",
-  "meta.llama3-8b-instruct-v1:0": "Llama 3 8B",
-  "mistral.mistral-7b-instruct-v0:2": "Mistral 7B Instruct",
-  "mistral.mistral-large-2402-v1:0": "Mistral Large",
-  "mistral.mixtral-8x7b-instruct-v0:1": "Mixtral 8x7B Instruct",
-  "us.amazon.nova-lite-v1:0": "Nova Lite (US)",
-  "us.amazon.nova-micro-v1:0": "Nova Micro (US)",
-  "us.amazon.nova-premier-v1:0": "Nova Premier (US)",
-  "us.amazon.nova-pro-v1:0": "Nova Pro (US)",
-  "us.anthropic.claude-3-5-haiku-20241022-v1:0": "Claude 3.5 Haiku (US)",
-  "us.anthropic.claude-3-5-sonnet-20240620-v1:0": "Claude 3.5 Sonnet v1 (US)",
-  "us.anthropic.claude-3-5-sonnet-20241022-v2:0": "Claude 3.5 Sonnet v2 (US)",
-  "us.anthropic.claude-3-7-sonnet-20250219-v1:0": "Claude 3.7 Sonnet (US)",
-  "us.anthropic.claude-3-haiku-20240307-v1:0": "Claude 3 Haiku (US)",
-  "us.anthropic.claude-opus-4-1-20250805-v1:0": "Claude Opus 4.1 (US)",
-  "us.anthropic.claude-opus-4-20250514-v1:0": "Claude Opus 4 (US)",
-  "us.anthropic.claude-sonnet-4-20250514-v1:0": "Claude 4 Sonnet (US)",
-  "us.anthropic.claude-sonnet-4-5-20250929-v1:0": "Claude 4.5 Sonnet (US)",
-  "us.anthropic.claude-haiku-4-5-20251001-v1:0": "Claude 4.5 Haiku (US)",
-  "us-gov.anthropic.claude-sonnet-4-5-20250929-v1:0":
-    "Claude 4.5 Sonnet (US Gov)",
-  "us-gov.anthropic.claude-sonnet-4-20250514-v1:0": "Claude 4 Sonnet (US Gov)",
-  "us-gov.anthropic.claude-haiku-4-5-20251001-v1:0":
-    "Claude 4.5 Haiku (US Gov)",
-  "us-gov.anthropic.claude-3-5-haiku-20241022-v1:0":
-    "Claude 3.5 Haiku (US Gov)",
-  "us-gov.anthropic.claude-3-5-sonnet-20241022-v2:0":
-    "Claude 3.5 Sonnet v2 (US Gov)",
-  "us-gov.anthropic.claude-3-7-sonnet-20250219-v1:0":
-    "Claude 3.7 Sonnet (US Gov)",
-  "us-gov.anthropic.claude-3-haiku-20240307-v1:0": "Claude 3 Haiku (US Gov)",
-  "us-gov.anthropic.claude-opus-4-1-20250805-v1:0": "Claude Opus 4.1 (US Gov)",
-  "us-gov.anthropic.claude-opus-4-20250514-v1:0": "Claude Opus 4 (US Gov)",
-  "us.deepseek.r1-v1:0": "DeepSeek R1 (US)",
-  "us.meta.llama3-1-405b-instruct-v1:0": "Llama 3.1 405B (US)",
-  "us.meta.llama3-1-70b-instruct-v1:0": "Llama 3.1 70B (US)",
-  "us.meta.llama3-1-8b-instruct-v1:0": "Llama 3.1 8B (US)",
-  "us.meta.llama3-2-1b-instruct-v1:0": "Llama 3.2 1B (US)",
-  "us.meta.llama3-2-11b-instruct-v1:0": "Llama 3.2 11B (US)",
-  "us.meta.llama3-2-3b-instruct-v1:0": "Llama 3.2 3B (US)",
-  "us.meta.llama3-2-90b-instruct-v1:0": "Llama 3.2 90B (US)",
-  "us.meta.llama3-3-70b-instruct-v1:0": "Llama 3.3 70B (US)",
-  "us.meta.llama4-maverick-17b-instruct-v1:0": "Llama 4 Maverick 17B (US)",
-  "us.meta.llama4-scout-17b-instruct-v1:0": "Llama 4 Scout 17B (US)",
-  "us.mistral.pixtral-large-2502-v1:0": "Pixtral Large (US)",
-
-  // Ollama cloud models
-  "gpt-oss:20b": "gpt-oss 20B",
-  "gpt-oss:120b": "gpt-oss 120B",
-  "deepseek-v3.1:671b": "DeepSeek-v3.1 671B",
-  "kimi-k2:1t": "Kimi K2 1T",
-  "qwen3-coder:480b": "Qwen3-Coder 480B",
-  "glm-4.6": "GLM 4.6",
-
-  // Ollama models in litellm map (disjoint from ollama's supported model list)
-  // https://models.litellm.ai --> provider ollama
-  codegeex4: "CodeGeeX 4",
-  codegemma: "CodeGemma",
-  codellama: "CodeLLama",
-  "deepseek-coder-v2-base": "DeepSeek-Coder-v2 Base",
-  "deepseek-coder-v2-instruct": "DeepSeek-Coder-v2 Instruct",
-  "deepseek-coder-v2-lite-base": "DeepSeek-Coder-v2 Lite Base",
-  "deepseek-coder-v2-lite-instruct": "DeepSeek-Coder-v2 Lite Instruct",
-  "internlm2_5-20b-chat": "InternLM 2.5 20B Chat",
-  llama2: "Llama 2",
-  "llama2-uncensored": "Llama 2 Uncensored",
-  "llama2:13b": "Llama 2 13B",
-  "llama2:70b": "Llama 2 70B",
-  "llama2:7b": "Llama 2 7B",
-  llama3: "Llama 3",
-  "llama3:70b": "Llama 3 70B",
-  "llama3:8b": "Llama 3 8B",
-  mistral: "Mistral", // Mistral 7b
-  "mistral-7B-Instruct-v0.1": "Mistral 7B Instruct v0.1",
-  "mistral-7B-Instruct-v0.2": "Mistral 7B Instruct v0.2",
-  "mistral-large-instruct-2407": "Mistral Large Instruct 24.07",
-  "mixtral-8x22B-Instruct-v0.1": "Mixtral 8x22B Instruct v0.1",
-  "mixtral8x7B-Instruct-v0.1": "Mixtral 8x7B Instruct v0.1",
-  "orca-mini": "Orca Mini",
-  vicuna: "Vicuna",
-};
-
-export function getDisplayNameForModel(modelName: string): string {
-  if (modelName.startsWith("bedrock/")) {
-    const parts = modelName.split("/");
-    const lastPart = parts[parts.length - 1];
-    if (lastPart === undefined) {
-      return "";
-    }
-
-    const displayName = MODEL_DISPLAY_NAMES[lastPart];
-    return displayName || lastPart;
-  }
-
-  return MODEL_DISPLAY_NAMES[modelName] || modelName;
-}
 
 // Get source metadata for configured sources - deduplicated by source type
 function getConfiguredSources(

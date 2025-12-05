@@ -529,14 +529,22 @@ class LitellmLLM(LLM):
                     ]
                     else {}
                 ),
+                # Anthropic Claude uses `thinking` with budget_tokens for extended thinking
+                # This applies to Claude models on any provider (anthropic, vertex_ai, bedrock)
                 **(
                     {"thinking": {"type": "enabled", "budget_tokens": 10000}}
-                    if reasoning_effort and is_reasoning
+                    if reasoning_effort
+                    and is_reasoning
+                    and "claude" in self.config.model_name.lower()
                     else {}
                 ),
+                # OpenAI and other providers use reasoning_effort
+                # (litellm maps this to thinking_level for Gemini 3 models)
                 **(
                     {"reasoning_effort": reasoning_effort}
-                    if reasoning_effort and is_reasoning
+                    if reasoning_effort
+                    and is_reasoning
+                    and "claude" not in self.config.model_name.lower()
                     else {}
                 ),
                 **(
