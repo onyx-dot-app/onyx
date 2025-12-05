@@ -52,6 +52,8 @@ RUN uv pip install --system --upgrade \
         -r /tmp/requirements.txt \
         -r /tmp/ee-requirements.txt && \
     pip uninstall -y py && \
+    playwright install chromium && \
+    playwright install-deps chromium && \
     ln -s /usr/local/bin/supervisord /usr/bin/supervisord
 
 # RU и EN модель для spaCy
