@@ -33,6 +33,8 @@ import { updateMCPServerStatus } from "@/lib/tools/mcpService";
 import Message from "@/refresh-components/messages/Message";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { SvgArrowExchange } from "@opal/icons";
+import { useAuthType } from "@/lib/hooks";
+import { AuthType } from "@/lib/constants";
 
 interface MCPAuthenticationModalProps {
   mcpServer: MCPServerWithStatus | null;
@@ -67,6 +69,7 @@ const validationSchema = Yup.object().shape({
       MCPAuthenticationType.NONE,
       MCPAuthenticationType.API_TOKEN,
       MCPAuthenticationType.OAUTH,
+      MCPAuthenticationType.PT_OAUTH,
     ])
     .required("Authentication type is required"),
   auth_performer: Yup.string().when("auth_type", {
@@ -111,6 +114,10 @@ export default function MCPAuthenticationModal({
     "per-user"
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Check if OAuth is enabled for the Onyx instance
+  const authType = useAuthType();
+  const isOAuthEnabled =
+    authType === AuthType.OIDC || authType === AuthType.GOOGLE_OAUTH;
 
   const { data: fullServer } = useSWR<MCPServerWithStatus>(
     mcpServer ? `/api/admin/mcp/servers/${mcpServer.id}` : null,
@@ -421,8 +428,16 @@ export default function MCPAuthenticationModal({
                             value={MCPAuthenticationType.OAUTH}
                             description="Each user need to authenticate via OAuth with their own credentials."
                           >
-                            OAuth 2.0
+                            OAuth
                           </InputSelect.Item>
+                          {isOAuthEnabled && (
+                            <InputSelect.Item
+                              value={MCPAuthenticationType.PT_OAUTH}
+                              description="Forward the user's OAuth access token used to authenticate Onyx."
+                            >
+                              OAuth Pass-through
+                            </InputSelect.Item>
+                          )}
                           <InputSelect.Item
                             value={MCPAuthenticationType.API_TOKEN}
                             description="Use per-user individual API key or organization-wide shared API key."
@@ -444,13 +459,7 @@ export default function MCPAuthenticationModal({
                       }}
                     />
                   </FormField>
-
-                  {/* Divider - only show if we have authentication fields */}
-                  {(values.auth_type === MCPAuthenticationType.API_TOKEN ||
-                    values.auth_type === MCPAuthenticationType.OAUTH ||
-                    values.auth_type === MCPAuthenticationType.NONE) && (
-                    <Separator className="-my-2" />
-                  )}
+                  <Separator className="-my-2" />
                 </div>
 
                 {/* OAuth Section */}
@@ -634,6 +643,17 @@ export default function MCPAuthenticationModal({
                   <Message
                     text="No authentication for this MCP server"
                     description="No authentication will be used for this connection. Make sure you trust this server. You are responsible for actions taken with this connection."
+                    default
+                    medium
+                    static
+                    className="w-full"
+                    close={false}
+                  />
+                )}
+                {values.auth_type === MCPAuthenticationType.PT_OAUTH && (
+                  <Message
+                    text="Use pass-through for services with shared identity provider."
+                    description="Onyx will forward the user's OAuth access token directly to the server as an Authorization header. Make sure the server supports authentication with the same provider."
                     default
                     medium
                     static
