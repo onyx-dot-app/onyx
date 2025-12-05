@@ -70,6 +70,12 @@ uv export --no-emit-project --no-default-groups --no-hashes --extra ee -o backen
 uv export --no-emit-project --no-default-groups --no-hashes --extra model_server -o backend/requirements/model_server.txt
 ```
 
+or with pre-commit:
+
+```bash
+uv run pre-commit run uv-lock uv-export --all-files
+```
+
 ### 4. Installing Dependencies
 
 If enabled, all packages are installed automatically by the `uv-sync` pre-commit hook when changing
@@ -77,19 +83,29 @@ branches or pulling new changes.
 
 ```bash
 # For everything (most common)
-uv sync
+uv sync --all-extras
 
 # For backend production (shared + backend dependencies)
 uv sync --extra backend
 
 # For backend development (shared + backend + dev tools)
-uv sync --extra backend --group dev
+uv sync --extra backend --extra dev
 
 # For backend with EE (shared + backend + ee)
 uv sync --extra backend --extra ee
 
 # For model server (shared + model_server, NO backend deps!)
 uv sync --extra model_server
+```
+
+`uv` aggressively [ignores active virtual environments](https://docs.astral.sh/uv/concepts/projects/config/#project-environment-path) and prefers the root virtual environment.
+When working in workspace packages, be sure to pass `--active` when syncing the virtual environment:
+
+```bash
+cd backend/
+source .venv/bin/activate
+uv sync --active
+uv run --active ...
 ```
 
 ### 5. Upgrading Dependencies
