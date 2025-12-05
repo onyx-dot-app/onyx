@@ -26,6 +26,7 @@ import SvgEdit from "@/icons/edit";
 import SvgCheck from "@/icons/check";
 import SvgX from "@/icons/x";
 import SvgPlusCircle from "@/icons/plus-circle";
+import SvgFolderPlus from "@/icons/folder-plus";
 import { formatBytes } from "@/lib/utils";
 import { timestampToReadableDate } from "@/lib/dateUtils";
 
@@ -349,13 +350,11 @@ export function InlineFileManagement({
       {/* Confirmation Modal */}
       <Modal open={showSaveConfirm} onOpenChange={setShowSaveConfirm}>
         <Modal.Content mini>
-          <Modal.Header className="p-6 pb-4">
-            <Modal.CloseButton />
-            <Modal.Title>Confirm File Changes</Modal.Title>
-            <Modal.Description>
-              When you save these changes, the following will happen:
-            </Modal.Description>
-          </Modal.Header>
+          <Modal.Header
+            icon={SvgFolderPlus}
+            title="Confirm File Changes"
+            description="When you save these changes, the following will happen:"
+          />
 
           <Modal.Body className="px-6 space-y-3">
             {selectedFilesToRemove.size > 0 && (
