@@ -4,14 +4,13 @@ import re
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
-from enum import Enum
 from typing import Any
-from typing import TypedDict
 
 from langchain_core.messages import HumanMessage
 from pydantic import ValidationError
 
 from onyx.configs.app_configs import MAX_SLACK_QUERY_EXPANSIONS
+from onyx.context.search.federated.models import ChannelMetadata
 from onyx.context.search.models import ChunkIndexRequest
 from onyx.federated_connectors.slack.models import SlackEntities
 from onyx.llm.interfaces import LLM
@@ -35,44 +34,25 @@ WORD_PUNCTUATION = ".,!?;:\"'#"
 
 RECENCY_KEYWORDS = ["recent", "latest", "newest", "last"]
 
-
-class ChannelTypeString(str, Enum):
-    """String representations of Slack channel types."""
-
-    IM = "im"
-    MPIM = "mpim"
-    PRIVATE_CHANNEL = "private_channel"
-    PUBLIC_CHANNEL = "public_channel"
-
-
-class ChannelMetadata(TypedDict):
-    """Type definition for cached channel metadata."""
-
-    name: str
-    type: ChannelTypeString
-    is_private: bool
-    is_member: bool
-
-
 # All Slack channel types for fetching metadata
 ALL_CHANNEL_TYPES = [
-    ChannelTypeString.PUBLIC_CHANNEL.value,
-    ChannelTypeString.IM.value,
-    ChannelTypeString.MPIM.value,
-    ChannelTypeString.PRIVATE_CHANNEL.value,
+    ChannelType.PUBLIC_CHANNEL.value,
+    ChannelType.IM.value,
+    ChannelType.MPIM.value,
+    ChannelType.PRIVATE_CHANNEL.value,
 ]
 
 # Map Slack API scopes to their corresponding channel types
 # This is used for graceful degradation when scopes are missing
 SCOPE_TO_CHANNEL_TYPE_MAP = {
-    "mpim:read": ChannelTypeString.MPIM.value,
-    "mpim:history": ChannelTypeString.MPIM.value,
-    "im:read": ChannelTypeString.IM.value,
-    "im:history": ChannelTypeString.IM.value,
-    "groups:read": ChannelTypeString.PRIVATE_CHANNEL.value,
-    "groups:history": ChannelTypeString.PRIVATE_CHANNEL.value,
-    "channels:read": ChannelTypeString.PUBLIC_CHANNEL.value,
-    "channels:history": ChannelTypeString.PUBLIC_CHANNEL.value,
+    "mpim:read": ChannelType.MPIM.value,
+    "mpim:history": ChannelType.MPIM.value,
+    "im:read": ChannelType.IM.value,
+    "im:history": ChannelType.IM.value,
+    "groups:read": ChannelType.PRIVATE_CHANNEL.value,
+    "groups:history": ChannelType.PRIVATE_CHANNEL.value,
+    "channels:read": ChannelType.PUBLIC_CHANNEL.value,
+    "channels:history": ChannelType.PUBLIC_CHANNEL.value,
 }
 
 
@@ -371,11 +351,11 @@ def get_channel_type(
         ch_meta = channel_metadata.get(channel_id)
         if ch_meta:
             type_str = ch_meta.get("type")
-            if type_str == ChannelTypeString.IM.value:
+            if type_str == ChannelType.IM.value:
                 return ChannelType.IM
-            elif type_str == ChannelTypeString.MPIM.value:
+            elif type_str == ChannelType.MPIM.value:
                 return ChannelType.MPIM
-            elif type_str == ChannelTypeString.PRIVATE_CHANNEL.value:
+            elif type_str == ChannelType.PRIVATE_CHANNEL.value:
                 return ChannelType.PRIVATE_CHANNEL
             return ChannelType.PUBLIC_CHANNEL
 

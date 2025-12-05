@@ -16,12 +16,11 @@ from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
 from onyx.configs.chat_configs import DOC_TIME_DECAY
 from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import TextSection
+from onyx.context.search.federated.models import ChannelMetadata
 from onyx.context.search.federated.models import SlackMessage
 from onyx.context.search.federated.slack_search_utils import ALL_CHANNEL_TYPES
 from onyx.context.search.federated.slack_search_utils import build_channel_query_filter
 from onyx.context.search.federated.slack_search_utils import build_slack_queries
-from onyx.context.search.federated.slack_search_utils import ChannelMetadata
-from onyx.context.search.federated.slack_search_utils import ChannelTypeString
 from onyx.context.search.federated.slack_search_utils import get_channel_type
 from onyx.context.search.federated.slack_search_utils import (
     get_channel_type_for_missing_scope,
@@ -92,7 +91,7 @@ def fetch_and_cache_channel_metadata(
                 filtered: dict[str, ChannelMetadata] = {
                     k: v
                     for k, v in cached_data.items()
-                    if v.get("type") != ChannelTypeString.PRIVATE_CHANNEL.value
+                    if v.get("type") != ChannelType.PRIVATE_CHANNEL.value
                 }
                 logger.debug(f"Filtered to {len(filtered)} channels (exclude private)")
                 return filtered
@@ -135,7 +134,7 @@ def fetch_and_cache_channel_metadata(
 
                     # Determine channel type
                     channel_type_enum = get_channel_type(channel_info=ch)
-                    channel_type = ChannelTypeString(channel_type_enum.value)
+                    channel_type = ChannelType(channel_type_enum.value)
 
                     channel_metadata[channel_id] = {
                         "name": ch.get("name", ""),
@@ -353,7 +352,7 @@ def _extract_channel_data_from_entities(
                 if meta["name"]
                 and (
                     parsed_entities.include_private_channels
-                    or meta.get("type") != ChannelTypeString.PRIVATE_CHANNEL.value
+                    or meta.get("type") != ChannelType.PRIVATE_CHANNEL.value
                 )
             ]
     except ValidationError:
