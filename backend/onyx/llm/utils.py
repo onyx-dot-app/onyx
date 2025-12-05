@@ -699,40 +699,43 @@ def get_llm_contextual_cost(
     return usd_per_prompt + usd_per_completion
 
 
-def llm_max_input_tokens(
+def get_llm_max_tokens(
     model_map: dict,
     model_name: str,
     model_provider: str,
 ) -> int:
-    """Best effort attempt to get the max input tokens for the LLM."""
+    """Best effort attempt to get the max tokens for the LLM"""
     if GEN_AI_MAX_TOKENS:
         # This is an override, so always return this
         logger.info(f"Using override GEN_AI_MAX_TOKENS: {GEN_AI_MAX_TOKENS}")
         return GEN_AI_MAX_TOKENS
 
-    model_obj = find_model_obj(
-        model_map,
-        model_provider,
-        model_name,
-    )
-    if not model_obj:
-        logger.warning(
-            f"Model '{model_name}' not found in LiteLLM. "
-            f"Falling back to {GEN_AI_MODEL_FALLBACK_MAX_TOKENS} tokens."
+    try:
+        model_obj = find_model_obj(
+            model_map,
+            model_provider,
+            model_name,
+        )
+        if not model_obj:
+            raise RuntimeError(
+                f"No litellm entry found for {model_provider}/{model_name}"
+            )
+
+        if "max_input_tokens" in model_obj:
+            max_tokens = model_obj["max_input_tokens"]
+            return max_tokens
+
+        if "max_tokens" in model_obj:
+            max_tokens = model_obj["max_tokens"]
+            return max_tokens
+
+        logger.error(f"No max tokens found for LLM: {model_name}")
+        raise RuntimeError("No max tokens found for LLM")
+    except Exception:
+        logger.exception(
+            f"Failed to get max tokens for LLM with name {model_name}. Defaulting to {GEN_AI_MODEL_FALLBACK_MAX_TOKENS}."
         )
         return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
-
-    if "max_input_tokens" in model_obj:
-        return model_obj["max_input_tokens"]
-
-    if "max_tokens" in model_obj:
-        return model_obj["max_tokens"]
-
-    logger.warning(
-        f"No max tokens found for '{model_name}'. "
-        f"Falling back to {GEN_AI_MODEL_FALLBACK_MAX_TOKENS} tokens."
-    )
-    return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 
 
 def get_llm_max_output_tokens(
@@ -740,32 +743,32 @@ def get_llm_max_output_tokens(
     model_name: str,
     model_provider: str,
 ) -> int:
-    """Best effort attempt to get the max output tokens for the LLM."""
-    default_output_tokens = int(GEN_AI_MODEL_FALLBACK_MAX_TOKENS)
+    """Best effort attempt to get the max output tokens for the LLM"""
+    try:
+        model_obj = model_map.get(f"{model_provider}/{model_name}")
+        if not model_obj:
+            model_obj = model_map[model_name]
+        else:
+            pass
 
-    model_obj = model_map.get(f"{model_provider}/{model_name}")
-    if not model_obj:
-        model_obj = model_map.get(model_name)
+        if "max_output_tokens" in model_obj:
+            max_output_tokens = model_obj["max_output_tokens"]
+            return max_output_tokens
 
-    if not model_obj:
-        logger.warning(
-            f"Model '{model_name}' not found in LiteLLM. "
-            f"Falling back to {default_output_tokens} output tokens."
+        # Fallback to a fraction of max_tokens if max_output_tokens is not specified
+        if "max_tokens" in model_obj:
+            max_output_tokens = int(model_obj["max_tokens"] * 0.1)
+            return max_output_tokens
+
+        logger.error(f"No max output tokens found for LLM: {model_name}")
+        raise RuntimeError("No max output tokens found for LLM")
+    except Exception:
+        default_output_tokens = int(GEN_AI_MODEL_FALLBACK_MAX_TOKENS)
+        logger.exception(
+            f"Failed to get max output tokens for LLM with name {model_name}. "
+            f"Defaulting to {default_output_tokens} (fallback max tokens)."
         )
         return default_output_tokens
-
-    if "max_output_tokens" in model_obj:
-        return model_obj["max_output_tokens"]
-
-    # Fallback to a fraction of max_tokens if max_output_tokens is not specified
-    if "max_tokens" in model_obj:
-        return int(model_obj["max_tokens"] * 0.1)
-
-    logger.warning(
-        f"No max output tokens found for '{model_name}'. "
-        f"Falling back to {default_output_tokens} output tokens."
-    )
-    return default_output_tokens
 
 
 def get_max_input_tokens(
@@ -782,7 +785,7 @@ def get_max_input_tokens(
     litellm_model_map = get_model_map()
 
     input_toks = (
-        llm_max_input_tokens(
+        get_llm_max_tokens(
             model_name=model_name,
             model_provider=model_provider,
             model_map=litellm_model_map,
@@ -800,19 +803,6 @@ def get_max_input_tokens_from_llm_provider(
     llm_provider: "LLMProviderView",
     model_name: str,
 ) -> int:
-    """Get max input tokens for a model, with fallback chain.
-
-    Fallback order:
-    1. Use max_input_tokens from model_configuration (populated from source APIs
-       like OpenRouter, Ollama, or our Bedrock mapping)
-    2. Look up in litellm.model_cost dictionary
-    3. Fall back to GEN_AI_MODEL_FALLBACK_MAX_TOKENS (4096)
-
-    Most dynamic providers (OpenRouter, Ollama) provide context_length via their
-    APIs. Bedrock doesn't expose this, so we parse from model ID suffix (:200k)
-    or use BEDROCK_MODEL_TOKEN_LIMITS mapping. The 4096 fallback is only hit for
-    unknown models not in any of these sources.
-    """
     max_input_tokens = None
     for model_configuration in llm_provider.model_configurations:
         if model_configuration.name == model_name:
@@ -825,54 +815,6 @@ def get_max_input_tokens_from_llm_provider(
             model_name=model_name,
         )
     )
-
-
-def get_bedrock_token_limit(model_id: str) -> int:
-    """Look up token limit for a Bedrock model.
-
-    AWS Bedrock API doesn't expose token limits directly. This function
-    attempts to determine the limit from multiple sources.
-
-    Lookup order:
-    1. Parse from model ID suffix (e.g., ":200k" → 200000)
-    2. Check LiteLLM's model_cost dictionary
-    3. Fall back to our hardcoded BEDROCK_MODEL_TOKEN_LIMITS mapping
-    4. Default to 4096 if not found anywhere
-    """
-    from onyx.llm.constants import BEDROCK_MODEL_TOKEN_LIMITS
-
-    model_id_lower = model_id.lower()
-
-    # 1. Try to parse context length from model ID suffix
-    # Format: "model-name:version:NNNk" where NNN is the context length in thousands
-    # Examples: ":200k", ":128k", ":1000k", ":8k", ":4k"
-    context_match = re.search(r":(\d+)k\b", model_id_lower)
-    if context_match:
-        return int(context_match.group(1)) * 1000
-
-    # 2. Check LiteLLM's model_cost dictionary
-    try:
-        model_map = get_model_map()
-        # Try with bedrock/ prefix first, then without
-        for key in [f"bedrock/{model_id}", model_id]:
-            if key in model_map:
-                model_info = model_map[key]
-                if "max_input_tokens" in model_info:
-                    return model_info["max_input_tokens"]
-                if "max_tokens" in model_info:
-                    return model_info["max_tokens"]
-    except Exception:
-        pass  # Fall through to mapping
-
-    # 3. Try our hardcoded mapping (longest match first)
-    for pattern, limit in sorted(
-        BEDROCK_MODEL_TOKEN_LIMITS.items(), key=lambda x: -len(x[0])
-    ):
-        if pattern in model_id_lower:
-            return limit
-
-    # 4. Default fallback
-    return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 
 
 def model_supports_image_input(model_name: str, model_provider: str) -> bool:

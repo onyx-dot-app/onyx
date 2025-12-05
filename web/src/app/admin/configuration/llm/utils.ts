@@ -23,8 +23,6 @@ import {
   LLMProviderView,
   DynamicProviderConfig,
   OllamaModelResponse,
-  OpenRouterModelResponse,
-  BedrockModelResponse,
   ModelConfiguration,
 } from "./interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
@@ -34,7 +32,6 @@ export const AGGREGATOR_PROVIDERS = new Set([
   "bedrock",
   "bedrock_converse",
   "openrouter",
-  "ollama_chat",
   "vertex_ai",
 ]);
 
@@ -150,21 +147,19 @@ export const dynamicProviderConfigs: Record<
       aws_bearer_token_bedrock: values.custom_config?.AWS_BEARER_TOKEN_BEDROCK,
       provider_name: existingLlmProvider?.name,
     }),
-    processResponse: (data: BedrockModelResponse[], llmProviderDescriptor) =>
-      data.map((modelData) => {
+    processResponse: (data: string[], llmProviderDescriptor) =>
+      data.map((modelName) => {
         const existingConfig = llmProviderDescriptor.model_configurations.find(
-          (config) => config.name === modelData.name
+          (config) => config.name === modelName
         );
         return {
-          name: modelData.name,
-          display_name: modelData.display_name,
+          name: modelName,
           is_visible: existingConfig?.is_visible ?? false,
-          max_input_tokens: modelData.max_input_tokens,
-          supports_image_input: modelData.supports_image_input,
+          max_input_tokens: null,
+          supports_image_input: existingConfig?.supports_image_input ?? null,
         };
       }),
-    getModelNames: (data: BedrockModelResponse[]) =>
-      data.map((model) => model.name),
+    getModelNames: (data: string[]) => data,
     successMessage: (count: number) =>
       `Successfully fetched ${count} models for the selected region (including cross-region inference models).`,
   },
@@ -172,9 +167,8 @@ export const dynamicProviderConfigs: Record<
     endpoint: "/api/admin/llm/ollama/available-models",
     isDisabled: (values) => !values.api_base,
     disabledReason: "API Base is required to fetch Ollama models",
-    buildRequestBody: ({ values, existingLlmProvider }) => ({
+    buildRequestBody: ({ values }) => ({
       api_base: values.api_base,
-      provider_name: existingLlmProvider?.name,
     }),
     processResponse: (data: OllamaModelResponse[], llmProviderDescriptor) =>
       data.map((modelData) => {
@@ -183,7 +177,6 @@ export const dynamicProviderConfigs: Record<
         );
         return {
           name: modelData.name,
-          display_name: modelData.display_name,
           is_visible: existingConfig?.is_visible ?? true,
           max_input_tokens: modelData.max_input_tokens,
           supports_image_input: modelData.supports_image_input,
@@ -199,25 +192,23 @@ export const dynamicProviderConfigs: Record<
     isDisabled: (values) => !values.api_base || !values.api_key,
     disabledReason:
       "API Base and API Key are required to fetch OpenRouter models",
-    buildRequestBody: ({ values, existingLlmProvider }) => ({
+    buildRequestBody: ({ values }) => ({
       api_base: values.api_base,
       api_key: values.api_key,
-      provider_name: existingLlmProvider?.name,
     }),
-    processResponse: (data: OpenRouterModelResponse[], llmProviderDescriptor) =>
+    processResponse: (data: OllamaModelResponse[], llmProviderDescriptor) =>
       data.map((modelData) => {
         const existingConfig = llmProviderDescriptor.model_configurations.find(
           (config) => config.name === modelData.name
         );
         return {
           name: modelData.name,
-          display_name: modelData.display_name,
           is_visible: existingConfig?.is_visible ?? true,
           max_input_tokens: modelData.max_input_tokens,
           supports_image_input: modelData.supports_image_input,
         };
       }),
-    getModelNames: (data: OpenRouterModelResponse[]) => data.map((m) => m.name),
+    getModelNames: (data: OllamaModelResponse[]) => data.map((m) => m.name),
     successMessage: (count: number) =>
       `Successfully fetched ${count} models from OpenRouter.`,
   },
