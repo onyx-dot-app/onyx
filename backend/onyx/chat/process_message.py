@@ -2,6 +2,7 @@ import re
 import traceback
 from collections.abc import Callable
 from collections.abc import Iterator
+from typing import Any
 from uuid import UUID
 from uuid import uuid4
 
@@ -23,6 +24,7 @@ from onyx.chat.models import ExtractedProjectFiles
 from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import ProjectFileMetadata
 from onyx.chat.models import StreamingError
+from onyx.chat.multi_model_stream import MultiModelStreamMerger
 from onyx.chat.prompt_utils import calculate_reserved_tokens
 from onyx.chat.save_chat import save_chat_turn
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
@@ -258,6 +260,372 @@ def _initialize_chat_session(
     return user_message
 
 
+def _process_single_model(
+    current_override: LLMOverride | None,
+    persona: Any,
+    user: User | None,
+    litellm_additional_headers: dict[str, str] | None,
+    long_term_logger: LongTermLogger,
+    db_session: Session,
+    emitter: Any,
+    user_selected_filters: Any,
+    chat_session: Any,
+    extracted_project_files: ExtractedProjectFiles,
+    bypass_acl: bool,
+    slack_context: SlackContext | None,
+    chat_session_id: UUID,
+    user_message: ChatMessage,
+    custom_tool_additional_headers: dict[str, str] | None,
+    allowed_tool_ids: list[int] | None,
+    disable_internal_search: bool,
+    response_group_id: UUID | None,
+    chat_history: list[ChatMessage],
+    files: dict[str, ChatLoadedFile],
+    additional_context: str | None,
+    tool_id_to_name_map: dict[int, str],
+    custom_agent_prompt: str | None,
+    memories: list[str] | None,
+    forced_tool_id: int | None,
+    check_is_connected: Callable[[], bool],
+) -> AnswerStream:
+    """Process a single model request (original sequential flow)."""
+    # Get LLM for this specific override
+    current_llm, current_fast_llm = get_llms_for_persona(
+        persona=persona,
+        user=user,
+        llm_override=current_override,
+        additional_headers=litellm_additional_headers,
+        long_term_logger=long_term_logger,
+    )
+    current_token_counter = get_llm_token_counter(current_llm)
+
+    # Construct tools for this LLM
+    current_tool_dict = construct_tools(
+        persona=persona,
+        db_session=db_session,
+        emitter=emitter,
+        user=user,
+        llm=current_llm,
+        fast_llm=current_fast_llm,
+        search_tool_config=SearchToolConfig(
+            user_selected_filters=user_selected_filters,
+            project_id=(
+                chat_session.project_id
+                if extracted_project_files.project_as_filter
+                else None
+            ),
+            bypass_acl=bypass_acl,
+            slack_context=slack_context,
+        ),
+        custom_tool_config=CustomToolConfig(
+            chat_session_id=chat_session_id,
+            message_id=user_message.id if user_message else None,
+            additional_headers=custom_tool_additional_headers,
+        ),
+        allowed_tool_ids=allowed_tool_ids,
+        disable_internal_search=disable_internal_search,
+    )
+    current_tools: list[Tool] = []
+    for tool_list in current_tool_dict.values():
+        current_tools.extend(tool_list)
+
+    # Reserve a message id for this model's response
+    assistant_response = reserve_message_id(
+        db_session=db_session,
+        chat_session_id=chat_session_id,
+        parent_message=user_message.id,
+        message_type=MessageType.ASSISTANT,
+        model_provider=current_llm.config.model_provider,
+        model_name=current_llm.config.model_name,
+        response_group_id=response_group_id,
+    )
+
+    yield MessageResponseIDInfo(
+        user_message_id=user_message.id,
+        reserved_assistant_message_id=assistant_response.id,
+        model_provider=current_llm.config.model_provider,
+        model_name=current_llm.config.model_name,
+        response_group_id=str(response_group_id) if response_group_id else None,
+    )
+
+    # Convert the chat history into a simple format
+    simple_chat_history = convert_chat_history(
+        chat_history=chat_history,
+        files=files,
+        project_image_files=extracted_project_files.project_image_files,
+        additional_context=additional_context,
+        token_counter=current_token_counter,
+        tool_id_to_name_map=tool_id_to_name_map,
+    )
+
+    # Create state container for accumulating partial results
+    state_container = ChatStateContainer()
+
+    # Run the LLM loop with explicit wrapper for stop signal handling
+    yield from run_chat_llm_with_state_containers(
+        run_llm_loop,
+        emitter=emitter,
+        state_container=state_container,
+        is_connected=check_is_connected,
+        simple_chat_history=simple_chat_history,
+        tools=current_tools,
+        custom_agent_prompt=custom_agent_prompt,
+        project_files=extracted_project_files,
+        persona=persona,
+        memories=memories,
+        llm=current_llm,
+        token_counter=current_token_counter,
+        db_session=db_session,
+        forced_tool_id=forced_tool_id,
+    )
+
+    # Determine if stopped by user
+    completed_normally = check_is_connected()
+    if not completed_normally:
+        logger.debug(f"Chat session {chat_session_id} stopped by user")
+
+    # Build final answer based on completion status
+    if completed_normally:
+        if state_container.answer_tokens is None:
+            raise RuntimeError(
+                "LLM run completed normally but did not return an answer."
+            )
+        final_answer = state_container.answer_tokens
+    else:
+        # Stopped by user - append stop message
+        if state_container.answer_tokens:
+            final_answer = (
+                state_container.answer_tokens
+                + " ... The generation was stopped by the user here."
+            )
+        else:
+            final_answer = "The generation was stopped by the user."
+
+    # Build citation_docs_info from accumulated citations
+    citation_docs_info: list[CitationDocInfo] = []
+    seen_citation_nums: set[int] = set()
+    for citation_num, search_doc in state_container.citation_to_doc.items():
+        if citation_num not in seen_citation_nums:
+            seen_citation_nums.add(citation_num)
+            citation_docs_info.append(
+                CitationDocInfo(
+                    search_doc=search_doc,
+                    citation_number=citation_num,
+                )
+            )
+
+    save_chat_turn(
+        message_text=final_answer,
+        reasoning_tokens=state_container.reasoning_tokens,
+        citation_docs_info=citation_docs_info,
+        tool_calls=state_container.tool_calls,
+        db_session=db_session,
+        assistant_message=assistant_response,
+    )
+
+
+def _process_multiple_models_concurrently(
+    llm_overrides: list[LLMOverride | None],
+    response_group_id: UUID | None,
+    persona: Any,
+    user: User | None,
+    litellm_additional_headers: dict[str, str] | None,
+    long_term_logger: LongTermLogger,
+    db_session: Session,
+    user_selected_filters: Any,
+    chat_session: Any,
+    extracted_project_files: ExtractedProjectFiles,
+    bypass_acl: bool,
+    slack_context: SlackContext | None,
+    chat_session_id: UUID,
+    user_message: ChatMessage,
+    custom_tool_additional_headers: dict[str, str] | None,
+    allowed_tool_ids: list[int] | None,
+    disable_internal_search: bool,
+    chat_history: list[ChatMessage],
+    files: dict[str, ChatLoadedFile],
+    additional_context: str | None,
+    tool_id_to_name_map: dict[int, str],
+    custom_agent_prompt: str | None,
+    memories: list[str] | None,
+    forced_tool_id: int | None,
+    check_is_connected: Callable[[], bool],
+) -> AnswerStream:
+    """Process multiple models concurrently and merge their streaming outputs.
+
+    All models start at the same time and their responses are streamed as they arrive.
+    Each packet is tagged with model_id so the frontend can route to the correct UI.
+    """
+    if response_group_id is None:
+        response_group_id = uuid4()
+
+    # Create the merger for coordinating concurrent streams
+    merger = MultiModelStreamMerger(response_group_id=response_group_id)
+
+    # Track assistant responses for saving chat turns later
+    model_to_assistant_response: dict[str, ChatMessage] = {}
+
+    # Phase 1: Setup all models and yield MessageResponseIDInfo for each
+    for current_override in llm_overrides:
+        # Get LLM for this specific override
+        current_llm, current_fast_llm = get_llms_for_persona(
+            persona=persona,
+            user=user,
+            llm_override=current_override,
+            additional_headers=litellm_additional_headers,
+            long_term_logger=long_term_logger,
+        )
+
+        model_id = (
+            f"{current_llm.config.model_provider}:{current_llm.config.model_name}"
+        )
+
+        # Reserve a message id for this model's response
+        assistant_response = reserve_message_id(
+            db_session=db_session,
+            chat_session_id=chat_session_id,
+            parent_message=user_message.id,
+            message_type=MessageType.ASSISTANT,
+            model_provider=current_llm.config.model_provider,
+            model_name=current_llm.config.model_name,
+            response_group_id=response_group_id,
+        )
+        model_to_assistant_response[model_id] = assistant_response
+
+        # Register this model with the merger
+        model_ctx = merger.register_model(model_id)
+
+        # Store extra data needed for saving chat turn
+        model_ctx.extra_data["llm"] = current_llm
+        model_ctx.extra_data["fast_llm"] = current_fast_llm
+        model_ctx.extra_data["assistant_response"] = assistant_response
+
+        # Yield MessageResponseIDInfo so frontend knows about this model
+        yield MessageResponseIDInfo(
+            user_message_id=user_message.id,
+            reserved_assistant_message_id=assistant_response.id,
+            model_provider=current_llm.config.model_provider,
+            model_name=current_llm.config.model_name,
+            response_group_id=str(response_group_id),
+        )
+
+    # Phase 2: Start all model threads
+    for model_id, model_ctx in merger.get_model_contexts().items():
+        current_llm = model_ctx.extra_data["llm"]
+        current_fast_llm = model_ctx.extra_data["fast_llm"]
+        current_token_counter = get_llm_token_counter(current_llm)
+
+        # Construct tools for this LLM
+        current_tool_dict = construct_tools(
+            persona=persona,
+            db_session=db_session,
+            emitter=model_ctx.emitter,
+            user=user,
+            llm=current_llm,
+            fast_llm=current_fast_llm,
+            search_tool_config=SearchToolConfig(
+                user_selected_filters=user_selected_filters,
+                project_id=(
+                    chat_session.project_id
+                    if extracted_project_files.project_as_filter
+                    else None
+                ),
+                bypass_acl=bypass_acl,
+                slack_context=slack_context,
+            ),
+            custom_tool_config=CustomToolConfig(
+                chat_session_id=chat_session_id,
+                message_id=user_message.id if user_message else None,
+                additional_headers=custom_tool_additional_headers,
+            ),
+            allowed_tool_ids=allowed_tool_ids,
+            disable_internal_search=disable_internal_search,
+        )
+        current_tools: list[Tool] = []
+        for tool_list in current_tool_dict.values():
+            current_tools.extend(tool_list)
+
+        # Convert the chat history into a simple format
+        simple_chat_history = convert_chat_history(
+            chat_history=chat_history,
+            files=files,
+            project_image_files=extracted_project_files.project_image_files,
+            additional_context=additional_context,
+            token_counter=current_token_counter,
+            tool_id_to_name_map=tool_id_to_name_map,
+        )
+
+        # Start the model thread
+        merger.start_model_thread(
+            model_id=model_id,
+            target_func=run_llm_loop,
+            simple_chat_history=simple_chat_history,
+            tools=current_tools,
+            custom_agent_prompt=custom_agent_prompt,
+            project_files=extracted_project_files,
+            persona=persona,
+            memories=memories,
+            llm=current_llm,
+            token_counter=current_token_counter,
+            db_session=db_session,
+            forced_tool_id=forced_tool_id,
+        )
+
+    # Phase 3: Stream merged packets from all models
+    yield from merger.stream(is_connected=check_is_connected)
+
+    # Phase 4: Wait for all threads to complete
+    merger.wait_for_threads(timeout=5.0)
+
+    # Phase 5: Save chat turns for each model
+    completed_normally = check_is_connected()
+    for model_id, model_ctx in merger.get_model_contexts().items():
+        state_container = model_ctx.state_container
+        assistant_response = model_ctx.extra_data["assistant_response"]
+
+        # Build final answer based on completion status
+        if model_ctx.error is not None:
+            # Model failed - save error message
+            final_answer = f"Error: {str(model_ctx.error)}"
+        elif completed_normally:
+            if state_container.answer_tokens is None:
+                # Model may not have completed - use partial answer or error
+                final_answer = state_container.answer_tokens or "No response generated."
+            else:
+                final_answer = state_container.answer_tokens
+        else:
+            # Stopped by user - append stop message
+            if state_container.answer_tokens:
+                final_answer = (
+                    state_container.answer_tokens
+                    + " ... The generation was stopped by the user here."
+                )
+            else:
+                final_answer = "The generation was stopped by the user."
+
+        # Build citation_docs_info from accumulated citations
+        citation_docs_info: list[CitationDocInfo] = []
+        seen_citation_nums: set[int] = set()
+        for citation_num, search_doc in state_container.citation_to_doc.items():
+            if citation_num not in seen_citation_nums:
+                seen_citation_nums.add(citation_num)
+                citation_docs_info.append(
+                    CitationDocInfo(
+                        search_doc=search_doc,
+                        citation_number=citation_num,
+                    )
+                )
+
+        save_chat_turn(
+            message_text=final_answer,
+            reasoning_tokens=state_container.reasoning_tokens,
+            citation_docs_info=citation_docs_info,
+            tool_calls=state_container.tool_calls,
+            db_session=db_session,
+            assistant_message=assistant_response,
+        )
+
+
 def stream_chat_message_objects(
     new_msg_req: CreateChatMessageRequest,
     user: User | None,
@@ -445,158 +813,74 @@ def stream_chat_message_objects(
         def check_is_connected() -> bool:
             return check_stop_signal(chat_session_id, redis_client)
 
-        # Process each LLM override (multi-model support)
-        # For single model, this loop runs once
-        # For multiple models, each gets its own assistant message with shared response_group_id
-        for model_index, current_override in enumerate(llm_overrides_to_process):
-            # Get LLM for this specific override
-            current_llm, current_fast_llm = get_llms_for_persona(
+        # Branch based on single vs multiple models
+        if len(llm_overrides_to_process) == 1:
+            # SINGLE MODEL: Use existing sequential processing for simplicity
+            yield from _process_single_model(
+                current_override=llm_overrides_to_process[0],
                 persona=persona,
                 user=user,
-                llm_override=current_override,
-                additional_headers=litellm_additional_headers,
+                litellm_additional_headers=litellm_additional_headers,
                 long_term_logger=long_term_logger,
-            )
-            current_token_counter = get_llm_token_counter(current_llm)
-
-            # Construct tools for this LLM
-            current_tool_dict = construct_tools(
-                persona=persona,
                 db_session=db_session,
                 emitter=emitter,
-                user=user,
-                llm=current_llm,
-                fast_llm=current_fast_llm,
-                search_tool_config=SearchToolConfig(
-                    user_selected_filters=user_selected_filters,
-                    project_id=(
-                        chat_session.project_id
-                        if extracted_project_files.project_as_filter
-                        else None
-                    ),
-                    bypass_acl=bypass_acl,
-                    slack_context=slack_context,
-                ),
-                custom_tool_config=CustomToolConfig(
-                    chat_session_id=chat_session_id,
-                    message_id=user_message.id if user_message else None,
-                    additional_headers=custom_tool_additional_headers,
-                ),
+                user_selected_filters=user_selected_filters,
+                chat_session=chat_session,
+                extracted_project_files=extracted_project_files,
+                bypass_acl=bypass_acl,
+                slack_context=slack_context,
+                chat_session_id=chat_session_id,
+                user_message=user_message,
+                custom_tool_additional_headers=custom_tool_additional_headers,
                 allowed_tool_ids=new_msg_req.allowed_tool_ids,
                 disable_internal_search=disable_internal_search,
-            )
-            current_tools: list[Tool] = []
-            for tool_list in current_tool_dict.values():
-                current_tools.extend(tool_list)
-
-            # Reserve a message id for this model's response
-            assistant_response = reserve_message_id(
-                db_session=db_session,
-                chat_session_id=chat_session_id,
-                parent_message=user_message.id,
-                message_type=MessageType.ASSISTANT,
-                # Track which model generated this response
-                model_provider=current_llm.config.model_provider,
-                model_name=current_llm.config.model_name,
-                # Share response_group_id for multi-model responses
                 response_group_id=response_group_id,
-            )
-
-            yield MessageResponseIDInfo(
-                user_message_id=user_message.id,
-                reserved_assistant_message_id=assistant_response.id,
-                model_provider=current_llm.config.model_provider,
-                model_name=current_llm.config.model_name,
-                response_group_id=str(response_group_id) if response_group_id else None,
-            )
-
-            # Convert the chat history into a simple format that is free of any DB objects
-            # and is easy to parse for the agent loop
-            simple_chat_history = convert_chat_history(
                 chat_history=chat_history,
                 files=files,
-                project_image_files=extracted_project_files.project_image_files,
                 additional_context=additional_context,
-                token_counter=current_token_counter,
                 tool_id_to_name_map=tool_id_to_name_map,
-            )
-
-            # Create state container for accumulating partial results
-            state_container = ChatStateContainer()
-
-            # Run the LLM loop with explicit wrapper for stop signal handling
-            # The wrapper runs run_llm_loop in a background thread and polls every 300ms
-            # for stop signals. run_llm_loop itself doesn't know about stopping.
-            # Note: DB session is not thread safe but nothing else uses it and the
-            # reference is passed directly so it's ok.
-            yield from run_chat_llm_with_state_containers(
-                run_llm_loop,
-                emitter=emitter,
-                state_container=state_container,
-                is_connected=check_is_connected,  # Not passed through to run_llm_loop
-                simple_chat_history=simple_chat_history,
-                tools=current_tools,
                 custom_agent_prompt=custom_agent_prompt,
-                project_files=extracted_project_files,
-                persona=persona,
                 memories=memories,
-                llm=current_llm,
-                token_counter=current_token_counter,
-                db_session=db_session,
                 forced_tool_id=(
                     new_msg_req.forced_tool_ids[0]
                     if new_msg_req.forced_tool_ids
                     else None
                 ),
+                check_is_connected=check_is_connected,
             )
-
-            # Determine if stopped by user
-            completed_normally = check_is_connected()
-            if not completed_normally:
-                logger.debug(f"Chat session {chat_session_id} stopped by user")
-
-            # Build final answer based on completion status
-            if completed_normally:
-                if state_container.answer_tokens is None:
-                    raise RuntimeError(
-                        "LLM run completed normally but did not return an answer."
-                    )
-                final_answer = state_container.answer_tokens
-            else:
-                # Stopped by user - append stop message
-                if state_container.answer_tokens:
-                    final_answer = (
-                        state_container.answer_tokens
-                        + " ... The generation was stopped by the user here."
-                    )
-                else:
-                    final_answer = "The generation was stopped by the user."
-
-            # Build citation_docs_info from accumulated citations in state container
-            citation_docs_info: list[CitationDocInfo] = []
-            seen_citation_nums: set[int] = set()
-            for citation_num, search_doc in state_container.citation_to_doc.items():
-                if citation_num not in seen_citation_nums:
-                    seen_citation_nums.add(citation_num)
-                    citation_docs_info.append(
-                        CitationDocInfo(
-                            search_doc=search_doc,
-                            citation_number=citation_num,
-                        )
-                    )
-
-            save_chat_turn(
-                message_text=final_answer,
-                reasoning_tokens=state_container.reasoning_tokens,
-                citation_docs_info=citation_docs_info,
-                tool_calls=state_container.tool_calls,
+        else:
+            # MULTIPLE MODELS: Use concurrent processing
+            yield from _process_multiple_models_concurrently(
+                llm_overrides=llm_overrides_to_process,
+                response_group_id=response_group_id,
+                persona=persona,
+                user=user,
+                litellm_additional_headers=litellm_additional_headers,
+                long_term_logger=long_term_logger,
                 db_session=db_session,
-                assistant_message=assistant_response,
+                user_selected_filters=user_selected_filters,
+                chat_session=chat_session,
+                extracted_project_files=extracted_project_files,
+                bypass_acl=bypass_acl,
+                slack_context=slack_context,
+                chat_session_id=chat_session_id,
+                user_message=user_message,
+                custom_tool_additional_headers=custom_tool_additional_headers,
+                allowed_tool_ids=new_msg_req.allowed_tool_ids,
+                disable_internal_search=disable_internal_search,
+                chat_history=chat_history,
+                files=files,
+                additional_context=additional_context,
+                tool_id_to_name_map=tool_id_to_name_map,
+                custom_agent_prompt=custom_agent_prompt,
+                memories=memories,
+                forced_tool_id=(
+                    new_msg_req.forced_tool_ids[0]
+                    if new_msg_req.forced_tool_ids
+                    else None
+                ),
+                check_is_connected=check_is_connected,
             )
-
-            # If user stopped, don't process remaining models
-            if not completed_normally:
-                break
 
     except ValueError as e:
         logger.exception("Failed to process chat message.")

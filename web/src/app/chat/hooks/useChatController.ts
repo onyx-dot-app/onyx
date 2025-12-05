@@ -631,8 +631,12 @@ export function useChatController({
         responseGroupId?: string;
         // Track if we've received the backend message ID for this node
         backendMessageId?: number;
+        // model_id for routing packets from concurrent streams
+        modelId?: string;
       }
       const assistantNodes: Map<number, AssistantNodeData> = new Map();
+      // Map model_id to assistant message ID for routing concurrent packets
+      const modelIdToAssistantId: Map<string, number> = new Map();
       let currentStreamingAssistantId: number | null = null;
       let assistantNodeIdOffset = 1;
 
@@ -851,6 +855,12 @@ export function useChatController({
               const msgInfo = packet as MessageResponseIDInfo;
               const reservedId = msgInfo.reserved_assistant_message_id;
 
+              // Build model_id for packet routing (matches backend format)
+              const modelId =
+                msgInfo.model_provider && msgInfo.model_name
+                  ? `${msgInfo.model_provider}:${msgInfo.model_name}`
+                  : undefined;
+
               // Multi-model with pre-created nodes: map backend ID to pre-created node
               if (
                 isMultiModel &&
@@ -870,6 +880,8 @@ export function useChatController({
                     // The backend's response_group_id arrives at different times for each model,
                     // which would cause tabs to disappear/reappear during streaming
                     responseGroupId: preCreatedData.responseGroupId,
+                    // Store model_id for packet routing
+                    modelId: modelId,
                   });
                   nextPreCreatedNodeIndex++;
                 }
@@ -889,6 +901,7 @@ export function useChatController({
                     modelProvider: msgInfo.model_provider ?? undefined,
                     modelName: msgInfo.model_name ?? undefined,
                     responseGroupId: msgInfo.response_group_id ?? undefined,
+                    modelId: modelId,
                   });
                 } else {
                   // Create a new assistant node for additional models
@@ -908,6 +921,7 @@ export function useChatController({
                     modelProvider: msgInfo.model_provider ?? undefined,
                     modelName: msgInfo.model_name ?? undefined,
                     responseGroupId: msgInfo.response_group_id ?? undefined,
+                    modelId: modelId,
                   });
                   // Add the new assistant node to the tree
                   currentMessageTreeLocal = upsertToCompleteMessageTree({
@@ -922,6 +936,14 @@ export function useChatController({
                 // Already have this ID, just switch to streaming for it
                 currentStreamingAssistantId = reservedId;
                 newAssistantMessageId = reservedId;
+              }
+
+              // Map model_id to assistant message ID for routing concurrent packets
+              if (modelId) {
+                modelIdToAssistantId.set(modelId, reservedId);
+                console.log(
+                  `[useChatController] Mapped model_id ${modelId} -> assistant ID ${reservedId}`
+                );
               }
             }
 
@@ -976,18 +998,39 @@ export function useChatController({
               console.debug("Object packet:", JSON.stringify(packet));
               packets.push(packet as Packet);
 
-              // Multi-model: route packets to the current streaming assistant
-              if (currentStreamingAssistantId !== null) {
-                const currentAssistant = assistantNodes.get(
-                  currentStreamingAssistantId
-                );
-                if (currentAssistant) {
-                  currentAssistant.packets.push(packet as Packet);
+              const typedPacket = packet as Packet;
+
+              // Multi-model: route packets by model_id if available (concurrent streaming)
+              // Falls back to currentStreamingAssistantId for backward compatibility (sequential)
+              let targetAssistantId: number | null = null;
+
+              if (typedPacket.model_id) {
+                // Use model_id from packet for concurrent multi-model routing
+                const mappedId = modelIdToAssistantId.get(typedPacket.model_id);
+                if (mappedId !== undefined) {
+                  targetAssistantId = mappedId;
+                } else {
+                  console.warn(
+                    `[useChatController] Unknown model_id in packet: ${typedPacket.model_id}`
+                  );
+                  // Fall back to currentStreamingAssistantId
+                  targetAssistantId = currentStreamingAssistantId;
+                }
+              } else {
+                // No model_id - use currentStreamingAssistantId (sequential/single model)
+                targetAssistantId = currentStreamingAssistantId;
+              }
+
+              // Route packet to the target assistant
+              if (targetAssistantId !== null) {
+                const targetAssistant = assistantNodes.get(targetAssistantId);
+                if (targetAssistant) {
+                  targetAssistant.packets.push(typedPacket);
                 }
               }
 
               // Check if the packet contains document information
-              const packetObj = (packet as Packet).obj;
+              const packetObj = typedPacket.obj;
 
               if (packetObj.type === "citation_info") {
                 // Individual citation packet from backend streaming
@@ -1001,14 +1044,12 @@ export function useChatController({
                   ...(citations || {}),
                   [citationInfo.citation_number]: citationInfo.document_id,
                 };
-                // Multi-model: also track citations per assistant
-                if (currentStreamingAssistantId !== null) {
-                  const currentAssistant = assistantNodes.get(
-                    currentStreamingAssistantId
-                  );
-                  if (currentAssistant) {
-                    currentAssistant.citations = {
-                      ...(currentAssistant.citations || {}),
+                // Multi-model: also track citations per assistant (using targetAssistantId)
+                if (targetAssistantId !== null) {
+                  const targetAssistant = assistantNodes.get(targetAssistantId);
+                  if (targetAssistant) {
+                    targetAssistant.citations = {
+                      ...(targetAssistant.citations || {}),
                       [citationInfo.citation_number]: citationInfo.document_id,
                     };
                   }
@@ -1026,14 +1067,13 @@ export function useChatController({
                       ])
                     ),
                   };
-                  // Multi-model: also track citations per assistant
-                  if (currentStreamingAssistantId !== null) {
-                    const currentAssistant = assistantNodes.get(
-                      currentStreamingAssistantId
-                    );
-                    if (currentAssistant) {
-                      currentAssistant.citations = {
-                        ...(currentAssistant.citations || {}),
+                  // Multi-model: also track citations per assistant (using targetAssistantId)
+                  if (targetAssistantId !== null) {
+                    const targetAssistant =
+                      assistantNodes.get(targetAssistantId);
+                    if (targetAssistant) {
+                      targetAssistant.citations = {
+                        ...(targetAssistant.citations || {}),
                         ...Object.fromEntries(
                           citationDelta.citations.map((c) => [
                             c.citation_num,
@@ -1048,13 +1088,12 @@ export function useChatController({
                 const messageStart = packetObj as MessageStart;
                 if (messageStart.final_documents) {
                   documents = messageStart.final_documents;
-                  // Multi-model: also track documents per assistant
-                  if (currentStreamingAssistantId !== null) {
-                    const currentAssistant = assistantNodes.get(
-                      currentStreamingAssistantId
-                    );
-                    if (currentAssistant) {
-                      currentAssistant.documents = messageStart.final_documents;
+                  // Multi-model: also track documents per assistant (using targetAssistantId)
+                  if (targetAssistantId !== null) {
+                    const targetAssistant =
+                      assistantNodes.get(targetAssistantId);
+                    if (targetAssistant) {
+                      targetAssistant.documents = messageStart.final_documents;
                     }
                   }
                   updateSelectedNodeForDocDisplay(

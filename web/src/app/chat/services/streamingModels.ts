@@ -226,6 +226,9 @@ export type ObjTypes =
 export interface Packet {
   turn_index: number;
   obj: ObjTypes;
+  // Optional model identifier for multi-model streaming
+  // Format: "{provider}:{model_name}" e.g. "openai:gpt-4"
+  model_id?: string | null;
 }
 
 export interface ChatPacket {

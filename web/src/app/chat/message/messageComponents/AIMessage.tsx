@@ -680,7 +680,7 @@ export default function AIMessage({
                                     chatState.regenerate!(llmDescriptor);
                                   }}
                                   folded
-                                  singleSelectMode
+                                  singleSelectMode={false}
                                 />
                               </div>
                             )}
