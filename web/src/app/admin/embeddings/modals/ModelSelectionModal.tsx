@@ -19,7 +19,7 @@ export default function ModelSelectionConfirmationModal({
   onCancel,
 }: ModelSelectionConfirmationModalProps) {
   return (
-    <Modal open={true} onOpenChange={onCancel}>
+    <Modal open onOpenChange={onCancel}>
       <Modal.Content tall>
         <Modal.Header
           icon={SvgServer}

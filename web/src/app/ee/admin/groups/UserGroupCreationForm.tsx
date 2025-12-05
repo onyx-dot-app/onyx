@@ -35,7 +35,7 @@ export default function UserGroupCreationForm({
   );
 
   return (
-    <Modal open={true} onOpenChange={onClose}>
+    <Modal open onOpenChange={onClose}>
       <Modal.Content medium>
         <Modal.Header
           icon={SvgUsers}
