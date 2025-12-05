@@ -24,7 +24,6 @@ Examples:
 
 Query: "what are the big topics in eng-general this week?"
 Output:
-(empty - contains only meta-words and temporal terms, no actual content keywords)
 
 Query: "performance issues in eng-general"
 Output:

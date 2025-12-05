@@ -34,7 +34,7 @@ _IGNORE_DIRECTORIES: Set[str] = {".venv", "venv", ".env", "env", "__pycache__"}
 
 # Map of modules to lazy import -> settings for what to ignore
 _LAZY_IMPORT_MODULES_TO_IGNORE_SETTINGS: Dict[str, LazyImportSettings] = {
-    "vertexai": LazyImportSettings(),
+    "google.genai": LazyImportSettings(),
     "openai": LazyImportSettings(),
     "markitdown": LazyImportSettings(),
     "tiktoken": LazyImportSettings(),

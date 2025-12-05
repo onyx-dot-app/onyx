@@ -23,6 +23,10 @@ import {
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { dynamicProviderConfigs, fetchModels } from "./utils";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
+import {
+  isValidAzureTargetUri,
+  parseAzureTargetUri,
+} from "@/lib/azureTargetUri";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
@@ -224,29 +228,7 @@ export function LLMProviderUpdateForm({
             .test(
               "valid-target-uri",
               "Target URI must be a valid URL with api-version query parameter and either a deployment name in the path or /openai/responses",
-              (value) => {
-                if (!value) return false;
-                try {
-                  const url = new URL(value);
-                  const hasApiVersion = !!url.searchParams
-                    .get("api-version")
-                    ?.trim();
-
-                  // Check if the path contains a deployment name OR is /openai/responses
-                  const pathMatch = url.pathname.match(
-                    /\/openai\/deployments\/([^\/]+)/
-                  );
-                  const hasDeploymentName = Boolean(pathMatch && pathMatch[1]);
-                  const isResponsesPath =
-                    url.pathname.includes("/openai/responses");
-
-                  return (
-                    hasApiVersion && (hasDeploymentName || isResponsesPath)
-                  );
-                } catch {
-                  return false;
-                }
-              }
+              (value) => (value ? isValidAzureTargetUri(value) : false)
             )
         : Yup.string(),
     ...(llmProviderDescriptor.custom_config_keys
@@ -314,16 +296,13 @@ export function LLMProviderUpdateForm({
 
         if (llmProviderDescriptor.name === "azure" && target_uri) {
           try {
-            const url = new URL(target_uri);
+            const { url, apiVersion, deploymentName } =
+              parseAzureTargetUri(target_uri);
             finalApiBase = url.origin; // Only use origin (protocol + hostname + port)
-            finalApiVersion = url.searchParams.get("api-version") || "";
+            finalApiVersion = apiVersion;
 
-            // Extract deployment name from path: /openai/deployments/{deployment-name}/...
-            const pathMatch = url.pathname.match(
-              /\/openai\/deployments\/([^\/]+)/
-            );
-            if (pathMatch && pathMatch[1]) {
-              finalDeploymentName = pathMatch[1];
+            if (deploymentName) {
+              finalDeploymentName = deploymentName;
             }
           } catch (error) {
             // This should not happen due to validation, but handle gracefully

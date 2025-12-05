@@ -10,7 +10,14 @@ import {
   createToolGroups,
   createMockChatState,
   renderMultiToolRenderer,
+  createInternalSearchToolGroup,
 } from "@tests/setup/multiToolTestHelpers";
+
+// The search tool renderers use ResultIcon, which pulls in complex source metadata.
+// For these tests we only care about statuses/text, so mock it to avoid heavy deps.
+jest.mock("@/components/chat/sources/SourceCard", () => ({
+  ResultIcon: () => <div data-testid="result-icon" />,
+}));
 
 // Mock the RendererComponent to return predictable, simple output
 jest.mock("./renderMessageComponent", () => ({
@@ -82,6 +89,49 @@ describe("MultiToolRenderer - Complete Mode", () => {
     // Wait for Done node
     await waitFor(() => {
       expect(screen.getByText("Done")).toBeInTheDocument();
+    });
+  });
+
+  test("internal search tool is split into two steps in summary", () => {
+    const searchGroup = createInternalSearchToolGroup(0);
+
+    render(
+      <MultiToolRenderer
+        packetGroups={[searchGroup]}
+        chatState={createMockChatState()}
+        isComplete={true}
+        isFinalAnswerComing={false}
+        stopPacketSeen={true}
+      />
+    );
+
+    // One internal search tool becomes two logical steps
+    expect(screen.getByText("2 steps")).toBeInTheDocument();
+  });
+
+  test("internal search tool shows separate Searching and Reading steps when expanded", async () => {
+    const user = setupUser();
+
+    const searchGroup = createInternalSearchToolGroup(0);
+
+    render(
+      <MultiToolRenderer
+        packetGroups={[searchGroup]}
+        chatState={createMockChatState()}
+        isComplete={true}
+        isFinalAnswerComing={true}
+        stopPacketSeen={true}
+      />
+    );
+
+    // Summary should reflect two steps
+    await user.click(screen.getByText("2 steps"));
+
+    await waitFor(() => {
+      // Step 1 status from SearchToolStep1Renderer
+      expect(screen.getByText("Searching internally")).toBeInTheDocument();
+      // Step 2 status from SearchToolStep2Renderer
+      expect(screen.getByText("Reading")).toBeInTheDocument();
     });
   });
 
@@ -346,7 +396,7 @@ describe("MultiToolRenderer - Edge Cases", () => {
   });
 
   test("handles empty packet groups gracefully", () => {
-    const emptyGroups: { ind: number; packets: any[] }[] = [];
+    const emptyGroups: { turn_index: number; packets: any[] }[] = [];
 
     const { container } = render(
       <MultiToolRenderer
@@ -389,5 +439,75 @@ describe("MultiToolRenderer - Accessibility", () => {
 
     // Summary text should be present
     expect(screen.getByText("3 steps")).toBeInTheDocument();
+  });
+});
+
+describe("MultiToolRenderer - Shimmering", () => {
+  test("stops shimmering when isStreaming is false", () => {
+    const { container } = render(
+      <MultiToolRenderer
+        packetGroups={createToolGroups(2)}
+        chatState={createMockChatState()}
+        isComplete={false}
+        isFinalAnswerComing={false}
+        stopPacketSeen={false}
+        isStreaming={false}
+      />
+    );
+
+    // When isStreaming is false, loading-text class should not be applied
+    const loadingElements = container.querySelectorAll(".loading-text");
+    expect(loadingElements.length).toBe(0);
+  });
+
+  test("applies shimmer classes when streaming", () => {
+    const { container } = render(
+      <MultiToolRenderer
+        packetGroups={createToolGroups(2)}
+        chatState={createMockChatState()}
+        isComplete={false}
+        isFinalAnswerComing={false}
+        stopPacketSeen={false}
+        isStreaming={true}
+      />
+    );
+
+    // When isStreaming is true, loading-text class should be applied
+    const loadingElements = container.querySelectorAll(".loading-text");
+    expect(loadingElements.length).toBeGreaterThan(0);
+  });
+
+  test("stops shimmering when stopPacketSeen is true", () => {
+    const { container } = render(
+      <MultiToolRenderer
+        packetGroups={createToolGroups(2)}
+        chatState={createMockChatState()}
+        isComplete={false}
+        isFinalAnswerComing={false}
+        stopPacketSeen={true}
+        isStreaming={true}
+      />
+    );
+
+    // When stopPacketSeen is true, shimmering should stop regardless of isStreaming
+    const loadingElements = container.querySelectorAll(".loading-text");
+    expect(loadingElements.length).toBe(0);
+  });
+
+  test("stops shimmering when isComplete is true", () => {
+    const { container } = render(
+      <MultiToolRenderer
+        packetGroups={createToolGroups(2)}
+        chatState={createMockChatState()}
+        isComplete={true}
+        isFinalAnswerComing={false}
+        stopPacketSeen={false}
+        isStreaming={true}
+      />
+    );
+
+    // When isComplete is true, shimmering should stop
+    const loadingElements = container.querySelectorAll(".loading-text");
+    expect(loadingElements.length).toBe(0);
   });
 });

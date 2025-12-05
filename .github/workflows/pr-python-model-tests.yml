@@ -32,6 +32,7 @@ jobs:
   model-check:
     # See https://runs-on.com/runners/linux/
     runs-on: [runs-on,runner=8cpu-linux-x64,"run-id=${{ github.run_id }}-model-check"]
+    timeout-minutes: 45
 
     env:
       PYTHONPATH: ./backend
@@ -60,7 +61,7 @@ jobs:
           docker tag onyxdotapp/onyx-model-server:latest onyxdotapp/onyx-model-server:test
 
       - name: Set up Python
-        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # ratchet:actions/setup-python@v6
+        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # ratchet:actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: "pip"

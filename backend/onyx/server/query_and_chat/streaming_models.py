@@ -1,5 +1,3 @@
-from collections import OrderedDict
-from collections.abc import Mapping
 from enum import Enum
 from typing import Annotated
 from typing import Literal
@@ -8,105 +6,213 @@ from typing import Union
 from pydantic import BaseModel
 from pydantic import Field
 
-from onyx.agents.agent_search.dr.models import GeneratedImage
-from onyx.context.search.models import SavedSearchDoc
+from onyx.context.search.models import SearchDoc
+
+
+class StreamingType(Enum):
+    """Enum defining all streaming packet types. This is the single source of truth for type strings."""
+
+    MESSAGE_START = "message_start"
+    MESSAGE_DELTA = "message_delta"
+    ERROR = "error"
+    STOP = "stop"
+    SEARCH_TOOL_START = "search_tool_start"
+    SEARCH_TOOL_QUERIES_DELTA = "search_tool_queries_delta"
+    SEARCH_TOOL_DOCUMENTS_DELTA = "search_tool_documents_delta"
+    OPEN_URL_START = "open_url_start"
+    OPEN_URL_URLS = "open_url_urls"
+    OPEN_URL_DOCUMENTS = "open_url_documents"
+    IMAGE_GENERATION_START = "image_generation_start"
+    IMAGE_GENERATION_HEARTBEAT = "image_generation_heartbeat"
+    IMAGE_GENERATION_FINAL = "image_generation_final"
+    PYTHON_TOOL_START = "python_tool_start"
+    PYTHON_TOOL_DELTA = "python_tool_delta"
+    CUSTOM_TOOL_START = "custom_tool_start"
+    CUSTOM_TOOL_DELTA = "custom_tool_delta"
+    REASONING_START = "reasoning_start"
+    REASONING_DELTA = "reasoning_delta"
+    REASONING_DONE = "reasoning_done"
+    CITATION_INFO = "citation_info"
 
 
 class BaseObj(BaseModel):
     type: str = ""
 
 
-"""Basic Message Packets"""
+"""Reasoning Packets"""
 
 
-class MessageStart(BaseObj):
-    type: Literal["message_start"] = "message_start"
+# Tells the frontend to display the reasoning block
+class ReasoningStart(BaseObj):
+    type: Literal["reasoning_start"] = StreamingType.REASONING_START.value
 
-    # Merged set of all documents considered
-    final_documents: list[SavedSearchDoc] | None
+
+# The stream of tokens for the reasoning
+class ReasoningDelta(BaseObj):
+    type: Literal["reasoning_delta"] = StreamingType.REASONING_DELTA.value
+
+    reasoning: str
+
+
+class ReasoningDone(BaseObj):
+    type: Literal["reasoning_done"] = StreamingType.REASONING_DONE.value
+
+
+"""Final Agent Response Packets"""
+
+
+# Start of the final answer
+class AgentResponseStart(BaseObj):
+    type: Literal["message_start"] = StreamingType.MESSAGE_START.value
+
+    final_documents: list[SearchDoc] | None = None
+
+
+# The stream of tokens for the final response
+# There is no end packet for this as the stream is over and a final OverallStop packet is emitted
+class AgentResponseDelta(BaseObj):
+    type: Literal["message_delta"] = StreamingType.MESSAGE_DELTA.value
 
     content: str
 
 
-class MessageDelta(BaseObj):
-    content: str
-    type: Literal["message_delta"] = "message_delta"
+# Citation info for the sidebar and inline citations
+class CitationInfo(BaseObj):
+    type: Literal["citation_info"] = StreamingType.CITATION_INFO.value
+
+    # The numerical number of the citation as provided by the LLM
+    citation_number: int
+    # The document id of the SearchDoc (same as the field stored in the DB)
+    # This is the actual document id from the connector, not the int id
+    document_id: str
 
 
 """Control Packets"""
 
 
+# This one isn't strictly necessary, remove in the future
+class SectionEnd(BaseObj):
+    type: Literal["section_end"] = "section_end"
+
+
 class PacketException(BaseObj):
-    type: Literal["error"] = "error"
+    type: Literal["error"] = StreamingType.ERROR.value
+
     exception: Exception
     model_config = {"arbitrary_types_allowed": True}
 
 
 class OverallStop(BaseObj):
-    type: Literal["stop"] = "stop"
-
-
-class SectionEnd(BaseObj):
-    type: Literal["section_end"] = "section_end"
+    type: Literal["stop"] = StreamingType.STOP.value
 
 
 """Tool Packets"""
 
 
+# Search tool is called and the UI block needs to start
 class SearchToolStart(BaseObj):
-    type: Literal["internal_search_tool_start"] = "internal_search_tool_start"
+    type: Literal["search_tool_start"] = StreamingType.SEARCH_TOOL_START.value
 
     is_internet_search: bool = False
 
 
-class SearchToolDelta(BaseObj):
-    type: Literal["internal_search_tool_delta"] = "internal_search_tool_delta"
+# Queries coming through as the LLM determines what to search
+# Mostly for query expansions and advanced search strategies
+class SearchToolQueriesDelta(BaseObj):
+    type: Literal["search_tool_queries_delta"] = (
+        StreamingType.SEARCH_TOOL_QUERIES_DELTA.value
+    )
 
     queries: list[str]
-    documents: list[SavedSearchDoc]
 
 
-class FetchToolStart(BaseObj):
-    type: Literal["fetch_tool_start"] = "fetch_tool_start"
+# Documents coming through as the system knows what to add to the context
+class SearchToolDocumentsDelta(BaseObj):
+    type: Literal["search_tool_documents_delta"] = (
+        StreamingType.SEARCH_TOOL_DOCUMENTS_DELTA.value
+    )
 
-    documents: list[SavedSearchDoc]
+    # This cannot be the SavedSearchDoc as this is yielded by the SearchTool directly
+    # which does not save documents to the DB.
+    documents: list[SearchDoc]
 
 
+# OpenURL tool packets - 3-stage sequence
+class OpenUrlStart(BaseObj):
+    """Signal that OpenURL tool has started."""
+
+    type: Literal["open_url_start"] = StreamingType.OPEN_URL_START.value
+
+
+class OpenUrlUrls(BaseObj):
+    """URLs to be fetched (sent before crawling begins)."""
+
+    type: Literal["open_url_urls"] = StreamingType.OPEN_URL_URLS.value
+
+    urls: list[str]
+
+
+class OpenUrlDocuments(BaseObj):
+    """Final documents after crawling completes."""
+
+    type: Literal["open_url_documents"] = StreamingType.OPEN_URL_DOCUMENTS.value
+
+    documents: list[SearchDoc]
+
+
+# Image generation starting, needs to allocate a placeholder block for it on the UI
 class ImageGenerationToolStart(BaseObj):
-    type: Literal["image_generation_tool_start"] = "image_generation_tool_start"
+    type: Literal["image_generation_start"] = StreamingType.IMAGE_GENERATION_START.value
 
 
-class ImageGenerationToolDelta(BaseObj):
-    type: Literal["image_generation_tool_delta"] = "image_generation_tool_delta"
+# Since image generation can take a while
+# we send a heartbeat to the frontend to keep the UI/connection alive
+class ImageGenerationToolHeartbeat(BaseObj):
+    type: Literal["image_generation_heartbeat"] = (
+        StreamingType.IMAGE_GENERATION_HEARTBEAT.value
+    )
+
+
+# Represents an image generated by an image generation tool
+class GeneratedImage(BaseModel):
+    """Represents an image generated by an image generation tool."""
+
+    file_id: str
+    url: str
+    revised_prompt: str
+    shape: str | None = None
+
+
+# The final generated images all at once at the end of image generation
+class ImageGenerationFinal(BaseObj):
+    type: Literal["image_generation_final"] = StreamingType.IMAGE_GENERATION_FINAL.value
 
     images: list[GeneratedImage]
 
 
-class ImageGenerationToolHeartbeat(BaseObj):
-    type: Literal["image_generation_tool_heartbeat"] = "image_generation_tool_heartbeat"
-
-
 class PythonToolStart(BaseObj):
-    type: Literal["python_tool_start"] = "python_tool_start"
+    type: Literal["python_tool_start"] = StreamingType.PYTHON_TOOL_START.value
     code: str
 
 
 class PythonToolDelta(BaseObj):
-    type: Literal["python_tool_delta"] = "python_tool_delta"
+    type: Literal["python_tool_delta"] = StreamingType.PYTHON_TOOL_DELTA.value
 
     stdout: str = ""
     stderr: str = ""
     file_ids: list[str] = []
 
 
+# Custom tool being called, first allocate a placeholder block for it on the UI
 class CustomToolStart(BaseObj):
-    type: Literal["custom_tool_start"] = "custom_tool_start"
+    type: Literal["custom_tool_start"] = StreamingType.CUSTOM_TOOL_START.value
 
     tool_name: str
 
 
+# The allowed streamed packets for a custom tool
 class CustomToolDelta(BaseObj):
-    type: Literal["custom_tool_delta"] = "custom_tool_delta"
+    type: Literal["custom_tool_delta"] = StreamingType.CUSTOM_TOOL_DELTA.value
 
     tool_name: str
     response_type: str
@@ -116,128 +222,47 @@ class CustomToolDelta(BaseObj):
     file_ids: list[str] | None = None
 
 
-"""Reasoning Packets"""
-
-
-class ReasoningStart(BaseObj):
-    type: Literal["reasoning_start"] = "reasoning_start"
-
-
-class ReasoningDelta(BaseObj):
-    type: Literal["reasoning_delta"] = "reasoning_delta"
-
-    reasoning: str
-
-
-"""Citation Packets"""
-
-
-class CitationStart(BaseObj):
-    type: Literal["citation_start"] = "citation_start"
-
-
-class SubQuestionIdentifier(BaseModel):
-    """None represents references to objects in the original flow. To our understanding,
-    these will not be None in the packets returned from agent search.
-    """
-
-    level: int | None = None
-    level_question_num: int | None = None
-
-    @staticmethod
-    def make_dict_by_level(
-        original_dict: Mapping[tuple[int, int], "SubQuestionIdentifier"],
-    ) -> dict[int, list["SubQuestionIdentifier"]]:
-        """returns a dict of level to object list (sorted by level_question_num)
-        Ordering is asc for readability.
-        """
-
-        # organize by level, then sort ascending by question_index
-        level_dict: dict[int, list[SubQuestionIdentifier]] = {}
-
-        # group by level
-        for k, obj in original_dict.items():
-            level = k[0]
-            if level not in level_dict:
-                level_dict[level] = []
-            level_dict[level].append(obj)
-
-        # for each level, sort the group
-        for k2, value2 in level_dict.items():
-            # we need to handle the none case due to SubQuestionIdentifier typing
-            # level_question_num as int | None, even though it should never be None here.
-            level_dict[k2] = sorted(
-                value2,
-                key=lambda x: (x.level_question_num is None, x.level_question_num),
-            )
-
-        # sort by level
-        sorted_dict = OrderedDict(sorted(level_dict.items()))
-        return sorted_dict
-
-
-class CitationInfo(SubQuestionIdentifier):
-    citation_num: int
-    document_id: str
-
-
-class CitationDelta(BaseObj):
-    type: Literal["citation_delta"] = "citation_delta"
-
-    citations: list[CitationInfo] | None = None
-
-
 """Packet"""
 
 # Discriminated union of all possible packet object types
-PacketObj = Annotated[
-    Union[
-        MessageStart,
-        MessageDelta,
-        OverallStop,
-        SectionEnd,
-        SearchToolStart,
-        SearchToolDelta,
-        ImageGenerationToolStart,
-        ImageGenerationToolDelta,
-        ImageGenerationToolHeartbeat,
-        PythonToolStart,
-        PythonToolDelta,
-        CustomToolStart,
-        CustomToolDelta,
-        ReasoningStart,
-        ReasoningDelta,
-        CitationStart,
-        CitationDelta,
-        PacketException,
-        FetchToolStart,
-    ],
-    Field(discriminator="type"),
+PacketObj = Union[
+    # Agent Response Packets
+    AgentResponseStart,
+    AgentResponseDelta,
+    # Control Packets
+    OverallStop,
+    SectionEnd,
+    # Error Packets
+    PacketException,
+    # Tool Packets
+    SearchToolStart,
+    SearchToolQueriesDelta,
+    SearchToolDocumentsDelta,
+    ImageGenerationToolStart,
+    ImageGenerationToolHeartbeat,
+    ImageGenerationFinal,
+    OpenUrlStart,
+    OpenUrlUrls,
+    OpenUrlDocuments,
+    PythonToolStart,
+    PythonToolDelta,
+    CustomToolStart,
+    CustomToolDelta,
+    # Reasoning Packets
+    ReasoningStart,
+    ReasoningDelta,
+    ReasoningDone,
+    # Citation Packets
+    CitationInfo,
 ]
 
 
 class Packet(BaseModel):
-    ind: int
-    obj: PacketObj
+    turn_index: int | None
+    obj: Annotated[PacketObj, Field(discriminator="type")]
 
 
+# This is for replaying it back from the DB to the frontend
 class EndStepPacketList(BaseModel):
-    end_step_nr: int
+    turn_index: int
     packet_list: list[Packet]
-
-
-class StreamingType(Enum):
-    MESSAGE_START = "message_start"
-    MESSAGE_DELTA = "message_delta"
-    INTERNAL_SEARCH_TOOL_START = "internal_search_tool_start"
-    INTERNAL_SEARCH_TOOL_DELTA = "internal_search_tool_delta"
-    IMAGE_GENERATION_TOOL_START = "image_generation_tool_start"
-    IMAGE_GENERATION_TOOL_DELTA = "image_generation_tool_delta"
-    PYTHON_TOOL_START = "python_tool_start"
-    PYTHON_TOOL_DELTA = "python_tool_delta"
-    REASONING_START = "reasoning_start"
-    REASONING_DELTA = "reasoning_delta"
-    CITATION_START = "citation_start"
-    CITATION_DELTA = "citation_delta"
-    CUSTOM_TOOL_START = "custom_tool_start"
-    CUSTOM_TOOL_DELTA = "custom_tool_delta"

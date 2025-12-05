@@ -1,5 +1,9 @@
 name: "Setup Python and Install Dependencies"
 description: "Sets up Python with uv and installs deps"
+inputs:
+  requirements:
+    description: "Newline-separated list of requirement files to install (relative to repo root)"
+    required: true
 runs:
   using: "composite"
   steps:
@@ -9,11 +13,26 @@ runs:
       # with:
       #   enable-cache: true
 
+    - name: Compute requirements hash
+      id: req-hash
+      shell: bash
+      env:
+        REQUIREMENTS: ${{ inputs.requirements }}
+      run: |
+        # Hash the contents of the specified requirement files
+        hash=""
+        while IFS= read -r req; do
+          if [ -n "$req" ] && [ -f "$req" ]; then
+            hash="$hash$(sha256sum "$req")"
+          fi
+        done <<< "$REQUIREMENTS"
+        echo "hash=$(echo "$hash" | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
     - name: Cache uv cache directory
       uses: runs-on/cache@50350ad4242587b6c8c2baa2e740b1bc11285ff4 # ratchet:runs-on/cache@v4
       with:
         path: ~/.cache/uv
-        key: ${{ runner.os }}-uv-${{ hashFiles('backend/requirements/*.txt', 'backend/pyproject.toml') }}
+        key: ${{ runner.os }}-uv-${{ steps.req-hash.outputs.hash }}
         restore-keys: |
           ${{ runner.os }}-uv-
 
@@ -38,8 +57,16 @@ runs:
 
     - name: Install Python dependencies with uv
       shell: bash
+      env:
+        REQUIREMENTS: ${{ inputs.requirements }}
       run: |
-        uv pip install \
-          -r backend/requirements/default.txt \
-          -r backend/requirements/dev.txt \
-          -r backend/requirements/model_server.txt
+        # Build the uv pip install command with each requirement file as array elements
+        cmd=("uv" "pip" "install")
+        while IFS= read -r req; do
+          # Skip empty lines
+          if [ -n "$req" ]; then
+            cmd+=("-r" "$req")
+          fi
+        done <<< "$REQUIREMENTS"
+        echo "Running: ${cmd[*]}"
+        "${cmd[@]}"

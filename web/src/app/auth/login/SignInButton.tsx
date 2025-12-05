@@ -3,7 +3,7 @@
 import Button from "@/refresh-components/buttons/Button";
 import { AuthType } from "@/lib/constants";
 import { FcGoogle } from "react-icons/fc";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 
 interface SignInButtonProps {
   authorizeUrl: string;
@@ -15,14 +15,14 @@ export default function SignInButton({
   authType,
 }: SignInButtonProps) {
   let button: React.ReactNode;
-  let icon: React.FunctionComponent<SvgProps> | undefined;
+  let icon: React.FunctionComponent<IconProps> | undefined;
 
-  if (authType === "google_oauth" || authType === "cloud") {
+  if (authType === AuthType.GOOGLE_OAUTH || authType === AuthType.CLOUD) {
     button = "Continue with Google";
     icon = FcGoogle;
-  } else if (authType === "oidc") {
+  } else if (authType === AuthType.OIDC) {
     button = "Continue with OIDC SSO";
-  } else if (authType === "saml") {
+  } else if (authType === AuthType.SAML) {
     button = "Continue with SAML SSO";
   }
 
@@ -35,7 +35,9 @@ export default function SignInButton({
 
   return (
     <Button
-      secondary={authType === "google_oauth" || authType === "cloud"}
+      secondary={
+        authType === AuthType.GOOGLE_OAUTH || authType === AuthType.CLOUD
+      }
       className="!w-full"
       leftIcon={icon}
       href={finalAuthorizeUrl}

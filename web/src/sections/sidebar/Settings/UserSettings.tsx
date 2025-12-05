@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getDisplayNameForModel, useAuthType } from "@/lib/hooks";
+import { useAuthType } from "@/lib/hooks";
 import { parseLlmDescriptor, structureValue } from "@/lib/llm/utils";
 import { setUserDefaultModel } from "@/lib/userSettings";
 import { usePathname, useRouter } from "next/navigation";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useUser } from "@/components/user/UserProvider";
 import { ThemePreference } from "@/lib/types";
+import { AuthType } from "@/lib/constants";
 import Switch from "@/refresh-components/inputs/Switch";
 import { SubLabel } from "@/components/Field";
 import LLMSelector from "@/components/llm/LLMSelector";
@@ -135,7 +136,7 @@ export default function UserSettings() {
       visibleSections.push({ id: "password", label: "Password" });
     }
 
-    if (authType && authType !== "disabled") {
+    if (authType && authType !== AuthType.DISABLED) {
       visibleSections.push({ id: "tokens", label: "Access Tokens" });
     }
 
@@ -177,7 +178,7 @@ export default function UserSettings() {
   llmProviders?.forEach((llmProvider) => {
     const providerOptions = llmProvider.model_configurations.map(
       (model_configuration) => ({
-        name: getDisplayNameForModel(model_configuration.name),
+        name: model_configuration.display_name || model_configuration.name,
         value: model_configuration.name,
       })
     );

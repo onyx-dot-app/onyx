@@ -7,6 +7,9 @@ on:
   merge_group:
   pull_request:
     branches: [ main ]
+  push:
+    tags:
+      - "v*.*.*"
   workflow_dispatch:  # Allows manual triggering
 
 permissions:
@@ -16,6 +19,7 @@ jobs:
   helm-chart-check:
     # See https://runs-on.com/runners/linux/
     runs-on: [runs-on,runner=8cpu-linux-x64,hdd=256,"run-id=${{ github.run_id }}-helm-chart-check"]
+    timeout-minutes: 45
 
     # fetch-depth 0 is required for helm/chart-testing-action
     steps:
@@ -79,6 +83,7 @@ jobs:
         helm repo add cloudnative-pg https://cloudnative-pg.github.io/charts
         helm repo add ot-container-kit https://ot-container-kit.github.io/helm-charts
         helm repo add minio https://charts.min.io/
+        helm repo add code-interpreter https://onyx-dot-app.github.io/code-interpreter/
         helm repo update
 
     - name: Install Redis operator

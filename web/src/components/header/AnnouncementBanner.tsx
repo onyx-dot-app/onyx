@@ -1,10 +1,10 @@
 "use client";
 import { useState, useEffect, useContext } from "react";
-import { XIcon } from "../icons/icons";
 import { CustomTooltip } from "../tooltip/CustomTooltip";
 import { SettingsContext } from "../settings/SettingsProvider";
 import Link from "next/link";
 import Cookies from "js-cookie";
+import SvgX from "@/icons/x";
 
 const DISMISSED_NOTIFICATION_COOKIE_PREFIX = "dismissed_notification_";
 const COOKIE_EXPIRY_DAYS = 1;
@@ -95,7 +95,7 @@ export function AnnouncementBanner() {
                 aria-label="Dismiss"
               >
                 <CustomTooltip showTick citation delay={100} content="Dismiss">
-                  <XIcon className="h-5 w-5" />
+                  <SvgX className="stroke-text-04 h-5 w-5" />
                 </CustomTooltip>
               </button>
             </div>

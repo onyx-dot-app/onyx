@@ -15,7 +15,7 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { cn, noProp } from "@/lib/utils";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 
 export interface MCPServer {
   id: number;
@@ -59,22 +59,22 @@ export default function MCPLineItem({
   const showInlineReauth = showAuthTrigger && canClickIntoServer;
   const showReauthButton = showAuthTrigger && !showInlineReauth;
 
-  function getServerIcon(): React.FunctionComponent<SvgProps> {
+  function getServerIcon(): React.FunctionComponent<IconProps> {
     if (isLoading) return SimpleLoader;
     if (isAuthenticated) {
       return (({ className }) => (
         <SvgCheck className={cn(className, "stroke-status-success-05")} />
-      )) as React.FunctionComponent<SvgProps>;
+      )) as React.FunctionComponent<IconProps>;
     }
     if (server.auth_type === MCPAuthenticationType.NONE) return SvgServer;
     if (server.auth_performer === MCPAuthenticationPerformer.PER_USER) {
       return (({ className }) => (
         <SvgKey className={cn(className, "stroke-status-warning-05")} />
-      )) as React.FunctionComponent<SvgProps>;
+      )) as React.FunctionComponent<IconProps>;
     }
     return (({ className }) => (
       <SvgLock className={cn(className, "stroke-status-error-05")} />
-    )) as React.FunctionComponent<SvgProps>;
+    )) as React.FunctionComponent<IconProps>;
   }
 
   const handleClick = noProp(() => {
@@ -96,7 +96,7 @@ export default function MCPLineItem({
       icon={getServerIcon()}
       onClick={handleClick}
       strikethrough={allToolsDisabled}
-      forced={isActive}
+      selected={isActive}
       rightChildren={
         <div className="flex flex-row items-center gap-1">
           {isAuthenticated &&

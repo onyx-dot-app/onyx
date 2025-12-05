@@ -11,11 +11,11 @@ import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionM
 import { useChatPageLayout } from "@/app/chat/stores/useChatSessionStore";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgMoreHorizontal from "@/icons/more-horizontal";
-import MenuButton from "@/refresh-components/buttons/MenuButton";
+import LineItem from "@/refresh-components/buttons/LineItem";
 import SvgFolderIn from "@/icons/folder-in";
 import SvgTrash from "@/icons/trash";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import { useChatSessions } from "@/lib/hooks/useChatSessions";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import {
   handleMoveOperation,
@@ -35,7 +35,8 @@ import SvgSidebar from "@/icons/sidebar";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
 import useScreenSize from "@/hooks/useScreenSize";
 
-interface AppPageLayoutProps extends React.HtmlHTMLAttributes<HTMLDivElement> {
+export interface AppPageLayoutProps
+  extends React.HtmlHTMLAttributes<HTMLDivElement> {
   settings: CombinedSettings | null;
   chatSession: ChatSession | null;
 }
@@ -70,7 +71,7 @@ export default function AppPageLayout({
     refreshCurrentProjectDetails,
     currentProjectId,
   } = useProjectsContext();
-  const { refreshChatSessions } = useChatContext();
+  const { refreshChatSessions } = useChatSessions();
   const { popup, setPopup } = usePopup();
   const router = useRouter();
 
@@ -160,21 +161,21 @@ export default function AppPageLayout({
   useEffect(() => {
     if (!showMoveOptions) {
       const items = [
-        <MenuButton
+        <LineItem
           key="move"
           icon={SvgFolderIn}
           onClick={noProp(() => setShowMoveOptions(true))}
         >
           Move to Project
-        </MenuButton>,
-        <MenuButton
+        </LineItem>,
+        <LineItem
           key="delete"
           icon={SvgTrash}
           onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
           danger
         >
           Delete
-        </MenuButton>,
+        </LineItem>,
       ];
       setPopoverItems(items);
     } else {
@@ -185,13 +186,13 @@ export default function AppPageLayout({
           onSearch={setSearchTerm}
         />,
         ...filteredProjects.map((project) => (
-          <MenuButton
+          <LineItem
             key={project.id}
             icon={SvgFolderIn}
             onClick={noProp(() => handleMoveClick(project.id))}
           >
             {project.name}
-          </MenuButton>
+          </LineItem>
         )),
       ];
       setPopoverItems(items);

@@ -1,9 +1,10 @@
 "use client";
 import Separator from "@/refresh-components/Separator";
-import { IconProps, XIcon } from "./icons/icons";
+import { IconProps } from "./icons/icons";
 import { useRef, useEffect, useState, JSX } from "react";
 import ReactDOM from "react-dom";
 import { cn } from "@/lib/utils";
+import SvgX from "@/icons/x";
 
 interface ModalProps {
   icon?: ({ size, className }: IconProps) => JSX.Element;
@@ -100,7 +101,7 @@ export function Modal({
               className="cursor-pointer text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-300 transition-colors duration-200 p-2"
               aria-label="Close modal"
             >
-              <XIcon className="w-5 h-5" />
+              <SvgX className="stroke-text-04 w-5 h-5" />
             </button>
           </div>
         )}

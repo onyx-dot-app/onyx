@@ -6,7 +6,7 @@ import {
   useProjectsContext,
 } from "@/app/chat/projects/ProjectsContext";
 import { useDroppable } from "@dnd-kit/core";
-import MenuButton from "@/refresh-components/buttons/MenuButton";
+import LineItem from "@/refresh-components/buttons/LineItem";
 import SvgFolder from "@/icons/folder";
 import SvgEdit from "@/icons/edit";
 import {
@@ -27,7 +27,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgMoreHorizontal from "@/icons/more-horizontal";
 import { PopoverAnchor } from "@radix-ui/react-popover";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 import useAppFocus from "@/hooks/useAppFocus";
 import SvgFolderOpen from "@/icons/folder-open";
 import SvgFolderPartialOpen from "@/icons/folder-partial-open";
@@ -58,7 +58,7 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
     },
   });
 
-  function getFolderIcon(): React.FunctionComponent<SvgProps> {
+  function getFolderIcon(): React.FunctionComponent<IconProps> {
     if (open) {
       return SvgFolderOpen;
     } else {
@@ -90,22 +90,22 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
   }
 
   const popoverItems = [
-    <MenuButton
+    <LineItem
       key="rename-project"
       icon={SvgEdit}
       onClick={noProp(() => setIsEditing(true))}
     >
       Rename Project
-    </MenuButton>,
+    </LineItem>,
     null,
-    <MenuButton
+    <LineItem
       key="delete-project"
       icon={SvgTrash}
       onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
       danger
     >
       Delete Project
-    </MenuButton>,
+    </LineItem>,
   ];
 
   return (

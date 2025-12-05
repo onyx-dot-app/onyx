@@ -7,6 +7,9 @@ on:
   merge_group:
   pull_request:
     branches: [main]
+  push:
+    tags:
+      - "v*.*.*"
   schedule:
     # This cron expression runs the job daily at 16:00 UTC (9am PT)
     - cron: "0 16 * * *"
@@ -126,6 +129,7 @@ jobs:
   connectors-check:
     # See https://runs-on.com/runners/linux/
     runs-on: [runs-on, runner=8cpu-linux-x64, "run-id=${{ github.run_id }}-connectors-check", "extras=s3-cache"]
+    timeout-minutes: 45
 
     env:
       PYTHONPATH: ./backend
@@ -140,6 +144,10 @@ jobs:
 
       - name: Setup Python and Install Dependencies
         uses: ./.github/actions/setup-python-and-install-dependencies
+        with:
+          requirements: |
+            backend/requirements/default.txt
+            backend/requirements/dev.txt
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright

@@ -1,8 +1,6 @@
 from collections.abc import Sequence
 from datetime import datetime
 from datetime import timedelta
-from typing import Any
-from typing import cast
 from typing import Tuple
 from uuid import UUID
 
@@ -16,32 +14,19 @@ from sqlalchemy import Row
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.exc import MultipleResultsFound
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
-from onyx.agents.agent_search.dr.enums import ResearchAnswerPurpose
-from onyx.agents.agent_search.dr.enums import ResearchType
-from onyx.agents.agent_search.shared_graph_utils.models import CombinedAgentMetrics
-from onyx.agents.agent_search.shared_graph_utils.models import (
-    SubQuestionAnswerResults,
-)
-from onyx.agents.agent_search.utils import create_citation_format_list
 from onyx.chat.models import DocumentRelevance
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import RetrievalDocs
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc as ServerSearchDoc
-from onyx.db.models import AgentSearchMetrics
-from onyx.db.models import AgentSubQuery
-from onyx.db.models import AgentSubQuestion
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatMessage__SearchDoc
 from onyx.db.models import ChatSession
 from onyx.db.models import ChatSessionSharedStatus
-from onyx.db.models import ResearchAgentIteration
-from onyx.db.models import SearchDoc
 from onyx.db.models import SearchDoc as DBSearchDoc
 from onyx.db.models import ToolCall
 from onyx.db.models import User
@@ -51,11 +36,7 @@ from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.server.query_and_chat.models import ChatMessageDetail
-from onyx.server.query_and_chat.models import SubQueryDetail
-from onyx.server.query_and_chat.models import SubQuestionDetail
-from onyx.tools.models import ToolCallFinalResult
 from onyx.utils.logger import setup_logger
-from onyx.utils.special_types import JSON_ro
 
 
 logger = setup_logger()
@@ -196,25 +177,9 @@ def get_chat_sessions_by_user(
     return list(chat_sessions)
 
 
-def delete_search_doc_message_relationship(
-    message_id: int, db_session: Session
-) -> None:
-    db_session.query(ChatMessage__SearchDoc).filter(
-        ChatMessage__SearchDoc.chat_message_id == message_id
-    ).delete(synchronize_session=False)
-
-    db_session.commit()
-
-
-def delete_tool_call_for_message_id(message_id: int, db_session: Session) -> None:
-    stmt = delete(ToolCall).where(ToolCall.message_id == message_id)
-    db_session.execute(stmt)
-    db_session.commit()
-
-
 def delete_orphaned_search_docs(db_session: Session) -> None:
     orphaned_docs = (
-        db_session.query(SearchDoc)
+        db_session.query(DBSearchDoc)
         .outerjoin(ChatMessage__SearchDoc)
         .filter(ChatMessage__SearchDoc.chat_message_id.is_(None))
         .all()
@@ -234,17 +199,12 @@ def delete_messages_and_files_from_chat_session(
         )
     ).fetchall()
 
-    for id, files in messages_with_files:
-        delete_tool_call_for_message_id(message_id=id, db_session=db_session)
-        delete_search_doc_message_relationship(message_id=id, db_session=db_session)
-
+    for _, files in messages_with_files:
         file_store = get_default_file_store()
         for file_info in files or []:
             file_store.delete_file(file_id=file_info.get("id"))
 
     # Delete ChatMessage records - CASCADE constraints will automatically handle:
-    # - AgentSubQuery records (via AgentSubQuestion)
-    # - AgentSubQuestion records
     # - ChatMessage__StandardAnswer relationship records
     db_session.execute(
         delete(ChatMessage).where(ChatMessage.chat_session_id == chat_session_id)
@@ -353,14 +313,26 @@ def delete_all_chat_sessions_for_user(
 ) -> None:
     user_id = user.id if user is not None else None
 
-    query = db_session.query(ChatSession).filter(
-        ChatSession.user_id == user_id, ChatSession.onyxbot_flow.is_(False)
+    chat_sessions = (
+        db_session.query(ChatSession)
+        .filter(ChatSession.user_id == user_id, ChatSession.onyxbot_flow.is_(False))
+        .all()
     )
 
     if hard_delete:
-        query.delete(synchronize_session=False)
+        for chat_session in chat_sessions:
+            delete_messages_and_files_from_chat_session(chat_session.id, db_session)
+        db_session.execute(
+            delete(ChatSession).where(
+                ChatSession.user_id == user_id, ChatSession.onyxbot_flow.is_(False)
+            )
+        )
     else:
-        query.update({ChatSession.deleted: True}, synchronize_session=False)
+        db_session.execute(
+            update(ChatSession)
+            .where(ChatSession.user_id == user_id, ChatSession.onyxbot_flow.is_(False))
+            .values(deleted=True)
+        )
 
     db_session.commit()
 
@@ -484,7 +456,7 @@ def get_chat_messages_by_sessions(
     stmt = (
         select(ChatMessage)
         .where(ChatMessage.chat_session_id.in_(chat_session_ids))
-        .order_by(nullsfirst(ChatMessage.parent_message))
+        .order_by(nullsfirst(ChatMessage.parent_message_id))
     )
     return db_session.execute(stmt).scalars().all()
 
@@ -514,25 +486,21 @@ def add_chats_to_session_from_slack_thread(
             parent_message=new_root_message,
             message=chat_message.message,
             files=chat_message.files,
-            rephrased_query=chat_message.rephrased_query,
             error=chat_message.error,
-            citations=chat_message.citations,
-            reference_docs=chat_message.search_docs,
-            tool_call=chat_message.tool_call,
             token_count=chat_message.token_count,
             message_type=chat_message.message_type,
-            alternate_assistant_id=chat_message.alternate_assistant_id,
-            overridden_model=chat_message.overridden_model,
+            reasoning_tokens=chat_message.reasoning_tokens,
         )
 
 
 def get_search_docs_for_chat_message(
     chat_message_id: int, db_session: Session
-) -> list[SearchDoc]:
+) -> list[DBSearchDoc]:
     stmt = (
-        select(SearchDoc)
+        select(DBSearchDoc)
         .join(
-            ChatMessage__SearchDoc, ChatMessage__SearchDoc.search_doc_id == SearchDoc.id
+            ChatMessage__SearchDoc,
+            ChatMessage__SearchDoc.search_doc_id == DBSearchDoc.id,
         )
         .where(ChatMessage__SearchDoc.chat_message_id == chat_message_id)
     )
@@ -540,12 +508,50 @@ def get_search_docs_for_chat_message(
     return list(db_session.scalars(stmt).all())
 
 
+def add_search_docs_to_chat_message(
+    chat_message_id: int, search_doc_ids: list[int], db_session: Session
+) -> None:
+    """
+    Link SearchDocs to a ChatMessage by creating entries in the chat_message__search_doc junction table.
+
+    Args:
+        chat_message_id: The ID of the chat message
+        search_doc_ids: List of search document IDs to link
+        db_session: The database session
+    """
+    for search_doc_id in search_doc_ids:
+        chat_message_search_doc = ChatMessage__SearchDoc(
+            chat_message_id=chat_message_id, search_doc_id=search_doc_id
+        )
+        db_session.add(chat_message_search_doc)
+
+
+def add_search_docs_to_tool_call(
+    tool_call_id: int, search_doc_ids: list[int], db_session: Session
+) -> None:
+    """
+    Link SearchDocs to a ToolCall by creating entries in the tool_call__search_doc junction table.
+
+    Args:
+        tool_call_id: The ID of the tool call
+        search_doc_ids: List of search document IDs to link
+        db_session: The database session
+    """
+    from onyx.db.models import ToolCall__SearchDoc
+
+    for search_doc_id in search_doc_ids:
+        tool_call_search_doc = ToolCall__SearchDoc(
+            tool_call_id=tool_call_id, search_doc_id=search_doc_id
+        )
+        db_session.add(tool_call_search_doc)
+
+
 def get_chat_messages_by_session(
     chat_session_id: UUID,
     user_id: UUID | None,
     db_session: Session,
     skip_permission_check: bool = False,
-    prefetch_tool_calls: bool = False,
+    prefetch_top_two_level_tool_calls: bool = True,
 ) -> list[ChatMessage]:
     if not skip_permission_check:
         # bug if we ever call this expecting the permission check to not be skipped
@@ -556,26 +562,16 @@ def get_chat_messages_by_session(
     stmt = (
         select(ChatMessage)
         .where(ChatMessage.chat_session_id == chat_session_id)
-        .order_by(nullsfirst(ChatMessage.parent_message))
+        .order_by(nullsfirst(ChatMessage.parent_message_id))
     )
 
-    if prefetch_tool_calls:
-        # stmt = stmt.options(
-        #     joinedload(ChatMessage.tool_call),
-        #     joinedload(ChatMessage.sub_questions).joinedload(
-        #         AgentSubQuestion.sub_queries
-        #     ),
-        # )
-        # result = db_session.scalars(stmt).unique().all()
-
-        stmt = (
-            select(ChatMessage)
-            .where(ChatMessage.chat_session_id == chat_session_id)
-            .order_by(nullsfirst(ChatMessage.parent_message))
-        )
+    # This should handle both the top level tool calls and deep research
+    # If there are future nested agents, this can be extended.
+    if prefetch_top_two_level_tool_calls:
+        # Load tool_calls and their direct children (one level deep)
         stmt = stmt.options(
-            joinedload(ChatMessage.research_iterations).joinedload(
-                ResearchAgentIteration.sub_steps
+            selectinload(ChatMessage.tool_calls).selectinload(
+                ToolCall.tool_call_children
             )
         )
         result = db_session.scalars(stmt).unique().all()
@@ -594,7 +590,7 @@ def get_or_create_root_message(
             db_session.query(ChatMessage)
             .filter(
                 ChatMessage.chat_session_id == chat_session_id,
-                ChatMessage.parent_message.is_(None),
+                ChatMessage.parent_message_id.is_(None),
             )
             .one_or_none()
         )
@@ -608,8 +604,8 @@ def get_or_create_root_message(
     else:
         new_root_message = ChatMessage(
             chat_session_id=chat_session_id,
-            parent_message=None,
-            latest_child_message=None,
+            parent_message_id=None,
+            latest_child_message_id=None,
             message="",
             token_count=0,
             message_type=MessageType.SYSTEM,
@@ -623,28 +619,34 @@ def reserve_message_id(
     db_session: Session,
     chat_session_id: UUID,
     parent_message: int,
-    message_type: MessageType,
-) -> int:
-    # Create an empty chat message
+    message_type: MessageType = MessageType.ASSISTANT,
+) -> ChatMessage:
+    # Create an temporary holding chat message to the updated and saved at the end
     empty_message = ChatMessage(
         chat_session_id=chat_session_id,
-        parent_message=parent_message,
-        latest_child_message=None,
-        message="",
-        token_count=0,
+        parent_message_id=parent_message,
+        latest_child_message_id=None,
+        message="Response was termination prior to completion, try regenerating.",
+        token_count=15,
         message_type=message_type,
     )
 
     # Add the empty message to the session
     db_session.add(empty_message)
-
-    # Flush the session to get an ID for the new chat message
     db_session.flush()
 
-    # Get the ID of the newly created message
-    new_id = empty_message.id
+    # Get the parent message and set its child pointer to the current message
+    parent_chat_message = (
+        db_session.query(ChatMessage).filter(ChatMessage.id == parent_message).first()
+    )
+    if parent_chat_message:
+        parent_chat_message.latest_child_message_id = empty_message.id
 
-    return new_id
+    # Committing because it's ok to recover this state. More clear to the user than it is now.
+    # Ideally there's a special UI for a case like this with a regenerate button but not needed for now.
+    db_session.commit()
+
+    return empty_message
 
 
 def create_new_chat_message(
@@ -655,19 +657,10 @@ def create_new_chat_message(
     message_type: MessageType,
     db_session: Session,
     files: list[FileDescriptor] | None = None,
-    rephrased_query: str | None = None,
     error: str | None = None,
-    reference_docs: list[DBSearchDoc] | None = None,
-    alternate_assistant_id: int | None = None,
-    # Maps the citation number [n] to the DB SearchDoc
-    citations: dict[int, int] | None = None,
-    tool_call: ToolCall | None = None,
     commit: bool = True,
     reserved_message_id: int | None = None,
-    overridden_model: str | None = None,
-    is_agentic: bool = False,
-    research_type: ResearchType | None = None,
-    research_plan: dict[str, Any] | None = None,
+    reasoning_tokens: str | None = None,
 ) -> ChatMessage:
     if reserved_message_id is not None:
         # Edit existing message
@@ -676,51 +669,33 @@ def create_new_chat_message(
             raise ValueError(f"No message found with id {reserved_message_id}")
 
         existing_message.chat_session_id = chat_session_id
-        existing_message.parent_message = parent_message.id
+        existing_message.parent_message_id = parent_message.id
         existing_message.message = message
-        existing_message.rephrased_query = rephrased_query
         existing_message.token_count = token_count
         existing_message.message_type = message_type
-        existing_message.citations = citations
         existing_message.files = files
-        existing_message.tool_call = tool_call
         existing_message.error = error
-        existing_message.alternate_assistant_id = alternate_assistant_id
-        existing_message.overridden_model = overridden_model
-        existing_message.is_agentic = is_agentic
-        existing_message.research_type = research_type
-        existing_message.research_plan = research_plan
+        existing_message.reasoning_tokens = reasoning_tokens
         new_chat_message = existing_message
     else:
         # Create new message
         new_chat_message = ChatMessage(
             chat_session_id=chat_session_id,
-            parent_message=parent_message.id,
-            latest_child_message=None,
+            parent_message_id=parent_message.id,
+            latest_child_message_id=None,
             message=message,
-            rephrased_query=rephrased_query,
             token_count=token_count,
             message_type=message_type,
-            citations=citations,
             files=files,
-            tool_call=tool_call,
             error=error,
-            alternate_assistant_id=alternate_assistant_id,
-            overridden_model=overridden_model,
-            is_agentic=is_agentic,
-            research_type=research_type,
-            research_plan=research_plan,
+            reasoning_tokens=reasoning_tokens,
         )
         db_session.add(new_chat_message)
-
-    # SQL Alchemy will propagate this to update the reference_docs' foreign keys
-    if reference_docs:
-        new_chat_message.search_docs = reference_docs
 
     # Flush the session to get an ID for the new chat message
     db_session.flush()
 
-    parent_message.latest_child_message = new_chat_message.id
+    parent_message.latest_child_message_id = new_chat_message.id
     if commit:
         db_session.commit()
 
@@ -732,7 +707,7 @@ def set_as_latest_chat_message(
     user_id: UUID | None,
     db_session: Session,
 ) -> None:
-    parent_message_id = chat_message.parent_message
+    parent_message_id = chat_message.parent_message_id
 
     if parent_message_id is None:
         raise RuntimeError(
@@ -743,63 +718,14 @@ def set_as_latest_chat_message(
         chat_message_id=parent_message_id, user_id=user_id, db_session=db_session
     )
 
-    parent_message.latest_child_message = chat_message.id
+    parent_message.latest_child_message_id = chat_message.id
 
     db_session.commit()
 
 
-def attach_files_to_chat_message(
-    chat_message: ChatMessage,
-    files: list[FileDescriptor],
-    db_session: Session,
-    commit: bool = True,
-) -> None:
-    chat_message.files = files
-    if commit:
-        db_session.commit()
-
-
-def get_doc_query_identifiers_from_model(
-    search_doc_ids: list[int],
-    chat_session: ChatSession,
-    user_id: UUID | None,
-    db_session: Session,
-    enforce_chat_session_id_for_search_docs: bool,
-) -> list[tuple[str, int]]:
-    """Given a list of search_doc_ids"""
-    search_docs = (
-        db_session.query(SearchDoc).filter(SearchDoc.id.in_(search_doc_ids)).all()
-    )
-
-    if user_id != chat_session.user_id:
-        logger.error(
-            f"Docs referenced are from a chat session not belonging to user {user_id}"
-        )
-        raise ValueError("Docs references do not belong to user")
-
-    try:
-        if any(
-            [
-                doc.chat_messages[0].chat_session_id != chat_session.id
-                for doc in search_docs
-            ]
-        ):
-            if enforce_chat_session_id_for_search_docs:
-                raise ValueError("Invalid reference doc, not from this chat session.")
-    except IndexError:
-        # This happens when the doc has no chat_messages associated with it.
-        # which happens as an edge case where the chat message failed to save
-        # This usually happens when the LLM fails either immediately or partially through.
-        raise RuntimeError("Chat session failed, please start a new session.")
-
-    doc_query_identifiers = [(doc.document_id, doc.chunk_ind) for doc in search_docs]
-
-    return doc_query_identifiers
-
-
 def update_search_docs_table_with_relevance(
     db_session: Session,
-    reference_db_search_docs: list[SearchDoc],
+    reference_db_search_docs: list[DBSearchDoc],
     relevance_summary: DocumentRelevance,
 ) -> None:
     for search_doc in reference_db_search_docs:
@@ -808,8 +734,8 @@ def update_search_docs_table_with_relevance(
         )
         if relevance_data is not None:
             db_session.execute(
-                update(SearchDoc)
-                .where(SearchDoc.id == search_doc.id)
+                update(DBSearchDoc)
+                .where(DBSearchDoc.id == search_doc.id)
                 .values(
                     is_relevant=relevance_data.relevant,
                     relevance_explanation=relevance_data.content,
@@ -821,11 +747,12 @@ def update_search_docs_table_with_relevance(
 def create_db_search_doc(
     server_search_doc: ServerSearchDoc,
     db_session: Session,
-) -> SearchDoc:
-    db_search_doc = SearchDoc(
+    commit: bool = True,
+) -> DBSearchDoc:
+    db_search_doc = DBSearchDoc(
         document_id=server_search_doc.document_id,
         chunk_ind=server_search_doc.chunk_ind,
-        semantic_id=server_search_doc.semantic_identifier,
+        semantic_id=server_search_doc.semantic_identifier or "Unknown",
         link=server_search_doc.link,
         blurb=server_search_doc.blurb,
         source_type=server_search_doc.source_type,
@@ -844,13 +771,16 @@ def create_db_search_doc(
     )
 
     db_session.add(db_search_doc)
-    db_session.commit()
+    if commit:
+        db_session.commit()
+    else:
+        db_session.flush()
     return db_search_doc
 
 
 def get_db_search_doc_by_id(doc_id: int, db_session: Session) -> DBSearchDoc | None:
     """There are no safety checks here like user permission etc., use with caution"""
-    search_doc = db_session.query(SearchDoc).filter(SearchDoc.id == doc_id).first()
+    search_doc = db_session.query(DBSearchDoc).filter(DBSearchDoc.id == doc_id).first()
     return search_doc
 
 
@@ -859,17 +789,20 @@ def get_db_search_doc_by_document_id(
 ) -> DBSearchDoc | None:
     """Get SearchDoc by document_id field. There are no safety checks here like user permission etc., use with caution"""
     search_doc = (
-        db_session.query(SearchDoc).filter(SearchDoc.document_id == document_id).first()
+        db_session.query(DBSearchDoc)
+        .filter(DBSearchDoc.document_id == document_id)
+        .first()
     )
     return search_doc
 
 
-def translate_db_search_doc_to_server_search_doc(
-    db_search_doc: SearchDoc,
+def translate_db_search_doc_to_saved_search_doc(
+    db_search_doc: DBSearchDoc,
     remove_doc_content: bool = False,
 ) -> SavedSearchDoc:
     return SavedSearchDoc(
         db_doc_id=db_search_doc.id,
+        score=db_search_doc.score,
         document_id=db_search_doc.document_id,
         chunk_ind=db_search_doc.chunk_ind,
         semantic_identifier=db_search_doc.semantic_id,
@@ -879,7 +812,6 @@ def translate_db_search_doc_to_server_search_doc(
         boost=db_search_doc.boost,
         hidden=db_search_doc.hidden,
         metadata=db_search_doc.doc_metadata if not remove_doc_content else {},
-        score=db_search_doc.score,
         match_highlights=(
             db_search_doc.match_highlights if not remove_doc_content else []
         ),
@@ -894,67 +826,6 @@ def translate_db_search_doc_to_server_search_doc(
     )
 
 
-def translate_db_sub_questions_to_server_objects(
-    db_sub_questions: list[AgentSubQuestion],
-) -> list[SubQuestionDetail]:
-    sub_questions = []
-    for sub_question in db_sub_questions:
-        sub_queries = []
-        docs: dict[str, SearchDoc] = {}
-        doc_results = cast(
-            list[dict[str, JSON_ro]], sub_question.sub_question_doc_results
-        )
-        verified_doc_ids = [x["document_id"] for x in doc_results]
-        for sub_query in sub_question.sub_queries:
-            doc_ids = [doc.id for doc in sub_query.search_docs]
-            sub_queries.append(
-                SubQueryDetail(
-                    query=sub_query.sub_query,
-                    query_id=sub_query.id,
-                    doc_ids=doc_ids,
-                )
-            )
-            for doc in sub_query.search_docs:
-                docs[doc.document_id] = doc
-
-        verified_docs = [
-            docs[cast(str, doc_id)] for doc_id in verified_doc_ids if doc_id in docs
-        ]
-
-        sub_questions.append(
-            SubQuestionDetail(
-                level=sub_question.level,
-                level_question_num=sub_question.level_question_num,
-                question=sub_question.sub_question,
-                answer=sub_question.sub_answer,
-                sub_queries=sub_queries,
-                context_docs=get_retrieval_docs_from_search_docs(
-                    verified_docs, sort_by_score=False
-                ),
-            )
-        )
-    return sub_questions
-
-
-def get_retrieval_docs_from_search_docs(
-    search_docs: list[SearchDoc],
-    remove_doc_content: bool = False,
-    sort_by_score: bool = True,
-) -> RetrievalDocs:
-    top_documents = [
-        translate_db_search_doc_to_server_search_doc(
-            db_doc, remove_doc_content=remove_doc_content
-        )
-        for db_doc in search_docs
-    ]
-    if sort_by_score:
-        top_documents = sorted(top_documents, key=lambda doc: doc.score, reverse=True)  # type: ignore
-    return RetrievalDocs(top_documents=top_documents)
-
-
-# Note: translate_db_message_to_packets moved to onyx.server.query_and_chat.streaming_utils
-
-
 def translate_db_message_to_chat_message_detail(
     chat_message: ChatMessage,
     remove_doc_content: bool = False,
@@ -966,127 +837,46 @@ def translate_db_message_to_chat_message_detail(
         if latest_feedback.is_positive is not None:
             current_feedback = "like" if latest_feedback.is_positive else "dislike"
 
+    # Convert citations from {citation_num: db_doc_id} to {citation_num: document_id}
+    converted_citations = None
+    if chat_message.citations and chat_message.search_docs:
+        # Build lookup map: db_doc_id -> document_id
+        db_doc_id_to_document_id = {
+            doc.id: doc.document_id for doc in chat_message.search_docs
+        }
+
+        converted_citations = {}
+        for citation_num, db_doc_id in chat_message.citations.items():
+            document_id = db_doc_id_to_document_id.get(db_doc_id)
+            if document_id:
+                converted_citations[citation_num] = document_id
+
+    top_documents = [
+        translate_db_search_doc_to_saved_search_doc(
+            db_doc, remove_doc_content=remove_doc_content
+        )
+        for db_doc in chat_message.search_docs
+    ]
+    top_documents = sorted(
+        top_documents, key=lambda doc: (doc.score or 0.0), reverse=True
+    )
     chat_msg_detail = ChatMessageDetail(
         chat_session_id=chat_message.chat_session_id,
         message_id=chat_message.id,
-        parent_message=chat_message.parent_message,
-        latest_child_message=chat_message.latest_child_message,
+        parent_message=chat_message.parent_message_id,
+        latest_child_message=chat_message.latest_child_message_id,
         message=chat_message.message,
-        rephrased_query=chat_message.rephrased_query,
-        context_docs=get_retrieval_docs_from_search_docs(
-            chat_message.search_docs, remove_doc_content=remove_doc_content
-        ),
+        reasoning_tokens=chat_message.reasoning_tokens,
         message_type=chat_message.message_type,
-        research_type=chat_message.research_type,
+        context_docs=top_documents,
+        citations=converted_citations,
         time_sent=chat_message.time_sent,
-        citations=chat_message.citations,
         files=chat_message.files or [],
-        tool_call=(
-            ToolCallFinalResult(
-                tool_name=chat_message.tool_call.tool_name,
-                tool_args=chat_message.tool_call.tool_arguments,
-                tool_result=chat_message.tool_call.tool_result,
-            )
-            if chat_message.tool_call
-            else None
-        ),
-        alternate_assistant_id=chat_message.alternate_assistant_id,
-        overridden_model=chat_message.overridden_model,
         error=chat_message.error,
         current_feedback=current_feedback,
     )
 
     return chat_msg_detail
-
-
-def log_agent_metrics(
-    db_session: Session,
-    user_id: UUID | None,
-    persona_id: int | None,  # Can be none if temporary persona is used
-    agent_type: str,
-    start_time: datetime | None,
-    agent_metrics: CombinedAgentMetrics,
-) -> AgentSearchMetrics:
-    agent_timings = agent_metrics.timings
-    agent_base_metrics = agent_metrics.base_metrics
-    agent_refined_metrics = agent_metrics.refined_metrics
-    agent_additional_metrics = agent_metrics.additional_metrics
-
-    agent_metric_tracking = AgentSearchMetrics(
-        user_id=user_id,
-        persona_id=persona_id,
-        agent_type=agent_type,
-        start_time=start_time,
-        base_duration_s=agent_timings.base_duration_s,
-        full_duration_s=agent_timings.full_duration_s,
-        base_metrics=vars(agent_base_metrics) if agent_base_metrics else None,
-        refined_metrics=vars(agent_refined_metrics) if agent_refined_metrics else None,
-        all_metrics=(
-            vars(agent_additional_metrics) if agent_additional_metrics else None
-        ),
-    )
-
-    db_session.add(agent_metric_tracking)
-    db_session.flush()
-
-    return agent_metric_tracking
-
-
-def log_agent_sub_question_results(
-    db_session: Session,
-    chat_session_id: UUID | None,
-    primary_message_id: int | None,
-    sub_question_answer_results: list[SubQuestionAnswerResults],
-) -> None:
-
-    now = datetime.now()
-
-    for sub_question_answer_result in sub_question_answer_results:
-        level, level_question_num = [
-            int(x) for x in sub_question_answer_result.question_id.split("_")
-        ]
-        sub_question = sub_question_answer_result.question
-        sub_answer = sub_question_answer_result.answer
-        sub_document_results = create_citation_format_list(
-            sub_question_answer_result.context_documents
-        )
-
-        sub_question_object = AgentSubQuestion(
-            chat_session_id=chat_session_id,
-            primary_question_id=primary_message_id,
-            level=level,
-            level_question_num=level_question_num,
-            sub_question=sub_question,
-            sub_answer=sub_answer,
-            sub_question_doc_results=sub_document_results,
-        )
-
-        db_session.add(sub_question_object)
-        db_session.commit()
-
-        sub_question_id = sub_question_object.id
-
-        for sub_query in sub_question_answer_result.sub_query_retrieval_results:
-            sub_query_object = AgentSubQuery(
-                parent_question_id=sub_question_id,
-                chat_session_id=chat_session_id,
-                sub_query=sub_query.query,
-                time_created=now,
-            )
-
-            db_session.add(sub_query_object)
-            db_session.commit()
-
-            search_docs = ServerSearchDoc.from_chunks_or_sections(
-                sub_query.retrieved_documents
-            )
-            for doc in search_docs:
-                db_doc = create_db_search_doc(doc, db_session)
-                db_session.add(db_doc)
-                sub_query_object.search_docs.append(db_doc)
-            db_session.commit()
-
-    return None
 
 
 def update_chat_session_updated_at_timestamp(
@@ -1114,10 +904,10 @@ def create_search_doc_from_inference_section(
     is_relevant: bool | None = None,
     relevance_explanation: str | None = None,
     commit: bool = False,
-) -> SearchDoc:
+) -> DBSearchDoc:
     """Create a SearchDoc in the database from an InferenceSection."""
 
-    db_search_doc = SearchDoc(
+    db_search_doc = DBSearchDoc(
         document_id=inference_section.center_chunk.document_id,
         chunk_ind=inference_section.center_chunk.chunk_id,
         semantic_id=inference_section.center_chunk.semantic_identifier,
@@ -1152,9 +942,9 @@ def create_search_doc_from_inference_section(
 
 def create_search_doc_from_saved_search_doc(
     saved_search_doc: SavedSearchDoc,
-) -> SearchDoc:
+) -> DBSearchDoc:
     """Convert SavedSearchDoc (server model) into DB SearchDoc with correct field mapping."""
-    return SearchDoc(
+    return DBSearchDoc(
         document_id=saved_search_doc.document_id,
         chunk_ind=saved_search_doc.chunk_ind,
         # Map Pydantic semantic_identifier -> DB semantic_id; ensure non-null
@@ -1182,21 +972,13 @@ def update_db_session_with_messages(
     db_session: Session,
     chat_message_id: int,
     chat_session_id: UUID,
-    is_agentic: bool | None,
     message: str | None = None,
     message_type: str | None = None,
     token_count: int | None = None,
-    rephrased_query: str | None = None,
-    citations: dict[int, int] | None = None,
     error: str | None = None,
-    alternate_assistant_id: int | None = None,
-    overridden_model: str | None = None,
-    research_type: str | None = None,
-    research_plan: dict[str, str] | None = None,
-    final_documents: list[SearchDoc] | None = None,
     update_parent_message: bool = True,
-    research_answer_purpose: ResearchAnswerPurpose | None = None,
     files: list[FileDescriptor] | None = None,
+    reasoning_tokens: str | None = None,
     commit: bool = False,
 ) -> ChatMessage:
     chat_message = (
@@ -1216,40 +998,21 @@ def update_db_session_with_messages(
         chat_message.message_type = MessageType(message_type)
     if token_count:
         chat_message.token_count = token_count
-    if rephrased_query:
-        chat_message.rephrased_query = rephrased_query
-    if citations:
-        # Convert string keys to integers to match database field type
-        chat_message.citations = {int(k): v for k, v in citations.items()}
     if error:
         chat_message.error = error
-    if alternate_assistant_id:
-        chat_message.alternate_assistant_id = alternate_assistant_id
-    if overridden_model:
-        chat_message.overridden_model = overridden_model
-    if research_type:
-        chat_message.research_type = ResearchType(research_type)
-    if research_plan:
-        chat_message.research_plan = research_plan
-    if final_documents:
-        chat_message.search_docs = final_documents
-    if is_agentic is not None:
-        chat_message.is_agentic = is_agentic
-
-    if research_answer_purpose:
-        chat_message.research_answer_purpose = research_answer_purpose
-
     if files is not None:
         chat_message.files = files
+    if reasoning_tokens is not None:
+        chat_message.reasoning_tokens = reasoning_tokens
 
     if update_parent_message:
         parent_chat_message = (
             db_session.query(ChatMessage)
-            .filter(ChatMessage.id == chat_message.parent_message)
+            .filter(ChatMessage.id == chat_message.parent_message_id)
             .first()
         )
         if parent_chat_message:
-            parent_chat_message.latest_child_message = chat_message.id
+            parent_chat_message.latest_child_message_id = chat_message.id
 
     if commit:
         db_session.commit()

@@ -2,18 +2,18 @@
 
 import React, { memo } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
+import { usePinnedAgentsWithDetails } from "@/lib/hooks/useAgents";
 import { useAppRouter } from "@/hooks/appNavigation";
 import SvgPin from "@/icons/pin";
 import { cn, noProp } from "@/lib/utils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { getAgentIcon } from "@/sections/sidebar/utils";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import SvgX from "@/icons/x";
 import useAppFocus from "@/hooks/useAppFocus";
 import useIsMounted from "@/hooks/useIsMounted";
+import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 
 interface SortableItemProps {
   id: number;
@@ -52,7 +52,7 @@ interface AgentButtonProps {
 function AgentButtonInner({ agent }: AgentButtonProps) {
   const route = useAppRouter();
   const activeSidebarTab = useAppFocus();
-  const { pinnedAgents, togglePinnedAgent } = useAgentsContext();
+  const { pinnedAgents, togglePinnedAgent } = usePinnedAgentsWithDetails();
   const pinned = pinnedAgents.some(
     (pinnedAgent) => pinnedAgent.id === agent.id
   );
@@ -62,7 +62,7 @@ function AgentButtonInner({ agent }: AgentButtonProps) {
       <div className="flex flex-col w-full h-full">
         <SidebarTab
           key={agent.id}
-          leftIcon={getAgentIcon(agent)}
+          leftIcon={() => <AgentAvatar agent={agent} />}
           onClick={() => route({ agentId: agent.id })}
           active={
             typeof activeSidebarTab === "object" &&

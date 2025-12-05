@@ -46,8 +46,8 @@ export interface RetrievalDetails {
   enable_auto_detect_filters?: boolean | null;
 }
 
-// Document ID -> Citation number
-export type CitationMap = { [key: string]: number };
+// Citation number -> Document ID (allows O(1) lookup when rendering citations)
+export type CitationMap = { [citation_num: number]: string };
 
 export enum ChatFileType {
   IMAGE = "image",
@@ -150,8 +150,6 @@ export interface BackendChatSession {
   description: string;
   persona_id: number;
   persona_name: string;
-  persona_icon_color: string | null;
-  persona_icon_shape: number | null;
   messages: BackendMessage[];
   time_created: string;
   time_updated: string;

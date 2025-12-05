@@ -8,7 +8,7 @@ import SvgPlug from "@/icons/plug";
 import SvgUnplug from "@/icons/unplug";
 import { PopoverMenu } from "@/components/ui/popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Switch from "@/refresh-components/inputs/Switch";
 
@@ -96,7 +96,7 @@ export default function SwitchList({
                 icon={
                   item.leading
                     ? ((() =>
-                        item.leading) as React.FunctionComponent<SvgProps>)
+                        item.leading) as React.FunctionComponent<IconProps>)
                     : undefined
                 }
                 rightChildren={

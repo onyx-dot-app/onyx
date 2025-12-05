@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import dynamic from "next/dynamic";
 import {
   useEffect,
   useMemo,
@@ -32,6 +31,7 @@ import SvgArrowRightCircle from "@/icons/arrow-right-circle";
 import RawModal from "@/refresh-components/RawModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgX from "@/icons/x";
+import SvgGlobe from "@/icons/globe";
 
 type WebSearchProviderType = "google_pse" | "serper" | "exa";
 type WebContentProviderType = "firecrawl" | "onyx_web_crawler" | (string & {});
@@ -218,9 +218,9 @@ const ProviderSetupModal = memo(
                   />
                 </FormField.Control>
                 {optionalField.description && (
-                  <div className="text-text-03 ml-0.5">
+                  <Text secondaryBody text03 className="ml-0.5">
                     {optionalField.description}
-                  </div>
+                  </Text>
                 )}
               </FormField>
             )}
@@ -321,9 +321,9 @@ const ProviderSetupModal = memo(
                   />
                 </FormField.Control>
                 {optionalField.description && (
-                  <div className="text-text-03 ml-0.5">
+                  <Text secondaryBody text03 className="ml-0.5">
                     {optionalField.description}
-                  </div>
+                  </Text>
                 )}
               </FormField>
             )}
@@ -805,7 +805,7 @@ export default function Page() {
       <div className="container mx-auto">
         <AdminPageTitle
           title="Web Search"
-          icon={<GlobeIcon size={32} className="my-auto" />}
+          icon={SvgGlobe}
           includeDivider={false}
         />
         <Callout type="danger" title="Failed to load web search settings">
@@ -825,7 +825,7 @@ export default function Page() {
       <div className="container mx-auto">
         <AdminPageTitle
           title="Web Search"
-          icon={<GlobeIcon size={32} className="my-auto" />}
+          icon={SvgGlobe}
           includeDivider={false}
         />
         <div className="mt-8">
@@ -1332,7 +1332,7 @@ export default function Page() {
         </div>
 
         <div className="mt-1 flex w-full max-w-[960px] flex-col gap-8 px-4 py-6">
-          <Separator className="my-0 bg-border-01" />
+          <Separator className="py-0" />
 
           <div className="flex flex-col gap-3 self-stretch">
             <div className="flex flex-col gap-0.5">

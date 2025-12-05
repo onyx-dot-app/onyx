@@ -13,6 +13,7 @@ const SvgFolderPartialOpen = React.forwardRef<SVGSVGElement, IconProps>(
       role={title ? "img" : "presentation"}
       aria-label={title}
       className={className}
+      stroke="currentColor"
       {...props}
     >
       {title ? <title>{title}</title> : null}

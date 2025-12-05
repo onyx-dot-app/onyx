@@ -5,7 +5,7 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { ProjectFile } from "@/app/chat/projects/ProjectsContext";
 import { formatRelativeTime } from "@/app/chat/components/projects/project_utils";
 import Text from "@/refresh-components/texts/Text";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 import SvgFileText from "@/icons/file-text";
 import SvgImage from "@/icons/image";
 import SvgEye from "@/icons/eye";
@@ -25,7 +25,7 @@ import CounterSeparator from "@/refresh-components/CounterSeparator";
 function getIcon(
   file: ProjectFile,
   isProcessing: boolean
-): React.FunctionComponent<SvgProps> {
+): React.FunctionComponent<IconProps> {
   if (isProcessing) return SimpleLoader;
   const ext = getFileExtension(file.name).toLowerCase();
   if (isImageExtension(ext)) return SvgImage;
@@ -88,7 +88,7 @@ export interface UserFilesModalProps {
   // Modal content
   title: string;
   description: string;
-  icon: React.FunctionComponent<SvgProps>;
+  icon: React.FunctionComponent<IconProps>;
   recentFiles: ProjectFile[];
   handleUploadChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   selectedFileIds?: string[];
@@ -182,17 +182,9 @@ export default function UserFilesModal({
           }}
           preventAccidentalClose={false}
         >
-          <Modal.CloseButton />
-
-          <Modal.Header className="flex flex-col gap-3 p-4">
-            <div className="flex flex-col gap-2">
-              <Modal.Icon icon={icon} />
-              <Modal.Title>{title}</Modal.Title>
-              <Modal.Description>{description}</Modal.Description>
-            </div>
-
+          <Modal.Header icon={icon} title={title} description={description}>
             {/* Search bar section */}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-row items-center gap-2">
               <InputTypeIn
                 ref={searchInputRef}
                 placeholder="Search files..."
@@ -224,7 +216,7 @@ export default function UserFilesModal({
                 <Text text03>No files found</Text>
               </div>
             ) : (
-              <ScrollIndicatorDiv className="px-2 pt-2 gap-2" variant="shadow">
+              <ScrollIndicatorDiv className="p-2 gap-2" variant="shadow">
                 {filtered.map((projectFle) => {
                   const isSelected = selectedIds.has(projectFle.id);
                   return (
@@ -271,6 +263,7 @@ export default function UserFilesModal({
               </ScrollIndicatorDiv>
             )}
           </Modal.Body>
+
           <Modal.Footer className="flex items-center justify-between p-4">
             {/* Left side: file count and controls */}
             {onPickRecent && (

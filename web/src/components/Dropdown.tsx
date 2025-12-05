@@ -8,10 +8,12 @@ import {
   useState,
   JSX,
 } from "react";
-import { ChevronDownIcon, PlusIcon } from "./icons/icons";
+import { ChevronDownIcon } from "./icons/icons";
 import { FiCheck, FiChevronDown, FiInfo } from "react-icons/fi";
 import { Popover } from "./popover/Popover";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import Button from "@/refresh-components/buttons/Button";
+import SvgPlus from "@/icons/plus";
 
 export interface Option<T> {
   name: string;
@@ -202,14 +204,14 @@ export function SearchMultiSelectDropdown({
                 (option) =>
                   option.name.toLowerCase() === searchTerm.toLowerCase()
               ) && (
-                <button
-                  className="w-full text-left flex items-center px-4 py-2 text-sm text-text-800 hover:bg-background-100"
+                <Button
+                  className="w-full"
                   role="menuitem"
                   onClick={handleCustomValueSelect}
+                  leftIcon={SvgPlus}
                 >
-                  <PlusIcon className="w-4 h-4 mr-2 text-text-600" />
                   Use &quot;{searchTerm}&quot; as custom value
-                </button>
+                </Button>
               )}
 
             {onCreate &&
@@ -220,18 +222,18 @@ export function SearchMultiSelectDropdown({
               ) && (
                 <>
                   <div className="border-t border-background-300"></div>
-                  <button
-                    className="w-full text-left flex items-center px-4 py-2 text-sm text-text-800 hover:bg-background-100"
+                  <Button
+                    className="w-full"
                     role="menuitem"
                     onClick={() => {
                       onCreate(searchTerm);
                       setIsOpen(false);
                       setSearchTerm("");
                     }}
+                    leftIcon={SvgPlus}
                   >
-                    <PlusIcon className="w-4 h-4 mr-2 text-text-600" />
                     Create label &quot;{searchTerm}&quot;
-                  </button>
+                  </Button>
                 </>
               )}
 
@@ -320,12 +322,12 @@ export function DefaultDropdownElement({
         flex
         mx-1
         px-2
-        text-sm 
-        py-1.5 
+        text-sm
+        py-1.5
         my-1
-        select-none 
+        select-none
         ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}
-        bg-transparent 
+        bg-transparent
         rounded
         text-text-dark
         ${disabled ? "" : "hover:bg-accent-background-hovered"}
@@ -397,14 +399,14 @@ export const DefaultDropdown = forwardRef<HTMLDivElement, DefaultDropdownProps>(
     const Content = (
       <div
         className={`
-          flex 
-          text-sm 
-          bg-background 
+          flex
+          text-sm
+          bg-background
           px-3
-          py-1.5 
-          rounded-lg 
-          border 
-          border-border 
+          py-1.5
+          rounded-lg
+          border
+          border-border
           cursor-pointer`}
       >
         <p className="line-clamp-1">
@@ -421,12 +423,12 @@ export const DefaultDropdown = forwardRef<HTMLDivElement, DefaultDropdownProps>(
       <div
         ref={ref}
         className={`
-        rounded-lg 
-        flex 
-        flex-col 
+        rounded-lg
+        flex
+        flex-col
         bg-background
         ${maxHeight || "max-h-96"}
-        overflow-y-auto 
+        overflow-y-auto
         overscroll-contain`}
       >
         {includeDefault && (
@@ -472,61 +474,3 @@ export const DefaultDropdown = forwardRef<HTMLDivElement, DefaultDropdownProps>(
     );
   }
 );
-
-export function ControlledPopup({
-  children,
-  popupContent,
-  isOpen,
-  setIsOpen,
-}: {
-  children: JSX.Element | string;
-  popupContent: JSX.Element | string;
-  isOpen: boolean;
-  setIsOpen: (value: boolean) => void;
-}) {
-  const filtersRef = useRef<HTMLDivElement>(null);
-  // hides logout popup on any click outside
-  const handleClickOutside = useCallback(
-    (event: MouseEvent) => {
-      if (
-        filtersRef.current &&
-        !filtersRef.current.contains(event.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    },
-    [filtersRef, setIsOpen]
-  );
-
-  useEffect(() => {
-    document.addEventListener("mousedown", handleClickOutside);
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [handleClickOutside]);
-
-  return (
-    <div ref={filtersRef} className="relative">
-      {children}
-      {isOpen && (
-        <div
-          className={`
-            absolute 
-            top-0 
-            bg-background 
-            border 
-            border-border 
-            z-30 
-            rounded 
-            text-text-darker 
-            shadow-lg`}
-          style={{ transform: "translateY(calc(-100% - 5px))" }}
-        >
-          {popupContent}
-        </div>
-      )}
-    </div>
-  );
-}
-DefaultDropdown.displayName = "DefaultDropdown";

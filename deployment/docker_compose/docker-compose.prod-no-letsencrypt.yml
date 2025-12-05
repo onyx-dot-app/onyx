@@ -125,7 +125,7 @@ services:
       context: ../../backend
       dockerfile: Dockerfile
     command: >
-      /bin/sh -c "if [ \"${MCP_SERVER_ENABLED}\" != \"True\" ] && [ \"${MCP_SERVER_ENABLED}\" != \"true\" ]; then
+      /bin/sh -c "if [ \"${MCP_SERVER_ENABLED:-}\" != \"True\" ] && [ \"${MCP_SERVER_ENABLED:-}\" != \"true\" ]; then
         echo 'MCP server is disabled (MCP_SERVER_ENABLED=false), skipping...';
         exit 0;
       else
@@ -164,7 +164,7 @@ services:
       context: ../../backend
       dockerfile: Dockerfile.model_server
     command: >
-      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER}\" = \"true\" ]; then
+      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER:-}\" = \"true\" ]; then
         echo 'Skipping service...';
         exit 0;
       else
@@ -192,7 +192,7 @@ services:
       context: ../../backend
       dockerfile: Dockerfile.model_server
     command: >
-      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER}\" = \"true\" ]; then
+      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER:-}\" = \"true\" ]; then
         echo 'Skipping service...';
         exit 0;
       else
@@ -330,7 +330,7 @@ services:
       - path: .env
         required: false
 
-    # Below is needed for the `docker-out-of-docker` execution mode 
+    # Below is needed for the `docker-out-of-docker` execution mode
     user: root
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -346,7 +346,7 @@ volumes:
   model_cache_huggingface:
   indexing_huggingface_model_cache:
   # for logs that we don't want to lose on container restarts
-  api_server_logs:  
+  api_server_logs:
   background_logs:
   inference_model_server_logs:
   indexing_model_server_logs:

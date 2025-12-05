@@ -1,24 +1,40 @@
+default_install_hook_types:
+  - pre-commit
+  - post-checkout
+  - post-merge
+  - post-rewrite
 repos:
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 569ddf04117761eb74cef7afb5143bbb96fcdfbb  # frozen: 0.9.15
+    hooks:
+      - id: uv-sync
+      # NOTE: This takes ~6s on a single, large module which is prohibitively slow.
+      # - id: uv-run
+      #   name: mypy
+      #   args: ["mypy"]
+      #   pass_filenames: true
+      #   files: ^backend/.*\.py$
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
     hooks:
       - id: check-yaml
         files: ^.github/
 
   - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.8
+    rev: a443f344ff32813837fa49f7aa6cbc478d770e62  # frozen: v1.7.9
     hooks:
       - id: actionlint
 
   - repo: https://github.com/psf/black
-    rev: 25.1.0
+    rev: 8a737e727ac5ab2f1d4cf5876720ed276dc8dc4b # frozen: 25.1.0
     hooks:
     - id: black
       language_version: python3.11
 
   # this is a fork which keeps compatibility with black
   - repo: https://github.com/wimglenn/reorder-python-imports-black
-    rev: v3.14.0
+    rev: f55cd27f90f0cf0ee775002c2383ce1c7820013d  # frozen: v3.14.0
     hooks:
     - id: reorder-python-imports
       args: ['--py311-plus', '--application-directories=backend/']
@@ -30,26 +46,32 @@ repos:
   # These settings will remove unused imports with side effects
   # Note: The repo currently does not and should not have imports with side effects
   - repo: https://github.com/PyCQA/autoflake
-    rev: v2.3.1
+    rev: 0544741e2b4a22b472d9d93e37d4ea9153820bb1  # frozen: v2.3.1
     hooks:
       - id: autoflake
         args: [ '--remove-all-unused-imports', '--remove-unused-variables', '--in-place' , '--recursive']
 
+  - repo: https://github.com/golangci/golangci-lint
+    rev: e6ebea0145f385056bce15041d3244c0e5e15848  # frozen: v2.7.0
+    hooks:
+      - id: golangci-lint
+        entry: bash -c "find tools/ -name go.mod -print0 | xargs -0 -I{} bash -c 'cd \"$(dirname {})\" && golangci-lint run ./...'"
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
-    rev: v0.11.4
+    rev: 971923581912ef60a6b70dbf0c3e9a39563c9d47  # frozen: v0.11.4
     hooks:
       - id: ruff
 
   - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v3.1.0
+    rev: ffb6a759a979008c0e6dff86e39f4745a2d9eac4  # frozen: v3.1.0
     hooks:
     - id: prettier
       types_or: [html, css, javascript, ts, tsx]
       language_version: system
 
   - repo: https://github.com/sirwart/ripsecrets
-    rev: v0.1.11
+    rev: 7d94620933e79b8acaa0cd9e60e9864b07673d86  # frozen: v0.1.11
     hooks:
       - id: ripsecrets
         args:
@@ -72,30 +94,9 @@ repos:
         language: system
         files: ^backend/(?!\.venv/).*\.py$
 
-  # We would like to have a mypy pre-commit hook, but due to the fact that
-  # pre-commit runs in it's own isolated environment, we would need to install
-  # and keep in sync all dependencies so mypy has access to the appropriate type
-  # stubs. This does not seem worth it at the moment, so for now we will stick to
-  # having mypy run via Github Actions / manually by contributors
-  # - repo: https://github.com/pre-commit/mirrors-mypy
-  #   rev: v1.1.1
-  #   hooks:
-  #     - id: mypy
-  #       exclude: ^tests/
-  #       # below are needed for type stubs since pre-commit runs in it's own
-  #       # isolated environment. Unfortunately, this needs to be kept in sync
-  #       # with requirements/dev.txt + requirements/default.txt
-  #       additional_dependencies: [
-  #         alembic==1.10.4,
-  #         types-beautifulsoup4==4.12.0.3,
-  #         types-html5lib==1.1.11.13,
-  #         types-oauthlib==3.2.0.9,
-  #         types-psycopg2==2.9.21.10,
-  #         types-python-dateutil==2.8.19.13,
-  #         types-regex==2023.3.23.1,
-  #         types-requests==2.28.11.17,
-  #         types-retry==0.9.9.3,
-  #         types-urllib3==1.26.25.11
-  #       ]
-  #       # TODO: add back once errors are addressed
-  #       # args: [--strict]
+      - id: typescript-check
+        name: TypeScript type check
+        entry: bash -c 'cd web && npm run types:check'
+        language: system
+        pass_filenames: false
+        files: ^web/.*\.(ts|tsx)$

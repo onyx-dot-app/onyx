@@ -20,6 +20,7 @@ jobs:
   scan-licenses:
     # See https://runs-on.com/runners/linux/
     runs-on: [runs-on,runner=2cpu-linux-x64,"run-id=${{ github.run_id }}-scan-licenses"]
+    timeout-minutes: 45
     permissions:
       actions: read
       contents: read
@@ -32,7 +33,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # ratchet:actions/setup-python@v6
+        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # ratchet:actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -89,6 +90,7 @@ jobs:
   scan-trivy:
     # See https://runs-on.com/runners/linux/
     runs-on: [runs-on,runner=2cpu-linux-x64,"run-id=${{ github.run_id }}-scan-trivy"]
+    timeout-minutes: 45
 
     steps:
     - name: Set up Docker Buildx
