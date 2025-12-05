@@ -70,12 +70,6 @@ uv export --no-emit-project --no-default-groups --no-hashes --extra ee -o backen
 uv export --no-emit-project --no-default-groups --no-hashes --extra model_server -o backend/requirements/model_server.txt
 ```
 
-or with pre-commit:
-
-```bash
-uv run pre-commit run uv-lock uv-export --all-files
-```
-
 ### 4. Installing Dependencies
 
 If enabled, all packages are installed automatically by the `uv-sync` pre-commit hook when changing
