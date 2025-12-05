@@ -185,6 +185,9 @@ dev = [
     "hatchling==1.28.0",
 ]
 
+[tool.uv]
+default-groups = "all"
+
 [tool.uv.workspace]
 members = ["backend", "tools/ods"]
 
