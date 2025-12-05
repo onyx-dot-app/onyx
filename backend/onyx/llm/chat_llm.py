@@ -92,9 +92,13 @@ def _convert_tools_to_responses_api_format(tools: list[dict]) -> list[dict]:
     for tool in tools:
         if tool.get("type") == "function" and "function" in tool:
             func = tool["function"]
+            name = func.get("name")
+            if not name:
+                logger.warning("Skipping tool with missing name in function definition")
+                continue
             converted_tool = {
                 "type": "function",
-                "name": func.get("name"),
+                "name": name,
                 "description": func.get("description", ""),
                 "parameters": func.get("parameters", {}),
             }
