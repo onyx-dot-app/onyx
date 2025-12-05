@@ -166,6 +166,11 @@ dev = [
     "hatchling==1.28.0",
 ]
 
+# Enterprise Edition features
+ee = [
+    "posthog==3.7.4",
+]
+
 # Model server specific dependencies (ML packages)
 model_server = [
     "accelerate==1.6.0",
@@ -178,11 +183,6 @@ model_server = [
     "torch==2.6.0",
     "transformers==4.53.0",
     "sentry-sdk[fastapi,celery,starlette]==2.14.0",
-]
-
-# Enterprise Edition features
-ee = [
-    "posthog==3.7.4",
 ]
 
 [tool.uv.workspace]
