@@ -251,15 +251,27 @@ def upsert_llm_provider(
 
     db_session.flush()
 
+    # Import here to avoid circular imports
+    from onyx.llm.utils import get_max_input_tokens
+
     for model_configuration in llm_provider_upsert_request.model_configurations:
+        # If max_input_tokens is not provided, look it up from LiteLLM
+        max_input_tokens = model_configuration.max_input_tokens
+        if max_input_tokens is None:
+            max_input_tokens = get_max_input_tokens(
+                model_name=model_configuration.name,
+                model_provider=llm_provider_upsert_request.provider,
+            )
+
         db_session.execute(
             insert(ModelConfiguration)
             .values(
                 llm_provider_id=existing_llm_provider.id,
                 name=model_configuration.name,
                 is_visible=model_configuration.is_visible,
-                max_input_tokens=model_configuration.max_input_tokens,
+                max_input_tokens=max_input_tokens,
                 supports_image_input=model_configuration.supports_image_input,
+                display_name=model_configuration.display_name,
             )
             .on_conflict_do_nothing()
         )
@@ -287,6 +299,56 @@ def upsert_llm_provider(
 
     full_llm_provider = LLMProviderView.from_model(existing_llm_provider)
     return full_llm_provider
+
+
+def sync_model_configurations(
+    db_session: Session,
+    provider_name: str,
+    models: list[dict],
+) -> int:
+    """Sync model configurations for a dynamic provider (OpenRouter, Bedrock, Ollama).
+
+    This inserts NEW models from the source API without overwriting existing ones.
+    User preferences (is_visible, max_input_tokens) are preserved for existing models.
+
+    Args:
+        db_session: Database session
+        provider_name: Name of the LLM provider
+        models: List of model dicts with keys: name, display_name, max_input_tokens, supports_image_input
+
+    Returns:
+        Number of new models added
+    """
+    provider = fetch_existing_llm_provider(name=provider_name, db_session=db_session)
+    if not provider:
+        raise ValueError(f"LLM Provider '{provider_name}' not found")
+
+    # Get existing model names to count new additions
+    existing_names = {mc.name for mc in provider.model_configurations}
+
+    new_count = 0
+    for model in models:
+        model_name = model["name"]
+        if model_name not in existing_names:
+            # Insert new model with is_visible=False (user must explicitly enable)
+            db_session.execute(
+                insert(ModelConfiguration)
+                .values(
+                    llm_provider_id=provider.id,
+                    name=model_name,
+                    is_visible=False,
+                    max_input_tokens=model.get("max_input_tokens"),
+                    supports_image_input=model.get("supports_image_input", False),
+                    display_name=model.get("display_name"),
+                )
+                .on_conflict_do_nothing()
+            )
+            new_count += 1
+
+    if new_count > 0:
+        db_session.commit()
+
+    return new_count
 
 
 def fetch_existing_embedding_providers(
