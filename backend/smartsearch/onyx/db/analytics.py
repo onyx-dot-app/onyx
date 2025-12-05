@@ -73,6 +73,11 @@ def fetch_per_user_query_analytics(
             ChatSession.user_id,
         )
         .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
+        .join(
+            ChatMessageFeedback,
+            ChatMessageFeedback.chat_message_id == ChatMessage.id,
+            isouter=True,
+        )
         .where(
             ChatMessage.time_sent >= start,
         )
