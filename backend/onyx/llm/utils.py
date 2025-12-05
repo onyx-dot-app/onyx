@@ -432,43 +432,40 @@ def get_llm_contextual_cost(
     return usd_per_prompt + usd_per_completion
 
 
-def get_llm_max_tokens(
+def llm_max_input_tokens(
     model_map: dict,
     model_name: str,
     model_provider: str,
 ) -> int:
-    """Best effort attempt to get the max tokens for the LLM"""
+    """Best effort attempt to get the max input tokens for the LLM."""
     if GEN_AI_MAX_TOKENS:
         # This is an override, so always return this
         logger.info(f"Using override GEN_AI_MAX_TOKENS: {GEN_AI_MAX_TOKENS}")
         return GEN_AI_MAX_TOKENS
 
-    try:
-        model_obj = find_model_obj(
-            model_map,
-            model_provider,
-            model_name,
-        )
-        if not model_obj:
-            raise RuntimeError(
-                f"No litellm entry found for {model_provider}/{model_name}"
-            )
-
-        if "max_input_tokens" in model_obj:
-            max_tokens = model_obj["max_input_tokens"]
-            return max_tokens
-
-        if "max_tokens" in model_obj:
-            max_tokens = model_obj["max_tokens"]
-            return max_tokens
-
-        raise RuntimeError("No max tokens found for LLM")
-    except Exception:
+    model_obj = find_model_obj(
+        model_map,
+        model_provider,
+        model_name,
+    )
+    if not model_obj:
         logger.warning(
             f"Model '{model_name}' not found in LiteLLM. "
             f"Falling back to {GEN_AI_MODEL_FALLBACK_MAX_TOKENS} tokens."
         )
         return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
+
+    if "max_input_tokens" in model_obj:
+        return model_obj["max_input_tokens"]
+
+    if "max_tokens" in model_obj:
+        return model_obj["max_tokens"]
+
+    logger.warning(
+        f"No max tokens found for '{model_name}'. "
+        f"Falling back to {GEN_AI_MODEL_FALLBACK_MAX_TOKENS} tokens."
+    )
+    return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 
 
 def get_llm_max_output_tokens(
@@ -476,31 +473,32 @@ def get_llm_max_output_tokens(
     model_name: str,
     model_provider: str,
 ) -> int:
-    """Best effort attempt to get the max output tokens for the LLM"""
-    try:
-        model_obj = model_map.get(f"{model_provider}/{model_name}")
-        if not model_obj:
-            model_obj = model_map[model_name]
-        else:
-            pass
+    """Best effort attempt to get the max output tokens for the LLM."""
+    default_output_tokens = int(GEN_AI_MODEL_FALLBACK_MAX_TOKENS)
 
-        if "max_output_tokens" in model_obj:
-            max_output_tokens = model_obj["max_output_tokens"]
-            return max_output_tokens
+    model_obj = model_map.get(f"{model_provider}/{model_name}")
+    if not model_obj:
+        model_obj = model_map.get(model_name)
 
-        # Fallback to a fraction of max_tokens if max_output_tokens is not specified
-        if "max_tokens" in model_obj:
-            max_output_tokens = int(model_obj["max_tokens"] * 0.1)
-            return max_output_tokens
-
-        raise RuntimeError("No max output tokens found for LLM")
-    except Exception:
-        default_output_tokens = int(GEN_AI_MODEL_FALLBACK_MAX_TOKENS)
+    if not model_obj:
         logger.warning(
             f"Model '{model_name}' not found in LiteLLM. "
             f"Falling back to {default_output_tokens} output tokens."
         )
         return default_output_tokens
+
+    if "max_output_tokens" in model_obj:
+        return model_obj["max_output_tokens"]
+
+    # Fallback to a fraction of max_tokens if max_output_tokens is not specified
+    if "max_tokens" in model_obj:
+        return int(model_obj["max_tokens"] * 0.1)
+
+    logger.warning(
+        f"No max output tokens found for '{model_name}'. "
+        f"Falling back to {default_output_tokens} output tokens."
+    )
+    return default_output_tokens
 
 
 def get_max_input_tokens(
@@ -517,7 +515,7 @@ def get_max_input_tokens(
     litellm_model_map = get_model_map()
 
     input_toks = (
-        get_llm_max_tokens(
+        llm_max_input_tokens(
             model_name=model_name,
             model_provider=model_provider,
             model_map=litellm_model_map,
