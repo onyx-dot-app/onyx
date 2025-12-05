@@ -157,12 +157,13 @@ coloredlogs==15.0.1
     # via onnxruntime
 courlan==1.3.2
     # via trafilatura
-cryptography==44.0.3
+cryptography==46.0.3
     # via
     #   authlib
     #   msal
     #   pdfminer-six
     #   pyjwt
+    #   sendgrid
 cyclopts==4.2.4
     # via fastmcp
 dask==2023.8.1
@@ -471,6 +472,7 @@ markupsafe==3.0.3
     # via
     #   jinja2
     #   mako
+    #   werkzeug
 marshmallow==3.26.1
     # via
     #   dataclasses-json
@@ -486,7 +488,7 @@ more-itertools==10.8.0
     # via simple-salesforce
 mpmath==1.3.0
     # via sympy
-msal==1.28.0
+msal==1.34.0
     # via office365-rest-python-client
 msgpack==1.1.2
     # via distributed
@@ -859,7 +861,7 @@ rsa==4.9.1
     # via google-auth
 s3transfer==0.13.1
     # via boto3
-sendgrid==6.11.0
+sendgrid==6.12.5
 sentry-sdk==2.14.0
     # via onyx
 shapely==2.0.6
@@ -899,8 +901,6 @@ sse-starlette==3.0.3
     # via mcp
 sseclient-py==1.8.0
     # via braintrust
-starkbank-ecdsa==2.2.0
-    # via sendgrid
 starlette==0.47.2
     # via
     #   fastapi
@@ -1057,6 +1057,8 @@ websockets==15.0.1
     # via
     #   fastmcp
     #   google-genai
+werkzeug==3.1.4
+    # via sendgrid
 wrapt==1.17.3
     # via
     #   aiobotocore
