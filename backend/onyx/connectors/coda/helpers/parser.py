@@ -99,24 +99,21 @@ class CodaParser:
             else:
                 return str(value)
         elif isinstance(value, list):
-            # Join list items with commas
             return ", ".join(str(item) for item in value)
         elif isinstance(value, bool):
-            # Render booleans as checkmark or empty
             return "✓" if value else ""
         else:
-            # Escape pipe characters and newlines for markdown tables
             return str(value).replace("|", "\\|").replace("\n", " ")
 
     @staticmethod
-    def convert_table_to_markdown(
+    def convert_table_to_html(
         table: CodaTableReference,
         columns: list[CodaColumn],
         rows: list[CodaRow],
     ) -> str:
-        """Convert table data to markdown format.
+        """Convert table data to HTML format.
 
-        Generates a markdown table with headers, separator row, and data rows.
+        Generates an HTML table with headers and data rows.
         Only includes columns marked as displayable.
 
         Args:
@@ -125,40 +122,46 @@ class CodaParser:
             rows: List of row data (may be truncated)
 
         Returns:
-            str: Markdown formatted table string
+            str: HTML formatted table string
         """
         # Handle empty cases
         if not columns:
-            return f"# {table.name}\n\n*Empty table - no columns defined*"
+            return (
+                f"<h1>{table.name}</h1><p><i>Empty table - no columns defined</i></p>"
+            )
 
         if not rows:
-            return f"# {table.name}\n\n*Empty table - no data*"
+            return f"<h1>{table.name}</h1><p><i>Empty table - no data</i></p>"
 
         # Build column name to ID mapping for displayable columns only
         col_id_to_name = {col.id: col.name for col in columns if col.display}
 
         if not col_id_to_name:
-            return f"# {table.name}\n\n*No displayable columns*"
+            return f"<h1>{table.name}</h1><p><i>No displayable columns</i></p>"
 
-        # Build markdown table
-        lines = [f"# {table.name}\n"]
+        # Build HTML table
+        html_parts = [f"<h1>{table.name}</h1>", "<table>", "<thead>", "<tr>"]
 
         # Header row
-        header_cells = [col_id_to_name[col_id] for col_id in col_id_to_name.keys()]
-        lines.append("| " + " | ".join(header_cells) + " |")
-
-        # Separator row
-        lines.append("| " + " | ".join(["---"] * len(header_cells)) + " |")
+        for col_name in col_id_to_name.values():
+            html_parts.append(f"<th>{col_name}</th>")
+        html_parts.append("</tr>")
+        html_parts.append("</thead>")
+        html_parts.append("<tbody>")
 
         # Data rows
         for row in rows:
-            cells = []
+            html_parts.append("<tr>")
             for col_id in col_id_to_name.keys():
                 value = row.values.get(col_id, "")
-                cells.append(CodaParser.format_cell_value(value))
-            lines.append("| " + " | ".join(cells) + " |")
+                formatted_value = CodaParser.format_cell_value(value)
+                html_parts.append(f"<td>{formatted_value}</td>")
+            html_parts.append("</tr>")
 
-        return "\n".join(lines)
+        html_parts.append("</tbody>")
+        html_parts.append("</table>")
+
+        return "".join(html_parts)
 
     @staticmethod
     def build_page_title(page: CodaPage) -> str:
@@ -179,21 +182,6 @@ class CodaParser:
             page_title = f"{page_title} - {page.subtitle}"
 
         return page_title
-
-    @staticmethod
-    def build_page_content(title: str, markdown_content: str) -> str:
-        """Build the full text content for a page document.
-
-        Combines the page title with the exported markdown content.
-
-        Args:
-            title: The page title
-            markdown_content: The markdown content exported from Coda
-
-        Returns:
-            str: The combined content ready for document indexing
-        """
-        return f"{title}\n\n{markdown_content}"
 
     @staticmethod
     def parse_html_content(content: str) -> list[TextSection | ImageSection]:

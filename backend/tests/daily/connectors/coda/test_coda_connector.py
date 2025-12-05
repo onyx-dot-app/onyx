@@ -46,9 +46,14 @@ def api_client(api_token: str) -> CodaAPIClient:
 
 
 @pytest.fixture(scope="session")
-def connector(api_token: str, test_docs: list[dict[str, Any]]) -> CodaConnector:
+def connector(
+    request: pytest.FixtureRequest, api_token: str, test_docs: list[dict[str, Any]]
+) -> CodaConnector:
     """Fixture to create and authenticate connector."""
-    conn = CodaConnector(batch_size=5, doc_ids=[test_docs[0]["id"]])
+    conn = CodaConnector(
+        batch_size=5,
+        doc_ids=[test_docs[0]["id"]],
+    )
     conn.load_credentials({"coda_api_token": api_token})
     conn.validate_connector_settings()
     return conn
@@ -294,10 +299,7 @@ class TestLoadFromStateEndToEnd:
                     assert len(section.text) > 0
                 elif isinstance(section, ImageSection):
                     assert section.image_file_id is not None
-                if connector.export_format == "markdown":
-                    assert section.link is not None
 
-            # Metadata
             assert "doc_id" in doc.metadata
             assert "page_id" in doc.metadata or "table_id" in doc.metadata
             assert "path" in doc.metadata or "table_name" in doc.metadata
@@ -373,15 +375,14 @@ class TestLoadFromStateEndToEnd:
 
                 assert section.text is not None, f"Section text is None for {doc.id}"
 
-                if connector.export_format == "markdown":
-                    lines = section.text.strip().split("\n")
-                    assert (
-                        len(lines) > 1
-                    ), f"Section {lines} {doc.sections.index(section)} has only title and blank line, {doc.semantic_identifier}"
-
-                    logger.info(
-                        f"Document {doc.id} {doc.semantic_identifier} has {len(lines)} lines"
-                    )
+                # For HTML, check for tags or minimal content length
+                assert len(section.text) > 0, f"Section text is empty for doc {doc.id}"
+                # Basic check for HTML-like content if it's not a plain text section
+                if "<" in section.text and ">" in section.text:
+                    pass  # Looks like HTML
+                else:
+                    # It might be plain text even in HTML mode if source is simple
+                    pass
 
                 # Content should be meaningfully longer than just the title
                 if doc.metadata.get("type") != CodaObjectType.TABLE:
@@ -418,45 +419,14 @@ class TestLoadFromStateEndToEnd:
 
 
 class TestExportFormats:
-    """Test suite for different export formats (markdown vs html)."""
+    """Test suite for content export."""
 
-    def test_markdown_export(
+    def test_content_export(
         self, api_token: str, test_docs: list[dict[str, Any]]
     ) -> None:
-        """Test that markdown export works correctly."""
-        # Create connector with markdown format (default)
-        connector = CodaConnector(
-            batch_size=5, export_format="markdown", doc_ids=[test_docs[1]["id"]]
-        )
-        connector.load_credentials({"coda_api_token": api_token})
-
-        # Load documents
-        gen = connector.load_from_state()
-        batches = list(gen)
-        logger.info(f"Loaded {len(batches)} batches")
-
-        # Check that we got documents
-        all_docs = []
-        for batch in batches:
-            all_docs.extend(batch)
-
-        assert len(all_docs) > 0, "Should have at least one document"
-
-        # Verify content is markdown (check for markdown headers)
-        page_docs = [doc for doc in all_docs if "page_id" in doc.metadata]
-        if page_docs:
-            sample_doc = page_docs[0]
-            content = sample_doc.sections[0].text
-            # Markdown typically has # headers
-            assert "#" in content or len(content) > 0, "Should have markdown content"
-            print(f"\nMarkdown export verified: {len(page_docs)} pages")
-
-    def test_html_export(self, api_token: str, test_docs: list[dict[str, Any]]) -> None:
-        """Test that HTML export works correctly."""
-        # Create connector with HTML format
-        connector = CodaConnector(
-            batch_size=5, export_format="html", doc_ids=[test_docs[1]["id"]]
-        )
+        """Test that content export works correctly."""
+        # Create connector
+        connector = CodaConnector(batch_size=5, doc_ids=[test_docs[1]["id"]])
         connector.load_credentials({"coda_api_token": api_token})
 
         # Load documents

@@ -37,7 +37,8 @@ class CodaConnector(LoadConnector, PollConnector, SlimConnector):
         doc_ids (list[str] | None): Specific doc IDs to index. If None, indexes all.
         max_table_rows (int): Maximum rows to fetch per table
         include_tables (bool): Whether to index table content
-        export_format (str): Format for page exports - 'markdown' or 'html' (default: 'markdown')
+        max_table_rows (int): Maximum rows to fetch per table
+        include_tables (bool): Whether to index table content
     """
 
     def __init__(
@@ -46,14 +47,12 @@ class CodaConnector(LoadConnector, PollConnector, SlimConnector):
         doc_ids: list[str] | None = None,
         max_table_rows: int = 1000,
         include_tables: bool = True,
-        export_format: str = "markdown",
     ) -> None:
         """Initialize with parameters."""
         self.batch_size = batch_size
         self.doc_ids = set(doc_ids) if doc_ids else None
         self.max_table_rows = max_table_rows
         self.include_tables = include_tables
-        self.export_format = export_format
 
         # Clients initialized after credentials loaded
         self.client: CodaAPIClient | None = None
@@ -71,7 +70,6 @@ class CodaConnector(LoadConnector, PollConnector, SlimConnector):
             client=self.client,
             parser=self.parser,
             max_table_rows=self.max_table_rows,
-            export_format=self.export_format,
         )
 
         return None

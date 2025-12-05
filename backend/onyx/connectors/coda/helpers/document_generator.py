@@ -8,9 +8,7 @@ from onyx.connectors.coda.models.page import CodaPage
 from onyx.connectors.coda.models.table import CodaTableReference
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import Document
-from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -34,7 +32,6 @@ class CodaDocumentGenerator:
         client: CodaAPIClient,
         parser: CodaParser,
         max_table_rows: int = 1000,
-        export_format: str = "markdown",
     ) -> None:
         """Initialize with dependencies.
 
@@ -42,12 +39,10 @@ class CodaDocumentGenerator:
             client: CodaAPIClient for API calls
             parser: CodaParser for data transformation
             max_table_rows: Maximum rows to fetch per table
-            export_format: Format for page exports - 'markdown' or 'html'
         """
         self.client = client
         self.parser = parser
         self.max_table_rows = max_table_rows
-        self.export_format = export_format
         self.indexed_pages: set[str] = set()
         self.indexed_tables: set[str] = set()
         self.skipped_pages: set[str] = set()
@@ -81,9 +76,7 @@ class CodaDocumentGenerator:
             logger.info(f"Reading page '{page.name}' in doc '{doc.name}'")
 
             # Get page content from API
-            content = self.client.export_page_content(
-                doc.id, page.id, self.export_format
-            )
+            content = self.client.export_page_content(doc.id, page.id, "html")
 
             if content is None:
                 self.skipped_pages.add(page.id)
@@ -106,19 +99,7 @@ class CodaDocumentGenerator:
             # Parse page title and content
             page_title = self.parser.build_page_title(page)
 
-            sections: list[TextSection | ImageSection] = []
-
-            if self.export_format == "html":
-                sections = self.parser.parse_html_content(content)
-
-            else:
-                text = self.parser.build_page_content(page_title, content)
-                sections = [
-                    TextSection(
-                        link=page.browserLink,
-                        text=text,
-                    )
-                ]
+            sections = self.parser.parse_html_content(content)
 
             # Build metadata
             metadata = self.parser.build_page_metadata(doc, page, page_map)
@@ -183,8 +164,8 @@ class CodaDocumentGenerator:
                     logger.debug(f"Skipping table '{table.name}': no rows")
                     continue
 
-                # Parse table to markdown
-                content = self.parser.convert_table_to_markdown(table, columns, rows)
+                # Parse table to HTML
+                content = self.parser.convert_table_to_html(table, columns, rows)
 
                 # Mark as indexed
                 self.indexed_tables.add(table_key)
@@ -195,12 +176,8 @@ class CodaDocumentGenerator:
                 # Build owners (tables use doc owner since they don't have individual authors)
                 primary_owners = self.parser.build_doc_owners(doc)
 
-                sections: list[TextSection | ImageSection] = [
-                    TextSection(
-                        link=table.browserLink,
-                        text=content,
-                    )
-                ]
+                # Parse the HTML table into sections
+                sections = self.parser.parse_html_content(content)
 
                 yield Document(
                     id=table_key,
