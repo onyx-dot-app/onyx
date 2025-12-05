@@ -25,7 +25,7 @@ export default function GenericConfirmModal({
         <Modal.Body>
           <Text>{message}</Text>
         </Modal.Body>
-        <Modal.Footer className="p-4">
+        <Modal.Footer>
           <Button onClick={onConfirm}>{confirmText}</Button>
         </Modal.Footer>
       </Modal.Content>
