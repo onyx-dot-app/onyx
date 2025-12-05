@@ -1,7 +1,9 @@
 import type React from "react";
 import { MCPServer } from "@/lib/tools/interfaces";
+import { IconProps } from "@/icons";
 
-export enum MCPActionStatus {
+// Generic action status for UI components
+export enum ActionStatus {
   CONNECTED = "connected",
   PENDING = "pending",
   DISCONNECTED = "disconnected",
@@ -42,7 +44,7 @@ export interface MCPTool {
   id: string;
   name: string;
   description: string;
-  icon?: React.ReactNode;
+  icon?: React.FunctionComponent<IconProps>;
   isAvailable: boolean;
   isEnabled: boolean;
 }

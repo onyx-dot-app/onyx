@@ -11,15 +11,29 @@ import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import SvgServer from "@/icons/server";
 import SvgCheckCircle from "@/icons/check-circle";
 import { createMCPServer, updateMCPServer } from "@/lib/tools/mcpService";
-import { MCPServerCreateRequest, MCPServerStatus } from "@/lib/tools/types";
+import {
+  MCPServerCreateRequest,
+  MCPServerStatus,
+  MCPServerWithStatus,
+} from "@/lib/tools/types";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Separator from "@/refresh-components/Separator";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgUnplug from "@/icons/unplug";
-import { useMCPActions } from "@/sections/actions/MCPActionsContext";
+import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { ModalCreationInterface } from "@/refresh-components/contexts/ModalContext";
 
 interface AddMCPServerModalProps {
   skipOverlay?: boolean;
+  serverToManage: MCPServerWithStatus | null;
+  setServerToManage: (server: MCPServerWithStatus | null) => void;
+  setServerToDisconnect: (server: MCPServerWithStatus | null) => void;
+  disconnectModal: ModalCreationInterface;
+  manageServerModal: ModalCreationInterface;
+  onServerCreated?: (server: MCPServerWithStatus) => void;
+  handleAuthenticate: (serverId: number) => void;
+  setPopup?: (spec: PopupSpec) => void;
+  mutateMcpServers?: () => Promise<void>;
 }
 
 const validationSchema = Yup.object().shape({
@@ -32,22 +46,20 @@ const validationSchema = Yup.object().shape({
 
 export default function AddMCPServerModal({
   skipOverlay = false,
+  serverToManage,
+  setServerToManage,
+  setServerToDisconnect,
+  disconnectModal,
+  manageServerModal,
+  onServerCreated,
+  handleAuthenticate,
+  setPopup,
+  mutateMcpServers,
 }: AddMCPServerModalProps) {
   const { isOpen, toggle } = useModal();
-  const {
-    mutateMcpServers,
-    setPopup,
-    serverToManage,
-    disconnectModal,
-    manageServerModal,
-    setServerToDisconnect,
-    setServerToManage,
-    onServerCreated,
-    handleAuthenticate,
-  } = useMCPActions();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Use serverToManage from context
+  // Use serverToManage from props
   const server = serverToManage;
 
   // Handler for disconnect button
@@ -75,21 +87,21 @@ export default function AddMCPServerModal({
       if (isEditMode && server) {
         // Update existing server
         await updateMCPServer(server.id, values);
-        setPopup({
+        setPopup?.({
           message: "MCP Server updated successfully",
           type: "success",
         });
-        await mutateMcpServers();
+        await mutateMcpServers?.();
       } else {
         // Create new server
         const createdServer = await createMCPServer(values);
 
-        setPopup({
+        setPopup?.({
           message: "MCP Server created successfully",
           type: "success",
         });
 
-        await mutateMcpServers();
+        await mutateMcpServers?.();
 
         if (onServerCreated) {
           onServerCreated(createdServer);
@@ -103,7 +115,7 @@ export default function AddMCPServerModal({
         `Error ${isEditMode ? "updating" : "creating"} MCP server:`,
         error
       );
-      setPopup({
+      setPopup?.({
         message:
           error instanceof Error
             ? error.message

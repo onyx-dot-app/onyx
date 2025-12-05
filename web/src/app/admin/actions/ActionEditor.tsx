@@ -20,7 +20,7 @@ import Link from "next/link";
 import Separator from "@/refresh-components/Separator";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import { useAuthType } from "@/lib/hooks";
-import { AuthType } from "@/lib/constants";
+import { AuthType, DOCS_ADMINS_PATH } from "@/lib/constants";
 import { InfoIcon } from "@/components/icons/icons";
 import {
   Table,
@@ -171,7 +171,7 @@ function ActionForm({
         {/* Documentation Link */}
         <div className="rounded-md border border-border bg-background-50 p-4">
           <Link
-            href="https://docs.onyx.app/admin/actions/overview"
+            href={`${DOCS_ADMINS_PATH}/actions/overview`}
             className="flex items-center gap-2 group"
             target="_blank"
             rel="noopener noreferrer"

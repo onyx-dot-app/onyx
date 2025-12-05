@@ -1,5 +1,6 @@
+"use client";
 import { ToolSnapshot } from "@/lib/tools/types";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
@@ -16,7 +17,7 @@ import { updateCustomTool, deleteCustomTool } from "@/lib/tools/openApiService";
 import { updateToolStatus } from "@/lib/tools/mcpService";
 import DisconnectEntityModal from "./modals/DisconnectEntityModal";
 
-export default function OpenApiActionsList() {
+export default function OpenApiPageContent() {
   const { data: openApiTools, mutate: mutateOpenApiTools } = useSWR<
     ToolSnapshot[]
   >("/api/tool/openapi", errorHandlingFetcher, {
@@ -34,6 +35,20 @@ export default function OpenApiActionsList() {
     useState<ToolSnapshot | null>(null);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSharedOverlay, setShowSharedOverlay] = useState(false);
+
+  useEffect(() => {
+    const anyModalOpen =
+      addOpenAPIActionModal.isOpen ||
+      openAPIAuthModal.isOpen ||
+      disconnectModal.isOpen;
+    setShowSharedOverlay(anyModalOpen);
+  }, [
+    addOpenAPIActionModal.isOpen,
+    openAPIAuthModal.isOpen,
+    disconnectModal.isOpen,
+  ]);
 
   const handleOpenAuthModal = useCallback(
     (tool: ToolSnapshot) => {
@@ -212,44 +227,57 @@ export default function OpenApiActionsList() {
     }
   }, [disconnectModal, handleDisableTool, toolPendingDisconnect]);
 
+  const executeDeleteTool = useCallback(
+    async (tool: ToolSnapshot) => {
+      try {
+        setIsDeleting(true);
+        const response = await deleteCustomTool(tool.id);
+        if (response.data) {
+          setPopup({
+            message: `${tool.name} deleted successfully.`,
+            type: "success",
+          });
+          await mutateOpenApiTools();
+        } else {
+          throw new Error(response.error || "Failed to delete tool.");
+        }
+      } catch (error) {
+        console.error("Failed to delete OpenAPI tool", error);
+        setPopup({
+          message:
+            error instanceof Error
+              ? error.message
+              : "An unexpected error occurred while deleting the tool.",
+          type: "error",
+        });
+        throw error;
+      } finally {
+        setIsDeleting(false);
+      }
+    },
+    [mutateOpenApiTools, setPopup]
+  );
+
   const handleDeleteToolFromModal = useCallback(async () => {
     if (!toolPendingDisconnect || isDeleting) {
       return;
     }
 
     try {
-      setIsDeleting(true);
-      const response = await deleteCustomTool(toolPendingDisconnect.id);
-      if (response.data) {
-        setPopup({
-          message: `${toolPendingDisconnect.name} deleted successfully.`,
-          type: "success",
-        });
-        await mutateOpenApiTools();
-      } else {
-        setPopup({
-          message: response.error || "Failed to delete tool.",
-          type: "error",
-        });
-      }
-    } catch (error) {
-      console.error("Failed to delete OpenAPI tool", error);
-      setPopup({
-        message: "An unexpected error occurred while deleting the tool.",
-        type: "error",
-      });
+      await executeDeleteTool(toolPendingDisconnect);
     } finally {
-      setIsDeleting(false);
       disconnectModal.toggle(false);
       setToolPendingDisconnect(null);
     }
-  }, [
-    disconnectModal,
-    isDeleting,
-    mutateOpenApiTools,
-    setPopup,
-    toolPendingDisconnect,
-  ]);
+  }, [disconnectModal, executeDeleteTool, isDeleting, toolPendingDisconnect]);
+
+  const handleDeleteTool = useCallback(
+    async (tool: ToolSnapshot) => {
+      if (isDeleting) return;
+      await executeDeleteTool(tool);
+    },
+    [executeDeleteTool, isDeleting]
+  );
 
   const handleAddAction = useCallback(() => {
     setToolBeingEdited(null);
@@ -259,6 +287,33 @@ export default function OpenApiActionsList() {
   const handleAddModalClose = useCallback(() => {
     setToolBeingEdited(null);
   }, []);
+
+  const handleRenameTool = useCallback(
+    async (toolId: number, newName: string) => {
+      try {
+        const response = await updateCustomTool(toolId, { name: newName });
+        if (response.error) {
+          throw new Error(response.error);
+        }
+        setPopup({
+          message: "OpenAPI action renamed successfully",
+          type: "success",
+        });
+        await mutateOpenApiTools();
+      } catch (error) {
+        console.error("Error renaming tool:", error);
+        setPopup({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to rename OpenAPI action",
+          type: "error",
+        });
+        throw error; // Re-throw so ButtonRenaming can handle it
+      }
+    },
+    [setPopup, mutateOpenApiTools]
+  );
 
   const authenticationModalTitle = useMemo(() => {
     if (!selectedTool) {
@@ -280,25 +335,53 @@ export default function OpenApiActionsList() {
     return selectedTool.custom_headers?.length ? "custom-header" : "oauth";
   }, [selectedTool]);
 
+  // Filter tools based on search query
+  const filteredTools = useMemo(() => {
+    if (!openApiTools) return [];
+    if (!searchQuery.trim()) return openApiTools;
+
+    const query = searchQuery.toLowerCase();
+    return openApiTools.filter(
+      (tool) =>
+        tool.name.toLowerCase().includes(query) ||
+        tool.description?.toLowerCase().includes(query)
+    );
+  }, [openApiTools, searchQuery]);
+
   return (
     <>
       {popup}
+      {showSharedOverlay && (
+        <div
+          className="fixed inset-0 z-[2000] bg-mask-03 backdrop-blur-03 pointer-events-none data-[state=open]:animate-in data-[state=open]:fade-in-0"
+          data-state="open"
+          aria-hidden="true"
+        />
+      )}
       <Actionbar
-        hasActions={false}
+        hasActions={(openApiTools?.length ?? 0) > 0}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
         onAddAction={handleAddAction}
         buttonText="Add OpenAPI Action"
+        className="mb-4"
       />
-      {openApiTools?.map((tool) => (
-        <OpenApiActionCard
-          key={tool.id}
-          tool={tool}
-          onAuthenticate={handleOpenAuthModal}
-          onManage={handleManageTool}
-          mutateOpenApiTools={mutateOpenApiTools}
-          setPopup={setPopup}
-          onOpenDisconnectModal={handleOpenDisconnectModal}
-        />
-      ))}
+
+      <div className="flex flex-col gap-4 w-full">
+        {filteredTools?.map((tool) => (
+          <OpenApiActionCard
+            key={tool.id}
+            tool={tool}
+            onAuthenticate={handleOpenAuthModal}
+            onManage={handleManageTool}
+            onDelete={handleDeleteTool}
+            onRename={handleRenameTool}
+            mutateOpenApiTools={mutateOpenApiTools}
+            setPopup={setPopup}
+            onOpenDisconnectModal={handleOpenDisconnectModal}
+          />
+        ))}
+      </div>
 
       <addOpenAPIActionModal.Provider>
         <AddOpenAPIActionModal
@@ -324,6 +407,7 @@ export default function OpenApiActionsList() {
       <openAPIAuthModal.Provider>
         <OpenAPIAuthenticationModal
           isOpen={openAPIAuthModal.isOpen}
+          skipOverlay
           onClose={resetAuthModal}
           title={authenticationModalTitle}
           entityName={selectedTool?.name ?? null}
