@@ -89,11 +89,6 @@ class CodaDocumentGenerator:
                 logger.debug(f"Skipping page '{page.name}': no content")
                 continue
 
-            if len(content) < len(page.name) + 15:
-                self.skipped_pages.add(page.id)
-                logger.debug(f"Skipping page '{page.name}': no content")
-                continue
-
             # Mark as indexed
             self.indexed_pages.add(page_key)
 
@@ -190,7 +185,7 @@ class CodaDocumentGenerator:
 
             except Exception as e:
                 logger.warning(
-                    f"Error processing table '{table.name}' in doc '{doc.name}': {e}"
+                    f"Error processing table '{table.name}' in doc '{doc.name}': {type(e).__name__}: {e}"
                 )
                 continue
 
