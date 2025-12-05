@@ -13,7 +13,14 @@ import { FeedbackType } from "@/app/chat/interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import CitedSourcesToggle from "@/app/chat/message/messageComponents/CitedSourcesToggle";
 import { TooltipGroup } from "@/components/tooltip/CustomTooltip";
-import { useRef, useState, useEffect, useCallback, RefObject } from "react";
+import {
+  useRef,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  RefObject,
+} from "react";
 import {
   useChatSessionStore,
   useDocumentSidebarVisible,
@@ -89,6 +96,26 @@ export default function AIMessage({
     activeResponse,
   } = useModelResponses(modelResponses);
 
+  // DEBUG: Log modelResponses
+  if (modelResponses && modelResponses.length > 0) {
+    console.log(
+      "[AIMessage] nodeId:",
+      nodeId,
+      "modelResponses:",
+      modelResponses.length,
+      "hasMultipleResponses:",
+      hasMultipleResponses
+    );
+  }
+
+  // When in multi-model mode, use the active response's packets instead of rawPackets
+  const effectivePackets = useMemo(() => {
+    if (hasMultipleResponses && activeResponse?.message?.packets) {
+      return activeResponse.message.packets;
+    }
+    return rawPackets;
+  }, [hasMultipleResponses, activeResponse, rawPackets]);
+
   const modal = useCreateModal();
   const [feedbackModalProps, setFeedbackModalProps] =
     useState<FeedbackModalProps | null>(null);
@@ -156,7 +183,8 @@ export default function AIMessage({
   );
 
   const [finalAnswerComing, _setFinalAnswerComing] = useState(
-    isFinalAnswerComing(rawPackets) || isStreamingComplete(rawPackets)
+    isFinalAnswerComing(effectivePackets) ||
+      isStreamingComplete(effectivePackets)
   );
   const setFinalAnswerComing = (value: boolean) => {
     _setFinalAnswerComing(value);
@@ -164,7 +192,7 @@ export default function AIMessage({
   };
 
   const [displayComplete, _setDisplayComplete] = useState(
-    isStreamingComplete(rawPackets)
+    isStreamingComplete(effectivePackets)
   );
   const setDisplayComplete = (value: boolean) => {
     _setDisplayComplete(value);
@@ -172,7 +200,7 @@ export default function AIMessage({
   };
 
   const [stopPacketSeen, _setStopPacketSeen] = useState(
-    isStreamingComplete(rawPackets)
+    isStreamingComplete(effectivePackets)
   );
   const setStopPacketSeen = (value: boolean) => {
     _setStopPacketSeen(value);
@@ -190,12 +218,20 @@ export default function AIMessage({
   const groupedPacketsRef = useRef<{ turn_index: number; packets: Packet[] }[]>(
     []
   );
-  const finalAnswerComingRef = useRef<boolean>(isFinalAnswerComing(rawPackets));
-  const displayCompleteRef = useRef<boolean>(isStreamingComplete(rawPackets));
-  const stopPacketSeenRef = useRef<boolean>(isStreamingComplete(rawPackets));
+  const finalAnswerComingRef = useRef<boolean>(
+    isFinalAnswerComing(effectivePackets)
+  );
+  const displayCompleteRef = useRef<boolean>(
+    isStreamingComplete(effectivePackets)
+  );
+  const stopPacketSeenRef = useRef<boolean>(
+    isStreamingComplete(effectivePackets)
+  );
   // Track turn_index values for graceful SECTION_END injection
   const seenTurnIndicesRef = useRef<Set<number>>(new Set());
   const turnIndicesWithSectionEndRef = useRef<Set<number>>(new Set());
+  // Track previous activeModelIndex for synchronous reset detection
+  const prevActiveModelIndexRef = useRef<number>(activeModelIndex);
 
   // Reset incremental state when switching messages or when stream resets
   const resetState = () => {
@@ -206,9 +242,9 @@ export default function AIMessage({
     documentMapRef.current = new Map();
     groupedPacketsMapRef.current = new Map();
     groupedPacketsRef.current = [];
-    finalAnswerComingRef.current = isFinalAnswerComing(rawPackets);
-    displayCompleteRef.current = isStreamingComplete(rawPackets);
-    stopPacketSeenRef.current = isStreamingComplete(rawPackets);
+    finalAnswerComingRef.current = isFinalAnswerComing(effectivePackets);
+    displayCompleteRef.current = isStreamingComplete(effectivePackets);
+    stopPacketSeenRef.current = isStreamingComplete(effectivePackets);
     seenTurnIndicesRef.current = new Set();
     turnIndicesWithSectionEndRef.current = new Set();
   };
@@ -216,8 +252,19 @@ export default function AIMessage({
     resetState();
   }, [nodeId]);
 
+  // SYNCHRONOUS reset when switching model tabs - must happen BEFORE packet processing
+  // useEffect runs AFTER render, but packet processing happens DURING render,
+  // so we need to detect tab changes synchronously to avoid mixing packets
+  if (
+    hasMultipleResponses &&
+    prevActiveModelIndexRef.current !== activeModelIndex
+  ) {
+    resetState();
+    prevActiveModelIndexRef.current = activeModelIndex;
+  }
+
   // If the upstream replaces packets with a shorter list (reset), clear state
-  if (lastProcessedIndexRef.current > rawPackets.length) {
+  if (lastProcessedIndexRef.current > effectivePackets.length) {
     resetState();
   }
 
@@ -256,9 +303,13 @@ export default function AIMessage({
   };
 
   // Process only the new packets synchronously for this render
-  if (rawPackets.length > lastProcessedIndexRef.current) {
-    for (let i = lastProcessedIndexRef.current; i < rawPackets.length; i++) {
-      const packet = rawPackets[i];
+  if (effectivePackets.length > lastProcessedIndexRef.current) {
+    for (
+      let i = lastProcessedIndexRef.current;
+      i < effectivePackets.length;
+      i++
+    ) {
+      const packet = effectivePackets[i];
       if (!packet) continue;
 
       const currentTurnIndex = packet.turn_index;
@@ -385,7 +436,7 @@ export default function AIMessage({
       .filter(({ packets }) => hasContentPackets(packets))
       .sort((a, b) => a.turn_index - b.turn_index);
 
-    lastProcessedIndexRef.current = rawPackets.length;
+    lastProcessedIndexRef.current = effectivePackets.length;
   }
 
   const citations = citationsRef.current;
@@ -587,7 +638,9 @@ export default function AIMessage({
                             )}
 
                             <CopyIconButton
-                              getCopyText={() => getTextContent(rawPackets)}
+                              getCopyText={() =>
+                                getTextContent(effectivePackets)
+                              }
                               tertiary
                               data-testid="AIMessage/copy-button"
                             />

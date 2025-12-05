@@ -143,6 +143,12 @@ export interface Message {
 
   // feedback state
   currentFeedback?: FeedbackType | null;
+
+  // Multi-model response support
+  modelProvider?: string;
+  modelName?: string;
+  // Groups parallel multi-model responses together
+  responseGroupId?: string;
 }
 
 export interface BackendChatSession {
@@ -192,6 +198,11 @@ export interface BackendMessage {
   tool_call: ToolCallFinalResult | null;
   current_feedback: string | null;
 
+  // Multi-model response support
+  model_provider: string | null;
+  model_name: string | null;
+  response_group_id: string | null;
+
   sub_questions: SubQuestionDetail[];
   // Keeping existing properties
   comments: any;
@@ -203,6 +214,10 @@ export interface BackendMessage {
 export interface MessageResponseIDInfo {
   user_message_id: number | null;
   reserved_assistant_message_id: number;
+  // Multi-model response support
+  model_provider?: string | null;
+  model_name?: string | null;
+  response_group_id?: string | null;
 }
 
 export interface UserKnowledgeFilePacket {

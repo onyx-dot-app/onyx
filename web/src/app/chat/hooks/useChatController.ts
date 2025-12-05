@@ -618,10 +618,100 @@ export function useChatController({
         initialAssistantNode = result.initialAssistantNode;
       }
 
+      // Multi-model response support: track all assistant nodes being streamed
+      interface AssistantNodeData {
+        node: Message;
+        answer: string;
+        packets: Packet[];
+        documents: OnyxDocument[];
+        citations: CitationMap | null;
+        finalMessage: BackendMessage | null;
+        // Multi-model info
+        modelProvider?: string;
+        modelName?: string;
+        responseGroupId?: string;
+        // Track if we've received the backend message ID for this node
+        backendMessageId?: number;
+      }
+      const assistantNodes: Map<number, AssistantNodeData> = new Map();
+      let currentStreamingAssistantId: number | null = null;
+      let assistantNodeIdOffset = 1;
+
+      // Check if multiple models are selected (for pre-creating all nodes)
+      const selectedModels = llmManager.selectedLlms;
+      const isMultiModel = !modelOverride && selectedModels.length > 1;
+
+      // Generate a client-side response group ID for multi-model
+      const clientResponseGroupId = isMultiModel
+        ? crypto.randomUUID()
+        : undefined;
+
+      // Create all assistant nodes upfront if multi-model
+      // This ensures tabs appear immediately without flash/delay
+      const allInitialAssistantNodes: Message[] = [];
+      if (isMultiModel) {
+        selectedModels.forEach((model, i) => {
+          const nodeOffset = i + 1;
+          // Build message with model info included from the start
+          const assistantNode =
+            i === 0
+              ? {
+                  ...initialAssistantNode,
+                  modelProvider: model.name,
+                  modelName: model.modelName,
+                  responseGroupId: clientResponseGroupId,
+                }
+              : buildEmptyMessage({
+                  messageType: "assistant",
+                  parentNodeId: initialUserNode.nodeId,
+                  nodeIdOffset: nodeOffset,
+                  modelProvider: model.name,
+                  modelName: model.modelName,
+                  responseGroupId: clientResponseGroupId,
+                });
+
+          allInitialAssistantNodes.push(assistantNode);
+
+          // Use negative temporary IDs to distinguish from real backend IDs
+          // Will be replaced when MessageResponseIDInfo arrives
+          const tempId = -(i + 1);
+          assistantNodes.set(tempId, {
+            node: assistantNode,
+            answer: "",
+            packets: [],
+            documents: selectedDocuments,
+            citations: null,
+            finalMessage: null,
+            modelProvider: model.name,
+            modelName: model.modelName,
+            responseGroupId: clientResponseGroupId,
+          });
+        });
+        assistantNodeIdOffset = selectedModels.length;
+      } else {
+        allInitialAssistantNodes.push(initialAssistantNode);
+      }
+
       // make messages appear + clear input bar
       const messagesToUpsert = regenerationRequest
-        ? [initialAssistantNode] // Only upsert the new assistant for regeneration
-        : [initialUserNode, initialAssistantNode]; // Upsert both for normal/edit flow
+        ? allInitialAssistantNodes // Only upsert assistants for regeneration
+        : [initialUserNode, ...allInitialAssistantNodes]; // Upsert user + all assistants
+
+      // DEBUG: Log pre-created messages
+      if (isMultiModel) {
+        console.log("[useChatController] Pre-creating multi-model nodes:", {
+          clientResponseGroupId,
+          messagesCount: messagesToUpsert.length,
+          messages: messagesToUpsert.map((m) => ({
+            nodeId: m.nodeId,
+            type: m.type,
+            modelProvider: m.modelProvider,
+            modelName: m.modelName,
+            responseGroupId: m.responseGroupId,
+          })),
+        });
+      }
+
       currentMessageTreeLocal = upsertToCompleteMessageTree({
         messages: messagesToUpsert,
         completeMessageTreeOverride: currentMessageTreeLocal,
@@ -650,6 +740,9 @@ export function useChatController({
 
       let newUserMessageId: number | null = null;
       let newAssistantMessageId: number | null = null;
+
+      // Track which pre-created node index we're on (for multi-model)
+      let nextPreCreatedNodeIndex = 0;
 
       try {
         const lastSuccessfulMessageId = getLastSuccessfulMessageId(
@@ -696,6 +789,7 @@ export function useChatController({
             user_file_id: file.id,
           })),
           regenerate: regenerationRequest !== undefined,
+          // Single model override (for regeneration or backwards compatibility)
           modelProvider:
             modelOverride?.name || llmManager.currentLlm.name || undefined,
           modelVersion:
@@ -704,6 +798,15 @@ export function useChatController({
             searchParams?.get(SEARCH_PARAM_NAMES.MODEL_VERSION) ||
             undefined,
           temperature: llmManager.temperature || undefined,
+          // Multi-model support: if multiple LLMs are selected and no single override,
+          // send all selected models
+          llmOverrides:
+            !modelOverride && llmManager.selectedLlms.length > 1
+              ? llmManager.selectedLlms.map((llm) => ({
+                  model_provider: llm.name,
+                  model_version: llm.modelName,
+                }))
+              : undefined,
           systemPromptOverride:
             searchParams?.get(SEARCH_PARAM_NAMES.SYSTEM_PROMPT) || undefined,
           useExistingUserMessage: isSeededChat,
@@ -746,8 +849,81 @@ export function useChatController({
             if (
               (packet as MessageResponseIDInfo).reserved_assistant_message_id
             ) {
-              newAssistantMessageId = (packet as MessageResponseIDInfo)
-                .reserved_assistant_message_id;
+              const msgInfo = packet as MessageResponseIDInfo;
+              const reservedId = msgInfo.reserved_assistant_message_id;
+
+              // Multi-model with pre-created nodes: map backend ID to pre-created node
+              if (
+                isMultiModel &&
+                nextPreCreatedNodeIndex < selectedModels.length
+              ) {
+                // Find the pre-created node (stored with negative temp ID)
+                const tempId = -(nextPreCreatedNodeIndex + 1);
+                const preCreatedData = assistantNodes.get(tempId);
+
+                if (preCreatedData) {
+                  // Move from temp ID to real backend ID
+                  assistantNodes.delete(tempId);
+                  assistantNodes.set(reservedId, {
+                    ...preCreatedData,
+                    backendMessageId: reservedId,
+                    // Keep using client-side responseGroupId during streaming for consistent grouping
+                    // The backend's response_group_id arrives at different times for each model,
+                    // which would cause tabs to disappear/reappear during streaming
+                    responseGroupId: preCreatedData.responseGroupId,
+                  });
+                  nextPreCreatedNodeIndex++;
+                }
+                currentStreamingAssistantId = reservedId;
+                newAssistantMessageId = reservedId;
+              }
+              // Single model or fallback: create node on demand
+              else if (!assistantNodes.has(reservedId)) {
+                if (assistantNodes.size === 0) {
+                  assistantNodes.set(reservedId, {
+                    node: initialAssistantNode,
+                    answer: "",
+                    packets: [],
+                    documents: selectedDocuments,
+                    citations: null,
+                    finalMessage: null,
+                    modelProvider: msgInfo.model_provider ?? undefined,
+                    modelName: msgInfo.model_name ?? undefined,
+                    responseGroupId: msgInfo.response_group_id ?? undefined,
+                  });
+                } else {
+                  // Create a new assistant node for additional models
+                  assistantNodeIdOffset++;
+                  const newAssistantNode = buildEmptyMessage({
+                    messageType: "assistant",
+                    parentNodeId: initialUserNode.nodeId,
+                    nodeIdOffset: assistantNodeIdOffset,
+                  });
+                  assistantNodes.set(reservedId, {
+                    node: newAssistantNode,
+                    answer: "",
+                    packets: [],
+                    documents: selectedDocuments,
+                    citations: null,
+                    finalMessage: null,
+                    modelProvider: msgInfo.model_provider ?? undefined,
+                    modelName: msgInfo.model_name ?? undefined,
+                    responseGroupId: msgInfo.response_group_id ?? undefined,
+                  });
+                  // Add the new assistant node to the tree
+                  currentMessageTreeLocal = upsertToCompleteMessageTree({
+                    messages: [newAssistantNode],
+                    completeMessageTreeOverride: currentMessageTreeLocal,
+                    chatSessionId: frozenSessionId,
+                  });
+                }
+                currentStreamingAssistantId = reservedId;
+                newAssistantMessageId = reservedId;
+              } else {
+                // Already have this ID, just switch to streaming for it
+                currentStreamingAssistantId = reservedId;
+                newAssistantMessageId = reservedId;
+              }
             }
 
             if (Object.hasOwn(packet, "user_files")) {
@@ -783,6 +959,15 @@ export function useChatController({
               throw new Error((packet as StreamingError).error);
             } else if (Object.hasOwn(packet, "message_id")) {
               finalMessage = packet as BackendMessage;
+              // Multi-model: associate finalMessage with current streaming assistant
+              if (currentStreamingAssistantId !== null) {
+                const currentAssistant = assistantNodes.get(
+                  currentStreamingAssistantId
+                );
+                if (currentAssistant) {
+                  currentAssistant.finalMessage = finalMessage;
+                }
+              }
             } else if (Object.hasOwn(packet, "stop_reason")) {
               const stop_reason = (packet as StreamStopInfo).stop_reason;
               if (stop_reason === StreamStopReason.CONTEXT_LENGTH) {
@@ -791,6 +976,16 @@ export function useChatController({
             } else if (Object.hasOwn(packet, "obj")) {
               console.debug("Object packet:", JSON.stringify(packet));
               packets.push(packet as Packet);
+
+              // Multi-model: route packets to the current streaming assistant
+              if (currentStreamingAssistantId !== null) {
+                const currentAssistant = assistantNodes.get(
+                  currentStreamingAssistantId
+                );
+                if (currentAssistant) {
+                  currentAssistant.packets.push(packet as Packet);
+                }
+              }
 
               // Check if the packet contains document information
               const packetObj = (packet as Packet).obj;
@@ -807,6 +1002,18 @@ export function useChatController({
                   ...(citations || {}),
                   [citationInfo.citation_number]: citationInfo.document_id,
                 };
+                // Multi-model: also track citations per assistant
+                if (currentStreamingAssistantId !== null) {
+                  const currentAssistant = assistantNodes.get(
+                    currentStreamingAssistantId
+                  );
+                  if (currentAssistant) {
+                    currentAssistant.citations = {
+                      ...(currentAssistant.citations || {}),
+                      [citationInfo.citation_number]: citationInfo.document_id,
+                    };
+                  }
+                }
               } else if (packetObj.type === "citation_delta") {
                 // Batched citation packet (for backwards compatibility)
                 const citationDelta = packetObj as CitationDelta;
@@ -820,11 +1027,37 @@ export function useChatController({
                       ])
                     ),
                   };
+                  // Multi-model: also track citations per assistant
+                  if (currentStreamingAssistantId !== null) {
+                    const currentAssistant = assistantNodes.get(
+                      currentStreamingAssistantId
+                    );
+                    if (currentAssistant) {
+                      currentAssistant.citations = {
+                        ...(currentAssistant.citations || {}),
+                        ...Object.fromEntries(
+                          citationDelta.citations.map((c) => [
+                            c.citation_num,
+                            c.document_id,
+                          ])
+                        ),
+                      };
+                    }
+                  }
                 }
               } else if (packetObj.type === "message_start") {
                 const messageStart = packetObj as MessageStart;
                 if (messageStart.final_documents) {
                   documents = messageStart.final_documents;
+                  // Multi-model: also track documents per assistant
+                  if (currentStreamingAssistantId !== null) {
+                    const currentAssistant = assistantNodes.get(
+                      currentStreamingAssistantId
+                    );
+                    if (currentAssistant) {
+                      currentAssistant.documents = messageStart.final_documents;
+                    }
+                  }
                   updateSelectedNodeForDocDisplay(
                     frozenSessionId,
                     initialAssistantNode.nodeId
@@ -840,30 +1073,105 @@ export function useChatController({
             parentMessage =
               parentMessage || currentMessageTreeLocal?.get(SYSTEM_NODE_ID)!;
 
-            currentMessageTreeLocal = upsertToCompleteMessageTree({
-              messages: [
-                {
-                  ...initialUserNode,
-                  messageId: newUserMessageId ?? undefined,
-                  files: files,
-                },
-                {
-                  ...initialAssistantNode,
-                  messageId: newAssistantMessageId ?? undefined,
-                  message: error || answer,
-                  type: error ? "error" : "assistant",
+            // Build messages to upsert, including all assistant nodes for multi-model support
+            const messagesToUpsertInLoop: Message[] = [
+              {
+                ...initialUserNode,
+                messageId: newUserMessageId ?? undefined,
+                files: files,
+              },
+            ];
+
+            // Add all assistant nodes (single or multi-model)
+            // DEBUG: Log what we're about to upsert
+            console.log(
+              "[useChatController streaming] assistantNodes.size:",
+              assistantNodes.size,
+              "isMultiModel:",
+              isMultiModel
+            );
+            if (assistantNodes.size > 0) {
+              for (const [assistantMsgId, assistantData] of Array.from(
+                assistantNodes.entries()
+              )) {
+                console.log(
+                  "[useChatController streaming] Upserting assistant:",
+                  {
+                    msgId: assistantMsgId,
+                    nodeId: assistantData.node.nodeId,
+                    responseGroupId: assistantData.responseGroupId,
+                    nodeResponseGroupId: assistantData.node.responseGroupId,
+                  }
+                );
+                // Only set messageId if we have a real backend ID (positive number)
+                // Negative IDs are temporary client-side IDs for pre-created nodes
+                const realMessageId =
+                  assistantMsgId > 0 ? assistantMsgId : undefined;
+
+                const msgToUpsert: Message = {
+                  ...assistantData.node,
+                  messageId: realMessageId,
+                  message: error || answer, // For now, use the global answer (will be fixed for proper multi-model)
+                  type: error ? "error" : ("assistant" as const),
                   retrievalType,
-                  query: finalMessage?.rephrased_query || query,
-                  documents: documents,
-                  citations: finalMessage?.citations || citations || {},
-                  files: finalMessage?.files || aiMessageImages || [],
-                  toolCall: finalMessage?.tool_call || toolCall,
+                  query: assistantData.finalMessage?.rephrased_query || query,
+                  documents: assistantData.documents,
+                  citations:
+                    assistantData.finalMessage?.citations ||
+                    assistantData.citations ||
+                    {},
+                  files:
+                    assistantData.finalMessage?.files || aiMessageImages || [],
+                  toolCall: assistantData.finalMessage?.tool_call || toolCall,
                   stackTrace: stackTrace,
-                  overridden_model: finalMessage?.overridden_model,
+                  overridden_model:
+                    assistantData.finalMessage?.overridden_model,
                   stopReason: stopReason,
-                  packets: packets,
-                },
-              ],
+                  // Use per-model packets only - don't fall back to global packets
+                  // This ensures each model tab shows only its own content
+                  packets: assistantData.packets,
+                  // Multi-model: include model info for grouping
+                  // Use finalMessage if available, otherwise use info from pre-created node
+                  modelProvider:
+                    assistantData.finalMessage?.model_provider ??
+                    assistantData.modelProvider,
+                  modelName:
+                    assistantData.finalMessage?.model_name ??
+                    assistantData.modelName,
+                  // Prioritize client-side responseGroupId for consistent grouping during streaming
+                  responseGroupId:
+                    assistantData.responseGroupId ??
+                    assistantData.finalMessage?.response_group_id ??
+                    undefined,
+                };
+                console.log(
+                  "[useChatController streaming] msgToUpsert responseGroupId:",
+                  msgToUpsert.responseGroupId
+                );
+                messagesToUpsertInLoop.push(msgToUpsert);
+              }
+            } else {
+              // Fallback for single model (no MessageResponseIDInfo received yet)
+              messagesToUpsertInLoop.push({
+                ...initialAssistantNode,
+                messageId: newAssistantMessageId ?? undefined,
+                message: error || answer,
+                type: error ? "error" : "assistant",
+                retrievalType,
+                query: finalMessage?.rephrased_query || query,
+                documents: documents,
+                citations: finalMessage?.citations || citations || {},
+                files: finalMessage?.files || aiMessageImages || [],
+                toolCall: finalMessage?.tool_call || toolCall,
+                stackTrace: stackTrace,
+                overridden_model: finalMessage?.overridden_model,
+                stopReason: stopReason,
+                packets: packets,
+              });
+            }
+
+            currentMessageTreeLocal = upsertToCompleteMessageTree({
+              messages: messagesToUpsertInLoop,
               // Pass the latest map state
               completeMessageTreeOverride: currentMessageTreeLocal,
               chatSessionId: frozenSessionId!,

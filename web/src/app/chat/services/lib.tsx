@@ -180,6 +180,8 @@ export interface SendMessageParams {
   useAgentSearch?: boolean;
   enabledToolIds?: number[];
   forcedToolIds?: number[];
+  // Multi-model response support
+  llmOverrides?: { model_provider: string; model_version: string }[];
 }
 
 export async function* sendMessage({
@@ -203,6 +205,7 @@ export async function* sendMessage({
   useAgentSearch,
   enabledToolIds,
   forcedToolIds,
+  llmOverrides,
 }: SendMessageParams): AsyncGenerator<PacketType, void, unknown> {
   const documentsAreSelected =
     selectedDocumentIds && selectedDocumentIds.length > 0;
@@ -232,14 +235,18 @@ export async function* sendMessage({
           system_prompt: systemPromptOverride,
         }
       : null,
+    // Multi-model response support: if llmOverrides is provided with multiple models,
+    // send it as llm_overrides; otherwise use single llm_override for backwards compatibility
     llm_override:
-      temperature || modelVersion
+      !llmOverrides && (temperature || modelVersion)
         ? {
             temperature,
             model_provider: modelProvider,
             model_version: modelVersion,
           }
         : null,
+    llm_overrides:
+      llmOverrides && llmOverrides.length > 0 ? llmOverrides : null,
     use_existing_user_message: useExistingUserMessage,
     use_agentic_search: useAgentSearch ?? false,
     allowed_tool_ids: enabledToolIds,
@@ -550,6 +557,10 @@ export function processRawChatHistory(
       overridden_model: messageInfo.overridden_model,
       packets: packetsForMessage || [],
       currentFeedback: messageInfo.current_feedback as FeedbackType | null,
+      // Multi-model response support
+      modelProvider: messageInfo.model_provider ?? undefined,
+      modelName: messageInfo.model_name ?? undefined,
+      responseGroupId: messageInfo.response_group_id ?? undefined,
     };
 
     messages.set(messageInfo.message_id, message);

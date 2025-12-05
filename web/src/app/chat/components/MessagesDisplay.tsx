@@ -77,6 +77,43 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
   // Stable fallbacks to avoid changing prop identities on each render
   const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
   const emptyChildrenIds = useMemo<number[]>(() => [], []);
+
+  // Build a map of responseGroupId -> Messages for multi-model response grouping
+  // Also track which nodeIds should be skipped (all but the first in each group)
+  // Use nodeId instead of messageId because pre-created nodes have undefined messageId
+  const { responseGroupMap, nodeIdsToSkip } = useMemo(() => {
+    const groupMap = new Map<string, Message[]>();
+    const skipNodeIds = new Set<number>();
+
+    for (const msg of messageHistory) {
+      // Use nodeId for grouping - it's always present even for pre-created nodes
+      if (msg.responseGroupId) {
+        const existing = groupMap.get(msg.responseGroupId);
+        if (existing) {
+          // This is not the first message in the group - skip it
+          existing.push(msg);
+          skipNodeIds.add(msg.nodeId);
+        } else {
+          // First message in the group - will be rendered with tabs
+          groupMap.set(msg.responseGroupId, [msg]);
+        }
+      }
+    }
+
+    // DEBUG: Log grouping result
+    if (groupMap.size > 0) {
+      console.log(
+        "[MessagesDisplay] responseGroupMap:",
+        Array.from(groupMap.entries()).map(([k, v]) => ({
+          groupId: k,
+          messageCount: v.length,
+          nodeIds: v.map((m) => m.nodeId),
+        }))
+      );
+    }
+
+    return { responseGroupMap: groupMap, nodeIdsToSkip: skipNodeIds };
+  }, [messageHistory]);
   const createRegenerator = useCallback(
     (regenerationRequest: {
       messageId: number;
@@ -178,13 +215,62 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
           // so the previous message is guaranteed to be the parent of the current message
           const previousMessage = i !== 0 ? messageHistory[i - 1] : null;
 
-          // MOCK: Generate modelResponses from currently selected LLMs
-          // In the real implementation, this would come from the message data itself
-          // (each message would store which models were used when it was sent)
-          const mockModelResponses: ModelResponse[] | undefined =
-            llmManager.selectedLlms.length > 1
-              ? llmManager.selectedLlms.map((llm) => ({ model: llm }))
-              : undefined;
+          // Multi-model response grouping:
+          // Skip messages that are not the first in their response group
+          if (nodeIdsToSkip.has(message.nodeId)) {
+            return null;
+          }
+
+          // Build modelResponses from all messages in this response group
+          let modelResponses: ModelResponse[] | undefined;
+          let responseGroupNodeIds: Set<number> | undefined;
+
+          if (message.responseGroupId) {
+            const groupMessages = responseGroupMap.get(message.responseGroupId);
+            console.log(
+              "[MessagesDisplay] Rendering message with responseGroupId:",
+              {
+                messageNodeId: message.nodeId,
+                responseGroupId: message.responseGroupId,
+                groupMessagesCount: groupMessages?.length,
+                groupNodeIds: groupMessages?.map((m) => m.nodeId),
+              }
+            );
+            if (groupMessages && groupMessages.length > 1) {
+              modelResponses = groupMessages.map((msg) => ({
+                model: {
+                  name: msg.modelProvider || "",
+                  provider: msg.modelProvider || "",
+                  modelName: msg.modelName || "",
+                },
+                // Include the actual message for this model's response
+                message: msg,
+              }));
+              console.log(
+                "[MessagesDisplay] Created modelResponses:",
+                modelResponses.length
+              );
+              // Track nodeIds in this group to exclude from branch switching
+              responseGroupNodeIds = new Set(
+                groupMessages.map((msg) => msg.nodeId)
+              );
+            }
+          }
+
+          // Filter out messages that are part of the same response group from branch switching
+          // Multi-model responses should appear as tabs, not as alternative branches
+          const switchableMessages = (() => {
+            const allChildren =
+              parentMessage?.childrenNodeIds ?? emptyChildrenIds;
+            if (!responseGroupNodeIds || responseGroupNodeIds.size === 0) {
+              return allChildren;
+            }
+            // Keep only messages NOT in the same response group (except current message)
+            return allChildren.filter(
+              (nodeId) =>
+                nodeId === message.nodeId || !responseGroupNodeIds!.has(nodeId)
+            );
+          })();
 
           return (
             <div
@@ -206,12 +292,10 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
                 overriddenModel={llmManager.currentLlm?.modelName}
                 nodeId={message.nodeId}
                 llmManager={llmManager}
-                otherMessagesCanSwitchTo={
-                  parentMessage?.childrenNodeIds ?? emptyChildrenIds
-                }
+                otherMessagesCanSwitchTo={switchableMessages}
                 onMessageSelection={onMessageSelection}
                 researchType={message.researchType}
-                modelResponses={mockModelResponses}
+                modelResponses={modelResponses}
               />
             </div>
           );

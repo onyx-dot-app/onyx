@@ -84,6 +84,21 @@ export function upsertMessages(
   let newMessages = new Map(currentMessages);
   let messagesToAddClones = messagesToAdd.map((msg) => ({ ...msg })); // Clone all incoming messages
 
+  // DEBUG: Log messages being upserted
+  const assistantMsgs = messagesToAddClones.filter(
+    (m) => m.type === "assistant"
+  );
+  if (assistantMsgs.length > 0) {
+    console.log(
+      "[upsertMessages] Assistant messages being added:",
+      assistantMsgs.map((m) => ({
+        nodeId: m.nodeId,
+        responseGroupId: m.responseGroupId,
+        modelProvider: m.modelProvider,
+      }))
+    );
+  }
+
   if (newMessages.size === 0 && messagesToAddClones.length > 0) {
     const firstMessage = messagesToAddClones[0];
     if (!firstMessage) {
@@ -254,6 +269,43 @@ export function getLatestMessageChain(messages: MessageTreeState): Message[] {
     return chain;
   }
 
+  // Build a map of responseGroupId -> all messages in that group
+  // This is used to include all multi-model responses when we encounter one
+  const responseGroupMap = new Map<string, Message[]>();
+  for (const msg of Array.from(messages.values())) {
+    if (msg.responseGroupId) {
+      const existing = responseGroupMap.get(msg.responseGroupId) || [];
+      existing.push(msg);
+      responseGroupMap.set(msg.responseGroupId, existing);
+    }
+  }
+
+  // DEBUG: Log all assistant messages in tree and their responseGroupId
+  const allAssistantMsgs = Array.from(messages.values()).filter(
+    (m) => m.type === "assistant"
+  );
+  console.log(
+    "[getLatestMessageChain] Tree has",
+    messages.size,
+    "messages,",
+    allAssistantMsgs.length,
+    "assistants"
+  );
+  if (allAssistantMsgs.length > 0) {
+    console.log(
+      "[getLatestMessageChain] Assistant messages in tree:",
+      allAssistantMsgs.map((m) => ({
+        nodeId: m.nodeId,
+        responseGroupId: m.responseGroupId,
+        modelProvider: m.modelProvider,
+      }))
+    );
+  }
+  console.log(
+    "[getLatestMessageChain] responseGroupMap size:",
+    responseGroupMap.size
+  );
+
   // Find the root message
   let root: Message | undefined;
   if (messages.has(SYSTEM_NODE_ID)) {
@@ -285,6 +337,9 @@ export function getLatestMessageChain(messages: MessageTreeState): Message[] {
     chain.push(root);
   }
 
+  // Track which response groups we've already added to avoid duplicates
+  const addedResponseGroups = new Set<string>();
+
   while (
     currentMessage?.latestChildNodeId !== null &&
     currentMessage?.latestChildNodeId !== undefined
@@ -292,8 +347,41 @@ export function getLatestMessageChain(messages: MessageTreeState): Message[] {
     const nextNodeId = currentMessage.latestChildNodeId;
     const nextMessage = messages.get(nextNodeId);
     if (nextMessage) {
-      chain.push(nextMessage);
-      currentMessage = nextMessage;
+      // Check if this message is part of a multi-model response group
+      if (
+        nextMessage.responseGroupId &&
+        !addedResponseGroups.has(nextMessage.responseGroupId)
+      ) {
+        // Add ALL messages in this response group (for tabbed display)
+        const groupMessages = responseGroupMap.get(nextMessage.responseGroupId);
+        if (groupMessages && groupMessages.length > 1) {
+          // Sort by nodeId to ensure consistent ordering
+          const sortedGroupMessages = [...groupMessages].sort(
+            (a, b) => a.nodeId - b.nodeId
+          );
+          for (const msg of sortedGroupMessages) {
+            chain.push(msg);
+          }
+          addedResponseGroups.add(nextMessage.responseGroupId);
+          // Continue from the last message in the group (they should all have same parent,
+          // so we can pick any to continue the chain - pick the one that was "latest")
+          currentMessage = nextMessage;
+        } else {
+          // Only one message in group, add normally
+          chain.push(nextMessage);
+          currentMessage = nextMessage;
+        }
+      } else if (
+        nextMessage.responseGroupId &&
+        addedResponseGroups.has(nextMessage.responseGroupId)
+      ) {
+        // Already added this group, just move to next
+        currentMessage = nextMessage;
+      } else {
+        // Normal message (no response group)
+        chain.push(nextMessage);
+        currentMessage = nextMessage;
+      }
     } else {
       console.warn(
         `Chain broken: Message with nodeId ${nextNodeId} not found.`
@@ -414,6 +502,10 @@ interface BuildEmptyMessageParams {
   message?: string;
   files?: FileDescriptor[];
   nodeIdOffset?: number;
+  // Multi-model support
+  modelProvider?: string;
+  modelName?: string;
+  responseGroupId?: string;
 }
 
 export const buildEmptyMessage = (params: BuildEmptyMessageParams): Message => {
@@ -427,6 +519,10 @@ export const buildEmptyMessage = (params: BuildEmptyMessageParams): Message => {
     toolCall: null,
     parentNodeId: params.parentNodeId,
     packets: [],
+    // Multi-model support
+    modelProvider: params.modelProvider,
+    modelName: params.modelName,
+    responseGroupId: params.responseGroupId,
   };
 };
 

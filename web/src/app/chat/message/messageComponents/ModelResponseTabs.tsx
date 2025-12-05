@@ -5,10 +5,12 @@ import { LlmDescriptor } from "@/lib/hooks";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import { cn } from "@/lib/utils";
 
+import { Message } from "@/app/chat/interfaces";
+
 export interface ModelResponse {
   model: LlmDescriptor;
-  // For now, we'll just use the model info. Content is handled by parent.
-  // In future: could include per-model packets, citations, etc.
+  // The actual message data for this model's response
+  message?: Message;
 }
 
 interface ModelResponseTabsProps {
