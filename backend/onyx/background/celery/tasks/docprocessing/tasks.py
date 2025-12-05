@@ -816,7 +816,6 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
             secondary_cc_pair_ids: list[int] = []
             secondary_search_settings = get_secondary_search_settings(db_session)
             if secondary_search_settings:
-                # Only include paused CC pairs for REINDEX switchover type
                 # For ACTIVE_ONLY, we skip paused connectors
                 include_paused = (
                     secondary_search_settings.switchover_type != SwitchoverType.ACTIVE_ONLY
