@@ -71,7 +71,7 @@ If using a higher version, sometimes some libraries will not be available (i.e. 
 
 #### Backend: Python requirements
 
-Currently, we use [uv](https://docs.astral.sh/uv/) and recommend creating a virtual environment.
+Currently, we use [uv](https://docs.astral.sh/uv/) and recommend creating a [virtual environment](https://docs.astral.sh/uv/pip/environments/#using-a-virtual-environment).
 
 For convenience here's a command for it:
 
