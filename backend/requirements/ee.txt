@@ -43,6 +43,8 @@ botocore==1.39.11
     #   aiobotocore
     #   boto3
     #   s3transfer
+brotli==1.2.0
+    # via onyx
 cachetools==6.2.2
     # via google-auth
 certifi==2025.11.12
