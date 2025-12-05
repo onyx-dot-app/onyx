@@ -24,6 +24,8 @@ interface BaseMemoizedAIMessageProps {
   researchType?: string | null;
   // Multi-model responses
   modelResponses?: ModelResponse[];
+  // The nodeId of the latest/selected child in the sibling group (for tab selection)
+  latestChildNodeId?: number | null;
 }
 
 interface InternalMemoizedAIMessageProps extends BaseMemoizedAIMessageProps {
@@ -58,6 +60,7 @@ const InternalMemoizedAIMessage = React.memo(
     projectFiles,
     researchType,
     modelResponses,
+    latestChildNodeId,
   }: InternalMemoizedAIMessageProps) {
     const chatState = React.useMemo(
       () => ({
@@ -93,6 +96,7 @@ const InternalMemoizedAIMessage = React.memo(
         otherMessagesCanSwitchTo={otherMessagesCanSwitchTo}
         onMessageSelection={onMessageSelection}
         modelResponses={modelResponses}
+        latestChildNodeId={latestChildNodeId}
       />
     );
   }
@@ -116,6 +120,7 @@ export const MemoizedAIMessage = ({
   projectFiles,
   researchType,
   modelResponses,
+  latestChildNodeId,
 }: MemoizedAIMessageProps) => {
   const regenerate = useMemo(() => {
     if (messageId === undefined) {
@@ -152,6 +157,7 @@ export const MemoizedAIMessage = ({
       projectFiles={projectFiles}
       researchType={researchType}
       modelResponses={modelResponses}
+      latestChildNodeId={latestChildNodeId}
     />
   );
 };

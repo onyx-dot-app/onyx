@@ -71,6 +71,8 @@ export interface AIMessageProps {
   // Multi-model responses: when multiple models are selected, each has its own response
   // If undefined or length <= 1, renders normally without tabs
   modelResponses?: ModelResponse[];
+  // The nodeId of the latest/selected child in the sibling group (for tab selection)
+  latestChildNodeId?: number | null;
 }
 
 export default function AIMessage({
@@ -83,6 +85,7 @@ export default function AIMessage({
   otherMessagesCanSwitchTo,
   onMessageSelection,
   modelResponses,
+  latestChildNodeId,
 }: AIMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
   const { popup, setPopup } = usePopup();
@@ -94,7 +97,7 @@ export default function AIMessage({
     setActiveIndex: setActiveModelIndex,
     hasMultipleResponses,
     activeResponse,
-  } = useModelResponses(modelResponses);
+  } = useModelResponses(modelResponses, latestChildNodeId);
 
   // Handler for tab changes - switches branches via onMessageSelection
   // This updates latestChildNodeId and persists to backend, enabling true branching

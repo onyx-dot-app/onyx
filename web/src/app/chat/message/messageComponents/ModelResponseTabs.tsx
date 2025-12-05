@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { LlmDescriptor } from "@/lib/hooks";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import { cn } from "@/lib/utils";
@@ -89,8 +89,51 @@ export function ModelResponseTabs({
 }
 
 // Hook to manage multi-model response state
-export function useModelResponses(modelResponses?: ModelResponse[]) {
-  const [activeIndex, setActiveIndex] = useState(0);
+export function useModelResponses(
+  modelResponses?: ModelResponse[],
+  latestChildNodeId?: number | null
+) {
+  // Calculate initial index based on latestChildNodeId
+  const initialIndex = useMemo(() => {
+    if (!modelResponses || modelResponses.length === 0) return 0;
+    if (latestChildNodeId === undefined || latestChildNodeId === null) return 0;
+
+    const index = modelResponses.findIndex(
+      (r) => r.message?.nodeId === latestChildNodeId
+    );
+    return index >= 0 ? index : 0;
+  }, [modelResponses, latestChildNodeId]);
+
+  const [activeIndex, setActiveIndex] = useState(initialIndex);
+
+  // Track previous modelResponses length to detect new responses (regeneration)
+  const prevLengthRef = useRef(modelResponses?.length ?? 0);
+
+  // Auto-switch to new tab when a response is added (regeneration case)
+  // Also sync with latestChildNodeId when it changes (e.g., on load or branch switch)
+  useEffect(() => {
+    const currentLength = modelResponses?.length ?? 0;
+
+    // If a new response was added, switch to it (regeneration case)
+    if (currentLength > prevLengthRef.current && currentLength > 0) {
+      setActiveIndex(currentLength - 1);
+    }
+    // If latestChildNodeId changed (e.g., loading chat), sync to it
+    else if (
+      latestChildNodeId !== undefined &&
+      latestChildNodeId !== null &&
+      modelResponses
+    ) {
+      const targetIndex = modelResponses.findIndex(
+        (r) => r.message?.nodeId === latestChildNodeId
+      );
+      if (targetIndex >= 0 && targetIndex !== activeIndex) {
+        setActiveIndex(targetIndex);
+      }
+    }
+
+    prevLengthRef.current = currentLength;
+  }, [modelResponses, latestChildNodeId, activeIndex]);
 
   // Reset active index if it's out of bounds
   const safeActiveIndex = useMemo(() => {

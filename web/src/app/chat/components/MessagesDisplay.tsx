@@ -314,6 +314,7 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
                 onMessageSelection={onMessageSelection}
                 researchType={message.researchType}
                 modelResponses={modelResponses}
+                latestChildNodeId={parentMessage?.latestChildNodeId}
               />
             </div>
           );
