@@ -59,15 +59,6 @@ export function ToolSelector({
   const isWebSearchEnabled = webSearchTool && enabledToolsMap[webSearchTool.id];
   const isOpenUrlForced = isWebSearchEnabled;
 
-  // Auto-enable OpenURL when Web Search is enabled
-  useEffect(() => {
-    if (isOpenUrlForced && openUrlTool && setFieldValue) {
-      if (!enabledToolsMap[openUrlTool.id]) {
-        setFieldValue(`enabled_tools_map.${openUrlTool.id}`, true);
-      }
-    }
-  }, [isOpenUrlForced, openUrlTool, enabledToolsMap, setFieldValue]);
-
   const { mcpTools, customTools, mcpToolsByServer } = useMemo(() => {
     const allCustom = tools.filter(
       (tool) =>
@@ -238,6 +229,12 @@ export function ToolSelector({
           name={`enabled_tools_map.${webSearchTool.id}`}
           label={webSearchTool.display_name}
           subtext="Access real-time information and search the web for up-to-date results"
+          onChange={(checked) => {
+            // When enabling Web Search, also enable OpenURL
+            if (checked && openUrlTool && setFieldValue) {
+              setFieldValue(`enabled_tools_map.${openUrlTool.id}`, true);
+            }
+          }}
         />
       )}
 

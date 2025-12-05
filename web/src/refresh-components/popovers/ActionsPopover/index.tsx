@@ -1,7 +1,6 @@
 "use client";
 
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
-import { isChatSelectable } from "@/app/chat/components/tools/toolVisibility";
 import { useState, useEffect } from "react";
 import {
   Popover,
@@ -185,8 +184,8 @@ export default function ActionsPopover({
     // Filter out MCP tools
     if (tool.mcp_server_id) return false;
 
-    // Filter out tools that are not chat-selectable based on centralized config
-    if (!isChatSelectable(tool)) return false;
+    // Filter out tools that are not chat-selectable (visibility set by backend)
+    if (!tool.chat_selectable) return false;
 
     // Advertise to admin/curator users that they can connect an internal search tool
     // even if it's not available or has no connectors
