@@ -148,6 +148,7 @@ def test_search_provider(
     request: WebSearchProviderTestRequest,
     _: User | None = Depends(current_admin_user),
 ) -> dict[str, str]:
+    logger.error(f"Testing search provider: {request}")
     try:
         provider = build_search_provider_from_config(
             provider_type=request.provider_type,
@@ -162,36 +163,13 @@ def test_search_provider(
             status_code=400, detail="Unable to build provider configuration."
         )
 
-    # Actually test the API key by making a real search call
+    # Run the API client's test_connection method to ensure the connection is valid.
     try:
-        test_results = provider.search("test")
-        if not test_results or not any(result.link for result in test_results):
-            raise HTTPException(
-                status_code=400,
-                detail="API key validation failed: search returned no results.",
-            )
+        return provider.test_connection()
     except HTTPException:
         raise
     except Exception as e:
-        error_msg = str(e)
-        if (
-            "api" in error_msg.lower()
-            or "key" in error_msg.lower()
-            or "auth" in error_msg.lower()
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid API key: {error_msg}",
-            ) from e
-        raise HTTPException(
-            status_code=400,
-            detail=f"API key validation failed: {error_msg}",
-        ) from e
-
-    logger.info(
-        f"Web search provider test succeeded for {request.provider_type.value}."
-    )
-    return {"status": "ok"}
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @admin_router.get("/content-providers", response_model=list[WebContentProviderView])
