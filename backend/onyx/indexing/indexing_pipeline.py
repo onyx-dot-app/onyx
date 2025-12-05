@@ -554,14 +554,15 @@ def add_chunk_summaries(
                 suffix=context_prompt2,
                 continuation=True,  # Append chunk to the document context
             )
-            assert isinstance(processed_prompt, str)  # for mypy
 
             chunk.chunk_context = llm_response_to_string(
                 llm.invoke(
                     processed_prompt,
                     max_tokens=MAX_CONTEXT_TOKENS,
-                )
+                ).choice.message.content
+                or ""
             )
+
         except LLMRateLimitError as e:
             # Erroring during chunker is undesirable, so we log the error and continue
             # TODO: for v2, add robust retry logic
