@@ -116,7 +116,7 @@ backend = [
     "dropbox==12.0.2",
     "shapely==2.0.6",
     "stripe==10.12.0",
-    "urllib3==2.5.0",
+    "urllib3==2.6.0",
     "mistune==0.8.4",
     "sendgrid==6.12.5",
     "exa_py==1.15.4",
