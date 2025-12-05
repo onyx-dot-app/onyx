@@ -538,7 +538,7 @@ mcp==1.19.0
     #   onyx
 mdurl==0.1.2
     # via markdown-it-py
-mistune==0.8.4
+mistune==3.1.4
     # via onyx
 more-itertools==10.8.0
     # via simple-salesforce
