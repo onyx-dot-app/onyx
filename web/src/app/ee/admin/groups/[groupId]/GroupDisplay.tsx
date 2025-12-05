@@ -3,7 +3,7 @@
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useState } from "react";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
-import { AddMemberForm } from "./AddMemberForm";
+import AddMemberForm from "./AddMemberForm";
 import { updateUserGroup, updateCuratorStatus } from "./lib";
 import { LoadingAnimation } from "@/components/Loading";
 import {
@@ -13,7 +13,7 @@ import {
   USER_ROLE_LABELS,
   ConnectorStatus,
 } from "@/lib/types";
-import { AddConnectorForm } from "./AddConnectorForm";
+import AddConnectorForm from "./AddConnectorForm";
 import Separator from "@/refresh-components/Separator";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Text from "@/components/ui/text";
