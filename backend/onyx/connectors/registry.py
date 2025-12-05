@@ -204,6 +204,10 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.testrail.connector",
         class_name="TestRailConnector",
     ),
+    DocumentSource.CODA: ConnectorMapping(
+        module_path="onyx.connectors.coda.coda_connector",
+        class_name="CodaConnector",
+    ),
     # just for integration tests
     DocumentSource.MOCK_CONNECTOR: ConnectorMapping(
         module_path="onyx.connectors.mock_connector.connector",
