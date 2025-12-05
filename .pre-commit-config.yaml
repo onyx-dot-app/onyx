@@ -9,6 +9,24 @@ repos:
     hooks:
       - id: uv-sync
         args: ["--locked", "--all-extras"]
+      - id: uv-lock
+        files: ^pyproject\.toml$
+      - id: uv-export
+        name: uv-export default.txt
+        args: ["--no-emit-project", "--no-default-groups", "--no-hashes", "--extra", "backend", "-o", "backend/requirements/default.txt"]
+        files: ^(pyproject\.toml|uv\.lock)$
+      - id: uv-export
+        name: uv-export dev.txt
+        args: ["--no-emit-project", "--no-default-groups", "--no-hashes", "--extra", "dev", "-o", "backend/requirements/dev.txt"]
+        files: ^(pyproject\.toml|uv\.lock)$
+      - id: uv-export
+        name: uv-export ee.txt
+        args: ["--no-emit-project", "--no-default-groups", "--no-hashes", "--extra", "ee", "-o", "backend/requirements/ee.txt"]
+        files: ^(pyproject\.toml|uv\.lock)$
+      - id: uv-export
+        name: uv-export model_server.txt
+        args: ["--no-emit-project", "--no-default-groups", "--no-hashes", "--extra", "model_server", "-o", "backend/requirements/model_server.txt"]
+        files: ^(pyproject\.toml|uv\.lock)$
       # NOTE: This takes ~6s on a single, large module which is prohibitively slow.
       # - id: uv-run
       #   name: mypy

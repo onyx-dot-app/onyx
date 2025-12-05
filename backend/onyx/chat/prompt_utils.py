@@ -10,18 +10,18 @@ from onyx.file_store.models import FileDescriptor
 from onyx.prompts.chat_prompts import CITATION_REMINDER
 from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
 from onyx.prompts.chat_prompts import DEFAULT_SYSTEM_PROMPT
-from onyx.prompts.chat_prompts import GENERATE_IMAGE_GUIDANCE
-from onyx.prompts.chat_prompts import INTERNAL_SEARCH_GUIDANCE
-from onyx.prompts.chat_prompts import OPEN_URLS_GUIDANCE
-from onyx.prompts.chat_prompts import PYTHON_TOOL_GUIDANCE
 from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
-from onyx.prompts.chat_prompts import TOOL_DESCRIPTION_SEARCH_GUIDANCE
-from onyx.prompts.chat_prompts import TOOL_SECTION_HEADER
 from onyx.prompts.chat_prompts import USER_INFO_HEADER
-from onyx.prompts.chat_prompts import WEB_SEARCH_GUIDANCE
 from onyx.prompts.prompt_utils import get_company_context
 from onyx.prompts.prompt_utils import handle_onyx_date_awareness
 from onyx.prompts.prompt_utils import replace_citation_guidance_tag
+from onyx.prompts.tool_prompts import GENERATE_IMAGE_GUIDANCE
+from onyx.prompts.tool_prompts import INTERNAL_SEARCH_GUIDANCE
+from onyx.prompts.tool_prompts import OPEN_URLS_GUIDANCE
+from onyx.prompts.tool_prompts import PYTHON_TOOL_GUIDANCE
+from onyx.prompts.tool_prompts import TOOL_DESCRIPTION_SEARCH_GUIDANCE
+from onyx.prompts.tool_prompts import TOOL_SECTION_HEADER
+from onyx.prompts.tool_prompts import WEB_SEARCH_GUIDANCE
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
