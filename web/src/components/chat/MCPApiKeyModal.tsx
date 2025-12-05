@@ -5,9 +5,11 @@ import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { FiEye, FiEyeOff, FiAlertCircle } from "react-icons/fi";
 import SvgKey from "@/icons/key";
 import Text from "@/refresh-components/texts/Text";
+import SvgEye from "@/icons/eye";
+import SvgEyeClosed from "@/icons/eye-closed";
+import SvgAlertCircle from "@/icons/alert-circle";
 
 interface MCPAuthTemplate {
   headers: Array<{ name: string; value: string }>;
@@ -175,7 +177,7 @@ export default function MCPApiKeyModal({
 
           {error && (
             <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-md text-red-800 text-sm">
-              <FiAlertCircle className="h-4 w-4 flex-shrink-0" />
+              <SvgAlertCircle className="h-4 w-4 flex-shrink-0" />
               <span>{error}</span>
             </div>
           )}
@@ -209,9 +211,9 @@ export default function MCPApiKeyModal({
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-subtle hover:text-emphasis"
                       >
                         {showCredentials[field] ? (
-                          <FiEyeOff className="h-4 w-4" />
+                          <SvgEyeClosed className="h-4 w-4" />
                         ) : (
-                          <FiEye className="h-4 w-4" />
+                          <SvgEye className="h-4 w-4" />
                         )}
                       </button>
                     </div>
@@ -238,9 +240,9 @@ export default function MCPApiKeyModal({
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-subtle hover:text-emphasis"
                   >
                     {showApiKey ? (
-                      <FiEyeOff className="h-4 w-4" />
+                      <SvgEyeClosed className="h-4 w-4" />
                     ) : (
-                      <FiEye className="h-4 w-4" />
+                      <SvgEye className="h-4 w-4" />
                     )}
                   </button>
                 </div>
