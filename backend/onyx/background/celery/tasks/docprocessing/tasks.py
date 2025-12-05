@@ -816,10 +816,14 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
             secondary_cc_pair_ids: list[int] = []
             secondary_search_settings = get_secondary_search_settings(db_session)
             if secondary_search_settings:
-                # Include paused CC pairs during embedding swap
+                # Only include paused CC pairs for REINDEX switchover type
+                # For ACTIVE_ONLY, we skip paused connectors
+                include_paused = (
+                    secondary_search_settings.switchover_type != SwitchoverType.ACTIVE_ONLY
+                )
                 standard_cc_pair_ids = (
                     fetch_indexable_standard_connector_credential_pair_ids(
-                        db_session, active_cc_pairs_only=False
+                        db_session, active_cc_pairs_only=not include_paused
                     )
                 )
                 user_file_cc_pair_ids = (
