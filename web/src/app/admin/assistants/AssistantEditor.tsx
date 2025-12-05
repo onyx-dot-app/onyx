@@ -667,14 +667,18 @@ export default function AssistantEditor({
             values.llm_model_version_override || defaultModelName || ""
           );
 
-          const src =
+          const uploadedImageId =
             uploadedImagePreview ??
             (existingPersona?.uploaded_image_id && !removePersonaImage
               ? existingPersona?.uploaded_image_id
               : undefined);
 
           const iconElement = (
-            <CustomAgentAvatar name={values.name} src={src} size={48} />
+            <CustomAgentAvatar
+              name={values.name}
+              uploadedImageId={uploadedImageId}
+              size={48}
+            />
           );
 
           return (

@@ -6,6 +6,7 @@ import { OnyxIcon } from "@/components/icons/icons";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { DEFAULT_ASSISTANT_ID } from "@/lib/constants";
 import CustomAgentAvatar from "@/refresh-components/avatars/CustomAgentAvatar";
+import Image from "next/image";
 
 export interface AgentAvatarProps {
   agent: MinimalPersonaSnapshot;
@@ -18,14 +19,15 @@ export default function AgentAvatar({ agent, ...props }: AgentAvatarProps) {
   if (agent.id === DEFAULT_ASSISTANT_ID) {
     return settings.enterpriseSettings?.use_custom_logo ? (
       <div
-        className="aspect-square rounded-full overflow-hidden"
+        className="aspect-square rounded-full overflow-hidden relative"
         style={{ height: props.size, width: props.size }}
       >
-        <img
+        <Image
           alt="Logo"
           src="/api/enterprise-settings/logo"
-          loading="lazy"
-          className="h-full w-full object-contain object-center"
+          fill
+          className="object-contain object-center"
+          sizes={`${props.size}px`}
         />
       </div>
     ) : (
@@ -36,11 +38,7 @@ export default function AgentAvatar({ agent, ...props }: AgentAvatarProps) {
   return (
     <CustomAgentAvatar
       name={agent.name}
-      src={
-        agent.uploaded_image_id
-          ? buildImgUrl(agent.uploaded_image_id)
-          : undefined
-      }
+      uploadedImageId={agent.uploaded_image_id}
       iconName={agent.icon_name}
       {...props}
     />
