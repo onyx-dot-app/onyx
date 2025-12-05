@@ -34,7 +34,7 @@ import {
   SvgOnyxLogo,
   SvgX,
 } from "@opal/icons";
-type WebSearchProviderType = "google_pse" | "serper" | "exa";
+type WebSearchProviderType = "google_pse" | "serper" | "exa" | "searxng";
 type WebContentProviderType = "firecrawl" | "onyx_web_crawler" | (string & {});
 
 interface WebSearchProviderView {
@@ -62,6 +62,7 @@ const SEARCH_PROVIDER_LABEL: Record<WebSearchProviderType, string> = {
   google_pse: "Google PSE",
   serper: "Serper",
   exa: "Exa",
+  searxng: "SearXNG",
 };
 
 const CONTENT_PROVIDER_LABEL: Record<string, string> = {
@@ -96,11 +97,12 @@ const SEARCH_PROVIDER_ORDER: WebSearchProviderType[] = [
   "exa",
   "serper",
   "google_pse",
+  "searxng",
 ];
 
 const SEARCH_PROVIDER_DETAILS: Record<
   WebSearchProviderType,
-  { subtitle: string; helper: string; logoSrc?: string; apiKeyUrl: string }
+  { subtitle: string; helper: string; logoSrc?: string; apiKeyUrl?: string }
 > = {
   exa: {
     subtitle: "Exa.ai",
@@ -119,6 +121,11 @@ const SEARCH_PROVIDER_DETAILS: Record<
     helper: "Connect to Google PSE to set up web search.",
     logoSrc: "/Google.svg",
     apiKeyUrl: "https://programmablesearchengine.google.com/controlpanel/all",
+  },
+  searxng: {
+    subtitle: "SearXNG",
+    helper: "Connect to SearXNG to set up web search.",
+    logoSrc: "/SearXNG.svg",
   },
 };
 
@@ -144,6 +151,7 @@ type ProviderSetupModalProps = {
   canConnect: boolean;
   onConnect: () => void;
   apiKeyAutoFocus?: boolean;
+  hideApiKey?: boolean;
 };
 
 const ProviderSetupModal = memo(
@@ -162,6 +170,7 @@ const ProviderSetupModal = memo(
     canConnect,
     onConnect,
     apiKeyAutoFocus = true,
+    hideApiKey = false,
   }: ProviderSetupModalProps) => {
     if (!isOpen) return null;
 
@@ -226,80 +235,84 @@ const ProviderSetupModal = memo(
               </FormField>
             )}
 
-            <FormField
-              name="api_key"
-              state={
-                helperClass.includes("status-error") ||
-                helperClass.includes("error")
-                  ? "error"
-                  : helperClass.includes("green")
-                    ? "success"
-                    : "idle"
-              }
-              className="w-full"
-            >
-              <FormField.Label>
-                <Text mainUiAction text04>
-                  API Key
-                </Text>
-              </FormField.Label>
-              <FormField.Control>
-                <PasswordInputTypeIn
-                  placeholder="Enter API key"
-                  value={apiKeyValue}
-                  autoFocus={apiKeyAutoFocus}
-                  onFocus={(e) => {
-                    // Select all text if it's the masked placeholder when focused
-                    if (apiKeyValue === "••••••••••••••••") {
-                      e.target.select();
-                    }
-                  }}
-                  onChange={(event) => {
-                    onApiKeyChange(event.target.value);
-                  }}
-                  showClearButton={false}
-                />
-              </FormField.Control>
-              {isProcessing ? (
-                <FormField.APIMessage
-                  state="loading"
-                  messages={{
-                    loading:
-                      typeof helperMessage === "string"
-                        ? helperMessage
-                        : "Validating API key...",
-                  }}
-                />
-              ) : typeof helperMessage === "string" ? (
-                <FormField.Message
-                  messages={{
-                    idle:
-                      helperClass.includes("status-error") ||
-                      helperClass.includes("error")
-                        ? ""
-                        : helperClass.includes("green")
+            {!hideApiKey && (
+              <FormField
+                name="api_key"
+                state={
+                  helperClass.includes("status-error") ||
+                  helperClass.includes("error")
+                    ? "error"
+                    : helperClass.includes("green")
+                      ? "success"
+                      : "idle"
+                }
+                className="w-full"
+              >
+                <FormField.Label>
+                  <Text mainUiAction text04>
+                    API Key
+                  </Text>
+                </FormField.Label>
+                <FormField.Control>
+                  <PasswordInputTypeIn
+                    placeholder="Enter API key"
+                    value={apiKeyValue}
+                    autoFocus={apiKeyAutoFocus}
+                    onFocus={(e) => {
+                      // Select all text if it's the masked placeholder when focused
+                      if (apiKeyValue === "••••••••••••••••") {
+                        e.target.select();
+                      }
+                    }}
+                    onChange={(event) => {
+                      onApiKeyChange(event.target.value);
+                    }}
+                    showClearButton={false}
+                  />
+                </FormField.Control>
+                {isProcessing ? (
+                  <FormField.APIMessage
+                    state="loading"
+                    messages={{
+                      loading:
+                        typeof helperMessage === "string"
+                          ? helperMessage
+                          : "Validating API key...",
+                    }}
+                  />
+                ) : typeof helperMessage === "string" ? (
+                  <FormField.Message
+                    messages={{
+                      idle:
+                        helperClass.includes("status-error") ||
+                        helperClass.includes("error")
                           ? ""
-                          : helperMessage,
-                    error:
-                      helperClass.includes("status-error") ||
-                      helperClass.includes("error")
+                          : helperClass.includes("green")
+                            ? ""
+                            : helperMessage,
+                      error:
+                        helperClass.includes("status-error") ||
+                        helperClass.includes("error")
+                          ? helperMessage
+                          : "",
+                      success: helperClass.includes("green")
                         ? helperMessage
                         : "",
-                    success: helperClass.includes("green") ? helperMessage : "",
-                  }}
-                />
-              ) : (
-                <div className="flex flex-row items-center gap-x-0.5">
-                  <Text
-                    text03
-                    secondaryBody
-                    className={cn(helperClass, "ml-0.5")}
-                  >
-                    {helperMessage}
-                  </Text>
-                </div>
-              )}
-            </FormField>
+                    }}
+                  />
+                ) : (
+                  <div className="flex flex-row items-center gap-x-0.5">
+                    <Text
+                      text03
+                      secondaryBody
+                      className={cn(helperClass, "ml-0.5")}
+                    >
+                      {helperMessage}
+                    </Text>
+                  </div>
+                )}
+              </FormField>
+            )}
 
             {optionalField && !optionalField.showFirst && (
               <FormField
@@ -478,10 +491,17 @@ export default function Page() {
       setSearchStatusMessage(null);
       setSearchErrorMessage(null);
     }
-    if (selectedProviderType === "google_pse") {
+    if (
+      selectedProviderType === "google_pse" ||
+      selectedProviderType === "searxng"
+    ) {
       const config = provider?.config || {};
       const searchId =
-        config.search_engine_id || config.cx || config.search_engine || "";
+        config.search_engine_id ||
+        config.cx ||
+        config.search_engine ||
+        config.searxng_base_url ||
+        "";
       setSearchEngineIdValue(searchId);
     } else {
       setSearchEngineIdValue("");
@@ -597,10 +617,15 @@ export default function Page() {
     : "";
   const trimmedApiKey = apiKeyValue.trim();
   const trimmedSearchEngineId = searchEngineIdValue.trim();
+  // To connect, we must specify a provider type. We  also must specify an API key
+  // for all providers except SearXNG, and an identifier for the search engine for
+  // SearXNG and Google PSE.
   const canConnect =
     !!selectedProviderType &&
-    trimmedApiKey.length > 0 &&
-    (selectedProviderType !== "google_pse" || trimmedSearchEngineId.length > 0);
+    (selectedProviderType === "searxng" || trimmedApiKey.length > 0) &&
+    ((selectedProviderType !== "google_pse" &&
+      selectedProviderType !== "searxng") ||
+      trimmedSearchEngineId.length > 0);
   const contentProviderLabel = selectedContentProviderType
     ? CONTENT_PROVIDER_LABEL[selectedContentProviderType] ||
       selectedContentProviderType
@@ -889,13 +914,17 @@ export default function Page() {
     }
 
     const trimmedKey = trimmedApiKey;
-    if (!trimmedKey) {
+    if (selectedProviderType !== "searxng" && !trimmedKey) {
       return;
     }
 
     const config: Record<string, string> = {};
     if (selectedProviderType === "google_pse" && trimmedSearchEngineId) {
       config.search_engine_id = trimmedSearchEngineId;
+    }
+    if (selectedProviderType === "searxng" && trimmedSearchEngineId) {
+      config.searxng_base_url = trimmedSearchEngineId;
+      console.log("config", config);
     }
 
     const existingProvider = searchProviders.find(
@@ -923,12 +952,14 @@ export default function Page() {
         }
       );
 
+      console.log("testResponse", testResponse);
+
       if (!testResponse.ok) {
         const errorBody = await testResponse.json().catch(() => ({}));
         throw new Error(
           typeof errorBody?.detail === "string"
             ? errorBody.detail
-            : "Failed to validate API key."
+            : "Unknown error validating search provider."
         );
       }
 
@@ -1485,7 +1516,8 @@ export default function Page() {
                               typeof providerType === "string" &&
                               (providerType === "google_pse" ||
                                 providerType === "serper" ||
-                                providerType === "exa")
+                                providerType === "exa" ||
+                                providerType === "searxng")
                             ) {
                               setSelectedProviderType(
                                 providerType as WebSearchProviderType
@@ -1777,7 +1809,28 @@ export default function Page() {
                   </>
                 ),
               }
-            : undefined
+            : selectedProviderType === "searxng"
+              ? {
+                  label: "SearXNG Base URL",
+                  value: searchEngineIdValue,
+                  onChange: (value) => setSearchEngineIdValue(value),
+                  placeholder: "https://your-searxng-instance.com",
+                  description: (
+                    <>
+                      Paste the base URL of your{" "}
+                      <a
+                        href="https://docs.searxng.org/admin/installation.html"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline"
+                      >
+                        private SearXNG instance
+                      </a>
+                      .
+                    </>
+                  ),
+                }
+              : undefined
         }
         helperMessage={getSearchProviderHelperMessage()}
         helperClass={getSearchProviderHelperClass()}
@@ -1786,6 +1839,7 @@ export default function Page() {
         onConnect={() => {
           void handleSearchConnect();
         }}
+        hideApiKey={selectedProviderType === "searxng"}
       />
 
       <ProviderSetupModal
