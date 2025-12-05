@@ -462,10 +462,14 @@ def get_llm_max_tokens(
             max_tokens = model_obj["max_tokens"]
             return max_tokens
 
-        raise RuntimeWarning("No max tokens found for LLM")
+        # No max tokens found, use fallback
+        logger.warning(
+            f"No max tokens found for LLM with name {model_name}. Defaulting to {GEN_AI_MODEL_FALLBACK_MAX_TOKENS}."
+        )
+        return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
     except Exception:
         logger.warning(
-            f"Failed to get max tokens for LLM with name {model_name}. Defaulting to {GEN_AI_MODEL_FALLBACK_MAX_TOKENS}."
+            f"Exception occured while getting max tokens for {model_name}. Defaulting to {GEN_AI_MODEL_FALLBACK_MAX_TOKENS}."
         )
         return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 
