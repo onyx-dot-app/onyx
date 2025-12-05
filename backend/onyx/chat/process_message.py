@@ -2,7 +2,6 @@ import re
 import traceback
 from collections.abc import Callable
 from collections.abc import Iterator
-from typing import Any
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -216,7 +215,6 @@ def _initialize_chat_session(
     chat_session_id: UUID,
     db_session: Session,
     use_existing_user_message: bool = False,
-    regenerate: bool = False,
 ) -> ChatMessage:
     root_message = get_or_create_root_message(
         chat_session_id=chat_session_id, db_session=db_session
@@ -230,27 +228,6 @@ def _initialize_chat_session(
             user_id=user_id,
             db_session=db_session,
         )
-
-    # # When branching from a non-latest sibling (e.g., selecting a different model's response
-    # # from a multi-model response group), we need to update the latest_child_message_id
-    # # pointers up the chain to make this branch the new "mainline". This ensures
-    # # create_chat_history_chain can trace from root to the new message.
-    # current = parent_message
-    # while current.parent_message is not None:
-    #     grandparent = current.parent_message
-    #     if grandparent.latest_child_message_id != current.id:
-    #         grandparent.latest_child_message_id = current.id
-    #     current = grandparent
-
-    # For regeneration, parent_id points to the existing user message we want to regenerate from.
-    # We don't create a new user message - just return the existing one so a new assistant
-    # response can be created as its sibling.
-    if regenerate:
-        if parent_message.message_type != MessageType.USER:
-            raise RuntimeError(
-                "Parent message is not a user message, needed for regeneration flow."
-            )
-        return parent_message
 
     # For seeding, the parent message points to the message that is supposed to be the last
     # user message.
@@ -279,363 +256,6 @@ def _initialize_chat_session(
         commit=False,
     )
     return user_message
-
-
-def _process_single_model(
-    current_override: LLMOverride | None,
-    persona: Any,
-    user: User | None,
-    litellm_additional_headers: dict[str, str] | None,
-    long_term_logger: LongTermLogger,
-    db_session: Session,
-    emitter: Any,
-    user_selected_filters: Any,
-    chat_session: Any,
-    extracted_project_files: ExtractedProjectFiles,
-    bypass_acl: bool,
-    slack_context: SlackContext | None,
-    chat_session_id: UUID,
-    user_message: ChatMessage,
-    custom_tool_additional_headers: dict[str, str] | None,
-    allowed_tool_ids: list[int] | None,
-    disable_internal_search: bool,
-    chat_history: list[ChatMessage],
-    files: dict[str, ChatLoadedFile],
-    additional_context: str | None,
-    tool_id_to_name_map: dict[int, str],
-    custom_agent_prompt: str | None,
-    memories: list[str] | None,
-    forced_tool_id: int | None,
-    check_is_connected: Callable[[], bool],
-) -> AnswerStream:
-    """Process a single model request (original sequential flow)."""
-    # Get LLM for this specific override
-    current_llm, current_fast_llm = get_llms_for_persona(
-        persona=persona,
-        user=user,
-        llm_override=current_override,
-        additional_headers=litellm_additional_headers,
-        long_term_logger=long_term_logger,
-    )
-    current_token_counter = get_llm_token_counter(current_llm)
-
-    # Construct tools for this LLM
-    current_tool_dict = construct_tools(
-        persona=persona,
-        db_session=db_session,
-        emitter=emitter,
-        user=user,
-        llm=current_llm,
-        fast_llm=current_fast_llm,
-        search_tool_config=SearchToolConfig(
-            user_selected_filters=user_selected_filters,
-            project_id=(
-                chat_session.project_id
-                if extracted_project_files.project_as_filter
-                else None
-            ),
-            bypass_acl=bypass_acl,
-            slack_context=slack_context,
-        ),
-        custom_tool_config=CustomToolConfig(
-            chat_session_id=chat_session_id,
-            message_id=user_message.id if user_message else None,
-            additional_headers=custom_tool_additional_headers,
-        ),
-        allowed_tool_ids=allowed_tool_ids,
-        disable_internal_search=disable_internal_search,
-    )
-    current_tools: list[Tool] = []
-    for tool_list in current_tool_dict.values():
-        current_tools.extend(tool_list)
-
-    # Reserve a message id for this model's response
-    assistant_response = reserve_message_id(
-        db_session=db_session,
-        chat_session_id=chat_session_id,
-        parent_message=user_message.id,
-        message_type=MessageType.ASSISTANT,
-        model_provider=current_llm.config.model_provider,
-        model_name=current_llm.config.model_name,
-    )
-
-    yield MessageResponseIDInfo(
-        user_message_id=user_message.id,
-        reserved_assistant_message_id=assistant_response.id,
-        model_provider=current_llm.config.model_provider,
-        model_name=current_llm.config.model_name,
-    )
-
-    # Convert the chat history into a simple format
-    simple_chat_history = convert_chat_history(
-        chat_history=chat_history,
-        files=files,
-        project_image_files=extracted_project_files.project_image_files,
-        additional_context=additional_context,
-        token_counter=current_token_counter,
-        tool_id_to_name_map=tool_id_to_name_map,
-    )
-
-    # Create state container for accumulating partial results
-    state_container = ChatStateContainer()
-
-    # Run the LLM loop with explicit wrapper for stop signal handling
-    yield from run_chat_llm_with_state_containers(
-        run_llm_loop,
-        emitter=emitter,
-        state_container=state_container,
-        is_connected=check_is_connected,
-        simple_chat_history=simple_chat_history,
-        tools=current_tools,
-        custom_agent_prompt=custom_agent_prompt,
-        project_files=extracted_project_files,
-        persona=persona,
-        memories=memories,
-        llm=current_llm,
-        token_counter=current_token_counter,
-        db_session=db_session,
-        forced_tool_id=forced_tool_id,
-    )
-
-    # Determine if stopped by user
-    completed_normally = check_is_connected()
-    if not completed_normally:
-        logger.debug(f"Chat session {chat_session_id} stopped by user")
-
-    # Build final answer based on completion status
-    if completed_normally:
-        if state_container.answer_tokens is None:
-            raise RuntimeError(
-                "LLM run completed normally but did not return an answer."
-            )
-        final_answer = state_container.answer_tokens
-    else:
-        # Stopped by user - append stop message
-        if state_container.answer_tokens:
-            final_answer = (
-                state_container.answer_tokens
-                + " ... The generation was stopped by the user here."
-            )
-        else:
-            final_answer = "The generation was stopped by the user."
-
-    # Build citation_docs_info from accumulated citations
-    citation_docs_info: list[CitationDocInfo] = []
-    seen_citation_nums: set[int] = set()
-    for citation_num, search_doc in state_container.citation_to_doc.items():
-        if citation_num not in seen_citation_nums:
-            seen_citation_nums.add(citation_num)
-            citation_docs_info.append(
-                CitationDocInfo(
-                    search_doc=search_doc,
-                    citation_number=citation_num,
-                )
-            )
-
-    save_chat_turn(
-        message_text=final_answer,
-        reasoning_tokens=state_container.reasoning_tokens,
-        citation_docs_info=citation_docs_info,
-        tool_calls=state_container.tool_calls,
-        db_session=db_session,
-        assistant_message=assistant_response,
-    )
-
-
-def _process_multiple_models_concurrently(
-    llm_overrides: list[LLMOverride | None],
-    persona: Any,
-    user: User | None,
-    litellm_additional_headers: dict[str, str] | None,
-    long_term_logger: LongTermLogger,
-    db_session: Session,
-    user_selected_filters: Any,
-    chat_session: Any,
-    extracted_project_files: ExtractedProjectFiles,
-    bypass_acl: bool,
-    slack_context: SlackContext | None,
-    chat_session_id: UUID,
-    user_message: ChatMessage,
-    custom_tool_additional_headers: dict[str, str] | None,
-    allowed_tool_ids: list[int] | None,
-    disable_internal_search: bool,
-    chat_history: list[ChatMessage],
-    files: dict[str, ChatLoadedFile],
-    additional_context: str | None,
-    tool_id_to_name_map: dict[int, str],
-    custom_agent_prompt: str | None,
-    memories: list[str] | None,
-    forced_tool_id: int | None,
-    check_is_connected: Callable[[], bool],
-) -> AnswerStream:
-    """Process multiple models concurrently and merge their streaming outputs.
-
-    All models start at the same time and their responses are streamed as they arrive.
-    Each packet is tagged with model_id so the frontend can route to the correct UI.
-    """
-    # Create the merger for coordinating concurrent streams
-    merger = MultiModelStreamMerger()
-
-    # Track assistant responses for saving chat turns later
-    model_to_assistant_response: dict[str, ChatMessage] = {}
-
-    # Phase 1: Setup all models and yield MessageResponseIDInfo for each
-    for current_override in llm_overrides:
-        # Get LLM for this specific override
-        current_llm, current_fast_llm = get_llms_for_persona(
-            persona=persona,
-            user=user,
-            llm_override=current_override,
-            additional_headers=litellm_additional_headers,
-            long_term_logger=long_term_logger,
-        )
-
-        model_id = (
-            f"{current_llm.config.model_provider}:{current_llm.config.model_name}"
-        )
-
-        # Reserve a message id for this model's response
-        assistant_response = reserve_message_id(
-            db_session=db_session,
-            chat_session_id=chat_session_id,
-            parent_message=user_message.id,
-            message_type=MessageType.ASSISTANT,
-            model_provider=current_llm.config.model_provider,
-            model_name=current_llm.config.model_name,
-        )
-        model_to_assistant_response[model_id] = assistant_response
-
-        # Register this model with the merger
-        model_ctx = merger.register_model(model_id)
-
-        # Store extra data needed for saving chat turn
-        model_ctx.extra_data["llm"] = current_llm
-        model_ctx.extra_data["fast_llm"] = current_fast_llm
-        model_ctx.extra_data["assistant_response"] = assistant_response
-
-        # Yield MessageResponseIDInfo so frontend knows about this model
-        yield MessageResponseIDInfo(
-            user_message_id=user_message.id,
-            reserved_assistant_message_id=assistant_response.id,
-            model_provider=current_llm.config.model_provider,
-            model_name=current_llm.config.model_name,
-        )
-
-    # Phase 2: Start all model threads
-    for model_id, model_ctx in merger.get_model_contexts().items():
-        current_llm = model_ctx.extra_data["llm"]
-        current_fast_llm = model_ctx.extra_data["fast_llm"]
-        current_token_counter = get_llm_token_counter(current_llm)
-
-        # Construct tools for this LLM
-        current_tool_dict = construct_tools(
-            persona=persona,
-            db_session=db_session,
-            emitter=model_ctx.emitter,
-            user=user,
-            llm=current_llm,
-            fast_llm=current_fast_llm,
-            search_tool_config=SearchToolConfig(
-                user_selected_filters=user_selected_filters,
-                project_id=(
-                    chat_session.project_id
-                    if extracted_project_files.project_as_filter
-                    else None
-                ),
-                bypass_acl=bypass_acl,
-                slack_context=slack_context,
-            ),
-            custom_tool_config=CustomToolConfig(
-                chat_session_id=chat_session_id,
-                message_id=user_message.id if user_message else None,
-                additional_headers=custom_tool_additional_headers,
-            ),
-            allowed_tool_ids=allowed_tool_ids,
-            disable_internal_search=disable_internal_search,
-        )
-        current_tools: list[Tool] = []
-        for tool_list in current_tool_dict.values():
-            current_tools.extend(tool_list)
-
-        # Convert the chat history into a simple format
-        simple_chat_history = convert_chat_history(
-            chat_history=chat_history,
-            files=files,
-            project_image_files=extracted_project_files.project_image_files,
-            additional_context=additional_context,
-            token_counter=current_token_counter,
-            tool_id_to_name_map=tool_id_to_name_map,
-        )
-
-        # Start the model thread
-        merger.start_model_thread(
-            model_id=model_id,
-            target_func=run_llm_loop,
-            simple_chat_history=simple_chat_history,
-            tools=current_tools,
-            custom_agent_prompt=custom_agent_prompt,
-            project_files=extracted_project_files,
-            persona=persona,
-            memories=memories,
-            llm=current_llm,
-            token_counter=current_token_counter,
-            db_session=db_session,
-            forced_tool_id=forced_tool_id,
-        )
-
-    # Phase 3: Stream merged packets from all models
-    yield from merger.stream(is_connected=check_is_connected)
-
-    # Phase 4: Wait for all threads to complete
-    merger.wait_for_threads(timeout=5.0)
-
-    # Phase 5: Save chat turns for each model
-    completed_normally = check_is_connected()
-    for model_id, model_ctx in merger.get_model_contexts().items():
-        state_container = model_ctx.state_container
-        assistant_response = model_ctx.extra_data["assistant_response"]
-
-        # Build final answer based on completion status
-        if model_ctx.error is not None:
-            # Model failed - save error message
-            final_answer = f"Error: {str(model_ctx.error)}"
-        elif completed_normally:
-            if state_container.answer_tokens is None:
-                # Model may not have completed - use partial answer or error
-                final_answer = state_container.answer_tokens or "No response generated."
-            else:
-                final_answer = state_container.answer_tokens
-        else:
-            # Stopped by user - append stop message
-            if state_container.answer_tokens:
-                final_answer = (
-                    state_container.answer_tokens
-                    + " ... The generation was stopped by the user here."
-                )
-            else:
-                final_answer = "The generation was stopped by the user."
-
-        # Build citation_docs_info from accumulated citations
-        citation_docs_info: list[CitationDocInfo] = []
-        seen_citation_nums: set[int] = set()
-        for citation_num, search_doc in state_container.citation_to_doc.items():
-            if citation_num not in seen_citation_nums:
-                seen_citation_nums.add(citation_num)
-                citation_docs_info.append(
-                    CitationDocInfo(
-                        search_doc=search_doc,
-                        citation_number=citation_num,
-                    )
-                )
-
-        save_chat_turn(
-            message_text=final_answer,
-            reasoning_tokens=state_container.reasoning_tokens,
-            citation_docs_info=citation_docs_info,
-            tool_calls=state_container.tool_calls,
-            db_session=db_session,
-            assistant_message=assistant_response,
-        )
 
 
 def stream_chat_message_objects(
@@ -703,24 +323,18 @@ def stream_chat_message_objects(
                 "Must specify a set of documents for chat or specify search options"
             )
 
-        # Build the list of LLM overrides to process
-        # If llm_overrides is provided (multi-model), use that list
-        # Otherwise, use single llm_override or session override
-        llm_overrides_to_process: list[LLMOverride | None] = []
+        # Build the list of LLM overrides to process (multi-model support)
+        llm_overrides: list[LLMOverride | None] = []
         if new_msg_req.llm_overrides and len(new_msg_req.llm_overrides) > 0:
-            llm_overrides_to_process = list(new_msg_req.llm_overrides)
+            llm_overrides = list(new_msg_req.llm_overrides)
         else:
-            # Single model case - use llm_override or session default
-            llm_overrides_to_process = [
-                new_msg_req.llm_override or chat_session.llm_override
-            ]
+            llm_overrides = [new_msg_req.llm_override or chat_session.llm_override]
 
-        # Use the first override to create initial LLM for user message tokenization
-        first_override = llm_overrides_to_process[0]
+        # Use first model for initial setup (token counting for user message)
         llm, fast_llm = get_llms_for_persona(
             persona=persona,
             user=user,
-            llm_override=first_override,
+            llm_override=llm_overrides[0],
             additional_headers=litellm_additional_headers,
             long_term_logger=long_term_logger,
         )
@@ -745,7 +359,6 @@ def stream_chat_message_objects(
             chat_session_id=chat_session_id,
             db_session=db_session,
             use_existing_user_message=use_existing_user_message,
-            regenerate=new_msg_req.regenerate or False,
         )
 
         # re-create linear history of messages
@@ -755,56 +368,19 @@ def stream_chat_message_objects(
 
         last_chat_message = chat_history[-1]
 
-        # For regeneration, we reuse the existing user message so it won't be at the end
-        # of the chain (there will be existing assistant responses after it)
-        if not (new_msg_req.regenerate or False):
-            if last_chat_message.id != user_message.id:
-                db_session.rollback()
-                raise RuntimeError(
-                    "The new message was not on the mainline. "
-                    "Chat message history tree is not correctly built."
-                )
+        if last_chat_message.id != user_message.id:
+            db_session.rollback()
+            raise RuntimeError(
+                "The new message was not on the mainline. "
+                "Chat message history tree is not correctly built."
+            )
 
-            # At this point we can save the user message as it's validated and final
-            db_session.commit()
+        # At this point we can save the user message as it's validated and final
+        db_session.commit()
 
         memories = get_memories(user, db_session)
 
         custom_agent_prompt = get_custom_agent_prompt(persona, chat_session)
-
-        reserved_token_count = calculate_reserved_tokens(
-            db_session=db_session,
-            persona_system_prompt=custom_agent_prompt or "",
-            token_counter=token_counter,
-            files=last_chat_message.files,
-            memories=memories,
-        )
-
-        # Process projects, if all of the files fit in the context, it doesn't need to use RAG
-        extracted_project_files = _extract_project_file_texts_and_images(
-            project_id=chat_session.project_id,
-            user_id=user_id,
-            llm_max_context_window=llm.config.max_input_tokens,
-            reserved_token_count=reserved_token_count,
-            db_session=db_session,
-        )
-
-        # There are cases where the internal search tool should be disabled
-        # If the user is in a project, it should not use other sources / generic search
-        # If they are in a project but using a custom agent, it should use the agent setup
-        # (which means it can use search)
-        # However if in a project and there are more files than can fit in the context,
-        # it should use the search tool with the project filter on
-        disable_internal_search = bool(
-            chat_session.project_id
-            and persona.id is DEFAULT_PERSONA_ID
-            and (
-                extracted_project_files.project_file_texts
-                or not extracted_project_files.project_as_filter
-            )
-        )
-
-        emitter = get_default_emitter()
 
         # TODO Once summarization is done, we don't need to load all the files from the beginning anymore.
         # load all files needed for this chat chain in memory
@@ -824,71 +400,241 @@ def stream_chat_message_objects(
         def check_is_connected() -> bool:
             return check_stop_signal(chat_session_id, redis_client)
 
-        # Branch based on single vs multiple models
-        if len(llm_overrides_to_process) == 1:
-            # SINGLE MODEL: Use existing sequential processing for simplicity
-            yield from _process_single_model(
-                current_override=llm_overrides_to_process[0],
+        # Setup for multi-model (concurrent) vs single-model (synchronous)
+        is_multi_model = len(llm_overrides) > 1
+        merger = MultiModelStreamMerger() if is_multi_model else None
+
+        # Track state for single-model case (used after the loop)
+        single_model_state: tuple[ChatStateContainer, ChatMessage, LLM] | None = None
+
+        # Process each model
+        for llm_override in llm_overrides:
+            # Get LLM for this model
+            llm, fast_llm = get_llms_for_persona(
                 persona=persona,
                 user=user,
-                litellm_additional_headers=litellm_additional_headers,
+                llm_override=llm_override,
+                additional_headers=litellm_additional_headers,
                 long_term_logger=long_term_logger,
+            )
+            token_counter = get_llm_token_counter(llm)
+
+            reserved_token_count = calculate_reserved_tokens(
+                db_session=db_session,
+                persona_system_prompt=custom_agent_prompt or "",
+                token_counter=token_counter,
+                files=last_chat_message.files,
+                memories=memories,
+            )
+
+            # Process projects, if all of the files fit in the context, it doesn't need to use RAG
+            extracted_project_files = _extract_project_file_texts_and_images(
+                project_id=chat_session.project_id,
+                user_id=user_id,
+                llm_max_context_window=llm.config.max_input_tokens,
+                reserved_token_count=reserved_token_count,
+                db_session=db_session,
+            )
+
+            # There are cases where the internal search tool should be disabled
+            # If the user is in a project, it should not use other sources / generic search
+            # If they are in a project but using a custom agent, it should use the agent setup
+            # (which means it can use search)
+            # However if in a project and there are more files than can fit in the context,
+            # it should use the search tool with the project filter on
+            disable_internal_search = bool(
+                chat_session.project_id
+                and persona.id is DEFAULT_PERSONA_ID
+                and (
+                    extracted_project_files.project_file_texts
+                    or not extracted_project_files.project_as_filter
+                )
+            )
+
+            # Get the appropriate emitter
+            if merger is not None:
+                model_id = f"{llm.config.model_provider}:{llm.config.model_name}"
+                model_ctx = merger.register_model(model_id)
+                emitter = model_ctx.emitter
+            else:
+                emitter = get_default_emitter()
+            # Construct tools based on the persona configurations
+            tool_dict = construct_tools(
+                persona=persona,
                 db_session=db_session,
                 emitter=emitter,
-                user_selected_filters=user_selected_filters,
-                chat_session=chat_session,
-                extracted_project_files=extracted_project_files,
-                bypass_acl=bypass_acl,
-                slack_context=slack_context,
-                chat_session_id=chat_session_id,
-                user_message=user_message,
-                custom_tool_additional_headers=custom_tool_additional_headers,
-                allowed_tool_ids=new_msg_req.allowed_tool_ids,
-                disable_internal_search=disable_internal_search,
-                chat_history=chat_history,
-                files=files,
-                additional_context=additional_context,
-                tool_id_to_name_map=tool_id_to_name_map,
-                custom_agent_prompt=custom_agent_prompt,
-                memories=memories,
-                forced_tool_id=(
-                    new_msg_req.forced_tool_ids[0]
-                    if new_msg_req.forced_tool_ids
-                    else None
-                ),
-                check_is_connected=check_is_connected,
-            )
-        else:
-            # MULTIPLE MODELS: Use concurrent processing
-            yield from _process_multiple_models_concurrently(
-                llm_overrides=llm_overrides_to_process,
-                persona=persona,
                 user=user,
-                litellm_additional_headers=litellm_additional_headers,
-                long_term_logger=long_term_logger,
-                db_session=db_session,
-                user_selected_filters=user_selected_filters,
-                chat_session=chat_session,
-                extracted_project_files=extracted_project_files,
-                bypass_acl=bypass_acl,
-                slack_context=slack_context,
-                chat_session_id=chat_session_id,
-                user_message=user_message,
-                custom_tool_additional_headers=custom_tool_additional_headers,
+                llm=llm,
+                fast_llm=fast_llm,
+                search_tool_config=SearchToolConfig(
+                    user_selected_filters=user_selected_filters,
+                    project_id=(
+                        chat_session.project_id
+                        if extracted_project_files.project_as_filter
+                        else None
+                    ),
+                    bypass_acl=bypass_acl,
+                    slack_context=slack_context,
+                ),
+                custom_tool_config=CustomToolConfig(
+                    chat_session_id=chat_session_id,
+                    message_id=user_message.id if user_message else None,
+                    additional_headers=custom_tool_additional_headers,
+                ),
                 allowed_tool_ids=new_msg_req.allowed_tool_ids,
                 disable_internal_search=disable_internal_search,
+            )
+            tools: list[Tool] = []
+            for tool_list in tool_dict.values():
+                tools.extend(tool_list)
+
+            # Reserve a message id for the assistant response for frontend to track packets
+            assistant_response = reserve_message_id(
+                db_session=db_session,
+                chat_session_id=chat_session_id,
+                parent_message=user_message.id,
+                message_type=MessageType.ASSISTANT,
+                model_provider=llm.config.model_provider,
+                model_name=llm.config.model_name,
+            )
+
+            yield MessageResponseIDInfo(
+                user_message_id=user_message.id,
+                reserved_assistant_message_id=assistant_response.id,
+                model_provider=llm.config.model_provider,
+                model_name=llm.config.model_name,
+            )
+
+            # Convert the chat history into a simple format that is free of any DB objects
+            # and is easy to parse for the agent loop
+            simple_chat_history = convert_chat_history(
                 chat_history=chat_history,
                 files=files,
+                project_image_files=extracted_project_files.project_image_files,
                 additional_context=additional_context,
+                token_counter=token_counter,
                 tool_id_to_name_map=tool_id_to_name_map,
-                custom_agent_prompt=custom_agent_prompt,
-                memories=memories,
-                forced_tool_id=(
-                    new_msg_req.forced_tool_ids[0]
-                    if new_msg_req.forced_tool_ids
-                    else None
-                ),
-                check_is_connected=check_is_connected,
+            )
+
+            if merger is not None:
+                # Multi-model: start thread for concurrent execution
+                model_ctx.extra_data["assistant_response"] = assistant_response
+                model_ctx.extra_data["llm"] = llm
+
+                merger.start_model_thread(
+                    model_id=model_id,
+                    target_func=run_llm_loop,
+                    simple_chat_history=simple_chat_history,
+                    tools=tools,
+                    custom_agent_prompt=custom_agent_prompt,
+                    project_files=extracted_project_files,
+                    persona=persona,
+                    memories=memories,
+                    llm=llm,
+                    token_counter=token_counter,
+                    db_session=db_session,
+                    forced_tool_id=(
+                        new_msg_req.forced_tool_ids[0]
+                        if new_msg_req.forced_tool_ids
+                        else None
+                    ),
+                )
+            else:
+                # Single model: run synchronously
+                state_container = ChatStateContainer()
+                single_model_state = (state_container, assistant_response, llm)
+
+                # Run the LLM loop with explicit wrapper for stop signal handling
+                # The wrapper runs run_llm_loop in a background thread and polls every 300ms
+                # for stop signals. run_llm_loop itself doesn't know about stopping.
+                # Note: DB session is not thread safe but nothing else uses it and the
+                # reference is passed directly so it's ok.
+                yield from run_chat_llm_with_state_containers(
+                    run_llm_loop,
+                    emitter=emitter,
+                    state_container=state_container,
+                    is_connected=check_is_connected,  # Not passed through to run_llm_loop
+                    simple_chat_history=simple_chat_history,
+                    tools=tools,
+                    custom_agent_prompt=custom_agent_prompt,
+                    project_files=extracted_project_files,
+                    persona=persona,
+                    memories=memories,
+                    llm=llm,
+                    token_counter=token_counter,
+                    db_session=db_session,
+                    forced_tool_id=(
+                        new_msg_req.forced_tool_ids[0]
+                        if new_msg_req.forced_tool_ids
+                        else None
+                    ),
+                )
+
+        # After loop: handle streaming for multi-model
+        if merger is not None:
+            yield from merger.stream(is_connected=check_is_connected)
+            merger.wait_for_threads()
+
+        # Determine if stopped by user
+        completed_normally = check_is_connected()
+        if not completed_normally:
+            logger.debug(f"Chat session {chat_session_id} stopped by user")
+
+        # Build list of (state_container, assistant_response, error) for saving
+        if merger is not None:
+            models_to_save = [
+                (ctx.state_container, ctx.extra_data["assistant_response"], ctx.error)
+                for ctx in merger.get_model_contexts().values()
+            ]
+        else:
+            assert single_model_state is not None
+            state_container, assistant_response, _ = single_model_state
+            models_to_save = [(state_container, assistant_response, None)]
+
+        # Save chat turns for all models
+        for state_container, assistant_response, error in models_to_save:
+            if error is not None:
+                final_answer = f"Error: {str(error)}"
+            elif completed_normally:
+                if state_container.answer_tokens is None:
+                    if merger is not None:
+                        final_answer = "No response generated."
+                    else:
+                        raise RuntimeError(
+                            "LLM run completed normally but did not return an answer."
+                        )
+                else:
+                    final_answer = state_container.answer_tokens
+            else:
+                # Stopped by user - append stop message
+                if state_container.answer_tokens:
+                    final_answer = (
+                        state_container.answer_tokens
+                        + " ... The generation was stopped by the user here."
+                    )
+                else:
+                    final_answer = "The generation was stopped by the user."
+
+            # Build citation_docs_info from accumulated citations
+            citation_docs_info: list[CitationDocInfo] = []
+            seen_citation_nums: set[int] = set()
+            for citation_num, search_doc in state_container.citation_to_doc.items():
+                if citation_num not in seen_citation_nums:
+                    seen_citation_nums.add(citation_num)
+                    citation_docs_info.append(
+                        CitationDocInfo(
+                            search_doc=search_doc,
+                            citation_number=citation_num,
+                        )
+                    )
+
+            save_chat_turn(
+                message_text=final_answer,
+                reasoning_tokens=state_container.reasoning_tokens,
+                citation_docs_info=citation_docs_info,
+                tool_calls=state_container.tool_calls,
+                db_session=db_session,
+                assistant_message=assistant_response,
             )
 
     except ValueError as e:
