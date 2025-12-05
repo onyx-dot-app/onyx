@@ -4,7 +4,7 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import EmbeddingModelSelection from "../EmbeddingModelSelectionForm";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
-import Text from "@/components/ui/text";
+import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import { WarningCircle, Warning, CaretDownIcon } from "@phosphor-icons/react";
 import {
@@ -26,7 +26,8 @@ import {
 } from "../interfaces";
 import RerankingDetailsForm from "../RerankingFormPage";
 import { useEmbeddingFormContext } from "@/components/context/EmbeddingContext";
-import { Modal } from "@/components/Modal";
+import Modal from "@/refresh-components/Modal";
+import SvgAlertTriangle from "@/icons/alert-triangle";
 import InstantSwitchConfirmModal from "../modals/InstantSwitchConfirmModal";
 import { useRouter } from "next/navigation";
 import CardSection from "@/components/admin/CardSection";
@@ -540,20 +541,29 @@ export default function EmbeddingForm() {
           </>
         )}
         {showPoorModel && (
-          <Modal
-            onOutsideClick={() => setShowPoorModel(false)}
-            width="max-w-3xl"
-            title={`Are you sure you want to select ${selectedProvider.model_name}?`}
-          >
-            <>
-              <div className="text-lg">
-                {selectedProvider.model_name} is a lower accuracy model.
-                <br />
-                We recommend the following alternatives.
-                <li>Cohere embed-english-v3.0 for cloud-based</li>
-                <li>Nomic nomic-embed-text-v1 for self-hosted</li>
-              </div>
-              <div className="flex mt-4 justify-between">
+          <Modal open onOpenChange={() => setShowPoorModel(false)}>
+            <Modal.Content medium>
+              <Modal.Header
+                icon={SvgAlertTriangle}
+                title={`Are you sure you want to select ${selectedProvider.model_name}?`}
+                onClose={() => setShowPoorModel(false)}
+              />
+              <Modal.Body>
+                <div className="text-lg">
+                  <Text>
+                    {`${selectedProvider.model_name} is a lower accuracy model. We recommend the following alternatives:`}
+                  </Text>
+                  <ul className="list-disc list-inside mt-2 ml-4">
+                    <li>
+                      <Text>Cohere embed-english-v3.0 for cloud-based</Text>
+                    </li>
+                    <li>
+                      <Text>Nomic nomic-embed-text-v1 for self-hosted</Text>
+                    </li>
+                  </ul>
+                </div>
+              </Modal.Body>
+              <Modal.Footer>
                 <Button secondary onClick={() => setShowPoorModel(false)}>
                   Cancel update
                 </Button>
@@ -563,10 +573,10 @@ export default function EmbeddingForm() {
                     nextFormStep();
                   }}
                 >
-                  Continue with {selectedProvider.model_name}
+                  {`Continue with ${selectedProvider.model_name}`}
                 </Button>
-              </div>
-            </>
+              </Modal.Footer>
+            </Modal.Content>
           </Modal>
         )}
 
