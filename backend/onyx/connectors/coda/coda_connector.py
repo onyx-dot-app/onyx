@@ -333,14 +333,14 @@ class CodaConnector(LoadConnector):
                 docs = [doc]
             except Exception as e:
                 logger.error(f"Failed to get doc {self.doc_id}: {e}")
-                return
+                raise
         else:
             # All docs mode
             try:
                 docs = self._list_docs()
             except Exception as e:
                 logger.error(f"Failed to list Coda docs: {e}")
-                return
+                raise
 
         logger.info(f"Found {len(docs)} Coda doc(s) to process")
 
