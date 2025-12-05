@@ -39,15 +39,17 @@ import { CreateStdOAuthCredential } from "@/components/credentials/actions/Creat
 import { Card } from "../ui/card";
 import { isTypedFileField, TypedFile } from "@/lib/connectors/fileTypes";
 
+export interface CredentialSectionProps {
+  ccPair: CCPairFullInfo;
+  sourceType: ValidSources;
+  refresh: () => void;
+}
+
 export default function CredentialSection({
   ccPair,
   sourceType,
   refresh,
-}: {
-  ccPair: CCPairFullInfo;
-  sourceType: ValidSources;
-  refresh: () => void;
-}) {
+}: CredentialSectionProps) {
   const { data: credentials } = useSWR<Credential<ConfluenceCredentialJson>[]>(
     buildSimilarCredentialInfoURL(sourceType),
     errorHandlingFetcher,
@@ -242,7 +244,7 @@ export default function CredentialSection({
       </Card>
 
       {showModifyCredential && (
-        <Modal open={true} onOpenChange={closeModifyCredential}>
+        <Modal open onOpenChange={closeModifyCredential}>
           <Modal.Content medium>
             <Modal.Header
               icon={SvgEdit}
@@ -270,7 +272,7 @@ export default function CredentialSection({
       )}
 
       {editingCredential && (
-        <Modal open={true} onOpenChange={closeEditingCredential}>
+        <Modal open onOpenChange={closeEditingCredential}>
           <Modal.Content medium>
             <Modal.Header
               icon={SvgEdit}

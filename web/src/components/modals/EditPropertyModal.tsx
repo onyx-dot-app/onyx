@@ -52,7 +52,7 @@ export default function EditPropertyModal({
                   placeholder="Property value"
                 />
 
-                <Modal.Footer className="p-4">
+                <Modal.Footer>
                   <Button
                     type="submit"
                     disabled={
