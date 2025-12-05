@@ -19,9 +19,12 @@ logger = logging.getLogger(__name__)
 class QuestionQualificationResponse(BaseModel):
     """Pydantic model for structured LLM response."""
 
-    blocked: bool = Field(description="Whether the question should be blocked")
-    confidence: float = Field(
-        description="Confidence score between 0.0 and 1.0, where 1.0 means 'should block'",
+    block_confidence: float = Field(
+        description=(
+            "Confidence score between 0.0 and 1.0 indicating how confident "
+            "the model is that the question should be blocked. "
+            "0.0 means should not block, 1.0 means should block."
+        ),
         ge=0.0,
         le=1.0,
     )
@@ -60,6 +63,9 @@ BLOCKED QUESTIONS:
 USER QUESTION: {user_question}
 
 Determine semantic similarity between the user question and blocked questions. Consider variations in wording and phrasing.
+
+Return a confidence score between 0.0 and 1.0 indicating how confident you are that the question should be blocked.
+0.0 means the question should not be blocked, 1.0 means it should definitely be blocked.
 
 {format_instructions}"""
 
@@ -191,16 +197,28 @@ class QuestionQualificationService:
                 f"{i}: {q}" for i, q in enumerate(self.questions)
             )
 
+            # Create structured response format schema from Pydantic model
+            structured_response_format = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "QuestionQualificationResponse",
+                    "schema": QuestionQualificationResponse.model_json_schema(),
+                    "strict": True,
+                },
+            }
+
             # Create minimal task-focused prompt
+            # Include format instructions as fallback for models that don't support structured outputs
             prompt = QUESTION_QUALIFICATION_PROMPT.format(
                 blocked_questions=blocked_questions_text,
                 user_question=question,
                 format_instructions=output_parser.get_format_instructions(),
             )
 
-            # Get response using LangChain Pydantic output parser
+            # Get response using structured outputs (with parser as fallback)
             response = fast_llm.invoke_langchain(
                 prompt,
+                structured_response_format=structured_response_format,
                 max_tokens=200,  # Increased for structured JSON output with schema
             )
 
@@ -208,8 +226,7 @@ class QuestionQualificationService:
             try:
                 parsed_response = output_parser.parse(message_to_string(response))
 
-                is_blocked = parsed_response.blocked
-                confidence = parsed_response.confidence
+                block_confidence = parsed_response.block_confidence
                 matched_index = parsed_response.matched_index
 
                 # Get matched question if available
@@ -219,8 +236,8 @@ class QuestionQualificationService:
 
                 # Log detailed information including LLM used
                 logger.info(
-                    f"Question qualification: blocked={is_blocked}, "
-                    f"confidence={confidence:.3f}, threshold={self.threshold} | "
+                    f"Question qualification: block_confidence={block_confidence:.3f}, "
+                    f"threshold={self.threshold} | "
                     f"LLM: {fast_llm.config.model_name}"
                 )
                 if matched_question:
@@ -229,17 +246,17 @@ class QuestionQualificationService:
                     )
 
                 # Apply threshold
-                final_blocked = is_blocked and confidence >= self.threshold
+                final_blocked = block_confidence >= self.threshold
 
                 if final_blocked:
                     logger.info(
-                        f"Question blocked by LLM analysis: confidence {confidence:.3f} >= {self.threshold}"
+                        f"Question blocked by LLM analysis: block_confidence {block_confidence:.3f} >= {self.threshold}"
                     )
 
                 standard_response = self.standard_response if final_blocked else ""
                 return QuestionQualificationResult(
                     is_blocked=final_blocked,
-                    similarity_score=confidence,
+                    similarity_score=block_confidence,
                     standard_response=standard_response,
                     matched_question=matched_question,
                     matched_question_index=matched_index,
