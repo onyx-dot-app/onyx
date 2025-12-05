@@ -27,6 +27,27 @@ import {
 } from "./interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 
+/**
+ * Merges existing model configurations with fresh capability data from descriptor.
+ * Preserves user settings (visibility) while updating capabilities (image support, etc.)
+ */
+export const mergeModelConfigsWithFreshCapabilities = (
+  existingConfigs: ModelConfiguration[],
+  freshConfigs: ModelConfiguration[]
+): ModelConfiguration[] => {
+  const freshConfigMap = new Map(freshConfigs.map((c) => [c.name, c]));
+  return existingConfigs.map((existing) => {
+    const fresh = freshConfigMap.get(existing.name);
+    return {
+      ...existing,
+      supports_image_output:
+        fresh?.supports_image_output ?? existing.supports_image_output,
+      supports_image_input:
+        fresh?.supports_image_input ?? existing.supports_image_input,
+    };
+  });
+};
+
 // Aggregator providers that host models from multiple vendors
 export const AGGREGATOR_PROVIDERS = new Set([
   "bedrock",

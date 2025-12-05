@@ -613,8 +613,8 @@ def model_supports_image_output(model_name: str, model_provider: str) -> bool:
                     LLMProvider.provider == model_provider,
                 )
             )
-            if model_config:
-                return model_config.supports_image_output or False
+            if model_config and model_config.supports_image_output is not None:
+                return model_config.supports_image_output
     except Exception as e:
         logger.warning(
             f"Failed to query database for {model_provider} model {model_name} image generation support: {e}"
