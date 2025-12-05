@@ -466,7 +466,6 @@ interface BuildEmptyMessageParams {
   message?: string;
   files?: FileDescriptor[];
   nodeIdOffset?: number;
-  // Multi-model support
   modelProvider?: string;
   modelName?: string;
 }
@@ -482,7 +481,6 @@ export const buildEmptyMessage = (params: BuildEmptyMessageParams): Message => {
     toolCall: null,
     parentNodeId: params.parentNodeId,
     packets: [],
-    // Multi-model support
     modelProvider: params.modelProvider,
     modelName: params.modelName,
   };

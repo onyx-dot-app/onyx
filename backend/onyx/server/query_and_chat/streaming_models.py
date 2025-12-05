@@ -260,9 +260,7 @@ PacketObj = Union[
 class Packet(BaseModel):
     turn_index: int | None
     obj: Annotated[PacketObj, Field(discriminator="type")]
-    # Optional model identifier for multi-model streaming
-    # Format: "{provider}:{model_name}" e.g. "openai:gpt-4"
-    model_id: str | None = None
+    model_id: str | None = None  # Format: "{provider}:{model_name}" e.g. "openai:gpt-4"
 
 
 # This is for replaying it back from the DB to the frontend
