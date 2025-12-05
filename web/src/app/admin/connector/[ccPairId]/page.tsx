@@ -653,7 +653,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
                 <Text className="text-sm text-text-default">
                   {ccPair.last_permission_sync_attempt_finished
                     ? timeAgo(ccPair.last_permission_sync_attempt_finished)
-                    : timeAgo(ccPair.last_full_permission_sync) ?? "-"}
+                    : (timeAgo(ccPair.last_full_permission_sync) ?? "-")}
                 </Text>
               </div>
             </>

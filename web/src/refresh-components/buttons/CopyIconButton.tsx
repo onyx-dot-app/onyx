@@ -8,8 +8,10 @@ import SvgAlertTriangle from "@/icons/alert-triangle";
 
 type CopyState = "idle" | "copied" | "error";
 
-export interface CopyIconButtonProps
-  extends Omit<IconButtonProps, "icon" | "onClick"> {
+export interface CopyIconButtonProps extends Omit<
+  IconButtonProps,
+  "icon" | "onClick"
+> {
   // Function that returns the text to copy to clipboard
   getCopyText: () => string;
 }

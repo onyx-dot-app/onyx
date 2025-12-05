@@ -84,8 +84,9 @@ const useInputSelectContext = () => {
  * </InputSelect>
  * ```
  */
-interface InputSelectRootProps
-  extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root> {
+interface InputSelectRootProps extends React.ComponentPropsWithoutRef<
+  typeof SelectPrimitive.Root
+> {
   /** Whether to show error styling */
   error?: boolean;
   /** Whether the select is disabled */
@@ -188,8 +189,9 @@ InputSelectRoot.displayName = "InputSelect";
  * <InputSelect.Trigger placeholder="Select..." rightSection={<Badge>New</Badge>} />
  * ```
  */
-interface InputSelectTriggerProps
-  extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> {
+interface InputSelectTriggerProps extends React.ComponentPropsWithoutRef<
+  typeof SelectPrimitive.Trigger
+> {
   /** Placeholder when no value selected */
   placeholder?: React.ReactNode;
   /** Content to render on the right side of the trigger */
@@ -276,8 +278,9 @@ InputSelectTrigger.displayName = "InputSelectTrigger";
  * </InputSelect.Content>
  * ```
  */
-interface InputSelectContentProps
-  extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content> {}
+interface InputSelectContentProps extends React.ComponentPropsWithoutRef<
+  typeof SelectPrimitive.Content
+> {}
 const InputSelectContent = React.forwardRef<
   React.ComponentRef<typeof SelectPrimitive.Content>,
   InputSelectContentProps

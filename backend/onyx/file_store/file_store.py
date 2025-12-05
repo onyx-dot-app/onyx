@@ -127,7 +127,9 @@ class FileStore(ABC):
         """
 
     @abstractmethod
-    def get_file_size(self, file_id: str, db_session: Session | None = None) -> int | None:
+    def get_file_size(
+        self, file_id: str, db_session: Session | None = None
+    ) -> int | None:
         """
         Get the size of a file in bytes.
         Optionally provide a db_session for database access.
