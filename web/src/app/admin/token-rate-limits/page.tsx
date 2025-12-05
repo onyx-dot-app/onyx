@@ -16,7 +16,7 @@ import { Scope, TokenRateLimit } from "./types";
 import { GenericTokenRateLimitTable } from "./TokenRateLimitTables";
 import { mutate } from "swr";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { CreateRateLimitModal } from "./CreateRateLimitModal";
+import CreateRateLimitModal from "./CreateRateLimitModal";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import SvgShield from "@/icons/shield";

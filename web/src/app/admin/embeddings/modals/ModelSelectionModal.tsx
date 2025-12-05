@@ -1,64 +1,67 @@
-import { Modal } from "@/components/Modal";
-import Text from "@/components/ui/text";
+import Modal from "@/refresh-components/Modal";
+import Text from "@/refresh-components/texts/Text";
 import { Callout } from "@/components/ui/callout";
 import Button from "@/refresh-components/buttons/Button";
-import { HostedEmbeddingModel } from "../../../../components/embedding/interfaces";
+import SvgServer from "@/icons/server";
+import { HostedEmbeddingModel } from "@/components/embedding/interfaces";
 
-export function ModelSelectionConfirmationModal({
-  selectedModel,
-  isCustom,
-  onConfirm,
-  onCancel,
-}: {
+export interface ModelSelectionConfirmationModalProps {
   selectedModel: HostedEmbeddingModel;
   isCustom: boolean;
   onConfirm: () => void;
   onCancel: () => void;
-}) {
+}
+
+export default function ModelSelectionConfirmationModal({
+  selectedModel,
+  isCustom,
+  onConfirm,
+  onCancel,
+}: ModelSelectionConfirmationModalProps) {
   return (
-    <Modal
-      width="max-w-3xl"
-      title="Update Embedding Model"
-      onOutsideClick={onCancel}
-    >
-      <div>
-        <div className="mb-4">
-          <Text className="text-lg mb-4">
-            You have selected: <b>{selectedModel.model_name}</b>. Are you sure
-            you want to update to this new embedding model?
+    <Modal open={true} onOpenChange={onCancel}>
+      <Modal.Content tall>
+        <Modal.Header
+          icon={SvgServer}
+          title="Update Embedding Model"
+          onClose={onCancel}
+        />
+        <Modal.Body>
+          <Text>
+            You have selected: <strong>{selectedModel.model_name}</strong>. Are
+            you sure you want to update to this new embedding model?
           </Text>
-          <Text className="text-lg mb-2">
+          <Text>
             We will re-index all your documents in the background so you will be
             able to continue to use Onyx as normal with the old model in the
             meantime. Depending on how many documents you have indexed, this may
             take a while.
           </Text>
-          <Text className="text-lg mb-2">
+          <Text>
             <i>NOTE:</i> this re-indexing process will consume more resources
             than normal. If you are self-hosting, we recommend that you allocate
             at least 16GB of RAM to Onyx during this process.
           </Text>
 
           {isCustom && (
-            <Callout type="warning" title="IMPORTANT" className="mt-4">
+            <Callout type="warning" title="IMPORTANT">
               We&apos;ve detected that this is a custom-specified embedding
               model. Since we have to download the model files before verifying
               the configuration&apos;s correctness, we won&apos;t be able to let
-              you know if the configuration is valid until <b>after</b> we start
-              re-indexing your documents. If there is an issue, it will show up
-              on this page as an indexing error on this page after clicking
-              Confirm.
+              you know if the configuration is valid until{" "}
+              <strong>after</strong> we start re-indexing your documents. If
+              there is an issue, it will show up on this page as an indexing
+              error on this page after clicking Confirm.
             </Callout>
           )}
-
-          <div className="flex mt-8 gap-x-2 justify-end">
-            <Button onClick={onConfirm}>Confirm</Button>
-            <Button secondary onClick={onCancel}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      </div>
+        </Modal.Body>
+        <Modal.Footer className="p-4 gap-2 justify-end">
+          <Button onClick={onConfirm}>Confirm</Button>
+          <Button secondary onClick={onCancel}>
+            Cancel
+          </Button>
+        </Modal.Footer>
+      </Modal.Content>
     </Modal>
   );
 }

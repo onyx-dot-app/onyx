@@ -12,11 +12,11 @@ import {
 } from "@/components/embedding/interfaces";
 import OpenEmbeddingPage from "@/app/admin/embeddings/pages/OpenEmbeddingPage";
 import CloudEmbeddingPage from "@/app/admin/embeddings/pages/CloudEmbeddingPage";
-import { ProviderCreationModal } from "@/app/admin/embeddings/modals/ProviderCreationModal";
+import ProviderCreationModal from "@/app/admin/embeddings/modals/ProviderCreationModal";
 import DeleteCredentialsModal from "@/app/admin/embeddings/modals/DeleteCredentialsModal";
-import { SelectModelModal } from "@/app/admin/embeddings/modals/SelectModelModal";
+import SelectModelModal from "@/app/admin/embeddings/modals/SelectModelModal";
 import ChangeCredentialsModal from "@/app/admin/embeddings/modals/ChangeCredentialsModal";
-import { ModelSelectionConfirmationModal } from "@/app/admin/embeddings/modals/ModelSelectionModal";
+import ModelSelectionConfirmationModal from "@/app/admin/embeddings/modals/ModelSelectionModal";
 import AlreadyPickedModal from "@/app/admin/embeddings/modals/AlreadyPickedModal";
 import { ModelOption } from "@/components/embedding/ModelSelector";
 import {
