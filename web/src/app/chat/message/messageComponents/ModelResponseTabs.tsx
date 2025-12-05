@@ -4,6 +4,8 @@ import { useState, useMemo } from "react";
 import { LlmDescriptor } from "@/lib/hooks";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import { cn } from "@/lib/utils";
+import { isStreamingComplete } from "@/app/chat/services/packetUtils";
+import { FiCheck } from "react-icons/fi";
 
 import { Message } from "@/app/chat/interfaces";
 
@@ -17,6 +19,25 @@ interface ModelResponseTabsProps {
   modelResponses: ModelResponse[];
   activeIndex: number;
   onTabChange: (index: number) => void;
+}
+
+// Streaming indicator component - pulsing dot animation
+function StreamingIndicator() {
+  return (
+    <span className="relative flex h-2 w-2">
+      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+      <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+    </span>
+  );
+}
+
+// Completion indicator component - checkmark
+function CompletedIndicator() {
+  return (
+    <span className="flex items-center justify-center h-3.5 w-3.5 rounded-full bg-emerald-500/20">
+      <FiCheck className="h-2.5 w-2.5 text-emerald-600" strokeWidth={3} />
+    </span>
+  );
 }
 
 export function ModelResponseTabs({
@@ -37,6 +58,11 @@ export function ModelResponseTabs({
           response.model.modelName
         );
 
+        // Determine streaming status for this model's response
+        const packets = response.message?.packets || [];
+        const isComplete = isStreamingComplete(packets);
+        const hasStartedStreaming = packets.length > 0;
+
         return (
           <button
             key={`${response.model.provider}-${response.model.modelName}-${index}`}
@@ -52,9 +78,9 @@ export function ModelResponseTabs({
             <span className="max-w-[120px] truncate">
               {response.model.modelName || response.model.provider}
             </span>
-            {isActive && (
-              <span className="w-1.5 h-1.5 rounded-full bg-action-link-01" />
-            )}
+            {/* Status indicator: streaming or complete */}
+            {hasStartedStreaming && !isComplete && <StreamingIndicator />}
+            {isComplete && <CompletedIndicator />}
           </button>
         );
       })}

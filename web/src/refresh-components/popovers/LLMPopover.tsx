@@ -610,9 +610,16 @@ export default function LLMPopover({
                                   // Match by both modelName AND provider to handle same model name across providers
                                   const isSelected = isModelSelected(option);
 
-                                  // Disable unselected items when at max
+                                  // In single-select mode, check if this is the current model being replaced
+                                  const isCurrentModel =
+                                    singleSelectMode &&
+                                    currentModelName === option.modelName;
+
+                                  // Disable unselected items when at max (only in multi-select mode)
                                   const isDisabled =
-                                    !isSelected && isAtMaxSelection;
+                                    !singleSelectMode &&
+                                    !isSelected &&
+                                    isAtMaxSelection;
 
                                   // Build description with version info
                                   const description =
@@ -625,7 +632,9 @@ export default function LLMPopover({
                                     <div
                                       key={`${option.name}-${option.modelName}`}
                                       ref={
-                                        isSelected ? selectedItemRef : undefined
+                                        isSelected || isCurrentModel
+                                          ? selectedItemRef
+                                          : undefined
                                       }
                                       title={
                                         isDisabled
@@ -634,7 +643,11 @@ export default function LLMPopover({
                                       }
                                     >
                                       <LineItem
-                                        selected={isSelected}
+                                        selected={
+                                          singleSelectMode
+                                            ? isCurrentModel
+                                            : isSelected
+                                        }
                                         description={description}
                                         onClick={() =>
                                           !isDisabled &&
@@ -646,7 +659,15 @@ export default function LLMPopover({
                                             : ""
                                         }`}
                                         rightChildren={
-                                          isSelected ? (
+                                          // In single-select mode: show "Current" badge for the model being replaced
+                                          // In multi-select mode: show checkmark for selected models
+                                          singleSelectMode ? (
+                                            isCurrentModel ? (
+                                              <span className="text-[10px] font-medium text-text-03 bg-background-emphasis px-1.5 py-0.5 rounded">
+                                                Current
+                                              </span>
+                                            ) : null
+                                          ) : isSelected ? (
                                             <SvgCheck className="h-4 w-4 stroke-action-link-05 shrink-0" />
                                           ) : null
                                         }

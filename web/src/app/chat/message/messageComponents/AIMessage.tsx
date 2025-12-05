@@ -688,14 +688,20 @@ export default function AIMessage({
                               <div data-testid="AIMessage/regenerate">
                                 <LLMPopover
                                   llmManager={llmManager}
-                                  currentModelName={chatState.overriddenModel}
+                                  currentModelName={
+                                    // Use the model from the active response (for multi-model)
+                                    // or fall back to session-level override
+                                    activeResponse?.message?.modelName ||
+                                    activeResponse?.model.modelName ||
+                                    chatState.overriddenModel
+                                  }
                                   onSelect={(modelName) => {
                                     const llmDescriptor =
                                       parseLlmDescriptor(modelName);
                                     chatState.regenerate!(llmDescriptor);
                                   }}
                                   folded
-                                  singleSelectMode={false}
+                                  singleSelectMode={true}
                                 />
                               </div>
                             )}
