@@ -79,23 +79,54 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
   const emptyChildrenIds = useMemo<number[]>(() => [], []);
 
   // Build a map of responseGroupId -> Messages for multi-model response grouping
+  // Uses completeMessageTree to know about ALL response groups across all branches
   // Also track which nodeIds should be skipped (all but the first in each group)
-  // Use nodeId instead of messageId because pre-created nodes have undefined messageId
   const { responseGroupMap, nodeIdsToSkip } = useMemo(() => {
     const groupMap = new Map<string, Message[]>();
     const skipNodeIds = new Set<number>();
 
+    // First, build group info from the COMPLETE message tree (all branches)
+    // This ensures we know about response groups even when viewing a different branch
+    if (completeMessageTree) {
+      for (const msg of Array.from(completeMessageTree.values())) {
+        if (msg.responseGroupId) {
+          const existing = groupMap.get(msg.responseGroupId);
+          if (existing) {
+            existing.push(msg);
+          } else {
+            groupMap.set(msg.responseGroupId, [msg]);
+          }
+        }
+      }
+    }
+
+    // Also include messages from messageHistory (for streaming/pre-created nodes
+    // that might not be in completeMessageTree yet)
     for (const msg of messageHistory) {
-      // Use nodeId for grouping - it's always present even for pre-created nodes
       if (msg.responseGroupId) {
         const existing = groupMap.get(msg.responseGroupId);
         if (existing) {
-          // This is not the first message in the group - skip it
-          existing.push(msg);
-          skipNodeIds.add(msg.nodeId);
+          // Check if this message is already in the group (by nodeId)
+          if (!existing.some((m) => m.nodeId === msg.nodeId)) {
+            existing.push(msg);
+          }
         } else {
-          // First message in the group - will be rendered with tabs
           groupMap.set(msg.responseGroupId, [msg]);
+        }
+      }
+    }
+
+    // For each group, sort by nodeId and mark all but the first as "skip"
+    for (const [, messages] of Array.from(groupMap.entries())) {
+      if (messages.length > 1) {
+        // Sort by nodeId for consistent ordering
+        messages.sort((a: Message, b: Message) => a.nodeId - b.nodeId);
+        // Skip all except the first (representative) message
+        for (let i = 1; i < messages.length; i++) {
+          const msg = messages[i];
+          if (msg) {
+            skipNodeIds.add(msg.nodeId);
+          }
         }
       }
     }
@@ -113,7 +144,7 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
     }
 
     return { responseGroupMap: groupMap, nodeIdsToSkip: skipNodeIds };
-  }, [messageHistory]);
+  }, [messageHistory, completeMessageTree]);
   const createRegenerator = useCallback(
     (regenerationRequest: {
       messageId: number;
@@ -257,19 +288,14 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
             }
           }
 
-          // Filter out messages that are part of the same response group from branch switching
-          // Multi-model responses should appear as tabs, not as alternative branches
+          // Filter out non-representative messages from ALL response groups for branch switching
+          // Each multi-model response group should appear as a single branch option, not 4 separate ones
           const switchableMessages = (() => {
             const allChildren =
               parentMessage?.childrenNodeIds ?? emptyChildrenIds;
-            if (!responseGroupNodeIds || responseGroupNodeIds.size === 0) {
-              return allChildren;
-            }
-            // Keep only messages NOT in the same response group (except current message)
-            return allChildren.filter(
-              (nodeId) =>
-                nodeId === message.nodeId || !responseGroupNodeIds!.has(nodeId)
-            );
+            // Filter out all nodeIds that are "non-representative" in their response group
+            // nodeIdsToSkip contains all messages except the first one in each response group
+            return allChildren.filter((nodeId) => !nodeIdsToSkip.has(nodeId));
           })();
 
           return (
