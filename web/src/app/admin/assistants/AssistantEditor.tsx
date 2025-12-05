@@ -208,7 +208,12 @@ export default function AssistantEditor({
 
   const enabledToolsMap: { [key: number]: boolean } = {};
   tools.forEach((tool) => {
-    enabledToolsMap[tool.id] = personaCurrentToolIds.includes(tool.id);
+    // Enable tool if:
+    // 1. It's part of the existing persona's tools, OR
+    // 2. It's marked as default_enabled in the backend config (for new personas)
+    enabledToolsMap[tool.id] =
+      personaCurrentToolIds.includes(tool.id) ||
+      (tool.default_enabled && !existingPersona);
   });
 
   const { allRecentFiles, beginUpload } = useProjectsContext();

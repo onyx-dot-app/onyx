@@ -9,8 +9,8 @@ from onyx.db.models import Persona
 from onyx.db.models import PersonaLabel
 from onyx.db.models import StarterMessage
 from onyx.server.features.document_set.models import DocumentSetSummary
-from onyx.server.features.tool.models import should_expose_tool_to_fe
 from onyx.server.features.tool.models import ToolSnapshot
+from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
 from onyx.server.models import MinimalUserSnapshot
 from onyx.utils.logger import setup_logger
 

@@ -17,7 +17,7 @@ repos:
         files: ^(pyproject\.toml|uv\.lock)$
       - id: uv-export
         name: uv-export dev.txt
-        args: ["--no-emit-project", "--no-default-groups", "--no-hashes", "--group", "dev", "-o", "backend/requirements/dev.txt"]
+        args: ["--no-emit-project", "--no-default-groups", "--no-hashes", "--extra", "dev", "-o", "backend/requirements/dev.txt"]
         files: ^(pyproject\.toml|uv\.lock)$
       - id: uv-export
         name: uv-export ee.txt

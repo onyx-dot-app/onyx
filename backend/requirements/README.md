@@ -77,19 +77,29 @@ branches or pulling new changes.
 
 ```bash
 # For everything (most common)
-uv sync
+uv sync --all-extras
 
 # For backend production (shared + backend dependencies)
 uv sync --extra backend
 
 # For backend development (shared + backend + dev tools)
-uv sync --extra backend --group dev
+uv sync --extra backend --extra dev
 
 # For backend with EE (shared + backend + ee)
 uv sync --extra backend --extra ee
 
 # For model server (shared + model_server, NO backend deps!)
 uv sync --extra model_server
+```
+
+`uv` aggressively [ignores active virtual environments](https://docs.astral.sh/uv/concepts/projects/config/#project-environment-path) and prefers the root virtual environment.
+When working in workspace packages, be sure to pass `--active` when syncing the virtual environment:
+
+```bash
+cd backend/
+source .venv/bin/activate
+uv sync --active
+uv run --active ...
 ```
 
 ### 5. Upgrading Dependencies
