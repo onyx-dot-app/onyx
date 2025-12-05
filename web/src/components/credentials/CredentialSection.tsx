@@ -21,7 +21,9 @@ import {
   buildCCPairInfoUrl,
   buildSimilarCredentialInfoURL,
 } from "@/app/admin/connector/[ccPairId]/lib";
-import { Modal } from "../Modal";
+import Modal from "@/refresh-components/Modal";
+import SvgEdit from "@/icons/edit";
+import SvgKey from "@/icons/key";
 import EditCredential from "./actions/EditCredential";
 import { getSourceDisplayName } from "@/lib/sources";
 import {
@@ -240,70 +242,85 @@ export default function CredentialSection({
       </Card>
 
       {showModifyCredential && (
-        <Modal
-          onOutsideClick={closeModifyCredential}
-          className="max-w-3xl rounded-lg"
-          title="Update Credentials"
-        >
-          <ModifyCredential
-            close={closeModifyCredential}
-            accessType={ccPair.access_type}
-            attachedConnector={ccPair.connector}
-            defaultedCredential={defaultedCredential}
-            credentials={credentials}
-            editableCredentials={editableCredentials}
-            onDeleteCredential={onDeleteCredential}
-            onEditCredential={(credential: Credential<any>) =>
-              onEditCredential(credential)
-            }
-            onSwap={onSwap}
-            onCreateNew={() => makeShowCreateCredential()}
-          />
+        <Modal open={true} onOpenChange={closeModifyCredential}>
+          <Modal.Content medium>
+            <Modal.Header
+              icon={SvgEdit}
+              title="Update Credentials"
+              onClose={closeModifyCredential}
+            />
+            <Modal.Body>
+              <ModifyCredential
+                close={closeModifyCredential}
+                accessType={ccPair.access_type}
+                attachedConnector={ccPair.connector}
+                defaultedCredential={defaultedCredential}
+                credentials={credentials}
+                editableCredentials={editableCredentials}
+                onDeleteCredential={onDeleteCredential}
+                onEditCredential={(credential: Credential<any>) =>
+                  onEditCredential(credential)
+                }
+                onSwap={onSwap}
+                onCreateNew={() => makeShowCreateCredential()}
+              />
+            </Modal.Body>
+          </Modal.Content>
         </Modal>
       )}
 
       {editingCredential && (
-        <Modal
-          onOutsideClick={closeEditingCredential}
-          className="max-w-3xl rounded-lg"
-          title="Edit Credential"
-        >
-          <EditCredential
-            onUpdate={onUpdateCredential}
-            setPopup={setPopup}
-            credential={editingCredential}
-            onClose={closeEditingCredential}
-          />
+        <Modal open={true} onOpenChange={closeEditingCredential}>
+          <Modal.Content medium>
+            <Modal.Header
+              icon={SvgEdit}
+              title="Edit Credential"
+              onClose={closeEditingCredential}
+            />
+            <Modal.Body>
+              <EditCredential
+                onUpdate={onUpdateCredential}
+                setPopup={setPopup}
+                credential={editingCredential}
+                onClose={closeEditingCredential}
+              />
+            </Modal.Body>
+          </Modal.Content>
         </Modal>
       )}
 
       {showCreateCredential && (
-        <Modal
-          onOutsideClick={closeCreateCredential}
-          className="max-w-3xl flex flex-col items-start rounded-lg"
-          title={`Create ${getSourceDisplayName(sourceType)} Credential`}
-        >
-          {oauthDetailsLoading ? (
-            <Spinner />
-          ) : (
-            <>
-              {oauthDetails && oauthDetails.oauth_enabled ? (
-                <CreateStdOAuthCredential
-                  sourceType={sourceType}
-                  additionalFields={oauthDetails.additional_kwargs}
-                />
+        <Modal open onOpenChange={closeCreateCredential}>
+          <Modal.Content medium>
+            <Modal.Header
+              icon={SvgKey}
+              title={`Create ${getSourceDisplayName(sourceType)} Credential`}
+              onClose={closeCreateCredential}
+            />
+            <Modal.Body>
+              {oauthDetailsLoading ? (
+                <Spinner />
               ) : (
-                <CreateCredential
-                  sourceType={sourceType}
-                  accessType={ccPair.access_type}
-                  swapConnector={ccPair.connector}
-                  setPopup={setPopup}
-                  onSwap={onSwap}
-                  onClose={closeCreateCredential}
-                />
+                <>
+                  {oauthDetails && oauthDetails.oauth_enabled ? (
+                    <CreateStdOAuthCredential
+                      sourceType={sourceType}
+                      additionalFields={oauthDetails.additional_kwargs}
+                    />
+                  ) : (
+                    <CreateCredential
+                      sourceType={sourceType}
+                      accessType={ccPair.access_type}
+                      swapConnector={ccPair.connector}
+                      setPopup={setPopup}
+                      onSwap={onSwap}
+                      onClose={closeCreateCredential}
+                    />
+                  )}
+                </>
               )}
-            </>
-          )}
+            </Modal.Body>
+          </Modal.Content>
         </Modal>
       )}
     </div>
