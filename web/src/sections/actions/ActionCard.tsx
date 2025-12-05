@@ -7,6 +7,11 @@ import { cn } from "@/lib/utils";
 import { ActionStatus } from "@/lib/tools/types";
 import type { IconProps } from "@opal/types";
 import { SvgServer } from "@opal/icons";
+import {
+  ActionCardProvider,
+  ActionCardContextValue,
+} from "@/sections/actions/ActionCardContext";
+
 export interface ActionCardProps {
   // Core content
   title: string;
@@ -76,6 +81,7 @@ export default function ActionCard({
   const [internalExpanded, setInternalExpanded] = useState(initialExpanded);
   const [isToolsRefreshing, setIsToolsRefreshing] = useState(false);
   const hasInitializedExpansion = useRef(false);
+  const [isHovered, setIsHovered] = useState(false);
 
   // Determine if we're in controlled mode
   const isControlled = controlledIsExpanded !== undefined;
@@ -108,52 +114,60 @@ export default function ActionCard({
       ? "bg-background-neutral-02"
       : "";
 
-  return (
-    <div
-      className={cn(
-        "w-full",
-        backgroundColor,
-        "border border-border-01 rounded-16",
-        className
-      )}
-      role="article"
-      aria-label={ariaLabel || `${title} action card`}
-    >
-      <div className="flex flex-col w-full">
-        {/* Header Section */}
-        <div className="flex items-start justify-between p-3 w-full">
-          <ActionCardHeader
-            title={title}
-            description={description}
-            icon={icon || SvgServer}
-            status={status}
-            onEdit={onEdit}
-            onRename={onRename}
-          />
+  const contextValue: ActionCardContextValue = { isHovered };
 
-          {/* Action Buttons */}
-          {actions}
+  return (
+    <ActionCardProvider value={contextValue}>
+      <div
+        className={cn(
+          "w-full",
+          backgroundColor,
+          "border border-border-01 rounded-16",
+          "transition-shadow duration-200",
+          isHovered && "shadow-00",
+          className
+        )}
+        role="article"
+        aria-label={ariaLabel || `${title} action card`}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        <div className="flex flex-col w-full">
+          {/* Header Section */}
+          <div className="flex items-start justify-between p-3 w-full">
+            <ActionCardHeader
+              title={title}
+              description={description}
+              icon={icon || SvgServer}
+              status={status}
+              onEdit={onEdit}
+              onRename={onRename}
+            />
+
+            {/* Action Buttons */}
+            {actions}
+          </div>
+
+          {/* Tools Section (Only when expanded and search is enabled) */}
+          {isExpandedActual && enableSearch && (
+            <ToolsSection
+              isRefreshing={isToolsRefreshing}
+              onRefresh={onRefresh ? handleRefreshTools : undefined}
+              onDisableAll={onDisableAll}
+              onFold={onFold}
+              searchQuery={searchQuery}
+              onSearchQueryChange={onSearchQueryChange || (() => {})}
+            />
+          )}
         </div>
 
-        {/* Tools Section (Only when expanded and search is enabled) */}
-        {isExpandedActual && enableSearch && (
-          <ToolsSection
-            isRefreshing={isToolsRefreshing}
-            onRefresh={onRefresh ? handleRefreshTools : undefined}
-            onDisableAll={onDisableAll}
-            onFold={onFold}
-            searchQuery={searchQuery}
-            onSearchQueryChange={onSearchQueryChange || (() => {})}
-          />
+        {/* Content Area - Only render when expanded */}
+        {isExpandedActual && children && (
+          <div className="animate-in fade-in slide-in-from-top-2 duration-300 p-2 border-t border-border-01">
+            {children}
+          </div>
         )}
       </div>
-
-      {/* Content Area - Only render when expanded */}
-      {isExpandedActual && children && (
-        <div className="animate-in fade-in slide-in-from-top-2 duration-300 p-2 border-t border-border-01">
-          {children}
-        </div>
-      )}
-    </div>
+    </ActionCardProvider>
   );
 }
