@@ -818,7 +818,8 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
             if secondary_search_settings:
                 # For ACTIVE_ONLY, we skip paused connectors
                 include_paused = (
-                    secondary_search_settings.switchover_type != SwitchoverType.ACTIVE_ONLY
+                    secondary_search_settings.switchover_type
+                    != SwitchoverType.ACTIVE_ONLY
                 )
                 standard_cc_pair_ids = (
                     fetch_indexable_standard_connector_credential_pair_ids(
