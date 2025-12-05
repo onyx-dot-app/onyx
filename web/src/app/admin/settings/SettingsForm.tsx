@@ -442,8 +442,9 @@ export function SettingsForm() {
                     display_model_names: provider.vision_models,
                   }))}
                   currentLlm={visionLLM}
-                  onSelect={(value) => setVisionLLM(value)}
+                  requiresImageInput={true}
                   visibleModelsOnly={false} // Allow admins to select non-visible models for image processing
+                  onSelect={(value) => setVisionLLM(value)}
                 />
                 <Button
                   onClick={() => updateDefaultVisionProvider(visionLLM)}

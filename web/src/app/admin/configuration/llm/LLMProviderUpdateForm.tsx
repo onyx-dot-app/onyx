@@ -620,14 +620,18 @@ export function LLMProviderUpdateForm({
                     name="default_model_name"
                     subtext="The model to use by default for this provider unless otherwise specified."
                     label="Default Model"
-                    options={currentModelConfigurations.map(
-                      (modelConfiguration) => ({
+                    options={currentModelConfigurations
+                      .filter(
+                        (
+                          modelConfiguration // Don't show image generation models in LLM configuration modal
+                        ) => !modelConfiguration.supports_image_output
+                      )
+                      .map((modelConfiguration) => ({
                         // don't clean up names here to give admins descriptive names / handle duplicates
                         // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
                         name: modelConfiguration.name,
                         value: modelConfiguration.name,
-                      })
-                    )}
+                      }))}
                     maxHeight="max-h-56"
                   />
                 ) : (
@@ -654,14 +658,17 @@ export function LLMProviderUpdateForm({
                       name="fast_default_model_name"
                       subtext="The model to use for lighter flows like `LLM Chunk Filter` for this provider. If not set, will use the Default Model configured above."
                       label="[Optional] Fast Model"
-                      options={currentModelConfigurations.map(
-                        (modelConfiguration) => ({
+                      options={currentModelConfigurations
+                        .filter(
+                          (modelConfiguration) =>
+                            !modelConfiguration.supports_image_output
+                        )
+                        .map((modelConfiguration) => ({
                           // don't clean up names here to give admins descriptive names / handle duplicates
                           // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
                           name: modelConfiguration.name,
                           value: modelConfiguration.name,
-                        })
-                      )}
+                        }))}
                       includeDefault
                       maxHeight="max-h-56"
                     />
@@ -691,14 +698,18 @@ export function LLMProviderUpdateForm({
                             name="selected_model_names"
                             label="Display Models"
                             subtext="Select the models to make available to users. Unselected models will not be available."
-                            options={currentModelConfigurations.map(
-                              (modelConfiguration) => ({
+                            options={currentModelConfigurations
+                              .filter(
+                                (
+                                  modelConfiguration // Don't show image generation models in LLM configuration modal
+                                ) => !modelConfiguration.supports_image_output
+                              )
+                              .map((modelConfiguration) => ({
                                 value: modelConfiguration.name,
                                 // don't clean up names here to give admins descriptive names / handle duplicates
                                 // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
                                 label: modelConfiguration.name,
-                              })
-                            )}
+                              }))}
                             onChange={(selected) =>
                               formikProps.setFieldValue(
                                 "selected_model_names",
