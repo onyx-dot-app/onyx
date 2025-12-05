@@ -99,7 +99,6 @@ class MessageResponseIDInfo(BaseModel):
     reserved_assistant_message_id: int
     model_provider: str | None = None
     model_name: str | None = None
-    response_group_id: str | None = None
 
 
 class StreamingError(BaseModel):

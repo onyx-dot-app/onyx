@@ -110,7 +110,7 @@ class CreateChatMessageRequest(ChunkContext):
     prompt_override: PromptOverride | None = None
 
     # List of LLM overrides to generate responses from
-    # If provided, generates one response per override, all sharing the same response_group_id
+    # If provided, generates one response per override (all sharing the same parent message)
     # Takes precedence over llm_override if both are provided
     llm_overrides: list[LLMOverride] | None = None
 
@@ -252,7 +252,6 @@ class ChatMessageDetail(BaseModel):
 
     model_provider: str | None = None
     model_name: str | None = None
-    response_group_id: UUID | None = None
 
     def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
         initial_dict = super().model_dump(mode="json", *args, **kwargs)  # type: ignore

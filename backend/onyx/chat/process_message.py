@@ -4,7 +4,6 @@ from collections.abc import Callable
 from collections.abc import Iterator
 from typing import Any
 from uuid import UUID
-from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
@@ -217,6 +216,7 @@ def _initialize_chat_session(
     chat_session_id: UUID,
     db_session: Session,
     use_existing_user_message: bool = False,
+    regenerate: bool = False,
 ) -> ChatMessage:
     root_message = get_or_create_root_message(
         chat_session_id=chat_session_id, db_session=db_session
@@ -241,6 +241,16 @@ def _initialize_chat_session(
     #     if grandparent.latest_child_message_id != current.id:
     #         grandparent.latest_child_message_id = current.id
     #     current = grandparent
+
+    # For regeneration, parent_id points to the existing user message we want to regenerate from.
+    # We don't create a new user message - just return the existing one so a new assistant
+    # response can be created as its sibling.
+    if regenerate:
+        if parent_message.message_type != MessageType.USER:
+            raise RuntimeError(
+                "Parent message is not a user message, needed for regeneration flow."
+            )
+        return parent_message
 
     # For seeding, the parent message points to the message that is supposed to be the last
     # user message.
@@ -289,7 +299,6 @@ def _process_single_model(
     custom_tool_additional_headers: dict[str, str] | None,
     allowed_tool_ids: list[int] | None,
     disable_internal_search: bool,
-    response_group_id: UUID | None,
     chat_history: list[ChatMessage],
     files: dict[str, ChatLoadedFile],
     additional_context: str | None,
@@ -348,7 +357,6 @@ def _process_single_model(
         message_type=MessageType.ASSISTANT,
         model_provider=current_llm.config.model_provider,
         model_name=current_llm.config.model_name,
-        response_group_id=response_group_id,
     )
 
     yield MessageResponseIDInfo(
@@ -356,7 +364,6 @@ def _process_single_model(
         reserved_assistant_message_id=assistant_response.id,
         model_provider=current_llm.config.model_provider,
         model_name=current_llm.config.model_name,
-        response_group_id=str(response_group_id) if response_group_id else None,
     )
 
     # Convert the chat history into a simple format
@@ -437,7 +444,6 @@ def _process_single_model(
 
 def _process_multiple_models_concurrently(
     llm_overrides: list[LLMOverride | None],
-    response_group_id: UUID | None,
     persona: Any,
     user: User | None,
     litellm_additional_headers: dict[str, str] | None,
@@ -467,11 +473,8 @@ def _process_multiple_models_concurrently(
     All models start at the same time and their responses are streamed as they arrive.
     Each packet is tagged with model_id so the frontend can route to the correct UI.
     """
-    if response_group_id is None:
-        response_group_id = uuid4()
-
     # Create the merger for coordinating concurrent streams
-    merger = MultiModelStreamMerger(response_group_id=response_group_id)
+    merger = MultiModelStreamMerger()
 
     # Track assistant responses for saving chat turns later
     model_to_assistant_response: dict[str, ChatMessage] = {}
@@ -499,7 +502,6 @@ def _process_multiple_models_concurrently(
             message_type=MessageType.ASSISTANT,
             model_provider=current_llm.config.model_provider,
             model_name=current_llm.config.model_name,
-            response_group_id=response_group_id,
         )
         model_to_assistant_response[model_id] = assistant_response
 
@@ -517,7 +519,6 @@ def _process_multiple_models_concurrently(
             reserved_assistant_message_id=assistant_response.id,
             model_provider=current_llm.config.model_provider,
             model_name=current_llm.config.model_name,
-            response_group_id=str(response_group_id),
         )
 
     # Phase 2: Start all model threads
@@ -714,11 +715,6 @@ def stream_chat_message_objects(
                 new_msg_req.llm_override or chat_session.llm_override
             ]
 
-        # Generate response_group_id if multiple models are selected
-        response_group_id: UUID | None = None
-        if len(llm_overrides_to_process) > 1:
-            response_group_id = uuid4()
-
         # Use the first override to create initial LLM for user message tokenization
         first_override = llm_overrides_to_process[0]
         llm, fast_llm = get_llms_for_persona(
@@ -749,6 +745,7 @@ def stream_chat_message_objects(
             chat_session_id=chat_session_id,
             db_session=db_session,
             use_existing_user_message=use_existing_user_message,
+            regenerate=new_msg_req.regenerate or False,
         )
 
         # re-create linear history of messages
@@ -758,15 +755,18 @@ def stream_chat_message_objects(
 
         last_chat_message = chat_history[-1]
 
-        if last_chat_message.id != user_message.id:
-            db_session.rollback()
-            raise RuntimeError(
-                "The new message was not on the mainline. "
-                "Chat message history tree is not correctly built."
-            )
+        # For regeneration, we reuse the existing user message so it won't be at the end
+        # of the chain (there will be existing assistant responses after it)
+        if not (new_msg_req.regenerate or False):
+            if last_chat_message.id != user_message.id:
+                db_session.rollback()
+                raise RuntimeError(
+                    "The new message was not on the mainline. "
+                    "Chat message history tree is not correctly built."
+                )
 
-        # At this point we can save the user message as it's validated and final
-        db_session.commit()
+            # At this point we can save the user message as it's validated and final
+            db_session.commit()
 
         memories = get_memories(user, db_session)
 
@@ -845,7 +845,6 @@ def stream_chat_message_objects(
                 custom_tool_additional_headers=custom_tool_additional_headers,
                 allowed_tool_ids=new_msg_req.allowed_tool_ids,
                 disable_internal_search=disable_internal_search,
-                response_group_id=response_group_id,
                 chat_history=chat_history,
                 files=files,
                 additional_context=additional_context,
@@ -863,7 +862,6 @@ def stream_chat_message_objects(
             # MULTIPLE MODELS: Use concurrent processing
             yield from _process_multiple_models_concurrently(
                 llm_overrides=llm_overrides_to_process,
-                response_group_id=response_group_id,
                 persona=persona,
                 user=user,
                 litellm_additional_headers=litellm_additional_headers,

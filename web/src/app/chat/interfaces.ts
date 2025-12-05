@@ -146,7 +146,6 @@ export interface Message {
 
   modelProvider?: string;
   modelName?: string;
-  responseGroupId?: string;
 }
 
 export interface BackendChatSession {
@@ -198,7 +197,6 @@ export interface BackendMessage {
 
   model_provider: string | null;
   model_name: string | null;
-  response_group_id: string | null;
 
   sub_questions: SubQuestionDetail[];
   // Keeping existing properties
@@ -213,7 +211,6 @@ export interface MessageResponseIDInfo {
   reserved_assistant_message_id: number;
   model_provider?: string | null;
   model_name?: string | null;
-  response_group_id?: string | null;
 }
 
 export interface UserKnowledgeFilePacket {

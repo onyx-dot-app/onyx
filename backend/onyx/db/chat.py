@@ -622,7 +622,6 @@ def reserve_message_id(
     message_type: MessageType = MessageType.ASSISTANT,
     model_provider: str | None = None,
     model_name: str | None = None,
-    response_group_id: UUID | None = None,
 ) -> ChatMessage:
     # Create an temporary holding chat message to the updated and saved at the end
     empty_message = ChatMessage(
@@ -634,7 +633,6 @@ def reserve_message_id(
         message_type=message_type,
         model_provider=model_provider,
         model_name=model_name,
-        response_group_id=response_group_id,
     )
 
     # Add the empty message to the session
@@ -669,7 +667,6 @@ def create_new_chat_message(
     reasoning_tokens: str | None = None,
     model_provider: str | None = None,
     model_name: str | None = None,
-    response_group_id: UUID | None = None,
 ) -> ChatMessage:
     if reserved_message_id is not None:
         # Edit existing message
@@ -687,7 +684,6 @@ def create_new_chat_message(
         existing_message.reasoning_tokens = reasoning_tokens
         existing_message.model_provider = model_provider
         existing_message.model_name = model_name
-        existing_message.response_group_id = response_group_id
         new_chat_message = existing_message
     else:
         # Create new message
@@ -703,7 +699,6 @@ def create_new_chat_message(
             reasoning_tokens=reasoning_tokens,
             model_provider=model_provider,
             model_name=model_name,
-            response_group_id=response_group_id,
         )
         db_session.add(new_chat_message)
 
@@ -891,7 +886,6 @@ def translate_db_message_to_chat_message_detail(
         current_feedback=current_feedback,
         model_provider=chat_message.model_provider,
         model_name=chat_message.model_name,
-        response_group_id=chat_message.response_group_id,
     )
 
     return chat_msg_detail

@@ -558,7 +558,6 @@ export function processRawChatHistory(
       currentFeedback: messageInfo.current_feedback as FeedbackType | null,
       modelProvider: messageInfo.model_provider ?? undefined,
       modelName: messageInfo.model_name ?? undefined,
-      responseGroupId: messageInfo.response_group_id ?? undefined,
     };
 
     messages.set(messageInfo.message_id, message);

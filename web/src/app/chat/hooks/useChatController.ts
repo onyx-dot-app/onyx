@@ -628,7 +628,6 @@ export function useChatController({
         finalMessage: BackendMessage | null;
         modelProvider?: string;
         modelName?: string;
-        responseGroupId?: string;
         // Track if we've received the backend message ID for this node
         backendMessageId?: number;
         // model_id for routing packets from concurrent streams
@@ -644,11 +643,6 @@ export function useChatController({
       const selectedModels = llmManager.selectedLlms;
       const isMultiModel = !modelOverride && selectedModels.length > 1;
 
-      // Generate a client-side response group ID for multi-model
-      const clientResponseGroupId = isMultiModel
-        ? crypto.randomUUID()
-        : undefined;
-
       // Create all assistant nodes upfront if multi-model
       // This ensures tabs appear immediately without flash/delay
       const allInitialAssistantNodes: Message[] = [];
@@ -662,7 +656,6 @@ export function useChatController({
                   ...initialAssistantNode,
                   modelProvider: model.name,
                   modelName: model.modelName,
-                  responseGroupId: clientResponseGroupId,
                 }
               : buildEmptyMessage({
                   messageType: "assistant",
@@ -670,7 +663,6 @@ export function useChatController({
                   nodeIdOffset: nodeOffset,
                   modelProvider: model.name,
                   modelName: model.modelName,
-                  responseGroupId: clientResponseGroupId,
                 });
 
           allInitialAssistantNodes.push(assistantNode);
@@ -687,7 +679,6 @@ export function useChatController({
             finalMessage: null,
             modelProvider: model.name,
             modelName: model.modelName,
-            responseGroupId: clientResponseGroupId,
           });
         });
         assistantNodeIdOffset = selectedModels.length;
@@ -699,21 +690,6 @@ export function useChatController({
       const messagesToUpsert = regenerationRequest
         ? allInitialAssistantNodes // Only upsert assistants for regeneration
         : [initialUserNode, ...allInitialAssistantNodes]; // Upsert user + all assistants
-
-      // DEBUG: Log pre-created messages
-      if (isMultiModel) {
-        console.log("[useChatController] Pre-creating multi-model nodes:", {
-          clientResponseGroupId,
-          messagesCount: messagesToUpsert.length,
-          messages: messagesToUpsert.map((m) => ({
-            nodeId: m.nodeId,
-            type: m.type,
-            modelProvider: m.modelProvider,
-            modelName: m.modelName,
-            responseGroupId: m.responseGroupId,
-          })),
-        });
-      }
 
       currentMessageTreeLocal = upsertToCompleteMessageTree({
         messages: messagesToUpsert,
@@ -881,10 +857,6 @@ export function useChatController({
                   assistantNodes.set(reservedId, {
                     ...preCreatedData,
                     backendMessageId: reservedId,
-                    // Keep using client-side responseGroupId during streaming for consistent grouping
-                    // The backend's response_group_id arrives at different times for each model,
-                    // which would cause tabs to disappear/reappear during streaming
-                    responseGroupId: preCreatedData.responseGroupId,
                     // Store model_id for packet routing
                     modelId: modelId,
                   });
@@ -905,7 +877,6 @@ export function useChatController({
                     finalMessage: null,
                     modelProvider: msgInfo.model_provider ?? undefined,
                     modelName: msgInfo.model_name ?? undefined,
-                    responseGroupId: msgInfo.response_group_id ?? undefined,
                     modelId: modelId,
                   });
                 } else {
@@ -925,7 +896,6 @@ export function useChatController({
                     finalMessage: null,
                     modelProvider: msgInfo.model_provider ?? undefined,
                     modelName: msgInfo.model_name ?? undefined,
-                    responseGroupId: msgInfo.response_group_id ?? undefined,
                     modelId: modelId,
                   });
                   // Add the new assistant node to the tree
@@ -1126,26 +1096,10 @@ export function useChatController({
             ];
 
             // Add all assistant nodes (single or multi-model)
-            // DEBUG: Log what we're about to upsert
-            console.log(
-              "[useChatController streaming] assistantNodes.size:",
-              assistantNodes.size,
-              "isMultiModel:",
-              isMultiModel
-            );
             if (assistantNodes.size > 0) {
               for (const [assistantMsgId, assistantData] of Array.from(
                 assistantNodes.entries()
               )) {
-                console.log(
-                  "[useChatController streaming] Upserting assistant:",
-                  {
-                    msgId: assistantMsgId,
-                    nodeId: assistantData.node.nodeId,
-                    responseGroupId: assistantData.responseGroupId,
-                    nodeResponseGroupId: assistantData.node.responseGroupId,
-                  }
-                );
                 // Only set messageId if we have a real backend ID (positive number)
                 // Negative IDs are temporary client-side IDs for pre-created nodes
                 const realMessageId =
@@ -1181,16 +1135,7 @@ export function useChatController({
                   modelName:
                     assistantData.finalMessage?.model_name ??
                     assistantData.modelName,
-                  // Prioritize client-side responseGroupId for consistent grouping during streaming
-                  responseGroupId:
-                    assistantData.responseGroupId ??
-                    assistantData.finalMessage?.response_group_id ??
-                    undefined,
                 };
-                console.log(
-                  "[useChatController streaming] msgToUpsert responseGroupId:",
-                  msgToUpsert.responseGroupId
-                );
                 messagesToUpsertInLoop.push(msgToUpsert);
               }
             } else {

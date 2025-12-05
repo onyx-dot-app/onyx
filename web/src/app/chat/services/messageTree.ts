@@ -84,21 +84,6 @@ export function upsertMessages(
   let newMessages = new Map(currentMessages);
   let messagesToAddClones = messagesToAdd.map((msg) => ({ ...msg })); // Clone all incoming messages
 
-  // DEBUG: Log messages being upserted
-  const assistantMsgs = messagesToAddClones.filter(
-    (m) => m.type === "assistant"
-  );
-  if (assistantMsgs.length > 0) {
-    console.log(
-      "[upsertMessages] Assistant messages being added:",
-      assistantMsgs.map((m) => ({
-        nodeId: m.nodeId,
-        responseGroupId: m.responseGroupId,
-        modelProvider: m.modelProvider,
-      }))
-    );
-  }
-
   if (newMessages.size === 0 && messagesToAddClones.length > 0) {
     const firstMessage = messagesToAddClones[0];
     if (!firstMessage) {
@@ -269,42 +254,16 @@ export function getLatestMessageChain(messages: MessageTreeState): Message[] {
     return chain;
   }
 
-  // Build a map of responseGroupId -> all messages in that group
-  // This is used to include all multi-model responses when we encounter one
-  const responseGroupMap = new Map<string, Message[]>();
+  // Build a map of parentNodeId -> sibling assistant messages
+  // This is used to include all multi-model responses (or regenerations) when we encounter one
+  const siblingAssistantMap = new Map<number, Message[]>();
   for (const msg of Array.from(messages.values())) {
-    if (msg.responseGroupId) {
-      const existing = responseGroupMap.get(msg.responseGroupId) || [];
+    if (msg.type === "assistant" && msg.parentNodeId !== null) {
+      const existing = siblingAssistantMap.get(msg.parentNodeId) || [];
       existing.push(msg);
-      responseGroupMap.set(msg.responseGroupId, existing);
+      siblingAssistantMap.set(msg.parentNodeId, existing);
     }
   }
-
-  // DEBUG: Log all assistant messages in tree and their responseGroupId
-  const allAssistantMsgs = Array.from(messages.values()).filter(
-    (m) => m.type === "assistant"
-  );
-  console.log(
-    "[getLatestMessageChain] Tree has",
-    messages.size,
-    "messages,",
-    allAssistantMsgs.length,
-    "assistants"
-  );
-  if (allAssistantMsgs.length > 0) {
-    console.log(
-      "[getLatestMessageChain] Assistant messages in tree:",
-      allAssistantMsgs.map((m) => ({
-        nodeId: m.nodeId,
-        responseGroupId: m.responseGroupId,
-        modelProvider: m.modelProvider,
-      }))
-    );
-  }
-  console.log(
-    "[getLatestMessageChain] responseGroupMap size:",
-    responseGroupMap.size
-  );
 
   // Find the root message
   let root: Message | undefined;
@@ -337,8 +296,8 @@ export function getLatestMessageChain(messages: MessageTreeState): Message[] {
     chain.push(root);
   }
 
-  // Track which response groups we've already added to avoid duplicates
-  const addedResponseGroups = new Set<string>();
+  // Track which parent nodes we've already added sibling groups for (to avoid duplicates)
+  const addedSiblingGroups = new Set<number>();
 
   while (
     currentMessage?.latestChildNodeId !== null &&
@@ -347,38 +306,43 @@ export function getLatestMessageChain(messages: MessageTreeState): Message[] {
     const nextNodeId = currentMessage.latestChildNodeId;
     const nextMessage = messages.get(nextNodeId);
     if (nextMessage) {
-      // Check if this message is part of a multi-model response group
+      // Check if this is an assistant message that might have siblings (multi-model or regenerations)
       if (
-        nextMessage.responseGroupId &&
-        !addedResponseGroups.has(nextMessage.responseGroupId)
+        nextMessage.type === "assistant" &&
+        nextMessage.parentNodeId !== null &&
+        !addedSiblingGroups.has(nextMessage.parentNodeId)
       ) {
-        // Add ALL messages in this response group (for tabbed display)
-        const groupMessages = responseGroupMap.get(nextMessage.responseGroupId);
-        if (groupMessages && groupMessages.length > 1) {
+        // Get all sibling assistant messages that share the same parent
+        const siblingMessages = siblingAssistantMap.get(
+          nextMessage.parentNodeId
+        );
+        if (siblingMessages && siblingMessages.length > 1) {
+          // Multiple siblings - add ALL of them for tabbed display
           // Sort by nodeId to ensure consistent ordering
-          const sortedGroupMessages = [...groupMessages].sort(
+          const sortedSiblings = [...siblingMessages].sort(
             (a, b) => a.nodeId - b.nodeId
           );
-          for (const msg of sortedGroupMessages) {
+          for (const msg of sortedSiblings) {
             chain.push(msg);
           }
-          addedResponseGroups.add(nextMessage.responseGroupId);
-          // Continue from the last message in the group (they should all have same parent,
-          // so we can pick any to continue the chain - pick the one that was "latest")
+          addedSiblingGroups.add(nextMessage.parentNodeId);
+          // Continue from the one that was "latest" (the one we were following)
           currentMessage = nextMessage;
         } else {
-          // Only one message in group, add normally
+          // Only one assistant child, add normally
           chain.push(nextMessage);
+          addedSiblingGroups.add(nextMessage.parentNodeId);
           currentMessage = nextMessage;
         }
       } else if (
-        nextMessage.responseGroupId &&
-        addedResponseGroups.has(nextMessage.responseGroupId)
+        nextMessage.type === "assistant" &&
+        nextMessage.parentNodeId !== null &&
+        addedSiblingGroups.has(nextMessage.parentNodeId)
       ) {
-        // Already added this group, just move to next
+        // Already added this sibling group, just move to next
         currentMessage = nextMessage;
       } else {
-        // Normal message (no response group)
+        // Normal message (user message or no parent)
         chain.push(nextMessage);
         currentMessage = nextMessage;
       }
@@ -505,7 +469,6 @@ interface BuildEmptyMessageParams {
   // Multi-model support
   modelProvider?: string;
   modelName?: string;
-  responseGroupId?: string;
 }
 
 export const buildEmptyMessage = (params: BuildEmptyMessageParams): Message => {
@@ -522,7 +485,6 @@ export const buildEmptyMessage = (params: BuildEmptyMessageParams): Message => {
     // Multi-model support
     modelProvider: params.modelProvider,
     modelName: params.modelName,
-    responseGroupId: params.responseGroupId,
   };
 };
 
@@ -535,23 +497,22 @@ export const buildImmediateMessages = (
   initialUserNode: Message;
   initialAssistantNode: Message;
 } => {
-  const initialUserNode = messageToResend
-    ? { ...messageToResend } // clone the message to avoid mutating the original
-    : buildEmptyMessage({
-        messageType: "user",
-        parentNodeId,
-        message: userInput,
-        files,
-      });
+  // Always create a new user node with a new nodeId.
+  // For edits (messageToResend exists), we use the new message content (userInput)
+  // but create a fresh node. The backend will create the actual message.
+  const initialUserNode = buildEmptyMessage({
+    messageType: "user",
+    parentNodeId,
+    message: userInput,
+    files: messageToResend?.files || files,
+  });
   const initialAssistantNode = buildEmptyMessage({
     messageType: "assistant",
     parentNodeId: initialUserNode.nodeId,
     nodeIdOffset: 1,
   });
 
-  initialUserNode.childrenNodeIds = initialUserNode.childrenNodeIds
-    ? [...initialUserNode.childrenNodeIds, initialAssistantNode.nodeId]
-    : [initialAssistantNode.nodeId];
+  initialUserNode.childrenNodeIds = [initialAssistantNode.nodeId];
   initialUserNode.latestChildNodeId = initialAssistantNode.nodeId;
 
   return {

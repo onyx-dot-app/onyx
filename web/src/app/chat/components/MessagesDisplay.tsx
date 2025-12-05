@@ -78,23 +78,23 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
   const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
   const emptyChildrenIds = useMemo<number[]>(() => [], []);
 
-  // Build a map of responseGroupId -> Messages for multi-model response grouping
-  // Uses completeMessageTree to know about ALL response groups across all branches
+  // Build a map of parentNodeId -> sibling assistant Messages for multi-model/regeneration grouping
+  // Uses completeMessageTree to know about ALL sibling groups across all branches
   // Also track which nodeIds should be skipped (all but the first in each group)
-  const { responseGroupMap, nodeIdsToSkip } = useMemo(() => {
-    const groupMap = new Map<string, Message[]>();
+  const { siblingGroupMap, nodeIdsToSkip } = useMemo(() => {
+    const groupMap = new Map<number, Message[]>();
     const skipNodeIds = new Set<number>();
 
     // First, build group info from the COMPLETE message tree (all branches)
-    // This ensures we know about response groups even when viewing a different branch
+    // This ensures we know about sibling groups even when viewing a different branch
     if (completeMessageTree) {
       for (const msg of Array.from(completeMessageTree.values())) {
-        if (msg.responseGroupId) {
-          const existing = groupMap.get(msg.responseGroupId);
+        if (msg.type === "assistant" && msg.parentNodeId !== null) {
+          const existing = groupMap.get(msg.parentNodeId);
           if (existing) {
             existing.push(msg);
           } else {
-            groupMap.set(msg.responseGroupId, [msg]);
+            groupMap.set(msg.parentNodeId, [msg]);
           }
         }
       }
@@ -103,27 +103,33 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
     // Also include messages from messageHistory (for streaming/pre-created nodes
     // that might not be in completeMessageTree yet)
     for (const msg of messageHistory) {
-      if (msg.responseGroupId) {
-        const existing = groupMap.get(msg.responseGroupId);
+      if (msg.type === "assistant" && msg.parentNodeId !== null) {
+        const existing = groupMap.get(msg.parentNodeId);
         if (existing) {
           // Check if this message is already in the group (by nodeId)
           if (!existing.some((m) => m.nodeId === msg.nodeId)) {
             existing.push(msg);
           }
         } else {
-          groupMap.set(msg.responseGroupId, [msg]);
+          groupMap.set(msg.parentNodeId, [msg]);
         }
       }
     }
 
-    // For each group, sort by model name for consistent ordering across refresh
-    // Using model name instead of nodeId ensures the same order whether streaming or loaded from DB
+    // For each group with multiple siblings, sort for consistent ordering
+    // Primary sort: by model name (for consistent order after refresh)
+    // Fallback sort: by nodeId (for stable order during streaming when model names aren't set yet)
     for (const [, messages] of Array.from(groupMap.entries())) {
       if (messages.length > 1) {
         messages.sort((a: Message, b: Message) => {
           const aName = `${a.modelProvider || ""}:${a.modelName || ""}`;
           const bName = `${b.modelProvider || ""}:${b.modelName || ""}`;
-          return aName.localeCompare(bName);
+          // If both have model names, sort by model name
+          // Otherwise, fall back to nodeId for stable ordering during streaming
+          if (aName !== ":" && bName !== ":") {
+            return aName.localeCompare(bName);
+          }
+          return a.nodeId - b.nodeId;
         });
         // Skip all except the first (representative) message
         for (let i = 1; i < messages.length; i++) {
@@ -135,19 +141,7 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
       }
     }
 
-    // DEBUG: Log grouping result
-    if (groupMap.size > 0) {
-      console.log(
-        "[MessagesDisplay] responseGroupMap:",
-        Array.from(groupMap.entries()).map(([k, v]) => ({
-          groupId: k,
-          messageCount: v.length,
-          nodeIds: v.map((m) => m.nodeId),
-        }))
-      );
-    }
-
-    return { responseGroupMap: groupMap, nodeIdsToSkip: skipNodeIds };
+    return { siblingGroupMap: groupMap, nodeIdsToSkip: skipNodeIds };
   }, [messageHistory, completeMessageTree]);
   const createRegenerator = useCallback(
     (regenerationRequest: {
@@ -219,6 +213,7 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
                 content={message.message}
                 files={message.files}
                 messageId={message.messageId}
+                nodeId={message.nodeId}
                 handleEditWithMessageId={handleEditWithMessageId}
                 otherMessagesCanSwitchTo={
                   parentMessage?.childrenNodeIds ?? emptyChildrenIds
@@ -245,34 +240,35 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
             );
           }
 
-          // NOTE: it's fine to use the previous entry in messageHistory
-          // since this is a "parsed" version of the message tree
-          // so the previous message is guaranteed to be the parent of the current message
-          const previousMessage = i !== 0 ? messageHistory[i - 1] : null;
+          // For assistant messages, we need to find the actual parent (user message)
+          // by looking up parentNodeId, since messageHistory may contain sibling
+          // assistant messages (multi-model or regenerations) that share the same parent
+          const previousMessage = (() => {
+            if (i === 0) return null;
+            // For assistant messages, find the parent by parentNodeId
+            if (message.type === "assistant" && message.parentNodeId !== null) {
+              return (
+                messageHistory.find((m) => m.nodeId === message.parentNodeId) ??
+                null
+              );
+            }
+            // For user messages, the previous entry is the parent
+            return messageHistory[i - 1] ?? null;
+          })();
 
-          // Multi-model response grouping:
-          // Skip messages that are not the first in their response group
+          // Multi-model/regeneration sibling grouping:
+          // Skip messages that are not the first in their sibling group
           if (nodeIdsToSkip.has(message.nodeId)) {
             return null;
           }
 
-          // Build modelResponses from all messages in this response group
+          // Build modelResponses from all sibling messages with the same parent
           let modelResponses: ModelResponse[] | undefined;
-          let responseGroupNodeIds: Set<number> | undefined;
 
-          if (message.responseGroupId) {
-            const groupMessages = responseGroupMap.get(message.responseGroupId);
-            console.log(
-              "[MessagesDisplay] Rendering message with responseGroupId:",
-              {
-                messageNodeId: message.nodeId,
-                responseGroupId: message.responseGroupId,
-                groupMessagesCount: groupMessages?.length,
-                groupNodeIds: groupMessages?.map((m) => m.nodeId),
-              }
-            );
-            if (groupMessages && groupMessages.length > 1) {
-              modelResponses = groupMessages.map((msg) => ({
+          if (message.type === "assistant" && message.parentNodeId !== null) {
+            const siblingMessages = siblingGroupMap.get(message.parentNodeId);
+            if (siblingMessages && siblingMessages.length > 1) {
+              modelResponses = siblingMessages.map((msg) => ({
                 model: {
                   name: msg.modelProvider || "",
                   provider: msg.modelProvider || "",
@@ -281,24 +277,16 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
                 // Include the actual message for this model's response
                 message: msg,
               }));
-              console.log(
-                "[MessagesDisplay] Created modelResponses:",
-                modelResponses.length
-              );
-              // Track nodeIds in this group to exclude from branch switching
-              responseGroupNodeIds = new Set(
-                groupMessages.map((msg) => msg.nodeId)
-              );
             }
           }
 
-          // Filter out non-representative messages from ALL response groups for branch switching
-          // Each multi-model response group should appear as a single branch option, not 4 separate ones
+          // Filter out non-representative messages from ALL sibling groups for branch switching
+          // Each multi-model/regeneration group should appear as a single branch option
           const switchableMessages = (() => {
             const allChildren =
               parentMessage?.childrenNodeIds ?? emptyChildrenIds;
-            // Filter out all nodeIds that are "non-representative" in their response group
-            // nodeIdsToSkip contains all messages except the first one in each response group
+            // Filter out all nodeIds that are "non-representative" in their sibling group
+            // nodeIdsToSkip contains all messages except the first one in each group
             return allChildren.filter((nodeId) => !nodeIdsToSkip.has(nodeId));
           })();
 

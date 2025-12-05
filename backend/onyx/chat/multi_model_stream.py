@@ -14,7 +14,6 @@ from dataclasses import field
 from queue import Empty
 from queue import Queue
 from typing import Any
-from uuid import UUID
 
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.emitter import Emitter
@@ -88,7 +87,7 @@ class MultiModelStreamMerger:
     its own thread and emits packets to a shared queue.
 
     Usage:
-        merger = MultiModelStreamMerger(response_group_id=uuid4())
+        merger = MultiModelStreamMerger()
 
         # Register models and get their emitters
         for model in models:
@@ -100,8 +99,7 @@ class MultiModelStreamMerger:
             yield packet
     """
 
-    def __init__(self, response_group_id: UUID):
-        self.response_group_id = response_group_id
+    def __init__(self) -> None:
         self.merged_queue: Queue[Packet | None] = Queue()
         self.model_contexts: dict[str, ModelStreamContext] = {}
         self._lock = threading.Lock()
