@@ -116,11 +116,15 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
       }
     }
 
-    // For each group, sort by nodeId and mark all but the first as "skip"
+    // For each group, sort by model name for consistent ordering across refresh
+    // Using model name instead of nodeId ensures the same order whether streaming or loaded from DB
     for (const [, messages] of Array.from(groupMap.entries())) {
       if (messages.length > 1) {
-        // Sort by nodeId for consistent ordering
-        messages.sort((a: Message, b: Message) => a.nodeId - b.nodeId);
+        messages.sort((a: Message, b: Message) => {
+          const aName = `${a.modelProvider || ""}:${a.modelName || ""}`;
+          const bName = `${b.modelProvider || ""}:${b.modelName || ""}`;
+          return aName.localeCompare(bName);
+        });
         // Skip all except the first (representative) message
         for (let i = 1; i < messages.length; i++) {
           const msg = messages[i];

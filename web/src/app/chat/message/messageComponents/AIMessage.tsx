@@ -96,6 +96,21 @@ export default function AIMessage({
     activeResponse,
   } = useModelResponses(modelResponses);
 
+  // Handler for tab changes - switches branches via onMessageSelection
+  // This updates latestChildNodeId and persists to backend, enabling true branching
+  const handleTabChange = useCallback(
+    (index: number) => {
+      setActiveModelIndex(index);
+      // Switch branches via onMessageSelection - this updates the message tree
+      // and persists to backend so subsequent messages branch from this response
+      const selectedMessage = modelResponses?.[index]?.message;
+      if (selectedMessage?.nodeId && onMessageSelection) {
+        onMessageSelection(selectedMessage.nodeId);
+      }
+    },
+    [setActiveModelIndex, modelResponses, onMessageSelection]
+  );
+
   // DEBUG: Log modelResponses
   if (modelResponses && modelResponses.length > 0) {
     console.log(
@@ -504,7 +519,7 @@ export default function AIMessage({
                       <ModelResponseTabs
                         modelResponses={modelResponses}
                         activeIndex={activeModelIndex}
-                        onTabChange={setActiveModelIndex}
+                        onTabChange={handleTabChange}
                       />
                     )}
 

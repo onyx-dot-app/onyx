@@ -231,6 +231,17 @@ def _initialize_chat_session(
             db_session=db_session,
         )
 
+    # # When branching from a non-latest sibling (e.g., selecting a different model's response
+    # # from a multi-model response group), we need to update the latest_child_message_id
+    # # pointers up the chain to make this branch the new "mainline". This ensures
+    # # create_chat_history_chain can trace from root to the new message.
+    # current = parent_message
+    # while current.parent_message is not None:
+    #     grandparent = current.parent_message
+    #     if grandparent.latest_child_message_id != current.id:
+    #         grandparent.latest_child_message_id = current.id
+    #     current = grandparent
+
     # For seeding, the parent message points to the message that is supposed to be the last
     # user message.
     if use_existing_user_message:

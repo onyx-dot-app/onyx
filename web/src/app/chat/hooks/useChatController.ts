@@ -748,9 +748,14 @@ export function useChatController({
       let nextPreCreatedNodeIndex = 0;
 
       try {
-        const lastSuccessfulMessageId = getLastSuccessfulMessageId(
-          currentMessageTreeLocal
-        );
+        // Read the CURRENT message tree from store to get the correct parent
+        // This is important for multi-model responses where tab switching updates
+        // latestChildNodeId - we need the fresh state, not the captured closure
+        const freshMessageTree =
+          useChatSessionStore.getState().sessions.get(frozenSessionId)
+            ?.messageTree || currentMessageTreeLocal;
+        const lastSuccessfulMessageId =
+          getLastSuccessfulMessageId(freshMessageTree);
         const disabledToolIds = liveAssistant
           ? assistantPreferences?.[liveAssistant?.id]?.disabled_tool_ids
           : undefined;
