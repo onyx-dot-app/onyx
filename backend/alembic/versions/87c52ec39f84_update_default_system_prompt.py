@@ -1,9 +1,8 @@
 """update_default_system_prompt
 
-
-Revision ID: d21c3867fa79
-Revises: e8f0d2a38171
-Create Date: 2025-12-05 11:16:26.812404
+Revision ID: 87c52ec39f84
+Revises: 7bd55f264e1b
+Create Date: 2025-12-05 15:54:06.002452
 
 """
 
@@ -12,8 +11,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = "d21c3867fa79"
-down_revision = "e8f0d2a38171"
+revision = "87c52ec39f84"
+down_revision = "7bd55f264e1b"
 branch_labels = None
 depends_on = None
 
