@@ -22,6 +22,8 @@ from onyx.connectors.coda.models.icon import CodaIcon
 from onyx.connectors.coda.models.page import CodaPageImage
 from onyx.connectors.coda.models.person import CodaPersonValue
 from onyx.connectors.coda.models.table import CodaColumnFormatType
+from onyx.connectors.models import ImageSection
+from onyx.connectors.models import TextSection
 from tests.daily.connectors.coda.conftest import make_column
 from tests.daily.connectors.coda.conftest import make_doc
 from tests.daily.connectors.coda.conftest import make_folder_ref
@@ -583,6 +585,98 @@ class TestBuildTableMetadata:
         # Verify counts
         assert result["row_count"] == "100"
         assert result["column_count"] == "10"
+
+
+class TestParseHtmlContent:
+    """Test suite for parse_html_content method."""
+
+    def test_parse_simple_text(self) -> None:
+        """Test parsing simple HTML with text."""
+        html = "<p>Hello World</p>"
+        sections = CodaParser.parse_html_content(html)
+
+        assert len(sections) == 1
+        assert isinstance(sections[0], TextSection)
+        assert sections[0].text == "Hello World"
+
+    def test_parse_text_with_formatting(self) -> None:
+        """Test parsing HTML with formatting tags."""
+        html = "<p><b>Bold</b> and <i>Italic</i></p>"
+        sections = CodaParser.parse_html_content(html)
+
+        assert len(sections) == 1
+        assert isinstance(sections[0], TextSection)
+        assert sections[0].text == "Bold and Italic"
+
+    def test_parse_multiple_paragraphs(self) -> None:
+        """Test parsing multiple paragraphs."""
+        html = "<p>Para 1</p><p>Para 2</p>"
+        sections = CodaParser.parse_html_content(html)
+
+        assert len(sections) == 1
+        assert isinstance(sections[0], TextSection)
+        # Check that newlines are inserted
+        assert "Para 1" in sections[0].text
+        assert "Para 2" in sections[0].text
+        assert "\n" in sections[0].text
+
+    def test_parse_image_only(self) -> None:
+        """Test parsing HTML with only an image."""
+        html = '<img src="https://example.com/image.png" />'
+        sections = CodaParser.parse_html_content(html)
+
+        assert len(sections) == 1
+        assert isinstance(sections[0], ImageSection)
+        assert sections[0].link == "https://example.com/image.png"
+        assert sections[0].image_file_id == "https://example.com/image.png"
+
+    def test_parse_mixed_content(self) -> None:
+        """Test parsing mixed text and images."""
+        html = """
+        <h1>Title</h1>
+        <p>Intro text</p>
+        <img src="https://example.com/img1.png" />
+        <p>Caption</p>
+        """
+        sections = CodaParser.parse_html_content(html)
+
+        # Should be: Text (Title + Intro), Image, Text (Caption)
+        assert len(sections) == 3
+        assert isinstance(sections[0], TextSection)
+        assert "Title" in sections[0].text
+        assert "Intro text" in sections[0].text
+
+        assert isinstance(sections[1], ImageSection)
+        assert sections[1].link == "https://example.com/img1.png"
+        assert sections[1].image_file_id == "https://example.com/img1.png"
+
+        assert isinstance(sections[2], TextSection)
+        assert "Caption" in sections[2].text
+
+    def test_parse_empty_content(self) -> None:
+        """Test parsing empty content."""
+        assert CodaParser.parse_html_content("") == []
+        assert CodaParser.parse_html_content(None) == []  # type: ignore
+
+    def test_parse_nested_structure(self) -> None:
+        """Test parsing nested HTML structure."""
+        html = """
+        <div>
+            <h2>Section 1</h2>
+            <ul>
+                <li>Item 1</li>
+                <li>Item 2</li>
+            </ul>
+        </div>
+        """
+        sections = CodaParser.parse_html_content(html)
+
+        assert len(sections) == 1
+        assert isinstance(sections[0], TextSection)
+        text = sections[0].text
+        assert "Section 1" in text
+        assert "Item 1" in text
+        assert "Item 2" in text
 
 
 if __name__ == "__main__":

@@ -103,20 +103,27 @@ class CodaDocumentGenerator:
 
             # Parse page title and content
             page_title = self.parser.build_page_title(page)
-            text = self.parser.build_page_content(page_title, content)
+
+            sections: list[TextSection | ImageSection] = []
+
+            if self.export_format == "html":
+                sections = self.parser.parse_html_content(content)
+                sections.insert(0, TextSection(link=page.browserLink, text=page_title))
+
+            else:
+                text = self.parser.build_page_content(page_title, content)
+                sections = [
+                    TextSection(
+                        link=page.browserLink,
+                        text=text,
+                    )
+                ]
 
             # Build metadata
             metadata = self.parser.build_page_metadata(doc, page, page_map)
 
             # Build owners
             primary_owners, secondary_owners = self.parser.build_page_owners(page)
-
-            sections: list[TextSection | ImageSection] = [
-                TextSection(
-                    link=page.browserLink,
-                    text=text,
-                )
-            ]
 
             yield Document(
                 id=page_key,

@@ -2,6 +2,9 @@ from datetime import datetime
 from datetime import timezone
 from typing import Any
 
+from bs4 import BeautifulSoup
+from bs4 import NavigableString
+from bs4 import Tag
 from dateutil import parser as date_parser
 
 from onyx.connectors.coda.models.common import CodaObjectType
@@ -11,6 +14,8 @@ from onyx.connectors.coda.models.table import CodaColumn
 from onyx.connectors.coda.models.table import CodaRow
 from onyx.connectors.coda.models.table import CodaTableReference
 from onyx.connectors.models import BasicExpertInfo
+from onyx.connectors.models import ImageSection
+from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -189,6 +194,71 @@ class CodaParser:
             str: The combined content ready for document indexing
         """
         return f"{title}\n\n{markdown_content}"
+
+    @staticmethod
+    def parse_html_content(content: str) -> list[TextSection | ImageSection]:
+        """Parse HTML content into text and image sections.
+
+        Args:
+            content: Raw HTML content string
+
+        Returns:
+            list[TextSection | ImageSection]: List of parsed sections
+        """
+        if not content:
+            return []
+
+        soup = BeautifulSoup(content, "html.parser")
+        sections: list[TextSection | ImageSection] = []
+        current_text = []
+
+        def flush_text() -> None:
+            if current_text:
+                text = "".join(current_text).strip()
+                if text:
+                    sections.append(TextSection(text=text, link=None))
+                current_text.clear()
+
+        # Iterate through all elements
+        # We want to preserve order, so we'll walk the tree or just iterate top-level
+        # For simplicity and to flatten the structure, let's iterate over all descendants
+        # but that might duplicate text.
+        # Better to iterate over the body's children.
+
+        body = soup.body if soup.body else soup
+
+        for element in body.descendants:
+            if isinstance(element, NavigableString):
+                text = str(element)
+                if text.strip():
+                    current_text.append(text)
+            elif isinstance(element, Tag):
+                if element.name == "img":
+                    flush_text()
+                    src = element.get("src")
+                    if src:
+                        sections.append(
+                            ImageSection(
+                                link=str(src), text=None, image_file_id=str(src)
+                            )
+                        )
+                elif element.name in [
+                    "br",
+                    "p",
+                    "div",
+                    "h1",
+                    "h2",
+                    "h3",
+                    "h4",
+                    "h5",
+                    "h6",
+                    "li",
+                ]:
+                    # Add newline for block elements to ensure text separation
+                    current_text.append("\n")
+
+        flush_text()
+        return sections
 
     @staticmethod
     def build_page_owners(
