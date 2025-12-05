@@ -153,10 +153,20 @@ class QuestionQualificationService:
             self._config_loaded = True  # Mark as loaded to avoid repeated attempts
             return False
 
-    def _get_fast_llm(self) -> LLM:
-        """Get the fast LLM for question qualification."""
-        _, fast_llm = get_default_llms()
-        return fast_llm
+    def _get_llm_for_qualification(self) -> LLM | None:
+        """Get LLM for question qualification.
+
+        Uses fast LLM for cost/speed efficiency since this runs on every question.
+        get_default_llms() internally falls back to default model if fast model
+        is not configured. Returns None if LLM initialization fails entirely.
+        """
+        try:
+            # Returns (default_llm, fast_llm) - fast_llm uses default if not configured
+            _, fast_llm = get_default_llms()
+            return fast_llm
+        except Exception as e:
+            logger.warning(f"Failed to get LLM for question qualification: {e}")
+            return None
 
     def is_enabled(self) -> bool:
         """Check if question qualification is enabled by environment variable."""
@@ -186,10 +196,16 @@ class QuestionQualificationService:
                     is_blocked=False, similarity_score=0.0
                 )
 
-            # Get fast LLM
-            fast_llm = self._get_fast_llm()
+            # Get LLM fresh each call to handle admin config changes
+            llm = self._get_llm_for_qualification()
+            if llm is None:
+                logger.warning("No LLM available, question qualification skipped")
+                return QuestionQualificationResult(
+                    is_blocked=False, similarity_score=0.0
+                )
+
             logger.debug(
-                f"Using LLM: {fast_llm.config.model_name} ({fast_llm.config.model_provider})"
+                f"Using LLM: {llm.config.model_name} ({llm.config.model_provider})"
             )
 
             # Format blocked questions with indices
@@ -216,7 +232,7 @@ class QuestionQualificationService:
             )
 
             # Get response using structured outputs (with parser as fallback)
-            response = fast_llm.invoke_langchain(
+            response = llm.invoke_langchain(
                 prompt,
                 structured_response_format=structured_response_format,
                 max_tokens=200,  # Increased for structured JSON output with schema
@@ -238,7 +254,7 @@ class QuestionQualificationService:
                 logger.info(
                     f"Question qualification: block_confidence={block_confidence:.3f}, "
                     f"threshold={self.threshold} | "
-                    f"LLM: {fast_llm.config.model_name}"
+                    f"LLM: {llm.config.model_name}"
                 )
                 if matched_question:
                     logger.info(
