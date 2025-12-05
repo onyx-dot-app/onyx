@@ -12,6 +12,7 @@ Prerequisites:
 import os
 from collections.abc import Generator
 from time import sleep
+from time import time
 from typing import Any
 
 import pytest
@@ -165,8 +166,28 @@ def test_docs(api_token: str) -> Generator[dict[str, Any], None, None]:
     print(f"[SETUP] Doc ID: {response['id']}")
     print(f"[SETUP] Browser link: {response['browserLink']}")
 
+    # Poll for doc availability instead of hard sleep
+    print("\n[SETUP] Polling for doc availability...")
+    start_time = time()
+    timeout = 60
+    doc_available = False
+
+    while time() - start_time < timeout:
+        try:
+            # Try to fetch the doc
+            check_response = client._make_request("GET", f"/docs/{response['id']}")
+            if check_response and check_response.get("id") == response["id"]:
+                print(f"[SETUP] Doc available after {time() - start_time:.1f}s")
+                doc_available = True
+                break
+        except Exception:
+            pass
+        sleep(2)
+
+    if not doc_available:
+        print(f"[SETUP] Warning: Doc not available after {timeout}s, tests may fail")
+
     # Yield the doc info for tests to use
-    sleep(50)
     yield [response, response2]
 
     # Cleanup: Delete the doc after all tests complete
