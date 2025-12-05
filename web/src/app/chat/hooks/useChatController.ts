@@ -618,39 +618,29 @@ export function useChatController({
         initialAssistantNode = result.initialAssistantNode;
       }
 
-      // Multi-model response support: track all assistant nodes being streamed
+      // Track assistant nodes (supports both single and multi-model)
       interface AssistantNodeData {
         node: Message;
-        answer: string;
+        backendMessageId?: number;
         packets: Packet[];
         documents: OnyxDocument[];
         citations: CitationMap | null;
         finalMessage: BackendMessage | null;
-        modelProvider?: string;
-        modelName?: string;
-        // Track if we've received the backend message ID for this node
-        backendMessageId?: number;
-        // model_id for routing packets from concurrent streams
-        modelId?: string;
       }
-      const assistantNodes: Map<number, AssistantNodeData> = new Map();
-      // Map model_id to assistant message ID for routing concurrent packets
-      const modelIdToAssistantId: Map<string, number> = new Map();
-      let currentStreamingAssistantId: number | null = null;
-      let assistantNodeIdOffset = 1;
+      // Map model_id (e.g. "openai:gpt-4") to index in assistantNodes array
+      const modelIdToIndex: Map<string, number> = new Map();
 
-      // Check if multiple models are selected (for pre-creating all nodes)
+      // Check if multiple models are selected
       const selectedModels = llmManager.selectedLlms;
       const isMultiModel = !modelOverride && selectedModels.length > 1;
+      const modelsToCreate = isMultiModel
+        ? selectedModels
+        : [llmManager.currentLlm];
 
-      // Create all assistant nodes upfront if multi-model
-      // This ensures tabs appear immediately without flash/delay
-      const allInitialAssistantNodes: Message[] = [];
-      if (isMultiModel) {
-        selectedModels.forEach((model, i) => {
-          const nodeOffset = i + 1;
-          // Build message with model info included from the start
-          const assistantNode =
+      // Pre-create assistant nodes for immediate UI display
+      const assistantNodes: AssistantNodeData[] = modelsToCreate.map(
+        (model, i) => ({
+          node:
             i === 0
               ? {
                   ...initialAssistantNode,
@@ -660,31 +650,18 @@ export function useChatController({
               : buildEmptyMessage({
                   messageType: "assistant",
                   parentNodeId: initialUserNode.nodeId,
-                  nodeIdOffset: nodeOffset,
+                  nodeIdOffset: i + 1,
                   modelProvider: model.name,
                   modelName: model.modelName,
-                });
+                }),
+          packets: [],
+          documents: selectedDocuments,
+          citations: null,
+          finalMessage: null,
+        })
+      );
 
-          allInitialAssistantNodes.push(assistantNode);
-
-          // Use negative temporary IDs to distinguish from real backend IDs
-          // Will be replaced when MessageResponseIDInfo arrives
-          const tempId = -(i + 1);
-          assistantNodes.set(tempId, {
-            node: assistantNode,
-            answer: "",
-            packets: [],
-            documents: selectedDocuments,
-            citations: null,
-            finalMessage: null,
-            modelProvider: model.name,
-            modelName: model.modelName,
-          });
-        });
-        assistantNodeIdOffset = selectedModels.length;
-      } else {
-        allInitialAssistantNodes.push(initialAssistantNode);
-      }
+      const allInitialAssistantNodes = assistantNodes.map((a) => a.node);
 
       // make messages appear + clear input bar
       const messagesToUpsert = regenerationRequest
@@ -698,30 +675,21 @@ export function useChatController({
       });
       resetInputBar();
 
-      let answer = "";
-
+      // Shared state across all models
       const stopReason: StreamStopReason | null = null;
       let query: string | null = null;
       let retrievalType: RetrievalType =
         selectedDocuments.length > 0
           ? RetrievalType.SelectedDocs
           : RetrievalType.None;
-      let documents: OnyxDocument[] = selectedDocuments;
-      let citations: CitationMap | null = null;
       let aiMessageImages: FileDescriptor[] | null = null;
       let error: string | null = null;
       let stackTrace: string | null = null;
-
-      let finalMessage: BackendMessage | null = null;
       let toolCall: ToolCallMetadata | null = null;
       let files = projectFilesToFileDescriptors(currentMessageFiles);
-      let packets: Packet[] = [];
 
       let newUserMessageId: number | null = null;
-      let newAssistantMessageId: number | null = null;
-
-      // Track which pre-created node index we're on (for multi-model)
-      let nextPreCreatedNodeIndex = 0;
+      let nextNodeIndex = 0;
 
       try {
         // Read the CURRENT message tree from store to get the correct parent
@@ -773,7 +741,6 @@ export function useChatController({
             user_file_id: file.id,
           })),
           regenerate: regenerationRequest !== undefined,
-          // Single model override (for regeneration or backwards compatibility)
           modelProvider:
             modelOverride?.name || llmManager.currentLlm.name || undefined,
           modelVersion:
@@ -782,8 +749,7 @@ export function useChatController({
             searchParams?.get(SEARCH_PARAM_NAMES.MODEL_VERSION) ||
             undefined,
           temperature: llmManager.temperature || undefined,
-          // Multi-model support: if multiple LLMs are selected and no single override,
-          // send all selected models
+          // Multi-model support: if multiple LLMs are selected and no single override, send all selected models
           llmOverrides:
             !modelOverride && llmManager.selectedLlms.length > 1
               ? llmManager.selectedLlms.map((llm) => ({
@@ -834,91 +800,19 @@ export function useChatController({
               (packet as MessageResponseIDInfo).reserved_assistant_message_id
             ) {
               const msgInfo = packet as MessageResponseIDInfo;
-              const reservedId = msgInfo.reserved_assistant_message_id;
 
-              // Build model_id for packet routing (matches backend format)
-              const modelId =
-                msgInfo.model_provider && msgInfo.model_name
-                  ? `${msgInfo.model_provider}:${msgInfo.model_name}`
-                  : undefined;
+              // Assign backend message ID to next pre-created node
+              const nodeToUpdate = assistantNodes[nextNodeIndex];
+              if (nodeToUpdate) {
+                nodeToUpdate.backendMessageId =
+                  msgInfo.reserved_assistant_message_id;
 
-              // Multi-model with pre-created nodes: map backend ID to pre-created node
-              if (
-                isMultiModel &&
-                nextPreCreatedNodeIndex < selectedModels.length
-              ) {
-                // Find the pre-created node (stored with negative temp ID)
-                const tempId = -(nextPreCreatedNodeIndex + 1);
-                const preCreatedData = assistantNodes.get(tempId);
-
-                if (preCreatedData) {
-                  // Move from temp ID to real backend ID
-                  assistantNodes.delete(tempId);
-                  assistantNodes.set(reservedId, {
-                    ...preCreatedData,
-                    backendMessageId: reservedId,
-                    // Store model_id for packet routing
-                    modelId: modelId,
-                  });
-                  nextPreCreatedNodeIndex++;
+                // Map model_id to index for packet routing
+                if (msgInfo.model_provider && msgInfo.model_name) {
+                  const modelId = `${msgInfo.model_provider}:${msgInfo.model_name}`;
+                  modelIdToIndex.set(modelId, nextNodeIndex);
                 }
-                currentStreamingAssistantId = reservedId;
-                newAssistantMessageId = reservedId;
-              }
-              // Single model or fallback: create node on demand
-              else if (!assistantNodes.has(reservedId)) {
-                if (assistantNodes.size === 0) {
-                  assistantNodes.set(reservedId, {
-                    node: initialAssistantNode,
-                    answer: "",
-                    packets: [],
-                    documents: selectedDocuments,
-                    citations: null,
-                    finalMessage: null,
-                    modelProvider: msgInfo.model_provider ?? undefined,
-                    modelName: msgInfo.model_name ?? undefined,
-                    modelId: modelId,
-                  });
-                } else {
-                  // Create a new assistant node for additional models
-                  assistantNodeIdOffset++;
-                  const newAssistantNode = buildEmptyMessage({
-                    messageType: "assistant",
-                    parentNodeId: initialUserNode.nodeId,
-                    nodeIdOffset: assistantNodeIdOffset,
-                  });
-                  assistantNodes.set(reservedId, {
-                    node: newAssistantNode,
-                    answer: "",
-                    packets: [],
-                    documents: selectedDocuments,
-                    citations: null,
-                    finalMessage: null,
-                    modelProvider: msgInfo.model_provider ?? undefined,
-                    modelName: msgInfo.model_name ?? undefined,
-                    modelId: modelId,
-                  });
-                  // Add the new assistant node to the tree
-                  currentMessageTreeLocal = upsertToCompleteMessageTree({
-                    messages: [newAssistantNode],
-                    completeMessageTreeOverride: currentMessageTreeLocal,
-                    chatSessionId: frozenSessionId,
-                  });
-                }
-                currentStreamingAssistantId = reservedId;
-                newAssistantMessageId = reservedId;
-              } else {
-                // Already have this ID, just switch to streaming for it
-                currentStreamingAssistantId = reservedId;
-                newAssistantMessageId = reservedId;
-              }
-
-              // Map model_id to assistant message ID for routing concurrent packets
-              if (modelId) {
-                modelIdToAssistantId.set(modelId, reservedId);
-                console.log(
-                  `[useChatController] Mapped model_id ${modelId} -> assistant ID ${reservedId}`
-                );
+                nextNodeIndex++;
               }
             }
 
@@ -954,16 +848,16 @@ export function useChatController({
 
               throw new Error((packet as StreamingError).error);
             } else if (Object.hasOwn(packet, "message_id")) {
-              finalMessage = packet as BackendMessage;
-              // Multi-model: associate finalMessage with current streaming assistant
-              if (currentStreamingAssistantId !== null) {
-                const currentAssistant = assistantNodes.get(
-                  currentStreamingAssistantId
-                );
-                if (currentAssistant) {
-                  currentAssistant.finalMessage = finalMessage;
-                }
-              }
+              // Route finalMessage to target assistant
+              const backendMsg = packet as BackendMessage;
+              const msgModelId = (backendMsg as any).model_id as
+                | string
+                | undefined;
+              const targetIndex = msgModelId
+                ? modelIdToIndex.get(msgModelId) ?? 0
+                : 0;
+              const targetNode = assistantNodes[targetIndex];
+              if (targetNode) targetNode.finalMessage = backendMsg;
             } else if (Object.hasOwn(packet, "stop_reason")) {
               const stop_reason = (packet as StreamStopInfo).stop_reason;
               if (stop_reason === StreamStopReason.CONTEXT_LENGTH) {
@@ -971,70 +865,35 @@ export function useChatController({
               }
             } else if (Object.hasOwn(packet, "obj")) {
               console.debug("Object packet:", JSON.stringify(packet));
-              packets.push(packet as Packet);
-
               const typedPacket = packet as Packet;
 
-              // Multi-model: route packets by model_id if available (concurrent streaming)
-              // Falls back to currentStreamingAssistantId for backward compatibility (sequential)
-              let targetAssistantId: number | null = null;
+              // Route packet to target assistant by model_id, or first assistant if single model
+              const targetIndex = typedPacket.model_id
+                ? modelIdToIndex.get(typedPacket.model_id) ?? 0
+                : 0;
+              const target = assistantNodes[targetIndex];
+              if (!target) continue;
 
-              if (typedPacket.model_id) {
-                // Use model_id from packet for concurrent multi-model routing
-                const mappedId = modelIdToAssistantId.get(typedPacket.model_id);
-                if (mappedId !== undefined) {
-                  targetAssistantId = mappedId;
-                } else {
-                  console.warn(
-                    `[useChatController] Unknown model_id in packet: ${typedPacket.model_id}`
-                  );
-                  // Fall back to currentStreamingAssistantId
-                  targetAssistantId = currentStreamingAssistantId;
-                }
-              } else {
-                // No model_id - use currentStreamingAssistantId (sequential/single model)
-                targetAssistantId = currentStreamingAssistantId;
-              }
+              target.packets.push(typedPacket);
 
-              // Route packet to the target assistant
-              if (targetAssistantId !== null) {
-                const targetAssistant = assistantNodes.get(targetAssistantId);
-                if (targetAssistant) {
-                  targetAssistant.packets.push(typedPacket);
-                }
-              }
-
-              // Check if the packet contains document information
+              // Update per-assistant state based on packet type
               const packetObj = typedPacket.obj;
-
               if (packetObj.type === "citation_info") {
-                // Individual citation packet from backend streaming
                 const citationInfo = packetObj as {
                   type: "citation_info";
                   citation_number: number;
                   document_id: string;
                 };
-                // Incrementally build citations map
-                citations = {
-                  ...(citations || {}),
+                target.citations = {
+                  ...(target.citations || {}),
                   [citationInfo.citation_number]: citationInfo.document_id,
                 };
-                // Multi-model: also track citations per assistant (using targetAssistantId)
-                if (targetAssistantId !== null) {
-                  const targetAssistant = assistantNodes.get(targetAssistantId);
-                  if (targetAssistant) {
-                    targetAssistant.citations = {
-                      ...(targetAssistant.citations || {}),
-                      [citationInfo.citation_number]: citationInfo.document_id,
-                    };
-                  }
-                }
               } else if (packetObj.type === "citation_delta") {
                 // Batched citation packet (for backwards compatibility)
                 const citationDelta = packetObj as CitationDelta;
                 if (citationDelta.citations) {
-                  citations = {
-                    ...(citations || {}),
+                  target.citations = {
+                    ...(target.citations || {}),
                     ...Object.fromEntries(
                       citationDelta.citations.map((c) => [
                         c.citation_num,
@@ -1042,35 +901,11 @@ export function useChatController({
                       ])
                     ),
                   };
-                  // Multi-model: also track citations per assistant (using targetAssistantId)
-                  if (targetAssistantId !== null) {
-                    const targetAssistant =
-                      assistantNodes.get(targetAssistantId);
-                    if (targetAssistant) {
-                      targetAssistant.citations = {
-                        ...(targetAssistant.citations || {}),
-                        ...Object.fromEntries(
-                          citationDelta.citations.map((c) => [
-                            c.citation_num,
-                            c.document_id,
-                          ])
-                        ),
-                      };
-                    }
-                  }
                 }
               } else if (packetObj.type === "message_start") {
                 const messageStart = packetObj as MessageStart;
                 if (messageStart.final_documents) {
-                  documents = messageStart.final_documents;
-                  // Multi-model: also track documents per assistant (using targetAssistantId)
-                  if (targetAssistantId !== null) {
-                    const targetAssistant =
-                      assistantNodes.get(targetAssistantId);
-                    if (targetAssistant) {
-                      targetAssistant.documents = messageStart.final_documents;
-                    }
-                  }
+                  target.documents = messageStart.final_documents;
                   updateSelectedNodeForDocDisplay(
                     frozenSessionId,
                     initialAssistantNode.nodeId
@@ -1086,7 +921,7 @@ export function useChatController({
             parentMessage =
               parentMessage || currentMessageTreeLocal?.get(SYSTEM_NODE_ID)!;
 
-            // Build messages to upsert, including all assistant nodes for multi-model support
+            // Build messages to upsert
             const messagesToUpsertInLoop: Message[] = [
               {
                 ...initialUserNode,
@@ -1095,66 +930,29 @@ export function useChatController({
               },
             ];
 
-            // Add all assistant nodes (single or multi-model)
-            if (assistantNodes.size > 0) {
-              for (const [assistantMsgId, assistantData] of Array.from(
-                assistantNodes.entries()
-              )) {
-                // Only set messageId if we have a real backend ID (positive number)
-                // Negative IDs are temporary client-side IDs for pre-created nodes
-                const realMessageId =
-                  assistantMsgId > 0 ? assistantMsgId : undefined;
-
-                const msgToUpsert: Message = {
-                  ...assistantData.node,
-                  messageId: realMessageId,
-                  message: error || answer, // For now, use the global answer (will be fixed for proper multi-model)
-                  type: error ? "error" : ("assistant" as const),
-                  retrievalType,
-                  query: assistantData.finalMessage?.rephrased_query || query,
-                  documents: assistantData.documents,
-                  citations:
-                    assistantData.finalMessage?.citations ||
-                    assistantData.citations ||
-                    {},
-                  files:
-                    assistantData.finalMessage?.files || aiMessageImages || [],
-                  toolCall: assistantData.finalMessage?.tool_call || toolCall,
-                  stackTrace: stackTrace,
-                  overridden_model:
-                    assistantData.finalMessage?.overridden_model,
-                  stopReason: stopReason,
-                  // Use per-model packets only - don't fall back to global packets
-                  // This ensures each model tab shows only its own content
-                  packets: assistantData.packets,
-                  // Multi-model: include model info for grouping
-                  // Use finalMessage if available, otherwise use info from pre-created node
-                  modelProvider:
-                    assistantData.finalMessage?.model_provider ??
-                    assistantData.modelProvider,
-                  modelName:
-                    assistantData.finalMessage?.model_name ??
-                    assistantData.modelName,
-                };
-                messagesToUpsertInLoop.push(msgToUpsert);
-              }
-            } else {
-              // Fallback for single model (no MessageResponseIDInfo received yet)
+            // Add all assistant nodes
+            for (const assistantData of assistantNodes) {
               messagesToUpsertInLoop.push({
-                ...initialAssistantNode,
-                messageId: newAssistantMessageId ?? undefined,
-                message: error || answer,
-                type: error ? "error" : "assistant",
+                ...assistantData.node,
+                messageId: assistantData.backendMessageId,
+                message: error || "",
+                type: error ? "error" : ("assistant" as const),
                 retrievalType,
-                query: finalMessage?.rephrased_query || query,
-                documents: documents,
-                citations: finalMessage?.citations || citations || {},
-                files: finalMessage?.files || aiMessageImages || [],
-                toolCall: finalMessage?.tool_call || toolCall,
+                query: assistantData.finalMessage?.rephrased_query || query,
+                documents: assistantData.documents,
+                citations:
+                  assistantData.finalMessage?.citations ||
+                  assistantData.citations ||
+                  {},
+                files:
+                  assistantData.finalMessage?.files || aiMessageImages || [],
+                toolCall: assistantData.finalMessage?.tool_call || toolCall,
                 stackTrace: stackTrace,
-                overridden_model: finalMessage?.overridden_model,
+                overridden_model: assistantData.finalMessage?.overridden_model,
                 stopReason: stopReason,
-                packets: packets,
+                packets: assistantData.packets,
+                modelProvider: assistantData.node.modelProvider,
+                modelName: assistantData.node.modelName,
               });
             }
 
