@@ -9,7 +9,7 @@ import {
   TextFormField,
 } from "@/components/Field";
 import { BrainIcon } from "@/components/icons/icons";
-import { Modal } from "@/components/Modal";
+import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import UnlabeledSwitchField from "@/refresh-components/formik-fields/UnlabeledSwitchField";
 import { Form, Formik, FormikState, useFormikContext } from "formik";
@@ -294,20 +294,25 @@ function Main() {
         </>
       )}
       {configureModalShown && (
-        <Modal
-          title="Configure Knowledge Graph"
-          onOutsideClick={() => setConfigureModalShown(false)}
-          className="overflow-y-scroll"
-        >
-          <KGConfiguration
-            kgConfig={kgConfig}
-            setPopup={setPopup}
-            onSubmitSuccess={async () => {
-              await configMutate();
-              setConfigureModalShown(false);
-            }}
-            entityTypesMutate={entityTypesMutate}
-          />
+        <Modal open onOpenChange={() => setConfigureModalShown(false)}>
+          <Modal.Content medium>
+            <Modal.Header
+              icon={SvgSettings}
+              title="Configure Knowledge Graph"
+              onClose={() => setConfigureModalShown(false)}
+            />
+            <Modal.Body>
+              <KGConfiguration
+                kgConfig={kgConfig}
+                setPopup={setPopup}
+                onSubmitSuccess={async () => {
+                  await configMutate();
+                  setConfigureModalShown(false);
+                }}
+                entityTypesMutate={entityTypesMutate}
+              />
+            </Modal.Body>
+          </Modal.Content>
         </Modal>
       )}
     </div>

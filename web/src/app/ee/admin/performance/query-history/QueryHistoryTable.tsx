@@ -41,12 +41,13 @@ import {
   PREVIOUS_CSV_TASK_BUTTON_NAME,
 } from "./constants";
 import { humanReadableFormatWithTime } from "@/lib/time";
-import { Modal } from "@/components/Modal";
+import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import { Badge } from "@/components/ui/badge";
 import SvgMinusCircle from "@/icons/minus-circle";
 import SvgThumbsDown from "@/icons/thumbs-down";
 import SvgThumbsUp from "@/icons/thumbs-up";
+import SvgFileText from "@/icons/file-text";
 
 function QueryHistoryTableRow({
   chatSessionMinimal,
@@ -171,65 +172,70 @@ function PreviousQueryHistoryExportsModal({
   );
 
   return (
-    <Modal
-      title="Previous Query History Exports"
-      onOutsideClick={() => setShowModal(false)}
-      className="overflow-y-scroll h-1/2"
-    >
-      <div className="flex flex-col h-full w-full py-4">
-        <div className="flex flex-1">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Generated At</TableHead>
-                <TableHead>Start Range</TableHead>
-                <TableHead>End Range</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Download</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginatedTasks.map((task, index) => (
-                <TableRow key={index}>
-                  <TableCell>
-                    {humanReadableFormatWithTime(task.startTime)}
-                  </TableCell>
-                  <TableCell>{task.start.toDateString()}</TableCell>
-                  <TableCell>{task.end.toDateString()}</TableCell>
-                  <TableCell>
-                    <ExportBadge status={task.status} />
-                  </TableCell>
-                  <TableCell>
-                    {task.status === "SUCCESS" ? (
-                      <Link
-                        className="flex justify-center"
-                        href={withRequestId(
-                          DOWNLOAD_QUERY_HISTORY_URL,
-                          task.taskId
+    <Modal open={true} onOpenChange={() => setShowModal(false)}>
+      <Modal.Content large>
+        <Modal.Header
+          icon={SvgFileText}
+          title="Previous Query History Exports"
+          onClose={() => setShowModal(false)}
+        />
+        <Modal.Body>
+          <div className="flex flex-col w-full">
+            <div className="flex flex-1">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Generated At</TableHead>
+                    <TableHead>Start Range</TableHead>
+                    <TableHead>End Range</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Download</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedTasks.map((task, index) => (
+                    <TableRow key={index}>
+                      <TableCell>
+                        {humanReadableFormatWithTime(task.startTime)}
+                      </TableCell>
+                      <TableCell>{task.start.toDateString()}</TableCell>
+                      <TableCell>{task.end.toDateString()}</TableCell>
+                      <TableCell>
+                        <ExportBadge status={task.status} />
+                      </TableCell>
+                      <TableCell>
+                        {task.status === "SUCCESS" ? (
+                          <Link
+                            className="flex justify-center"
+                            href={withRequestId(
+                              DOWNLOAD_QUERY_HISTORY_URL,
+                              task.taskId
+                            )}
+                          >
+                            <FiDownload color="primary" />
+                          </Link>
+                        ) : (
+                          <FiDownload color="primary" className="opacity-20" />
                         )}
-                      >
-                        <FiDownload color="primary" />
-                      </Link>
-                    ) : (
-                      <FiDownload color="primary" className="opacity-20" />
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
 
-        <div className="flex mt-3">
-          <div className="mx-auto">
-            <PageSelector
-              currentPage={taskPage}
-              totalPages={totalTaskPages}
-              onPageChange={setTaskPage}
-            />
+            <div className="flex mt-3">
+              <div className="mx-auto">
+                <PageSelector
+                  currentPage={taskPage}
+                  totalPages={totalTaskPages}
+                  onPageChange={setTaskPage}
+                />
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </Modal.Body>
+      </Modal.Content>
     </Modal>
   );
 }
