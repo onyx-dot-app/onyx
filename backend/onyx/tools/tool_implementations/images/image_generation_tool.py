@@ -13,11 +13,13 @@ from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.file_store.utils import build_frontend_file_url
 from onyx.file_store.utils import save_files
+from onyx.llm.utils import any_image_generation_model_exists
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolHeartbeat
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.settings.store import load_settings
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.images.models import (
@@ -81,8 +83,18 @@ class ImageGenerationTool(Tool[None]):
     @override
     @classmethod
     def is_available(cls, db_session: Session) -> bool:
-        """Available if an OpenAI LLM provider is configured in the system."""
+        """Available if image generation is enabled in settings and image generation models exist."""
         try:
+            # Check if image generation is disabled in settings
+            settings = load_settings()
+            if settings.image_generation_enabled is False:
+                return False
+
+            # Check if any image generation models exist in the database
+            if any_image_generation_model_exists():
+                return True
+
+            # Fallback: check for OpenAI/Azure providers (legacy behavior)
             providers = fetch_existing_llm_providers(db_session)
             return any(
                 (provider.provider == "openai" and provider.api_key is not None)

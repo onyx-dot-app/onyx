@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
 from onyx.llm.utils import model_supports_image_input
+from onyx.llm.utils import model_supports_image_output
 from onyx.server.manage.llm.models import ModelConfigurationView
 
 
@@ -507,6 +508,10 @@ def fetch_model_configurations_for_provider(
             is_visible=False,
             max_input_tokens=None,
             supports_image_input=model_supports_image_input(
+                model_name=model_name,
+                model_provider=provider_name,
+            ),
+            supports_image_output=model_supports_image_output(
                 model_name=model_name,
                 model_provider=provider_name,
             ),

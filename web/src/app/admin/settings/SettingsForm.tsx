@@ -13,7 +13,9 @@ import { Modal } from "@/components/Modal";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { AnonymousUserPath } from "./AnonymousUserPath";
 import LLMSelector from "@/components/llm/LLMSelector";
-import { useVisionProviders } from "./hooks/useVisionProviders";
+import { useVisionProviders } from "@/app/admin/settings/hooks/useVisionProviders";
+import { useImageGenerationProviders } from "@/app/admin/settings/hooks/useImageGenerationProviders";
+import { parseLlmDescriptor } from "@/lib/llm/utils";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 
 export function Checkbox({
@@ -96,6 +98,13 @@ export function SettingsForm() {
     updateDefaultVisionProvider,
   } = useVisionProviders(setPopup);
 
+  const {
+    imageGenerationProviders,
+    imageGenerationLLM,
+    setImageGenerationLLM,
+    initializeFromSettings: initializeImageGenerationFromSettings,
+  } = useImageGenerationProviders(setPopup);
+
   const combinedSettings = useContext(SettingsContext);
 
   useEffect(() => {
@@ -111,6 +120,20 @@ export function SettingsForm() {
     }
     // We don't need to fetch vision providers here anymore as the hook handles it
   }, []);
+
+  // Initialize image generation LLM selection from settings when providers are loaded
+  useEffect(() => {
+    if (settings && imageGenerationProviders.length > 0) {
+      initializeImageGenerationFromSettings(
+        settings.default_image_generation_provider ?? null,
+        settings.default_image_generation_model ?? null
+      );
+    }
+  }, [
+    settings,
+    imageGenerationProviders,
+    initializeImageGenerationFromSettings,
+  ]);
 
   if (!settings) {
     return null;
@@ -420,6 +443,7 @@ export function SettingsForm() {
                   }))}
                   currentLlm={visionLLM}
                   onSelect={(value) => setVisionLLM(value)}
+                  visibleModelsOnly={false} // Allow admins to select non-visible models for image processing
                 />
                 <Button
                   onClick={() => updateDefaultVisionProvider(visionLLM)}
@@ -436,6 +460,95 @@ export function SettingsForm() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Image Generation Settings */}
+      <Title className="mt-8 mb-4">Image Generation</Title>
+
+      <div className="flex flex-col gap-2">
+        <Checkbox
+          label="Enable Image Generation"
+          sublabel="If enabled, users will be able to use the image generation tool in their chats. Requires at least one image generation model to be configured."
+          checked={settings.image_generation_enabled ?? true}
+          onChange={(e) =>
+            handleToggleSettingsField(
+              "image_generation_enabled",
+              e.target.checked
+            )
+          }
+        />
+
+        {/* Default Image Generation LLM Section */}
+        {(settings.image_generation_enabled ?? true) && (
+          <div className="mt-4">
+            <Label>Default Image Generation Model</Label>
+            <SubLabel>
+              Select the default model to use for image generation. This model
+              will be used by all users when generating images.
+            </SubLabel>
+
+            <div className="mt-2 max-w-xs">
+              {!imageGenerationProviders ||
+              imageGenerationProviders.length === 0 ? (
+                <div className="text-sm text-gray-500">
+                  No image generation models found. Please add an LLM provider
+                  with image generation models configured.
+                </div>
+              ) : (
+                <>
+                  <LLMSelector
+                    userSettings={false}
+                    llmProviders={imageGenerationProviders.map((provider) => ({
+                      ...provider,
+                      model_names: provider.image_generation_models,
+                      display_model_names: provider.image_generation_models,
+                    }))}
+                    currentLlm={imageGenerationLLM}
+                    requiresImageGeneration={true}
+                    visibleModelsOnly={false} // Image generation models are never visible
+                    onSelect={(value) => setImageGenerationLLM(value)}
+                  />
+                  <Button
+                    onClick={() => {
+                      if (!imageGenerationLLM) {
+                        setPopup({
+                          message: "Please select an image generation model",
+                          type: "error",
+                        });
+                        return;
+                      }
+                      const { name, modelName } =
+                        parseLlmDescriptor(imageGenerationLLM);
+                      const providerObj = imageGenerationProviders.find(
+                        (p) => p.name === name
+                      );
+                      if (!providerObj) {
+                        setPopup({
+                          message: "Provider not found",
+                          type: "error",
+                        });
+                        return;
+                      }
+                      updateSettingField([
+                        {
+                          fieldName: "default_image_generation_provider",
+                          newValue: providerObj.id,
+                        },
+                        {
+                          fieldName: "default_image_generation_model",
+                          newValue: modelName,
+                        },
+                      ]);
+                    }}
+                    className="mt-2"
+                  >
+                    Set Default Image Generation Model
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

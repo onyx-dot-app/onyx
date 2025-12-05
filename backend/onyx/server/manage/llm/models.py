@@ -7,6 +7,7 @@ from pydantic import field_validator
 
 from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import litellm_thinks_model_supports_image_input
+from onyx.llm.utils import litellm_thinks_model_supports_image_output
 from onyx.llm.utils import model_is_reasoning_model
 
 
@@ -65,6 +66,18 @@ class LLMProviderDescriptor(BaseModel):
         from onyx.llm.llm_provider_options import get_provider_display_name
 
         provider = llm_provider_model.provider
+
+        # Build model configurations, filtering out image generation models
+        # Image generation models should not appear in normal LLM selection
+        model_configs = []
+        for model_configuration in llm_provider_model.model_configurations:
+            config_view = ModelConfigurationView.from_model(
+                model_configuration, llm_provider_model.provider
+            )
+            # Filter out image generation models from user-facing model selection
+            if not config_view.supports_image_output:
+                model_configs.append(config_view)
+
         return cls(
             name=llm_provider_model.name,
             provider=provider,
@@ -74,12 +87,7 @@ class LLMProviderDescriptor(BaseModel):
             is_default_provider=llm_provider_model.is_default_provider,
             is_default_vision_provider=llm_provider_model.is_default_vision_provider,
             default_vision_model=llm_provider_model.default_vision_model,
-            model_configurations=list(
-                ModelConfigurationView.from_model(
-                    model_configuration, llm_provider_model.provider
-                )
-                for model_configuration in llm_provider_model.model_configurations
-            ),
+            model_configurations=model_configs,
         )
 
 
@@ -168,6 +176,7 @@ class ModelConfigurationUpsertRequest(BaseModel):
     is_visible: bool
     max_input_tokens: int | None = None
     supports_image_input: bool | None = None
+    supports_image_output: bool | None = None
 
     @classmethod
     def from_model(
@@ -178,6 +187,7 @@ class ModelConfigurationUpsertRequest(BaseModel):
             is_visible=model_configuration_model.is_visible,
             max_input_tokens=model_configuration_model.max_input_tokens,
             supports_image_input=model_configuration_model.supports_image_input,
+            supports_image_output=model_configuration_model.supports_image_output,
         )
 
 
@@ -186,6 +196,7 @@ class ModelConfigurationView(BaseModel):
     is_visible: bool
     max_input_tokens: int | None = None
     supports_image_input: bool
+    supports_image_output: bool
     supports_reasoning: bool = False
     display_name: str | None = None
     provider_display_name: str | None = None
@@ -235,6 +246,13 @@ class ModelConfigurationView(BaseModel):
                     model_configuration_model.name, provider_name
                 )
             ),
+            supports_image_output=(
+                val
+                if (val := model_configuration_model.supports_image_output) is not None
+                else litellm_thinks_model_supports_image_output(
+                    model_configuration_model.name, provider_name
+                )
+            ),
             supports_reasoning=model_is_reasoning_model(
                 model_configuration_model.name, provider_name
             ),
@@ -251,6 +269,12 @@ class VisionProviderResponse(LLMProviderView):
     """Response model for vision providers endpoint, including vision-specific fields."""
 
     vision_models: list[str]
+
+
+class ImageGenerationProviderResponse(LLMProviderView):
+    """Response model for image generation providers endpoint, including image generation-specific fields."""
+
+    image_generation_models: list[str]
 
 
 class LLMCost(BaseModel):

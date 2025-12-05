@@ -462,10 +462,9 @@ def get_llm_max_tokens(
             max_tokens = model_obj["max_tokens"]
             return max_tokens
 
-        logger.error(f"No max tokens found for LLM: {model_name}")
-        raise RuntimeError("No max tokens found for LLM")
+        raise RuntimeWarning("No max tokens found for LLM")
     except Exception:
-        logger.exception(
+        logger.warning(
             f"Failed to get max tokens for LLM with name {model_name}. Defaulting to {GEN_AI_MODEL_FALLBACK_MAX_TOKENS}."
         )
         return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
@@ -565,8 +564,8 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
                     LLMProvider.provider == model_provider,
                 )
             )
-            if model_config and model_config.supports_image_input is not None:
-                return model_config.supports_image_input
+            if model_config:
+                return model_config.supports_image_input or False
     except Exception as e:
         logger.warning(
             f"Failed to query database for {model_provider} model {model_name} image support: {e}"
@@ -599,6 +598,70 @@ def litellm_thinks_model_supports_image_input(
         return False
 
 
+def model_supports_image_output(model_name: str, model_provider: str) -> bool:
+    # First, try to read an explicit configuration from the model_configuration table
+    try:
+        with get_session_with_current_tenant() as db_session:
+            model_config = db_session.scalar(
+                select(ModelConfiguration)
+                .join(
+                    LLMProvider,
+                    ModelConfiguration.llm_provider_id == LLMProvider.id,
+                )
+                .where(
+                    ModelConfiguration.name == model_name,
+                    LLMProvider.provider == model_provider,
+                )
+            )
+            if model_config:
+                return model_config.supports_image_output or False
+    except Exception as e:
+        logger.warning(
+            f"Failed to query database for {model_provider} model {model_name} image generation support: {e}"
+        )
+
+    # Fallback to looking up the model in the litellm model_cost dict
+    return litellm_thinks_model_supports_image_output(model_name, model_provider)
+
+
+def litellm_thinks_model_supports_image_output(
+    model_name: str, model_provider: str
+) -> bool:
+    """Generally should call `model_supports_image_output` unless you already know that
+    `model_supports_image_output` from the DB is not set OR you need to avoid the performance
+    hit of querying the DB."""
+    try:
+        model_obj = find_model_obj(get_model_map(), model_provider, model_name)
+        if not model_obj:
+            logger.warning(
+                f"No litellm entry found for {model_provider}/{model_name}, "
+                "this model may or may not support image generation output."
+            )
+            return False
+        return model_obj.get("mode", "") == "image_generation"
+    except Exception:
+        logger.exception(
+            f"Failed to get model object for {model_provider}/{model_name}"
+        )
+        return False
+
+
+def any_image_generation_model_exists() -> bool:
+    """Check if any image generation models exist in any LLM provider."""
+    try:
+        with get_session_with_current_tenant() as db_session:
+            # Check for models with supports_image_output=True in the database
+            model_config = db_session.scalar(
+                select(ModelConfiguration).where(
+                    ModelConfiguration.supports_image_output == True  # noqa: E712
+                )
+            )
+            return model_config is not None
+    except Exception as e:
+        logger.warning(f"Failed to check for image generation models: {e}")
+        return False
+
+
 def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:
     import litellm
 
@@ -614,7 +677,7 @@ def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:
 
         # Fallback: try using litellm.supports_reasoning() for newer models
         try:
-            logger.debug("Falling back to `litellm.supports_reasoning`")
+            # logger.debug("Falling back to `litellm.supports_reasoning`")
             full_model_name = (
                 f"{model_provider}/{model_name}"
                 if model_provider not in model_name

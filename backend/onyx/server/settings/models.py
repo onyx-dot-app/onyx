@@ -61,6 +61,11 @@ class Settings(BaseModel):
     search_time_image_analysis_enabled: bool | None = False
     image_analysis_max_size_mb: int | None = 20
 
+    # Image generation settings
+    image_generation_enabled: bool | None = True
+    default_image_generation_provider: int | None = None
+    default_image_generation_model: str | None = None
+
     # User Knowledge settings
     user_knowledge_enabled: bool | None = True
 

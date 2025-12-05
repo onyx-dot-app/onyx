@@ -66,7 +66,37 @@ class CustomToolConfig(BaseModel):
 
 
 def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
-    """Helper function to get image generation LLM config based on available providers"""
+    """Helper function to get image generation LLM config based on available providers.
+
+    Priority:
+    1. Settings-defined image generation provider/model
+    2. Current LLM's provider if OpenAI
+    3. Azure if configured
+    4. Any OpenAI provider in database
+    """
+    from onyx.server.settings.store import load_settings
+
+    settings = load_settings()
+
+    # Check if a default image generation provider/model is configured in settings
+    if (
+        settings.default_image_generation_provider
+        and settings.default_image_generation_model
+    ):
+        llm_providers = fetch_existing_llm_providers(db_session)
+        for provider in llm_providers:
+            if provider.id == settings.default_image_generation_provider:
+                return LLMConfig(
+                    model_provider=provider.provider,
+                    model_name=settings.default_image_generation_model,
+                    temperature=GEN_AI_TEMPERATURE,
+                    api_key=provider.api_key,
+                    api_base=provider.api_base,
+                    api_version=provider.api_version,
+                    max_input_tokens=llm.config.max_input_tokens,
+                )
+
+    # Fallback: use current LLM's provider if OpenAI
     if llm and llm.config.api_key and llm.config.model_provider == "openai":
         return LLMConfig(
             model_provider=llm.config.model_provider,
@@ -78,6 +108,7 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
             max_input_tokens=llm.config.max_input_tokens,
         )
 
+    # Fallback: use Azure if configured
     if llm.config.model_provider == "azure" and AZURE_IMAGE_API_KEY is not None:
         return LLMConfig(
             model_provider="azure",

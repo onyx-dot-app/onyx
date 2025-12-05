@@ -21,6 +21,7 @@ interface LLMOption {
   provider: string;
   providerDisplayName: string;
   supportsImageInput: boolean;
+  supportsImageOutput: boolean;
   vendor: string | null;
 }
 
@@ -30,7 +31,9 @@ export interface LLMSelectorProps {
   currentLlm: string | null;
   onSelect: (value: string | null) => void;
   requiresImageGeneration?: boolean;
+  requiresImageInput?: boolean;
   excludePublicProviders?: boolean;
+  visibleModelsOnly?: boolean;
 }
 
 export default function LLMSelector({
@@ -39,7 +42,9 @@ export default function LLMSelector({
   currentLlm,
   onSelect,
   requiresImageGeneration,
+  requiresImageInput,
   excludePublicProviders = false,
+  visibleModelsOnly = true,
 }: LLMSelectorProps) {
   const currentDescriptor = useMemo(
     () => (currentLlm ? parseLlmDescriptor(currentLlm) : null),
@@ -61,7 +66,11 @@ export default function LLMSelector({
           (currentDescriptor?.provider === provider.provider ||
             currentDescriptor?.name === provider.name);
 
-        if (!modelConfiguration.is_visible && !matchesCurrentSelection) {
+        if (
+          visibleModelsOnly &&
+          !modelConfiguration.is_visible &&
+          !matchesCurrentSelection
+        ) {
           return;
         }
 
@@ -71,11 +80,13 @@ export default function LLMSelector({
         }
         seenKeys.add(key);
 
-        const supportsImageInput =
-          modelConfiguration.supports_image_input || false;
-
-        // If the model does not support image input and we require image generation, skip it
-        if (requiresImageGeneration && !supportsImageInput) {
+        if (
+          requiresImageGeneration &&
+          !modelConfiguration.supports_image_output
+        ) {
+          return;
+        }
+        if (requiresImageInput && !modelConfiguration.supports_image_input) {
           return;
         }
 
@@ -92,7 +103,9 @@ export default function LLMSelector({
           provider: provider.provider,
           providerDisplayName:
             provider.provider_display_name || provider.provider,
-          supportsImageInput,
+          supportsImageInput: modelConfiguration.supports_image_input ?? false,
+          supportsImageOutput:
+            modelConfiguration.supports_image_output ?? false,
           vendor: modelConfiguration.vendor || null,
         };
 
@@ -107,6 +120,8 @@ export default function LLMSelector({
     currentDescriptor?.provider,
     currentDescriptor?.name,
     requiresImageGeneration,
+    requiresImageInput,
+    visibleModelsOnly,
   ]);
 
   // Group options by provider using backend-provided display names
@@ -153,7 +168,7 @@ export default function LLMSelector({
   const defaultModelDisplayName = defaultModelConfig
     ? defaultModelConfig.display_name || defaultModelConfig.name
     : defaultModelName || null;
-  const defaultLabel = userSettings ? "System Default" : "User Default";
+  const defaultLabel = userSettings ? "User Default" : "System Default";
 
   // Determine if we should show grouped view (only if we have multiple vendors)
   const showGrouped = groupedOptions.length > 1;
