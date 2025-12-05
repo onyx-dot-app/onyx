@@ -180,7 +180,6 @@ class GeneratedImage(BaseModel):
     file_id: str
     url: str
     revised_prompt: str
-    shape: str | None = None
 
 
 # The final generated images all at once at the end of image generation

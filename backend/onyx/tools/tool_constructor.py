@@ -243,6 +243,9 @@ def construct_tools(
                         model=img_generation_llm_config.model_name,
                         tool_id=db_tool_model.id,
                         emitter=emitter,
+                        config_resolver=lambda: _get_image_generation_config(
+                            llm, db_session
+                        ),
                     )
                 ]
 
