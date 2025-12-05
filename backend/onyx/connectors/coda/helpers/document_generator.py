@@ -3,7 +3,6 @@ from collections.abc import Generator
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.coda.api.client import CodaAPIClient
 from onyx.connectors.coda.helpers.parser import CodaParser
-from onyx.connectors.coda.models.common import CodaObjectType
 from onyx.connectors.coda.models.doc import CodaDoc
 from onyx.connectors.coda.models.page import CodaPage
 from onyx.connectors.coda.models.table import CodaTableReference
@@ -107,19 +106,10 @@ class CodaDocumentGenerator:
             text = self.parser.build_page_content(page_title, content)
 
             # Build metadata
-            metadata: dict[str, str | list[str]] = {
-                "type": CodaObjectType.PAGE,
-                "doc_name": doc.name,
-                "doc_id": doc.id,
-                "page_id": page.id,
-                "path": self.parser.get_page_path(page, page_map),
-            }
+            metadata = self.parser.build_page_metadata(doc, page, page_map)
 
-            if page.parent:
-                metadata["parent_page_id"] = page.parent.id
-
-            if page.icon:
-                metadata["icon"] = str(page.icon)
+            # Build owners
+            primary_owners, secondary_owners = self.parser.build_page_owners(page)
 
             sections: list[TextSection | ImageSection] = [
                 TextSection(
@@ -139,6 +129,8 @@ class CodaDocumentGenerator:
                     else None
                 ),
                 metadata=metadata,
+                primary_owners=primary_owners,
+                secondary_owners=secondary_owners,
             )
 
     def generate_table_documents(
@@ -186,15 +178,10 @@ class CodaDocumentGenerator:
                 self.indexed_tables.add(table_key)
 
                 # Build metadata
-                metadata: dict[str, str | list[str]] = {
-                    "type": CodaObjectType.TABLE,
-                    "doc_name": doc.name,
-                    "doc_id": doc.id,
-                    "table_id": table.id,
-                    "table_name": table.name,
-                    "row_count": str(len(rows)),
-                    "column_count": str(len(columns)),
-                }
+                metadata = self.parser.build_table_metadata(doc, table, columns, rows)
+
+                # Build owners (tables use doc owner since they don't have individual authors)
+                primary_owners = self.parser.build_doc_owners(doc)
 
                 sections: list[TextSection | ImageSection] = [
                     TextSection(
@@ -212,6 +199,7 @@ class CodaDocumentGenerator:
                         doc.updatedAt.replace("Z", "+00:00")
                     ),
                     metadata=metadata,
+                    primary_owners=primary_owners,
                 )
 
             except Exception as e:

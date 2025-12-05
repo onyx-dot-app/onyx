@@ -49,7 +49,7 @@ class CodaPage(CodaObjectBase):
     icon: Optional[CodaIcon] = None
     image: Optional[CodaPageImage] = None
     parent: Optional[CodaPageReference] = None
-    author: Optional[CodaPersonValue] = None
+    authors: Optional[list[CodaPersonValue]] = None
     createdAt: Optional[str] = None
     createdBy: Optional[CodaPersonValue] = None
     updatedAt: Optional[str] = None

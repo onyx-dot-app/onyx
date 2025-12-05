@@ -1,4 +1,5 @@
 from enum import StrEnum
+from typing import Literal
 from typing import Optional
 
 from pydantic import BaseModel
@@ -20,8 +21,8 @@ class CodaSchemaOrgIdentifier(StrEnum):
 class CodaPersonValue(BaseModel):
     """Represents a Coda Person object"""
 
-    context: str = Field(alias="@context")
-    type: CodaSchemaOrgIdentifier = Field(alias="@type")
     name: str
-    additionalType: Optional[str] = None
     email: Optional[str] = None
+    additionalType: Optional[str] = None
+    context: str = Field(alias="@context")
+    type: Literal[CodaSchemaOrgIdentifier.PERSON] = Field(alias="@type")

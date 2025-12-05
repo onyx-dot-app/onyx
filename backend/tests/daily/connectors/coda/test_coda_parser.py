@@ -18,14 +18,20 @@ import pytest
 
 from onyx.connectors.coda.helpers.parser import CodaParser
 from onyx.connectors.coda.models.common import CodaObjectType
-from onyx.connectors.coda.models.page import CodaPage
-from onyx.connectors.coda.models.page import CodaPageReference
-from onyx.connectors.coda.models.table import CodaColumn
-from onyx.connectors.coda.models.table import CodaColumnFormat
+from onyx.connectors.coda.models.icon import CodaIcon
+from onyx.connectors.coda.models.page import CodaPageImage
+from onyx.connectors.coda.models.person import CodaPersonValue
 from onyx.connectors.coda.models.table import CodaColumnFormatType
-from onyx.connectors.coda.models.table import CodaRow
-from onyx.connectors.coda.models.table import CodaTableReference
-from onyx.connectors.coda.models.table import TableType
+from tests.daily.connectors.coda.conftest import make_column
+from tests.daily.connectors.coda.conftest import make_doc
+from tests.daily.connectors.coda.conftest import make_folder_ref
+from tests.daily.connectors.coda.conftest import make_page
+from tests.daily.connectors.coda.conftest import make_page_ref
+from tests.daily.connectors.coda.conftest import make_row
+from tests.daily.connectors.coda.conftest import make_table
+from tests.daily.connectors.coda.conftest import make_workspace_ref
+
+# Import factory functions from conftest
 
 
 class TestParseTimestamp:
@@ -76,17 +82,7 @@ class TestGetPagePath:
 
     def test_single_page_no_parent(self) -> None:
         """Test path for a page with no parent."""
-        page = CodaPage(
-            id="page-1",
-            name="Root Page",
-            href="https://coda.io/apis/v1/docs/doc-1/pages/page-1",
-            browserLink="https://coda.io/d/doc-1/page-1",
-            type=CodaObjectType.PAGE,
-            isHidden=False,
-            isEffectivelyHidden=False,
-            children=[],
-            contentType="canvas",
-        )
+        page = make_page(id="page-1", name="Root Page")
         page_map = {"page-1": page}
 
         result = CodaParser.get_page_path(page, page_map)
@@ -94,35 +90,11 @@ class TestGetPagePath:
 
     def test_two_level_hierarchy(self) -> None:
         """Test path for a page with one parent."""
-        parent = CodaPage(
-            id="parent-1",
-            name="Parent Page",
-            href="https://coda.io/apis/v1/docs/doc-1/pages/parent-1",
-            browserLink="https://coda.io/d/doc-1/parent-1",
-            type=CodaObjectType.PAGE,
-            isHidden=False,
-            isEffectivelyHidden=False,
-            children=[],
-            contentType="canvas",
-        )
-
-        child = CodaPage(
+        parent = make_page(id="parent-1", name="Parent Page")
+        child = make_page(
             id="child-1",
             name="Child Page",
-            href="https://coda.io/apis/v1/docs/doc-1/pages/child-1",
-            browserLink="https://coda.io/d/doc-1/child-1",
-            type=CodaObjectType.PAGE,
-            isHidden=False,
-            isEffectivelyHidden=False,
-            children=[],
-            contentType="canvas",
-            parent=CodaPageReference(
-                id="parent-1",
-                name="Parent Page",
-                href="https://coda.io/apis/v1/docs/doc-1/pages/parent-1",
-                browserLink="https://coda.io/d/doc-1/parent-1",
-                type=CodaObjectType.PAGE,
-            ),
+            parent=make_page_ref(id="parent-1", name="Parent Page"),
         )
 
         page_map = {"parent-1": parent, "child-1": child}
@@ -132,54 +104,16 @@ class TestGetPagePath:
 
     def test_three_level_hierarchy(self) -> None:
         """Test path for a deeply nested page."""
-        grandparent = CodaPage(
-            id="grandparent-1",
-            name="Grandparent",
-            href="https://coda.io/apis/v1/docs/doc-1/pages/grandparent-1",
-            browserLink="https://coda.io/d/doc-1/grandparent-1",
-            type=CodaObjectType.PAGE,
-            isHidden=False,
-            isEffectivelyHidden=False,
-            children=[],
-            contentType="canvas",
-        )
-
-        parent = CodaPage(
+        grandparent = make_page(id="grandparent-1", name="Grandparent")
+        parent = make_page(
             id="parent-1",
             name="Parent",
-            href="https://coda.io/apis/v1/docs/doc-1/pages/parent-1",
-            browserLink="https://coda.io/d/doc-1/parent-1",
-            type=CodaObjectType.PAGE,
-            isHidden=False,
-            isEffectivelyHidden=False,
-            children=[],
-            contentType="canvas",
-            parent=CodaPageReference(
-                id="grandparent-1",
-                name="Grandparent",
-                href="https://coda.io/apis/v1/docs/doc-1/pages/grandparent-1",
-                browserLink="https://coda.io/d/doc-1/grandparent-1",
-                type=CodaObjectType.PAGE,
-            ),
+            parent=make_page_ref(id="grandparent-1", name="Grandparent"),
         )
-
-        child = CodaPage(
+        child = make_page(
             id="child-1",
             name="Child",
-            href="https://coda.io/apis/v1/docs/doc-1/pages/child-1",
-            browserLink="https://coda.io/d/doc-1/child-1",
-            type=CodaObjectType.PAGE,
-            isHidden=False,
-            isEffectivelyHidden=False,
-            children=[],
-            contentType="canvas",
-            parent=CodaPageReference(
-                id="parent-1",
-                name="Parent",
-                href="https://coda.io/apis/v1/docs/doc-1/pages/parent-1",
-                browserLink="https://coda.io/d/doc-1/parent-1",
-                type=CodaObjectType.PAGE,
-            ),
+            parent=make_page_ref(id="parent-1", name="Parent"),
         )
 
         page_map = {
@@ -193,23 +127,10 @@ class TestGetPagePath:
 
     def test_missing_parent_in_map(self) -> None:
         """Test path when parent is referenced but not in page_map."""
-        child = CodaPage(
+        child = make_page(
             id="child-1",
             name="Child Page",
-            href="https://coda.io/apis/v1/docs/doc-1/pages/child-1",
-            browserLink="https://coda.io/d/doc-1/child-1",
-            type=CodaObjectType.PAGE,
-            isHidden=False,
-            isEffectivelyHidden=False,
-            children=[],
-            contentType="canvas",
-            parent=CodaPageReference(
-                id="missing-parent",
-                name="Missing Parent",
-                href="https://coda.io/apis/v1/docs/doc-1/pages/missing-parent",
-                browserLink="https://coda.io/d/doc-1/missing-parent",
-                type=CodaObjectType.PAGE,
-            ),
+            parent=make_page_ref(id="missing-parent", name="Missing Parent"),
         )
 
         page_map = {"child-1": child}
@@ -220,23 +141,10 @@ class TestGetPagePath:
 
     def test_parent_with_no_id(self) -> None:
         """Test path when parent reference has no ID."""
-        child = CodaPage(
+        child = make_page(
             id="child-1",
             name="Child Page",
-            href="https://coda.io/apis/v1/docs/doc-1/pages/child-1",
-            browserLink="https://coda.io/d/doc-1/child-1",
-            type=CodaObjectType.PAGE,
-            isHidden=False,
-            isEffectivelyHidden=False,
-            children=[],
-            contentType="canvas",
-            parent=CodaPageReference(
-                id="",
-                name="Empty ID Parent",
-                href="https://coda.io/apis/v1/docs/doc-1/pages/empty",
-                browserLink="https://coda.io/d/doc-1/empty",
-                type=CodaObjectType.PAGE,
-            ),
+            parent=make_page_ref(id="", name="Empty ID Parent"),
         )
 
         page_map = {"child-1": child}
@@ -339,59 +247,16 @@ class TestConvertTableToMarkdown:
 
     def test_normal_table_with_data(self) -> None:
         """Test converting a normal table with columns and rows."""
-        table = CodaTableReference(
-            id="table-1",
-            name="Test Table",
-            href="https://coda.io/apis/v1/docs/doc-1/tables/table-1",
-            browserLink="https://coda.io/d/doc-1/table-1",
-            type=CodaObjectType.TABLE,
-            tableType=TableType.TABLE,
-        )
-
+        table = make_table(id="table-1", name="Test Table")
         columns = [
-            CodaColumn(
-                id="col-1",
-                type=CodaObjectType.COLUMN,
-                href="https://coda.io/apis/v1/docs/doc-1/tables/table-1/columns/col-1",
-                name="Name",
-                format=CodaColumnFormat(type=CodaColumnFormatType.text, isArray=False),
-                display=True,
-            ),
-            CodaColumn(
-                id="col-2",
-                type=CodaObjectType.COLUMN,
-                href="https://coda.io/apis/v1/docs/doc-1/tables/table-1/columns/col-2",
-                name="Age",
-                format=CodaColumnFormat(
-                    type=CodaColumnFormatType.number, isArray=False
-                ),
-                display=True,
+            make_column(id="col-1", name="Name", format_type=CodaColumnFormatType.text),
+            make_column(
+                id="col-2", name="Age", format_type=CodaColumnFormatType.number
             ),
         ]
-
         rows = [
-            CodaRow(
-                id="row-1",
-                name="Row 1",
-                href="https://coda.io/apis/v1/docs/doc-1/tables/table-1/rows/row-1",
-                type=CodaObjectType.ROW,
-                index=0,
-                browserLink="https://coda.io/d/doc-1/table-1/row-1",
-                createdAt="2024-01-01T00:00:00Z",
-                updatedAt="2024-01-01T00:00:00Z",
-                values={"col-1": "Alice", "col-2": 30},
-            ),
-            CodaRow(
-                id="row-2",
-                name="Row 2",
-                href="https://coda.io/apis/v1/docs/doc-1/tables/table-1/rows/row-2",
-                type=CodaObjectType.ROW,
-                index=1,
-                browserLink="https://coda.io/d/doc-1/table-1/row-2",
-                createdAt="2024-01-01T00:00:00Z",
-                updatedAt="2024-01-01T00:00:00Z",
-                values={"col-1": "Bob", "col-2": 25},
-            ),
+            make_row(id="row-1", index=0, values={"col-1": "Alice", "col-2": 30}),
+            make_row(id="row-2", index=1, values={"col-1": "Bob", "col-2": 25}),
         ]
 
         result = CodaParser.convert_table_to_markdown(table, columns, rows)
@@ -405,17 +270,9 @@ class TestConvertTableToMarkdown:
 
     def test_empty_table_no_columns(self) -> None:
         """Test converting a table with no columns."""
-        table = CodaTableReference(
-            id="table-1",
-            name="Empty Table",
-            href="https://coda.io/apis/v1/docs/doc-1/tables/table-1",
-            browserLink="https://coda.io/d/doc-1/table-1",
-            type=CodaObjectType.TABLE,
-            tableType=TableType.TABLE,
-        )
-
-        columns: list[CodaColumn] = []
-        rows: list[CodaRow] = []
+        table = make_table(id="table-1", name="Empty Table")
+        columns = []
+        rows = []
 
         result = CodaParser.convert_table_to_markdown(table, columns, rows)
 
@@ -424,27 +281,9 @@ class TestConvertTableToMarkdown:
 
     def test_empty_table_no_rows(self) -> None:
         """Test converting a table with columns but no rows."""
-        table = CodaTableReference(
-            id="table-1",
-            name="Empty Table",
-            href="https://coda.io/apis/v1/docs/doc-1/tables/table-1",
-            browserLink="https://coda.io/d/doc-1/table-1",
-            type=CodaObjectType.TABLE,
-            tableType=TableType.TABLE,
-        )
-
-        columns = [
-            CodaColumn(
-                id="col-1",
-                type=CodaObjectType.COLUMN,
-                href="https://coda.io/apis/v1/docs/doc-1/tables/table-1/columns/col-1",
-                name="Name",
-                format=CodaColumnFormat(type=CodaColumnFormatType.text, isArray=False),
-                display=True,
-            ),
-        ]
-
-        rows: list[CodaRow] = []
+        table = make_table(id="table-1", name="Empty Table")
+        columns = [make_column(id="col-1", name="Name")]
+        rows = []
 
         result = CodaParser.convert_table_to_markdown(table, columns, rows)
 
@@ -453,39 +292,9 @@ class TestConvertTableToMarkdown:
 
     def test_no_displayable_columns(self) -> None:
         """Test converting a table where all columns have display=False."""
-        table = CodaTableReference(
-            id="table-1",
-            name="Hidden Columns Table",
-            href="https://coda.io/apis/v1/docs/doc-1/tables/table-1",
-            browserLink="https://coda.io/d/doc-1/table-1",
-            type=CodaObjectType.TABLE,
-            tableType=TableType.TABLE,
-        )
-
-        columns = [
-            CodaColumn(
-                id="col-1",
-                type=CodaObjectType.COLUMN,
-                href="https://coda.io/apis/v1/docs/doc-1/tables/table-1/columns/col-1",
-                name="Hidden Column",
-                format=CodaColumnFormat(type=CodaColumnFormatType.text, isArray=False),
-                display=False,
-            ),
-        ]
-
-        rows = [
-            CodaRow(
-                id="row-1",
-                name="Row 1",
-                href="https://coda.io/apis/v1/docs/doc-1/tables/table-1/rows/row-1",
-                type=CodaObjectType.ROW,
-                index=0,
-                browserLink="https://coda.io/d/doc-1/table-1/row-1",
-                createdAt="2024-01-01T00:00:00Z",
-                updatedAt="2024-01-01T00:00:00Z",
-                values={"col-1": "Data"},
-            ),
-        ]
+        table = make_table(id="table-1", name="Hidden Columns Table")
+        columns = [make_column(id="col-1", name="Hidden Column", display=False)]
+        rows = [make_row(id="row-1", index=0, values={"col-1": "Data"})]
 
         result = CodaParser.convert_table_to_markdown(table, columns, rows)
 
@@ -494,54 +303,16 @@ class TestConvertTableToMarkdown:
 
     def test_mixed_displayable_columns(self) -> None:
         """Test that only displayable columns are included."""
-        table = CodaTableReference(
-            id="table-1",
-            name="Mixed Table",
-            href="https://coda.io/apis/v1/docs/doc-1/tables/table-1",
-            browserLink="https://coda.io/d/doc-1/table-1",
-            type=CodaObjectType.TABLE,
-            tableType=TableType.TABLE,
-        )
-
+        table = make_table(id="table-1", name="Mixed Table")
         columns = [
-            CodaColumn(
-                id="col-1",
-                type=CodaObjectType.COLUMN,
-                href="https://coda.io/apis/v1/docs/doc-1/tables/table-1/columns/col-1",
-                name="Visible",
-                format=CodaColumnFormat(type=CodaColumnFormatType.text, isArray=False),
-                display=True,
-            ),
-            CodaColumn(
-                id="col-2",
-                type=CodaObjectType.COLUMN,
-                href="https://coda.io/apis/v1/docs/doc-1/tables/table-1/columns/col-2",
-                name="Hidden",
-                format=CodaColumnFormat(type=CodaColumnFormatType.text, isArray=False),
-                display=False,
-            ),
-            CodaColumn(
-                id="col-3",
-                type=CodaObjectType.COLUMN,
-                href="https://coda.io/apis/v1/docs/doc-1/tables/table-1/columns/col-3",
-                name="Also Visible",
-                format=CodaColumnFormat(type=CodaColumnFormatType.text, isArray=False),
-                display=True,
-            ),
+            make_column(id="col-1", name="Visible", display=True),
+            make_column(id="col-2", name="Hidden", display=False),
+            make_column(id="col-3", name="Also Visible", display=True),
         ]
-
         rows = [
-            CodaRow(
-                id="row-1",
-                name="Row 1",
-                href="https://coda.io/apis/v1/docs/doc-1/tables/table-1/rows/row-1",
-                type=CodaObjectType.ROW,
-                index=0,
-                browserLink="https://coda.io/d/doc-1/table-1/row-1",
-                createdAt="2024-01-01T00:00:00Z",
-                updatedAt="2024-01-01T00:00:00Z",
-                values={"col-1": "A", "col-2": "B", "col-3": "C"},
-            ),
+            make_row(
+                id="row-1", index=0, values={"col-1": "A", "col-2": "B", "col-3": "C"}
+            )
         ]
 
         result = CodaParser.convert_table_to_markdown(table, columns, rows)
@@ -553,49 +324,14 @@ class TestConvertTableToMarkdown:
 
     def test_missing_cell_values(self) -> None:
         """Test handling rows with missing cell values."""
-        table = CodaTableReference(
-            id="table-1",
-            name="Sparse Table",
-            href="https://coda.io/apis/v1/docs/doc-1/tables/table-1",
-            browserLink="https://coda.io/d/doc-1/table-1",
-            type=CodaObjectType.TABLE,
-            tableType=TableType.TABLE,
-        )
-
+        table = make_table(id="table-1", name="Sparse Table")
         columns = [
-            CodaColumn(
-                id="col-1",
-                type=CodaObjectType.COLUMN,
-                href="https://coda.io/apis/v1/docs/doc-1/tables/table-1/columns/col-1",
-                name="Name",
-                format=CodaColumnFormat(type=CodaColumnFormatType.text, isArray=False),
-                display=True,
-            ),
-            CodaColumn(
-                id="col-2",
-                type=CodaObjectType.COLUMN,
-                href="https://coda.io/apis/v1/docs/doc-1/tables/table-1/columns/col-2",
-                name="Age",
-                format=CodaColumnFormat(
-                    type=CodaColumnFormatType.number, isArray=False
-                ),
-                display=True,
+            make_column(id="col-1", name="Name"),
+            make_column(
+                id="col-2", name="Age", format_type=CodaColumnFormatType.number
             ),
         ]
-
-        rows = [
-            CodaRow(
-                id="row-1",
-                name="Row 1",
-                href="https://coda.io/apis/v1/docs/doc-1/tables/table-1/rows/row-1",
-                type=CodaObjectType.ROW,
-                index=0,
-                browserLink="https://coda.io/d/doc-1/table-1/row-1",
-                createdAt="2024-01-01T00:00:00Z",
-                updatedAt="2024-01-01T00:00:00Z",
-                values={"col-1": "Alice"},  # Missing col-2
-            ),
-        ]
+        rows = [make_row(id="row-1", index=0, values={"col-1": "Alice"})]
 
         result = CodaParser.convert_table_to_markdown(table, columns, rows)
 
@@ -609,52 +345,21 @@ class TestBuildPageTitle:
 
     def test_page_with_name_only(self) -> None:
         """Test building title for page with name only."""
-        page = CodaPage(
-            id="page-1",
-            name="My Page",
-            href="https://coda.io/apis/v1/docs/doc-1/pages/page-1",
-            browserLink="https://coda.io/d/doc-1/page-1",
-            type=CodaObjectType.PAGE,
-            isHidden=False,
-            isEffectivelyHidden=False,
-            children=[],
-            contentType="canvas",
-        )
+        page = make_page(id="page-1", name="My Page")
 
         result = CodaParser.build_page_title(page)
         assert result == "My Page"
 
     def test_page_with_name_and_subtitle(self) -> None:
         """Test building title for page with name and subtitle."""
-        page = CodaPage(
-            id="page-1",
-            name="My Page",
-            subtitle="A detailed description",
-            href="https://coda.io/apis/v1/docs/doc-1/pages/page-1",
-            browserLink="https://coda.io/d/doc-1/page-1",
-            type=CodaObjectType.PAGE,
-            isHidden=False,
-            isEffectivelyHidden=False,
-            children=[],
-            contentType="canvas",
-        )
+        page = make_page(id="page-1", name="My Page", subtitle="A detailed description")
 
         result = CodaParser.build_page_title(page)
         assert result == "My Page - A detailed description"
 
     def test_page_with_empty_name(self) -> None:
         """Test building title for page with empty name."""
-        page = CodaPage(
-            id="page-456",
-            name="",
-            href="https://coda.io/apis/v1/docs/doc-1/pages/page-456",
-            browserLink="https://coda.io/d/doc-1/page-456",
-            type=CodaObjectType.PAGE,
-            isHidden=False,
-            isEffectivelyHidden=False,
-            children=[],
-            contentType="canvas",
-        )
+        page = make_page(id="page-456", name="")
 
         result = CodaParser.build_page_title(page)
         assert result == "Untitled Page page-456"
@@ -693,6 +398,191 @@ class TestBuildPageContent:
         assert "# Header" in result
         assert "**Bold text**" in result
         assert "*italic text*" in result
+
+
+class TestBuildPageMetadata:
+    """Test suite for build_page_metadata method."""
+
+    def test_basic_page_metadata(self) -> None:
+        """Test building metadata for a basic page."""
+        doc = make_doc(id="doc-1", name="Test Document")
+        page = make_page(id="page-1", name="Test Page")
+        page_map = {"page-1": page}
+
+        result = CodaParser.build_page_metadata(doc, page, page_map)
+
+        # Verify required fields
+        assert result["coda_object_type"] == CodaObjectType.PAGE
+        assert result["doc_name"] == "Test Document"
+        assert result["doc_id"] == "doc-1"
+        assert result["page_id"] == "page-1"
+        assert result["page_name"] == "Test Page"
+        assert result["path"] == "Test Page"
+        assert result["content_type"] == "canvas"
+        assert result["browser_link"] == "https://coda.io/d/doc-1/page-1"
+
+        # Verify optional fields are not present when not provided
+        assert "parent_page_id" not in result
+        assert "icon" not in result
+        assert "subtitle" not in result
+        assert "image_url" not in result
+        assert "author" not in result
+
+    def test_page_metadata_with_parent(self) -> None:
+        """Test building metadata for a page with a parent."""
+        doc = make_doc(
+            id="doc-1",
+            name="Test Document",
+            owner="email@s.com",
+            ownerName="Test User",
+            workspace=make_workspace_ref(id="workspace-1"),
+            folder=make_folder_ref(id="folder-1"),
+        )
+        parent = make_page(id="parent-1", name="Parent Page")
+        child = make_page(
+            id="child-1",
+            name="Child Page",
+            parent=make_page_ref(id="parent-1", name="Parent Page"),
+        )
+
+        page_map = {"parent-1": parent, "child-1": child}
+
+        result = CodaParser.build_page_metadata(doc, child, page_map)
+
+        # Verify parent is included
+        assert result["parent_page_id"] == "parent-1"
+        assert result["parent_page_name"] == "Parent Page"
+        assert result["path"] == "Parent Page / Child Page"
+
+    def test_page_metadata_comprehensive(self) -> None:
+        """Test building metadata with all optional fields populated."""
+
+        doc = make_doc(id="doc-1", name="Test Document")
+
+        # Create child pages
+        child1 = make_page_ref(id="child-1", name="Child 1")
+        child2 = make_page_ref(id="child-2", name="Child 2")
+
+        page = make_page(
+            id="page-1",
+            name="Comprehensive Page",
+            subtitle="A page with all metadata",
+            children=[child1, child2],
+            icon=CodaIcon(
+                name="rocket", type="icon", browserLink="https://coda.io/icons/rocket"
+            ),
+            image=CodaPageImage(
+                browserLink="https://coda.io/images/page-1.png",
+                width=1200,
+                height=630,
+            ),
+            author=CodaPersonValue(
+                **{
+                    "name": "John Doe",
+                    "email": "john@example.com",
+                    "@context": "author",
+                    "@type": "Person",
+                }
+            ),
+            createdBy=CodaPersonValue(
+                **{
+                    "name": "Jane Smith",
+                    "email": "jane@example.com",
+                    "@context": "createdBy",
+                    "@type": "Person",
+                }
+            ),
+            updatedBy=CodaPersonValue(
+                **{
+                    "name": "Bob Wilson",
+                    "email": "bob@example.com",
+                    "@context": "updatedBy",
+                    "@type": "Person",
+                }
+            ),
+            createdAt="2024-01-01T10:00:00Z",
+            updatedAt="2024-01-15T14:30:00Z",
+        )
+
+        page_map = {"page-1": page}
+
+        result = CodaParser.build_page_metadata(doc, page, page_map)
+
+        # Verify all required fields
+        assert result["coda_object_type"] == CodaObjectType.PAGE
+        assert result["doc_name"] == "Test Document"
+        assert result["doc_id"] == "doc-1"
+        assert result["page_id"] == "page-1"
+        assert result["page_name"] == "Comprehensive Page"
+        assert result["path"] == "Comprehensive Page"
+        assert result["content_type"] == "canvas"
+        assert result["browser_link"] == "https://coda.io/d/doc-1/page-1"
+
+        # Verify all optional fields
+        assert result["subtitle"] == "A page with all metadata"
+        assert result["created_at"] == "2024-01-01T10:00:00Z"
+        assert result["updated_at"] == "2024-01-15T14:30:00Z"
+        assert result["child_count"] == "2"
+        assert result["child_page_ids"] == ["child-1", "child-2"]
+
+
+class TestBuildTableMetadata:
+    """Test suite for build_table_metadata method."""
+
+    def test_basic_table_metadata(self) -> None:
+        """Test building metadata for a basic table."""
+        doc = make_doc(id="doc-1", name="Test Document")
+        table = make_table(id="table-1", name="Test Table")
+        columns = [
+            make_column(id="col-1", name="Name"),
+            make_column(
+                id="col-2", name="Age", format_type=CodaColumnFormatType.number
+            ),
+        ]
+        rows = [
+            make_row(id="row-1", index=0, values={"col-1": "Alice", "col-2": 30}),
+            make_row(id="row-2", index=1, values={"col-1": "Bob", "col-2": 25}),
+        ]
+
+        result = CodaParser.build_table_metadata(doc, table, columns, rows)
+
+        # Verify all fields
+        assert result["type"] == CodaObjectType.TABLE
+        assert result["doc_name"] == "Test Document"
+        assert result["doc_id"] == "doc-1"
+        assert result["table_id"] == "table-1"
+        assert result["table_name"] == "Test Table"
+        assert result["row_count"] == "2"
+        assert result["column_count"] == "2"
+
+    def test_table_metadata_with_no_data(self) -> None:
+        """Test building metadata for an empty table."""
+        doc = make_doc(id="doc-1", name="Test Document")
+        table = make_table(id="table-1", name="Empty Table")
+        columns = []
+        rows = []
+
+        result = CodaParser.build_table_metadata(doc, table, columns, rows)
+
+        # Verify counts are zero
+        assert result["row_count"] == "0"
+        assert result["column_count"] == "0"
+
+    def test_table_metadata_with_large_dataset(self) -> None:
+        """Test building metadata for a table with many rows."""
+        doc = make_doc(id="doc-1", name="Test Document")
+        table = make_table(id="table-1", name="Large Table")
+        columns = [make_column(id=f"col-{i}", name=f"Column {i}") for i in range(10)]
+        rows = [
+            make_row(id=f"row-{i}", name=f"Row {i}", index=i, values={})
+            for i in range(100)
+        ]
+
+        result = CodaParser.build_table_metadata(doc, table, columns, rows)
+
+        # Verify counts
+        assert result["row_count"] == "100"
+        assert result["column_count"] == "10"
 
 
 if __name__ == "__main__":

@@ -50,7 +50,7 @@ class CodaDocPublished(BaseModel):
     earnCredit: bool
     href: str
     mode: CodaDocPublishedMode
-    category: DocCategory
+    category: list[DocCategory]
     description: str
     imageLink: str
 
