@@ -106,15 +106,16 @@ class CodaParser:
             return str(value).replace("|", "\\|").replace("\n", " ")
 
     @staticmethod
-    def convert_table_to_html(
+    def convert_table_to_text(
         table: CodaTableReference,
         columns: list[CodaColumn],
         rows: list[CodaRow],
     ) -> str:
-        """Convert table data to HTML format.
+        """Convert table data to text format (Key: Value).
 
-        Generates an HTML table with headers and data rows.
-        Only includes columns marked as displayable.
+        Generates a text representation where each row is a line and cells
+        are formatted as "Column Name: Value", separated by tabs.
+        This matches the Notion connector's approach for better indexing.
 
         Args:
             table: The table metadata (name, etc.)
@@ -122,46 +123,36 @@ class CodaParser:
             rows: List of row data (may be truncated)
 
         Returns:
-            str: HTML formatted table string
+            str: Text formatted table string
         """
         # Handle empty cases
         if not columns:
-            return (
-                f"<h1>{table.name}</h1><p><i>Empty table - no columns defined</i></p>"
-            )
+            return f"{table.name}\n\nEmpty table - no columns defined"
 
         if not rows:
-            return f"<h1>{table.name}</h1><p><i>Empty table - no data</i></p>"
+            return f"{table.name}\n\nEmpty table - no data"
 
         # Build column name to ID mapping for displayable columns only
         col_id_to_name = {col.id: col.name for col in columns if col.display}
 
         if not col_id_to_name:
-            return f"<h1>{table.name}</h1><p><i>No displayable columns</i></p>"
+            return f"{table.name}\n\nNo displayable columns"
 
-        # Build HTML table
-        html_parts = [f"<h1>{table.name}</h1>", "<table>", "<thead>", "<tr>"]
-
-        # Header row
-        for col_name in col_id_to_name.values():
-            html_parts.append(f"<th>{col_name}</th>")
-        html_parts.append("</tr>")
-        html_parts.append("</thead>")
-        html_parts.append("<tbody>")
+        text_parts = [f"{table.name}\n"]
 
         # Data rows
         for row in rows:
-            html_parts.append("<tr>")
-            for col_id in col_id_to_name.keys():
+            row_parts = []
+            for col_id, col_name in col_id_to_name.items():
                 value = row.values.get(col_id, "")
                 formatted_value = CodaParser.format_cell_value(value)
-                html_parts.append(f"<td>{formatted_value}</td>")
-            html_parts.append("</tr>")
+                if formatted_value:
+                    row_parts.append(f"{col_name}: {formatted_value}")
 
-        html_parts.append("</tbody>")
-        html_parts.append("</table>")
+            if row_parts:
+                text_parts.append("\t".join(row_parts))
 
-        return "".join(html_parts)
+        return "\n".join(text_parts)
 
     @staticmethod
     def build_page_title(page: CodaPage) -> str:
@@ -239,6 +230,17 @@ class CodaParser:
                 ]:
                     # Add newline for block elements to ensure text separation
                     current_text.append("\n")
+                elif element.name == "table":
+                    # Extract table ID for reference
+                    table_id = element.get("data-coda-grid-id")
+                    placeholder = f"[[TABLE:{table_id}]]" if table_id else "[[TABLE]]"
+                    # Flush any accumulated text before inserting placeholder
+                    flush_text()
+                    # Create a dedicated TextSection for the placeholder
+                    sections.append(TextSection(text=placeholder, link=None))
+                    # Remove the table element so its children are not processed
+                    element.extract()
+                    continue
 
         flush_text()
         return sections
@@ -368,19 +370,11 @@ class CodaParser:
         table: CodaTableReference,
         columns: list[CodaColumn],
         rows: list[CodaRow],
+        parent_page_id: str | None = None,
     ) -> dict[str, str | list[str]]:
         """Build metadata dictionary for a table document.
 
-        Creates a metadata dict with table information including row/column counts.
-
-        Args:
-            doc: The parent document
-            table: The table to build metadata for
-            columns: List of column definitions
-            rows: List of row data
-
-        Returns:
-            dict: Metadata dictionary with table information
+        Creates a metadata dict with table information including row/column counts and optional parent page linkage.
         """
         from onyx.connectors.coda.models.common import CodaObjectType
 
@@ -392,6 +386,7 @@ class CodaParser:
             "table_name": table.name,
             "row_count": str(len(rows)),
             "column_count": str(len(columns)),
+            "parent_page_id": parent_page_id if parent_page_id else None,
         }
 
-        return metadata
+        return {k: v for k, v in metadata.items() if v is not None}

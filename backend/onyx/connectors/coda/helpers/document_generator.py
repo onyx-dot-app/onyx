@@ -9,6 +9,7 @@ from onyx.connectors.coda.models.table import CodaTableReference
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import Document
 from onyx.connectors.models import SlimDocument
+from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -108,6 +109,7 @@ class CodaDocumentGenerator:
             primary_owners, secondary_owners = self.parser.build_page_owners(page)
 
             if len(sections) == 0:
+                self.skipped_pages.add(page.id)
                 logger.debug(f"Skipping page '{page.name}': no content")
                 continue
 
@@ -164,20 +166,15 @@ class CodaDocumentGenerator:
                     logger.debug(f"Skipping table '{table.name}': no rows")
                     continue
 
-                # Parse table to HTML
-                content = self.parser.convert_table_to_html(table, columns, rows)
-
-                # Mark as indexed
+                content = self.parser.convert_table_to_text(table, columns, rows)
                 self.indexed_tables.add(table_key)
 
-                # Build metadata
-                metadata = self.parser.build_table_metadata(doc, table, columns, rows)
-
-                # Build owners (tables use doc owner since they don't have individual authors)
+                metadata = self.parser.build_table_metadata(
+                    doc, table, columns, rows, parent_page_id=table.parent.id
+                )
                 primary_owners = self.parser.build_doc_owners(doc)
 
-                # Parse the HTML table into sections
-                sections = self.parser.parse_html_content(content)
+                sections = [TextSection(text=content, link=None)]
 
                 yield Document(
                     id=table_key,
