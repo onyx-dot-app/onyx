@@ -472,6 +472,8 @@ def get_persona(
     user: User | None = Depends(current_limited_user),
     db_session: Session = Depends(get_session),
 ) -> FullPersonaSnapshot:
+    from onyx.db.persona import get_child_persona_configs
+
     persona = get_persona_by_id(
         persona_id=persona_id,
         user=user,
@@ -490,7 +492,8 @@ def get_persona(
             )
             db_session.commit()
 
-    return FullPersonaSnapshot.from_model(persona)
+    child_configs = get_child_persona_configs(persona_id, db_session)
+    return FullPersonaSnapshot.from_model(persona, child_persona_configs=child_configs)
 
 
 @basic_router.post("/assistant-prompt-refresh")

@@ -30,6 +30,9 @@ from onyx.onyxbot.slack.models import SlackContext
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.tool import Tool
+from onyx.tools.tool_implementations.agent.agent_tool import AgentTool
+from onyx.tools.tool_implementations.agent.agent_tool import generate_agent_tool_id
+from onyx.tools.tool_implementations.agent.models import AgentInvocationConfig
 from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
 )
@@ -364,6 +367,52 @@ def construct_tools(
                 logger.warning(
                     f"Tool '{expected_tool_name}' not found in MCP server '{mcp_server.name}'"
                 )
+
+    if hasattr(persona, "child_personas") and persona.child_personas:
+        from onyx.db.models import Persona__Persona
+        from sqlalchemy import select
+
+        for child_persona in persona.child_personas:
+            if child_persona.deleted:
+                continue
+
+            config_stmt = select(Persona__Persona).where(
+                Persona__Persona.parent_persona_id == persona.id,
+                Persona__Persona.child_persona_id == child_persona.id,
+            )
+            config_row = db_session.execute(config_stmt).scalar_one_or_none()
+
+            agent_config = AgentInvocationConfig(
+                pass_conversation_context=(
+                    config_row.pass_conversation_context if config_row else True
+                ),
+                pass_files=config_row.pass_files if config_row else False,
+                max_tokens_to_child=(
+                    config_row.max_tokens_to_child if config_row else None
+                ),
+                max_tokens_from_child=(
+                    config_row.max_tokens_from_child if config_row else None
+                ),
+                invocation_instructions=(
+                    config_row.invocation_instructions if config_row else None
+                ),
+            )
+
+            agent_tool_id = generate_agent_tool_id(persona.id, child_persona.id)
+
+            agent_tool = AgentTool(
+                tool_id=agent_tool_id,
+                emitter=emitter,
+                child_persona=child_persona,
+                parent_persona_id=persona.id,
+                agent_config=agent_config,
+                db_session=db_session,
+                user=user,
+                llm=llm,
+                fast_llm=fast_llm,
+            )
+
+            tool_dict[agent_tool_id] = [agent_tool]
 
     tools: list[Tool] = []
     for tool_list in tool_dict.values():

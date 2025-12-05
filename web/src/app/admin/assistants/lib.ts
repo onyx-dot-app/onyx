@@ -1,4 +1,5 @@
 import {
+  ChildPersonaConfig,
   MinimalPersonaSnapshot,
   Persona,
   StarterMessage,
@@ -30,6 +31,8 @@ interface PersonaUpsertRequest {
   display_priority: number | null;
   label_ids: number[] | null;
   user_file_ids: string[] | null;
+  child_persona_ids: number[];
+  child_persona_configs?: ChildPersonaConfig[] | null;
 }
 
 export interface PersonaUpsertParameters {
@@ -54,6 +57,8 @@ export interface PersonaUpsertParameters {
   is_default_persona: boolean;
   label_ids: number[] | null;
   user_file_ids: string[];
+  child_persona_ids: number[];
+  child_persona_configs?: ChildPersonaConfig[] | null;
 }
 
 function buildPersonaUpsertRequest(
@@ -76,6 +81,8 @@ function buildPersonaUpsertRequest(
     remove_image,
     search_start_date,
     user_file_ids,
+    child_persona_ids,
+    child_persona_configs,
   } = creationRequest;
 
   return {
@@ -106,6 +113,8 @@ function buildPersonaUpsertRequest(
     display_priority: null,
     label_ids: creationRequest.label_ids ?? null,
     user_file_ids: user_file_ids ?? null,
+    child_persona_ids: child_persona_ids ?? [],
+    child_persona_configs: child_persona_configs ?? null,
   };
 }
 

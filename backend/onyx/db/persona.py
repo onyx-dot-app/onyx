@@ -26,6 +26,7 @@ from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
 from onyx.db.models import DocumentSet
 from onyx.db.models import Persona
+from onyx.db.models import Persona__Persona
 from onyx.db.models import Persona__User
 from onyx.db.models import Persona__UserGroup
 from onyx.db.models import PersonaLabel
@@ -36,6 +37,7 @@ from onyx.db.models import User__UserGroup
 from onyx.db.models import UserFile
 from onyx.db.models import UserGroup
 from onyx.db.notification import create_notification
+from onyx.server.features.persona.models import ChildPersonaConfig
 from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import MinimalPersonaSnapshot
 from onyx.server.features.persona.models import PersonaSharedNotificationData
@@ -286,7 +288,6 @@ def create_update_persona(
             "onyx.db.persona", "make_persona_private"
         )
 
-        # Privatize Persona
         versioned_make_persona_private(
             persona_id=persona.id,
             creator_user_id=user.id if user else None,
@@ -294,6 +295,14 @@ def create_update_persona(
             group_ids=create_persona_request.groups,
             db_session=db_session,
         )
+
+        if create_persona_request.child_persona_ids is not None:
+            update_persona_child_personas(
+                persona_id=persona.id,
+                child_persona_ids=create_persona_request.child_persona_ids,
+                child_persona_configs=create_persona_request.child_persona_configs,
+                db_session=db_session,
+            )
 
     except ValueError as e:
         logger.exception("Failed to create persona")
@@ -346,6 +355,86 @@ def update_persona_public_status(
 
     persona.is_public = is_public
     db_session.commit()
+
+
+def update_persona_child_personas(
+    persona_id: int,
+    child_persona_ids: list[int],
+    child_persona_configs: list | None,
+    db_session: Session,
+) -> None:
+    from onyx.server.features.persona.models import ChildPersonaConfig
+
+    db_session.query(Persona__Persona).filter(
+        Persona__Persona.parent_persona_id == persona_id
+    ).delete()
+
+    config_map: dict[int, ChildPersonaConfig] = {}
+    if child_persona_configs:
+        for cfg in child_persona_configs:
+            if isinstance(cfg, dict):
+                cfg = ChildPersonaConfig(**cfg)
+            config_map[cfg.persona_id] = cfg
+
+    for child_id in child_persona_ids:
+        if child_id == persona_id:
+            continue
+
+        child_persona = db_session.query(Persona).filter(Persona.id == child_id).first()
+        if not child_persona or child_persona.deleted:
+            continue
+
+        config = config_map.get(child_id)
+
+        new_relation = Persona__Persona(
+            parent_persona_id=persona_id,
+            child_persona_id=child_id,
+            pass_conversation_context=(
+                config.pass_conversation_context if config else True
+            ),
+            pass_files=config.pass_files if config else False,
+            max_tokens_to_child=config.max_tokens_to_child if config else None,
+            max_tokens_from_child=config.max_tokens_from_child if config else None,
+            invocation_instructions=config.invocation_instructions if config else None,
+        )
+        db_session.add(new_relation)
+
+    db_session.commit()
+
+
+def get_child_personas(
+    persona_id: int,
+    db_session: Session,
+) -> list[Persona]:
+    stmt = (
+        select(Persona)
+        .join(Persona__Persona, Persona.id == Persona__Persona.child_persona_id)
+        .where(Persona__Persona.parent_persona_id == persona_id)
+        .where(Persona.deleted.is_(False))
+    )
+    return list(db_session.scalars(stmt).all())
+
+
+def get_child_persona_configs(
+    persona_id: int,
+    db_session: Session,
+) -> list[ChildPersonaConfig]:
+    """Get the configuration for all child personas of a given persona."""
+    stmt = select(Persona__Persona).where(
+        Persona__Persona.parent_persona_id == persona_id
+    )
+    links = db_session.scalars(stmt).all()
+    return [
+        ChildPersonaConfig(
+            persona_id=link.child_persona_id,
+            pass_conversation_context=link.pass_conversation_context,
+            pass_files=link.pass_files,
+            max_tokens_to_child=link.max_tokens_to_child,
+            max_tokens_from_child=link.max_tokens_from_child,
+            invocation_instructions=link.invocation_instructions,
+        )
+        for link in links
+    ]
 
 
 def _build_persona_filters(

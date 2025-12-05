@@ -9,6 +9,23 @@ export interface StarterMessage extends StarterMessageBase {
   name: string;
 }
 
+export interface ChildPersonaSnapshot {
+  id: number;
+  name: string;
+  description: string;
+  uploaded_image_id?: string;
+  icon_name?: string;
+}
+
+export interface ChildPersonaConfig {
+  persona_id: number;
+  pass_conversation_context: boolean;
+  pass_files: boolean;
+  max_tokens_to_child?: number | null;
+  max_tokens_from_child?: number | null;
+  invocation_instructions?: string | null;
+}
+
 export interface MinimalPersonaSnapshot {
   id: number;
   name: string;
@@ -37,8 +54,9 @@ export interface Persona extends MinimalPersonaSnapshot {
   users: MinimalUserSnapshot[];
   groups: number[];
   num_chunks?: number;
+  child_personas?: ChildPersonaSnapshot[];
+  child_persona_configs?: ChildPersonaConfig[];
 
-  // Embedded prompt fields on persona
   system_prompt: string | null;
   task_prompt: string | null;
   datetime_aware: boolean;

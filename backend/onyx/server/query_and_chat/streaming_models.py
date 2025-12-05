@@ -10,8 +10,6 @@ from onyx.context.search.models import SearchDoc
 
 
 class StreamingType(Enum):
-    """Enum defining all streaming packet types. This is the single source of truth for type strings."""
-
     MESSAGE_START = "message_start"
     MESSAGE_DELTA = "message_delta"
     ERROR = "error"
@@ -33,6 +31,9 @@ class StreamingType(Enum):
     REASONING_DELTA = "reasoning_delta"
     REASONING_DONE = "reasoning_done"
     CITATION_INFO = "citation_info"
+    AGENT_TOOL_START = "agent_tool_start"
+    AGENT_TOOL_DELTA = "agent_tool_delta"
+    AGENT_TOOL_FINAL = "agent_tool_final"
 
 
 class BaseObj(BaseModel):
@@ -210,31 +211,46 @@ class CustomToolStart(BaseObj):
     tool_name: str
 
 
-# The allowed streamed packets for a custom tool
 class CustomToolDelta(BaseObj):
     type: Literal["custom_tool_delta"] = StreamingType.CUSTOM_TOOL_DELTA.value
 
     tool_name: str
     response_type: str
-    # For non-file responses
     data: dict | list | str | int | float | bool | None = None
-    # For file-based responses like image/csv
     file_ids: list[str] | None = None
+
+
+class AgentToolStart(BaseObj):
+    type: Literal["agent_tool_start"] = StreamingType.AGENT_TOOL_START.value
+
+    agent_name: str
+    agent_id: int
+
+
+class AgentToolDelta(BaseObj):
+    type: Literal["agent_tool_delta"] = StreamingType.AGENT_TOOL_DELTA.value
+
+    agent_name: str
+    status_text: str | None = None
+    nested_content: str | None = None
+
+
+class AgentToolFinal(BaseObj):
+    type: Literal["agent_tool_final"] = StreamingType.AGENT_TOOL_FINAL.value
+
+    agent_name: str
+    summary: str
+    full_response: str | None = None
 
 
 """Packet"""
 
-# Discriminated union of all possible packet object types
 PacketObj = Union[
-    # Agent Response Packets
     AgentResponseStart,
     AgentResponseDelta,
-    # Control Packets
     OverallStop,
     SectionEnd,
-    # Error Packets
     PacketException,
-    # Tool Packets
     SearchToolStart,
     SearchToolQueriesDelta,
     SearchToolDocumentsDelta,
@@ -248,11 +264,12 @@ PacketObj = Union[
     PythonToolDelta,
     CustomToolStart,
     CustomToolDelta,
-    # Reasoning Packets
+    AgentToolStart,
+    AgentToolDelta,
+    AgentToolFinal,
     ReasoningStart,
     ReasoningDelta,
     ReasoningDone,
-    # Citation Packets
     CitationInfo,
 ]
 

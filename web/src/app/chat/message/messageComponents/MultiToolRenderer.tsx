@@ -32,8 +32,17 @@ type DisplayItem = {
   packets: Packet[];
 };
 
+// Helper to check if a tool group is an agent tool (which may contain nested search)
+function isAgentToolGroup(packets: Packet[]): boolean {
+  return packets.some((p) => p.obj.type === PacketType.AGENT_TOOL_START);
+}
+
 // Helper to check if a tool group is an internal search (not internet search)
+// Excludes agent tool groups since they handle nested searches internally
 function isInternalSearchToolGroup(packets: Packet[]): boolean {
+  // If this is an agent tool group, don't treat it as a search tool group
+  if (isAgentToolGroup(packets)) return false;
+
   const hasSearchStart = packets.some(
     (p) => p.obj.type === PacketType.SEARCH_TOOL_START
   );

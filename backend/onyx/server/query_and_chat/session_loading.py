@@ -10,9 +10,12 @@ from onyx.context.search.models import SearchDoc
 from onyx.db.chat import get_db_search_doc_by_id
 from onyx.db.chat import translate_db_search_doc_to_saved_search_doc
 from onyx.db.models import ChatMessage
+from onyx.db.models import ToolCall
 from onyx.db.tools import get_tool_by_id
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
+from onyx.server.query_and_chat.streaming_models import AgentToolFinal
+from onyx.server.query_and_chat.streaming_models import AgentToolStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
@@ -260,6 +263,213 @@ def create_search_packets(
     return packets
 
 
+def collect_nested_search_data(
+    tool_call: "ToolCall",
+    db_session: Session,
+    include_children: bool = True,
+) -> tuple[list[str], list[SavedSearchDoc]]:
+    queries: list[str] = []
+    docs: list[SavedSearchDoc] = []
+
+    if "_agent_search_queries" in tool_call.tool_call_arguments:
+        queries.extend(
+            cast(list[str], tool_call.tool_call_arguments["_agent_search_queries"])
+        )
+
+    if tool_call.search_docs:
+        docs.extend(
+            [
+                translate_db_search_doc_to_saved_search_doc(doc)
+                for doc in tool_call.search_docs
+            ]
+        )
+
+    if include_children:
+        for child_tool_call in tool_call.tool_call_children:
+            if child_tool_call.invoked_persona_id is not None:
+                child_queries, child_docs = collect_nested_search_data(
+                    child_tool_call, db_session, include_children=True
+                )
+                queries.extend(child_queries)
+                docs.extend(child_docs)
+            else:
+                if child_tool_call.tool_call_arguments.get("queries"):
+                    child_queries = cast(
+                        list[str], child_tool_call.tool_call_arguments["queries"]
+                    )
+                    queries.extend(child_queries)
+                if child_tool_call.search_docs:
+                    docs.extend(
+                        [
+                            translate_db_search_doc_to_saved_search_doc(doc)
+                            for doc in child_tool_call.search_docs
+                        ]
+                    )
+
+    unique_queries = list(dict.fromkeys(queries))
+
+    seen_doc_ids: set[str] = set()
+    unique_docs: list[SavedSearchDoc] = []
+    for doc in docs:
+        if doc.document_id not in seen_doc_ids:
+            seen_doc_ids.add(doc.document_id)
+            unique_docs.append(doc)
+
+    return unique_queries, unique_docs
+
+
+def create_agent_tool_packets(
+    agent_name: str,
+    agent_id: int,
+    response: str,
+    turn_index: int,
+    search_queries: list[str] | None = None,
+    search_docs: list[SavedSearchDoc] | None = None,
+    nested_runs: list[dict] | None = None,
+) -> list[Packet]:
+    packets: list[Packet] = []
+
+    packets.append(
+        Packet(
+            turn_index=turn_index,
+            obj=AgentToolStart(agent_name=agent_name, agent_id=agent_id),
+        )
+    )
+
+    # Emit SearchToolStart if we have search queries or docs (needed for frontend to show search section)
+    if search_queries or search_docs:
+        packets.append(
+            Packet(
+                turn_index=turn_index,
+                obj=SearchToolStart(is_internet_search=False),
+            )
+        )
+
+    if search_queries:
+        packets.append(
+            Packet(
+                turn_index=turn_index,
+                obj=SearchToolQueriesDelta(queries=search_queries),
+            )
+        )
+
+    if search_docs:
+        sorted_search_docs = sorted(
+            search_docs, key=lambda x: x.score or 0.0, reverse=True
+        )
+        packets.append(
+            Packet(
+                turn_index=turn_index,
+                obj=SearchToolDocumentsDelta(
+                    documents=[
+                        SearchDoc(**doc.model_dump()) for doc in sorted_search_docs
+                    ]
+                ),
+            )
+        )
+
+    summary = response[:200] + "..." if len(response) > 200 else response
+    packets.append(
+        Packet(
+            turn_index=turn_index,
+            obj=AgentToolFinal(
+                agent_name=agent_name,
+                summary=summary,
+                full_response=response,
+            ),
+        )
+    )
+
+    packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
+
+    if nested_runs:
+        for nested in nested_runs:
+            nested_agent_name = nested.get("agent_name", "")
+            nested_agent_id = nested.get("agent_id", 0)
+            nested_response = nested.get("response", "")
+            nested_queries = nested.get("search_queries") or []
+            nested_docs_raw = nested.get("search_docs") or []
+            nested_nested_runs = nested.get("nested_runs") or None
+
+            nested_docs: list[SavedSearchDoc] = []
+            for doc_dict in nested_docs_raw:
+                try:
+                    nested_docs.append(SavedSearchDoc(**doc_dict))
+                except Exception:
+                    continue
+
+            packets.extend(
+                create_agent_tool_packets(
+                    agent_name=nested_agent_name,
+                    agent_id=nested_agent_id,
+                    response=nested_response,
+                    turn_index=turn_index,
+                    search_queries=nested_queries if nested_queries else None,
+                    search_docs=nested_docs if nested_docs else None,
+                    nested_runs=nested_nested_runs,
+                )
+            )
+
+    return packets
+
+
+def reconstruct_nested_agent_tool_call(
+    tool_call: "ToolCall",
+    base_turn_index: int,
+    agent_counter: list[int],
+    db_session: Session,
+) -> list[Packet]:
+    packets: list[Packet] = []
+
+    if tool_call.invoked_persona_id is None:
+        return packets
+
+    invoked_persona = tool_call.invoked_persona
+    if not invoked_persona:
+        return packets
+
+    # Assign this agent the next sequential turn_index
+    current_turn_index = base_turn_index + agent_counter[0]
+    agent_counter[0] += 1
+
+    # Collect search queries and docs from this agent and its nested children
+    nested_queries, nested_search_docs = collect_nested_search_data(
+        tool_call, db_session, include_children=False
+    )
+    nested_runs = (
+        cast(list[dict] | None, tool_call.tool_call_arguments.get("_agent_nested_runs"))
+        if tool_call.tool_call_arguments
+        else None
+    )
+
+    # Create packets for this agent
+    packets.extend(
+        create_agent_tool_packets(
+            agent_name=invoked_persona.name,
+            agent_id=invoked_persona.id,
+            response=tool_call.tool_call_response,
+            turn_index=current_turn_index,
+            search_queries=nested_queries if nested_queries else None,
+            search_docs=nested_search_docs if nested_search_docs else None,
+            nested_runs=nested_runs,
+        )
+    )
+
+    # Recursively process nested agent tool calls (they'll get the next sequential indices)
+    for child_tool_call in tool_call.tool_call_children:
+        if child_tool_call.invoked_persona_id is not None:
+            # This is a nested agent tool call - recursively process it
+            child_packets = reconstruct_nested_agent_tool_call(
+                child_tool_call,
+                base_turn_index,
+                agent_counter,
+                db_session,
+            )
+            packets.extend(child_packets)
+
+    return packets
+
+
 def translate_assistant_message_to_packets(
     chat_message: ChatMessage,
     db_session: Session,
@@ -275,9 +485,14 @@ def translate_assistant_message_to_packets(
         raise ValueError(f"Chat message {chat_message.id} is not an assistant message")
 
     if chat_message.tool_calls:
-        # Group tool calls by turn_number
+        # Filter to only top-level tool calls (parent_tool_call_id is None)
+        top_level_tool_calls = [
+            tc for tc in chat_message.tool_calls if tc.parent_tool_call_id is None
+        ]
+
+        # Group top-level tool calls by turn_number
         tool_calls_by_turn: dict[int, list] = {}
-        for tool_call in chat_message.tool_calls:
+        for tool_call in top_level_tool_calls:
             turn_num = tool_call.turn_number
             if turn_num not in tool_calls_by_turn:
                 tool_calls_by_turn[turn_num] = []
@@ -287,9 +502,25 @@ def translate_assistant_message_to_packets(
         for turn_num in sorted(tool_calls_by_turn.keys()):
             tool_calls_in_turn = tool_calls_by_turn[turn_num]
 
+            # Use a counter to assign sequential turn_index values for nested agents
+            # This ensures proper ordering: parent agents get lower indices, nested agents get higher indices
+            agent_counter = [0]
+
             # Process each tool call in this turn
             for tool_call in tool_calls_in_turn:
                 try:
+                    # Handle agent tools specially - they have invoked_persona_id set
+                    if tool_call.invoked_persona_id is not None:
+                        # Recursively reconstruct this agent and all nested agents
+                        agent_packets = reconstruct_nested_agent_tool_call(
+                            tool_call,
+                            turn_num,
+                            agent_counter,
+                            db_session,
+                        )
+                        packet_list.extend(agent_packets)
+                        continue
+
                     tool = get_tool_by_id(tool_call.tool_id, db_session)
 
                     # Handle different tool types

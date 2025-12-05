@@ -18,6 +18,7 @@ import { PythonToolRenderer } from "./renderers/PythonToolRenderer";
 import { ReasoningRenderer } from "./renderers/ReasoningRenderer";
 import CustomToolRenderer from "./renderers/CustomToolRenderer";
 import { FetchToolRenderer } from "./renderers/FetchToolRenderer";
+import { AgentToolRenderer } from "./renderers/AgentToolRenderer";
 
 // Different types of chat packets using discriminated unions
 export interface GroupedPackets {
@@ -52,6 +53,10 @@ function isFetchToolPacket(packet: Packet) {
   return packet.obj.type === PacketType.FETCH_TOOL_START;
 }
 
+function isAgentToolPacket(packet: Packet) {
+  return packet.obj.type === PacketType.AGENT_TOOL_START;
+}
+
 function isReasoningPacket(packet: Packet): packet is ReasoningPacket {
   return (
     packet.obj.type === PacketType.REASONING_START ||
@@ -65,6 +70,10 @@ export function findRenderer(
 ): MessageRenderer<any, any> | null {
   if (groupedPackets.packets.some((packet) => isChatPacket(packet))) {
     return MessageTextRenderer;
+  }
+  // Agent tool check comes first - it handles nested search/fetch tool packets internally
+  if (groupedPackets.packets.some((packet) => isAgentToolPacket(packet))) {
+    return AgentToolRenderer;
   }
   if (groupedPackets.packets.some((packet) => isSearchToolPacket(packet))) {
     return SearchToolRenderer;

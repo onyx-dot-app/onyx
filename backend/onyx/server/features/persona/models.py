@@ -52,6 +52,15 @@ class GenerateStarterMessageRequest(BaseModel):
     generation_count: int
 
 
+class ChildPersonaConfig(BaseModel):
+    persona_id: int
+    pass_conversation_context: bool = True
+    pass_files: bool = False
+    max_tokens_to_child: int | None = None
+    max_tokens_from_child: int | None = None
+    invocation_instructions: str | None = None
+
+
 class PersonaUpsertRequest(BaseModel):
     name: str
     description: str
@@ -64,24 +73,20 @@ class PersonaUpsertRequest(BaseModel):
     llm_model_provider_override: str | None = None
     llm_model_version_override: str | None = None
     starter_messages: list[StarterMessage] | None = None
-    # For Private Personas, who should be able to access these
     users: list[UUID] = Field(default_factory=list)
     groups: list[int] = Field(default_factory=list)
-    # e.g. ID of SearchTool or ImageGenerationTool or <USER_DEFINED_TOOL>
     tool_ids: list[int]
     remove_image: bool | None = None
-    uploaded_image_id: str | None = None  # New field for uploaded image
-    icon_name: str | None = (
-        None  # New field that is custom chosen during agent creation/editing
-    )
+    uploaded_image_id: str | None = None
+    icon_name: str | None = None
     search_start_date: datetime | None = None
     label_ids: list[int] | None = None
     is_default_persona: bool = False
     display_priority: int | None = None
-    # Accept string UUIDs from frontend
     user_file_ids: list[str] | None = None
+    child_persona_ids: list[int] = Field(default_factory=list)
+    child_persona_configs: list[ChildPersonaConfig] | None = None
 
-    # prompt fields
     system_prompt: str
     task_prompt: str
     datetime_aware: bool
@@ -158,6 +163,14 @@ class MinimalPersonaSnapshot(BaseModel):
         )
 
 
+class ChildPersonaSnapshot(BaseModel):
+    id: int
+    name: str
+    description: str
+    uploaded_image_id: str | None = None
+    icon_name: str | None = None
+
+
 class PersonaSnapshot(BaseModel):
     id: int
     name: str
@@ -166,7 +179,6 @@ class PersonaSnapshot(BaseModel):
     is_visible: bool
     uploaded_image_id: str | None
     icon_name: str | None
-    # Return string UUIDs to frontend for consistency
     user_file_ids: list[str]
     display_priority: int | None
     is_default_persona: bool
@@ -183,14 +195,33 @@ class PersonaSnapshot(BaseModel):
     llm_model_provider_override: str | None
     llm_model_version_override: str | None
     num_chunks: float | None
+    child_personas: list[ChildPersonaSnapshot] = []
+    child_persona_configs: list[ChildPersonaConfig] = []
 
-    # Embedded prompt fields (no longer separate prompt_ids)
     system_prompt: str | None = None
     task_prompt: str | None = None
     datetime_aware: bool = True
 
     @classmethod
-    def from_model(cls, persona: Persona) -> "PersonaSnapshot":
+    def from_model(
+        cls,
+        persona: Persona,
+        allow_deleted: bool = False,
+        child_persona_configs: list[ChildPersonaConfig] | None = None,
+    ) -> "PersonaSnapshot":
+        child_persona_list = []
+        if hasattr(persona, "child_personas") and persona.child_personas:
+            child_persona_list = [
+                ChildPersonaSnapshot(
+                    id=cp.id,
+                    name=cp.name,
+                    description=cp.description,
+                    uploaded_image_id=cp.uploaded_image_id,
+                    icon_name=cp.icon_name,
+                )
+                for cp in persona.child_personas
+                if not cp.deleted
+            ]
         return PersonaSnapshot(
             id=persona.id,
             name=persona.name,
@@ -229,6 +260,8 @@ class PersonaSnapshot(BaseModel):
             llm_model_provider_override=persona.llm_model_provider_override,
             llm_model_version_override=persona.llm_model_version_override,
             num_chunks=persona.num_chunks,
+            child_personas=child_persona_list,
+            child_persona_configs=child_persona_configs or [],
             system_prompt=persona.system_prompt,
             task_prompt=persona.task_prompt,
             datetime_aware=persona.datetime_aware,
@@ -244,7 +277,10 @@ class FullPersonaSnapshot(PersonaSnapshot):
 
     @classmethod
     def from_model(
-        cls, persona: Persona, allow_deleted: bool = False
+        cls,
+        persona: Persona,
+        allow_deleted: bool = False,
+        child_persona_configs: list[ChildPersonaConfig] | None = None,
     ) -> "FullPersonaSnapshot":
         if persona.deleted:
             error_msg = f"Persona with ID {persona.id} has been deleted"
@@ -252,6 +288,20 @@ class FullPersonaSnapshot(PersonaSnapshot):
                 raise ValueError(error_msg)
             else:
                 logger.warning(error_msg)
+
+        child_persona_list = []
+        if hasattr(persona, "child_personas") and persona.child_personas:
+            child_persona_list = [
+                ChildPersonaSnapshot(
+                    id=cp.id,
+                    name=cp.name,
+                    description=cp.description,
+                    uploaded_image_id=cp.uploaded_image_id,
+                    icon_name=cp.icon_name,
+                )
+                for cp in persona.child_personas
+                if not cp.deleted
+            ]
 
         return FullPersonaSnapshot(
             id=persona.id,
@@ -292,6 +342,8 @@ class FullPersonaSnapshot(PersonaSnapshot):
             llm_filter_extraction=persona.llm_filter_extraction,
             llm_model_provider_override=persona.llm_model_provider_override,
             llm_model_version_override=persona.llm_model_version_override,
+            child_personas=child_persona_list,
+            child_persona_configs=child_persona_configs or [],
             system_prompt=persona.system_prompt,
             task_prompt=persona.task_prompt,
             datetime_aware=persona.datetime_aware,

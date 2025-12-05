@@ -2234,9 +2234,14 @@ class ToolCall(Base):
     generated_images: Mapped[list[dict] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
+    invoked_persona_id: Mapped[int | None] = mapped_column(
+        ForeignKey("persona.id", ondelete="SET NULL"), nullable=True
+    )
 
-    # Relationships
     chat_session: Mapped[ChatSession] = relationship("ChatSession")
+    invoked_persona: Mapped["Persona | None"] = relationship(
+        "Persona", foreign_keys=[invoked_persona_id]
+    )
 
     chat_message: Mapped["ChatMessage | None"] = relationship(
         "ChatMessage",
@@ -2714,6 +2719,22 @@ class StarterMessage(BaseModel):
     message: str
 
 
+class Persona__Persona(Base):
+    __tablename__ = "persona__persona"
+
+    parent_persona_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id", ondelete="CASCADE"), primary_key=True
+    )
+    child_persona_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id", ondelete="CASCADE"), primary_key=True
+    )
+    pass_conversation_context: Mapped[bool] = mapped_column(Boolean, default=True)
+    pass_files: Mapped[bool] = mapped_column(Boolean, default=False)
+    max_tokens_to_child: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_tokens_from_child: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    invocation_instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class Persona__PersonaLabel(Base):
     __tablename__ = "persona__persona_label"
 
@@ -2837,8 +2858,14 @@ class Persona(Base):
         secondary=Persona__PersonaLabel.__table__,
         back_populates="personas",
     )
+    child_personas: Mapped[list["Persona"]] = relationship(
+        "Persona",
+        secondary=Persona__Persona.__table__,
+        primaryjoin="Persona.id == Persona__Persona.parent_persona_id",
+        secondaryjoin="Persona.id == Persona__Persona.child_persona_id",
+        foreign_keys="[Persona__Persona.parent_persona_id, Persona__Persona.child_persona_id]",
+    )
 
-    # Default personas loaded via yaml cannot have the same name
     __table_args__ = (
         Index(
             "_builtin_persona_name_idx",

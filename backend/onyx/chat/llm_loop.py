@@ -1015,6 +1015,23 @@ def run_llm_loop(
                     ):
                         generated_images = tool_response.rich_response.generated_images
 
+                    # Check if this is an agent tool to get the invoked persona id and collected data
+                    invoked_persona_id = None
+                    agent_search_docs = search_docs
+                    if hasattr(tool, "_child_persona"):
+                        invoked_persona_id = tool._child_persona.id
+                        # Include collected search queries and docs from child agent's tools
+                        tool_args = dict(tool_call.tool_args)
+                        if (
+                            hasattr(tool, "_nested_agent_runs")
+                            and tool._nested_agent_runs
+                        ):
+                            tool_args["_agent_nested_runs"] = tool._nested_agent_runs
+                        # Do not attach search docs to the agent tool call itself; child agents own their docs
+                        agent_search_docs = None
+                    else:
+                        tool_args = tool_call.tool_args
+
                     tool_call_info = ToolCallInfo(
                         parent_tool_call_id=None,  # Top-level tool calls are attached to the chat message
                         turn_index=current_tool_call_index,
@@ -1022,10 +1039,11 @@ def run_llm_loop(
                         tool_call_id=tool_call.tool_call_id,
                         tool_id=tool.id,
                         reasoning_tokens=llm_step_result.reasoning,  # All tool calls from this loop share the same reasoning
-                        tool_call_arguments=tool_call.tool_args,
+                        tool_call_arguments=tool_args,
                         tool_call_response=tool_response.llm_facing_response,
-                        search_docs=search_docs,
+                        search_docs=agent_search_docs,
                         generated_images=generated_images,
+                        invoked_persona_id=invoked_persona_id,
                     )
                     collected_tool_calls.append(tool_call_info)
                     # Add to state container for partial save support

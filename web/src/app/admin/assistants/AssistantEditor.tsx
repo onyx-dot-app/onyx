@@ -148,9 +148,7 @@ export default function AssistantEditor({
   tools,
   shouldAddAssistantToUserPreferences,
 }: AssistantEditorProps) {
-  // NOTE: assistants = agents
-  // TODO: rename everything to agents
-  const { refresh: refreshAgents } = useAgents();
+  const { agents: availableAgents, refresh: refreshAgents } = useAgents();
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -269,6 +267,16 @@ export default function AssistantEditor({
           ? "user_files"
           : "team_knowledge",
     is_default_persona: existingPersona?.is_default_persona ?? false,
+    child_persona_ids:
+      existingPersona?.child_persona_configs?.map((c) => c.persona_id) ?? [],
+    child_persona_configs:
+      existingPersona?.child_persona_configs?.reduce(
+        (acc, config) => {
+          acc[config.persona_id] = config;
+          return acc;
+        },
+        {} as Record<number, any>
+      ) ?? {},
   };
 
   interface AssistantPrompt {
@@ -473,6 +481,8 @@ export default function AssistantEditor({
             selectedGroups: Yup.array().of(Yup.number()),
             knowledge_source: Yup.string().required(),
             is_default_persona: Yup.boolean().required(),
+            child_persona_ids: Yup.array().of(Yup.number()),
+            child_persona_configs: Yup.object(),
           })
           .test(
             "system-prompt-or-task-prompt",
@@ -548,6 +558,18 @@ export default function AssistantEditor({
           const groups = values.is_public ? [] : values.selectedGroups;
           const teamKnowledge = values.knowledge_source === "team_knowledge";
 
+          const configMap =
+            (values.child_persona_configs as Record<number, any>) || {};
+          const childPersonaConfigs = values.child_persona_ids?.map(
+            (id: number) => ({
+              persona_id: id,
+              ...(configMap[id] || {
+                pass_conversation_context: true,
+                pass_files: false,
+              }),
+            })
+          );
+
           const submissionData: PersonaUpsertParameters = {
             ...values,
             starter_messages: starterMessages,
@@ -566,6 +588,8 @@ export default function AssistantEditor({
             num_chunks: numChunks,
             document_set_ids: teamKnowledge ? values.document_set_ids : [],
             user_file_ids: teamKnowledge ? [] : values.user_file_ids,
+            child_persona_ids: values.child_persona_ids || [],
+            child_persona_configs: childPersonaConfigs,
           };
 
           let personaResponse;
@@ -1185,6 +1209,8 @@ export default function AssistantEditor({
                             : "Image Generation requires an OpenAI or Azure Dall-E configuration."
                         }
                         hideSearchTool={true}
+                        availableAgents={availableAgents}
+                        currentPersonaId={existingPersona?.id}
                       />
                     </div>
                   </div>

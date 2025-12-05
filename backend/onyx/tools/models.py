@@ -162,6 +162,7 @@ class ToolCallInfo(BaseModel):
     tool_call_response: str
     search_docs: list[SearchDoc] | None = None
     generated_images: list[GeneratedImage] | None = None
+    invoked_persona_id: int | None = None  # For agent tools
 
 
 CHAT_SESSION_ID_PLACEHOLDER = "CHAT_SESSION_ID"

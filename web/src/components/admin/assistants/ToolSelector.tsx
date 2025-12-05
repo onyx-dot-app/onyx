@@ -11,6 +11,7 @@ import { BooleanFormField } from "@/components/Field";
 import { ToolSnapshot, MCPServer } from "@/lib/tools/interfaces";
 import { MCPServerSection } from "./FormSections";
 import { MemoizedToolList } from "./MemoizedToolCheckboxes";
+import { AgentSelector } from "./AgentSelector";
 import Text from "@/refresh-components/texts/Text";
 import {
   SEARCH_TOOL_ID,
@@ -21,6 +22,7 @@ import {
 } from "@/app/chat/components/tools/constants";
 import { HoverPopup } from "@/components/HoverPopup";
 import { Info } from "lucide-react";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 
 interface ToolSelectorProps {
   tools: ToolSnapshot[];
@@ -32,6 +34,8 @@ interface ToolSelectorProps {
   searchToolDisabled?: boolean;
   searchToolDisabledTooltip?: string;
   hideSearchTool?: boolean;
+  availableAgents?: MinimalPersonaSnapshot[];
+  currentPersonaId?: number;
 }
 
 export function ToolSelector({
@@ -44,6 +48,8 @@ export function ToolSelector({
   searchToolDisabled = false,
   searchToolDisabledTooltip,
   hideSearchTool = false,
+  availableAgents = [],
+  currentPersonaId,
 }: ToolSelectorProps) {
   const searchTool = tools.find((t) => t.in_code_tool_id === SEARCH_TOOL_ID);
   const webSearchTool = tools.find(
@@ -153,7 +159,7 @@ export function ToolSelector({
             <Info className="h-3.5 w-3.5 text-text-400 cursor-help" />
           }
           popupContent={
-            <div className="text-xs space-y-2 max-w-xs">
+            <div className="text-xs space-y-2 max-w-xs text-white">
               <div>
                 <span className="font-semibold">Internal Search:</span> Requires
                 at least one connector to be configured to search your
@@ -270,6 +276,13 @@ export function ToolSelector({
             );
           })}
         </>
+      )}
+
+      {availableAgents.length > 0 && (
+        <AgentSelector
+          availableAgents={availableAgents}
+          currentPersonaId={currentPersonaId}
+        />
       )}
     </div>
   );
