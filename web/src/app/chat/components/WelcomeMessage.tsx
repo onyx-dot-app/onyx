@@ -1,8 +1,9 @@
-// import { AssistantIcon } from "@/components/assistants/AssistantIcon";
+"use client";
+
 import { Logo } from "@/components/logo/Logo";
 import { getRandomGreeting } from "@/lib/chat/greetingMessages";
 import { cn } from "@/lib/utils";
-import AgentIcon from "@/refresh-components/AgentIcon";
+import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { useMemo } from "react";
@@ -17,6 +18,7 @@ export default function WelcomeMessage({
   isDefaultAgent,
 }: WelcomeMessageProps) {
   let content: React.ReactNode = null;
+
   if (isDefaultAgent) {
     const greeting = useMemo(getRandomGreeting, []);
     content = (
@@ -32,7 +34,7 @@ export default function WelcomeMessage({
           data-testid="assistant-name-display"
           className="flex flex-row items-center gap-3"
         >
-          <AgentIcon agent={agent} />
+          <AgentAvatar agent={agent} size={36} />
           <Text headingH2>{agent.name}</Text>
         </div>
         {agent.description && (

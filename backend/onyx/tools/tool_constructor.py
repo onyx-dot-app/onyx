@@ -2,14 +2,10 @@ from typing import cast
 from uuid import UUID
 
 from pydantic import BaseModel
-from pydantic import Field
 from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import OAuthTokenManager
 from onyx.chat.emitter import Emitter
-from onyx.chat.models import AnswerStyleConfig
-from onyx.chat.models import CitationConfig
-from onyx.chat.models import DocumentPruningConfig
 from onyx.configs.app_configs import AZURE_IMAGE_API_BASE
 from onyx.configs.app_configs import AZURE_IMAGE_API_KEY
 from onyx.configs.app_configs import AZURE_IMAGE_API_VERSION
@@ -30,7 +26,6 @@ from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
-from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.models import DynamicSchemaInfo
@@ -50,8 +45,6 @@ from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import (
     WebSearchTool,
 )
-from onyx.tools.utils import compute_all_tool_tokens
-from onyx.tools.utils import explicit_tool_calling_supported
 from onyx.utils.headers import header_dict_to_header_list
 from onyx.utils.logger import setup_logger
 
@@ -64,21 +57,6 @@ class SearchToolConfig(BaseModel):
     bypass_acl: bool = False
     additional_context: str | None = None
     slack_context: SlackContext | None = None
-
-
-class WebSearchToolConfig(BaseModel):
-    answer_style_config: AnswerStyleConfig = Field(
-        default_factory=lambda: AnswerStyleConfig(
-            citation_config=CitationConfig(all_docs_useful=True)
-        )
-    )
-    document_pruning_config: DocumentPruningConfig = Field(
-        default_factory=DocumentPruningConfig
-    )
-
-
-class ImageGenerationToolConfig(BaseModel):
-    pass
 
 
 class CustomToolConfig(BaseModel):
@@ -139,28 +117,6 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
     )
 
 
-# Note: this is not very clear / not the way things should generally be done. (+impure function)
-# TODO: refactor the tool config flow to be easier
-def _configure_document_pruning_for_tool_config(
-    tool_config: WebSearchToolConfig,
-    tools: list[Tool],
-    llm: LLM,
-) -> None:
-    """Helper function to configure document pruning settings for tool configs"""
-    tool_config.document_pruning_config.tool_num_tokens = compute_all_tool_tokens(
-        tools,
-        get_tokenizer(
-            model_name=llm.config.model_name,
-            provider_type=llm.config.model_provider,
-        ),
-    )
-    tool_config.document_pruning_config.using_tool_message = (
-        explicit_tool_calling_supported(
-            llm.config.model_provider, llm.config.model_name
-        )
-    )
-
-
 def construct_tools(
     persona: Persona,
     db_session: Session,
@@ -177,6 +133,12 @@ def construct_tools(
 
     Will simply skip tools that are not allowed/available."""
     tool_dict: dict[int, list[Tool]] = {}
+
+    # Log which tools are attached to the persona for debugging
+    persona_tool_names = [t.name for t in persona.tools]
+    logger.debug(
+        f"Constructing tools for persona '{persona.name}' (id={persona.id}): {persona_tool_names}"
+    )
 
     mcp_tool_cache: dict[int, dict[int, MCPTool]] = {}
     # Get user's OAuth token if available

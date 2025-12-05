@@ -56,7 +56,7 @@ from onyx.db.connector import check_federated_connectors_exist
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentIndex
-from onyx.llm.factory import get_llm_tokenizer_encode_func
+from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.secondary_llm_flows.document_filter import select_chunks_for_relevance
@@ -134,14 +134,14 @@ def deduplicate_queries(
 
 def _estimate_section_tokens(
     section: InferenceSection,
-    tokenizer_encode_func: Callable[[str], list[int]],
+    token_counter: Callable[[str], int],
     max_chunks_per_section: int | None = None,
 ) -> int:
     """Estimate token count for a section using the LLM tokenizer.
 
     Args:
         section: InferenceSection to estimate tokens for
-        tokenizer_encode_func: Function that encodes text to tokens
+        token_counter: Function that counts tokens in text
         max_chunks_per_section: Maximum chunks to consider per section (None for all)
 
     Returns:
@@ -155,9 +155,9 @@ def _estimate_section_tokens(
         selected_chunks = select_chunks_for_relevance(section, max_chunks_per_section)
         # Combine content from selected chunks
         combined_content = "\n".join(chunk.content for chunk in selected_chunks)
-        content_tokens = len(tokenizer_encode_func(combined_content))
+        content_tokens = token_counter(combined_content)
     else:
-        content_tokens = len(tokenizer_encode_func(section.combined_content))
+        content_tokens = token_counter(section.combined_content)
 
     return content_tokens + METADATA_TOKEN_ESTIMATE
 
@@ -166,7 +166,7 @@ def _estimate_section_tokens(
 def _trim_sections_by_tokens(
     sections: list[InferenceSection],
     max_tokens: int,
-    tokenizer_encode_func: Callable[[str], list[int]],
+    token_counter: Callable[[str], int],
     max_chunks_per_section: int | None = None,
 ) -> list[InferenceSection]:
     """Trim sections to fit within a token budget using the LLM tokenizer.
@@ -174,7 +174,7 @@ def _trim_sections_by_tokens(
     Args:
         sections: List of InferenceSection objects to trim
         max_tokens: Maximum token budget
-        tokenizer_encode_func: Function that encodes text to tokens
+        token_counter: Function that counts tokens in text
         max_chunks_per_section: Maximum chunks to consider per section (None for all)
 
     Returns:
@@ -188,7 +188,7 @@ def _trim_sections_by_tokens(
 
     for section in sections:
         section_tokens = _estimate_section_tokens(
-            section, tokenizer_encode_func, max_chunks_per_section
+            section, token_counter, max_chunks_per_section
         )
         if total_tokens + section_tokens <= max_tokens:
             trimmed_sections.append(section)
@@ -505,7 +505,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 or (llm_queries[0] if llm_queries else "")
             )
 
-            tokenizer_encode_func = get_llm_tokenizer_encode_func(self.llm)
+            token_counter = get_llm_token_counter(self.llm)
 
             # Trim sections to fit within token budget before LLM selection
             # This is to account for very short chunks flooding the search context
@@ -520,7 +520,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             sections_for_selection = _trim_sections_by_tokens(
                 sections=top_sections,
                 max_tokens=max_tokens_for_selection,
-                tokenizer_encode_func=tokenizer_encode_func,
+                token_counter=token_counter,
                 max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
             )
 

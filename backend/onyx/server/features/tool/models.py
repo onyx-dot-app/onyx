@@ -3,14 +3,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from onyx.db.models import Tool
-
-
-HIDDEN_TOOL_IDS = {"OktaProfileTool"}
-
-
-def should_expose_tool_to_fe(tool: Tool) -> bool:
-    """Return True when the given tool should be sent to the frontend."""
-    return tool.in_code_tool_id is None or tool.in_code_tool_id not in HIDDEN_TOOL_IDS
+from onyx.server.features.tool.tool_visibility import get_tool_visibility_config
 
 
 class ToolSnapshot(BaseModel):
@@ -26,13 +19,22 @@ class ToolSnapshot(BaseModel):
     user_id: str | None = None
     oauth_config_id: int | None = None
     oauth_config_name: str | None = None
+    enabled: bool = True
+
+    # Visibility settings computed from TOOL_VISIBILITY_CONFIG
+    chat_selectable: bool = True
+    agent_creation_selectable: bool = True
+    default_enabled: bool = False
 
     @classmethod
     def from_model(cls, tool: Tool) -> "ToolSnapshot":
+        # Get visibility config for this tool
+        config = get_tool_visibility_config(tool)
+
         return cls(
             id=tool.id,
             name=tool.name,
-            description=tool.description,
+            description=tool.description or "",
             definition=tool.openapi_schema,
             display_name=tool.display_name or tool.name,
             in_code_tool_id=tool.in_code_tool_id,
@@ -42,6 +44,13 @@ class ToolSnapshot(BaseModel):
             user_id=str(tool.user_id) if tool.user_id else None,
             oauth_config_id=tool.oauth_config_id,
             oauth_config_name=tool.oauth_config.name if tool.oauth_config else None,
+            enabled=tool.enabled,
+            # Populate visibility settings from config or use defaults
+            chat_selectable=config.chat_selectable if config else True,
+            agent_creation_selectable=(
+                config.agent_creation_selectable if config else True
+            ),
+            default_enabled=config.default_enabled if config else False,
         )
 
 

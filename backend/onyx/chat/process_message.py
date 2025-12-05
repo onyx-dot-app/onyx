@@ -15,7 +15,6 @@ from onyx.chat.chat_utils import get_custom_agent_prompt
 from onyx.chat.chat_utils import load_all_chat_files
 from onyx.chat.emitter import get_default_emitter
 from onyx.chat.llm_loop import run_llm_loop
-from onyx.chat.memories import get_memories
 from onyx.chat.models import AnswerStream
 from onyx.chat.models import ChatBasicResponse
 from onyx.chat.models import ChatLoadedFile
@@ -23,7 +22,7 @@ from onyx.chat.models import ExtractedProjectFiles
 from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import ProjectFileMetadata
 from onyx.chat.models import StreamingError
-from onyx.chat.prompt_builder.answer_prompt_builder import calculate_reserved_tokens
+from onyx.chat.prompt_utils import calculate_reserved_tokens
 from onyx.chat.save_chat import save_chat_turn
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
@@ -39,6 +38,7 @@ from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import reserve_message_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.memory import get_memories
 from onyx.db.models import ChatMessage
 from onyx.db.models import User
 from onyx.db.projects import get_project_token_count
@@ -48,7 +48,7 @@ from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.utils import load_in_memory_chat_files
 from onyx.file_store.utils import verify_user_files
-from onyx.llm.factory import get_llm_tokenizer_encode_func
+from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.interfaces import LLM
 from onyx.llm.utils import litellm_exception_to_error_msg
@@ -207,7 +207,7 @@ def _extract_project_file_texts_and_images(
 def _initialize_chat_session(
     message_text: str,
     files: list[FileDescriptor],
-    llm_tokenizer_encode_func: Callable[[str], list[int]],
+    token_counter: Callable[[str], int],
     parent_id: int | None,
     user_id: UUID | None,
     chat_session_id: UUID,
@@ -240,7 +240,7 @@ def _initialize_chat_session(
         token_count = parent_message.token_count
         parent_message = parent_message.parent_message
     else:
-        token_count = len(llm_tokenizer_encode_func(message_text))
+        token_count = token_counter(message_text)
 
     # Flushed for ID but not committed yet
     user_message = create_new_chat_message(
@@ -328,7 +328,7 @@ def stream_chat_message_objects(
             additional_headers=litellm_additional_headers,
             long_term_logger=long_term_logger,
         )
-        tokenizer_encode_func = get_llm_tokenizer_encode_func(llm)
+        token_counter = get_llm_token_counter(llm)
 
         # Verify that the user specified files actually belong to the user
         verify_user_files(
@@ -343,7 +343,7 @@ def stream_chat_message_objects(
         user_message = _initialize_chat_session(
             message_text=message_text,
             files=new_msg_req.file_descriptors,
-            llm_tokenizer_encode_func=tokenizer_encode_func,
+            token_counter=token_counter,
             parent_id=parent_id,
             user_id=user_id,
             chat_session_id=chat_session_id,
@@ -375,7 +375,7 @@ def stream_chat_message_objects(
         reserved_token_count = calculate_reserved_tokens(
             db_session=db_session,
             persona_system_prompt=custom_agent_prompt or "",
-            tokenizer_encode_func=tokenizer_encode_func,
+            token_counter=token_counter,
             files=last_chat_message.files,
             memories=memories,
         )
@@ -466,7 +466,7 @@ def stream_chat_message_objects(
             files=files,
             project_image_files=extracted_project_files.project_image_files,
             additional_context=additional_context,
-            tokenizer_encode_func=tokenizer_encode_func,
+            token_counter=token_counter,
             tool_id_to_name_map=tool_id_to_name_map,
         )
 
@@ -500,7 +500,7 @@ def stream_chat_message_objects(
             persona=persona,
             memories=memories,
             llm=llm,
-            tokenizer_func=tokenizer_encode_func,
+            token_counter=token_counter,
             db_session=db_session,
             forced_tool_id=(
                 new_msg_req.forced_tool_ids[0] if new_msg_req.forced_tool_ids else None

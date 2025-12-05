@@ -3,18 +3,15 @@
 import { ActionEditor } from "@/app/admin/actions/ActionEditor";
 import { BackButton } from "@/components/BackButton";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { ToolIcon } from "@/components/icons/icons";
 import CardSection from "@/components/admin/CardSection";
+import SvgActions from "@/icons/actions";
 
 export default function NewToolPage() {
   return (
     <div className="mx-auto container">
       <BackButton />
 
-      <AdminPageTitle
-        title="Create Action"
-        icon={<ToolIcon size={32} className="my-auto" />}
-      />
+      <AdminPageTitle title="Create Action" icon={SvgActions} />
 
       <CardSection>
         <ActionEditor />

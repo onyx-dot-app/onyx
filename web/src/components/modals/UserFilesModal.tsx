@@ -5,7 +5,7 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { ProjectFile } from "@/app/chat/projects/ProjectsContext";
 import { formatRelativeTime } from "@/app/chat/components/projects/project_utils";
 import Text from "@/refresh-components/texts/Text";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 import SvgFileText from "@/icons/file-text";
 import SvgImage from "@/icons/image";
 import SvgEye from "@/icons/eye";
@@ -25,7 +25,7 @@ import CounterSeparator from "@/refresh-components/CounterSeparator";
 function getIcon(
   file: ProjectFile,
   isProcessing: boolean
-): React.FunctionComponent<SvgProps> {
+): React.FunctionComponent<IconProps> {
   if (isProcessing) return SimpleLoader;
   const ext = getFileExtension(file.name).toLowerCase();
   if (isImageExtension(ext)) return SvgImage;
@@ -88,7 +88,7 @@ export interface UserFilesModalProps {
   // Modal content
   title: string;
   description: string;
-  icon: React.FunctionComponent<SvgProps>;
+  icon: React.FunctionComponent<IconProps>;
   recentFiles: ProjectFile[];
   handleUploadChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   selectedFileIds?: string[];

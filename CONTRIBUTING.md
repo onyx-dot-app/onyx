@@ -71,12 +71,12 @@ If using a higher version, sometimes some libraries will not be available (i.e. 
 
 #### Backend: Python requirements
 
-Currently, we use pip and recommend creating a virtual environment.
+Currently, we use [uv](https://docs.astral.sh/uv/) and recommend creating a [virtual environment](https://docs.astral.sh/uv/pip/environments/#using-a-virtual-environment).
 
 For convenience here's a command for it:
 
 ```bash
-python -m venv .venv
+uv venv .venv --python 3.11
 source .venv/bin/activate
 ```
 
@@ -95,32 +95,14 @@ If using PowerShell, the command slightly differs:
 Install the required python dependencies:
 
 ```bash
-pip install -r backend/requirements/combined.txt
+uv sync --all-extras
 ```
 
-or
+Install Playwright for Python (headless browser required by the Web Connector):
 
 ```bash
-pip install -r backend/requirements/default.txt
-pip install -r backend/requirements/dev.txt
-pip install -r backend/requirements/ee.txt
-pip install -r backend/requirements/model_server.txt
+uv run playwright install
 ```
-
-Fix vscode/cursor auto-imports:
-```bash
-pip install -e .
-```
-
-Install Playwright for Python (headless browser required by the Web Connector)
-
-In the activated Python virtualenv, install Playwright for Python by running:
-
-```bash
-playwright install
-```
-
-You may have to deactivate and reactivate your virtualenv for `playwright` to appear on your path.
 
 #### Frontend: Node dependencies
 
@@ -130,7 +112,7 @@ to manage your Node installations. Once installed, you can run
 ```bash
 nvm install 22 && nvm use 22
 node -v # verify your active version
-``` 
+```
 
 Navigate to `onyx/web` and run:
 
@@ -144,21 +126,15 @@ npm i
 
 For the backend, you'll need to setup pre-commit hooks (black / reorder-python-imports).
 
-With the virtual environment active, install the pre-commit library with:
+Then run:
 
 ```bash
-pip install pre-commit
-```
-
-Then, from the `onyx/backend` directory, run:
-
-```bash
-pre-commit install
+uv run pre-commit install
 ```
 
 Additionally, we use `mypy` for static type checking.
 Onyx is fully type-annotated, and we want to keep it that way!
-To run the mypy checks manually, run `python -m mypy .` from the `onyx/backend` directory.
+To run the mypy checks manually, run `uv run mypy .` from the `onyx/backend` directory.
 
 ### Web
 

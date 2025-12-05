@@ -31,6 +31,9 @@ func NewRootCommand() *cobra.Command {
 			} else {
 				log.SetLevel(log.InfoLevel)
 			}
+			log.SetFormatter(&log.TextFormatter{
+				DisableTimestamp: true,
+			})
 		},
 		Version: fmt.Sprintf("%s\ncommit %s", Version, Commit),
 	}

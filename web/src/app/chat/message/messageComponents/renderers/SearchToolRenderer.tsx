@@ -17,6 +17,7 @@ import Text from "@/refresh-components/texts/Text";
 import { SearchToolRendererV2 } from "./SearchToolRendererV2";
 import { usePostHog } from "posthog-js/react";
 import { ResearchType } from "@/app/chat/interfaces";
+import { clearTimeoutRefs } from "../timing";
 
 const INITIAL_RESULTS_TO_SHOW = 3;
 const RESULTS_PER_EXPANSION = 10;
@@ -134,6 +135,19 @@ export const SearchToolRenderer: MessageRenderer<
       !completionHandledRef.current
     ) {
       completionHandledRef.current = true;
+
+      // If stopped, skip intermediate states and complete immediately
+      if (stopPacketSeen) {
+        // Clear any pending timeouts
+        clearTimeoutRefs([timeoutRef, searchedTimeoutRef]);
+
+        // Skip "Searched" state, go directly to completion
+        setShouldShowAsSearching(false);
+        setShouldShowAsSearched(false);
+        onComplete();
+        return;
+      }
+
       const elapsedTime = Date.now() - searchStartTime;
       const minimumSearchingDuration = animate ? SEARCHING_MIN_DURATION_MS : 0;
       const minimumSearchedDuration = animate ? SEARCHED_MIN_DURATION_MS : 0;
@@ -160,17 +174,29 @@ export const SearchToolRenderer: MessageRenderer<
         );
       }
     }
-  }, [isComplete, searchStartTime, animate, queries, onComplete]);
+  }, [
+    isComplete,
+    searchStartTime,
+    animate,
+    queries,
+    onComplete,
+    stopPacketSeen,
+  ]);
+
+  // Cleanup timeouts when stopped
+  useEffect(() => {
+    if (stopPacketSeen) {
+      clearTimeoutRefs([timeoutRef, searchedTimeoutRef], true);
+      // Reset states to prevent flickering
+      setShouldShowAsSearching(false);
+      setShouldShowAsSearched(false);
+    }
+  }, [stopPacketSeen]);
 
   // Cleanup timeouts on unmount
   useEffect(() => {
     return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-      if (searchedTimeoutRef.current) {
-        clearTimeout(searchedTimeoutRef.current);
-      }
+      clearTimeoutRefs([timeoutRef, searchedTimeoutRef]);
     };
   }, []);
 

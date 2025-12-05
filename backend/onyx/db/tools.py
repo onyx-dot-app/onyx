@@ -4,11 +4,15 @@ from typing import Type
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from sqlalchemy import func
+from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.constants import UNSET
 from onyx.db.constants import UnsetType
+from onyx.db.enums import MCPServerStatus
+from onyx.db.models import MCPServer
 from onyx.db.models import Tool
 from onyx.db.models import ToolCall
 from onyx.server.features.tool.models import Header
@@ -22,10 +26,37 @@ if TYPE_CHECKING:
 logger = setup_logger()
 
 
-def get_tools(db_session: Session, *, only_enabled: bool = False) -> list[Tool]:
+def get_tools(
+    db_session: Session,
+    *,
+    only_enabled: bool = False,
+    only_connected_mcp: bool = False,
+    only_openapi: bool = False,
+) -> list[Tool]:
     query = select(Tool)
+
+    if only_connected_mcp:
+        # Keep tools that either:
+        # 1. Don't have an MCP server (mcp_server_id IS NULL) - Non-MCP tools
+        # 2. Have an MCP server that is connected - Connected MCP tools
+        query = query.outerjoin(MCPServer, Tool.mcp_server_id == MCPServer.id).where(
+            or_(
+                Tool.mcp_server_id.is_(None),  # Non-MCP tools (built-in, custom)
+                MCPServer.status == MCPServerStatus.CONNECTED,  # MCP tools connected
+            )
+        )
+
     if only_enabled:
         query = query.where(Tool.enabled.is_(True))
+
+    if only_openapi:
+        query = query.where(
+            Tool.openapi_schema.is_not(None),
+            # To avoid showing rows that have JSON literal `null` stored in the column to the user.
+            # tools from mcp servers will not have an openapi schema but it has `null`, so we need to exclude them.
+            func.jsonb_typeof(Tool.openapi_schema) == "object",
+        )
+
     return list(db_session.scalars(query).all())
 
 
@@ -34,11 +65,21 @@ def get_tools_by_mcp_server_id(
     db_session: Session,
     *,
     only_enabled: bool = False,
+    order_by_id: bool = False,
 ) -> list[Tool]:
     query = select(Tool).where(Tool.mcp_server_id == mcp_server_id)
     if only_enabled:
         query = query.where(Tool.enabled.is_(True))
+    if order_by_id:
+        query = query.order_by(Tool.id)
     return list(db_session.scalars(query).all())
+
+
+def get_tools_by_ids(tool_ids: list[int], db_session: Session) -> list[Tool]:
+    if not tool_ids:
+        return []
+    stmt = select(Tool).where(Tool.id.in_(tool_ids))
+    return list(db_session.scalars(stmt).all())
 
 
 def get_tool_by_id(tool_id: int, db_session: Session) -> Tool:

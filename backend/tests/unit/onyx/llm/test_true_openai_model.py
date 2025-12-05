@@ -128,3 +128,13 @@ class TestIsTrueOpenAIModel:
         model_map = get_model_map()
         if "openai/gpt-3.5-turbo-instruct" in model_map:
             assert is_true_openai_model("openai", "gpt-3.5-turbo-instruct") is True
+
+    def test_azure_openai_model_through_litellm_proxy(self) -> None:
+        """Test that Azure OpenAI models are correctly identified."""
+        assert is_true_openai_model("litellm_proxy", "gpt-4") is True
+        assert is_true_openai_model("litellm_proxy", "gpt-5") is True
+        assert is_true_openai_model("litellm_proxy", "gpt-5.1") is True
+
+        assert is_true_openai_model("litellm_proxy", "azure/gpt-4") is True
+        assert is_true_openai_model("litellm_proxy", "azure/gpt-5") is True
+        assert is_true_openai_model("litellm_proxy", "azure/gpt-5.1") is True

@@ -1,3 +1,14 @@
+[project]
+name = "onyx-backend"
+version = "0.0.0"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "onyx[backend,dev,ee]",
+]
+
+[tool.uv.sources]
+onyx = { workspace = true }
+
 [tool.mypy]
 plugins = "sqlalchemy.ext.mypy.plugin"
 mypy_path = "backend"
@@ -12,10 +23,6 @@ exclude = [
 [[tool.mypy.overrides]]
 module = "alembic.versions.*"
 disable_error_code = ["var-annotated"]
-
-[[tool.mypy.overrides]]
-module = "braintrust_langchain.*"
-ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "alembic_tenants.versions.*"

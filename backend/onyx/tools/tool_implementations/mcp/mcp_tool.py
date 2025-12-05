@@ -3,6 +3,7 @@ from typing import Any
 
 from onyx.chat.emitter import Emitter
 from onyx.db.enums import MCPAuthenticationType
+from onyx.db.enums import MCPTransport
 from onyx.db.models import MCPConnectionConfig
 from onyx.db.models import MCPServer
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
@@ -166,7 +167,7 @@ class MCPTool(Tool[None]):
                 self._name,
                 llm_kwargs,
                 connection_headers=headers,
-                transport=self.mcp_server.transport,
+                transport=self.mcp_server.transport or MCPTransport.STREAMABLE_HTTP,
             )
 
             logger.info(f"MCP tool '{self._name}' executed successfully")

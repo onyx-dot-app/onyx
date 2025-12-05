@@ -5,7 +5,6 @@ import { fetchSS } from "../utilsSS";
 import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
 import { ToolSnapshot } from "../tools/interfaces";
 import { fetchToolsSS } from "../tools/fetchTools";
-import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 export async function fetchAssistantEditorInfoSS(
   personaId?: number | string
 ): Promise<
@@ -92,10 +91,6 @@ export async function fetchAssistantEditorInfoSS(
 
   if (personaId && personaResponse && !personaResponse.ok) {
     return [null, `Failed to fetch Persona - ${await personaResponse.text()}`];
-  }
-
-  for (const provider of llmProviders) {
-    provider.icon = getProviderIcon(provider.provider);
   }
 
   const existingPersona = personaResponse

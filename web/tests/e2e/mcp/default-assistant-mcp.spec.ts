@@ -198,6 +198,16 @@ test.describe("Default Assistant MCP Integration", () => {
     expect(serverId).toBeGreaterThan(0);
     console.log(`[test] Server ID: ${serverId}`);
 
+    // Manually update status to CONNECTED to simulate a successful connection flow
+    // (since backend doesn't auto-update on list tools anymore)
+    await page.request.patch(
+      `${APP_BASE_URL}/api/admin/mcp/server/${serverId}/status`,
+      {
+        params: { status: "CONNECTED" },
+      }
+    );
+    console.log(`[test] Manually updated server status to CONNECTED`);
+
     // Select all tools
     const selectAllCheckbox = page.getByLabel("tool-checkbox-select-all");
     await expect(selectAllCheckbox).toBeVisible({ timeout: 5000 });
@@ -242,9 +252,9 @@ test.describe("Default Assistant MCP Integration", () => {
     console.log(`[test] Navigated to default assistant page`);
 
     // Wait for page to load
-    await expect(
-      page.getByRole("heading", { name: "Default Assistant" })
-    ).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('[aria-label="admin-page-title"]')).toBeVisible({
+      timeout: 10000,
+    });
     console.log(`[test] Page loaded`);
 
     // Scroll to actions section

@@ -5,7 +5,6 @@ build-backend = "hatchling.build"
 [project]
 name = "onyx-devtools"
 description = "Developer utilities for working on onyx.app"
-license = {file = "../../LICENSE"}
 authors = [{ name = "Onyx AI", email = "founders@onyx.app" }]
 readme = "README.md"
 requires-python = ">=3.9"
@@ -36,3 +35,6 @@ tag_regex = "^ods/v(?P<version>[vV]?\\d+(?:\\.\\d+){0,2}[^\\+]*)(?:\\+.*)?$"
 [tool.hatch.build.targets.wheel.hooks.custom]
 path = "hatch_build.py"
 binary_name = "ods"
+
+[tool.uv]
+managed = false

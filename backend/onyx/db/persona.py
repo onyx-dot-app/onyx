@@ -41,7 +41,7 @@ from onyx.server.features.persona.models import MinimalPersonaSnapshot
 from onyx.server.features.persona.models import PersonaSharedNotificationData
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
-from onyx.server.features.tool.models import should_expose_tool_to_fe
+from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
@@ -269,9 +269,8 @@ def create_update_persona(
             system_prompt=create_persona_request.system_prompt,
             task_prompt=create_persona_request.task_prompt,
             datetime_aware=create_persona_request.datetime_aware,
-            icon_color=create_persona_request.icon_color,
-            icon_shape=create_persona_request.icon_shape,
             uploaded_image_id=create_persona_request.uploaded_image_id,
+            icon_name=create_persona_request.icon_name,
             display_priority=create_persona_request.display_priority,
             remove_image=create_persona_request.remove_image,
             search_start_date=create_persona_request.search_start_date,
@@ -355,6 +354,17 @@ def _build_persona_filters(
     include_slack_bot_personas: bool,
     include_deleted: bool,
 ) -> Select[tuple[Persona]]:
+    """Filters which Personas are included in the query.
+
+    Args:
+        stmt: The base query to filter.
+        include_default: If True, includes builtin/default personas.
+        include_slack_bot_personas: If True, includes Slack bot personas.
+        include_deleted: If True, includes deleted personas.
+
+    Returns:
+        The modified query with the filters applied.
+    """
     if not include_default:
         stmt = stmt.where(Persona.builtin_persona.is_(False))
     if not include_slack_bot_personas:
@@ -649,15 +659,14 @@ def get_raw_personas_for_user(
     include_slack_bot_personas: bool = False,
     include_deleted: bool = False,
 ) -> Sequence[Persona]:
-    stmt = select(Persona)
-    stmt = _add_user_filters(stmt, user, get_editable)
-    stmt = _build_persona_filters(
-        stmt, include_default, include_slack_bot_personas, include_deleted
+    stmt = _build_persona_base_query(
+        user, get_editable, include_default, include_slack_bot_personas, include_deleted
     )
     return db_session.scalars(stmt).all()
 
 
 def get_personas(db_session: Session) -> Sequence[Persona]:
+    """WARNING: Unsafe, can fetch personas from all users."""
     stmt = select(Persona).distinct()
     stmt = stmt.where(not_(Persona.name.startswith(SLACK_BOT_PERSONA_PREFIX)))
     stmt = stmt.where(Persona.deleted.is_(False))
@@ -702,19 +711,54 @@ def mark_delete_persona_by_name(
     db_session.commit()
 
 
-def update_all_personas_display_priority(
+def update_personas_display_priority(
     display_priority_map: dict[int, int],
     db_session: Session,
+    user: User | None,
+    commit_db_txn: bool = False,
 ) -> None:
-    """Updates the display priority of all lives Personas"""
-    personas = get_personas(db_session=db_session)
-    available_persona_ids = {persona.id for persona in personas}
-    if available_persona_ids != set(display_priority_map.keys()):
-        raise ValueError("Invalid persona IDs provided")
+    """Updates the display priorities of the specified Personas.
 
-    for persona in personas:
-        persona.display_priority = display_priority_map[persona.id]
-    db_session.commit()
+    Args:
+        display_priority_map: A map of persona IDs to intended display
+            priorities.
+        db_session: Database session for executing queries.
+        user: The user to filter personas for. If None and auth is disabled,
+            assumes the user is an admin. Otherwise, if None shows only public
+            personas.
+        commit_db_txn: If True, commits the database transaction after
+            updating the display priorities. Defaults to False.
+
+    Raises:
+        ValueError: The caller tried to update a persona for which the user does
+            not have access.
+    """
+    # No-op to save a query if it is not necessary.
+    if len(display_priority_map) == 0:
+        return
+
+    personas = get_raw_personas_for_user(
+        user,
+        db_session,
+        get_editable=False,
+        include_default=True,
+        include_slack_bot_personas=True,
+        include_deleted=True,
+    )
+    available_personas_map: dict[int, Persona] = {
+        persona.id: persona for persona in personas
+    }
+
+    for persona_id, priority in display_priority_map.items():
+        if persona_id not in available_personas_map:
+            raise ValueError(
+                f"Invalid persona ID provided: Persona with ID {persona_id} was not found for this user."
+            )
+
+        available_personas_map[persona_id].display_priority = priority
+
+    if commit_db_txn:
+        db_session.commit()
 
 
 def upsert_persona(
@@ -738,9 +782,8 @@ def upsert_persona(
     tool_ids: list[int] | None = None,
     persona_id: int | None = None,
     commit: bool = True,
-    icon_color: str | None = None,
-    icon_shape: int | None = None,
     uploaded_image_id: str | None = None,
+    icon_name: str | None = None,
     display_priority: int | None = None,
     is_visible: bool = True,
     remove_image: bool | None = None,
@@ -841,10 +884,9 @@ def upsert_persona(
         existing_persona.starter_messages = starter_messages
         existing_persona.deleted = False  # Un-delete if previously deleted
         existing_persona.is_public = is_public
-        existing_persona.icon_color = icon_color
-        existing_persona.icon_shape = icon_shape
         if remove_image or uploaded_image_id:
             existing_persona.uploaded_image_id = uploaded_image_id
+        existing_persona.icon_name = icon_name
         existing_persona.is_visible = is_visible
         existing_persona.search_start_date = search_start_date
         existing_persona.labels = labels or []
@@ -905,9 +947,8 @@ def upsert_persona(
             llm_model_version_override=llm_model_version_override,
             starter_messages=starter_messages,
             tools=tools or [],
-            icon_shape=icon_shape,
-            icon_color=icon_color,
             uploaded_image_id=uploaded_image_id,
+            icon_name=icon_name,
             display_priority=display_priority,
             is_visible=is_visible,
             search_start_date=search_start_date,
@@ -1057,7 +1098,7 @@ def get_persona_by_id(
 def get_personas_by_ids(
     persona_ids: list[int], db_session: Session
 ) -> Sequence[Persona]:
-    """Unsafe, can fetch personas from all users"""
+    """WARNING: Unsafe, can fetch personas from all users."""
     if not persona_ids:
         return []
     personas = db_session.scalars(

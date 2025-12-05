@@ -1,5 +1,4 @@
 from collections.abc import Callable
-from typing import cast
 
 from sqlalchemy.orm import Session
 
@@ -412,4 +411,9 @@ def get_llm_tokenizer_encode_func(llm: LLM) -> Callable[[str], list[int]]:
         model_name=llm_model_name,
         provider_type=llm_provider,
     )
-    return cast(Callable[[str], list[int]], llm_tokenizer.encode)
+    return llm_tokenizer.encode
+
+
+def get_llm_token_counter(llm: LLM) -> Callable[[str], int]:
+    tokenizer_encode_func = get_llm_tokenizer_encode_func(llm)
+    return lambda text: len(tokenizer_encode_func(text))
