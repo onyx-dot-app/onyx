@@ -102,7 +102,7 @@ export const InviteUserButton = ({
     if (invited) {
       uninviteTrigger({ user_email: user.email });
     } else {
-      inviteTrigger({ emails: [user.email] });
+      inviteTrigger({ emails: [user.email.toLowerCase()] });
     }
   };
 
