@@ -18,7 +18,7 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import CheckpointedConnector
+from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
@@ -50,7 +50,7 @@ class TeamsCheckpoint(ConnectorCheckpoint):
 
 
 class TeamsConnector(
-    CheckpointedConnector[TeamsCheckpoint],
+    CheckpointedConnectorWithPermSync[TeamsCheckpoint],
     SlimConnectorWithPermSync,
 ):
     MAX_WORKERS = 10
@@ -246,6 +246,16 @@ class TeamsConnector(
             todo_team_ids=todos,
             has_more=bool(todos),
         )
+
+    def load_from_checkpoint_with_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: TeamsCheckpoint,
+    ) -> CheckpointOutput[TeamsCheckpoint]:
+        # Teams already fetches external_access (permissions) for each document
+        # in _convert_thread_to_document, so we can just delegate to load_from_checkpoint
+        return self.load_from_checkpoint(start, end, checkpoint)
 
     # impls for SlimConnectorWithPermSync
 
