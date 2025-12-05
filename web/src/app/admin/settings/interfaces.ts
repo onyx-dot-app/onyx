@@ -31,6 +31,11 @@ export interface Settings {
   search_time_image_analysis_enabled?: boolean;
   image_analysis_max_size_mb?: number | null;
 
+  // Image generation settings
+  image_generation_enabled?: boolean;
+  default_image_generation_provider?: number | null;
+  default_image_generation_model?: string | null;
+
   // User Knowledge settings
   user_knowledge_enabled?: boolean;
 

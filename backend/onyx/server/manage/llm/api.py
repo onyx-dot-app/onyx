@@ -41,8 +41,10 @@ from onyx.llm.llm_provider_options import WellKnownLLMProviderDescriptor
 from onyx.llm.utils import get_llm_contextual_cost
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.llm.utils import model_supports_image_input
+from onyx.llm.utils import model_supports_image_output
 from onyx.llm.utils import test_llm
 from onyx.server.manage.llm.models import BedrockModelsRequest
+from onyx.server.manage.llm.models import ImageGenerationProviderResponse
 from onyx.server.manage.llm.models import LLMCost
 from onyx.server.manage.llm.models import LLMProviderDescriptor
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
@@ -334,7 +336,7 @@ def get_vision_capable_providers(
     """Return a list of LLM providers and their models that support image input"""
 
     providers = fetch_existing_llm_providers(db_session)
-    vision_providers = []
+    vision_providers: list[VisionProviderResponse] = []
 
     logger.info("Fetching vision-capable providers")
 
@@ -343,11 +345,13 @@ def get_vision_capable_providers(
 
         # Check each model for vision capability
         for model_configuration in provider.model_configurations:
-            if model_supports_image_input(model_configuration.name, provider.provider):
-                vision_models.append(model_configuration.name)
-                logger.debug(
-                    f"Vision model found: {provider.provider}/{model_configuration.name}"
+            if model_configuration.supports_image_input is True or (
+                model_configuration.supports_image_input is None
+                and model_supports_image_input(
+                    model_configuration.name, provider.provider
                 )
+            ):
+                vision_models.append(model_configuration.name)
 
         # Only include providers with at least one vision-capable model
         if vision_models:
@@ -367,6 +371,56 @@ def get_vision_capable_providers(
 
     logger.info(f"Found {len(vision_providers)} vision-capable providers")
     return vision_providers
+
+
+@admin_router.get("/image-generation-providers")
+def get_image_generation_capable_providers(
+    _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> list[ImageGenerationProviderResponse]:
+    """Return a list of LLM providers and their models that support image generation output"""
+
+    providers = fetch_existing_llm_providers(db_session)
+    image_generation_providers: list[ImageGenerationProviderResponse] = []
+
+    logger.info("Fetching image-generation-capable providers")
+
+    for provider in providers:
+        image_generation_models = []
+
+        # Check each model for image generation capability
+        for model_configuration in provider.model_configurations:
+            if model_configuration.supports_image_output is True or (
+                model_configuration.supports_image_output is None
+                and model_supports_image_output(
+                    model_configuration.name, provider.provider
+                )
+            ):
+                image_generation_models.append(model_configuration.name)
+                logger.debug(
+                    f"Image generation model found: {provider.provider}/{model_configuration.name}"
+                )
+
+        # Only include providers with at least one image-generation-capable model
+        if image_generation_models:
+            provider_view = LLMProviderView.from_model(provider)
+            _mask_provider_api_key(provider_view)
+
+            image_generation_providers.append(
+                ImageGenerationProviderResponse(
+                    **provider_view.model_dump(),
+                    image_generation_models=image_generation_models,
+                )
+            )
+
+            logger.info(
+                f"Image generation provider: {provider.provider} with models: {image_generation_models}"
+            )
+
+    logger.info(
+        f"Found {len(image_generation_providers)} image-generation-capable providers"
+    )
+    return image_generation_providers
 
 
 """Endpoints for all"""

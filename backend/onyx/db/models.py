@@ -2437,6 +2437,10 @@ class ModelConfiguration(Base):
 
     supports_image_input: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
+    # 12-04-2025 - temporary stopgap to allow easier image generation model configuration
+    # Consider removing once refactor is planned and implemented
+    supports_image_output: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
     llm_provider: Mapped["LLMProvider"] = relationship(
         "LLMProvider",
         back_populates="model_configurations",

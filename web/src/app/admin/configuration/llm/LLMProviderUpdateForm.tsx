@@ -21,7 +21,11 @@ import {
   WellKnownLLMProviderDescriptor,
 } from "./interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { dynamicProviderConfigs, fetchModels } from "./utils";
+import {
+  dynamicProviderConfigs,
+  fetchModels,
+  mergeModelConfigsWithFreshCapabilities,
+} from "./utils";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import {
   isValidAzureTargetUri,
@@ -133,15 +137,16 @@ export function LLMProviderUpdateForm({
 
   // Helper function to get current model configurations
   const getCurrentModelConfigurations = (values: any): ModelConfiguration[] => {
-    // If user clicked "Fetch Available Models", use those
-    if ((values.fetched_model_configurations?.length ?? 0) > 0) {
+    if (values.fetched_model_configurations?.length > 0) {
       return values.fetched_model_configurations;
     }
-    // If editing an existing provider, use its models
-    if ((existingLlmProvider?.model_configurations?.length ?? 0) > 0) {
-      return existingLlmProvider?.model_configurations ?? [];
+    if (existingLlmProvider?.model_configurations?.length) {
+      // Merge existing visibility with fresh capabilities from descriptor
+      return mergeModelConfigsWithFreshCapabilities(
+        existingLlmProvider.model_configurations,
+        llmProviderDescriptor.model_configurations
+      );
     }
-    // Otherwise use the descriptor's default models
     return llmProviderDescriptor.model_configurations;
   };
 
@@ -323,6 +328,7 @@ export function LLMProviderUpdateForm({
               is_visible: visibleModels.includes(modelConfiguration.name),
               max_input_tokens: modelConfiguration.max_input_tokens ?? null,
               supports_image_input: modelConfiguration.supports_image_input,
+              supports_image_output: modelConfiguration.supports_image_output,
             })
           ),
         };
@@ -620,14 +626,17 @@ export function LLMProviderUpdateForm({
                     name="default_model_name"
                     subtext="The model to use by default for this provider unless otherwise specified."
                     label="Default Model"
-                    options={currentModelConfigurations.map(
-                      (modelConfiguration) => ({
+                    options={currentModelConfigurations
+                      .filter(
+                        (modelConfiguration) =>
+                          modelConfiguration.supports_image_output !== true
+                      )
+                      .map((modelConfiguration) => ({
                         // don't clean up names here to give admins descriptive names / handle duplicates
                         // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
                         name: modelConfiguration.name,
                         value: modelConfiguration.name,
-                      })
-                    )}
+                      }))}
                     maxHeight="max-h-56"
                   />
                 ) : (
@@ -654,14 +663,17 @@ export function LLMProviderUpdateForm({
                       name="fast_default_model_name"
                       subtext="The model to use for lighter flows like `LLM Chunk Filter` for this provider. If not set, will use the Default Model configured above."
                       label="[Optional] Fast Model"
-                      options={currentModelConfigurations.map(
-                        (modelConfiguration) => ({
+                      options={currentModelConfigurations
+                        .filter(
+                          (modelConfiguration) =>
+                            modelConfiguration.supports_image_output !== true
+                        )
+                        .map((modelConfiguration) => ({
                           // don't clean up names here to give admins descriptive names / handle duplicates
                           // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
                           name: modelConfiguration.name,
                           value: modelConfiguration.name,
-                        })
-                      )}
+                        }))}
                       includeDefault
                       maxHeight="max-h-56"
                     />
@@ -691,14 +703,18 @@ export function LLMProviderUpdateForm({
                             name="selected_model_names"
                             label="Display Models"
                             subtext="Select the models to make available to users. Unselected models will not be available."
-                            options={currentModelConfigurations.map(
-                              (modelConfiguration) => ({
+                            options={currentModelConfigurations
+                              .filter(
+                                (modelConfiguration) =>
+                                  modelConfiguration.supports_image_output !==
+                                  true
+                              )
+                              .map((modelConfiguration) => ({
                                 value: modelConfiguration.name,
                                 // don't clean up names here to give admins descriptive names / handle duplicates
                                 // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
                                 label: modelConfiguration.name,
-                              })
-                            )}
+                              }))}
                             onChange={(selected) =>
                               formikProps.setFieldValue(
                                 "selected_model_names",

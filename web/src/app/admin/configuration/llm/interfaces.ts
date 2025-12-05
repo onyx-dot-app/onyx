@@ -34,6 +34,7 @@ export interface ModelConfiguration {
   is_visible: boolean;
   max_input_tokens: number | null;
   supports_image_input: boolean | null;
+  supports_image_output?: boolean;
   supports_reasoning?: boolean;
   display_name?: string;
   provider_display_name?: string;
@@ -93,6 +94,10 @@ export interface LLMProviderView extends LLMProvider {
 
 export interface VisionProvider extends LLMProviderView {
   vision_models: string[];
+}
+
+export interface ImageGenerationProvider extends LLMProviderView {
+  image_generation_models: string[];
 }
 
 export interface LLMProviderDescriptor {
