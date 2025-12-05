@@ -7,7 +7,6 @@ Coda.io API Reference: https://coda.io/developers/apis/v1
 """
 
 from datetime import datetime
-from datetime import timezone
 from typing import Any
 
 import requests
@@ -94,7 +93,7 @@ class CodaConnector(LoadConnector):
     ) -> dict[str, Any]:
         """Make a request to the Coda API with retry logic."""
         url = f"{CODA_API_BASE}/{endpoint}"
-        response = requests.get(url, headers=self._get_headers(), params=params)
+        response = requests.get(url, headers=self._get_headers(), params=params, timeout=30)
         response.raise_for_status()
         return response.json()
 
@@ -214,7 +213,7 @@ class CodaConnector(LoadConnector):
             values = row.get("values", {})
             row_lines = []
             for col_name, value in values.items():
-                if value is not None and value != "":
+                if value is not None:
                     row_lines.append(f"  {col_name}: {value}")
             if row_lines:
                 lines.append("\n".join(row_lines))
