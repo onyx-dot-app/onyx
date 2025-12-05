@@ -620,7 +620,6 @@ def reserve_message_id(
     chat_session_id: UUID,
     parent_message: int,
     message_type: MessageType = MessageType.ASSISTANT,
-    # Multi-model response support
     model_provider: str | None = None,
     model_name: str | None = None,
     response_group_id: UUID | None = None,
@@ -668,7 +667,6 @@ def create_new_chat_message(
     commit: bool = True,
     reserved_message_id: int | None = None,
     reasoning_tokens: str | None = None,
-    # Multi-model response support
     model_provider: str | None = None,
     model_name: str | None = None,
     response_group_id: UUID | None = None,
@@ -891,7 +889,6 @@ def translate_db_message_to_chat_message_detail(
         files=chat_message.files or [],
         error=chat_message.error,
         current_feedback=current_feedback,
-        # Multi-model response support
         model_provider=chat_message.model_provider,
         model_name=chat_message.model_name,
         response_group_id=chat_message.response_group_id,

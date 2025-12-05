@@ -505,7 +505,6 @@ def stream_chat_message_objects(
             yield MessageResponseIDInfo(
                 user_message_id=user_message.id,
                 reserved_assistant_message_id=assistant_response.id,
-                # Multi-model response support
                 model_provider=current_llm.config.model_provider,
                 model_name=current_llm.config.model_name,
                 response_group_id=str(response_group_id) if response_group_id else None,

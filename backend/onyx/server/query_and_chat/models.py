@@ -109,7 +109,7 @@ class CreateChatMessageRequest(ChunkContext):
     llm_override: LLMOverride | None = None
     prompt_override: PromptOverride | None = None
 
-    # Multi-model response support: list of LLM overrides to generate responses from
+    # List of LLM overrides to generate responses from
     # If provided, generates one response per override, all sharing the same response_group_id
     # Takes precedence over llm_override if both are provided
     llm_overrides: list[LLMOverride] | None = None
@@ -250,10 +250,8 @@ class ChatMessageDetail(BaseModel):
     error: str | None = None
     current_feedback: str | None = None  # "like" | "dislike" | null
 
-    # Multi-model response support
     model_provider: str | None = None
     model_name: str | None = None
-    # Groups parallel multi-model responses together
     response_group_id: UUID | None = None
 
     def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore

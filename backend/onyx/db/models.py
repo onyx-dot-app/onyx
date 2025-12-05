@@ -2142,8 +2142,6 @@ class ChatMessage(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    # Multi-model response support
-    # Tracks which model generated this response (for assistant messages)
     model_provider: Mapped[str | None] = mapped_column(String, nullable=True)
     model_name: Mapped[str | None] = mapped_column(String, nullable=True)
     # Groups parallel multi-model responses together.

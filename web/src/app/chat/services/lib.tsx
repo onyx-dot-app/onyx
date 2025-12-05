@@ -180,7 +180,6 @@ export interface SendMessageParams {
   useAgentSearch?: boolean;
   enabledToolIds?: number[];
   forcedToolIds?: number[];
-  // Multi-model response support
   llmOverrides?: { model_provider: string; model_version: string }[];
 }
 
@@ -557,7 +556,6 @@ export function processRawChatHistory(
       overridden_model: messageInfo.overridden_model,
       packets: packetsForMessage || [],
       currentFeedback: messageInfo.current_feedback as FeedbackType | null,
-      // Multi-model response support
       modelProvider: messageInfo.model_provider ?? undefined,
       modelName: messageInfo.model_name ?? undefined,
       responseGroupId: messageInfo.response_group_id ?? undefined,

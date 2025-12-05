@@ -626,7 +626,6 @@ export function useChatController({
         documents: OnyxDocument[];
         citations: CitationMap | null;
         finalMessage: BackendMessage | null;
-        // Multi-model info
         modelProvider?: string;
         modelName?: string;
         responseGroupId?: string;
