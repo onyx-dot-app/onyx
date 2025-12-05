@@ -219,12 +219,6 @@ class CodaParser:
                     sections.append(TextSection(text=text, link=None))
                 current_text.clear()
 
-        # Iterate through all elements
-        # We want to preserve order, so we'll walk the tree or just iterate top-level
-        # For simplicity and to flatten the structure, let's iterate over all descendants
-        # but that might duplicate text.
-        # Better to iterate over the body's children.
-
         body = soup.body if soup.body else soup
 
         for element in body.descendants:

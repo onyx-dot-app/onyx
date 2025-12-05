@@ -8,16 +8,18 @@ from onyx.connectors.coda.helpers.document_generator import CodaDocumentGenerato
 from onyx.connectors.coda.helpers.parser import CodaParser
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
+from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.interfaces import SlimConnector
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
-class CodaConnector(LoadConnector, PollConnector):
+class CodaConnector(LoadConnector, PollConnector, SlimConnector):
     """Coda connector that reads all Coda docs and pages this integration has been granted access to.
 
     Responsibilities:
@@ -106,6 +108,18 @@ class CodaConnector(LoadConnector, PollConnector):
         documents = self.generator.generate_updated_documents(
             start=start,
             end=end,
+            doc_ids=self.doc_ids,
+            include_tables=self.include_tables,
+        )
+
+        yield from batch_generator(documents, self.batch_size)
+
+    def retrieve_all_slim_docs(self) -> GenerateSlimDocumentOutput:
+        """Retrieve all slim documents (IDs only) to handle deletions."""
+        if not self.generator:
+            raise ConnectorValidationError("Generator not initialized.")
+
+        documents = self.generator.generate_all_slim_documents(
             doc_ids=self.doc_ids,
             include_tables=self.include_tables,
         )

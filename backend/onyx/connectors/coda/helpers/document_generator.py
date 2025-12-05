@@ -9,6 +9,7 @@ from onyx.connectors.coda.models.table import CodaTableReference
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import Document
 from onyx.connectors.models import ImageSection
+from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
@@ -83,6 +84,7 @@ class CodaDocumentGenerator:
             content = self.client.export_page_content(
                 doc.id, page.id, self.export_format
             )
+
             if content is None:
                 self.skipped_pages.add(page.id)
                 logger.warning(f"Skipping page {page.id}: export failed")
@@ -310,3 +312,35 @@ class CodaDocumentGenerator:
 
                 if all_tables:
                     yield from self.generate_table_documents(doc, all_tables)
+
+    def generate_all_slim_documents(
+        self, doc_ids: set[str] | None = None, include_tables: bool = True
+    ) -> Generator[SlimDocument, None, None]:
+        """Generate slim documents (IDs only) for all accessible Coda content.
+
+        Args:
+            doc_ids: Optional set of doc IDs to process. If None, processes all.
+            include_tables: Whether to include table documents
+
+        Yields:
+            SlimDocument: Slim documents for all pages and tables
+        """
+        logger.info("Fetching all Coda doc IDs for deletion detection")
+
+        for doc in self.client.fetch_all_docs():
+            # Filter by doc_ids if specified
+            if doc_ids and doc.id not in doc_ids:
+                continue
+
+            # Fetch all pages
+            all_pages = self.client.fetch_all_pages(doc.id)
+            for page in all_pages:
+                page_key = f"{doc.id}:{page.id}"
+                yield SlimDocument(id=page_key)
+
+            # Fetch all tables if enabled
+            if include_tables:
+                all_tables = self.client.fetch_all_tables(doc.id)
+                for table in all_tables:
+                    table_key = f"{doc.id}:table:{table.id}"
+                    yield SlimDocument(id=table_key)

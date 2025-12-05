@@ -468,5 +468,50 @@ class TestExportFormats:
             print(f"Sample HTML preview: {content[:200]}...")
 
 
+class TestSlimRetrieval:
+    """Test suite for slim document retrieval (deletion detection)."""
+
+    def test_retrieve_all_slim_docs(
+        self, connector: CodaConnector, reference_data: dict[str, Any]
+    ) -> None:
+        """Test that retrieve_all_slim_docs returns all expected document IDs."""
+        # Ensure generator is initialized
+        assert connector.generator is not None
+
+        # Call the method
+        gen = connector.retrieve_all_slim_docs()
+        batches = list(gen)
+
+        # Flatten batches
+        slim_docs = []
+        for batch in batches:
+            slim_docs.extend(batch)
+
+        # Verify we got slim documents
+        assert len(slim_docs) > 0, "Should return at least one slim document"
+
+        # Verify IDs match expected format
+        for doc in slim_docs:
+            assert doc.id, "Slim document must have an ID"
+            # ID format should be doc_id:page_id or doc_id:table:table_id
+            parts = doc.id.split(":")
+            assert len(parts) >= 2, f"Invalid ID format: {doc.id}"
+
+        # Verify count matches roughly what we expect (pages + tables)
+        # Note: This might be slightly different from load_from_state count
+        # because load_from_state filters hidden/empty pages, while slim retrieval
+        # should ideally return everything that exists to be safe, or match the filter.
+        # Our implementation filters by doc_ids but fetches all pages.
+
+        # Check that we have at least as many slim docs as loaded docs
+        # (since slim docs might include things skipped during load)
+        loaded_doc_count = reference_data["total_pages"]
+        assert (
+            len(slim_docs) >= loaded_doc_count
+        ), f"Expected at least {loaded_doc_count} slim docs, got {len(slim_docs)}"
+
+        logger.info(f"Retrieved {len(slim_docs)} slim documents")
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
