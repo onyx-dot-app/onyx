@@ -64,13 +64,24 @@ def replace_citation_guidance_tag(
     *,
     should_cite_documents: bool = False,
     include_all_guidance: bool = False,
-) -> str:
+) -> tuple[str, bool]:
     """
     Replace [[CITATION_GUIDANCE]] placeholder with citation guidance if needed.
-    If the placeholder is not present, returns the prompt unchanged.
+
+    Returns:
+        tuple[str, bool]: (prompt_with_replacement, should_append_fallback)
+        - prompt_with_replacement: The prompt with placeholder replaced (or unchanged if not present)
+        - should_append_fallback: True if citation guidance should be appended
+            (placeholder was not present and citations are needed)
     """
-    if _CITATION_GUIDANCE_REPLACEMENT_PAT not in prompt_str:
-        return prompt_str
+    placeholder_was_present = _CITATION_GUIDANCE_REPLACEMENT_PAT in prompt_str
+
+    if not placeholder_was_present:
+        # Placeholder not present - caller should append if citations are needed
+        should_append = (
+            should_cite_documents or include_all_guidance
+        ) and REQUIRE_CITATION_GUIDANCE not in prompt_str
+        return prompt_str, should_append
 
     citation_guidance = (
         REQUIRE_CITATION_GUIDANCE
@@ -78,10 +89,12 @@ def replace_citation_guidance_tag(
         else ""
     )
 
-    return prompt_str.replace(
+    replaced_prompt = prompt_str.replace(
         _CITATION_GUIDANCE_REPLACEMENT_PAT,
         citation_guidance,
     )
+
+    return replaced_prompt, False
 
 
 def handle_onyx_date_awareness(

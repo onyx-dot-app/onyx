@@ -143,8 +143,7 @@ def build_system_prompt(
         system_prompt = CODE_BLOCK_MARKDOWN + system_prompt
 
     # Replace citation guidance placeholder if present
-    placeholder_was_present = "[[CITATION_GUIDANCE]]" in system_prompt
-    system_prompt = replace_citation_guidance_tag(
+    system_prompt, should_append_citation_guidance = replace_citation_guidance_tag(
         system_prompt,
         should_cite_documents=should_cite_documents,
         include_all_guidance=include_all_guidance,
@@ -160,13 +159,9 @@ def build_system_prompt(
                 memory.strip() for memory in memories if memory.strip()
             )
 
-    # If citation guidance placeholder was not present and we need citations, append after company context
+    # Append citation guidance after company context if placeholder was not present
     # This maintains backward compatibility and ensures citations are always enforced when needed
-    if (
-        (should_cite_documents or include_all_guidance)
-        and not placeholder_was_present
-        and REQUIRE_CITATION_GUIDANCE not in system_prompt
-    ):
+    if should_append_citation_guidance:
         system_prompt += REQUIRE_CITATION_GUIDANCE
 
     if include_all_guidance:
