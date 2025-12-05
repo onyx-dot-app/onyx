@@ -21,6 +21,8 @@ from onyx.connectors.coda.api.client import CodaAPIClient
 from onyx.connectors.coda.connector import CodaConnector
 from onyx.connectors.coda.models.common import CodaObjectType
 from onyx.connectors.models import Document
+from onyx.connectors.models import ImageSection
+from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -268,7 +270,10 @@ class TestLoadFromStateEndToEnd:
         ), f"Expected at least {expected_count} documents, got {total_documents}"
 
     def test_document_required_fields(
-        self, all_documents: list[Document], reference_data: dict[str, Any]
+        self,
+        all_documents: list[Document],
+        connector: CodaConnector,
+        reference_data: dict[str, Any],
     ) -> None:
         """Test that all documents have required fields."""
         for doc in all_documents:
@@ -284,9 +289,13 @@ class TestLoadFromStateEndToEnd:
             # Sections with content
             assert len(doc.sections) > 0
             for section in doc.sections:
-                assert section.text is not None
-                assert len(section.text) > 0
-                assert section.link is not None
+                if isinstance(section, TextSection):
+                    assert section.text is not None
+                    assert len(section.text) > 0
+                elif isinstance(section, ImageSection):
+                    assert section.image_file_id is not None
+                if connector.export_format == "markdown":
+                    assert section.link is not None
 
             # Metadata
             assert "doc_id" in doc.metadata
@@ -346,7 +355,10 @@ class TestLoadFromStateEndToEnd:
         ), f"Not all docs were processed. Expected {expected_doc_ids}, got {processed_doc_ids}"
 
     def test_document_content_not_empty(
-        self, all_documents: list[Document], reference_data: dict[str, Any]
+        self,
+        all_documents: list[Document],
+        reference_data: dict[str, Any],
+        connector: CodaConnector,
     ) -> None:
         """Test that all documents have meaningful content (not just title)."""
         for doc in all_documents:
@@ -356,16 +368,20 @@ class TestLoadFromStateEndToEnd:
 
             # Check that each section has actual content beyond the title
             for section in doc.sections:
-                assert section.text is not None, f"Section text is None for {doc.id}"
-                lines = section.text.strip().split("\n")
-                # Should have multiple lines (title + blank line + content)
-                assert (
-                    len(lines) > 1
-                ), f"Document {doc.id} has only title and blank line, no actual content {doc}"
+                if isinstance(section, ImageSection):
+                    continue
 
-                logger.info(
-                    f"Document {doc.id} {doc.semantic_identifier} has {len(lines)} lines"
-                )
+                assert section.text is not None, f"Section text is None for {doc.id}"
+
+                if connector.export_format == "markdown":
+                    lines = section.text.strip().split("\n")
+                    assert (
+                        len(lines) > 1
+                    ), f"Section {lines} {doc.sections.index(section)} has only title and blank line, {doc.semantic_identifier}"
+
+                    logger.info(
+                        f"Document {doc.id} {doc.semantic_identifier} has {len(lines)} lines"
+                    )
 
                 # Content should be meaningfully longer than just the title
                 if doc.metadata.get("type") != CodaObjectType.TABLE:

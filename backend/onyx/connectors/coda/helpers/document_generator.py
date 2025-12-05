@@ -110,7 +110,6 @@ class CodaDocumentGenerator:
 
             if self.export_format == "html":
                 sections = self.parser.parse_html_content(content)
-                sections.insert(0, TextSection(link=page.browserLink, text=page_title))
 
             else:
                 text = self.parser.build_page_content(page_title, content)
@@ -126,6 +125,10 @@ class CodaDocumentGenerator:
 
             # Build owners
             primary_owners, secondary_owners = self.parser.build_page_owners(page)
+
+            if len(sections) == 0:
+                logger.debug(f"Skipping page '{page.name}': no content")
+                continue
 
             yield Document(
                 id=page_key,

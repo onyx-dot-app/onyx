@@ -215,7 +215,8 @@ class CodaParser:
         def flush_text() -> None:
             if current_text:
                 text = "".join(current_text).strip()
-                if text:
+                if text and len(text) > 5 and text is not None:
+                    logger.debug(f"Adding text section: {text}")
                     sections.append(TextSection(text=text, link=None))
                 current_text.clear()
 
