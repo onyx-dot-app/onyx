@@ -186,7 +186,7 @@ function DefaultAssistantConfig() {
                       <Info className="h-3.5 w-3.5 text-text-400 cursor-help" />
                     }
                     popupContent={
-                      <div className="text-xs space-y-1.5 max-w-xs">
+                      <div className="text-xs space-y-1.5 max-w-xs bg-background-neutral-dark-03 text-text-light-05">
                         <div>You can use placeholders in your prompt:</div>
                         <div>
                           <span className="font-mono font-semibold">
