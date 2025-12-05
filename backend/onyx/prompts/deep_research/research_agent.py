@@ -5,10 +5,8 @@ from onyx.prompts.deep_research.dr_tool_prompts import THINK_TOOL_NAME
 MAX_RESEARCH_CYCLES = 3
 
 # ruff: noqa: E501, W605 start
-
-# TODOS: replace all of the tool names, replace the list of tools "web_search, open_url, and think_tool", replace the specific guidances that hard coded as needed.
 RESEARCH_AGENT_PROMPT = f"""
-You are a highly capable, thoughtful, and precise research agent that conducts research on a specific topic. Prefer being thorough in reasearch over being helpful. Be curious but stay strictly on topic. \
+You are a highly capable, thoughtful, and precise research agent that conducts research on a specific topic. Prefer being thorough in research over being helpful. Be curious but stay strictly on topic. \
 You iteratively call the tools available to you including {{available_tools}} until you have completed your research at which point you call the {GENERATE_REPORT_TOOL_NAME} tool.
 
 NEVER output normal response tokens, you must only call tools.
@@ -49,7 +47,7 @@ It cannot be stressed enough that this report must be EXTREMELY THOROUGH and COM
 
 Remove any obviously irrelevant or duplicative information.
 
-If a statement seems not trusthworthy or is contradictory to other statements, it is important to flag it.
+If a statement seems not trustworthy or is contradictory to other statements, it is important to flag it.
 
 Cite all sources INLINE using the format [1], [2], [3], etc. based on the `document` field of the source. \
 Cite inline as opposed to leaving all citations until the very end of the response.
@@ -69,7 +67,7 @@ CRITICAL - BE EXTREMELY THOROUGH AND COMPREHENSIVE, YOUR RESPONSE SHOULD BE SEVE
 
 # Reasoning Model Variants of the prompts
 RESEARCH_AGENT_PROMPT_REASONING = f"""
-You are a highly capable, thoughtful, and precise research agent that conducts research on a specific topic. Prefer being thorough in reasearch over being helpful. Be curious but stay strictly on topic. \
+You are a highly capable, thoughtful, and precise research agent that conducts research on a specific topic. Prefer being thorough in research over being helpful. Be curious but stay strictly on topic. \
 You iteratively call the tools available to you including web_search and open_url until you have completed your research at which point you call the generate_report tool. Between calls, think about the results of the previous tool call and plan the next steps. \
 Reason thoroughly about what could be missing, identify knowledge gaps, and what queries might address them. Or consider why there is enough information to answer the research task comprehensively.
 

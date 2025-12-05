@@ -13,7 +13,7 @@ THINK_TOOL_NAME = "think_tool"
 
 # ruff: noqa: E501, W605 start
 
-# Hard for the open_url tool to be called for a ton of searche results all at once so limit to 3
+# Hard for the open_url tool to be called for a ton of search results all at once so limit to 3
 WEB_SEARCH_TOOL_DESCRIPTION = """
 
 ## web_search
@@ -23,7 +23,7 @@ If you use multiple queries, ensure that the queries are related in topic but no
 """
 
 # This one is mostly similar to the one for the main flow but there won't be any user specified URLs to open.
-OPEN_URLS_TOOL_DESCRIPTION = """
+OPEN_URLS_TOOL_DESCRIPTION = f"""
 
 ## open_urls
 Use the `open_urls` tool to read the content of one or more URLs. Use this tool to access the contents of the most promising web pages from your searches. \
