@@ -8,10 +8,11 @@ repos:
     rev: 569ddf04117761eb74cef7afb5143bbb96fcdfbb  # frozen: 0.9.15
     hooks:
       - id: uv-sync
+        args: ["--locked", "--all-extras"]
       # NOTE: This takes ~6s on a single, large module which is prohibitively slow.
       # - id: uv-run
       #   name: mypy
-      #   args: ["mypy"]
+      #   args: ["--all-extras", "mypy"]
       #   pass_filenames: true
       #   files: ^backend/.*\.py$
 

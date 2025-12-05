@@ -218,9 +218,9 @@ const ProviderSetupModal = memo(
                   />
                 </FormField.Control>
                 {optionalField.description && (
-                  <div className="text-text-03 ml-0.5">
+                  <Text secondaryBody text03 className="ml-0.5">
                     {optionalField.description}
-                  </div>
+                  </Text>
                 )}
               </FormField>
             )}
@@ -321,9 +321,9 @@ const ProviderSetupModal = memo(
                   />
                 </FormField.Control>
                 {optionalField.description && (
-                  <div className="text-text-03 ml-0.5">
+                  <Text secondaryBody text03 className="ml-0.5">
                     {optionalField.description}
-                  </div>
+                  </Text>
                 )}
               </FormField>
             )}

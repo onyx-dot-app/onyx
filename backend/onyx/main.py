@@ -113,9 +113,6 @@ from onyx.server.middleware.rate_limiting import close_auth_limiter
 from onyx.server.middleware.rate_limiting import get_auth_rate_limiters
 from onyx.server.middleware.rate_limiting import setup_auth_limiter
 from onyx.server.onyx_api.ingestion import router as onyx_api_router
-from onyx.server.openai_assistants_api.full_openai_assistants_api import (
-    get_full_openai_assistants_api_router,
-)
 from onyx.server.pat.api import router as pat_router
 from onyx.server.query_and_chat.chat_backend import router as chat_router
 from onyx.server.query_and_chat.chat_backend_v0 import router as chat_v0_router
@@ -410,9 +407,6 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, web_search_admin_router)
     include_router_with_global_prefix_prepended(
         application, token_rate_limit_settings_router
-    )
-    include_router_with_global_prefix_prepended(
-        application, get_full_openai_assistants_api_router()
     )
     include_router_with_global_prefix_prepended(application, long_term_logs_router)
     include_router_with_global_prefix_prepended(application, api_key_router)
