@@ -17,7 +17,6 @@ import {
   MessageTreeState,
   upsertMessages,
   SYSTEM_NODE_ID,
-  buildImmediateMessages,
   buildEmptyMessage,
 } from "../services/messageTree";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
@@ -592,36 +591,31 @@ export function useChatController({
 
       // Add user message immediately to the message tree so that the chat
       // immediately reflects the user message
+      // Assistant nodes are created on-demand when MessageResponseIDInfo arrives
       let initialUserNode: Message;
-      let initialAssistantNode: Message;
 
       if (regenerationRequest) {
-        // For regeneration: keep the existing user message, only create new assistant
+        // For regeneration: keep the existing user message
         initialUserNode = regenerationRequest.parentMessage;
-        initialAssistantNode = buildEmptyMessage({
-          messageType: "assistant",
-          parentNodeId: initialUserNode.nodeId,
-          nodeIdOffset: 1,
-        });
       } else {
-        // For new messages or editing: create/update user message and assistant
+        // For new messages or editing: create/update user message
         const parentNodeIdForMessage = messageToResend
           ? messageToResend.parentNodeId || SYSTEM_NODE_ID
           : parentMessage?.nodeId || SYSTEM_NODE_ID;
-        const result = buildImmediateMessages(
-          parentNodeIdForMessage,
-          currMessage,
-          projectFilesToFileDescriptors(currentMessageFiles),
-          messageToResend
-        );
-        initialUserNode = result.initialUserNode;
-        initialAssistantNode = result.initialAssistantNode;
+        initialUserNode = messageToResend
+          ? { ...messageToResend }
+          : buildEmptyMessage({
+              messageType: "user",
+              parentNodeId: parentNodeIdForMessage,
+              message: currMessage,
+              files: projectFilesToFileDescriptors(currentMessageFiles),
+            });
       }
 
       // Track assistant nodes (supports both single and multi-model)
+      // Nodes are created on-demand when MessageResponseIDInfo arrives with backend IDs
       interface AssistantNodeData {
         node: Message;
-        backendMessageId?: number;
         packets: Packet[];
         documents: OnyxDocument[];
         citations: CitationMap | null;
@@ -629,50 +623,16 @@ export function useChatController({
       }
       // Map model_id (e.g. "openai:gpt-4") to index in assistantNodes array
       const modelIdToIndex: Map<string, number> = new Map();
+      const assistantNodes: AssistantNodeData[] = [];
 
-      // Check if multiple models are selected
-      const selectedModels = llmManager.selectedLlms;
-      const isMultiModel = !modelOverride && selectedModels.length > 1;
-      const modelsToCreate = isMultiModel
-        ? selectedModels
-        : [llmManager.currentLlm];
-
-      // Pre-create assistant nodes for immediate UI display
-      const assistantNodes: AssistantNodeData[] = modelsToCreate.map(
-        (model, i) => ({
-          node:
-            i === 0
-              ? {
-                  ...initialAssistantNode,
-                  modelProvider: model.name,
-                  modelName: model.modelName,
-                }
-              : buildEmptyMessage({
-                  messageType: "assistant",
-                  parentNodeId: initialUserNode.nodeId,
-                  nodeIdOffset: i + 1,
-                  modelProvider: model.name,
-                  modelName: model.modelName,
-                }),
-          packets: [],
-          documents: selectedDocuments,
-          citations: null,
-          finalMessage: null,
-        })
-      );
-
-      const allInitialAssistantNodes = assistantNodes.map((a) => a.node);
-
-      // make messages appear + clear input bar
-      const messagesToUpsert = regenerationRequest
-        ? allInitialAssistantNodes // Only upsert assistants for regeneration
-        : [initialUserNode, ...allInitialAssistantNodes]; // Upsert user + all assistants
-
-      currentMessageTreeLocal = upsertToCompleteMessageTree({
-        messages: messagesToUpsert,
-        completeMessageTreeOverride: currentMessageTreeLocal,
-        chatSessionId: frozenSessionId,
-      });
+      // Only upsert user message immediately; assistant nodes created when backend IDs arrive
+      if (!regenerationRequest) {
+        currentMessageTreeLocal = upsertToCompleteMessageTree({
+          messages: [initialUserNode],
+          completeMessageTreeOverride: currentMessageTreeLocal,
+          chatSessionId: frozenSessionId,
+        });
+      }
       resetInputBar();
 
       // Shared state across all models
@@ -689,7 +649,6 @@ export function useChatController({
       let files = projectFilesToFileDescriptors(currentMessageFiles);
 
       let newUserMessageId: number | null = null;
-      let nextNodeIndex = 0;
 
       try {
         // Read the CURRENT message tree from store to get the correct parent
@@ -800,20 +759,43 @@ export function useChatController({
               (packet as MessageResponseIDInfo).reserved_assistant_message_id
             ) {
               const msgInfo = packet as MessageResponseIDInfo;
+              const messageId = msgInfo.reserved_assistant_message_id;
 
-              // Assign backend message ID to next pre-created node
-              const nodeToUpdate = assistantNodes[nextNodeIndex];
-              if (nodeToUpdate) {
-                nodeToUpdate.backendMessageId =
-                  msgInfo.reserved_assistant_message_id;
+              // Create assistant node on-demand with nodeId = messageId
+              const newNode: Message = {
+                nodeId: messageId,
+                messageId: messageId,
+                message: "",
+                type: "assistant",
+                files: [],
+                toolCall: null,
+                parentNodeId: initialUserNode.nodeId,
+                packets: [],
+                modelProvider: msgInfo.model_provider || undefined,
+                modelName: msgInfo.model_name || undefined,
+              };
 
-                // Map model_id to index for packet routing
-                if (msgInfo.model_provider && msgInfo.model_name) {
-                  const modelId = `${msgInfo.model_provider}:${msgInfo.model_name}`;
-                  modelIdToIndex.set(modelId, nextNodeIndex);
-                }
-                nextNodeIndex++;
+              const nodeIndex = assistantNodes.length;
+              assistantNodes.push({
+                node: newNode,
+                packets: [],
+                documents: selectedDocuments,
+                citations: null,
+                finalMessage: null,
+              });
+
+              // Map model_id to index for packet routing
+              if (msgInfo.model_provider && msgInfo.model_name) {
+                const modelId = `${msgInfo.model_provider}:${msgInfo.model_name}`;
+                modelIdToIndex.set(modelId, nodeIndex);
               }
+
+              // Upsert the new assistant node to the tree
+              currentMessageTreeLocal = upsertToCompleteMessageTree({
+                messages: [newNode],
+                completeMessageTreeOverride: currentMessageTreeLocal,
+                chatSessionId: frozenSessionId,
+              });
             }
 
             if (Object.hasOwn(packet, "user_files")) {
@@ -908,7 +890,7 @@ export function useChatController({
                   target.documents = messageStart.final_documents;
                   updateSelectedNodeForDocDisplay(
                     frozenSessionId,
-                    initialAssistantNode.nodeId
+                    target.node.nodeId
                   );
                 }
               }
@@ -934,7 +916,6 @@ export function useChatController({
             for (const assistantData of assistantNodes) {
               messagesToUpsertInLoop.push({
                 ...assistantData.node,
-                messageId: assistantData.backendMessageId,
                 message: error || "",
                 type: error ? "error" : ("assistant" as const),
                 retrievalType,
@@ -967,6 +948,9 @@ export function useChatController({
       } catch (e: any) {
         console.log("Error:", e);
         const errorMsg = e.message;
+        // Use existing assistant node if available, otherwise create temp error node
+        const errorNodeId =
+          assistantNodes[0]?.node.nodeId ?? -1 * Date.now() - 1;
         currentMessageTreeLocal = upsertToCompleteMessageTree({
           messages: [
             {
@@ -984,7 +968,7 @@ export function useChatController({
               packets: [],
             },
             {
-              nodeId: initialAssistantNode.nodeId,
+              nodeId: errorNodeId,
               message: errorMsg,
               type: "error",
               files: aiMessageImages || [],

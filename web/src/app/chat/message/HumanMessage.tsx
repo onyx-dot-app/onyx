@@ -168,9 +168,8 @@ interface HumanMessageProps {
 
   // Message navigation
   messageId?: number | null;
-  nodeId: number;
   otherMessagesCanSwitchTo?: number[];
-  onMessageSelection?: (nodeId: number) => void;
+  onMessageSelection?: (messageId: number) => void;
 
   // Editing functionality
   onEdit?: (editedContent: string) => void;
@@ -184,7 +183,6 @@ export default function HumanMessage({
   content: initialContent,
   files,
   messageId,
-  nodeId,
   otherMessagesCanSwitchTo,
   onEdit,
   onMessageSelection,
@@ -201,9 +199,8 @@ export default function HumanMessage({
   const [isHovered, setIsHovered] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
-  // Use nodeId for index lookup since otherMessagesCanSwitchTo contains nodeIds
-  const currentMessageInd = nodeId
-    ? otherMessagesCanSwitchTo?.indexOf(nodeId)
+  const currentMessageInd = messageId
+    ? otherMessagesCanSwitchTo?.indexOf(messageId)
     : undefined;
 
   const getPreviousMessage = () => {

@@ -213,7 +213,6 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
                 content={message.message}
                 files={message.files}
                 messageId={message.messageId}
-                nodeId={message.nodeId}
                 handleEditWithMessageId={handleEditWithMessageId}
                 otherMessagesCanSwitchTo={
                   parentMessage?.childrenNodeIds ?? emptyChildrenIds
