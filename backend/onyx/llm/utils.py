@@ -568,8 +568,8 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
                     LLMProvider.provider == model_provider,
                 )
             )
-            if model_config:
-                return model_config.supports_image_input or False
+            if model_config and model_config.supports_image_input is not None:
+                return model_config.supports_image_input
     except Exception as e:
         logger.warning(
             f"Failed to query database for {model_provider} model {model_name} image support: {e}"
