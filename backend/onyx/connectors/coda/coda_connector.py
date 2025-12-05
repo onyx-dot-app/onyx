@@ -23,6 +23,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 CODA_API_BASE = "https://coda.io/apis/v1"
+_CODA_API_TIMEOUT = 30  # seconds
 
 
 class CodaClientNotSetUpError(PermissionError):
@@ -93,7 +94,7 @@ class CodaConnector(LoadConnector):
     ) -> dict[str, Any]:
         """Make a request to the Coda API with retry logic."""
         url = f"{CODA_API_BASE}/{endpoint}"
-        response = requests.get(url, headers=self._get_headers(), params=params, timeout=30)
+        response = requests.get(url, headers=self._get_headers(), params=params, timeout=_CODA_API_TIMEOUT)
         response.raise_for_status()
         return response.json()
 
