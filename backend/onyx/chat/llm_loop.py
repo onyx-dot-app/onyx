@@ -1,6 +1,5 @@
 import json
 from collections.abc import Callable
-from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -8,6 +7,8 @@ from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
 from onyx.chat.llm_step import run_llm_step
+from onyx.chat.llm_step import TOOL_CALL_MSG_ARGUMENTS
+from onyx.chat.llm_step import TOOL_CALL_MSG_FUNC_NAME
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import ExtractedProjectFiles
 from onyx.chat.models import LlmStepResult
@@ -68,9 +69,6 @@ logger = setup_logger()
 # Cycle 5: Maybe call open_url for some additional results or because last set failed
 # Cycle 6: No more tools available, forced to answer
 MAX_LLM_CYCLES = 6
-
-TOOL_CALL_MSG_FUNC_NAME = "function_name"
-TOOL_CALL_MSG_ARGUMENTS = "arguments"
 
 
 def _build_project_file_citation_mapping(
@@ -397,106 +395,6 @@ def translate_history_to_llm_format(
     return messages
 
 
-def _format_message_history_for_logging(
-    message_history: LanguageModelInput,
-) -> str:
-    """Format message history for logging, with special handling for tool calls.
-
-    Tool calls are formatted as JSON with 4-space indentation for readability.
-    """
-    formatted_lines = []
-
-    separator = "================================================"
-
-    # Handle string input
-    if isinstance(message_history, str):
-        formatted_lines.append("Message [string]:")
-        formatted_lines.append(separator)
-        formatted_lines.append(f"{message_history}")
-        return "\n".join(formatted_lines)
-
-    # Handle sequence of messages
-    for i, msg in enumerate(message_history):
-        # Type guard: ensure msg is a dict-like object (TypedDict)
-        if not isinstance(msg, dict):
-            formatted_lines.append(f"Message {i + 1} [unknown]:")
-            formatted_lines.append(separator)
-            formatted_lines.append(f"{msg}")
-            if i < len(message_history) - 1:
-                formatted_lines.append(separator)
-            continue
-
-        role = msg.get("role", "unknown")
-        formatted_lines.append(f"Message {i + 1} [{role}]:")
-        formatted_lines.append(separator)
-
-        if role == "system":
-            content = msg.get("content", "")
-            if isinstance(content, str):
-                formatted_lines.append(f"{content}")
-
-        elif role == "user":
-            content = msg.get("content", "")
-            if isinstance(content, str):
-                formatted_lines.append(f"{content}")
-            elif isinstance(content, list):
-                # Handle multimodal content (text + images)
-                for part in content:
-                    if isinstance(part, dict):
-                        part_type = part.get("type")
-                        if part_type == "text":
-                            text = part.get("text", "")
-                            if isinstance(text, str):
-                                formatted_lines.append(f"{text}")
-                        elif part_type == "image_url":
-                            image_url_dict = part.get("image_url")
-                            if isinstance(image_url_dict, dict):
-                                url = image_url_dict.get("url", "")
-                                if isinstance(url, str):
-                                    formatted_lines.append(f"[Image: {url[:50]}...]")
-
-        elif role == "assistant":
-            content = msg.get("content")
-            if content and isinstance(content, str):
-                formatted_lines.append(f"{content}")
-
-            tool_calls = msg.get("tool_calls")
-            if tool_calls and isinstance(tool_calls, list):
-                formatted_lines.append("Tool calls:")
-                for tool_call in tool_calls:
-                    if isinstance(tool_call, dict):
-                        tool_call_dict: dict[str, Any] = {}
-                        tool_call_id = tool_call.get("id")
-                        tool_call_type = tool_call.get("type")
-                        function_dict = tool_call.get("function")
-
-                        if tool_call_id:
-                            tool_call_dict["id"] = tool_call_id
-                        if tool_call_type:
-                            tool_call_dict["type"] = tool_call_type
-                        if isinstance(function_dict, dict):
-                            tool_call_dict["function"] = {
-                                "name": function_dict.get("name", ""),
-                                "arguments": function_dict.get("arguments", ""),
-                            }
-
-                        tool_call_json = json.dumps(tool_call_dict, indent=4)
-                        formatted_lines.append(tool_call_json)
-
-        elif role == "tool":
-            content = msg.get("content", "")
-            tool_call_id = msg.get("tool_call_id", "")
-            if isinstance(content, str) and isinstance(tool_call_id, str):
-                formatted_lines.append(f"Tool call ID: {tool_call_id}")
-                formatted_lines.append(f"Response: {content}")
-
-        # Add separator before next message (or at end)
-        if i < len(message_history) - 1:
-            formatted_lines.append(separator)
-
-    return "\n".join(formatted_lines)
-
-
 def run_llm_loop(
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -659,9 +557,9 @@ def run_llm_loop(
                 available_tokens=available_tokens,
             )
 
-            # This calls the LLM as a generator that yields packets for streaming.
-            # The caller iterates over the generator, emitting each packet, and captures the return value.
-            llm_step_gen = run_llm_step(
+            # This calls the LLM, yields packets (reasoning, answers, etc.) and returns the result
+            # It also pre-processes the tool calls in preparation for running them
+            step_generator = run_llm_step(
                 history=truncated_message_history,
                 tool_definitions=[tool.tool_definition() for tool in final_tools],
                 tool_choice=tool_choice,
@@ -675,14 +573,14 @@ def run_llm_loop(
                 final_documents=gathered_documents,
             )
 
-            # Iterate over the generator, emitting each packet
-            # The return value is captured via StopIteration
-            try:
-                while True:
-                    packet = next(llm_step_gen)
+            # Consume the generator, emitting packets and capturing the final result
+            while True:
+                try:
+                    packet = next(step_generator)
                     emitter.emit(packet)
-            except StopIteration as e:
-                llm_step_result, current_tool_call_index = e.value
+                except StopIteration as e:
+                    llm_step_result, current_tool_call_index = e.value
+                    break
 
             # Save citation mapping after each LLM step for incremental state updates
             state_container.set_citation_mapping(citation_processor.citation_to_doc)
