@@ -126,16 +126,10 @@ npm i
 
 For the backend, you'll need to setup pre-commit hooks (black / reorder-python-imports).
 
-With the virtual environment active, install the pre-commit library with:
-
-```bash
-uv pip install --system pre-commit
-```
-
 Then run:
 
 ```bash
-pre-commit install
+uv run pre-commit install
 ```
 
 Additionally, we use `mypy` for static type checking.
