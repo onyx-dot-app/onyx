@@ -99,10 +99,11 @@ export const InviteUserButton = ({
   const [showInviteModal, setShowInviteModal] = useState(false);
 
   const handleConfirm = () => {
+    const normalizedEmail = user.email.toLowerCase();
     if (invited) {
-      uninviteTrigger({ user_email: user.email });
+      uninviteTrigger({ user_email: normalizedEmail });
     } else {
-      inviteTrigger({ emails: [user.email.toLowerCase()] });
+      inviteTrigger({ emails: [normalizedEmail] });
     }
   };
 
