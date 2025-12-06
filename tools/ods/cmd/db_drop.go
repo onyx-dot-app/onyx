@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"regexp"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -10,6 +11,9 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/postgres"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
 )
+
+// validIdentifier matches valid PostgreSQL identifiers (letters, digits, underscores, starting with letter/underscore)
+var validIdentifier = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
 // DBDropOptions holds options for the db drop command.
 type DBDropOptions struct {
@@ -74,6 +78,11 @@ func runDBDrop(opts *DBDropOptions) {
 	env := config.Env()
 
 	if opts.Schema != "" {
+		// Validate schema name to prevent SQL injection
+		if !validIdentifier.MatchString(opts.Schema) {
+			log.Fatalf("Invalid schema name: %s", opts.Schema)
+		}
+
 		// Drop and recreate schema
 		log.Infof("Dropping schema: %s", opts.Schema)
 		dropSchemaSQL := fmt.Sprintf("DROP SCHEMA IF EXISTS %s CASCADE;", opts.Schema)

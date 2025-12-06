@@ -13,12 +13,15 @@ type MigrateOptions struct {
 }
 
 // getAlembicSchema converts the schema flag value to alembic.Schema.
-func getAlembicSchema(schema string) alembic.Schema {
+// Returns the schema and true if valid, or SchemaDefault and false if invalid.
+func getAlembicSchema(schema string) (alembic.Schema, bool) {
 	switch schema {
+	case "default", "":
+		return alembic.SchemaDefault, true
 	case "private":
-		return alembic.SchemaPrivate
+		return alembic.SchemaPrivate, true
 	default:
-		return alembic.SchemaDefault
+		return alembic.SchemaDefault, false
 	}
 }
 
@@ -65,7 +68,10 @@ Examples:
 }
 
 func runDBUpgrade(revision string, opts *MigrateOptions) {
-	schema := getAlembicSchema(opts.Schema)
+	schema, valid := getAlembicSchema(opts.Schema)
+	if !valid {
+		log.Fatalf("Invalid schema: %s (must be 'default' or 'private')", opts.Schema)
+	}
 
 	log.Infof("Upgrading database to revision: %s", revision)
 	if schema == alembic.SchemaPrivate {
@@ -106,7 +112,10 @@ Examples:
 }
 
 func runDBDowngrade(revision string, opts *MigrateOptions) {
-	schema := getAlembicSchema(opts.Schema)
+	schema, valid := getAlembicSchema(opts.Schema)
+	if !valid {
+		log.Fatalf("Invalid schema: %s (must be 'default' or 'private')", opts.Schema)
+	}
 
 	log.Infof("Downgrading database to revision: %s", revision)
 	if schema == alembic.SchemaPrivate {
@@ -143,7 +152,10 @@ Examples:
 }
 
 func runDBCurrent(opts *MigrateOptions) {
-	schema := getAlembicSchema(opts.Schema)
+	schema, valid := getAlembicSchema(opts.Schema)
+	if !valid {
+		log.Fatalf("Invalid schema: %s (must be 'default' or 'private')", opts.Schema)
+	}
 
 	if schema == alembic.SchemaPrivate {
 		log.Info("Checking current revision for schema: private (schema_private)")
@@ -185,7 +197,10 @@ Examples:
 }
 
 func runDBHistory(opts *HistoryOptions) {
-	schema := getAlembicSchema(opts.Schema)
+	schema, valid := getAlembicSchema(opts.Schema)
+	if !valid {
+		log.Fatalf("Invalid schema: %s (must be 'default' or 'private')", opts.Schema)
+	}
 
 	if schema == alembic.SchemaPrivate {
 		log.Info("Showing history for schema: private (schema_private)")

@@ -114,22 +114,23 @@ func CopyToContainer(container, src, dst string) error {
 }
 
 // GetContainerIP returns the IP address of a container.
-// It tries to get the IP from the first available network.
+// It returns the first available network IP if the container has multiple networks.
 func GetContainerIP(container string) (string, error) {
-	// Get IP from the container's network settings
+	// Get IPs from the container's network settings (space-separated if multiple)
 	cmd := exec.Command("docker", "inspect", "-f",
-		"{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}", container)
+		"{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}", container)
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to get container IP: %w", err)
 	}
 
-	ip := strings.TrimSpace(string(output))
-	if ip == "" {
+	// Take the first IP if there are multiple
+	ips := strings.Fields(string(output))
+	if len(ips) == 0 {
 		return "", fmt.Errorf("container %s has no IP address", container)
 	}
 
-	return ip, nil
+	return ips[0], nil
 }
 
 // GetExposedPort returns the host port that maps to a container port, if any.
