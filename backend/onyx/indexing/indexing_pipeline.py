@@ -541,6 +541,10 @@ def add_document_summaries(
 
     doc_tokens = tokenizer.encode(chunks_by_doc[0].source_document.get_text_content())
     doc_content = tokenizer_trim_middle(doc_tokens, trunc_doc_tokens, tokenizer)
+
+    # Apply prompt caching: cache the static prompt, document content is the suffix
+    # Note: For document summarization, there's no cacheable prefix since the document changes
+    # So we just pass the full prompt without caching
     summary_prompt = DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
     doc_summary = message_to_string(
         llm.invoke_langchain(summary_prompt, max_tokens=MAX_CONTEXT_TOKENS)
@@ -590,17 +594,30 @@ def add_chunk_summaries(
             )
         )
 
+    from onyx.llm.prompt_cache.processor import process_with_prompt_cache
+
     context_prompt1 = CONTEXTUAL_RAG_PROMPT1.format(document=doc_info)
 
     def assign_context(chunk: DocAwareChunk) -> None:
         context_prompt2 = CONTEXTUAL_RAG_PROMPT2.format(chunk=chunk.content)
         try:
-            chunk.chunk_context = message_to_string(
-                llm.invoke_langchain(
-                    context_prompt1 + context_prompt2,
-                    max_tokens=MAX_CONTEXT_TOKENS,
-                )
+            # Apply prompt caching: cache the document context (prompt1), chunk content is the suffix
+            # For string inputs with continuation=True, the result will be a concatenated string
+            processed_prompt, _ = process_with_prompt_cache(
+                llm=llm,
+                cacheable_prefix=context_prompt1,
+                suffix=context_prompt2,
+                continuation=True,  # Append chunk to the document context
             )
+
+            chunk.chunk_context = (
+                llm.invoke(
+                    processed_prompt,
+                    max_tokens=MAX_CONTEXT_TOKENS,
+                ).choice.message.content
+                or ""
+            )
+
         except LLMRateLimitError as e:
             # Erroring during chunker is undesirable, so we log the error and continue
             # TODO: for v2, add robust retry logic
