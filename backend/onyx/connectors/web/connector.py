@@ -348,23 +348,37 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
     return playwright, context
 
 
+def _urls_from_soup(soup: BeautifulSoup, sitemap_url: str) -> list[str]:
+    return [
+        _ensure_absolute_url(sitemap_url, loc_tag.text)
+        for loc_tag in soup.find_all("loc")
+    ]
+
+
 def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
     try:
         response = requests.get(sitemap_url, headers=DEFAULT_HEADERS)
         response.raise_for_status()
-        if response.headers.get("Content-Encoding") == "br":
+        soup = BeautifulSoup(response.content, "html.parser")
+        urls = _urls_from_soup(soup, sitemap_url)
+        if (
+            len(urls) == 0
+            and len(soup.find_all("urlset")) == 0
+            and response.headers.get("Content-Encoding") == "br"
+        ):
             import brotli  # type: ignore
 
-            response_content = brotli.decompress(response.content)
-        else:
-            response_content = response.content
-
-        soup = BeautifulSoup(response_content, "html.parser")
-
-        urls = [
-            _ensure_absolute_url(sitemap_url, loc_tag.text)
-            for loc_tag in soup.find_all("loc")
-        ]
+            # We hope to never enter this if case since requests should handle brotli compression automatically
+            # as long as the brotli package is available in the venv. Mostly leaving this code here to avoid
+            # a regression as someone says "Ah, looks like this brotli package isn't used anywhere, let's remove it"
+            try:
+                response_content = brotli.decompress(response.content)
+                soup = BeautifulSoup(response_content, "html.parser")
+                urls = _urls_from_soup(soup, sitemap_url)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to decompress sitemap {sitemap_url} using brotli: {e}"
+                )
 
         if len(urls) == 0 and len(soup.find_all("urlset")) == 0:
             # the given url doesn't look like a sitemap, let's try to find one
