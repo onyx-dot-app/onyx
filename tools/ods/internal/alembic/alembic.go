@@ -7,7 +7,11 @@ import (
 	"path/filepath"
 	"runtime"
 
+	log "github.com/sirupsen/logrus"
+
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/postgres"
 )
 
 // Schema represents an Alembic schema configuration.
@@ -68,7 +72,67 @@ func Run(args []string, schema Schema) error {
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 
+	// Pass through POSTGRES_* environment variables
+	cmd.Env = buildAlembicEnv()
+
 	return cmd.Run()
+}
+
+// buildAlembicEnv builds the environment for running alembic.
+// It inherits the current environment and ensures POSTGRES_* variables are set.
+// If POSTGRES_HOST is not explicitly set, it attempts to detect the PostgreSQL
+// container IP address automatically.
+func buildAlembicEnv() []string {
+	env := os.Environ()
+
+	// Get postgres config (which reads from env with defaults)
+	config := postgres.NewConfigFromEnv()
+
+	// If POSTGRES_HOST is not explicitly set, try to detect container IP
+	host := config.Host
+	if os.Getenv("POSTGRES_HOST") == "" {
+		if containerIP := detectPostgresContainerIP(); containerIP != "" {
+			host = containerIP
+			log.Debugf("Auto-detected PostgreSQL container IP: %s", containerIP)
+		}
+	}
+
+	// Ensure POSTGRES_* variables are set (use existing or defaults)
+	envVars := map[string]string{
+		"POSTGRES_HOST":     host,
+		"POSTGRES_PORT":     config.Port,
+		"POSTGRES_USER":     config.User,
+		"POSTGRES_PASSWORD": config.Password,
+		"POSTGRES_DB":       config.Database,
+	}
+
+	// Only add if not already set in environment (except HOST which we may have detected)
+	for key, value := range envVars {
+		if key == "POSTGRES_HOST" || os.Getenv(key) == "" {
+			env = append(env, fmt.Sprintf("%s=%s", key, value))
+		}
+	}
+
+	return env
+}
+
+// detectPostgresContainerIP attempts to find a running PostgreSQL container
+// and return its IP address.
+func detectPostgresContainerIP() string {
+	container, err := docker.FindPostgresContainer()
+	if err != nil {
+		log.Debugf("Could not find PostgreSQL container: %v", err)
+		return ""
+	}
+
+	ip, err := docker.GetContainerIP(container)
+	if err != nil {
+		log.Debugf("Could not get container IP for %s: %v", container, err)
+		return ""
+	}
+
+	log.Infof("Using PostgreSQL container: %s (%s)", container, ip)
+	return ip
 }
 
 // Upgrade runs alembic upgrade to the specified revision.

@@ -96,27 +96,29 @@ func runDBDrop(opts *DBDropOptions) {
 		// Drop and recreate entire database
 		log.Infof("Dropping database: %s", config.Database)
 
+		// Use template1 as maintenance database (can't drop a DB while connected to it)
+		maintenanceDB := "template1"
+
 		// Terminate existing connections
 		terminateSQL := fmt.Sprintf(
 			"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '%s' AND pid <> pg_backend_pid();",
 			config.Database)
 
-		// Connect to 'postgres' database to drop the target database
-		args := []string{"psql", "-U", config.User, "-d", "postgres", "-c", terminateSQL}
+		args := []string{"psql", "-U", config.User, "-d", maintenanceDB, "-c", terminateSQL}
 		if err := docker.ExecWithEnv(container, env, args...); err != nil {
 			log.Warnf("Failed to terminate connections (this may be okay): %v", err)
 		}
 
 		// Drop database
 		dropSQL := fmt.Sprintf("DROP DATABASE IF EXISTS %s;", config.Database)
-		args = []string{"psql", "-U", config.User, "-d", "postgres", "-c", dropSQL}
+		args = []string{"psql", "-U", config.User, "-d", maintenanceDB, "-c", dropSQL}
 		if err := docker.ExecWithEnv(container, env, args...); err != nil {
 			log.Fatalf("Failed to drop database: %v", err)
 		}
 
 		// Create database
 		createSQL := fmt.Sprintf("CREATE DATABASE %s;", config.Database)
-		args = []string{"psql", "-U", config.User, "-d", "postgres", "-c", createSQL}
+		args = []string{"psql", "-U", config.User, "-d", maintenanceDB, "-c", createSQL}
 		if err := docker.ExecWithEnv(container, env, args...); err != nil {
 			log.Fatalf("Failed to create database: %v", err)
 		}

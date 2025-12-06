@@ -11,7 +11,8 @@ import (
 // Known container names for PostgreSQL in order of preference
 var postgresContainerNames = []string{
 	"onyx_postgres",                  // From restart_containers.sh
-	"onyx-stack-relational_db-1",     // Docker compose with project name
+	"onyx-relational_db-1",           // Docker compose default project name
+	"onyx-stack-relational_db-1",     // Docker compose with stack project name
 	"docker_compose-relational_db-1", // Legacy docker compose naming
 	"relational_db",                  // Service name only
 }
@@ -26,14 +27,19 @@ func FindPostgresContainer() (string, error) {
 		}
 	}
 
-	// Fall back to searching for any postgres container
-	cmd := exec.Command("docker", "ps", "--format", "{{.Names}}", "--filter", "ancestor=postgres")
+	// Fall back to searching for any postgres container by image name
+	// Try multiple filters since the image name may vary (postgres, postgres:15.2-alpine, etc.)
+	cmd := exec.Command("docker", "ps", "--format", "{{.Names}}\t{{.Image}}")
 	output, err := cmd.Output()
 	if err == nil {
-		containers := strings.Split(strings.TrimSpace(string(output)), "\n")
-		for _, container := range containers {
-			if container != "" {
-				return container, nil
+		lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+		for _, line := range lines {
+			parts := strings.Split(line, "\t")
+			if len(parts) >= 2 {
+				name, image := parts[0], parts[1]
+				if strings.Contains(image, "postgres") {
+					return name, nil
+				}
 			}
 		}
 	}
@@ -105,4 +111,23 @@ func CopyToContainer(container, src, dst string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// GetContainerIP returns the IP address of a container.
+// It tries to get the IP from the first available network.
+func GetContainerIP(container string) (string, error) {
+	// Get IP from the container's network settings
+	cmd := exec.Command("docker", "inspect", "-f",
+		"{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}", container)
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get container IP: %w", err)
+	}
+
+	ip := strings.TrimSpace(string(output))
+	if ip == "" {
+		return "", fmt.Errorf("container %s has no IP address", container)
+	}
+
+	return ip, nil
 }

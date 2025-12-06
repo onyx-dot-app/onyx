@@ -33,6 +33,16 @@ func NewDBUpgradeCommand() *cobra.Command {
 
 If no revision is specified, upgrades to 'head' (latest revision).
 
+The command automatically detects the PostgreSQL container IP if POSTGRES_HOST
+is not set, so it works even when the port isn't exposed to localhost.
+
+Environment variables (auto-detected if not set):
+  POSTGRES_HOST      Database host (auto-detects container IP)
+  POSTGRES_PORT      Database port (default: 5432)
+  POSTGRES_USER      Database user (default: postgres)
+  POSTGRES_PASSWORD  Database password (default: password)
+  POSTGRES_DB        Database name (default: postgres)
+
 Examples:
   ods db upgrade                    # Upgrade to latest
   ods db upgrade head               # Same as above
