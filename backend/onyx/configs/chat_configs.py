@@ -101,3 +101,5 @@ USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH = (
 )
 
 USE_DIV_CON_AGENT = os.environ.get("USE_DIV_CON_AGENT", "false").lower() == "true"
+
+MAX_AGENT_RECURSION_DEPTH = int(os.environ.get("MAX_AGENT_RECURSION_DEPTH", "3"))

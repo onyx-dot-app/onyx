@@ -102,6 +102,7 @@ def _create_and_link_tool_calls(
                 if tool_call_info.generated_images
                 else None
             ),
+            invoked_persona_id=tool_call_info.invoked_persona_id,
             add_only=True,
         )
 
@@ -216,8 +217,9 @@ def save_chat_turn(
                     search_doc_key_to_id[search_doc_key] = db_search_doc.id
                     search_doc_ids_for_tool.append(db_search_doc.id)
 
+            unique_search_doc_ids = list(dict.fromkeys(search_doc_ids_for_tool))
             tool_call_to_search_doc_ids[tool_call_info.tool_call_id] = (
-                search_doc_ids_for_tool
+                unique_search_doc_ids
             )
 
     # 3. Collect all unique SearchDoc IDs from all tool calls to link to ChatMessage

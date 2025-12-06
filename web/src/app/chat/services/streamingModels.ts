@@ -29,6 +29,11 @@ export enum PacketType {
   CUSTOM_TOOL_START = "custom_tool_start",
   CUSTOM_TOOL_DELTA = "custom_tool_delta",
 
+  // Agent tool packets
+  AGENT_TOOL_START = "agent_tool_start",
+  AGENT_TOOL_DELTA = "agent_tool_delta",
+  AGENT_TOOL_FINAL = "agent_tool_final",
+
   // Reasoning packets
   REASONING_START = "reasoning_start",
   REASONING_DELTA = "reasoning_delta",
@@ -143,6 +148,27 @@ export interface CustomToolDelta extends BaseObj {
   file_ids?: string[] | null;
 }
 
+// Agent Tool Packets
+export interface AgentToolStart extends BaseObj {
+  type: "agent_tool_start";
+  agent_name: string;
+  agent_id: number;
+}
+
+export interface AgentToolDelta extends BaseObj {
+  type: "agent_tool_delta";
+  agent_name: string;
+  status_text?: string;
+  nested_content?: string;
+}
+
+export interface AgentToolFinal extends BaseObj {
+  type: "agent_tool_final";
+  agent_name: string;
+  summary: string;
+  full_response?: string;
+}
+
 // Reasoning Packets
 export interface ReasoningStart extends BaseObj {
   type: "reasoning_start";
@@ -198,12 +224,18 @@ export type FetchToolObj =
   | FetchToolDocuments
   | SectionEnd;
 export type CustomToolObj = CustomToolStart | CustomToolDelta | SectionEnd;
+export type AgentToolObj =
+  | AgentToolStart
+  | AgentToolDelta
+  | AgentToolFinal
+  | SectionEnd;
 export type NewToolObj =
   | SearchToolObj
   | ImageGenerationToolObj
   | PythonToolObj
   | FetchToolObj
-  | CustomToolObj;
+  | CustomToolObj
+  | AgentToolObj;
 
 export type ReasoningObj = ReasoningStart | ReasoningDelta | SectionEnd;
 
@@ -267,6 +299,11 @@ export interface FetchToolPacket {
 export interface CustomToolPacket {
   turn_index: number;
   obj: CustomToolObj;
+}
+
+export interface AgentToolPacket {
+  turn_index: number;
+  obj: AgentToolObj;
 }
 
 export interface ReasoningPacket {
