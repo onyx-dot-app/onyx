@@ -106,52 +106,6 @@ class CodaTable(CodaObjectBase):
     filter: Optional[CodaTableFilterFormula] = None
 
 
-class CodaColumnFormatType(StrEnum):
-    """
-    Represents the valid string values for the layout type of a table or view.
-    """
-
-    LinkColumnFormat = "LinkColumnFormat"
-    EmailColumnFormat = "EmailColumnFormat"
-    text = "text"
-    person = "person"
-    lookup = "lookup"
-    number = "number"
-    percent = "percent"
-    reaction = "reaction"
-    currency = "currency"
-    date = "date"
-    dateTime = "dateTime"
-    time = "time"
-    duration = "duration"
-    slider = "slider"
-    scale = "scale"
-    image = "image"
-    imageReference = "imageReference"
-    attachments = "attachments"
-
-
-class CodaColumnFormat(BaseModel):
-    """Represents a Coda Table Column Format"""
-
-    type: CodaColumnFormatType
-    isArray: bool
-
-
-class CodaColumn(BaseModel):
-    """Represents a Coda Table Column"""
-
-    id: str
-    type: Literal[CodaObjectType.COLUMN]
-    href: str
-    name: str
-    format: CodaColumnFormat
-    display: Optional[bool] = None
-    calculated: Optional[bool] = None
-    formula: Optional[str] = None
-    defaultValue: Optional[str] = None
-
-
 class CodaRow(CodaObjectBase):
     """Represents a Coda Table Row"""
 
