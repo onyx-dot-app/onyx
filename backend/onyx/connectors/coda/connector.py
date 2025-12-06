@@ -45,12 +45,14 @@ class CodaConnector(LoadConnector, PollConnector, SlimConnector):
         self,
         batch_size: int = INDEX_BATCH_SIZE,
         doc_ids: list[str] | None = None,
+        page_ids: list[str] | None = None,
         max_table_rows: int = 1000,
         include_tables: bool = True,
     ) -> None:
         """Initialize with parameters."""
         self.batch_size = batch_size
         self.doc_ids = set(doc_ids) if doc_ids else None
+        self.page_ids = set(page_ids) if page_ids else None
         self.max_table_rows = max_table_rows
         self.include_tables = include_tables
 
@@ -69,6 +71,7 @@ class CodaConnector(LoadConnector, PollConnector, SlimConnector):
         self.generator = CodaDocumentGenerator(
             client=self.client,
             parser=self.parser,
+            page_ids=self.page_ids,
             max_table_rows=self.max_table_rows,
         )
 
@@ -133,7 +136,12 @@ if __name__ == "__main__":
             os.environ.get("CODA_DOC_IDS", "").split(",")
             if os.environ.get("CODA_DOC_IDS")
             else None
-        )
+        ),
+        page_ids=(
+            os.environ.get("CODA_PAGE_IDS", "").split(",")
+            if os.environ.get("CODA_PAGE_IDS")
+            else None
+        ),
     )
     connector.load_credentials({"coda_api_token": os.environ.get("CODA_API_TOKEN")})
     connector.validate_connector_settings()

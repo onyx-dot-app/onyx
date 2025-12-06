@@ -34,6 +34,7 @@ class CodaDocumentGenerator:
         self,
         client: CodaAPIClient,
         parser: CodaParser,
+        page_ids: set[str] | None = None,
         max_table_rows: int = 1000,
     ) -> None:
         """Initialize with dependencies.
@@ -41,10 +42,12 @@ class CodaDocumentGenerator:
         Args:
             client: CodaAPIClient for API calls
             parser: CodaParser for data transformation
+            page_ids: Optional set of page IDs to index. If None, indexes all.
             max_table_rows: Maximum rows to fetch per table
         """
         self.client = client
         self.parser = parser
+        self.page_ids = page_ids
         self.max_table_rows = max_table_rows
         self.indexed_pages: set[str] = set()
         self.indexed_tables: set[str] = set()
@@ -226,8 +229,13 @@ class CodaDocumentGenerator:
             # Build map for hierarchy
             page_map = {p.id: p for p in all_pages}
 
+            # Filter pages if page_ids specified
+            pages_to_process = all_pages
+            if self.page_ids:
+                pages_to_process = [p for p in all_pages if p.id in self.page_ids]
+
             # Generate documents from pages
-            yield from self.generate_page_documents(doc, all_pages, page_map)
+            yield from self.generate_page_documents(doc, pages_to_process, page_map)
 
             # Process tables if enabled
             if include_tables:
@@ -292,6 +300,9 @@ class CodaDocumentGenerator:
                     updated_pages.append(page)
 
             if updated_pages:
+                if self.page_ids:
+                    updated_pages = [p for p in updated_pages if p.id in self.page_ids]
+
                 yield from self.generate_page_documents(doc, updated_pages, page_map)
 
             # Process tables for updated docs if enabled

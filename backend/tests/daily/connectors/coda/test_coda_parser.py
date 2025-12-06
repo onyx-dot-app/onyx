@@ -1,5 +1,3 @@
-from datetime import datetime
-from datetime import timezone
 from unittest.mock import MagicMock
 
 from onyx.connectors.coda.helpers.parser import CodaParser
@@ -19,12 +17,12 @@ class TestCodaParser:
         """Test parsing of ISO 8601 timestamps."""
         ts = "2023-01-01T12:00:00Z"
         dt = CodaParser.parse_timestamp(ts)
-        assert dt == datetime(2023, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        assert dt == 1672574400.0
 
         # Test with offset
         ts_offset = "2023-01-01T12:00:00+01:00"
         dt_offset = CodaParser.parse_timestamp(ts_offset)
-        assert dt_offset == datetime(2023, 1, 1, 11, 0, 0, tzinfo=timezone.utc)
+        assert dt_offset == 1672570800.0
 
     def test_get_page_path(self) -> None:
         """Test breadcrumb path construction."""
