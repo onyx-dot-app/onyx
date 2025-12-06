@@ -91,8 +91,20 @@ export interface LLMProviderView extends LLMProvider {
   is_default_provider: boolean | null;
 }
 
-export interface VisionProvider extends LLMProviderView {
-  vision_models: string[];
+/**
+ * Minimal response for vision providers endpoint.
+ * Only includes fields needed for the vision LLM selector.
+ */
+export interface VisionProvider {
+  id: number;
+  name: string;
+  provider: string;
+  default_model_name: string;
+  fast_default_model_name: string | null;
+  default_vision_model: string | null;
+  is_default_provider: boolean | null;
+  is_default_vision_provider: boolean | null;
+  model_configurations: ModelConfiguration[];
 }
 
 export interface LLMProviderDescriptor {

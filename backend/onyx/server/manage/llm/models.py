@@ -326,10 +326,23 @@ class ModelConfigurationView(BaseModel):
         )
 
 
-class VisionProviderResponse(LLMProviderView):
-    """Response model for vision providers endpoint, including vision-specific fields."""
+class VisionProviderResponse(BaseModel):
+    """Minimal response model for vision providers endpoint.
 
-    vision_models: list[str]
+    Only includes fields needed by the frontend for the vision LLM selector.
+    Excludes sensitive fields like api_key and custom_config.
+    """
+
+    id: int
+    name: str
+    provider: str
+    default_model_name: str
+    fast_default_model_name: str | None
+    default_vision_model: str | None
+    is_default_provider: bool | None
+    is_default_vision_provider: bool | None
+    # Only vision-capable model configurations (no secrets)
+    model_configurations: list[ModelConfigurationView]
 
 
 class LLMCost(BaseModel):

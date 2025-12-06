@@ -49,6 +49,7 @@ from onyx.server.manage.llm.models import LLMProviderDescriptor
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.models import ModelConfigurationView
 from onyx.server.manage.llm.models import OllamaFinalModelResponse
 from onyx.server.manage.llm.models import OllamaModelDetails
 from onyx.server.manage.llm.models import OllamaModelsRequest
@@ -346,30 +347,39 @@ def get_vision_capable_providers(
     logger.info("Fetching vision-capable providers")
 
     for provider in providers:
-        vision_models = []
+        vision_model_configs: list[ModelConfigurationView] = []
 
         # Check each model for vision capability
         for model_configuration in provider.model_configurations:
             if model_supports_image_input(model_configuration.name, provider.provider):
-                vision_models.append(model_configuration.name)
+                vision_model_configs.append(
+                    ModelConfigurationView.from_model(
+                        model_configuration, provider.provider
+                    )
+                )
                 logger.debug(
                     f"Vision model found: {provider.provider}/{model_configuration.name}"
                 )
 
         # Only include providers with at least one vision-capable model
-        if vision_models:
-            provider_view = LLMProviderView.from_model(provider)
-            _mask_provider_api_key(provider_view)
-
+        if vision_model_configs:
             vision_providers.append(
                 VisionProviderResponse(
-                    **provider_view.model_dump(),
-                    vision_models=vision_models,
+                    id=provider.id,
+                    name=provider.name,
+                    provider=provider.provider,
+                    default_model_name=provider.default_model_name,
+                    fast_default_model_name=provider.fast_default_model_name,
+                    default_vision_model=provider.default_vision_model,
+                    is_default_provider=provider.is_default_provider,
+                    is_default_vision_provider=provider.is_default_vision_provider,
+                    model_configurations=vision_model_configs,
                 )
             )
 
             logger.info(
-                f"Vision provider: {provider.provider} with models: {vision_models}"
+                f"Vision provider: {provider.provider} with "
+                f"models: {[m.name for m in vision_model_configs]}"
             )
 
     logger.info(f"Found {len(vision_providers)} vision-capable providers")
