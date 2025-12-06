@@ -621,9 +621,6 @@ def run_llm_loop(
                             f"Tool '{tool_call.tool_name}' not found in tools list"
                         )
 
-                    # Collect tool call info with reasoning tokens from this LLM step
-                    # All tool calls from the same loop iteration share the same reasoning tokens
-
                     # Extract search_docs if this is a search tool response
                     search_docs = None
                     if isinstance(tool_response.rich_response, SearchDocsResponse):
@@ -740,10 +737,6 @@ def run_llm_loop(
         if not llm_step_result or not llm_step_result.answer:
             raise RuntimeError("LLM did not return an answer.")
 
-        # Note: All state (answer, reasoning, citations, tool_calls) is saved incrementally
-        # in state_container. The process_message layer will persist to DB.
-
-        # Signal completion
         emitter.emit(
             Packet(turn_index=current_tool_call_index, obj=OverallStop(type="stop"))
         )
