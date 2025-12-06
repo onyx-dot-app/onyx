@@ -3572,7 +3572,7 @@ requires-dist = [
     { name = "numpy", marker = "extra == 'model-server'", specifier = "==1.26.4" },
     { name = "oauthlib", marker = "extra == 'backend'", specifier = "==3.2.2" },
     { name = "office365-rest-python-client", marker = "extra == 'backend'", specifier = "==2.5.9" },
-    { name = "onyx-devtools", marker = "extra == 'dev'", specifier = "==0.0.3" },
+    { name = "onyx-devtools", marker = "extra == 'dev'", specifier = "==0.1.0" },
     { name = "openai", specifier = "==2.6.1" },
     { name = "openinference-instrumentation", marker = "extra == 'backend'", specifier = "==0.1.42" },
     { name = "openpyxl", marker = "extra == 'backend'", specifier = "==3.0.10" },
@@ -3659,7 +3659,7 @@ requires-dist = [
     { name = "zizmor", marker = "extra == 'dev'", specifier = "==1.18.0" },
     { name = "zulip", marker = "extra == 'backend'", specifier = "==0.8.2" },
 ]
-provides-extras = ["backend", "model-server", "ee", "dev"]
+provides-extras = ["backend", "dev", "ee", "model-server"]
 
 [[package]]
 name = "onyx-backend"
@@ -3674,11 +3674,16 @@ requires-dist = [{ name = "onyx", extras = ["backend", "dev", "ee"], editable = 
 
 [[package]]
 name = "onyx-devtools"
-version = "0.0.3"
+version = "0.1.0"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4b/30/fb6c6d374e032cb788db494b41db21cf5b75d354231657845320c03d1c4f/onyx_devtools-0.0.3-py3-none-any.whl", hash = "sha256:055c2cb166d8531802d5ff9ac86e21b67c8a83fccba6474788a324036fb11801", size = 1203090, upload-time = "2025-12-06T17:55:26.749Z" },
-    { url = "https://files.pythonhosted.org/packages/a3/07/a37f20e342c2db40beda222eb4b9b621bf0f2bebdf399b4810dbf0ce8d16/onyx_devtools-0.0.3-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:c5eb14880db6b18b964e109da960e2f29b1f5480333a7e3913e67caef2927263", size = 1100677, upload-time = "2025-12-06T17:55:24.684Z" },
+    { url = "https://files.pythonhosted.org/packages/94/63/df98c6b494400023f5d0e8ca1c576d9d0267e14c46a73eb82d2d3ce0d9c6/onyx_devtools-0.1.0-py3-none-any.whl", hash = "sha256:49a4943aed5348f1b1b8618361bf086ae7921dbb5e9a34e8cc33912f661b4a28", size = 1203086, upload-time = "2025-12-06T18:37:57.006Z" },
+    { url = "https://files.pythonhosted.org/packages/99/95/ac71a0949ac79c766a27175af3621b72d264a2d424557f0f9235e3847b46/onyx_devtools-0.1.0-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:c79aac9e237c819dae65cc4aa1256d31c2b16ffc49f5b38cf81b789b43d01d53", size = 1193933, upload-time = "2025-12-06T18:37:54.793Z" },
+    { url = "https://files.pythonhosted.org/packages/d0/44/63869fd375700ef3698e645e278985c3ca2232e030641557318031266b76/onyx_devtools-0.1.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:31e0a6fa1b2ac39c47c3c018d26fdf77c8024a970b74d86d087502345201fd76", size = 1124361, upload-time = "2025-12-06T18:37:53.573Z" },
+    { url = "https://files.pythonhosted.org/packages/96/f5/a7512388da2076bcdd54d79b4bc94c9ce3a928536218d39f062852defbd1/onyx_devtools-0.1.0-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:675dbf17be28bc7fc9b07b5d5e276105087aaa2838129941f815ade737c2b67b", size = 1100671, upload-time = "2025-12-06T18:37:55.762Z" },
+    { url = "https://files.pythonhosted.org/packages/cb/60/33ede69d19654d7279b5d3d55592a16a879a78d590d815753e7cf56a58c6/onyx_devtools-0.1.0-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:76a4c3ff6c5377c6d8533405420b5c73ef7e9958ae6d4c94a0aad31f757c3276", size = 1203109, upload-time = "2025-12-06T18:37:56.833Z" },
+    { url = "https://files.pythonhosted.org/packages/41/a7/0b2df59c511c2c9458d176802beefb9769a9ed79112af4eeaf76333e9fd9/onyx_devtools-0.1.0-py3-none-win_amd64.whl", hash = "sha256:d5a6b5b2f60b859674a47f78682eab1992ccddae63e97ee766beb8a9108c56c2", size = 1291560, upload-time = "2025-12-06T18:37:55.719Z" },
+    { url = "https://files.pythonhosted.org/packages/63/dc/6b39630897f9fc6dff8aef1151a3cc36e2bec204d5d6f81335d84e59a049/onyx_devtools-0.1.0-py3-none-win_arm64.whl", hash = "sha256:3f81415fa0d1a03d67af86ff8981abb8c41145f807564ebb8439cbc0099c9cc1", size = 1169522, upload-time = "2025-12-06T18:37:55.555Z" },
 ]
 
 [[package]]
