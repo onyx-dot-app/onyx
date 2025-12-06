@@ -351,8 +351,8 @@ export default function LLMPopover({
           </SelectButton>
         </div>
       </PopoverTrigger>
-      <PopoverContent side="top" align="end" className="w-[280px] p-1">
-        <div className="flex flex-col gap-1">
+      <PopoverContent side="top" align="end" className="w-[280px] p-1.5">
+        <div className="flex flex-col gap-2">
           {/* Search Input */}
           <InputTypeIn
             ref={searchInputRef}
