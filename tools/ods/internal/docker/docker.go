@@ -131,3 +131,31 @@ func GetContainerIP(container string) (string, error) {
 
 	return ip, nil
 }
+
+// GetExposedPort returns the host port that maps to a container port, if any.
+// Returns empty string if the port is not exposed.
+func GetExposedPort(container string, containerPort string) string {
+	cmd := exec.Command("docker", "port", container, containerPort)
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+
+	// Output format: "0.0.0.0:5432" or ":::5432"
+	result := strings.TrimSpace(string(output))
+	if result == "" {
+		return ""
+	}
+
+	// Extract just the port number from "0.0.0.0:5432"
+	parts := strings.Split(result, ":")
+	if len(parts) >= 2 {
+		return parts[len(parts)-1]
+	}
+	return ""
+}
+
+// IsPortExposed checks if a container port is exposed to the host.
+func IsPortExposed(container string, containerPort string) bool {
+	return GetExposedPort(container, containerPort) != ""
+}
