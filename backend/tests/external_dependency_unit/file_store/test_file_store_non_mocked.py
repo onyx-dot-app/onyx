@@ -975,3 +975,40 @@ class TestS3BackedFileStore:
         assert (
             len(nonexistent_results) == 0
         ), "Should return empty list for non-existent prefix"
+
+    def test_get_file_size(self, file_store: S3BackedFileStore) -> None:
+        """Test getting file size from S3"""
+        file_id = f"{uuid.uuid4()}.txt"
+        display_name = "Test File Size"
+        content = "This is test content for file size check."
+        expected_size = len(content.encode("utf-8"))
+        file_type = "text/plain"
+        file_origin = FileOrigin.OTHER
+
+        # Save the file
+        content_io = BytesIO(content.encode("utf-8"))
+        returned_file_id = file_store.save_file(
+            content=content_io,
+            display_name=display_name,
+            file_origin=file_origin,
+            file_type=file_type,
+            file_id=file_id,
+        )
+
+        assert returned_file_id == file_id
+
+        # Get file size
+        file_size = file_store.get_file_size(file_id)
+
+        assert file_size is not None
+        assert file_size == expected_size
+
+    def test_get_file_size_nonexistent_file(
+        self, file_store: S3BackedFileStore
+    ) -> None:
+        """Test getting file size for a non-existent file returns None"""
+        nonexistent_file_id = f"{uuid.uuid4()}.txt"
+
+        file_size = file_store.get_file_size(nonexistent_file_id)
+
+        assert file_size is None

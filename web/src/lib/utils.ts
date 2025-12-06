@@ -111,6 +111,30 @@ export function isImageExtension(
 }
 
 /**
+ * Formats bytes to human-readable file size.
+ */
+export function formatBytes(
+  bytes: number | undefined,
+  decimals: number = 2
+): string {
+  if (bytes == null) return "Unknown";
+  if (bytes === 0) return "0 Bytes";
+
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+
+  let unitIndex = Math.floor(Math.log(bytes) / Math.log(k));
+  if (unitIndex < 0) unitIndex = 0;
+  if (unitIndex >= sizes.length) unitIndex = sizes.length - 1;
+  return (
+    parseFloat((bytes / Math.pow(k, unitIndex)).toFixed(dm)) +
+    " " +
+    sizes[unitIndex]
+  );
+}
+
+/**
  * Checks if a filename represents an image file based on its extension.
  */
 export function isImageFile(fileName: string | null | undefined): boolean {
