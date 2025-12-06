@@ -464,6 +464,7 @@ export enum ValidSources {
   Jira = "jira",
   Productboard = "productboard",
   Slab = "slab",
+  Coda = "coda",
   Notion = "notion",
   Guru = "guru",
   Gong = "gong",
