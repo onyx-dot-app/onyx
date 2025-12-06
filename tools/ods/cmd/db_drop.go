@@ -1,16 +1,14 @@
 package cmd
 
 import (
-	"bufio"
 	"fmt"
-	"os"
-	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/postgres"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
 )
 
 // DBDropOptions holds options for the db drop command.
@@ -58,16 +56,16 @@ func runDBDrop(opts *DBDropOptions) {
 
 	// Confirmation prompt
 	if !opts.Yes {
-		var prompt string
+		var msg string
 		if opts.Schema != "" {
-			prompt = fmt.Sprintf("This will DROP the schema '%s' in database '%s'. All data will be lost. Continue? (yes/no): ",
+			msg = fmt.Sprintf("This will DROP the schema '%s' in database '%s'. All data will be lost. Continue? (yes/no): ",
 				opts.Schema, config.Database)
 		} else {
-			prompt = fmt.Sprintf("This will DROP and RECREATE the database '%s'. All data will be lost. Continue? (yes/no): ",
+			msg = fmt.Sprintf("This will DROP and RECREATE the database '%s'. All data will be lost. Continue? (yes/no): ",
 				config.Database)
 		}
 
-		if !promptConfirm(prompt) {
+		if !prompt.Confirm(msg) {
 			log.Info("Aborted.")
 			return
 		}
@@ -126,16 +124,4 @@ func runDBDrop(opts *DBDropOptions) {
 		log.Infof("Database '%s' dropped and recreated successfully", config.Database)
 		log.Info("Run 'ods db upgrade' to apply migrations")
 	}
-}
-
-// promptConfirm prompts the user for yes/no confirmation.
-func promptConfirm(prompt string) bool {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print(prompt)
-	response, err := reader.ReadString('\n')
-	if err != nil {
-		return false
-	}
-	response = strings.TrimSpace(strings.ToLower(response))
-	return response == "yes" || response == "y"
 }

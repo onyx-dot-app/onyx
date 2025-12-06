@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,6 +9,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
 )
 
 // CherryPickOptions holds options for the cherry-pick command
@@ -110,7 +111,7 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 
 		// Prompt user for confirmation
 		if !opts.Yes {
-			if !promptYesNo(fmt.Sprintf("Auto-detected release version: %s. Continue? (yes/no): ", version)) {
+			if !prompt.Confirm(fmt.Sprintf("Auto-detected release version: %s. Continue? (yes/no): ", version)) {
 				log.Info("If you want to cherry-pick to a different release, use the --release flag. Exiting...")
 				return
 			}
@@ -221,26 +222,6 @@ func cherryPickToRelease(commitSHAs []string, branchSuffix, version, prTitle str
 
 	log.Infof("PR created successfully: %s", prURL)
 	return prURL, nil
-}
-
-// promptYesNo prompts the user with a yes/no question and returns true for yes, false for no
-func promptYesNo(prompt string) bool {
-	reader := bufio.NewReader(os.Stdin)
-	for {
-		fmt.Print(prompt)
-		response, err := reader.ReadString('\n')
-		if err != nil {
-			log.Fatalf("Failed to read input: %v", err)
-		}
-		response = strings.TrimSpace(strings.ToLower(response))
-		if response == "yes" || response == "y" || response == "" {
-			return true
-		}
-		if response == "no" || response == "n" {
-			return false
-		}
-		fmt.Println("Please enter 'yes' or 'no'")
-	}
 }
 
 // getCurrentBranch returns the name of the current git branch

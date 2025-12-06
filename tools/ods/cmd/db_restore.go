@@ -12,6 +12,7 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/postgres"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
 )
 
 // DBRestoreOptions holds options for the db restore command.
@@ -103,9 +104,9 @@ func runDBRestore(input string, opts *DBRestoreOptions) {
 
 	// Confirmation prompt
 	if !opts.Yes {
-		prompt := fmt.Sprintf("This will restore '%s' to database '%s'. Existing data may be overwritten. Continue? (yes/no): ",
+		msg := fmt.Sprintf("This will restore '%s' to database '%s'. Existing data may be overwritten. Continue? (yes/no): ",
 			filepath.Base(inputPath), config.Database)
-		if !promptConfirm(prompt) {
+		if !prompt.Confirm(msg) {
 			log.Info("Aborted.")
 			return
 		}
