@@ -8,6 +8,7 @@ import SvgOnyxOctagon from "@/icons/onyx-octagon";
 import SvgSearch from "@/icons/search";
 import { IconProps } from "@/icons";
 import Text from "@/refresh-components/texts/Text";
+import Image from "next/image";
 
 interface IconConfig {
   Icon: React.FunctionComponent<IconProps>;
@@ -54,14 +55,15 @@ export default function CustomAgentAvatar({
   if (src) {
     return (
       <div
-        className="aspect-square rounded-full overflow-hidden"
+        className="aspect-square rounded-full overflow-hidden relative"
         style={{ height: size, width: size }}
       >
-        <img
-          alt={name}
+        <Image
+          alt={name || "Agent avatar"}
           src={src}
-          loading="lazy"
-          className="h-full w-full object-cover object-center"
+          fill
+          className="object-cover object-center"
+          sizes={`${size}px`}
         />
       </div>
     );
