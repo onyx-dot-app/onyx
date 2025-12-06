@@ -27,9 +27,8 @@ import {
   TabsContent,
 } from "@/refresh-components/tabs/tabs";
 import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
-import { createMCPServer } from "@/lib/tools/edit";
 import { MCPServerStatus, MCPServerWithStatus } from "@/lib/tools/types";
-import { updateMCPServerStatus } from "@/lib/tools/mcpService";
+import { updateMCPServerStatus, upsertMCPServer } from "@/lib/tools/mcpService";
 import Message from "@/refresh-components/messages/Message";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { SvgArrowExchange } from "@opal/icons";
@@ -231,7 +230,7 @@ export default function MCPAuthenticationModal({
 
     try {
       const { data: serverResult, error: serverError } =
-        await createMCPServer(serverData);
+        await upsertMCPServer(serverData);
 
       if (serverError || !serverResult) {
         throw new Error(serverError || "Failed to save server configuration");
@@ -270,7 +269,7 @@ export default function MCPAuthenticationModal({
 
       // Step 1: Save the authentication configuration to the MCP server
       const { data: serverResult, error: serverError } =
-        await createMCPServer(serverData);
+        await upsertMCPServer(serverData);
 
       if (serverError || !serverResult) {
         throw new Error(serverError || "Failed to save server configuration");

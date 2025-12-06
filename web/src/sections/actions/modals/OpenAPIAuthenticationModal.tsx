@@ -15,7 +15,7 @@ import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import KeyValueInput, {
   KeyValue,
 } from "@/refresh-components/inputs/InputKeyValue";
-import { OAuthConfig } from "@/lib/tools/interfaces";
+import { OAuthConfig } from "@/lib/tools/types";
 import { getOAuthConfig } from "@/lib/oauth/api";
 import { SvgArrowExchange } from "@opal/icons";
 import { useAuthType } from "@/lib/hooks";

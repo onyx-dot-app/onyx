@@ -2,6 +2,7 @@ from typing import cast
 from uuid import UUID
 
 from sqlalchemy import and_
+from sqlalchemy import delete
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
@@ -330,3 +331,15 @@ def delete_user_connection_configs_for_server(
         db_session.delete(config)
 
     db_session.commit()
+
+
+def delete_all_user_connection_configs_for_server(
+    server_id: int, db_session: Session
+) -> None:
+    """Delete all user connection configs for a specific MCP server (excluding admin config)"""
+    db_session.execute(
+        delete(MCPConnectionConfig).where(
+            MCPConnectionConfig.mcp_server_id == server_id
+        )
+    )
+    db_session.flush()  # Don't commit yet, let caller decide when to commit
