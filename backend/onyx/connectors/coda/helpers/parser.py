@@ -1,4 +1,3 @@
-from datetime import datetime
 from datetime import timezone
 from typing import Any
 
@@ -32,17 +31,17 @@ class CodaParser:
     """
 
     @staticmethod
-    def parse_timestamp(timestamp_str: str) -> datetime:
+    def parse_timestamp(timestamp_str: str) -> float:
         """Robustly parse ISO 8601 timestamps to UTC.
 
         Args:
             timestamp_str: ISO 8601 formatted timestamp string
 
         Returns:
-            datetime: Parsed timestamp in UTC timezone
+            float: Parsed timestamp as unix timestamp
         """
         dt = date_parser.isoparse(timestamp_str)
-        return dt.astimezone(timezone.utc)
+        return dt.astimezone(timezone.utc).timestamp()
 
     @staticmethod
     def get_page_path(page: CodaPage, page_map: dict[str, CodaPage]) -> str:

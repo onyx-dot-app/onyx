@@ -104,6 +104,22 @@ class CodaAPIClient:
                     timeout=_CODA_CALL_TIMEOUT,
                     **kwargs,
                 )
+            elif method.upper() == "PUT":
+                res = requests.put(
+                    url,
+                    headers=self.headers,
+                    params=params,
+                    timeout=_CODA_CALL_TIMEOUT,
+                    **kwargs,
+                )
+            # elif method.upper() == "DELETE":
+            #     res = requests.delete(
+            #         url,
+            #         headers=self.headers,
+            #         params=params,
+            #         timeout=_CODA_CALL_TIMEOUT,
+            #         **kwargs,
+            #     )
             else:
                 raise ValueError(f"Unsupported HTTP method: {method}")
 
@@ -270,6 +286,57 @@ class CodaAPIClient:
 
         return self._make_request("POST", f"/docs/{doc_id}/pages", json=body)
 
+    def update_page(
+        self,
+        doc_id: str,
+        page_id: str,
+        name: str | None = None,
+        subtitle: str | None = None,
+        icon_name: str | None = None,
+        image_url: str | None = None,
+        content_html: str | None = None,
+        content_markdown: str | None = None,
+    ) -> dict[str, Any]:
+        """Update an existing page.
+
+        Args:
+            doc_id: ID of the doc
+            page_id: ID of the page to update
+            name: New name
+            subtitle: New subtitle
+            icon_name: New icon name
+            image_url: New image URL
+            content_html: New HTML content
+            content_markdown: New Markdown content
+
+        Returns:
+            dict with 'requestId' and 'id'
+        """
+        logger.debug(f"Updating page '{page_id}' in doc '{doc_id}'")
+
+        body: dict[str, Any] = {}
+        if name:
+            body["name"] = name
+        if subtitle:
+            body["subtitle"] = subtitle
+        if icon_name:
+            body["iconName"] = icon_name
+        if image_url:
+            body["imageUrl"] = image_url
+
+        body["contentUpdate"] = {}
+        if content_html:
+            canvas_content: dict[str, Any] = {}
+            canvas_content["format"] = "html"
+            canvas_content["content"] = content_html
+
+            body["contentUpdate"]["canvasContent"] = canvas_content
+            body["contentUpdate"]["insertionMode"] = "append"
+
+        logger.debug(f"Updating page '{page_id}' in doc '{doc_id}' with body: {body}")
+
+        return self._make_request("PUT", f"/docs/{doc_id}/pages/{page_id}", json=body)
+
     def fetch_tables(
         self, doc_id: str, page_token: str | None = None
     ) -> dict[str, Any]:
@@ -355,6 +422,50 @@ class CodaAPIClient:
                 break
 
         return all_rows
+
+    def upsert_rows(
+        self,
+        doc_id: str,
+        table_id: str,
+        rows: list[dict[str, Any]],
+        key_columns: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Insert or update rows in a table.
+
+        Args:
+            doc_id: ID of the doc
+            table_id: ID of the table
+            rows: List of rows to upsert. Each row is a dict of {column_id: value}
+                  or a dict with 'cells' key matching Coda API format.
+            key_columns: Optional list of column IDs to use as keys for upserting
+
+        Returns:
+            dict with 'requestId'
+        """
+        logger.debug(
+            f"Upserting {len(rows)} rows to table '{table_id}' in doc '{doc_id}'"
+        )
+
+        formatted_rows = []
+        for row in rows:
+            # If row is already in Coda format (has 'cells'), use it
+            if "cells" in row:
+                formatted_rows.append(row)
+                continue
+
+            # Otherwise convert simple dict {col: val} to Coda format
+            cells = []
+            for col, val in row.items():
+                cells.append({"column": col, "value": val})
+            formatted_rows.append({"cells": cells})
+
+        body = {"rows": formatted_rows}
+        if key_columns:
+            body["keyColumns"] = key_columns
+
+        return self._make_request(
+            "POST", f"/docs/{doc_id}/tables/{table_id}/rows", json=body
+        )
 
     def export_page_content(
         self, doc_id: str, page_id: str, output_format: str = "markdown"

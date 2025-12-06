@@ -1,4 +1,6 @@
 from collections.abc import Generator
+from datetime import datetime
+from datetime import timezone
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.coda.api.client import CodaAPIClient
@@ -114,7 +116,12 @@ class CodaDocumentGenerator:
                 source=DocumentSource.CODA,
                 semantic_identifier=page_title,
                 doc_updated_at=(
-                    self.parser.parse_timestamp(page.updatedAt.replace("Z", "+00:00"))
+                    datetime.fromtimestamp(
+                        self.parser.parse_timestamp(
+                            page.updatedAt.replace("Z", "+00:00")
+                        ),
+                        tz=timezone.utc,
+                    )
                     if page.updatedAt
                     else None
                 ),
@@ -176,8 +183,11 @@ class CodaDocumentGenerator:
                     sections=sections,
                     source=DocumentSource.CODA,
                     semantic_identifier=f"{doc.name} - {table.name}",
-                    doc_updated_at=self.parser.parse_timestamp(
-                        doc.updatedAt.replace("Z", "+00:00")
+                    doc_updated_at=datetime.fromtimestamp(
+                        self.parser.parse_timestamp(
+                            doc.updatedAt.replace("Z", "+00:00")
+                        ),
+                        tz=timezone.utc,
                     ),
                     metadata=metadata,
                     primary_owners=primary_owners,
@@ -253,8 +263,13 @@ class CodaDocumentGenerator:
 
             doc_updated_at = self.parser.parse_timestamp(doc.updatedAt)
 
+            logger.debug(
+                f"Processing doc: {doc.name} updated at {doc_updated_at} {start} {end}"
+            )
+
             # Skip docs outside time window
-            if doc_updated_at.timestamp() < start or doc_updated_at.timestamp() > end:
+            if doc_updated_at < start - 20000 or doc_updated_at > end + 20000:
+                logger.debug(f"Skipping doc: {doc.name} updated at {doc_updated_at}")
                 continue
 
             logger.info(f"Processing updated doc: {doc.name}")
@@ -269,21 +284,30 @@ class CodaDocumentGenerator:
                 if not page.updatedAt:
                     continue
                 page_updated_at = self.parser.parse_timestamp(page.updatedAt)
-                if start < page_updated_at.timestamp() < end:
+
+                logger.debug(
+                    f"Processing page: {page.name} updated at {page_updated_at} {start} {end}"
+                )
+                if start - 20000 < page_updated_at < end + 20000:
                     updated_pages.append(page)
 
             if updated_pages:
-                # Generate documents from updated pages
                 yield from self.generate_page_documents(doc, updated_pages, page_map)
 
             # Process tables for updated docs if enabled
             # Since tables don't have individual timestamps, we re-index all tables
             # for any doc that has been updated
             if include_tables:
+                all_updated_pages_ids = {p.id for p in updated_pages}
                 all_tables = self.client.fetch_all_tables(doc.id)
 
-                if all_tables:
-                    yield from self.generate_table_documents(doc, all_tables)
+                updated_tables = []
+                for table in all_tables:
+                    if table.parent and table.parent.id in all_updated_pages_ids:
+                        updated_tables.append(table)
+
+                if updated_tables:
+                    yield from self.generate_table_documents(doc, updated_tables)
 
     def generate_all_slim_documents(
         self, doc_ids: set[str] | None = None, include_tables: bool = True
