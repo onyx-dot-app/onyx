@@ -56,6 +56,15 @@ class WellKnownLLMProviderDescriptor(BaseModel):
 
 
 OPENAI_PROVIDER_NAME = "openai"
+# Curated list of OpenAI models to show by default in the UI
+OPENAI_VISIBLE_MODEL_NAMES = {
+    "gpt-5",
+    "gpt-5-mini",
+    "o1",
+    "o3-mini",
+    "gpt-4o",
+    "gpt-4o-mini",
+}
 
 BEDROCK_PROVIDER_NAME = "bedrock"
 BEDROCK_DEFAULT_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0"
@@ -125,6 +134,14 @@ _IGNORABLE_ANTHROPIC_MODELS = {
     "claude-instant-1",
     "anthropic/claude-3-5-sonnet-20241022",
 }
+# Curated list of Anthropic models to show by default in the UI
+ANTHROPIC_VISIBLE_MODEL_NAMES = {
+    "claude-opus-4-5-20251101",
+    "claude-sonnet-4-5-20250929",
+    "claude-sonnet-4-5",
+    "claude-haiku-4-5",
+    "claude-3-7-sonnet-latest",
+}
 
 AZURE_PROVIDER_NAME = "azure"
 
@@ -134,6 +151,12 @@ VERTEX_CREDENTIALS_FILE_KWARG = "vertex_credentials"
 VERTEX_LOCATION_KWARG = "vertex_location"
 VERTEXAI_DEFAULT_MODEL = "gemini-2.5-flash"
 VERTEXAI_DEFAULT_FAST_MODEL = "gemini-2.5-flash-lite"
+# Curated list of Vertex AI models to show by default in the UI
+VERTEXAI_VISIBLE_MODEL_NAMES = {
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-pro",
+}
 
 
 def _get_provider_to_models_map() -> dict[str, list[str]]:
@@ -468,6 +491,16 @@ def get_provider_display_name(provider_name: str) -> str:
     )
 
 
+def _get_visible_models_for_provider(provider_name: str) -> set[str]:
+    """Get the set of models that should be visible by default for a provider."""
+    _PROVIDER_TO_VISIBLE_MODELS: dict[str, set[str]] = {
+        OPENAI_PROVIDER_NAME: OPENAI_VISIBLE_MODEL_NAMES,
+        ANTHROPIC_PROVIDER_NAME: ANTHROPIC_VISIBLE_MODEL_NAMES,
+        VERTEXAI_PROVIDER_NAME: VERTEXAI_VISIBLE_MODEL_NAMES,
+    }
+    return _PROVIDER_TO_VISIBLE_MODELS.get(provider_name, set())
+
+
 def fetch_model_configurations_for_provider(
     provider_name: str,
 ) -> list[ModelConfigurationView]:
@@ -475,11 +508,13 @@ def fetch_model_configurations_for_provider(
 
     Looks up max_input_tokens from LiteLLM's model_cost. If not found, stores None
     and the runtime will use the fallback (4096).
+
+    Models in the curated visible lists (OPENAI_VISIBLE_MODEL_NAMES, etc.) are
+    marked as is_visible=True by default.
     """
     from onyx.llm.utils import get_max_input_tokens
 
-    # No models are marked visible by default - the default model logic
-    # in the frontend/backend will handle making default models visible.
+    visible_models = _get_visible_models_for_provider(provider_name)
     configs = []
     for model_name in fetch_models_for_provider(provider_name):
         max_input_tokens = get_max_input_tokens(
@@ -490,7 +525,7 @@ def fetch_model_configurations_for_provider(
         configs.append(
             ModelConfigurationView(
                 name=model_name,
-                is_visible=False,
+                is_visible=model_name in visible_models,
                 max_input_tokens=max_input_tokens,
                 supports_image_input=model_supports_image_input(
                     model_name=model_name,
