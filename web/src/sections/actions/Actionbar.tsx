@@ -43,7 +43,7 @@ const Actionbar: React.FC<ActionbarProps> = ({
             onChange={handleSearchChange}
             leftSearchIcon
             showClearButton
-            className="w-full bg-transparent border-none"
+            className="w-full !bg-transparent !border-transparent [&:is(:hover,:active,:focus,:focus-within)]:!bg-background-neutral-00 [&:is(:hover,:active,:focus,:focus-within)]:!border-border-01 [&:is(:focus,:focus-within)]:!shadow-none"
           />
         </div>
       ) : (

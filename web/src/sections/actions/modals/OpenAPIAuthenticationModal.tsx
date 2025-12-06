@@ -328,6 +328,7 @@ export default function OpenAPIAuthenticationModal({
             setFieldError,
             isSubmitting,
             isValid,
+            dirty,
           }) => (
             <Form className="flex flex-col h-full">
               <Modal.Body className="flex-1 overflow-y-auto max-h-[580px] p-2 bg-background-tint-01 w-full">
@@ -652,7 +653,9 @@ export default function OpenAPIAuthenticationModal({
                   main
                   primary
                   type="submit"
-                  disabled={!isValid || isSubmitting || shouldDisableForm}
+                  disabled={
+                    !isValid || isSubmitting || shouldDisableForm || !dirty
+                  }
                 >
                   {isSubmitting ? "Connecting..." : "Connect"}
                 </Button>

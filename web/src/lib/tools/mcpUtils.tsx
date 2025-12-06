@@ -8,11 +8,12 @@ import { SvgServer } from "@opal/icons";
  * Get an appropriate icon for an MCP server based on its URL and name.
  * Leverages the existing SOURCE_METADATA_MAP for connector icons.
  */
-export function getMCPServerIcon(
-  server: Pick<MCPServer, "server_url" | "name">
+export function getActionIcon(
+  serverUrl: string,
+  serverName: string
 ): React.FunctionComponent<IconProps> {
-  const url = server.server_url.toLowerCase();
-  const name = server.name.toLowerCase();
+  const url = serverUrl.toLowerCase();
+  const name = serverName.toLowerCase();
 
   for (const [sourceKey, metadata] of Object.entries(SOURCE_METADATA_MAP)) {
     const keyword = sourceKey.toLowerCase();

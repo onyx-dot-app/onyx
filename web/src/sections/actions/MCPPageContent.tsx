@@ -4,7 +4,7 @@ import React, { useState, useCallback, useMemo, useEffect } from "react";
 import useSWR, { KeyedMutator } from "swr";
 import MCPActionCard from "@/sections/actions/MCPActionCard";
 import Actionbar from "@/sections/actions/Actionbar";
-import { getMCPServerIcon } from "@/lib/tools/mcpUtils";
+import { getActionIcon } from "@/lib/tools/mcpUtils";
 import {
   ActionStatus,
   MCPServerStatus,
@@ -530,7 +530,7 @@ export default function MCPPageContent() {
               server={server}
               title={server.name}
               description={server.description || server.server_url}
-              logo={getMCPServerIcon(server)}
+              logo={getActionIcon(server.server_url, server.name)}
               status={status}
               toolCount={server.tool_count}
               initialExpanded={server.id === serverToExpand}

@@ -143,7 +143,7 @@ export default function AddMCPServerModal({
           validationSchema={validationSchema}
           onSubmit={handleSubmit}
         >
-          {({ values, errors, touched, handleChange, handleBlur }) => (
+          {({ values, errors, touched, handleChange, handleBlur, dirty }) => (
             <Form className="gap-0">
               <Modal.Header
                 icon={SvgServer}
@@ -313,7 +313,7 @@ export default function AddMCPServerModal({
                 >
                   Cancel
                 </Button>
-                <Button primary type="submit" disabled={isSubmitting}>
+                <Button primary type="submit" disabled={isSubmitting || !dirty}>
                   {isSubmitting
                     ? isEditMode
                       ? "Saving..."
