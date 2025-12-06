@@ -112,14 +112,14 @@ class CodaAPIClient:
                     timeout=_CODA_CALL_TIMEOUT,
                     **kwargs,
                 )
-            # elif method.upper() == "DELETE":
-            #     res = requests.delete(
-            #         url,
-            #         headers=self.headers,
-            #         params=params,
-            #         timeout=_CODA_CALL_TIMEOUT,
-            #         **kwargs,
-            #     )
+            elif method.upper() == "DELETE":
+                res = requests.delete(
+                    url,
+                    headers=self.headers,
+                    params=params,
+                    timeout=_CODA_CALL_TIMEOUT,
+                    **kwargs,
+                )
             else:
                 raise ValueError(f"Unsupported HTTP method: {method}")
 

@@ -15,9 +15,6 @@ from onyx.connectors.coda.models.table import CodaTableReference
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
-from onyx.utils.logger import setup_logger
-
-logger = setup_logger()
 
 
 class CodaParser:
@@ -194,7 +191,6 @@ class CodaParser:
             if current_text:
                 text = "".join(current_text).strip()
                 if text and len(text) > 5 and text is not None:
-                    logger.debug(f"Adding text section: {text}")
                     sections.append(TextSection(text=text, link=None))
                 current_text.clear()
 
