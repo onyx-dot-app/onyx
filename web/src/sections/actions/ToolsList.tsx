@@ -28,6 +28,9 @@ interface ToolsListProps {
   // Content
   children?: React.ReactNode;
 
+  // Left action (for refresh button and last verified text)
+  leftAction?: React.ReactNode;
+
   // Styling
   className?: string;
 }
@@ -44,6 +47,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
   emptyMessage = "No tools available",
   emptySearchMessage = "No tools found",
   children,
+  leftAction,
   className,
 }) => {
   const hasRetried = useRef(false);
@@ -87,27 +91,37 @@ const ToolsList: React.FC<ToolsListProps> = ({
       {/* Footer showing enabled tool count with filter toggle */}
       {showFooter && !isEmpty && !isFetching && (
         <FadeDiv>
-          <div className="flex items-center gap-1">
-            <Text mainUiBody className="text-action-link-05">
-              {enabledCount}
-            </Text>
-            <Text text03 mainUiBody>
-              of {totalCount} tool{totalCount !== 1 ? "s" : ""} enabled
-            </Text>
-            {onToggleShowOnlyEnabled && (
-              <IconButton
-                icon={SvgEye}
-                internal
-                onClick={onToggleShowOnlyEnabled}
-                className={showOnlyEnabled ? "bg-background-tint-02" : ""}
-                tooltip={
-                  showOnlyEnabled ? "Show all tools" : "Show only enabled"
-                }
-                aria-label={
-                  showOnlyEnabled ? "Show all tools" : "Show only enabled tools"
-                }
-              />
+          <div className="flex items-center justify-between gap-2 w-full">
+            {/* Left action area */}
+            {leftAction && (
+              <div className="flex items-center">{leftAction}</div>
             )}
+
+            {/* Right action area */}
+            <div className="flex items-center gap-1 ml-auto">
+              <Text mainUiBody className="text-action-link-05">
+                {enabledCount}
+              </Text>
+              <Text text03 mainUiBody>
+                of {totalCount} tool{totalCount !== 1 ? "s" : ""} enabled
+              </Text>
+              {onToggleShowOnlyEnabled && (
+                <IconButton
+                  icon={SvgEye}
+                  internal
+                  onClick={onToggleShowOnlyEnabled}
+                  className={showOnlyEnabled ? "bg-background-tint-02" : ""}
+                  tooltip={
+                    showOnlyEnabled ? "Show all tools" : "Show only enabled"
+                  }
+                  aria-label={
+                    showOnlyEnabled
+                      ? "Show all tools"
+                      : "Show only enabled tools"
+                  }
+                />
+              )}
+            </div>
           </div>
         </FadeDiv>
       )}

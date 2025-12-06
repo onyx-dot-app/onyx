@@ -8,9 +8,10 @@ import { getMCPServerIcon } from "@/lib/tools/mcpUtils";
 import {
   ActionStatus,
   MCPServerStatus,
-  MCPServerWithStatus,
+  MCPServer,
+  MCPServersResponse,
+  ToolSnapshot,
 } from "@/lib/tools/types";
-import { MCPServersResponse, ToolSnapshot } from "@/lib/tools/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
@@ -47,12 +48,10 @@ export default function MCPPageContent() {
   const { popup, setPopup } = usePopup();
 
   // Local state
-  const [selectedServer, setSelectedServer] =
-    useState<MCPServerWithStatus | null>(null);
+  const [selectedServer, setSelectedServer] = useState<MCPServer | null>(null);
   const [serverToDisconnect, setServerToDisconnect] =
-    useState<MCPServerWithStatus | null>(null);
-  const [serverToManage, setServerToManage] =
-    useState<MCPServerWithStatus | null>(null);
+    useState<MCPServer | null>(null);
+  const [serverToManage, setServerToManage] = useState<MCPServer | null>(null);
   const [serverToExpand, setServerToExpand] = useState<number | null>(null);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [showSharedOverlay, setShowSharedOverlay] = useState(false);
@@ -62,7 +61,7 @@ export default function MCPPageContent() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const mcpServers = useMemo(
-    () => (mcpData?.mcp_servers || []) as MCPServerWithStatus[],
+    () => (mcpData?.mcp_servers || []) as MCPServer[],
     [mcpData?.mcp_servers]
   );
   const isLoading = isMcpLoading;
@@ -146,7 +145,7 @@ export default function MCPPageContent() {
 
   // Determine action status based on server status field
   const getActionStatusForServer = useCallback(
-    (server: MCPServerWithStatus): ActionStatus => {
+    (server: MCPServer): ActionStatus => {
       if (server.status === MCPServerStatus.CONNECTED) {
         return ActionStatus.CONNECTED;
       } else if (
@@ -452,7 +451,7 @@ export default function MCPPageContent() {
   );
 
   const onServerCreated = useCallback(
-    (server: MCPServerWithStatus) => {
+    (server: MCPServer) => {
       setSelectedServer(server);
       authModal.toggle(true);
     },

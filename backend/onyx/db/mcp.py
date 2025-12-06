@@ -1,3 +1,4 @@
+import datetime
 from typing import cast
 from uuid import UUID
 
@@ -125,6 +126,7 @@ def update_mcp_server__no_commit(
     auth_performer: MCPAuthenticationPerformer | None = None,
     transport: MCPTransport | None = None,
     status: MCPServerStatus | None = None,
+    last_refreshed_at: datetime.datetime | None = None,
 ) -> MCPServer:
     """Update an existing MCP server"""
     server = get_mcp_server_by_id(server_id, db_session)
@@ -145,6 +147,8 @@ def update_mcp_server__no_commit(
         server.transport = transport
     if status is not None:
         server.status = status
+    if last_refreshed_at is not None:
+        server.last_refreshed_at = last_refreshed_at
 
     db_session.flush()  # Don't commit yet, let caller decide when to commit
     return server
