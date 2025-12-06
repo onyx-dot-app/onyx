@@ -79,6 +79,38 @@ class LLMRateLimitError(Exception):
     """
 
 
+def _convert_tools_to_responses_api_format(tools: list[dict]) -> list[dict]:
+    """Convert tools from Chat Completions API format to Responses API format.
+
+    Chat Completions API format:
+    {"type": "function", "function": {"name": "...", "description": "...", "parameters": {...}}}
+
+    Responses API format:
+    {"type": "function", "name": "...", "description": "...", "parameters": {...}}
+    """
+    converted_tools = []
+    for tool in tools:
+        if tool.get("type") == "function" and "function" in tool:
+            func = tool["function"]
+            name = func.get("name")
+            if not name:
+                logger.warning("Skipping tool with missing name in function definition")
+                continue
+            converted_tool = {
+                "type": "function",
+                "name": name,
+                "description": func.get("description", ""),
+                "parameters": func.get("parameters", {}),
+            }
+            if "strict" in func:
+                converted_tool["strict"] = func["strict"]
+            converted_tools.append(converted_tool)
+        else:
+            # If already in correct format or unknown format, pass through
+            converted_tools.append(tool)
+    return converted_tools
+
+
 def _base_msg_to_role(msg: BaseMessage) -> str:
     if isinstance(msg, HumanMessage) or isinstance(msg, HumanMessageChunk):
         return "user"
@@ -481,13 +513,21 @@ class LitellmLLM(LLM):
         )
 
         # Needed to get reasoning tokens from the model
-        if not is_legacy_langchain and (
+        use_responses_api = not is_legacy_langchain and (
             is_true_openai_model(self.config.model_provider, self.config.model_name)
             or self.config.model_provider == AZURE_PROVIDER_NAME
-        ):
+        )
+        if use_responses_api:
             model_provider = f"{self.config.model_provider}/responses"
         else:
             model_provider = self.config.model_provider
+
+        # Convert tools to Responses API format if using that API
+        processed_tools = (
+            _convert_tools_to_responses_api_format(tools)
+            if use_responses_api and tools
+            else tools
+        )
 
         try:
             return litellm.completion(
@@ -503,14 +543,19 @@ class LitellmLLM(LLM):
                 custom_llm_provider=self._custom_llm_provider or None,
                 # actual input
                 messages=processed_prompt,
-                tools=tools,
+                tools=processed_tools,
                 tool_choice=tool_choice_formatted,
                 # streaming choice
                 stream=stream,
                 # model params
                 temperature=(1 if is_reasoning else self._temperature),
                 timeout=timeout_override or self._timeout,
-                **({"stream_options": {"include_usage": True}} if stream else {}),
+                # stream_options is not supported by the Responses API
+                **(
+                    {"stream_options": {"include_usage": True}}
+                    if stream and not use_responses_api
+                    else {}
+                ),
                 # For now, we don't support parallel tool calls
                 # NOTE: we can't pass this in if tools are not specified
                 # or else OpenAI throws an error
