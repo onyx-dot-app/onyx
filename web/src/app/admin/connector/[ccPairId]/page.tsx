@@ -25,6 +25,7 @@ import {
 } from "./ConfigDisplay";
 import DeletionErrorStatus from "./DeletionErrorStatus";
 import { IndexAttemptsTable } from "./IndexAttemptsTable";
+import { InlineFileManagement } from "./InlineFileManagement";
 
 import { buildCCPairInfoUrl, triggerIndexing } from "./lib";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -652,7 +653,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
                 <Text className="text-sm text-text-default">
                   {ccPair.last_permission_sync_attempt_finished
                     ? timeAgo(ccPair.last_permission_sync_attempt_finished)
-                    : timeAgo(ccPair.last_full_permission_sync) ?? "-"}
+                    : (timeAgo(ccPair.last_full_permission_sync) ?? "-")}
                 </Text>
               </div>
             </>
@@ -691,6 +692,17 @@ function Main({ ccPairId }: { ccPairId: number }) {
                   ccPair.connector.source
                 )}
               />
+
+              {/* Inline file management for file connectors */}
+              {ccPair.connector.source === "file" &&
+                ccPair.is_editable_for_current_user && (
+                  <div className="mt-6">
+                    <InlineFileManagement
+                      connectorId={ccPair.connector.id}
+                      onRefresh={refresh}
+                    />
+                  </div>
+                )}
             </Card>
           </>
         )}

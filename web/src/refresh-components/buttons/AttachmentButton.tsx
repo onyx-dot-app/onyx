@@ -22,8 +22,7 @@ const iconClassNames = {
   processing: ["stroke-text-01"],
 } as const;
 
-interface AttachmentProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+interface AttachmentProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   selected?: boolean;
   processing?: boolean;
 
