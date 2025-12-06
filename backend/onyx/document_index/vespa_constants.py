@@ -26,9 +26,9 @@ DOCUMENT_ID_ENDPOINT = (
 
 SEARCH_ENDPOINT = f"{VESPA_APP_CONTAINER_URL}/search/"
 
-NUM_THREADS = (
-    32  # since Vespa doesn't allow batching of inserts / updates, we use threads
-)
+# Since Vespa doesn't allow batching of inserts / updates, we use threads to
+# parallelize the operations.
+NUM_THREADS = 32
 MAX_ID_SEARCH_QUERY_SIZE = 400
 # Suspect that adding too many "or" conditions will cause Vespa to timeout and return
 # an empty list of hits (with no error status and coverage: 0 and degraded)
@@ -37,7 +37,9 @@ MAX_OR_CONDITIONS = 10
 # in the long term, we are looking to improve the performance of Vespa
 # so that we can bring this back to default
 VESPA_TIMEOUT = "10s"
-BATCH_SIZE = 128  # Specific to Vespa
+# The size of the batch to use for batched operations like inserts / updates.
+# The batch will likely be sent to a threadpool of size NUM_THREADS.
+BATCH_SIZE = 128
 
 TENANT_ID = "tenant_id"
 DOCUMENT_ID = "document_id"
