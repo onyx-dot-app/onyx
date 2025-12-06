@@ -13,6 +13,7 @@ from onyx.context.search.models import BasicChunkRequest
 from onyx.context.search.models import ChunkContext
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import RetrievalDetails
+from onyx.file_store.models import FileDescriptor
 from onyx.server.manage.models import StandardAnswer
 
 
@@ -56,6 +57,8 @@ class BasicCreateChatMessageRequest(ChunkContext):
 
     # If True, uses agentic search instead of basic search
     use_agentic_search: bool = False
+    # Optional file descriptors for file attachments
+    file_descriptors: list[FileDescriptor] | None = None
 
     @model_validator(mode="after")
     def validate_chat_session_or_persona(self) -> "BasicCreateChatMessageRequest":
@@ -78,6 +81,8 @@ class BasicCreateChatMessageWithHistoryRequest(ChunkContext):
     structured_response_format: dict | None = None
     # If True, uses agentic search instead of basic search
     use_agentic_search: bool = False
+    # Optional file descriptors for file attachments
+    file_descriptors: list[FileDescriptor] | None = None
 
 
 class SimpleDoc(BaseModel):

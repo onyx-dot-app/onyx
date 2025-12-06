@@ -92,7 +92,7 @@ def handle_simplified_chat_message(
         chat_session_id=chat_session_id,
         parent_message_id=parent_message.id,
         message=chat_message_req.message,
-        file_descriptors=[],
+        file_descriptors=chat_message_req.file_descriptors or [],
         search_doc_ids=chat_message_req.search_doc_ids,
         retrieval_options=retrieval_options,
         # Simple API does not support reranking, hide complexity from user
@@ -211,7 +211,7 @@ def handle_send_message_simple_with_history(
         chat_session_id=chat_session.id,
         parent_message_id=chat_message.id,
         message=query,
-        file_descriptors=[],
+        file_descriptors=req.file_descriptors or [],
         search_doc_ids=req.search_doc_ids,
         retrieval_options=retrieval_options,
         # Simple API does not support reranking, hide complexity from user
