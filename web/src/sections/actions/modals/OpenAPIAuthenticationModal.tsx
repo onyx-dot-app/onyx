@@ -346,7 +346,7 @@ export default function OpenAPIAuthenticationModal({
                   </div>
                 ) : (
                   <>
-                    <div className="flex flex-col gap-4 p-2">
+                    <div className="flex flex-col gap-4 px-2 pt-2">
                       <FormField
                         name="authMethod"
                         state={
@@ -552,37 +552,23 @@ export default function OpenAPIAuthenticationModal({
                             }}
                           />
                         </FormField>
-
-                        <div className="flex flex-col gap-3 rounded-12 bg-background-tint-01 p-3">
+                        <div className="flex flex-col">
                           <Text text03 secondaryBody>
                             OAuth passthrough is only available if you enable
                             OIDC or OAuth authentication.
                           </Text>
-                          <div className="flex flex-col gap-2 w-full">
-                            <Text
-                              text03
-                              secondaryBody
-                              className="flex flex-wrap gap-1"
-                            >
-                              Use{" "}
-                              <span className="font-secondary-action">
-                                redirect URI
-                              </span>
-                              :
+                          <div className="flex items-center gap-1">
+                            <Text text03 secondaryBody>
+                              Use redirect URI:
                             </Text>
-                            <div className="flex items-center gap-2 rounded-08 border border-border-01 bg-background-tint-00 px-3 py-2">
-                              <Text
-                                text04
-                                className="font-mono text-[12px] leading-[16px] truncate flex-1"
-                              >
-                                {redirectUri}
-                              </Text>
-                              <CopyIconButton
-                                getCopyText={() => redirectUri}
-                                tooltip="Copy redirect URI"
-                                internal
-                              />
-                            </div>
+                            <Text text04 secondaryMono>
+                              {redirectUri}
+                            </Text>
+                            <CopyIconButton
+                              getCopyText={() => redirectUri}
+                              tooltip="Copy redirect URI"
+                              internal
+                            />
                           </div>
                         </div>
                       </section>
@@ -645,7 +631,7 @@ export default function OpenAPIAuthenticationModal({
 
               <Modal.Footer className="p-4 gap-2 bg-background-tint-00">
                 <Button main tertiary type="button" onClick={handleSkip}>
-                  Skip for Now
+                  Cancel
                 </Button>
                 <Button
                   main
@@ -653,11 +639,7 @@ export default function OpenAPIAuthenticationModal({
                   type="submit"
                   disabled={!isValid || isSubmitting || shouldDisableForm}
                 >
-                  {isSubmitting
-                    ? "Saving..."
-                    : isEditMode
-                      ? "Save Changes"
-                      : "Save & Connect"}
+                  {isSubmitting ? "Connecting..." : "Connect"}
                 </Button>
               </Modal.Footer>
             </Form>
