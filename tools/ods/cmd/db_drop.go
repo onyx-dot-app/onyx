@@ -107,6 +107,12 @@ func runDBDrop(opts *DBDropOptions) {
 		maintenanceDB := "template1"
 
 		// Terminate existing connections
+		// Validate database name to prevent SQL injection
+		if !validIdentifier.MatchString(config.Database) {
+			log.Fatalf("Invalid database name: %s", config.Database)
+		}
+
+		// Terminate existing connections
 		terminateSQL := fmt.Sprintf(
 			"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '%s' AND pid <> pg_backend_pid();",
 			config.Database)
