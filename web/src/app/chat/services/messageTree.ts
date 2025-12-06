@@ -495,22 +495,23 @@ export const buildImmediateMessages = (
   initialUserNode: Message;
   initialAssistantNode: Message;
 } => {
-  // Always create a new user node with a new nodeId.
-  // For edits (messageToResend exists), we use the new message content (userInput)
-  // but create a fresh node. The backend will create the actual message.
-  const initialUserNode = buildEmptyMessage({
-    messageType: "user",
-    parentNodeId,
-    message: userInput,
-    files: messageToResend?.files || files,
-  });
+  const initialUserNode = messageToResend
+    ? { ...messageToResend } // clone the message to avoid mutating the original
+    : buildEmptyMessage({
+        messageType: "user",
+        parentNodeId,
+        message: userInput,
+        files,
+      });
   const initialAssistantNode = buildEmptyMessage({
     messageType: "assistant",
     parentNodeId: initialUserNode.nodeId,
     nodeIdOffset: 1,
   });
 
-  initialUserNode.childrenNodeIds = [initialAssistantNode.nodeId];
+  initialUserNode.childrenNodeIds = initialUserNode.childrenNodeIds
+    ? [...initialUserNode.childrenNodeIds, initialAssistantNode.nodeId]
+    : [initialAssistantNode.nodeId];
   initialUserNode.latestChildNodeId = initialAssistantNode.nodeId;
 
   return {
