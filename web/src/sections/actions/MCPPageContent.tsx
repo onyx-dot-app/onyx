@@ -557,14 +557,6 @@ export default function MCPPageContent() {
             mcpServer={selectedServer}
             skipOverlay
             setPopup={setPopup}
-            mutateMcpServers={async () => {
-              await mutateMcpServers();
-            }}
-            onSuccess={async () => {
-              await mutateMcpServers();
-              authModal.toggle(false);
-              setSelectedServer(null);
-            }}
           />
         </authModal.Provider>
 

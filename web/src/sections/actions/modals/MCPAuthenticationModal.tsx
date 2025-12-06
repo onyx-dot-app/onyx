@@ -38,9 +38,7 @@ import { AuthType } from "@/lib/constants";
 interface MCPAuthenticationModalProps {
   mcpServer: MCPServerWithStatus | null;
   skipOverlay?: boolean;
-  onSuccess?: () => Promise<void>;
   setPopup?: (spec: PopupSpec) => void;
-  mutateMcpServers?: () => Promise<void>;
 }
 
 interface MCPAuthTemplate {
@@ -104,9 +102,7 @@ const validationSchema = Yup.object().shape({
 export default function MCPAuthenticationModal({
   mcpServer,
   skipOverlay = false,
-  onSuccess,
   setPopup,
-  mutateMcpServers,
 }: MCPAuthenticationModalProps) {
   const { isOpen, toggle } = useModal();
   const [activeAuthTab, setActiveAuthTab] = useState<"per-user" | "admin">(
@@ -220,42 +216,6 @@ export default function MCPAuthenticationModal({
           : undefined,
       existing_server_id: mcpServer.id,
     };
-  };
-
-  const handleSaveConfigsOnly = async (values: MCPAuthFormValues) => {
-    const serverData = constructServerData(values);
-    if (!serverData) return;
-
-    setIsSubmitting(true);
-
-    try {
-      const { data: serverResult, error: serverError } =
-        await upsertMCPServer(serverData);
-
-      if (serverError || !serverResult) {
-        throw new Error(serverError || "Failed to save server configuration");
-      }
-
-      setPopup?.({
-        message: "Authentication configuration saved successfully",
-        type: "success",
-      });
-
-      await mutateMcpServers?.();
-      await onSuccess?.();
-      toggle(false);
-    } catch (error) {
-      console.error("Error saving authentication config:", error);
-      setPopup?.({
-        message:
-          error instanceof Error
-            ? error.message
-            : "Failed to save configuration",
-        type: "error",
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
   };
 
   const handleSubmit = async (values: MCPAuthFormValues) => {
@@ -682,24 +642,17 @@ export default function MCPAuthenticationModal({
                   type="button"
                   onClick={() => toggle(false)}
                 >
-                  Skip for Now
-                </Button>
-                <Button
-                  main
-                  secondary
-                  type="button"
-                  onClick={() => handleSaveConfigsOnly(values)}
-                  disabled={!isValid || isSubmitting || isEditConfigsFlow}
-                >
-                  Save Configs Only
+                  Cancel
                 </Button>
                 <Button
                   main
                   primary
                   type="submit"
-                  disabled={!isValid || isSubmitting}
+                  disabled={
+                    !isValid || isSubmitting || (isEditConfigsFlow && !dirty)
+                  }
                 >
-                  {isSubmitting ? "Saving..." : "Save & Connect"}
+                  {isSubmitting ? "Connecting..." : "Connect"}
                 </Button>
               </Modal.Footer>
             </Form>
