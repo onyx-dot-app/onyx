@@ -71,6 +71,15 @@ class BraintrustTracingProcessor(TracingProcessor):
     def on_trace_start(self, trace: Trace) -> None:
         trace_meta = trace.export() or {}
         metadata = trace_meta.get("metadata") or {}
+        if isinstance(metadata, dict):
+            metadata = dict(metadata)
+        else:
+            metadata = {"metadata": metadata}
+
+        group_id = trace_meta.get("group_id")
+        if group_id:
+            metadata.setdefault("group_id", group_id)
+            metadata.setdefault("session_id", group_id)
 
         current_context = braintrust.current_span()
         if current_context != NOOP_SPAN:

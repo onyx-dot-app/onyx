@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from collections.abc import Sequence
 from typing import Any
 from typing import cast
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -790,8 +791,20 @@ def run_llm_loop(
     token_counter: Callable[[str], int],
     db_session: Session,
     forced_tool_id: int | None = None,
+    chat_session_id: UUID | None = None,
+    user_id: UUID | None = None,
 ) -> None:
-    with trace("run_llm_loop", metadata={"tenant_id": get_current_tenant_id()}):
+    trace_metadata: dict[str, Any] = {"tenant_id": get_current_tenant_id()}
+    if chat_session_id:
+        trace_metadata["chat_session_id"] = str(chat_session_id)
+    if user_id:
+        trace_metadata["user_id"] = str(user_id)
+
+    with trace(
+        "run_llm_loop",
+        group_id=str(chat_session_id) if chat_session_id else None,
+        metadata=trace_metadata,
+    ):
         # Fix some LiteLLM issues,
         from onyx.llm.litellm_singleton.config import (
             initialize_litellm,

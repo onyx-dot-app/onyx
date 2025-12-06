@@ -505,6 +505,8 @@ def stream_chat_message_objects(
             forced_tool_id=(
                 new_msg_req.forced_tool_ids[0] if new_msg_req.forced_tool_ids else None
             ),
+            chat_session_id=chat_session_id,
+            user_id=user_id,
         )
 
         # Determine if stopped by user

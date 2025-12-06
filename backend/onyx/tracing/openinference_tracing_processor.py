@@ -11,6 +11,9 @@ from typing import Any
 from typing import Optional
 from typing import Union
 
+from langfuse._client.attributes import create_generation_attributes
+from langfuse._client.attributes import create_span_attributes
+from langfuse._client.attributes import create_trace_attributes
 from openinference.instrumentation import safe_json_dumps
 from openinference.semconv.trace import MessageAttributes
 from openinference.semconv.trace import MessageContentAttributes
@@ -56,6 +59,7 @@ class OpenInferenceTracingProcessor(TracingProcessor):
         self._reverse_handoffs_dict: OrderedDict[str, str] = OrderedDict()
         self._first_input: dict[str, Any] = {}
         self._last_output: dict[str, Any] = {}
+        self._trace_context: dict[str, dict[str, Any]] = {}
 
     def on_trace_start(self, trace: Trace) -> None:
         """Called when a trace is started.
@@ -63,12 +67,28 @@ class OpenInferenceTracingProcessor(TracingProcessor):
         Args:
             trace: The trace that started.
         """
+        metadata, group_id, session_id, user_id = _extract_trace_context(trace)
+        metadata_with_group = _augment_metadata_with_group(metadata, group_id)
+        self._trace_context[trace.trace_id] = {
+            "metadata": metadata_with_group or {},
+            "group_id": group_id,
+            "session_id": session_id,
+            "user_id": user_id,
+        }
         otel_span = self._tracer.start_span(
             name=trace.name,
             attributes={
                 OPENINFERENCE_SPAN_KIND: OpenInferenceSpanKindValues.AGENT.value,
             },
         )
+        trace_attrs = create_trace_attributes(
+            name=trace.name,
+            user_id=user_id,
+            session_id=session_id,
+            metadata=metadata_with_group,
+        )
+        if trace_attrs:
+            otel_span.set_attributes(trace_attrs)
         self._root_spans[trace.trace_id] = otel_span
 
     def on_trace_end(self, trace: Trace) -> None:
@@ -77,6 +97,12 @@ class OpenInferenceTracingProcessor(TracingProcessor):
         Args:
             trace: The trace that started.
         """
+        trace_context = self._trace_context.pop(trace.trace_id, {})
+        metadata = trace_context.get("metadata") or {}
+        group_id = trace_context.get("group_id")
+        session_id = trace_context.get("session_id") or group_id
+        user_id = trace_context.get("user_id")
+
         if root_span := self._root_spans.pop(trace.trace_id, None):
             # Get the first input and last output for this specific trace
             trace_first_input = self._first_input.pop(trace.trace_id, None)
@@ -103,6 +129,16 @@ class OpenInferenceTracingProcessor(TracingProcessor):
                     # Fallback to string if JSON serialization fails
                     root_span.set_attribute(OUTPUT_VALUE, str(trace_last_output))
 
+            trace_attrs = create_trace_attributes(
+                name=trace.name,
+                user_id=user_id,
+                session_id=session_id,
+                input=trace_first_input,
+                output=trace_last_output,
+                metadata=metadata or None,
+            )
+            if trace_attrs:
+                root_span.set_attributes(trace_attrs)
             root_span.set_status(Status(StatusCode.OK))
             root_span.end()
         else:
@@ -165,6 +201,8 @@ class OpenInferenceTracingProcessor(TracingProcessor):
             if parent_node := self._reverse_handoffs_dict.pop(key, None):
                 otel_span.set_attribute(GRAPH_NODE_PARENT_ID, parent_node)
 
+        self._apply_langfuse_attributes(otel_span, span)
+
         end_time: Optional[int] = None
         if span.ended_at:
             try:
@@ -192,6 +230,42 @@ class OpenInferenceTracingProcessor(TracingProcessor):
         if output is not None:
             self._last_output[trace_id] = output
 
+    def _apply_langfuse_attributes(self, otel_span: OtelSpan, span: Span[Any]) -> None:
+        attributes: dict[str, Any] = {}
+        data = span.span_data
+
+        if isinstance(data, GenerationSpanData):
+            attributes = create_generation_attributes(
+                input=data.input,
+                output=data.output,
+                model=data.model,
+                model_parameters=data.model_config,
+                usage_details=_build_usage_details(data.usage),
+            )
+        elif isinstance(data, FunctionSpanData):
+            attributes = create_span_attributes(
+                input=data.input,
+                output=data.output,
+                metadata=data.mcp_data,
+                observation_type="tool",
+            )
+        elif isinstance(data, AgentSpanData):
+            metadata: dict[str, Any] = {}
+            if data.tools is not None:
+                metadata["tools"] = data.tools
+            if data.handoffs is not None:
+                metadata["handoffs"] = data.handoffs
+            if data.output_type is not None:
+                metadata["output_type"] = data.output_type
+
+            attributes = create_span_attributes(
+                metadata=metadata or None,
+                observation_type="agent",
+            )
+
+        if attributes:
+            otel_span.set_attributes(attributes)
+
     def force_flush(self) -> None:
         """Forces an immediate flush of all queued spans/traces."""
         # TODO
@@ -199,6 +273,90 @@ class OpenInferenceTracingProcessor(TracingProcessor):
     def shutdown(self) -> None:
         """Called when the application stops."""
         # TODO
+
+
+def _stringify(value: Any) -> str | None:
+    if value is None:
+        return None
+    try:
+        return str(value)
+    except Exception:
+        return None
+
+
+def _normalize_metadata(metadata: Any) -> dict[str, Any]:
+    if isinstance(metadata, dict):
+        return dict(metadata)
+    if metadata is None:
+        return {}
+    return {"metadata": metadata}
+
+
+def _augment_metadata_with_group(
+    metadata: dict[str, Any], group_id: str | None
+) -> dict[str, Any] | None:
+    if not metadata and not group_id:
+        return None
+    combined = dict(metadata)
+    if group_id:
+        combined.setdefault("group_id", group_id)
+        combined.setdefault("session_id", group_id)
+    return combined
+
+
+def _extract_trace_context(
+    trace: Trace,
+) -> tuple[dict[str, Any], str | None, str | None, str | None]:
+    trace_export = trace.export() or {}
+    metadata = _normalize_metadata(trace_export.get("metadata"))
+    group_id = _stringify(trace_export.get("group_id"))
+    user_id = _stringify(metadata.get("user_id"))
+    session_id = _stringify(
+        metadata.get("session_id") or metadata.get("chat_session_id") or group_id
+    )
+    return metadata, group_id, session_id, user_id
+
+
+def _build_usage_details(
+    usage: Optional[Mapping[str, Any]],
+) -> dict[str, int] | None:
+    if not usage:
+        return None
+
+    def _as_int(value: Any) -> int | None:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    details: dict[str, int] = {}
+
+    def maybe_set(target: str, keys: list[str]) -> None:
+        for key in keys:
+            val = usage.get(key)
+            if val is None:
+                continue
+            int_val = _as_int(val)
+            if int_val is not None:
+                details[target] = int_val
+                return
+
+    maybe_set("prompt_tokens", ["prompt_tokens", "input_tokens"])
+    maybe_set("completion_tokens", ["completion_tokens", "output_tokens"])
+    maybe_set("total_tokens", ["total_tokens"])
+    if (
+        "total_tokens" not in details
+        and "prompt_tokens" in details
+        and "completion_tokens" in details
+    ):
+        details["total_tokens"] = (
+            details["prompt_tokens"] + details["completion_tokens"]
+        )
+
+    maybe_set("cache_read_input_tokens", ["cache_read_input_tokens"])
+    maybe_set("cache_creation_input_tokens", ["cache_creation_input_tokens"])
+
+    return details or None
 
 
 def _as_utc_nano(dt: datetime) -> int:
