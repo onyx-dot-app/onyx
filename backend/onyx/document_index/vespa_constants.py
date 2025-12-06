@@ -3,7 +3,6 @@ from onyx.configs.app_configs import VESPA_CONFIG_SERVER_HOST
 from onyx.configs.app_configs import VESPA_HOST
 from onyx.configs.app_configs import VESPA_PORT
 from onyx.configs.app_configs import VESPA_TENANT_PORT
-from onyx.configs.constants import SOURCE_TYPE
 
 # config server
 
@@ -74,32 +73,3 @@ IMAGE_FILE_NAME = "image_file_name"
 
 # Specific to Vespa, needed for highlighting matching keywords / section
 CONTENT_SUMMARY = "content_summary"
-
-
-YQL_BASE = (
-    f"select "
-    f"documentid, "
-    f"{DOCUMENT_ID}, "
-    f"{CHUNK_ID}, "
-    f"{BLURB}, "
-    f"{CONTENT}, "
-    f"{SOURCE_TYPE}, "
-    f"{SOURCE_LINKS}, "
-    f"{SEMANTIC_IDENTIFIER}, "
-    f"{TITLE}, "
-    f"{SECTION_CONTINUATION}, "
-    f"{IMAGE_FILE_NAME}, "
-    f"{BOOST}, "
-    f"{AGGREGATED_CHUNK_BOOST_FACTOR}, "
-    f"{HIDDEN}, "
-    f"{DOC_UPDATED_AT}, "
-    f"{PRIMARY_OWNERS}, "
-    f"{SECONDARY_OWNERS}, "
-    f"{LARGE_CHUNK_REFERENCE_IDS}, "
-    f"{METADATA}, "
-    f"{METADATA_SUFFIX}, "
-    f"{DOC_SUMMARY}, "
-    f"{CHUNK_CONTEXT}, "
-    f"{CONTENT_SUMMARY} "
-    f"from {{index_name}} where "
-)
