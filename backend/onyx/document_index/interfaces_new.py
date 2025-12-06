@@ -1,6 +1,4 @@
 import abc
-from collections.abc import Iterator
-from typing import Any
 
 from pydantic import BaseModel
 
@@ -22,13 +20,17 @@ from onyx.db.enums import EmbeddingPrecision
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from shared_configs.model_server_models import Embedding
 
-# NOTE: "Document" in the naming convention is used to refer to the entire document as represented in Onyx.
-# What is actually stored in the index is the document chunks. By the terminology of most search engines / vector
-# databases, the individual objects stored are called documents, but in this case it refers to a chunk.
+# NOTE: "Document" in the naming convention is used to refer to the entire
+# document as represented in Onyx. What is actually stored in the index is the
+# document chunks. By the terminology of most search engines / vector databases,
+# the individual objects stored are called documents, but in this case it refers
+# to a chunk.
 
-# Outside of searching and update capabilities, the document index must also implement the ability to port all of
-# the documents over to a secondary index. This allows for embedding models to be updated and for porting documents
-# to happen in the background while the primary index still serves the main traffic.
+# Outside of searching and update capabilities, the document index must also
+# implement the ability to port all of the documents over to a secondary index.
+# This allows for embedding models to be updated and for porting documents to
+# happen in the background while the primary index still serves the main
+# traffic.
 
 
 __all__ = [
@@ -52,7 +54,7 @@ __all__ = [
 
 class DocumentInsertionRecord(BaseModel):
     """
-    Result of indexing a document
+    Result of indexing a document.
     """
 
     model_config = {"frozen": True}
@@ -62,10 +64,11 @@ class DocumentInsertionRecord(BaseModel):
 
 
 class DocumentSectionRequest(BaseModel):
-    """
-    Request for a document section or whole document
-    If no min_chunk_ind is provided it should start at the beginning of the document
-    If no max_chunk_ind is provided it should go to the end of the document
+    """Request for a document section or whole document.
+
+    If no min_chunk_ind is provided it should start at the beginning of the
+    document.
+    If no max_chunk_ind is provided it should go to the end of the document.
     """
 
     model_config = {"frozen": True}
@@ -77,24 +80,37 @@ class DocumentSectionRequest(BaseModel):
 
 class IndexingMetadata(BaseModel):
     """
-    Information about chunk counts for efficient cleaning / updating of document chunks. A common pattern to ensure
-    that no chunks are left over is to delete all of the chunks for a document and then re-index the document. This
-    information allows us to only delete the extra "tail" chunks when the document has gotten shorter.
+    Information about chunk counts for efficient cleaning / updating of document
+    chunks.
+
+    A common pattern to ensure that no chunks are left over is to delete all of
+    the chunks for a document and then re-index the document. This information
+    allows us to only delete the extra "tail" chunks when the document has
+    gotten shorter.
     """
 
-    # The tuple is (old_chunk_cnt, new_chunk_cnt)
-    doc_id_to_chunk_cnt_diff: dict[str, tuple[int, int]]
+    class ChunkCounts(BaseModel):
+        model_config = {"frozen": True}
+
+        old_chunk_cnt: int
+        new_chunk_cnt: int
+
+    model_config = {"frozen": True}
+
+    doc_id_to_chunk_cnt_diff: dict[str, ChunkCounts]
 
 
 class MetadataUpdateRequest(BaseModel):
     """
-    Updates to the documents that can happen without there being an update to the contents of the document.
+    Updates to the documents that can happen without there being an update to
+    the contents of the document.
     """
 
     document_ids: list[str]
-    # Passed in to help with potential optimizations of the implementation
+    # Passed in to help with potential optimizations of the implementation. The
+    # keys should be redundant with document_ids.
     doc_id_to_chunk_cnt: dict[str, int]
-    # For the ones that are None, there is no update required to that field
+    # For the ones that are None, there is no update required to that field.
     access: DocumentAccess | None = None
     document_sets: set[str] | None = None
     boost: float | None = None
@@ -109,17 +125,6 @@ class SchemaVerifiable(abc.ABC):
     necessary attributes for indexing, querying, filtering, and fields to return from search are
     all valid in the schema.
     """
-
-    def __init__(
-        self,
-        index_name: str,
-        tenant_id: int | None,
-        *args: Any,
-        **kwargs: Any,
-    ) -> None:
-        super().__init__(*args, **kwargs)
-        self.index_name = index_name
-        self.tenant_id = tenant_id
 
     @abc.abstractmethod
     def verify_and_create_index_if_necessary(
@@ -141,34 +146,40 @@ class SchemaVerifiable(abc.ABC):
 
 class Indexable(abc.ABC):
     """
-    Class must implement the ability to index document chunks
+    Class must implement the ability to index document chunks.
     """
 
     @abc.abstractmethod
     def index(
         self,
-        chunks: Iterator[DocMetadataAwareIndexChunk],
+        chunks: list[DocMetadataAwareIndexChunk],
         indexing_metadata: IndexingMetadata,
-    ) -> set[DocumentInsertionRecord]:
+    ) -> list[DocumentInsertionRecord]:
         """
-        Takes a list of document chunks and indexes them in the document index. This is often a batch operation
-        including chunks from multiple documents.
+        Takes a list of document chunks and indexes them in the document index.
 
-        NOTE: When a document is reindexed/updated here and has gotten shorter, it is important to delete the extra
-        chunks at the end to ensure there are no stale chunks in the index.
+        This is often a batch operation including chunks from multiple
+        documents.
 
-        NOTE: The chunks of a document are never separated into separate index() calls. So there is
-        no worry of receiving the first 0 through n chunks in one index call and the next n through
-        m chunks of a document in the next index call.
+        NOTE: When a document is reindexed/updated here and has gotten shorter,
+        it is important to delete the extra chunks at the end to ensure there
+        are no stale chunks in the index. The implementation should do this.
 
-        Parameters:
-        - chunks: Document chunks with all of the information needed for indexing to the document index.
-        - indexing_metadata: Information about chunk counts for efficient cleaning / updating
+        NOTE: The chunks of a document are never separated into separate index()
+        calls. So there is no worry of receiving the first 0 through n chunks in
+        one index call and the next n through m chunks of a document in the next
+        index call.
+
+        Args:
+            chunks: Document chunks with all of the information needed for
+                indexing to the document index.
+            indexing_metadata: Information about chunk counts for efficient
+                cleaning / updating.
 
         Returns:
-            List of document ids which map to unique documents and are used for deduping chunks
-            when updating, as well as if the document is newly indexed or already existed and
-            just updated
+            List of document ids which map to unique documents and are used for
+            deduping chunks when updating, as well as if the document is newly
+            indexed or already existed and just updated.
         """
         raise NotImplementedError
 
@@ -183,7 +194,6 @@ class Deletable(abc.ABC):
     def delete(
         self,
         db_doc_id: str,
-        *,
         # Passed in in case it helps the efficiency of the delete implementation
         chunk_count: int | None,
     ) -> int:
@@ -321,10 +331,10 @@ class DocumentIndex(
     abc.ABC,
 ):
     """
-    A valid document index that can plug into all Onyx flows must implement all of these
-    functionalities.
+    A valid document index that can plug into all Onyx flows must implement all
+    of these functionalities.
 
-    As a high level summary, document indices need to be able to
+    As a high-level summary, document indices need to be able to:
     - Verify the schema definition is valid
     - Index new documents
     - Update specific attributes of existing documents
