@@ -1,3 +1,4 @@
+import re
 from typing import Any
 from typing import TYPE_CHECKING
 
@@ -9,6 +10,75 @@ from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import litellm_thinks_model_supports_image_input
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.manage.llm.utils import is_reasoning_model
+
+
+def _is_obsolete_model(model_name: str, provider: str) -> bool:
+    """Check if a model is obsolete and should be filtered out.
+
+    Filters models that are 2+ major versions behind or deprecated.
+    """
+    model_lower = model_name.lower()
+
+    # OpenAI obsolete models
+    if provider == "openai":
+        # GPT-3 (not 3.5) is obsolete
+        if "gpt-3" in model_lower and "gpt-3.5" not in model_lower:
+            return True
+        # Legacy models
+        if any(
+            m in model_lower
+            for m in [
+                "text-davinci",
+                "text-curie",
+                "text-babbage",
+                "text-ada",
+                "davinci",
+                "curie",
+                "babbage",
+                "ada",
+            ]
+        ):
+            return True
+
+    # Anthropic obsolete models
+    if provider == "anthropic":
+        if "claude-2" in model_lower or "claude-instant" in model_lower:
+            return True
+
+    # Vertex AI obsolete models
+    if provider == "vertex_ai":
+        if "gemini-1.0" in model_lower:
+            return True
+        if "palm" in model_lower or "bison" in model_lower:
+            return True
+
+    return False
+
+
+def _extract_base_model_name(model: str) -> str | None:
+    """Extract base model name by removing date suffixes.
+
+    Returns None if no date suffix was found.
+    """
+    patterns = [
+        r"-\d{8}$",  # -20250929
+        r"-\d{4}-\d{2}-\d{2}$",  # -2024-08-06
+        r"@\d{8}$",  # @20250219
+    ]
+    for pattern in patterns:
+        if re.search(pattern, model):
+            return re.sub(pattern, "", model)
+    return None
+
+
+def _should_filter_as_dated_duplicate(
+    model_name: str, all_model_names: set[str]
+) -> bool:
+    """Check if this model is a dated variant and a non-dated version exists."""
+    base = _extract_base_model_name(model_name)
+    if base and base in all_model_names:
+        return True
+    return False
 
 
 if TYPE_CHECKING:
@@ -66,6 +136,25 @@ class LLMProviderDescriptor(BaseModel):
         from onyx.llm.llm_provider_options import get_provider_display_name
 
         provider = llm_provider_model.provider
+
+        # Get all model names for deduplication check
+        all_model_names = {mc.name for mc in llm_provider_model.model_configurations}
+
+        # Filter out obsolete and duplicate models
+        filtered_configs = []
+        for model_configuration in llm_provider_model.model_configurations:
+            # Skip obsolete models
+            if _is_obsolete_model(model_configuration.name, provider):
+                continue
+            # Skip dated duplicates when non-dated version exists
+            if _should_filter_as_dated_duplicate(
+                model_configuration.name, all_model_names
+            ):
+                continue
+            filtered_configs.append(
+                ModelConfigurationView.from_model(model_configuration, provider)
+            )
+
         return cls(
             name=llm_provider_model.name,
             provider=provider,
@@ -75,12 +164,7 @@ class LLMProviderDescriptor(BaseModel):
             is_default_provider=llm_provider_model.is_default_provider,
             is_default_vision_provider=llm_provider_model.is_default_vision_provider,
             default_vision_model=llm_provider_model.default_vision_model,
-            model_configurations=list(
-                ModelConfigurationView.from_model(
-                    model_configuration, llm_provider_model.provider
-                )
-                for model_configuration in llm_provider_model.model_configurations
-            ),
+            model_configurations=filtered_configs,
         )
 
 
@@ -138,10 +222,30 @@ class LLMProviderView(LLMProvider):
         except Exception:
             personas = []
 
+        provider = llm_provider_model.provider
+
+        # Get all model names for deduplication check
+        all_model_names = {mc.name for mc in llm_provider_model.model_configurations}
+
+        # Filter out obsolete and duplicate models
+        filtered_configs = []
+        for model_configuration in llm_provider_model.model_configurations:
+            # Skip obsolete models
+            if _is_obsolete_model(model_configuration.name, provider):
+                continue
+            # Skip dated duplicates when non-dated version exists
+            if _should_filter_as_dated_duplicate(
+                model_configuration.name, all_model_names
+            ):
+                continue
+            filtered_configs.append(
+                ModelConfigurationView.from_model(model_configuration, provider)
+            )
+
         return cls(
             id=llm_provider_model.id,
             name=llm_provider_model.name,
-            provider=llm_provider_model.provider,
+            provider=provider,
             api_key=llm_provider_model.api_key,
             api_base=llm_provider_model.api_base,
             api_version=llm_provider_model.api_version,
@@ -155,12 +259,7 @@ class LLMProviderView(LLMProvider):
             groups=groups,
             personas=personas,
             deployment_name=llm_provider_model.deployment_name,
-            model_configurations=list(
-                ModelConfigurationView.from_model(
-                    model_configuration, llm_provider_model.provider
-                )
-                for model_configuration in llm_provider_model.model_configurations
-            ),
+            model_configurations=filtered_configs,
         )
 
 
