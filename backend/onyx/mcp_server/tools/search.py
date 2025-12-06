@@ -3,17 +3,17 @@
 from datetime import datetime
 from typing import Any
 
-from onyx.configs.constants import DocumentSource
-from onyx.context.search.enums import LLMEvaluationType
-from onyx.context.search.enums import SearchType
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import RetrievalDetails
 from onyx.mcp_server.api import mcp_server
+from onyx.mcp_server.models import DocumentSearchRequest
+from onyx.mcp_server.models import DocumentSource
+from onyx.mcp_server.models import IndexFilters
+from onyx.mcp_server.models import LLMEvaluationType
+from onyx.mcp_server.models import RetrievalDetails
+from onyx.mcp_server.models import SearchType
 from onyx.mcp_server.utils import get_api_server_url
 from onyx.mcp_server.utils import get_http_client
 from onyx.mcp_server.utils import get_indexed_sources
 from onyx.mcp_server.utils import require_access_token
-from onyx.server.query_and_chat.models import DocumentSearchRequest
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
