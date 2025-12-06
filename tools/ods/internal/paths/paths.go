@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // GitRoot returns the root directory of the current git repository.
@@ -26,12 +28,19 @@ func DataDir() string {
 	if runtime.GOOS == "windows" {
 		base = os.Getenv("LOCALAPPDATA")
 		if base == "" {
-			base = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local")
+			base = os.Getenv("USERPROFILE")
+			if base == "" {
+				log.Fatalf("Cannot determine data directory: LOCALAPPDATA and USERPROFILE are not set")
+			}
+			base = filepath.Join(base, "AppData", "Local")
 		}
 	} else {
 		base = os.Getenv("XDG_DATA_HOME")
 		if base == "" {
-			home, _ := os.UserHomeDir()
+			home, err := os.UserHomeDir()
+			if err != nil || home == "" {
+				log.Fatalf("Cannot determine data directory: XDG_DATA_HOME not set and home directory unknown: %v", err)
+			}
 			base = filepath.Join(home, ".local", "share")
 		}
 	}
