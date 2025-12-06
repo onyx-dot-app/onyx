@@ -9,7 +9,6 @@ import SvgSearch from "@/icons/search";
 import { IconProps } from "@/icons";
 import Text from "@/refresh-components/texts/Text";
 import Image from "next/image";
-import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 
 interface IconConfig {
   Icon: React.FunctionComponent<IconProps>;
@@ -40,7 +39,7 @@ function SvgOctagonWrapper({ size, children }: SvgOctagonWrapperProps) {
 
 export interface CustomAgentAvatarProps {
   name?: string;
-  uploadedImageId?: string;
+  src?: string;
   iconName?: string;
 
   size?: number;
@@ -48,12 +47,12 @@ export interface CustomAgentAvatarProps {
 
 export default function CustomAgentAvatar({
   name,
-  uploadedImageId,
+  src,
   iconName,
 
   size = 18,
 }: CustomAgentAvatarProps) {
-  if (uploadedImageId) {
+  if (src) {
     return (
       <div
         className="aspect-square rounded-full overflow-hidden relative"
@@ -61,7 +60,7 @@ export default function CustomAgentAvatar({
       >
         <Image
           alt={name || "Agent avatar"}
-          src={buildImgUrl(uploadedImageId)}
+          src={src}
           fill
           className="object-cover object-center"
           sizes={`${size}px`}

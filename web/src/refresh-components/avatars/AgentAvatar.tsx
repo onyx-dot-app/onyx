@@ -38,7 +38,11 @@ export default function AgentAvatar({ agent, ...props }: AgentAvatarProps) {
   return (
     <CustomAgentAvatar
       name={agent.name}
-      uploadedImageId={agent.uploaded_image_id}
+      src={
+        agent.uploaded_image_id
+          ? buildImgUrl(agent.uploaded_image_id)
+          : undefined
+      }
       iconName={agent.icon_name}
       {...props}
     />
