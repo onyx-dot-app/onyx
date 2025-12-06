@@ -3683,6 +3683,7 @@ class MCPServer(Base):
         "MCPConnectionConfig",
         foreign_keys="MCPConnectionConfig.mcp_server_id",
         back_populates="mcp_server",
+        passive_deletes=True,
     )
     current_actions: Mapped[list["Tool"]] = relationship(
         "Tool", back_populates="mcp_server", cascade="all, delete-orphan"

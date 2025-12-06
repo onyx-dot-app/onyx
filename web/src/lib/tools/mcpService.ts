@@ -7,9 +7,13 @@ import {
   MCPServerCreateRequest,
   MCPServerUpdateRequest,
   MCPServerStatus,
+  ApiResponse,
 } from "@/lib/tools/types";
-import { ToolSnapshot } from "@/lib/tools/interfaces";
-
+import { ToolSnapshot } from "@/lib/tools/types";
+import {
+  MCPAuthenticationType,
+  MCPAuthenticationPerformer,
+} from "@/lib/tools/types";
 export interface ToolStatusUpdateRequest {
   tool_ids: number[];
   enabled: boolean;
@@ -159,5 +163,53 @@ export async function updateMCPServerStatus(
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(errorText || "Failed to update MCP server status");
+  }
+}
+
+interface UpsertMCPServerResponse {
+  server_id: number;
+  server_name: string;
+  server_url: string;
+  auth_type: string;
+  auth_performer: string;
+  is_authenticated: boolean;
+}
+
+export async function upsertMCPServer(serverData: {
+  name: string;
+  description?: string;
+  server_url: string;
+  transport: string;
+  auth_type: MCPAuthenticationType;
+  auth_performer: MCPAuthenticationPerformer;
+  api_token?: string;
+  oauth_client_id?: string;
+  oauth_client_secret?: string;
+  auth_template?: any;
+  admin_credentials?: Record<string, string>;
+  existing_server_id?: number;
+}): Promise<ApiResponse<UpsertMCPServerResponse>> {
+  try {
+    const response = await fetch("/api/admin/mcp/servers/create", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(serverData),
+    });
+
+    if (!response.ok) {
+      const errorDetail = (await response.json()).detail;
+      return {
+        data: null,
+        error: `Failed to create MCP server: ${errorDetail}`,
+      };
+    }
+
+    const result: UpsertMCPServerResponse = await response.json();
+    return { data: result, error: null };
+  } catch (error) {
+    console.error("Error creating MCP server:", error);
+    return { data: null, error: `Error creating MCP server: ${error}` };
   }
 }

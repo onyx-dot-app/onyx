@@ -16,7 +16,7 @@ import SvgArrowExchange from "@/icons/arrow-exchange";
 import KeyValueInput, {
   KeyValue,
 } from "@/refresh-components/inputs/InputKeyValue";
-import { OAuthConfig } from "@/lib/tools/interfaces";
+import { OAuthConfig } from "@/lib/tools/types";
 import { getOAuthConfig } from "@/lib/oauth/api";
 import { useAuthType } from "@/lib/hooks";
 import { AuthType } from "@/lib/constants";
