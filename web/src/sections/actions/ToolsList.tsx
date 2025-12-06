@@ -7,7 +7,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import FadeDiv from "@/components/FadeDiv";
 import ToolItemSkeleton from "@/sections/actions/skeleton/ToolItemSkeleton";
 import ToolsEnabledCount from "@/sections/actions/ToolsEnabledCount";
-import { SvgEye } from "@opal/icons";
+import { SvgEye, SvgXCircle } from "@opal/icons";
 
 interface ToolsListProps {
   // Loading state
@@ -19,6 +19,7 @@ interface ToolsListProps {
   enabledCount?: number;
   showOnlyEnabled?: boolean;
   onToggleShowOnlyEnabled?: () => void;
+  onDisableAllTools?: () => void;
 
   // Empty state of filtered tools
   isEmpty?: boolean;
@@ -43,6 +44,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
   enabledCount,
   showOnlyEnabled = false,
   onToggleShowOnlyEnabled,
+  onDisableAllTools,
   isEmpty = false,
   searchQuery,
   emptyMessage = "No tools available",
@@ -116,6 +118,15 @@ const ToolsList: React.FC<ToolsListProps> = ({
                       ? "Show all tools"
                       : "Show only enabled tools"
                   }
+                />
+              )}
+              {onDisableAllTools && (
+                <IconButton
+                  icon={SvgXCircle}
+                  internal
+                  onClick={onDisableAllTools}
+                  tooltip="Disable all tools"
+                  aria-label="Disable all tools"
                 />
               )}
             </div>

@@ -264,11 +264,6 @@ export default function MCPActionCard({
         enableSearch={true}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
-        onRefresh={() => onRefreshTools?.(serverId, mutate)}
-        onDisableAll={() => {
-          const toolIds = tools.map((tool) => parseInt(tool.id));
-          onDisableAllTools?.(serverId, toolIds, mutate);
-        }}
         onFold={handleFold}
         className={className}
         ariaLabel={`${title} MCP server card`}
@@ -280,6 +275,10 @@ export default function MCPActionCard({
           enabledCount={tools.filter((tool) => tool.isEnabled).length}
           showOnlyEnabled={showOnlyEnabled}
           onToggleShowOnlyEnabled={handleToggleShowOnlyEnabled}
+          onDisableAllTools={() => {
+            const toolIds = tools.map((tool) => parseInt(tool.id));
+            onDisableAllTools?.(serverId, toolIds, mutate);
+          }}
           isEmpty={filteredTools.length === 0}
           searchQuery={searchQuery}
           emptyMessage="No tools available"
