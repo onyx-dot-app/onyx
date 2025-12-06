@@ -176,6 +176,38 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
     }
 
 
+def _is_obsolete_openai_model(model: str) -> bool:
+    """Check if an OpenAI model is obsolete (2+ major versions behind).
+
+    Current major version: GPT-5
+    GPT-4 is 1 version behind (keep)
+    GPT-3.5 is 1.5 versions behind (keep for now)
+    GPT-3 is 2 versions behind (obsolete)
+    """
+    model_lower = model.lower()
+
+    # GPT-3 models (not 3.5) are obsolete
+    if "gpt-3" in model_lower and "gpt-3.5" not in model_lower:
+        return True
+
+    # Specific deprecated models
+    deprecated = {
+        "text-davinci-003",
+        "text-davinci-002",
+        "text-curie-001",
+        "text-babbage-001",
+        "text-ada-001",
+        "davinci",
+        "curie",
+        "babbage",
+        "ada",
+    }
+    if model_lower in deprecated:
+        return True
+
+    return False
+
+
 def get_openai_model_names() -> list[str]:
     """Get OpenAI model names dynamically from litellm."""
     import litellm
@@ -193,9 +225,29 @@ def get_openai_model_names() -> list[str]:
             and "moderation" not in model.lower()
             and "sora" not in model.lower()  # video generation
             and "container" not in model.lower()  # not a model
+            and not _is_obsolete_openai_model(model)  # filter obsolete models
         ],
         reverse=True,
     )
+
+
+def _is_obsolete_anthropic_model(model: str) -> bool:
+    """Check if an Anthropic model is obsolete (2+ major versions behind).
+
+    Current major version: Claude 4
+    Claude 3 is 1 version behind (keep)
+    Claude 2 is 2 versions behind (obsolete)
+    Claude 1 / instant is obsolete
+    """
+    model_lower = model.lower()
+
+    # Claude 2 and earlier are obsolete
+    if "claude-2" in model_lower:
+        return True
+    if "claude-instant" in model_lower:
+        return True
+
+    return False
 
 
 def get_anthropic_model_names() -> list[str]:
@@ -207,9 +259,35 @@ def get_anthropic_model_names() -> list[str]:
             model
             for model in litellm.anthropic_models
             if model not in _IGNORABLE_ANTHROPIC_MODELS
+            and not _is_obsolete_anthropic_model(model)
         ],
         reverse=True,
     )
+
+
+def _is_obsolete_vertexai_model(model: str) -> bool:
+    """Check if a Vertex AI model is obsolete (2+ major versions behind).
+
+    For Gemini models:
+    Current: Gemini 3 (preview) / Gemini 2.5 (stable)
+    Gemini 2.0 is ~0.5 versions behind (keep)
+    Gemini 1.5 is ~1 version behind (keep)
+    Gemini 1.0 is ~2 versions behind (obsolete)
+
+    For Claude on Vertex (keep all Claude 3+ models):
+    Claude 3 and above are kept, Claude 2 is obsolete
+    """
+    model_lower = model.lower()
+
+    # Gemini 1.0 models are obsolete
+    if "gemini-1.0" in model_lower:
+        return True
+
+    # Old palm/bison models are obsolete
+    if "palm" in model_lower or "bison" in model_lower:
+        return True
+
+    return False
 
 
 def get_vertexai_model_names() -> list[str]:
@@ -252,6 +330,7 @@ def get_vertexai_model_names() -> list[str]:
             and "/" not in model  # filter out prefixed models like openai/gpt-oss
             and "search_api" not in model.lower()  # not a model
             and "-maas" not in model.lower()  # marketplace models
+            and not _is_obsolete_vertexai_model(model)  # filter obsolete models
         ],
         reverse=True,
     )
