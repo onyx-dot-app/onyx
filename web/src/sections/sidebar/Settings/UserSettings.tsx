@@ -474,7 +474,6 @@ export default function UserSettings() {
                           )
                         : null
                     }
-                    requiresImageGeneration={false}
                     onSelect={(selected) => {
                       if (selected === null) {
                         handleChangedefaultModel(null);

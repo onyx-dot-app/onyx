@@ -29,8 +29,10 @@ export interface LLMSelectorProps {
   llmProviders: LLMProviderDescriptor[];
   currentLlm: string | null;
   onSelect: (value: string | null) => void;
+  requiresImageInput?: boolean;
   requiresImageGeneration?: boolean;
   excludePublicProviders?: boolean;
+  visibleModelsOnly?: boolean;
 }
 
 export default function LLMSelector({
@@ -38,8 +40,10 @@ export default function LLMSelector({
   llmProviders,
   currentLlm,
   onSelect,
+  requiresImageInput,
   requiresImageGeneration,
   excludePublicProviders = false,
+  visibleModelsOnly = true,
 }: LLMSelectorProps) {
   const currentDescriptor = useMemo(
     () => (currentLlm ? parseLlmDescriptor(currentLlm) : null),
@@ -61,7 +65,15 @@ export default function LLMSelector({
           (currentDescriptor?.provider === provider.provider ||
             currentDescriptor?.name === provider.name);
 
-        if (!modelConfiguration.is_visible && !matchesCurrentSelection) {
+        if (
+          visibleModelsOnly &&
+          !modelConfiguration.is_visible &&
+          !matchesCurrentSelection
+        ) {
+          return;
+        }
+
+        if (requiresImageInput && !modelConfiguration.supports_image_input) {
           return;
         }
 
@@ -70,14 +82,6 @@ export default function LLMSelector({
           return; // Skip exact duplicate
         }
         seenKeys.add(key);
-
-        const supportsImageInput =
-          modelConfiguration.supports_image_input || false;
-
-        // If the model does not support image input and we require image generation, skip it
-        if (requiresImageGeneration && !supportsImageInput) {
-          return;
-        }
 
         const option: LLMOption = {
           name: displayName,
@@ -92,7 +96,7 @@ export default function LLMSelector({
           provider: provider.provider,
           providerDisplayName:
             provider.provider_display_name || provider.provider,
-          supportsImageInput,
+          supportsImageInput: modelConfiguration.supports_image_input ?? false,
           vendor: modelConfiguration.vendor || null,
         };
 
@@ -106,7 +110,9 @@ export default function LLMSelector({
     currentDescriptor?.modelName,
     currentDescriptor?.provider,
     currentDescriptor?.name,
+    requiresImageInput,
     requiresImageGeneration,
+    visibleModelsOnly,
   ]);
 
   // Group options by provider using backend-provided display names

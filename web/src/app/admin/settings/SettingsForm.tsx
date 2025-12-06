@@ -415,6 +415,8 @@ export function SettingsForm() {
                   userSettings={false}
                   llmProviders={visionProviders}
                   currentLlm={visionLLM}
+                  requiresImageInput={true}
+                  visibleModelsOnly={false}
                   onSelect={(value) => setVisionLLM(value)}
                 />
                 <Button
