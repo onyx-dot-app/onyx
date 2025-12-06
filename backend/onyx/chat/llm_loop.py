@@ -1,5 +1,6 @@
 import json
 from collections.abc import Callable
+from typing import cast
 
 from sqlalchemy.orm import Session
 
@@ -581,6 +582,9 @@ def run_llm_loop(
                 except StopIteration as e:
                     llm_step_result, current_tool_call_index = e.value
                     break
+
+            # Type narrowing: generator always returns a result, so this can't be None
+            llm_step_result = cast(LlmStepResult, llm_step_result)
 
             # Save citation mapping after each LLM step for incremental state updates
             state_container.set_citation_mapping(citation_processor.citation_to_doc)
