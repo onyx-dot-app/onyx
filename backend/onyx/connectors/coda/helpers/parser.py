@@ -1,15 +1,15 @@
 from datetime import timezone
-from typing import Any
 
 from bs4 import BeautifulSoup
 from bs4 import NavigableString
 from bs4 import Tag
 from dateutil import parser as date_parser
 
+from onyx.connectors.coda.models.column import CodaColumn
 from onyx.connectors.coda.models.common import CodaObjectType
 from onyx.connectors.coda.models.doc import CodaDoc
 from onyx.connectors.coda.models.page import CodaPage
-from onyx.connectors.coda.models.table import CodaColumn
+from onyx.connectors.coda.models.table import CodaCellValue
 from onyx.connectors.coda.models.table import CodaRow
 from onyx.connectors.coda.models.table import CodaTableReference
 from onyx.connectors.models import BasicExpertInfo
@@ -67,39 +67,40 @@ class CodaParser:
         return " / ".join(reversed(path_parts))
 
     @staticmethod
-    def format_cell_value(value: Any) -> str:
+    def format_cell_value(cell_value: CodaCellValue, column: CodaColumn) -> str:
         """Format a cell value for markdown table display.
 
-        Handles various Coda value types:
-        - Dicts with "name" or "url" keys
-        - Lists (joined with commas)
-        - Booleans (rendered as ✓ or empty)
-        - Strings with special character escaping
+        Handles Scalar Values:
+        - String
+        - Number
+        - Boolean
 
         Args:
-            value: The cell value to format
+            cell_value: The cell value to format
+            column_name: The name of the column
 
         Returns:
             str: Formatted value safe for markdown table display
         """
-        if value is None or value == "":
-            return ""
+        formatted_cell_value = f"{column.id}: "
 
-        # Handle different value types
-        if isinstance(value, dict):
-            # Handle special Coda value types
-            if "name" in value:
-                return str(value["name"])
-            elif "url" in value:
-                return str(value["url"])
-            else:
-                return str(value)
-        elif isinstance(value, list):
-            return ", ".join(str(item) for item in value)
-        elif isinstance(value, bool):
-            return "✓" if value else ""
-        else:
-            return str(value).replace("|", "\\|").replace("\n", " ")
+        if isinstance(cell_value, list):
+            formatted_cell_value += ", ".join(
+                CodaParser.format_cell_value(item) for item in cell_value
+            )
+
+        if column.format.type == "boolean":
+            formatted_cell_value += str(cell_value) + " [boolean]"
+
+        if column.format.type == "number":
+            formatted_cell_value += str(cell_value) + " [number]"
+
+        if column.format.type == "text":
+            formatted_cell_value += (
+                cell_value.replace("|", "\\|").replace("\n", " ") + " [string]"
+            )
+
+        return formatted_cell_value
 
     @staticmethod
     def convert_table_to_text(
@@ -128,20 +129,16 @@ class CodaParser:
         if not rows:
             return f"{table.name}\n\nEmpty table - no data"
 
-        # Build column name to ID mapping for displayable columns only
-        col_id_to_name = {col.id: col.name for col in columns if col.display}
-
-        if not col_id_to_name:
-            return f"{table.name}\n\nNo displayable columns"
+        col_map = {col.id: col for col in columns if col.display}
 
         text_parts = [f"{table.name}\n"]
 
         # Data rows
         for row in rows:
             row_parts = []
-            for col_id, col_name in col_id_to_name.items():
+            for col_id, col_name in col_map.items():
                 value = row.values.get(col_id, "")
-                formatted_value = CodaParser.format_cell_value(value)
+                formatted_value = CodaParser.format_cell_value(value, col_map[col_id])
                 if formatted_value:
                     row_parts.append(f"{col_name}: {formatted_value}")
 
