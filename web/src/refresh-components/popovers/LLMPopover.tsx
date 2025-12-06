@@ -445,11 +445,17 @@ export default function LLMPopover({
                                     option.provider ===
                                       llmManager.currentLlm.provider;
 
-                                  // Build description with version info
+                                  // Build description with model capabilities
+                                  const capabilities: string[] = [];
+                                  if (option.supportsReasoning) {
+                                    capabilities.push("Reasoning");
+                                  }
+                                  if (option.supportsImageInput) {
+                                    capabilities.push("Vision");
+                                  }
                                   const description =
-                                    option.version &&
-                                    option.version !== "latest"
-                                      ? option.version
+                                    capabilities.length > 0
+                                      ? capabilities.join(", ")
                                       : undefined;
 
                                   return (
