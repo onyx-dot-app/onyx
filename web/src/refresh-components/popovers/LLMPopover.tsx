@@ -289,7 +289,7 @@ export default function LLMPopover({
       // Small delay to let accordion content render
       const timer = setTimeout(() => {
         selectedItemRef.current?.scrollIntoView({
-          behavior: "smooth",
+          behavior: "instant",
           block: "center",
         });
       }, 50);
