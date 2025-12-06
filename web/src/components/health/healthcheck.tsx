@@ -2,7 +2,8 @@
 
 import { errorHandlingFetcher, RedirectError } from "@/lib/fetcher";
 import useSWR from "swr";
-import { Modal } from "../Modal";
+import Modal from "@/refresh-components/Modal";
+import SvgLogOut from "@/icons/log-out";
 import { useCallback, useEffect, useState, useRef } from "react";
 import { getSecondsUntilExpiration } from "@/lib/time";
 import { User } from "@/lib/types";
@@ -183,19 +184,18 @@ export const HealthCheckBanner = () => {
   // Logged out modal
   if (showLoggedOutModal) {
     return (
-      <Modal
-        width="w-1/3"
-        className="overflow-y-hidden flex flex-col"
-        title="You Have Been Logged Out"
-      >
-        <div className="flex flex-col gap-y-4">
-          <p className="text-sm">
-            Your session has expired. Please log in again to continue.
-          </p>
-          <div className="flex flex-row gap-x-2 justify-end mt-4">
+      <Modal open>
+        <Modal.Content small>
+          <Modal.Header icon={SvgLogOut} title="You Have Been Logged Out" />
+          <Modal.Body>
+            <p className="text-sm">
+              Your session has expired. Please log in again to continue.
+            </p>
+          </Modal.Body>
+          <Modal.Footer className="p-4 flex justify-end">
             <Button onClick={handleLogin}>Log In</Button>
-          </div>
-        </div>
+          </Modal.Footer>
+        </Modal.Content>
       </Modal>
     );
   }

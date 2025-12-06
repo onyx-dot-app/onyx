@@ -188,10 +188,10 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         if not all_search_results:
             raise RuntimeError("No search results found.")
 
-        # Convert search results to InferenceSections
+        # Convert search results to InferenceSections with rank-based scoring
         inference_sections = [
-            inference_section_from_internet_search_result(result)
-            for result in all_search_results
+            inference_section_from_internet_search_result(result, rank=i)
+            for i, result in enumerate(all_search_results)
         ]
 
         # Convert to SearchDocs

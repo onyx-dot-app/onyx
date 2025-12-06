@@ -112,6 +112,21 @@ export interface LLMProviderDescriptor {
 
 export interface OllamaModelResponse {
   name: string;
+  display_name: string;
+  max_input_tokens: number | null;
+  supports_image_input: boolean;
+}
+
+export interface OpenRouterModelResponse {
+  name: string;
+  display_name: string;
+  max_input_tokens: number | null;
+  supports_image_input: boolean;
+}
+
+export interface BedrockModelResponse {
+  name: string;
+  display_name: string;
   max_input_tokens: number;
   supports_image_input: boolean;
 }

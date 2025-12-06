@@ -7,6 +7,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.prompts.chat_prompts import ADDITIONAL_INFO
 from onyx.prompts.chat_prompts import COMPANY_DESCRIPTION_BLOCK
 from onyx.prompts.chat_prompts import COMPANY_NAME_BLOCK
+from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
 from onyx.prompts.constants import CODE_BLOCK_PAT
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
@@ -16,6 +17,7 @@ logger = setup_logger()
 
 
 _DANSWER_DATETIME_REPLACEMENT_PAT = "[[CURRENT_DATETIME]]"
+_CITATION_GUIDANCE_REPLACEMENT_PAT = "[[CITATION_GUIDANCE]]"
 _BASIC_TIME_STR = "The current date is {datetime_info}."
 
 
@@ -55,6 +57,44 @@ def replace_current_datetime_tag(
             include_day_of_week=include_day_of_week,
         ),
     )
+
+
+def replace_citation_guidance_tag(
+    prompt_str: str,
+    *,
+    should_cite_documents: bool = False,
+    include_all_guidance: bool = False,
+) -> tuple[str, bool]:
+    """
+    Replace [[CITATION_GUIDANCE]] placeholder with citation guidance if needed.
+
+    Returns:
+        tuple[str, bool]: (prompt_with_replacement, should_append_fallback)
+        - prompt_with_replacement: The prompt with placeholder replaced (or unchanged if not present)
+        - should_append_fallback: True if citation guidance should be appended
+            (placeholder is not present and citations are needed)
+    """
+    placeholder_was_present = _CITATION_GUIDANCE_REPLACEMENT_PAT in prompt_str
+
+    if not placeholder_was_present:
+        # Placeholder not present - caller should append if citations are needed
+        should_append = (
+            should_cite_documents or include_all_guidance
+        ) and REQUIRE_CITATION_GUIDANCE not in prompt_str
+        return prompt_str, should_append
+
+    citation_guidance = (
+        REQUIRE_CITATION_GUIDANCE
+        if should_cite_documents or include_all_guidance
+        else ""
+    )
+
+    replaced_prompt = prompt_str.replace(
+        _CITATION_GUIDANCE_REPLACEMENT_PAT,
+        citation_guidance,
+    )
+
+    return replaced_prompt, False
 
 
 def handle_onyx_date_awareness(
