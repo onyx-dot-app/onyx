@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import datetime
 import hashlib
 import json
 from collections.abc import Awaitable
@@ -1013,6 +1014,7 @@ def _db_mcp_server_to_api_mcp_server(
         is_authenticated=is_authenticated,
         user_authenticated=user_authenticated,
         status=db_server.status,
+        last_refreshed_at=db_server.last_refreshed_at,
         tool_count=tool_count,
         auth_template=auth_template,
         user_credentials=user_credentials,
@@ -1134,6 +1136,7 @@ def get_mcp_server_tools_snapshots(
                 server_id=server_id,
                 db_session=db,
                 status=MCPServerStatus.CONNECTED,
+                last_refreshed_at=datetime.datetime.now(datetime.timezone.utc),
             )
             db.commit()
         except Exception as e:

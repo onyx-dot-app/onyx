@@ -12,7 +12,7 @@ import { createMCPServer, updateMCPServer } from "@/lib/tools/mcpService";
 import {
   MCPServerCreateRequest,
   MCPServerStatus,
-  MCPServerWithStatus,
+  MCPServer,
 } from "@/lib/tools/types";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Separator from "@/refresh-components/Separator";
@@ -23,12 +23,12 @@ import { SvgCheckCircle, SvgServer, SvgUnplug } from "@opal/icons";
 
 interface AddMCPServerModalProps {
   skipOverlay?: boolean;
-  serverToManage: MCPServerWithStatus | null;
-  setServerToManage: (server: MCPServerWithStatus | null) => void;
-  setServerToDisconnect: (server: MCPServerWithStatus | null) => void;
+  serverToManage: MCPServer | null;
+  setServerToManage: (server: MCPServer | null) => void;
+  setServerToDisconnect: (server: MCPServer | null) => void;
   disconnectModal: ModalCreationInterface;
   manageServerModal: ModalCreationInterface;
-  onServerCreated?: (server: MCPServerWithStatus) => void;
+  onServerCreated?: (server: MCPServer) => void;
   handleAuthenticate: (serverId: number) => void;
   setPopup?: (spec: PopupSpec) => void;
   mutateMcpServers?: () => Promise<void>;

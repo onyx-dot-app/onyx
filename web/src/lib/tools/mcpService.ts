@@ -3,7 +3,7 @@
  */
 
 import {
-  MCPServerWithStatus,
+  MCPServer,
   MCPServerCreateRequest,
   MCPServerUpdateRequest,
   MCPServerStatus,
@@ -106,7 +106,7 @@ export async function disableAllServerTools(
  */
 export async function createMCPServer(
   data: MCPServerCreateRequest
-): Promise<MCPServerWithStatus> {
+): Promise<MCPServer> {
   const response = await fetch("/api/admin/mcp/server", {
     method: "POST",
     headers: {
@@ -129,7 +129,7 @@ export async function createMCPServer(
 export async function updateMCPServer(
   serverId: number,
   data: MCPServerUpdateRequest
-): Promise<MCPServerWithStatus> {
+): Promise<MCPServer> {
   const response = await fetch(`/api/admin/mcp/server/${serverId}`, {
     method: "PATCH",
     headers: {

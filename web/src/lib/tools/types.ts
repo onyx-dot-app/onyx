@@ -1,6 +1,6 @@
 import type React from "react";
-import { MCPServer } from "@/lib/tools/interfaces";
 import type { IconProps } from "@opal/types";
+import { MCPTransportType } from "@/lib/tools/interfaces";
 
 // Generic action status for UI components
 export enum ActionStatus {
@@ -18,14 +18,28 @@ export enum MCPServerStatus {
   DISCONNECTED = "DISCONNECTED",
 }
 
-// Extended interface with status field
-export interface MCPServerWithStatus
-  extends Omit<MCPServer, "transport" | "auth_type" | "auth_performer"> {
+export interface MCPServer {
+  id: number;
+  name: string;
+  description?: string;
+  server_url: string;
+  owner: string;
+  transport?: MCPTransportType;
+  auth_type?: MCPAuthenticationType;
+  auth_performer?: MCPAuthenticationPerformer;
+  is_authenticated: boolean;
+  user_authenticated?: boolean;
+  auth_template?: any;
+  admin_credentials?: Record<string, string>;
+  user_credentials?: Record<string, string>;
   status: MCPServerStatus;
-  transport: string | null;
-  auth_type: string | null;
-  auth_performer: string | null;
+  last_refreshed_at?: string;
   tool_count: number;
+}
+
+export interface MCPServersResponse {
+  assistant_id: string;
+  mcp_servers: MCPServer[];
 }
 
 export interface MCPServerCreateRequest {

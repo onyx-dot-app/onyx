@@ -15,16 +15,20 @@ import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { ActionStatus } from "@/lib/tools/types";
 import { useServerTools } from "@/sections/actions/useServerTools";
-import { MCPServerStatus, MCPServerWithStatus } from "@/lib/tools/types";
+import { MCPServerStatus, MCPServer } from "@/lib/tools/types";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { KeyedMutator } from "swr";
 import type { IconProps } from "@opal/types";
-import { SvgServer } from "@opal/icons";
+import { SvgRefreshCw, SvgServer } from "@opal/icons";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import Text from "@/refresh-components/texts/Text";
+import { timeAgo } from "@/lib/time";
+import { cn } from "@/lib/utils";
 
 export interface MCPActionCardProps {
   // Server identification
   serverId: number;
-  server: MCPServerWithStatus;
+  server: MCPServer;
 
   // Core content
   title: string;
@@ -95,6 +99,7 @@ export default function MCPActionCard({
   const [isToolsExpanded, setIsToolsExpanded] = useState(initialExpanded);
   const [searchQuery, setSearchQuery] = useState("");
   const [showOnlyEnabled, setShowOnlyEnabled] = useState(false);
+  const [isToolsRefreshing, setIsToolsRefreshing] = useState(false);
   const deleteModal = useCreateModal();
 
   // Update expanded state when initialExpanded changes
@@ -207,6 +212,43 @@ export default function MCPActionCard({
     }
   };
 
+  const handleRefreshTools = () => {
+    setIsToolsRefreshing(true);
+    onRefreshTools?.(serverId, mutate);
+    setTimeout(() => {
+      setIsToolsRefreshing(false);
+    }, 1000);
+  };
+
+  // Left action for ToolsList footer
+  const leftAction = useMemo(() => {
+    const lastRefreshedText = timeAgo(server.last_refreshed_at);
+
+    return (
+      <div className="flex items-center gap-2">
+        <IconButton
+          icon={SvgRefreshCw}
+          internal
+          onClick={handleRefreshTools}
+          tooltip="Refresh tools"
+          aria-label="Refresh tools"
+          className={cn(isToolsRefreshing && "animate-spin")}
+        />
+        {lastRefreshedText && (
+          <Text text03 mainUiBody className="whitespace-nowrap">
+            Tools last refreshed {lastRefreshedText}
+          </Text>
+        )}
+      </div>
+    );
+  }, [
+    server.last_refreshed_at,
+    serverId,
+    mutate,
+    onRefreshTools,
+    isToolsRefreshing,
+  ]);
+
   return (
     <>
       <ActionCard
@@ -242,6 +284,7 @@ export default function MCPActionCard({
           searchQuery={searchQuery}
           emptyMessage="No tools available"
           emptySearchMessage="No tools found"
+          leftAction={leftAction}
         >
           {filteredTools.map((tool) => (
             <ToolItem

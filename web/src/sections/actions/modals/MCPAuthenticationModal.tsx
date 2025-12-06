@@ -27,7 +27,7 @@ import {
   TabsContent,
 } from "@/refresh-components/tabs/tabs";
 import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
-import { MCPServerStatus, MCPServerWithStatus } from "@/lib/tools/types";
+import { MCPServerStatus, MCPServer } from "@/lib/tools/types";
 import { updateMCPServerStatus, upsertMCPServer } from "@/lib/tools/mcpService";
 import Message from "@/refresh-components/messages/Message";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
@@ -36,7 +36,7 @@ import { useAuthType } from "@/lib/hooks";
 import { AuthType } from "@/lib/constants";
 
 interface MCPAuthenticationModalProps {
-  mcpServer: MCPServerWithStatus | null;
+  mcpServer: MCPServer | null;
   skipOverlay?: boolean;
   setPopup?: (spec: PopupSpec) => void;
 }
@@ -114,7 +114,7 @@ export default function MCPAuthenticationModal({
   const isOAuthEnabled =
     authType === AuthType.OIDC || authType === AuthType.GOOGLE_OAUTH;
 
-  const { data: fullServer } = useSWR<MCPServerWithStatus>(
+  const { data: fullServer } = useSWR<MCPServer>(
     mcpServer ? `/api/admin/mcp/servers/${mcpServer.id}` : null,
     errorHandlingFetcher
   );
