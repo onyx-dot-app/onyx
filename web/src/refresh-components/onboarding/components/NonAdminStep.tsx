@@ -16,7 +16,7 @@ export default function NonAdminStep() {
   const inputRef = useRef<HTMLInputElement>(null);
   const { user, refreshUser } = useUser();
   const [name, setName] = useState("");
-  const [showToast, setShowToast] = useState(false);
+  const [showHeader, setShowHeader] = useState(false);
   const [isEditing, setIsEditing] = useState(true);
   const [savedName, setSavedName] = useState("");
 
@@ -36,7 +36,7 @@ export default function NonAdminStep() {
     updateUserPersonalization({ name })
       .then(() => {
         setSavedName(name);
-        setShowToast(true);
+        setShowHeader(true);
         setIsEditing(false);
         refreshUser();
       })
@@ -47,7 +47,7 @@ export default function NonAdminStep() {
 
   return (
     <>
-      {showToast && (
+      {showHeader && (
         <div className="flex items-center justify-between w-full max-w-[800px] min-h-11 py-1 pl-3 pr-2 bg-background-tint-00 rounded-16 shadow-01 mb-2">
           <div className="flex items-center gap-1">
             <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
@@ -58,7 +58,7 @@ export default function NonAdminStep() {
           <IconButton
             internal
             icon={SvgX}
-            onClick={() => setShowToast(false)}
+            onClick={() => setShowHeader(false)}
           />
         </div>
       )}
@@ -89,6 +89,12 @@ export default function NonAdminStep() {
               onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                 setName(e.target.value)
               }
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && name && name.trim().length > 0) {
+                  e.preventDefault();
+                  handleSave();
+                }
+              }}
               className="w-[26%] min-w-40"
             />
             <Button disabled={name === ""} onClick={handleSave}>
@@ -99,13 +105,13 @@ export default function NonAdminStep() {
       ) : (
         <div
           className={cn(containerClasses, "group")}
+          aria-label="Edit display name"
+          role="button"
+          tabIndex={0}
           onClick={() => {
             setIsEditing(true);
             setName(savedName);
           }}
-          aria-label="Edit display name"
-          role="button"
-          tabIndex={0}
         >
           <div className="flex items-center gap-1">
             <Avatar
