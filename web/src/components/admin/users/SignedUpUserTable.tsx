@@ -89,6 +89,7 @@ export default function SignedUpUserTable({
 
   const [selectedRoles, setSelectedRoles] = useState<UserRole[]>([]);
   const [resetPasswordUser, setResetPasswordUser] = useState<User | null>(null);
+  const invitedEmails = invitedUsers.map((user) => user.email.toLowerCase());
 
   const {
     currentPageData: pageOfUsers,
@@ -327,7 +328,7 @@ export default function SignedUpUserTable({
       return (
         <InviteUserButton
           user={user}
-          invited={invitedUsers.map((u) => u.email).includes(user.email)}
+          invited={invitedEmails.includes(user.email.toLowerCase())}
           setPopup={setPopup}
           mutate={[refresh, invitedUsersMutate]}
         />

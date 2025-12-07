@@ -7,13 +7,13 @@ import Separator from "@/refresh-components/Separator";
 import LLMProvider from "../components/LLMProvider";
 import { OnboardingActions, OnboardingState, OnboardingStep } from "../types";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
-import { PROVIDER_ICON_MAP } from "../constants";
 import LLMConnectionModal, {
   LLMConnectionModalProps,
 } from "@/refresh-components/onboarding/components/LLMConnectionModal";
 import { cn } from "@/lib/utils";
 import SvgCheckCircle from "@/icons/check-circle";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 
 type LLMStepProps = {
   state: OnboardingState;
@@ -51,8 +51,7 @@ const StackedProviderIcons = ({ providers }: StackedProviderIconsProps) => {
   return (
     <div className="flex items-center">
       {providers.slice(0, 3).map((provider, index) => {
-        const IconComponent = PROVIDER_ICON_MAP[provider];
-        if (!IconComponent) return null;
+        const IconComponent = getProviderIcon(provider);
 
         return (
           <div
@@ -165,7 +164,7 @@ const LLMStepInner = ({
                     onboardingActions={onboardingActions}
                     title={llmDescriptor.title}
                     subtitle={llmDescriptor.display_name}
-                    icon={PROVIDER_ICON_MAP[llmDescriptor.name]}
+                    icon={getProviderIcon(llmDescriptor.name)}
                     llmDescriptor={llmDescriptor}
                     disabled={disabled}
                     isConnected={onboardingState.data.llmProviders?.some(

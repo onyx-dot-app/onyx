@@ -3,7 +3,7 @@
 import React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { cn } from "@/lib/utils";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgX from "@/icons/x";
@@ -76,7 +76,7 @@ const useModalContext = () => {
 const sizeClassNames = {
   large: ["w-[80dvw]", "h-[80dvh]"],
   medium: ["w-[60rem]", "h-fit"],
-  small: ["w-[32rem]", "h-[30rem]"],
+  small: ["w-[32rem]", "max-h-[30rem]"],
   tall: ["w-[32rem]", "max-h-[calc(100dvh-4rem)]"],
   mini: ["w-[32rem]", "h-fit"],
 } as const;
@@ -124,6 +124,7 @@ interface ModalContentProps
   tall?: boolean;
   mini?: boolean;
   preventAccidentalClose?: boolean;
+  skipOverlay?: boolean;
 }
 const ModalContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
@@ -139,6 +140,7 @@ const ModalContent = React.forwardRef<
       tall,
       mini,
       preventAccidentalClose = true,
+      skipOverlay = false,
       ...props
     },
     ref
@@ -268,7 +270,7 @@ const ModalContent = React.forwardRef<
         value={{ closeButtonRef, hasAttemptedClose, setHasAttemptedClose }}
       >
         <DialogPrimitive.Portal>
-          <ModalOverlay />
+          {!skipOverlay && <ModalOverlay />}
           <DialogPrimitive.Content
             ref={(node) => {
               // Handle forwarded ref
@@ -283,7 +285,7 @@ const ModalContent = React.forwardRef<
             className={cn(
               "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[2001]",
               "bg-background-tint-00 border rounded-16 shadow-2xl",
-              "flex flex-col overflow-hidden",
+              "flex flex-col overflow-auto",
               "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
               "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
               "data-[state=open]:slide-in-from-top-1/2 data-[state=closed]:slide-out-to-top-1/2",
@@ -334,7 +336,7 @@ ModalContent.displayName = DialogPrimitive.Content.displayName;
  * ```
  */
 interface ModalHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
-  icon: React.FunctionComponent<SvgProps>;
+  icon: React.FunctionComponent<IconProps>;
   title: string;
   description?: string;
   onClose?: () => void;
@@ -369,21 +371,25 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
         <div className="flex flex-col gap-1">
           <div className="flex flex-row items-center justify-between">
             <Icon className={"w-[1.5rem] h-[1.5rem] stroke-text-04"} />
-            <div
-              tabIndex={-1}
-              ref={closeButtonRef as React.RefObject<HTMLDivElement>}
-            >
-              <DialogPrimitive.Close asChild>
-                <IconButton icon={SvgX} internal onClick={onClose} />
-              </DialogPrimitive.Close>
-            </div>
+            {onClose && (
+              <div
+                tabIndex={-1}
+                ref={closeButtonRef as React.RefObject<HTMLDivElement>}
+              >
+                <DialogPrimitive.Close asChild>
+                  <IconButton icon={SvgX} internal onClick={onClose} />
+                </DialogPrimitive.Close>
+              </div>
+            )}
           </div>
-          <DialogPrimitive.Title>
-            <Text headingH3>{title}</Text>
+          <DialogPrimitive.Title asChild>
+            <Text headingH3 as="span">
+              {title}
+            </Text>
           </DialogPrimitive.Title>
           {description && (
             <DialogPrimitive.Description>
-              <Text secondaryBody text03>
+              <Text secondaryBody text03 as="span">
                 {description}
               </Text>
             </DialogPrimitive.Description>
@@ -417,7 +423,11 @@ interface ModalBodyProps extends React.HTMLAttributes<HTMLDivElement> {}
 const ModalBody = React.forwardRef<HTMLDivElement, ModalBodyProps>(
   ({ className, children, ...props }, ref) => {
     return (
-      <div ref={ref} className={cn(className)} {...props}>
+      <div
+        ref={ref}
+        className={cn("pb-4 px-4 flex flex-col gap-4", className)}
+        {...props}
+      >
         {children}
       </div>
     );
@@ -452,7 +462,7 @@ const ModalFooter = React.forwardRef<HTMLDivElement, ModalFooterProps>(
       <div
         ref={ref}
         className={cn(
-          "flex flex-row items-center justify-end gap-1",
+          "flex flex-row items-center justify-end gap-1 p-4",
           className
         )}
         {...props}

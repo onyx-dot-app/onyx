@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { InputPrompt } from "@/app/chat/interfaces";
 import Button from "@/refresh-components/buttons/Button";
-import { PlusIcon } from "@/components/icons/icons";
 import Title from "@/components/ui/title";
 import Text from "@/components/ui/text";
 import { usePopup } from "@/components/admin/connectors/Popup";
@@ -20,6 +19,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgX from "@/icons/x";
 import SvgMoreHorizontal from "@/icons/more-horizontal";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
+import SvgPlus from "@/icons/plus";
 
 export default function InputPrompts() {
   const [inputPrompts, setInputPrompts] = useState<InputPrompt[]>([]);
@@ -206,8 +206,11 @@ export default function InputPrompts() {
           </div>
         </div>
       ) : (
-        <Button onClick={() => setIsCreatingNew(true)} className="w-full mt-4">
-          <PlusIcon size={14} className="mr-2" />
+        <Button
+          onClick={() => setIsCreatingNew(true)}
+          className="w-full mt-4"
+          leftIcon={SvgPlus}
+        >
           Create New Prompt
         </Button>
       )}

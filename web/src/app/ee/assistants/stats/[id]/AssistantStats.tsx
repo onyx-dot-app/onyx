@@ -1,4 +1,5 @@
 "use client";
+
 import { ThreeDotsLoader } from "@/components/Loading";
 import { getDatesList } from "@/app/ee/admin/performance/lib";
 import { useEffect, useState, useMemo } from "react";
@@ -7,7 +8,7 @@ import {
   DateRange,
 } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { useAgents } from "@/lib/hooks/useAgents";
-import AssistantIcon from "@/refresh-components/AgentIcon";
+import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { AreaChartDisplay } from "@/components/ui/areaChart";
 
@@ -156,7 +157,7 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center space-x-4">
-                {assistant && <AssistantIcon agent={assistant} />}
+                {assistant && <AgentAvatar agent={assistant} />}
                 <div>
                   <h3 className="text-lg font-normal">{assistant?.name}</h3>
                   <p className="text-sm text-text-500">

@@ -1,5 +1,3 @@
-from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
-from onyx.chat.models import LlmDoc
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
@@ -17,8 +15,12 @@ def truncate_search_result_content(content: str, max_chars: int = 20000) -> str:
 
 def inference_section_from_internet_page_scrape(
     result: WebContent,
+    rank: int = 0,
 ) -> InferenceSection:
     truncated_content = truncate_search_result_content(result.full_content)
+    # Calculate score using reciprocal rank to preserve ordering
+    score = 1.0 / (rank + 1)
+
     inference_chunk = InferenceChunk(
         chunk_id=0,
         blurb=result.title,
@@ -31,9 +33,7 @@ def inference_section_from_internet_page_scrape(
         title=result.title,
         boost=1,
         recency_bias=1.0,
-        # TODO, this is not a great system for this, and can cause the results to be out of order
-        # when saving and loading from the db, Postgres doesn't maintain the order.
-        score=0,
+        score=score,
         hidden=False,
         metadata={},
         match_highlights=[truncated_content],
@@ -51,7 +51,11 @@ def inference_section_from_internet_page_scrape(
 
 def inference_section_from_internet_search_result(
     result: WebSearchResult,
+    rank: int = 0,
 ) -> InferenceSection:
+    # Calculate score using reciprocal rank to preserve ordering
+    score = 1.0 / (rank + 1)
+
     chunk = InferenceChunk(
         chunk_id=0,
         blurb=result.snippet,
@@ -64,8 +68,7 @@ def inference_section_from_internet_search_result(
         title=result.title,
         boost=1,
         recency_bias=1.0,
-        # TODO, this is not a great system for this, and can cause the results to be out of order
-        score=0,
+        score=score,
         hidden=False,
         metadata={},
         match_highlights=[result.snippet],
@@ -79,24 +82,4 @@ def inference_section_from_internet_search_result(
         center_chunk=chunk,
         chunks=[chunk],
         combined_content=result.snippet,
-    )
-
-
-def llm_doc_from_web_content(web_content: WebContent) -> LlmDoc:
-    """Create an LlmDoc from WebContent with the WEB_SEARCH_PREFIX prefix"""
-    return LlmDoc(
-        # TODO: Is this what we want to do for document_id? We're kind of overloading it since it
-        # should ideally correspond to a document in the database. But I guess if you're calling this
-        # function you know it won't be in the database.
-        document_id=WEB_SEARCH_PREFIX + web_content.link,
-        content=truncate_search_result_content(web_content.full_content),
-        blurb=web_content.link,
-        semantic_identifier=web_content.link,
-        source_type=DocumentSource.WEB,
-        metadata={},
-        link=web_content.link,
-        document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
-        updated_at=web_content.published_date,
-        source_links={},
-        match_highlights=[],
     )

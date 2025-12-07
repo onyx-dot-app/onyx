@@ -2,6 +2,7 @@ from enum import Enum
 
 from pydantic import BaseModel
 
+from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
 from onyx.llm.utils import model_supports_image_input
 from onyx.server.manage.llm.models import ModelConfigurationView
 
@@ -55,44 +56,6 @@ class WellKnownLLMProviderDescriptor(BaseModel):
 
 
 OPENAI_PROVIDER_NAME = "openai"
-OPEN_AI_MODEL_NAMES = [
-    "gpt-5",
-    "gpt-5-mini",
-    "gpt-5-nano",
-    "o4-mini",
-    "o3-mini",
-    "o1-mini",
-    "o3",
-    "o1",
-    "gpt-4",
-    "gpt-4.1",
-    "gpt-4o",
-    "gpt-4o-mini",
-    "o1-preview",
-    "gpt-4-turbo",
-    "gpt-4-turbo-preview",
-    "gpt-4-1106-preview",
-    "gpt-4-vision-preview",
-    "gpt-4-0613",
-    "gpt-4o-2024-08-06",
-    "gpt-4-0314",
-    "gpt-4-32k-0314",
-    "gpt-3.5-turbo",
-    "gpt-3.5-turbo-0125",
-    "gpt-3.5-turbo-1106",
-    "gpt-3.5-turbo-16k",
-    "gpt-3.5-turbo-0613",
-    "gpt-3.5-turbo-16k-0613",
-    "gpt-3.5-turbo-0301",
-]
-OPEN_AI_VISIBLE_MODEL_NAMES = [
-    "gpt-5",
-    "gpt-5-mini",
-    "o1",
-    "o3-mini",
-    "gpt-4o",
-    "gpt-4o-mini",
-]
 
 BEDROCK_PROVIDER_NAME = "bedrock"
 BEDROCK_DEFAULT_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0"
@@ -155,23 +118,13 @@ OLLAMA_API_KEY_CONFIG_KEY = "OLLAMA_API_KEY"
 # OpenRouter
 OPENROUTER_PROVIDER_NAME = "openrouter"
 
-IGNORABLE_ANTHROPIC_MODELS = [
+ANTHROPIC_PROVIDER_NAME = "anthropic"
+# Models to exclude from Anthropic's model list (deprecated or duplicates)
+_IGNORABLE_ANTHROPIC_MODELS = {
     "claude-2",
     "claude-instant-1",
     "anthropic/claude-3-5-sonnet-20241022",
-]
-ANTHROPIC_PROVIDER_NAME = "anthropic"
-
-ANTHROPIC_VISIBLE_MODEL_NAMES = [
-    "claude-opus-4-5-20251101",
-    "claude-opus-4-1",
-    "claude-opus-4-20250514",
-    "claude-sonnet-4-5-20250929",
-    "claude-sonnet-4-5",
-    "claude-sonnet-4-20250514",
-    "claude-haiku-4-5",
-    "claude-3-7-sonnet-latest",
-]
+}
 
 AZURE_PROVIDER_NAME = "azure"
 
@@ -181,80 +134,104 @@ VERTEX_CREDENTIALS_FILE_KWARG = "vertex_credentials"
 VERTEX_LOCATION_KWARG = "vertex_location"
 VERTEXAI_DEFAULT_MODEL = "gemini-2.5-flash"
 VERTEXAI_DEFAULT_FAST_MODEL = "gemini-2.5-flash-lite"
-VERTEXAI_MODEL_NAMES = [
-    # 3.0 pro models
-    "gemini-3-pro-preview",
-    # 2.5 pro models
-    "gemini-2.5-pro",
-    VERTEXAI_DEFAULT_MODEL,
-    VERTEXAI_DEFAULT_FAST_MODEL,
-    # "gemini-2.5-pro-preview-06-05",
-    # "gemini-2.5-pro-preview-05-06",
-    # 2.0 flash-lite models
-    "gemini-2.0-flash-lite-001",
-    # "gemini-2.0-flash-lite-preview-02-05",
-    # 2.0 flash models
-    "gemini-2.0-flash-001",
-    "gemini-2.0-flash-exp",
-    # "gemini-2.0-flash-exp-image-generation",
-    # "gemini-2.0-flash-thinking-exp-01-21",
-    # Anthropic models
-    "claude-opus-4-5",
-    "claude-sonnet-4-5",
-    "claude-haiku-4-5",
-    "claude-opus-4-1@20250805",
-    "claude-sonnet-4",
-    "claude-opus-4",
-    "claude-3-7-sonnet@20250219",
-]
-VERTEXAI_VISIBLE_MODEL_NAMES = [
-    VERTEXAI_DEFAULT_MODEL,
-    VERTEXAI_DEFAULT_FAST_MODEL,
-]
 
 
 def _get_provider_to_models_map() -> dict[str, list[str]]:
-    """Lazy-load provider model mappings to avoid importing litellm at module level."""
+    """Lazy-load provider model mappings to avoid importing litellm at module level.
+
+    Dynamic providers (Bedrock, Ollama, OpenRouter) return empty lists here
+    because their models are fetched directly from the source API, which is
+    more up-to-date than LiteLLM's static lists.
+    """
     return {
-        OPENAI_PROVIDER_NAME: OPEN_AI_MODEL_NAMES,
-        BEDROCK_PROVIDER_NAME: get_bedrock_model_names(),
+        OPENAI_PROVIDER_NAME: get_openai_model_names(),
+        BEDROCK_PROVIDER_NAME: [],  # Dynamic - fetched from AWS API
         ANTHROPIC_PROVIDER_NAME: get_anthropic_model_names(),
-        VERTEXAI_PROVIDER_NAME: VERTEXAI_MODEL_NAMES,
-        OLLAMA_PROVIDER_NAME: [],
-        OPENROUTER_PROVIDER_NAME: [],
+        VERTEXAI_PROVIDER_NAME: get_vertexai_model_names(),
+        OLLAMA_PROVIDER_NAME: [],  # Dynamic - fetched from Ollama API
+        OPENROUTER_PROVIDER_NAME: [],  # Dynamic - fetched from OpenRouter API
     }
 
 
-def get_bedrock_model_names() -> list[str]:
+def get_openai_model_names() -> list[str]:
+    """Get OpenAI model names dynamically from litellm."""
     import litellm
 
-    # bedrock_converse_models are just extensions of the bedrock_models, not sure why
-    # litellm has split them into two lists :(
-    return [
-        model
-        for model in list(litellm.bedrock_models.union(litellm.bedrock_converse_models))
-        if "/" not in model and "embed" not in model
-    ][::-1]
+    return sorted(
+        [
+            # Strip openai/ prefix if present
+            model.replace("openai/", "") if model.startswith("openai/") else model
+            for model in litellm.open_ai_chat_completion_models
+            if "embed" not in model.lower()
+            and "audio" not in model.lower()
+            and "tts" not in model.lower()
+            and "whisper" not in model.lower()
+            and "dall-e" not in model.lower()
+            and "moderation" not in model.lower()
+            and "sora" not in model.lower()  # video generation
+            and "container" not in model.lower()  # not a model
+        ],
+        reverse=True,
+    )
 
 
 def get_anthropic_model_names() -> list[str]:
+    """Get Anthropic model names dynamically from litellm."""
     import litellm
 
-    return [
-        model
-        for model in litellm.anthropic_models
-        if model not in IGNORABLE_ANTHROPIC_MODELS
-    ][::-1]
+    return sorted(
+        [
+            model
+            for model in litellm.anthropic_models
+            if model not in _IGNORABLE_ANTHROPIC_MODELS
+        ],
+        reverse=True,
+    )
 
 
-_PROVIDER_TO_VISIBLE_MODELS_MAP = {
-    OPENAI_PROVIDER_NAME: OPEN_AI_VISIBLE_MODEL_NAMES,
-    BEDROCK_PROVIDER_NAME: [],
-    ANTHROPIC_PROVIDER_NAME: ANTHROPIC_VISIBLE_MODEL_NAMES,
-    VERTEXAI_PROVIDER_NAME: VERTEXAI_VISIBLE_MODEL_NAMES,
-    OLLAMA_PROVIDER_NAME: [],
-    OPENROUTER_PROVIDER_NAME: [],
-}
+def get_vertexai_model_names() -> list[str]:
+    """Get Vertex AI model names dynamically from litellm model_cost."""
+    import litellm
+
+    # Combine all vertex model sets
+    vertex_models: set[str] = set()
+    vertex_model_sets = [
+        "vertex_chat_models",
+        "vertex_language_models",
+        "vertex_anthropic_models",
+        "vertex_llama3_models",
+        "vertex_mistral_models",
+        "vertex_ai_ai21_models",
+        "vertex_deepseek_models",
+    ]
+    for attr in vertex_model_sets:
+        if hasattr(litellm, attr):
+            vertex_models.update(getattr(litellm, attr))
+
+    # Also extract from model_cost for any models not in the sets
+    for key in litellm.model_cost.keys():
+        if key.startswith("vertex_ai/"):
+            model_name = key.replace("vertex_ai/", "")
+            vertex_models.add(model_name)
+
+    return sorted(
+        [
+            model
+            for model in vertex_models
+            if "embed" not in model.lower()
+            and "image" not in model.lower()
+            and "video" not in model.lower()
+            and "code" not in model.lower()
+            and "veo" not in model.lower()  # video generation
+            and "live" not in model.lower()  # live/streaming models
+            and "tts" not in model.lower()  # text-to-speech
+            and "native-audio" not in model.lower()  # audio models
+            and "/" not in model  # filter out prefixed models like openai/gpt-oss
+            and "search_api" not in model.lower()  # not a model
+            and "-maas" not in model.lower()  # marketplace models
+        ],
+        reverse=True,
+    )
 
 
 def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
@@ -416,7 +393,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                     name=VERTEX_LOCATION_KWARG,
                     display_name="Location",
                     description="The location of the Vertex AI model. Please refer to the "
-                    "[Vertex AI configuration docs](https://docs.onyx.app/admin/ai_models/google_ai) for all possible values.",
+                    "[Vertex AI configuration docs](https://docs.onyx.app/admins/ai_models/google_ai) for all possible values.",
                     is_required=False,
                     is_secret=False,
                     key_type=CustomConfigKeyType.TEXT_INPUT,
@@ -456,31 +433,69 @@ def fetch_model_names_for_provider_as_set(provider_name: str) -> set[str] | None
 def fetch_visible_model_names_for_provider_as_set(
     provider_name: str,
 ) -> set[str] | None:
-    visible_model_names: list[str] | None = _PROVIDER_TO_VISIBLE_MODELS_MAP.get(
-        provider_name
+    """Get visible model names for a provider.
+
+    Note: Since we no longer maintain separate visible model lists,
+    this returns all models (same as fetch_model_names_for_provider_as_set).
+    Kept for backwards compatibility with alembic migrations.
+    """
+    return fetch_model_names_for_provider_as_set(provider_name)
+
+
+# Display names for Onyx-supported LLM providers (used in admin UI provider selection).
+# These override PROVIDER_DISPLAY_NAMES for Onyx-specific branding.
+_ONYX_PROVIDER_DISPLAY_NAMES: dict[str, str] = {
+    OPENAI_PROVIDER_NAME: "ChatGPT (OpenAI)",
+    OLLAMA_PROVIDER_NAME: "Ollama",
+    ANTHROPIC_PROVIDER_NAME: "Claude (Anthropic)",
+    AZURE_PROVIDER_NAME: "Azure OpenAI",
+    BEDROCK_PROVIDER_NAME: "Amazon Bedrock",
+    VERTEXAI_PROVIDER_NAME: "Google Vertex AI",
+    OPENROUTER_PROVIDER_NAME: "OpenRouter",
+}
+
+
+def get_provider_display_name(provider_name: str) -> str:
+    """Get human-friendly display name for an Onyx-supported provider.
+
+    First checks Onyx-specific display names, then falls back to
+    PROVIDER_DISPLAY_NAMES from constants.
+    """
+    if provider_name in _ONYX_PROVIDER_DISPLAY_NAMES:
+        return _ONYX_PROVIDER_DISPLAY_NAMES[provider_name]
+    return PROVIDER_DISPLAY_NAMES.get(
+        provider_name.lower(), provider_name.replace("_", " ").title()
     )
-    return set(visible_model_names) if visible_model_names else None
 
 
 def fetch_model_configurations_for_provider(
     provider_name: str,
 ) -> list[ModelConfigurationView]:
-    # if there are no explicitly listed visible model names,
-    # then we won't mark any of them as "visible". This will get taken
-    # care of by the logic to make default models visible.
-    visible_model_names = (
-        fetch_visible_model_names_for_provider_as_set(provider_name) or set()
-    )
+    """Fetch model configurations for a static provider (OpenAI, Anthropic, Vertex AI).
 
-    return [
-        ModelConfigurationView(
-            name=model_name,
-            is_visible=model_name in visible_model_names,
-            max_input_tokens=None,
-            supports_image_input=model_supports_image_input(
-                model_name=model_name,
-                model_provider=provider_name,
-            ),
+    Looks up max_input_tokens from LiteLLM's model_cost. If not found, stores None
+    and the runtime will use the fallback (4096).
+    """
+    from onyx.llm.utils import get_max_input_tokens
+
+    # No models are marked visible by default - the default model logic
+    # in the frontend/backend will handle making default models visible.
+    configs = []
+    for model_name in fetch_models_for_provider(provider_name):
+        max_input_tokens = get_max_input_tokens(
+            model_name=model_name,
+            model_provider=provider_name,
         )
-        for model_name in fetch_models_for_provider(provider_name)
-    ]
+
+        configs.append(
+            ModelConfigurationView(
+                name=model_name,
+                is_visible=False,
+                max_input_tokens=max_input_tokens,
+                supports_image_input=model_supports_image_input(
+                    model_name=model_name,
+                    model_provider=provider_name,
+                ),
+            )
+        )
+    return configs

@@ -21,9 +21,7 @@ from onyx.auth.users import current_user
 from onyx.chat.chat_utils import create_chat_history_chain
 from onyx.chat.chat_utils import extract_headers
 from onyx.chat.process_message import stream_chat_message
-from onyx.chat.prompt_builder.citations_prompt import (
-    compute_max_document_tokens_for_persona,
-)
+from onyx.chat.prompt_utils import get_default_base_system_prompt
 from onyx.chat.stop_signal_checker import set_fence
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
@@ -50,6 +48,7 @@ from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.feedback import create_chat_message_feedback
 from onyx.db.feedback import create_doc_retrieval_feedback
 from onyx.db.feedback import remove_chat_message_feedback
+from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.projects import check_project_ownership
@@ -58,6 +57,7 @@ from onyx.file_processing.extract_file_text import docx_to_txt_filename
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_default_llms
+from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.factory import get_llms_for_persona
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.redis.redis_pool import get_redis_client
@@ -96,6 +96,40 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 router = APIRouter(prefix="/chat")
+
+
+def _get_available_tokens_for_persona(
+    persona: Persona,
+    db_session: Session,
+    user: User | None,
+) -> int:
+    def _get_non_reserved_input_tokens(
+        model_max_input_tokens: int,
+        system_and_agent_prompt_tokens: int,
+        num_tools: int,
+        token_reserved_per_tool: int = 256,
+        # Estimating for a long user input message, hard to know ahead of time
+        default_reserved_tokens: int = 2000,
+    ) -> int:
+        return (
+            model_max_input_tokens
+            - system_and_agent_prompt_tokens
+            - num_tools * token_reserved_per_tool
+            - default_reserved_tokens
+        )
+
+    llm, _ = get_llms_for_persona(persona=persona, user=user)
+    token_counter = get_llm_token_counter(llm)
+
+    system_prompt = get_default_base_system_prompt(db_session)
+    agent_prompt = persona.system_prompt + " " if persona.system_prompt else ""
+    combined_prompt_tokens = token_counter(agent_prompt + system_prompt)
+
+    return _get_non_reserved_input_tokens(
+        model_max_input_tokens=llm.config.max_input_tokens,
+        system_and_agent_prompt_tokens=combined_prompt_tokens,
+        num_tools=len(persona.tools),
+    )
 
 
 @router.get("/get-user-chat-sessions")
@@ -252,12 +286,7 @@ def get_chat_session(
         description=chat_session.description,
         persona_id=chat_session.persona_id,
         persona_name=chat_session.persona.name if chat_session.persona else None,
-        persona_icon_color=(
-            chat_session.persona.icon_color if chat_session.persona else None
-        ),
-        persona_icon_shape=(
-            chat_session.persona.icon_shape if chat_session.persona else None
-        ),
+        personal_icon_name=chat_session.persona.icon_name,
         current_alternate_model=chat_session.current_alternate_model,
         messages=chat_message_details,
         time_created=chat_session.time_created,
@@ -555,8 +584,9 @@ def get_max_document_tokens(
         raise HTTPException(status_code=404, detail="Persona not found")
 
     return MaxSelectedDocumentTokens(
-        max_tokens=compute_max_document_tokens_for_persona(
+        max_tokens=_get_available_tokens_for_persona(
             persona=persona,
+            user=user,
             db_session=db_session,
         ),
     )
@@ -588,8 +618,9 @@ def get_available_context_tokens_for_session(
     if not chat_session.persona:
         raise HTTPException(status_code=400, detail="Chat session has no persona")
 
-    available = compute_max_document_tokens_for_persona(
+    available = _get_available_tokens_for_persona(
         persona=chat_session.persona,
+        user=user,
         db_session=db_session,
     )
 

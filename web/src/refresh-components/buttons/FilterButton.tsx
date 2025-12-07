@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Text from "@/refresh-components/texts/Text";
 import { cn, noProp } from "@/lib/utils";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 import SvgChevronDownSmall from "@/icons/chevron-down-small";
 import IconButton from "./IconButton";
 import SvgX from "@/icons/x";
@@ -51,7 +51,7 @@ export interface FilterButtonProps
   active?: boolean;
   transient?: boolean;
 
-  leftIcon: React.FunctionComponent<SvgProps>;
+  leftIcon: React.FunctionComponent<IconProps>;
   onClear?: () => void;
 
   children?: string;

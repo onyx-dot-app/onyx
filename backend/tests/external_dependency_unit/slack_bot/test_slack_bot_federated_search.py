@@ -355,6 +355,7 @@ class TestSlackBotFederatedSearch:
         self, mock_query_slack: Mock, channel_name: str
     ) -> None:
         """Setup query_slack mock to capture filtering parameters"""
+        from onyx.context.search.federated.slack_search import SlackQueryResult
 
         def mock_query_slack_capture_params(
             query_string: str,
@@ -366,14 +367,15 @@ class TestSlackBotFederatedSearch:
             include_dm: bool = False,
             entities: dict | None = None,
             available_channels: list | None = None,
-        ) -> list:
+            channel_metadata_dict: dict | None = None,
+        ) -> SlackQueryResult:
             self._captured_filtering_params = {
                 "allowed_private_channel": allowed_private_channel,
                 "include_dm": include_dm,
                 "channel_name": channel_name,
             }
 
-            return []
+            return SlackQueryResult(messages=[], filtered_channels=[])
 
         mock_query_slack.side_effect = mock_query_slack_capture_params
 

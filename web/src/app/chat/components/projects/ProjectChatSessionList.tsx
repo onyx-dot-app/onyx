@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ChatSessionMorePopup } from "@/components/sidebar/ChatSessionMorePopup";
 import { useProjectsContext } from "../../projects/ProjectsContext";
 import { ChatSession } from "@/app/chat/interfaces";
-import AgentIcon from "@/refresh-components/AgentIcon";
+import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import SvgBubbleText from "@/icons/bubble-text";
 import { useAgents } from "@/lib/hooks/useAgents";
 import { formatRelativeTime } from "./project_utils";
@@ -84,7 +84,7 @@ export default function ProjectChatSessionList() {
                         if (assistant) {
                           return (
                             <div className="h-full pt-1">
-                              <AgentIcon agent={assistant} size={18} />
+                              <AgentAvatar agent={assistant} size={18} />
                             </div>
                           );
                         }

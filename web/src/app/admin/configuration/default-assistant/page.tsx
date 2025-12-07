@@ -15,13 +15,14 @@ import { useAgents } from "@/lib/hooks/useAgents";
 import Separator from "@/refresh-components/Separator";
 import { SubLabel } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
-import { cn } from "@/lib/utils";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import Link from "next/link";
 import { Callout } from "@/components/ui/callout";
 import { ToolSnapshot, MCPServersResponse } from "@/lib/tools/interfaces";
 import { ToolSelector } from "@/components/admin/assistants/ToolSelector";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
+import { HoverPopup } from "@/components/HoverPopup";
+import { Info } from "lucide-react";
 
 interface DefaultAssistantConfiguration {
   tool_ids: number[];
@@ -115,7 +116,9 @@ function DefaultAssistantConfig() {
 
   const enabledToolsMap: { [key: number]: boolean } = {};
   tools.forEach((tool) => {
-    enabledToolsMap[tool.id] = config.tool_ids.includes(tool.id);
+    // Enable tool if it's in the current config OR if it's marked as default_enabled
+    enabledToolsMap[tool.id] =
+      config.tool_ids.includes(tool.id) || tool.default_enabled;
   });
 
   return (
@@ -176,9 +179,34 @@ function DefaultAssistantConfig() {
                     Instructions
                   </Text>
                 </div>
-                <SubLabel>
-                  Add instructions to tailor the behavior of the assistant.
-                </SubLabel>
+                <div className="flex items-start gap-1.5 mb-1">
+                  <SubLabel>
+                    Add instructions to tailor the behavior of the assistant.
+                  </SubLabel>
+                  <HoverPopup
+                    mainContent={
+                      <Info className="h-3.5 w-3.5 text-text-400 cursor-help" />
+                    }
+                    popupContent={
+                      <div className="text-xs space-y-1.5 max-w-xs bg-background-neutral-dark-03 text-text-light-05">
+                        <div>You can use placeholders in your prompt:</div>
+                        <div>
+                          <span className="font-mono font-semibold">
+                            [[CURRENT_DATETIME]]
+                          </span>{" "}
+                          - Injects the current date and time
+                        </div>
+                        <div>
+                          <span className="font-mono font-semibold">
+                            [[CITATION_GUIDANCE]]
+                          </span>{" "}
+                          - Injects citation guidance when search tools are used
+                        </div>
+                      </div>
+                    }
+                    direction="bottom"
+                  />
+                </div>
                 <div>
                   <InputTextArea
                     rows={8}

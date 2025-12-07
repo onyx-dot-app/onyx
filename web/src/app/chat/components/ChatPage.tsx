@@ -32,15 +32,15 @@ import { ChatPopup } from "@/app/chat/components/ChatPopup";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import { useUser } from "@/components/user/UserProvider";
-import { NoAssistantModal } from "@/components/modals/NoAssistantModal";
+import NoAssistantModal from "@/components/modals/NoAssistantModal";
 import TextView from "@/components/chat/TextView";
-import { Modal } from "@/components/Modal";
+import Modal from "@/refresh-components/Modal";
+import SvgFileText from "@/icons/file-text";
 import { useSendMessageToParent } from "@/lib/extension/utils";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import { getSourceMetadata } from "@/lib/sources";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { FederatedConnectorDetail, UserRole, ValidSources } from "@/lib/types";
-import { ChatSearchModal } from "@/app/chat/chat_search/ChatSearchModal";
 import useScreenSize from "@/hooks/useScreenSize";
 import { DocumentResults } from "@/app/chat/components/documentSidebar/DocumentResults";
 import { useChatController } from "@/app/chat/hooks/useChatController";
@@ -62,7 +62,7 @@ import {
   useDocumentSidebarVisible,
   useHasSentLocalUserMessage,
 } from "@/app/chat/stores/useChatSessionStore";
-import { FederatedOAuthModal } from "@/components/chat/FederatedOAuthModal";
+import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
 import { MessagesDisplay } from "@/app/chat/components/MessagesDisplay";
 import WelcomeMessage from "@/app/chat/components/WelcomeMessage";
 import ProjectContextPanel from "@/app/chat/components/projects/ProjectContextPanel";
@@ -283,7 +283,6 @@ export default function ChatPage({
   const [projectPanelVisible, setProjectPanelVisible] = useState(true);
 
   const filterManager = useFilters();
-  const [isChatSearchModalOpen, setIsChatSearchModalOpen] = useState(false);
 
   const isDefaultAgent = useIsDefaultAgent({
     liveAssistant,
@@ -619,11 +618,6 @@ export default function ChatPage({
     }
   }, [documentSidebarVisible, updateCurrentDocumentSidebarVisible]);
 
-  const toggleChatSessionSearchModal = useCallback(
-    () => setIsChatSearchModalOpen((open) => !open),
-    [setIsChatSearchModalOpen]
-  );
-
   if (!user) {
     redirect("/auth/login");
   }
@@ -763,7 +757,7 @@ export default function ChatPage({
     return (
       <>
         <HealthCheckBanner />
-        <NoAssistantModal isAdmin={isAdmin} />
+        <NoAssistantModal />
       </>
     );
   }
@@ -780,32 +774,35 @@ export default function ChatPage({
 
       <ChatPopup />
 
-      <ChatSearchModal
-        open={isChatSearchModalOpen}
-        onCloseModal={() => setIsChatSearchModalOpen(false)}
-      />
-
       {retrievalEnabled && documentSidebarVisible && settings?.isMobile && (
         <div className="md:hidden">
           <Modal
-            hideDividerForTitle
-            onOutsideClick={() => updateCurrentDocumentSidebarVisible(false)}
-            title="Sources"
+            open
+            onOpenChange={() => updateCurrentDocumentSidebarVisible(false)}
           >
-            {/* IMPORTANT: this is a memoized component, and it's very important
-            for performance reasons that this stays true. MAKE SURE that all function
-            props are wrapped in useCallback. */}
-            <DocumentResults
-              setPresentingDocument={setPresentingDocument}
-              modal={true}
-              closeSidebar={handleMobileDocumentSidebarClose}
-              selectedDocuments={selectedDocuments}
-              toggleDocumentSelection={toggleDocumentSelection}
-              clearSelectedDocuments={() => setSelectedDocuments([])}
-              // TODO (chris): fix
-              selectedDocumentTokens={0}
-              maxTokens={maxTokens}
-            />
+            <Modal.Content medium>
+              <Modal.Header
+                icon={SvgFileText}
+                title="Sources"
+                onClose={() => updateCurrentDocumentSidebarVisible(false)}
+              />
+              <Modal.Body>
+                {/* IMPORTANT: this is a memoized component, and it's very important
+                for performance reasons that this stays true. MAKE SURE that all function
+                props are wrapped in useCallback. */}
+                <DocumentResults
+                  setPresentingDocument={setPresentingDocument}
+                  modal={true}
+                  closeSidebar={handleMobileDocumentSidebarClose}
+                  selectedDocuments={selectedDocuments}
+                  toggleDocumentSelection={toggleDocumentSelection}
+                  clearSelectedDocuments={() => setSelectedDocuments([])}
+                  // TODO (chris): fix
+                  selectedDocumentTokens={0}
+                  maxTokens={maxTokens}
+                />
+              </Modal.Body>
+            </Modal.Content>
           </Modal>
         </div>
       )}

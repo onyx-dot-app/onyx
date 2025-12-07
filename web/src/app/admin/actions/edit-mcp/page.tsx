@@ -6,7 +6,6 @@ import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { BackButton } from "@/components/BackButton";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { ToolIcon } from "@/components/icons/icons";
 import CardSection from "@/components/admin/CardSection";
 import { TextFormField } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
@@ -36,6 +35,7 @@ import { ToolList } from "@/components/admin/actions/ToolList";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import SvgCheck from "@/icons/check";
 import SvgLink from "@/icons/link";
+import SvgActions from "@/icons/actions";
 
 const validationSchema = Yup.object().shape({
   name: Yup.string().required("Name is required"),
@@ -332,7 +332,7 @@ export default function NewMCPToolPage() {
 
       <AdminPageTitle
         title={verbRoot + "e MCP Server Actions"}
-        icon={<ToolIcon size={32} className="my-auto" />}
+        icon={SvgActions}
       />
 
       <Text className="mb-4">

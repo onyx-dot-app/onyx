@@ -1,8 +1,7 @@
 "use client";
 
-import React, { JSX } from "react";
+import React from "react";
 import { Option } from "@/components/Dropdown";
-import { generateRandomIconShape } from "@/lib/assistantIconUtils";
 import {
   CCPairBasicInfo,
   DocumentSetSummary,
@@ -12,14 +11,7 @@ import {
 } from "@/lib/types";
 import Separator from "@/refresh-components/Separator";
 import Button from "@/refresh-components/buttons/Button";
-import {
-  ArrayHelpers,
-  FieldArray,
-  Form,
-  Formik,
-  FormikProps,
-  FastField,
-} from "formik";
+import { ArrayHelpers, FieldArray, Form, Formik, FormikProps } from "formik";
 import { BooleanFormField, Label, TextFormField } from "@/components/Field";
 import {
   NameField,
@@ -29,7 +21,7 @@ import {
 } from "@/components/admin/assistants/FormSections";
 import { ToolSelector } from "@/components/admin/assistants/ToolSelector";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { getDisplayNameForModel, useLabels } from "@/lib/hooks";
+import { useLabels } from "@/lib/hooks";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
 import { addAssistantToList } from "@/lib/assistants/updateAssistantPreferences";
 import {
@@ -41,7 +33,7 @@ import { ToolSnapshot, MCPServer } from "@/lib/tools/interfaces";
 import { checkUserIsNoAuthUser } from "@/lib/user";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import * as Yup from "yup";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import {
@@ -59,14 +51,12 @@ import {
   CameraIcon,
   GroupsIconSkeleton,
   SwapIcon,
-  TrashIcon,
 } from "@/components/icons/icons";
-import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import { debounce } from "lodash";
 import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
 import StarterMessagesList from "@/app/admin/assistants/StarterMessageList";
 import UnlabeledSwitchField from "@/refresh-components/formik-fields/UnlabeledSwitchField";
-import { generateIdenticon } from "@/refresh-components/AgentIcon";
+import CustomAgentAvatar from "@/refresh-components/avatars/CustomAgentAvatar";
 import { BackButton } from "@/components/BackButton";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { MinimalUserSnapshot } from "@/lib/types";
@@ -101,12 +91,12 @@ import {
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import SvgTrash from "@/icons/trash";
-import SvgEditBig from "@/icons/edit-big";
 import SvgFiles from "@/icons/files";
 import { useAgents } from "@/lib/hooks/useAgents";
 import Text from "@/refresh-components/texts/Text";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import IconButton from "@/refresh-components/buttons/IconButton";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
@@ -122,7 +112,11 @@ function findWebSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === WEB_SEARCH_TOOL_ID);
 }
 
-function SubLabel({ children }: { children: string | JSX.Element }) {
+interface SubLabelProps {
+  children: React.ReactNode;
+}
+
+function SubLabel({ children }: SubLabelProps) {
   return (
     <div
       className="text-sm text-description font-description mb-2"
@@ -166,29 +160,11 @@ export default function AssistantEditor({
   const { labels, refreshLabels, createLabel, deleteLabel } = useLabels();
   const settings = useContext(SettingsContext);
 
-  const colorOptions = [
-    "#FF6FBF",
-    "#6FB1FF",
-    "#B76FFF",
-    "#FFB56F",
-    "#6FFF8D",
-    "#FF6F6F",
-    "#6FFFFF",
-  ];
-
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const userFilesModal = useCreateModal();
 
-  // both `defautIconColor` and `defaultIconShape` are state so that they
-  // persist across formik reformatting
-  const [defautIconColor, _setDeafultIconColor] = useState(
-    colorOptions[Math.floor(Math.random() * colorOptions.length)]
-  );
-  const [defaultIconShape] = useState<any>(
-    () => generateRandomIconShape().encodedGrid
-  );
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [removePersonaImage, setRemovePersonaImage] = useState(false);
@@ -218,7 +194,7 @@ export default function AssistantEditor({
   llmProviders.forEach((llmProvider) => {
     const providerOptions = llmProvider.model_configurations.map(
       (modelConfiguration) => ({
-        name: getDisplayNameForModel(modelConfiguration.name),
+        name: modelConfiguration.display_name || modelConfiguration.name,
         value: modelConfiguration.name,
       })
     );
@@ -234,7 +210,12 @@ export default function AssistantEditor({
 
   const enabledToolsMap: { [key: number]: boolean } = {};
   tools.forEach((tool) => {
-    enabledToolsMap[tool.id] = personaCurrentToolIds.includes(tool.id);
+    // Enable tool if:
+    // 1. It's part of the existing persona's tools, OR
+    // 2. It's marked as default_enabled in the backend config (for new personas)
+    enabledToolsMap[tool.id] =
+      personaCurrentToolIds.includes(tool.id) ||
+      (tool.default_enabled && !existingPersona);
   });
 
   const { allRecentFiles, beginUpload } = useProjectsContext();
@@ -274,8 +255,6 @@ export default function AssistantEditor({
       ? existingPersona.starter_messages
       : [{ message: "", name: "" }],
     enabled_tools_map: enabledToolsMap,
-    icon_color: existingPersona?.icon_color ?? defautIconColor,
-    icon_shape: existingPersona?.icon_shape ?? defaultIconShape,
     uploaded_image: null,
     labels: existingPersona?.labels ?? null,
 
@@ -381,9 +360,7 @@ export default function AssistantEditor({
     fetchMcpServers();
   }, []);
 
-  if (!labels) {
-    return <></>;
-  }
+  if (!labels) return null;
 
   const openDeleteModal = () => {
     setDeleteModalOpen(true);
@@ -494,8 +471,6 @@ export default function AssistantEditor({
               })
             ),
             search_start_date: Yup.date().nullable(),
-            icon_color: Yup.string(),
-            icon_shape: Yup.number(),
             uploaded_image: Yup.mixed().nullable(),
             // EE Only
             label_ids: Yup.array().of(Yup.number()),
@@ -580,7 +555,6 @@ export default function AssistantEditor({
 
           const submissionData: PersonaUpsertParameters = {
             ...values,
-            icon_color: values.icon_color ?? null,
             starter_messages: starterMessages,
             groups: groups,
             users: values.is_public
@@ -693,29 +667,15 @@ export default function AssistantEditor({
             values.llm_model_version_override || defaultModelName || ""
           );
 
-          const iconElement = (() => {
-            if (uploadedImagePreview) {
-              return (
-                <img
-                  src={uploadedImagePreview}
-                  alt="Uploaded agent icon"
-                  className="w-12 h-12 rounded-full object-cover"
-                />
-              );
-            }
+          const src =
+            uploadedImagePreview ??
+            (existingPersona?.uploaded_image_id && !removePersonaImage
+              ? existingPersona?.uploaded_image_id
+              : undefined);
 
-            if (existingPersona?.uploaded_image_id && !removePersonaImage) {
-              return (
-                <img
-                  src={buildImgUrl(existingPersona?.uploaded_image_id)}
-                  alt="Uploaded agent icon"
-                  className="w-12 h-12 rounded-full object-cover"
-                />
-              );
-            }
-
-            return generateIdenticon((values.icon_shape || 0).toString(), 36);
-          })();
+          const iconElement = (
+            <CustomAgentAvatar name={values.name} src={src} size={48} />
+          );
 
           return (
             <>
@@ -751,6 +711,7 @@ export default function AssistantEditor({
 
               <Form className="w-full text-text-950 assistant-editor">
                 <FormErrorFocus />
+
                 {/* Refresh starter messages when name or description changes */}
                 <p className="text-base font-normal text-2xl">
                   {existingPersona ? (
@@ -761,6 +722,7 @@ export default function AssistantEditor({
                     "Create an Agent"
                   )}
                 </p>
+
                 <div className="max-w-4xl w-full">
                   <Separator />
                   <div className="flex gap-x-2 items-center">
@@ -822,29 +784,6 @@ export default function AssistantEditor({
                         </Button>
                       )}
 
-                      {!values.uploaded_image &&
-                        (!existingPersona?.uploaded_image_id ||
-                          removePersonaImage) && (
-                          <Button
-                            secondary
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const newShape = generateRandomIconShape();
-                              const randomColor =
-                                colorOptions[
-                                  Math.floor(
-                                    Math.random() * colorOptions.length
-                                  )
-                                ];
-                              setFieldValue("icon_shape", newShape.encodedGrid);
-                              setFieldValue("icon_color", randomColor);
-                            }}
-                            leftIcon={SvgEditBig}
-                          >
-                            Generate Icon
-                          </Button>
-                        )}
-
                       {existingPersona?.uploaded_image_id &&
                         removePersonaImage &&
                         !values.uploaded_image && (
@@ -890,98 +829,90 @@ export default function AssistantEditor({
 
                 <div className="w-full max-w-4xl">
                   <div className="flex flex-col">
-                    <>
-                      <Separator />
-                      <div className="flex gap-x-2 py-2 justify-start">
-                        <div>
-                          <div className="flex items-start gap-x-2">
-                            <p className="block font-medium text-sm">
-                              Knowledge
-                            </p>
-                            <div className="flex items-center">
-                              <SimpleTooltip
-                                tooltip="To use Knowledge, you need to have at least one Connector configured. You can still upload user files to the agent below."
-                                side="top"
-                                align="center"
-                                disabled={connectorsExist}
-                              >
-                                <div
-                                  className={`${
-                                    !connectorsExist || !searchTool
-                                      ? "opacity-70 cursor-not-allowed"
-                                      : ""
-                                  }`}
-                                >
-                                  <UnlabeledSwitchField
-                                    onCheckedChange={() =>
-                                      toggleToolInValues(searchTool?.id || -1)
-                                    }
-                                    name={`enabled_tools_map.${
-                                      searchTool?.id || -1
-                                    }`}
-                                    disabled={!connectorsExist || !searchTool}
-                                  />
-                                </div>
-                              </SimpleTooltip>
+                    <Separator />
+                    <div className="flex gap-x-2 py-2 justify-start">
+                      <div className="flex items-start gap-x-2">
+                        <p className="block font-medium text-sm">Knowledge</p>
+                        <div className="flex items-center">
+                          <SimpleTooltip
+                            tooltip="To use Knowledge, you need to have at least one Connector configured. You can still upload user files to the agent below."
+                            side="top"
+                            align="center"
+                            disabled={connectorsExist}
+                          >
+                            <div
+                              className={`${
+                                !connectorsExist || !searchTool
+                                  ? "opacity-70 cursor-not-allowed"
+                                  : ""
+                              }`}
+                            >
+                              <UnlabeledSwitchField
+                                onCheckedChange={() =>
+                                  toggleToolInValues(searchTool?.id || -1)
+                                }
+                                name={`enabled_tools_map.${
+                                  searchTool?.id || -1
+                                }`}
+                                disabled={!connectorsExist || !searchTool}
+                              />
                             </div>
-                          </div>
+                          </SimpleTooltip>
                         </div>
                       </div>
-                    </>
+                    </div>
 
                     {((searchTool && values.enabled_tools_map[searchTool.id]) ||
                       !connectorsExist) && (
                       <div>
                         {canShowKnowledgeSource && (
-                          <>
-                            <div className="mt-1.5 mb-2.5">
-                              <div className="flex gap-2.5">
+                          <div className="mt-1.5 mb-2.5">
+                            <div className="flex gap-2.5">
+                              <div
+                                className={`w-[150px] h-[110px] rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-all ${
+                                  values.knowledge_source === "team_knowledge"
+                                    ? "border-2 border-blue-500 bg-blue-50 dark:bg-blue-950/20"
+                                    : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
+                                }`}
+                                onClick={() =>
+                                  setFieldValue(
+                                    "knowledge_source",
+                                    "team_knowledge"
+                                  )
+                                }
+                              >
+                                <div className="text-blue-500 mb-2">
+                                  <BookIcon size={24} />
+                                </div>
+                                <p className="font-medium text-xs">
+                                  Team Knowledge
+                                </p>
+                              </div>
+
+                              {userKnowledgeEnabled && (
                                 <div
                                   className={`w-[150px] h-[110px] rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-all ${
-                                    values.knowledge_source === "team_knowledge"
+                                    values.knowledge_source === "user_files"
                                       ? "border-2 border-blue-500 bg-blue-50 dark:bg-blue-950/20"
                                       : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
                                   }`}
                                   onClick={() =>
                                     setFieldValue(
                                       "knowledge_source",
-                                      "team_knowledge"
+                                      "user_files"
                                     )
                                   }
                                 >
                                   <div className="text-blue-500 mb-2">
-                                    <BookIcon size={24} />
+                                    <FileIcon size={24} />
                                   </div>
                                   <p className="font-medium text-xs">
-                                    Team Knowledge
+                                    User Knowledge
                                   </p>
                                 </div>
-
-                                {userKnowledgeEnabled && (
-                                  <div
-                                    className={`w-[150px] h-[110px] rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-all ${
-                                      values.knowledge_source === "user_files"
-                                        ? "border-2 border-blue-500 bg-blue-50 dark:bg-blue-950/20"
-                                        : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
-                                    }`}
-                                    onClick={() =>
-                                      setFieldValue(
-                                        "knowledge_source",
-                                        "user_files"
-                                      )
-                                    }
-                                  >
-                                    <div className="text-blue-500 mb-2">
-                                      <FileIcon size={24} />
-                                    </div>
-                                    <p className="font-medium text-xs">
-                                      User Knowledge
-                                    </p>
-                                  </div>
-                                )}
-                              </div>
+                              )}
                             </div>
-                          </>
+                          </div>
                         )}
 
                         {values.knowledge_source === "user_files" &&
@@ -1263,8 +1194,8 @@ export default function AssistantEditor({
                     </div>
                   </div>
                 </div>
-                <Separator />
 
+                <Separator />
                 <div className="-mt-2">
                   <div className="flex gap-x-2 mb-2 items-center">
                     <div className="block font-medium text-sm">
@@ -1318,6 +1249,7 @@ export default function AssistantEditor({
                   showAdvancedOptions={showAdvancedOptions}
                   setShowAdvancedOptions={setShowAdvancedOptions}
                 />
+
                 {showAdvancedOptions && (
                   <>
                     <div className="max-w-4xl w-full">
@@ -1604,7 +1536,8 @@ export default function AssistantEditor({
                                 </span>
                               </div>
                               {user?.role === UserRole.ADMIN && (
-                                <button
+                                <IconButton
+                                  icon={SvgTrash}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     const label = labels.find(
@@ -1614,10 +1547,7 @@ export default function AssistantEditor({
                                       deleteLabel(label.id);
                                     }
                                   }}
-                                  className="ml-2 p-1 hover:bg-background-hover rounded"
-                                >
-                                  <TrashIcon size={16} />
-                                </button>
+                                />
                               )}
                             </div>
                           )}
@@ -1644,8 +1574,8 @@ export default function AssistantEditor({
                         </div>
                       </div>
                     </div>
-                    <Separator />
 
+                    <Separator />
                     <div className="flex flex-col gap-y-4">
                       <div className="flex flex-col gap-y-4">
                         <h3 className="font-medium text-sm">
@@ -1684,8 +1614,8 @@ export default function AssistantEditor({
                         </div>
                       </div>
                     </div>
-                    <Separator />
 
+                    <Separator />
                     <BooleanFormField
                       small
                       removeIndent
@@ -1695,19 +1625,17 @@ export default function AssistantEditor({
                     />
 
                     <Separator />
-
                     <TaskPromptField />
                   </>
                 )}
 
                 <div className="mt-12 w-full flex justify-between items-center">
-                  <div>
-                    {existingPersona && (
-                      <Button danger onClick={openDeleteModal}>
-                        Delete
-                      </Button>
-                    )}
-                  </div>
+                  {existingPersona && (
+                    <Button danger onClick={openDeleteModal}>
+                      Delete
+                    </Button>
+                  )}
+
                   <div className="flex gap-x-2 items-center">
                     <Button
                       disabled={

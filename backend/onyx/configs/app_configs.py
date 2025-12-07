@@ -534,6 +534,10 @@ CONFLUENCE_TIMEZONE_OFFSET = float(
     os.environ.get("CONFLUENCE_TIMEZONE_OFFSET", get_current_tz_offset())
 )
 
+CONFLUENCE_USE_ONYX_USERS_FOR_GROUP_SYNC = (
+    os.environ.get("CONFLUENCE_USE_ONYX_USERS_FOR_GROUP_SYNC", "").lower() == "true"
+)
+
 GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD", 10 * 1024 * 1024)
 )

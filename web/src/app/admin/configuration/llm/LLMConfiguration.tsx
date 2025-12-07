@@ -1,6 +1,7 @@
 "use client";
 
-import { Modal } from "@/components/Modal";
+import Modal from "@/refresh-components/Modal";
+import SvgSettings from "@/icons/settings";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useState } from "react";
 import useSWR from "swr";
@@ -36,29 +37,32 @@ function LLMProviderUpdateModal({
     "Custom LLM Provider";
 
   return (
-    <Modal
-      title={`Setup ${providerName}`}
-      onOutsideClick={() => onClose()}
-      hideOverflow={true}
-    >
-      <div className="max-h-[70vh] overflow-y-auto px-4">
-        {llmProviderDescriptor ? (
-          <LLMProviderUpdateForm
-            llmProviderDescriptor={llmProviderDescriptor}
-            onClose={onClose}
-            existingLlmProvider={existingLlmProvider}
-            shouldMarkAsDefault={shouldMarkAsDefault}
-            setPopup={setPopup}
-          />
-        ) : (
-          <CustomLLMProviderUpdateForm
-            onClose={onClose}
-            existingLlmProvider={existingLlmProvider}
-            shouldMarkAsDefault={shouldMarkAsDefault}
-            setPopup={setPopup}
-          />
-        )}
-      </div>
+    <Modal open onOpenChange={onClose}>
+      <Modal.Content medium>
+        <Modal.Header
+          icon={SvgSettings}
+          title={`Setup ${providerName}`}
+          onClose={onClose}
+        />
+        <Modal.Body className="max-h-[70vh] overflow-y-auto">
+          {llmProviderDescriptor ? (
+            <LLMProviderUpdateForm
+              llmProviderDescriptor={llmProviderDescriptor}
+              onClose={onClose}
+              existingLlmProvider={existingLlmProvider}
+              shouldMarkAsDefault={shouldMarkAsDefault}
+              setPopup={setPopup}
+            />
+          ) : (
+            <CustomLLMProviderUpdateForm
+              onClose={onClose}
+              existingLlmProvider={existingLlmProvider}
+              shouldMarkAsDefault={shouldMarkAsDefault}
+              setPopup={setPopup}
+            />
+          )}
+        </Modal.Body>
+      </Modal.Content>
     </Modal>
   );
 }
@@ -112,17 +116,21 @@ function AddCustomLLMProvider({
     return (
       <>
         {popup}
-        <Modal
-          title={`Setup Custom LLM Provider`}
-          onOutsideClick={() => setFormIsVisible(false)}
-        >
-          <div className="max-h-[70vh] overflow-y-auto px-4">
-            <CustomLLMProviderUpdateForm
+        <Modal open onOpenChange={() => setFormIsVisible(false)}>
+          <Modal.Content medium>
+            <Modal.Header
+              icon={SvgSettings}
+              title="Setup Custom LLM Provider"
               onClose={() => setFormIsVisible(false)}
-              shouldMarkAsDefault={existingLlmProviders.length === 0}
-              setPopup={setPopup}
             />
-          </div>
+            <Modal.Body className="max-h-[70vh] overflow-y-auto">
+              <CustomLLMProviderUpdateForm
+                onClose={() => setFormIsVisible(false)}
+                shouldMarkAsDefault={existingLlmProviders.length === 0}
+                setPopup={setPopup}
+              />
+            </Modal.Body>
+          </Modal.Content>
         </Modal>
       </>
     );

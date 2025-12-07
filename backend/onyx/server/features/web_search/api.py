@@ -4,7 +4,6 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
-from onyx.chat.models import DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.db.web_search import fetch_active_web_content_provider
@@ -16,6 +15,8 @@ from onyx.server.features.web_search.models import WebSearchToolResponse
 from onyx.server.features.web_search.models import WebSearchWithContentResponse
 from onyx.server.manage.web_search.models import WebContentProviderView
 from onyx.server.manage.web_search.models import WebSearchProviderView
+from onyx.tools.models import LlmOpenUrlResult
+from onyx.tools.models import LlmWebSearchResult
 from onyx.tools.tool_implementations.open_url.models import WebContentProvider
 from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
     OnyxWebCrawler,
@@ -31,18 +32,15 @@ from onyx.tools.tool_implementations.web_search.providers import (
 from onyx.tools.tool_implementations.web_search.utils import (
     truncate_search_result_content,
 )
-from onyx.tools.tool_implementations_v2.tool_result_models import (
-    LlmOpenUrlResult,
-)
-from onyx.tools.tool_implementations_v2.tool_result_models import (
-    LlmWebSearchResult,
-)
 from onyx.utils.logger import setup_logger
 from shared_configs.enums import WebContentProviderType
 from shared_configs.enums import WebSearchProviderType
 
 router = APIRouter(prefix="/web-search")
 logger = setup_logger()
+
+
+DOCUMENT_CITATION_NUMBER_EMPTY_VALUE = -1
 
 
 def _get_active_search_provider(

@@ -1,22 +1,13 @@
-from collections.abc import Sequence
 from datetime import datetime
 from typing import cast
 
 from langchain_core.messages import BaseMessage
 
-from onyx.chat.models import LlmDoc
-from onyx.chat.models import PromptConfig
-from onyx.configs.chat_configs import LANGUAGE_HINT
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.models import InferenceChunk
-from onyx.db.models import Persona
 from onyx.prompts.chat_prompts import ADDITIONAL_INFO
-from onyx.prompts.chat_prompts import CITATION_REMINDER
 from onyx.prompts.chat_prompts import COMPANY_DESCRIPTION_BLOCK
 from onyx.prompts.chat_prompts import COMPANY_NAME_BLOCK
-from onyx.prompts.chat_prompts import LONG_CONVERSATION_REMINDER_TAG_CLOSED
-from onyx.prompts.chat_prompts import LONG_CONVERSATION_REMINDER_TAG_OPEN
-from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
+from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
 from onyx.prompts.constants import CODE_BLOCK_PAT
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
@@ -26,6 +17,7 @@ logger = setup_logger()
 
 
 _DANSWER_DATETIME_REPLACEMENT_PAT = "[[CURRENT_DATETIME]]"
+_CITATION_GUIDANCE_REPLACEMENT_PAT = "[[CITATION_GUIDANCE]]"
 _BASIC_TIME_STR = "The current date is {datetime_info}."
 
 
@@ -67,10 +59,42 @@ def replace_current_datetime_tag(
     )
 
 
-def build_date_time_string() -> str:
-    return ADDITIONAL_INFO.format(
-        datetime_info=_BASIC_TIME_STR.format(datetime_info=get_current_llm_day_time())
+def replace_citation_guidance_tag(
+    prompt_str: str,
+    *,
+    should_cite_documents: bool = False,
+    include_all_guidance: bool = False,
+) -> tuple[str, bool]:
+    """
+    Replace [[CITATION_GUIDANCE]] placeholder with citation guidance if needed.
+
+    Returns:
+        tuple[str, bool]: (prompt_with_replacement, should_append_fallback)
+        - prompt_with_replacement: The prompt with placeholder replaced (or unchanged if not present)
+        - should_append_fallback: True if citation guidance should be appended
+            (placeholder is not present and citations are needed)
+    """
+    placeholder_was_present = _CITATION_GUIDANCE_REPLACEMENT_PAT in prompt_str
+
+    if not placeholder_was_present:
+        # Placeholder not present - caller should append if citations are needed
+        should_append = (
+            should_cite_documents or include_all_guidance
+        ) and REQUIRE_CITATION_GUIDANCE not in prompt_str
+        return prompt_str, should_append
+
+    citation_guidance = (
+        REQUIRE_CITATION_GUIDANCE
+        if should_cite_documents or include_all_guidance
+        else ""
     )
+
+    replaced_prompt = prompt_str.replace(
+        _CITATION_GUIDANCE_REPLACEMENT_PAT,
+        citation_guidance,
+    )
+
+    return replaced_prompt, False
 
 
 def handle_onyx_date_awareness(
@@ -95,7 +119,11 @@ def handle_onyx_date_awareness(
         return prompt_with_datetime
 
     if datetime_aware:
-        return prompt_str + build_date_time_string()
+        return prompt_str + ADDITIONAL_INFO.format(
+            datetime_info=_BASIC_TIME_STR.format(
+                datetime_info=get_current_llm_day_time()
+            )
+        )
 
     return prompt_str
 
@@ -121,72 +149,6 @@ def get_company_context() -> str | None:
     except Exception as e:
         logger.error(f"Error handling company awareness: {e}")
         return None
-
-
-def build_task_prompt_reminders(
-    prompt: Persona | PromptConfig,
-    use_language_hint: bool,
-    citation_str: str = CITATION_REMINDER,
-    language_hint_str: str = LANGUAGE_HINT,
-) -> str:
-    base_task = (
-        prompt.reminder
-        if isinstance(prompt, PromptConfig)
-        else prompt.task_prompt or ""
-    )
-    citation_or_nothing = citation_str
-    language_hint_or_nothing = language_hint_str.lstrip() if use_language_hint else ""
-    return base_task + citation_or_nothing + language_hint_or_nothing
-
-
-def build_task_prompt_reminders_v2(
-    prompt: Persona | PromptConfig,
-    use_language_hint: bool,
-    should_cite: bool,
-    last_iteration_included_web_search: bool = False,
-    language_hint_str: str = LANGUAGE_HINT,
-) -> str | None:
-    """V2 version that conditionally includes citation requirements.
-
-    Args:
-        chat_turn_user_message: The user's message for this chat turn
-        prompt: Persona or PromptConfig with task_prompt
-        use_language_hint: Whether to include language hint
-        should_cite: Whether to include citation requirement statement
-        last_iteration_included_web_search: Whether the last iteration included web_search calls
-        language_hint_str: Language hint string to use
-
-    Returns:
-        Task prompt with optional citation statement and language hint
-    """
-    base_task = (
-        prompt.reminder
-        if isinstance(prompt, PromptConfig)
-        else prompt.task_prompt or ""
-    )
-
-    open_url_or_nothing = (
-        OPEN_URL_REMINDER if last_iteration_included_web_search else ""
-    )
-    citation_or_nothing = CITATION_REMINDER if should_cite else ""
-
-    language_hint_or_nothing = language_hint_str.lstrip() if use_language_hint else ""
-    lines = []
-    if base_task:
-        lines.append(base_task)
-    if open_url_or_nothing:
-        lines.append(open_url_or_nothing)
-    if citation_or_nothing:
-        lines.append(citation_or_nothing)
-    if language_hint_or_nothing:
-        lines.append(language_hint_or_nothing)
-    if lines:
-        return "\n".join(
-            [LONG_CONVERSATION_REMINDER_TAG_OPEN]
-            + lines
-            + [LONG_CONVERSATION_REMINDER_TAG_CLOSED]
-        )
-    return None
 
 
 # Maps connector enum string to a more natural language representation for the LLM
@@ -231,25 +193,6 @@ def build_doc_context_str(
             context_str += f"Updated: {update_str}\n"
     context_str += f"{CODE_BLOCK_PAT.format(content.strip())}\n\n\n"
     return context_str
-
-
-def build_complete_context_str(
-    context_docs: Sequence[LlmDoc | InferenceChunk],
-    include_metadata: bool = True,
-) -> str:
-    context_str = ""
-    for ind, doc in enumerate(context_docs, start=1):
-        context_str += build_doc_context_str(
-            semantic_identifier=doc.semantic_identifier,
-            source_type=doc.source_type,
-            content=doc.content,
-            metadata_dict=doc.metadata,
-            updated_at=doc.updated_at,
-            ind=ind,
-            include_metadata=include_metadata,
-        )
-
-    return context_str.strip()
 
 
 _PER_MESSAGE_TOKEN_BUFFER = 7

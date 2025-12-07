@@ -13,6 +13,7 @@ from enum import Enum
 from typing import Any
 from typing import cast
 from urllib.parse import unquote
+from urllib.parse import urlsplit
 
 import msal  # type: ignore[import-untyped]
 import requests
@@ -728,45 +729,76 @@ class SharepointConnector(
         return self._graph_client
 
     @staticmethod
+    def _strip_share_link_tokens(path: str) -> list[str]:
+        # Share links often include a token prefix like /:f:/r/ or /:x:/r/.
+        segments = [segment for segment in path.split("/") if segment]
+        if segments and segments[0].startswith(":"):
+            segments = segments[1:]
+            if segments and segments[0] in {"r", "s", "g"}:
+                segments = segments[1:]
+        return segments
+
+    @staticmethod
+    def _normalize_sharepoint_url(url: str) -> tuple[str | None, list[str]]:
+        try:
+            parsed = urlsplit(url)
+        except ValueError:
+            logger.warning(f"Sharepoint URL '{url}' could not be parsed")
+            return None, []
+
+        if not parsed.scheme or not parsed.netloc:
+            logger.warning(
+                f"Sharepoint URL '{url}' is not a valid absolute URL (missing scheme or host)"
+            )
+            return None, []
+
+        path_segments = SharepointConnector._strip_share_link_tokens(parsed.path)
+        return f"{parsed.scheme}://{parsed.netloc}", path_segments
+
+    @staticmethod
     def _extract_site_and_drive_info(site_urls: list[str]) -> list[SiteDescriptor]:
         site_data_list = []
         for url in site_urls:
-            parts = url.strip().split("/")
+            base_url, parts = SharepointConnector._normalize_sharepoint_url(url.strip())
+            if base_url is None:
+                continue
 
+            lower_parts = [part.lower() for part in parts]
             site_type_index = None
-            if "sites" in parts:
-                site_type_index = parts.index("sites")
-            elif "teams" in parts:
-                site_type_index = parts.index("teams")
+            for site_token in ("sites", "teams"):
+                if site_token in lower_parts:
+                    site_type_index = lower_parts.index(site_token)
+                    break
 
-            if site_type_index is not None:
-                # Extract the base site URL (up to and including the site/team name)
-                site_url = "/".join(parts[: site_type_index + 2])
-                remaining_parts = parts[site_type_index + 2 :]
+            if site_type_index is None or len(parts) <= site_type_index + 1:
+                logger.warning(
+                    f"Site URL '{url}' is not a valid Sharepoint URL (must contain /sites/<name> or /teams/<name>)"
+                )
+                continue
 
-                # Extract drive name and folder path
-                if remaining_parts:
-                    drive_name = unquote(remaining_parts[0])
-                    folder_path = (
-                        "/".join(unquote(part) for part in remaining_parts[1:])
-                        if len(remaining_parts) > 1
-                        else None
-                    )
-                else:
-                    drive_name = None
-                    folder_path = None
+            site_path = parts[: site_type_index + 2]
+            remaining_parts = parts[site_type_index + 2 :]
+            site_url = f"{base_url}/" + "/".join(site_path)
 
-                site_data_list.append(
-                    SiteDescriptor(
-                        url=site_url,
-                        drive_name=drive_name,
-                        folder_path=folder_path,
-                    )
+            # Extract drive name and folder path
+            if remaining_parts:
+                drive_name = unquote(remaining_parts[0])
+                folder_path = (
+                    "/".join(unquote(part) for part in remaining_parts[1:])
+                    if len(remaining_parts) > 1
+                    else None
                 )
             else:
-                logger.warning(
-                    f"Site URL '{url}' is not a valid Sharepoint URL (must contain /sites/ or /teams/)"
+                drive_name = None
+                folder_path = None
+
+            site_data_list.append(
+                SiteDescriptor(
+                    url=site_url,
+                    drive_name=drive_name,
+                    folder_path=folder_path,
                 )
+            )
         return site_data_list
 
     def _get_drive_items_for_drive_name(

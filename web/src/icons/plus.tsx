@@ -1,11 +1,13 @@
-import * as React from "react";
-import type { SVGProps } from "react";
+import { IconProps } from "@/icons";
 
-const SvgPlus = (props: SVGProps<SVGSVGElement>) => (
+const SvgPlus = ({ size, ...props }: IconProps) => (
   <svg
+    width={size}
+    height={size}
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 16 16"
     fill="none"
+    stroke="currentColor"
     {...props}
   >
     <path

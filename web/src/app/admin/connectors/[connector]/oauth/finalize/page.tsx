@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AdminPageTitle } from "@/components/admin/Title";
 import Button from "@/refresh-components/buttons/Button";
-import { KeyIcon } from "@/components/icons/icons";
 import { getSourceMetadata, isValidSource } from "@/lib/sources";
 import { ConfluenceAccessibleResource, ValidSources } from "@/lib/types";
 import CardSection from "@/components/admin/CardSection";
@@ -15,6 +14,7 @@ import {
 import { SelectorFormField } from "@/components/Field";
 import { ErrorMessage, Field, Form, Formik, useFormikContext } from "formik";
 import * as Yup from "yup";
+import SvgKey from "@/icons/key";
 
 // Helper component to keep the effect logic clean:
 function UpdateCloudURLOnCloudIdChange({
@@ -142,7 +142,7 @@ export default function OAuthFinalizePage() {
 
   return (
     <div className="mx-auto h-screen flex flex-col">
-      <AdminPageTitle title={pageTitle} icon={<KeyIcon size={32} />} />
+      <AdminPageTitle title={pageTitle} icon={SvgKey} />
 
       <div className="flex-1 flex flex-col items-center justify-center">
         <CardSection className="max-w-md w-[500px] h-[250px] p-8">

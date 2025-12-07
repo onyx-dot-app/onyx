@@ -9,9 +9,7 @@ import {
 } from "@/components/ui/table";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { LoadingAnimation } from "@/components/Loading";
-import { BasicTable } from "@/components/admin/connectors/BasicTable";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
-import { TrashIcon } from "@/components/icons/icons";
 import { deleteUserGroup } from "./lib";
 import { useRouter } from "next/navigation";
 import { FiEdit2, FiUser } from "react-icons/fi";

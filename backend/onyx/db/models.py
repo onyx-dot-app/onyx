@@ -62,6 +62,7 @@ from onyx.db.enums import (
     UserFileStatus,
     MCPAuthenticationPerformer,
     MCPTransport,
+    MCPServerStatus,
     ThemePreference,
     SwitchoverType,
 )
@@ -2436,6 +2437,11 @@ class ModelConfiguration(Base):
 
     supports_image_input: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
+    # Human-readable display name for the model.
+    # For dynamic providers (OpenRouter, Bedrock, Ollama), this comes from the source API.
+    # For static providers (OpenAI, Anthropic), this may be null and will fall back to LiteLLM.
+    display_name: Mapped[str | None] = mapped_column(String, nullable=True)
+
     llm_provider: Mapped["LLMProvider"] = relationship(
         "LLMProvider",
         back_populates="model_configurations",
@@ -2791,8 +2797,7 @@ class Persona(Base):
     datetime_aware: Mapped[bool] = mapped_column(Boolean, default=True)
 
     uploaded_image_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    icon_color: Mapped[str | None] = mapped_column(String, nullable=True)
-    icon_shape: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    icon_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # These are only defaults, users can select from all if desired
     document_sets: Mapped[list[DocumentSet]] = relationship(
@@ -3634,16 +3639,22 @@ class MCPServer(Base):
     description: Mapped[str | None] = mapped_column(String, nullable=True)
     server_url: Mapped[str] = mapped_column(String, nullable=False)
     # Transport type for connecting to the MCP server
-    transport: Mapped[MCPTransport] = mapped_column(
-        Enum(MCPTransport, native_enum=False), nullable=False
+    transport: Mapped[MCPTransport | None] = mapped_column(
+        Enum(MCPTransport, native_enum=False), nullable=True
     )
     # Auth type: "none", "api_token", or "oauth"
-    auth_type: Mapped[MCPAuthenticationType] = mapped_column(
-        Enum(MCPAuthenticationType, native_enum=False), nullable=False
+    auth_type: Mapped[MCPAuthenticationType | None] = mapped_column(
+        Enum(MCPAuthenticationType, native_enum=False), nullable=True
     )
     # Who performs authentication for this server (ADMIN or PER_USER)
-    auth_performer: Mapped[MCPAuthenticationPerformer] = mapped_column(
-        Enum(MCPAuthenticationPerformer, native_enum=False), nullable=False
+    auth_performer: Mapped[MCPAuthenticationPerformer | None] = mapped_column(
+        Enum(MCPAuthenticationPerformer, native_enum=False), nullable=True
+    )
+    # Status tracking for configuration flow
+    status: Mapped[MCPServerStatus] = mapped_column(
+        Enum(MCPServerStatus, native_enum=False),
+        nullable=False,
+        server_default="CREATED",
     )
     # Admin connection config - used for the config page
     # and (when applicable) admin-managed auth

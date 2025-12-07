@@ -5,6 +5,7 @@ import { FastField, useFormikContext } from "formik";
 import { TextFormField } from "@/components/Field";
 import { FiChevronRight, FiChevronDown } from "react-icons/fi";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
+import { DOCS_ADMINS_PATH } from "@/lib/constants";
 
 const MAX_DESCRIPTION_LENGTH = 600;
 import { useState, useEffect } from "react";
@@ -82,7 +83,7 @@ export const TaskPromptField = memo(function TaskPromptField() {
             form.setFieldValue("task_prompt", e.target.value);
           }}
           explanationText="Learn about prompting in our docs!"
-          explanationLink="https://docs.onyx.app/admin/agents/overview"
+          explanationLink={`${DOCS_ADMINS_PATH}/agents/overview`}
           className="[&_textarea]:placeholder:text-text-muted/50"
         />
       )}
