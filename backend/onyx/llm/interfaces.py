@@ -120,7 +120,7 @@ class LLM(abc.ABC):
             structured_response_format,
             timeout_override,
             max_tokens,
-            user_identity,
+            user_identity=user_identity,
         )
 
     @traced(name="invoke llm", type="llm")
@@ -203,7 +203,7 @@ class LLM(abc.ABC):
             structured_response_format,
             timeout_override,
             max_tokens,
-            user_identity,
+            user_identity=user_identity,
         )
 
     def stream_langchain(

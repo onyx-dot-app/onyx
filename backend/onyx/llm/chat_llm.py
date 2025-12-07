@@ -570,19 +570,16 @@ class LitellmLLM(LLM):
                 **model_kwargs_without_metadata,
             }
 
-            if metadata:
-                litellm_args["metadata"] = metadata
-            if SEND_USER_METADATA_TO_LLM_PROVIDER and user_identity and user_identity.user_id:
-                litellm_args["user"] = user_identity.user_id
-
             if SEND_USER_METADATA_TO_LLM_PROVIDER and user_identity:
-                logger.debug(
-                    "LLM call identifiers user_id=%s session_id=%s metadata=%s",
-                    user_identity.user_id,
-                    user_identity.session_id,
-                    litellm_args.get("metadata"),
-                )
+                if user_identity.session_id:
+                    metadata["session_id"] = user_identity.session_id
+                if user_identity.user_id:
+                    litellm_args["user"] = user_identity.user_id
 
+                if metadata:
+                    litellm_args["metadata"] = metadata
+            if metadata and not litellm_args.get("metadata"):
+                litellm_args["metadata"] = metadata
             return litellm.completion(**litellm_args)
         except Exception as e:
 
