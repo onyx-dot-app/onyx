@@ -1,5 +1,9 @@
 import os
 
+
+EXPLORATION_TEST_SCRIPT_USE_DEFAULT = (
+    os.environ.get("EXPLORATION_TEST_SCRIPT_USE_DEFAULT") or "false"
+).lower() == "true"
 EXPLORATION_TEST_USE_DC_DEFAULT = (
     os.environ.get("EXPLORATION_TEST_USE_DC_DEFAULT") or "false"
 ).lower() == "true"
@@ -17,4 +21,7 @@ EXPLORATION_TEST_USE_CORPUS_HISTORY_DEFAULT = (
 ).lower() == "true"
 EXPLORATION_TEST_USE_THINKING_DEFAULT = (
     os.environ.get("EXPLORATION_TEST_USE_THINKING_DEFAULT") or "false"
+).lower() == "true"
+EXPLORATION_TEST_USE_CONTEXT_EXPLORER_DEFAULT = (
+    os.environ.get("EXPLORATION_TEST_USE_CONTEXT_EXPLORER_DEFAULT") or "false"
 ).lower() == "true"

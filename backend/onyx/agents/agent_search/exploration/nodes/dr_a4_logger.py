@@ -24,9 +24,13 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.configs.exploration_research_configs import (
+    EXPLORATION_TEST_SCRIPT_USE_DEFAULT,
+)
 from onyx.context.search.models import InferenceSection
 from onyx.db.chat import create_search_doc_from_inference_section
 from onyx.db.chat import update_db_session_with_messages
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ChatMessage__SearchDoc
 from onyx.db.models import ResearchAgentIteration
 from onyx.db.models import ResearchAgentIterationSubStep
@@ -201,6 +205,30 @@ def save_iteration(
     db_session.commit()
 
 
+def save_new_cs(
+    graph_config: GraphConfig,
+    new_cheat_sheet_context: dict[str, Any] | None = None,
+) -> None:
+
+    with get_session_with_current_tenant() as temp_db_session:
+
+        user = fetch_user_by_id(
+            temp_db_session, graph_config.tooling.search_tool.user.id
+        )
+        if new_cheat_sheet_context and user:
+            logger.info(f"User: {user.email}")
+            update_user_cheat_sheet_context(
+                user=user,
+                new_cheat_sheet_context=new_cheat_sheet_context,
+                db_session=temp_db_session,
+            )
+            logger.info("CS Update done - pre")
+
+        temp_db_session.commit()
+
+        logger.info("CS Update done - post")
+
+
 def logging(
     state: MainState, config: RunnableConfig, writer: StreamWriter = lambda _: None
 ) -> LoggerUpdate:
@@ -212,6 +240,8 @@ def logging(
     # TODO: generate final answer using all the previous steps
     # (right now, answers from each step are concatenated onto each other)
     # Also, add missing fields once usage in UI is clear.
+
+    state.use_dc
 
     state.current_step_nr
     new_base_knowledge = state.extended_base_knowledge
@@ -254,23 +284,30 @@ def logging(
     )
     length_new_knowledge = len(llm_tokenizer.encode(json.dumps(new_knowledge)))
 
-    logger.debug(f"Length of original knowledge: {length_original_knowledge}")
-    logger.debug(f"Length of new knowledge: {length_new_knowledge}")
-    logger.debug(
+    logger.info(f"Length of original knowledge: {length_original_knowledge}")
+    logger.info(f"Length of new knowledge: {length_new_knowledge}")
+    logger.info(
         f"Length of knowledge increase: {length_new_knowledge - length_original_knowledge}"
     )
 
-    # Log the research agent steps
-    save_iteration(
-        state,
-        graph_config,
-        aggregated_context,
-        final_answer,
-        all_cited_documents,
-        is_internet_marker_dict,
-        num_tokens,
-        new_cheat_sheet_context=new_knowledge,
-    )
+    if EXPLORATION_TEST_SCRIPT_USE_DEFAULT:
+        save_new_cs(
+            graph_config=graph_config,
+            new_cheat_sheet_context=new_knowledge,
+        )
+        logger.info("New CS Updated")
+    else:
+        # Log the research agent steps
+        save_iteration(
+            state,
+            graph_config,
+            aggregated_context,
+            final_answer,
+            all_cited_documents,
+            is_internet_marker_dict,
+            num_tokens,
+            new_cheat_sheet_context=new_knowledge,
+        )
 
     return LoggerUpdate(
         log_messages=[

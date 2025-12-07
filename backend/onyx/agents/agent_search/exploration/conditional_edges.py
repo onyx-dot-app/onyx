@@ -24,17 +24,17 @@ def decision_router(state: MainState) -> list[Send | Hashable] | DRPath | str:
         next_tool_path = available_tools[next_tool_name].path
     elif next_tool_name == DRPath.END.value:
         return END
+    elif next_tool_name == DRPath.CONTEXT_EXPLORER.value:
+        return DRPath.CONTEXT_EXPLORER
     elif next_tool_name == DRPath.LOGGER.value:
         return DRPath.LOGGER
+    elif next_tool_name == DRPath.CLARIFIER.value:
+        return DRPath.CLARIFIER
     elif next_tool_name == DRPath.CLOSER.value:
         return DRPath.CLOSER
 
     else:
         return DRPath.ORCHESTRATOR
-
-    # handle invalid paths
-    if next_tool_path == DRPath.CLARIFIER:
-        raise ValueError("CLARIFIER is not a valid path during iteration")
 
     # handle tool calls without a query
     if (

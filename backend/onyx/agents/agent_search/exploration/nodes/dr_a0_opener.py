@@ -98,6 +98,7 @@ def _get_available_tools(
     active_source_types: list[DocumentSource],
     use_clarifier: bool = False,
     use_thinking: bool = False,
+    use_context_explorer: bool = False,
 ) -> dict[str, OrchestratorTool]:
 
     available_tools: dict[str, OrchestratorTool] = {}
@@ -206,9 +207,12 @@ def _get_available_tools(
             description="""This tool should be used if the next step is not particularly clear, \
 or if you think you need to think through the original question and the questions and answers \
 you have received so far in order to make a decision about what to do next AMONGST THE TOOLS AVAILABLE TO YOU \
-IN THIS REQUEST! (Note: some tools described earlier may be excluded!). Note that you can also refer back to \
-information and context from the base knowledge provided in the system prompt.
-If in doubt, use this tool. No action will be taken, just some reasoning will be done.""",
+IN THIS REQUEST! (Note: some tools described earlier may be excluded!).
+Note:
+   - you can refer to information from memory that may become available i order to inform which \
+tool to use next. BUT you MAY NOT use information from memory to answer thye question, so you \
+CANNOT chose the Closer tool in a situation where the answer is available in memory.
+  - If in doubt, use this tool. No action will be taken, just some reasoning will be done.""",
             metadata={},
             cost=0.0,
             tool_object=None,
@@ -225,6 +229,23 @@ the user in order to address the task. This can pertain to the original question
 out during the process so far. Note that you can also refer back to \
 information and context from the base knowledge provided in the system prompt.
 Articulate the questions in a bullet form.""",
+            metadata={},
+            cost=0.0,
+            tool_object=None,
+        )
+
+    if use_context_explorer:
+        available_tools[DRPath.CONTEXT_EXPLORER.value] = OrchestratorTool(
+            tool_id=104,
+            name=DRPath.CONTEXT_EXPLORER.value,
+            llm_path=DRPath.CONTEXT_EXPLORER.value,
+            path=DRPath.CONTEXT_EXPLORER,
+            description="""This tool allows you to aquire more context from a 'memory' that has information about \
+the user, their \
+company, and search- and reasoning strategies. If you think that the question implicitly relates to something the user \
+expects you to know to answer the question, you should use this tool to aquire more context. Also, if you believe that \
+answering the question may require non-trivial search- or reasoning strategies, you should use this tool to see whether \
+relevant lessons have been learned in the past.""",
             metadata={},
             cost=0.0,
             tool_object=None,
@@ -417,7 +438,7 @@ ANY tool mentioned can be accessed through this generic tool. If in doubt, use t
 }
 
 
-def clarifier(
+def opener(
     state: MainState, config: RunnableConfig, writer: StreamWriter = lambda _: None
 ) -> OrchestrationSetup:
     """
@@ -425,11 +446,18 @@ def clarifier(
     questions is needed. For now this is based on the models
     """
 
+    # _EXPLORATION_TEST_USE_DC = EXPLORATION_TEST_USE_DC_DEFAULT
+    _EXPLORATION_TEST_USE_DC = True
+    # _EXPLORATION_TEST_USE_DC = False
+
     _EXPLORATION_TEST_USE_CALRIFIER = EXPLORATION_TEST_USE_CALRIFIER_DEFAULT
     _EXPLORATION_TEST_USE_PLAN = EXPLORATION_TEST_USE_PLAN_DEFAULT
     _EXPLORATION_TEST_USE_PLAN_UPDATES = EXPLORATION_TEST_USE_PLAN_UPDATES_DEFAULT
     _EXPLORATION_TEST_USE_CORPUS_HISTORY = EXPLORATION_TEST_USE_CORPUS_HISTORY_DEFAULT
     _EXPLORATION_TEST_USE_THINKING = EXPLORATION_TEST_USE_THINKING_DEFAULT
+    # _EXPLORATION_TEST_USE_CONTEXT_EXPLORER = EXPLORATION_TEST_USE_CONTEXT_EXPLORER_DEFAULT
+    _EXPLORATION_TEST_USE_CONTEXT_EXPLORER = True
+    # _EXPLORATION_TEST_USE_CONTEXT_EXPLORER = False
 
     _EXPLORATION_TEST_USE_PLAN = False
 
@@ -475,6 +503,7 @@ def clarifier(
         active_source_types,
         use_clarifier=_EXPLORATION_TEST_USE_CALRIFIER,
         use_thinking=_EXPLORATION_TEST_USE_THINKING,
+        use_context_explorer=_EXPLORATION_TEST_USE_CONTEXT_EXPLORER,
     )
 
     available_tool_descriptions_str = "\n -" + "\n -".join(
@@ -568,10 +597,29 @@ def clarifier(
         original_cheat_sheet_context = get_user_cheat_sheet_context(
             user=user, db_session=db_session
         )
+        logger.info(f"User: {user.email}")
 
-    if original_cheat_sheet_context:
+    if (
+        original_cheat_sheet_context
+        and _EXPLORATION_TEST_USE_DC
+        and not _EXPLORATION_TEST_USE_CONTEXT_EXPLORER
+    ):
         cheat_sheet_string = f"""\n\nHere is additional context learned that may inform the \
 process (plan generation if applicable, reasoning, tool calls, etc.):\n{str(original_cheat_sheet_context)}\n###\n\n"""
+    elif original_cheat_sheet_context and _EXPLORATION_TEST_USE_CONTEXT_EXPLORER:
+        cs_key_string_components = []
+        for key, key_info in original_cheat_sheet_context.items():
+            cs_key_string_components.append(f"- {key}:")
+            for sub_key in key_info.keys():
+                cs_key_string_components.append(f"  - {sub_key}")
+
+        cheat_sheet_string = "\n".join(cs_key_string_components)
+        cheat_sheet_string = (
+            "Here are the keys and sub-keys available in the memory, and that may \
+hold relevant information to provide context for the user question:\n\n###\n"
+            + cheat_sheet_string
+            + "\n###\n\n"
+        )
     else:
         cheat_sheet_string = ""
 
@@ -673,8 +721,10 @@ Note:
         message_history_for_continuation=message_history_for_continuation,
         original_cheat_sheet_context=original_cheat_sheet_context,
         use_clarifier=_EXPLORATION_TEST_USE_CALRIFIER,
+        use_context_explorer=_EXPLORATION_TEST_USE_CONTEXT_EXPLORER,
         use_thinking=_EXPLORATION_TEST_USE_THINKING,
         use_plan=_EXPLORATION_TEST_USE_PLAN,
         use_plan_updates=_EXPLORATION_TEST_USE_PLAN_UPDATES,
         use_corpus_history=_EXPLORATION_TEST_USE_CORPUS_HISTORY,
+        use_dc=_EXPLORATION_TEST_USE_DC,
     )

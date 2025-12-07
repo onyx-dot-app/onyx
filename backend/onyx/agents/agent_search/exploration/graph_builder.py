@@ -7,14 +7,18 @@ from onyx.agents.agent_search.exploration.conditional_edges import (
 )
 from onyx.agents.agent_search.exploration.conditional_edges import decision_router
 from onyx.agents.agent_search.exploration.enums import DRPath
-from onyx.agents.agent_search.exploration.nodes.dr_a0_clarification import clarifier
+from onyx.agents.agent_search.exploration.nodes.dr_a0_opener import opener
 from onyx.agents.agent_search.exploration.nodes.dr_a1_orchestrator import orchestrator
 from onyx.agents.agent_search.exploration.nodes.dr_a2_closer import closer
+from onyx.agents.agent_search.exploration.nodes.dr_a2b_clarifier import clarifier
 from onyx.agents.agent_search.exploration.nodes.dr_a3a_cs_changes import cs_changes
 from onyx.agents.agent_search.exploration.nodes.dr_a3b_cs_update_consolidator import (
     cs_update_consolidator,
 )
 from onyx.agents.agent_search.exploration.nodes.dr_a4_logger import logging
+from onyx.agents.agent_search.exploration.nodes.dr_sa1_context_explorer import (
+    context_explorer,
+)
 from onyx.agents.agent_search.exploration.states import MainInput
 from onyx.agents.agent_search.exploration.states import MainState
 from onyx.agents.agent_search.exploration.sub_agents.basic_search.dr_basic_search_graph_builder import (
@@ -48,6 +52,7 @@ def exploration_graph_builder() -> StateGraph:
 
     ### Add nodes ###
 
+    graph.add_node(DRPath.OPENER, opener)
     graph.add_node(DRPath.CLARIFIER, clarifier)
 
     graph.add_node(DRPath.ORCHESTRATOR, orchestrator)
@@ -70,6 +75,8 @@ def exploration_graph_builder() -> StateGraph:
     generic_internal_tool_graph = dr_generic_internal_tool_graph_builder().compile()
     graph.add_node(DRPath.GENERIC_INTERNAL_TOOL, generic_internal_tool_graph)
 
+    graph.add_node(DRPath.CONTEXT_EXPLORER, context_explorer)
+
     graph.add_node(DRPath.CLOSER, closer)
     graph.add_node("cs_changes", cs_changes)
     graph.add_node("cs_consolidator", cs_update_consolidator)
@@ -77,9 +84,9 @@ def exploration_graph_builder() -> StateGraph:
 
     ### Add edges ###
 
-    graph.add_edge(start_key=START, end_key=DRPath.CLARIFIER)
+    graph.add_edge(start_key=START, end_key=DRPath.OPENER)
 
-    graph.add_conditional_edges(DRPath.CLARIFIER, decision_router)
+    graph.add_conditional_edges(DRPath.OPENER, decision_router)
 
     graph.add_conditional_edges(DRPath.ORCHESTRATOR, decision_router)
 
@@ -88,7 +95,9 @@ def exploration_graph_builder() -> StateGraph:
     graph.add_edge(start_key=DRPath.WEB_SEARCH, end_key=DRPath.ORCHESTRATOR)
     graph.add_edge(start_key=DRPath.IMAGE_GENERATION, end_key=DRPath.ORCHESTRATOR)
     graph.add_edge(start_key=DRPath.GENERIC_TOOL, end_key=DRPath.ORCHESTRATOR)
+    graph.add_edge(start_key=DRPath.CONTEXT_EXPLORER, end_key=DRPath.ORCHESTRATOR)
     graph.add_edge(start_key=DRPath.GENERIC_INTERNAL_TOOL, end_key=DRPath.ORCHESTRATOR)
+    graph.add_edge(start_key=DRPath.CLARIFIER, end_key=DRPath.LOGGER)
 
     graph.add_edge(DRPath.CLOSER, "cs_changes")
     graph.add_conditional_edges("cs_changes", cs_update_consolidator_router)

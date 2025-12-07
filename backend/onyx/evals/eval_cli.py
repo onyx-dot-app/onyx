@@ -31,11 +31,45 @@ def setup_session_factory() -> None:
 
 def load_data_local(
     local_data_path: str,
+    filter_key: str | None = None,
+    filter_value: str | None = None,
 ) -> list[dict[str, dict[str, str]]]:
     if not os.path.isfile(local_data_path):
         raise ValueError(f"Local data file does not exist: {local_data_path}")
     with open(local_data_path, "r") as f:
-        return json.load(f)
+        data = json.load(f)
+
+    print(f"Loaded {len(data)} items from {local_data_path}")
+
+    # Filter data if filter_key and filter_value are provided
+    if filter_key and filter_value:
+        print(f"Filtering by {filter_key}={filter_value}")
+
+        # Debug: print available keys in first item
+        if data:
+            print(f"Available keys in first item: {list(data[0].keys())}")
+            if filter_key in data[0]:
+                print(f"Sample value for '{filter_key}': {data[0][filter_key]}")
+
+        filtered_data = [
+            item
+            for item in data
+            if item.get("input", {}).get(filter_key) == filter_value
+            or item.get("metadata", {}).get(filter_key) == filter_value
+        ]
+        print(f"Filtered to {len(filtered_data)} items")
+
+        if len(filtered_data) == 0:
+            print(f"WARNING: No items matched filter {filter_key}={filter_value}")
+            # Show what values exist for this key
+            unique_values = set(
+                item.get(filter_key) for item in data if filter_key in item
+            )
+            print(f"Available values for '{filter_key}': {unique_values}")
+
+        return filtered_data
+
+    return data
 
 
 def run_local(
@@ -43,6 +77,8 @@ def run_local(
     remote_dataset_name: str | None,
     search_permissions_email: str | None = None,
     no_send_logs: bool = False,
+    filter_key: str | None = None,
+    filter_value: str | None = None,
 ) -> EvalationAck:
     """
     Run evaluation with local configurations.
@@ -72,11 +108,13 @@ def run_local(
             configuration=configuration, remote_dataset_name=remote_dataset_name
         )
     else:
+
         if local_data_path is None:
             raise ValueError(
                 "local_data_path or remote_dataset_name is required for local evaluation"
             )
-        data = load_data_local(local_data_path)
+        data = load_data_local(local_data_path, filter_key, filter_value)
+
         score = run_eval(configuration=configuration, data=data)
 
     return score
@@ -181,6 +219,18 @@ def main() -> None:
         default=False,
     )
 
+    parser.add_argument(
+        "--filter-key",
+        type=str,
+        help="Key to filter the data by (e.g., 'category', 'type')",
+    )
+
+    parser.add_argument(
+        "--filter-value",
+        type=str,
+        help="Value to filter for in the specified key",
+    )
+
     args = parser.parse_args()
 
     if args.local_data_path:
@@ -225,6 +275,8 @@ def main() -> None:
             remote_dataset_name=args.remote_dataset_name,
             search_permissions_email=args.search_permissions_email,
             no_send_logs=args.no_send_logs,
+            filter_key=args.filter_key,
+            filter_value=args.filter_value,
         )
 
 

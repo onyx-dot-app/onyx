@@ -31,18 +31,24 @@ _SEARCH_TOOL = {
     "type": "function",
     "function": {
         "name": "search_tool",
-        "description": "The search tool's functionality is described in the system prompt. \
+        "description": """The search tool's functionality is described in the system prompt. \
 Use it if you think you have one or  more questions that you believe are \
-suitable for the search tool. Use information from the base knowledge provided in the system prompt to \
-make sure the question has the sufficient context to be answered.",
+suitable for the search tool.  Make sure that the question has the sufficient context to be answered. \
+If available, use information from the memory that may be available \
+in the conversation history to provide sharper/better context to the questions you want to have done \
+a search for. As an example, if \
+the original question refers to 'availability products', and the memory extraction has an \
+explicit list of products that enhance availability, you probably want to include the product list in the \
+question to the search tool. \
+Or, if should a question refer to 'typical customers' and the memory extraction contains characteristics \
+of typical customers, you probably want \
+to include those characteristics in the question to the search tool. """,
         "parameters": {
             "type": "object",
             "properties": {
                 "request": {
                     "type": "array",
-                    "description": "The list of questions to be asked of the search tool. Remember that you can \
-also refer back to information and context from the base knowledge provided in the system prompt in order \
-to inform the question/query, ensuring it has sufficient context.",
+                    "description": "The list of questions to be asked of the search tool.",
                     "items": {
                         "type": "string",
                         "description": "The question to be asked of the search tool",
@@ -58,8 +64,11 @@ _THINKING_TOOL = {
     "type": "function",
     "function": {
         "name": "thinking_tool",
-        "description": "This tool is used if yoi think you need to think through the original question and the \
-questions and answers you have received so far in order to male a decision about what to do next. If in doubt, use this tool.",
+        "description": "This tool is used if you think you need to think through the original question and the \
+questions and answers you have received so far in order to make a decision about what to do next. \
+Note that a final answer MUST NOT be based on memory information, so you MUST NOT suggest the Closer tool \
+if the answer to the question is available only from the memory information in the conversation history! \
+If in doubt, use this tool.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -91,6 +100,31 @@ information or make checks.",
         },
     },
 }
+
+_CONTEXT_EXPLORER_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "context_explorer_tool",
+        "description": """This tool can be used to aquire more context from a 'memory' that has \
+information about the user, their \
+company, and search- and reasoning strategies. If you think that the question implicitly relates to something the user \
+expects you to know to answer the question, you should use this tool to aquire more context. Also, if you believe that \
+answering the question may require non-trivial search- or reasoning strategies, you should use this tool to see whether \
+relevant lessons have been learned in the past.
+Only use this tool though if you think it can REALLY help TO PROVIDE CONTEXT or INSTRUCTIONS FOR THE user question! Do \
+NOT USE IT to find information, that is what the Search Tool is for.""",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "request": {
+                    "type": "string",
+                    "description": "A brief summary of what you want to learn from the memory.",
+                },
+            },
+        },
+    },
+}
+
 
 _CLARIFIER_TOOL = {
     "type": "function",
@@ -139,10 +173,9 @@ def orchestrator(
     node_start_time = datetime.now()
 
     _EXPLORATION_TEST_USE_CALRIFIER = state.use_clarifier
-    state.use_plan
-    state.use_plan_updates
-    state.use_corpus_history
+    state.use_dc
     _EXPLORATION_TEST_USE_THINKING = state.use_thinking
+    _EXPLORATION_TEST_USE_CONTEXT_EXPLORER = state.use_context_explorer
 
     previous_tool_call_name = state.tools_used[-1] if state.tools_used else ""
 
@@ -182,7 +215,6 @@ def orchestrator(
 
     ResearchType.DEEP
     remaining_time_budget = state.remaining_time_budget
-    state.chat_history_string or "(No chat history yet available)"
 
     next_tool_name = None
 
@@ -238,8 +270,12 @@ def orchestrator(
         _SEARCH_TOOL,
     ]
 
-    if num_search_iterations > 0:
-        tools.append(_CLOSER_TOOL)
+    if (
+        num_search_iterations > 0
+        and previous_tool_call_name != DRPath.CONTEXT_EXPLORER.value
+        and DRPath.INTERNAL_SEARCH.value in state.tools_used
+    ):
+        tools.append(_CLOSER_TOOL)  # only hgo to closer after at least one search
 
     if (
         _EXPLORATION_TEST_USE_THINKING
@@ -252,6 +288,13 @@ def orchestrator(
         and previous_tool_call_name != DRPath.CLARIFIER.value
     ):
         tools.append(_CLARIFIER_TOOL)
+
+    if (
+        _EXPLORATION_TEST_USE_CONTEXT_EXPLORER
+        and num_search_iterations <= 2
+        and DRPath.CONTEXT_EXPLORER.value not in state.tools_used
+    ):
+        tools.append(_CONTEXT_EXPLORER_TOOL)
 
     in_orchestration_iteration_answers: list[IterationAnswer] = []
     if remaining_time_budget > 0:
@@ -271,6 +314,9 @@ def orchestrator(
                     query_list = tool_call["args"]["request"]
                     next_tool_name = DRPath.INTERNAL_SEARCH.value
                     num_search_iterations += 1
+                elif tool_call["name"] == "context_explorer_tool":
+                    reasoning_result = tool_call["args"]["request"]
+                    next_tool_name = DRPath.CONTEXT_EXPLORER.value
                 elif tool_call["name"] == "thinking_tool":
                     reasoning_result = tool_call["args"]["request"]
                     next_tool_name = (
@@ -302,6 +348,25 @@ def orchestrator(
                 elif tool_call["name"] == "clarifier_tool":
                     reasoning_result = tool_call["args"]["request"]
                     next_tool_name = DRPath.CLARIFIER.value
+                    message_history_for_continuation.append(
+                        AIMessage(content=reasoning_result)
+                    )
+                    new_messages_for_continuation.append(
+                        AIMessage(content=reasoning_result)
+                    )
+
+                    in_orchestration_iteration_answers.append(
+                        IterationAnswer(
+                            tool=DRPath.CLARIFIER.value,
+                            tool_id=103,
+                            iteration_nr=iteration_nr,
+                            parallelization_nr=0,
+                            question="",
+                            cited_documents={},
+                            answer=reasoning_result,
+                            reasoning=reasoning_result,
+                        )
+                    )
                 else:
                     raise ValueError(f"Unknown tool: {tool_call['name']}")
 
@@ -323,7 +388,7 @@ def orchestrator(
             )
         ],
         plan_of_record=plan_of_record,
-        remaining_time_budget=remaining_time_budget - 1.0,
+        remaining_time_budget=remaining_time_budget - 0.5,
         iteration_instructions=[
             IterationInstructions(
                 iteration_nr=iteration_nr,

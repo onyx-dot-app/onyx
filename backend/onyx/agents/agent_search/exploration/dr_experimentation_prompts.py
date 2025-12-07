@@ -216,7 +216,7 @@ For the top-level areas, please follow these instructions:
       - Keep at most 2–3 sub-keys, one of them MUST be 'name'.
       - No inferred importance, no personality traits, no leadership style, etc.
    - company:
-      - Keep at most 4–5 sub-keys
+      - Keep at most 4–5 sub-keys, one of them MUST be 'name'
       - Only keep information that gives a clear mental model of: what the company is and claims to do, \
 how the products work, etc.
   - search_strategy and reasoning_strategy:
@@ -241,4 +241,47 @@ For each sub-key:
     - No extra quotation marks beyond valid JSON requirements
     - Keep bullets short and direct
     - Merge overlapping ideas into fewer, stronger bullets
+"""
+
+CONTEXT_EXPLORER_PROMPT_TEMPLATE = """
+You are an expert in identifying suitable information from a memory that helps to provide \
+suitable context for a user question.
+
+The memory may have information about:
+ - the user
+ - the company where they work
+ - successful search strategies
+ - successfull reasoning strategies
+
+
+Your task is to extract components of the memory that are relevant to the user question.
+
+Note:
+  - particularly, identify information that could be relevant to make references more specific or \
+fill in gaps. Example: if the question refers to 'availabiliity products', and the memory has \
+a list of specific products that increase availability, you definitely want to include those \
+specific products as 'availability products'.
+
+Here is the user question:
+###
+---user_question---
+###
+
+Here is the current memory:
+###
+---current_memory---
+###
+
+Please respond with a string in this format:
+###
+  - user
+    -<sub-key>: <bullet point list of information about the user RELEVANT as context for the question>
+   - company
+    -<sub-key>: <bullet point list of information about the company RELEVANT as context for the question>
+   - search_strategy
+    -<sub-key>: <bullet point list of information about the search strategy RELEVANT as context for the question>
+   - reasoning_strategy
+    -<sub-key>: <bullet point list of information about the reasoning strategy RELEVANT as context for the question>
+###
+
 """

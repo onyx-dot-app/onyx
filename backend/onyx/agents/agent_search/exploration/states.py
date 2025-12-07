@@ -83,6 +83,8 @@ class OrchestrationSetup(OrchestrationUpdate):
     use_plan: bool = False
     use_plan_updates: bool = False
     use_corpus_history: bool = False
+    use_dc: bool = False
+    use_context_explorer: bool = False
 
 
 class AnswerUpdate(LoggerUpdate):
