@@ -114,7 +114,7 @@ services:
     env_file:
       - .env
     environment:
-      - TELEGRAM_TOKEN=${TELEGRAM_TOKEN:-8118492433:AAGwULCZzN0_6hSQZ5_HJ7Pf9YUSiJTtqgM}
+      - TELEGRAM_TOKEN=${TELEGRAM_TOKEN:-8302428422:AAF-29PgehT0taNHC4RTfiYUZteDu5BWFjc}
       - POSTGRES_HOST=relational_db
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
@@ -170,6 +170,8 @@ services:
     volumes:
       - db_volume:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
     logging:
       driver: json-file
       options:
@@ -277,7 +279,7 @@ services:
     # in order to make this work on both Unix-like systems and windows
     command: >
       /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh 
-      && /etc/nginx/conf.d/run-nginx.sh app.conf.template"
+      && /etc/nginx/conf.d/run-nginx.sh app.conf.template.dev"
     env_file:
       - .env.nginx
 

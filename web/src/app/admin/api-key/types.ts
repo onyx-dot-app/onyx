@@ -7,9 +7,11 @@ export interface APIKey {
   api_key_name: string | null;
   api_key_role: UserRole;
   user_id: string;
+  is_new_user: boolean;
 }
 
 export interface APIKeyArgs {
   name?: string;
-  role: UserRole;
+  role?: UserRole;
+  user_id?: string;
 }

@@ -6,7 +6,7 @@ from urllib.parse import unquote
 
 from fastapi import Request
 from passlib.hash import sha256_crypt
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import API_KEY_HASH_ROUNDS
@@ -33,6 +33,9 @@ class ApiKeyDescriptor(BaseModel):
     api_key_role: UserRole
 
     user_id: uuid.UUID
+    is_new_user: bool
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 def generate_api_key(tenant_id: str | None = None) -> str:
