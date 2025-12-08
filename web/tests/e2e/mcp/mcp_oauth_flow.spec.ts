@@ -1306,15 +1306,23 @@ test.describe("MCP OAuth flows", () => {
     logStep("Verified server card is visible");
 
     // Tools list automatically expands after fetch - wait for tool toggle to appear
-    const adminToolToggle = page.getByTestId(`tool-toggle-${TOOL_NAMES.admin}`);
-    await expect(adminToolToggle).toBeVisible({ timeout: 10000 });
-    const isEnabled = await adminToolToggle.getAttribute("data-state");
-    if (isEnabled !== "checked") {
-      await adminToolToggle.click();
-      await page.waitForTimeout(500);
-      logStep(`Enabled tool: ${TOOL_NAMES.admin} via UI`);
-    } else {
-      logStep(`Tool ${TOOL_NAMES.admin} already enabled`);
+    const adminToolToggles = page.getByTestId(
+      `tool-toggle-${TOOL_NAMES.admin}`
+    );
+    await expect(adminToolToggles.first()).toBeVisible({ timeout: 10000 });
+
+    // Enable all matching tools (in case there are multiple on the page)
+    const toggleCount = await adminToolToggles.count();
+    logStep(`Found ${toggleCount} instance(s) of ${TOOL_NAMES.admin}`);
+
+    for (let i = 0; i < toggleCount; i++) {
+      const toggle = adminToolToggles.nth(i);
+      const isEnabled = await toggle.getAttribute("data-state");
+      if (isEnabled !== "checked") {
+        await toggle.click();
+        await page.waitForTimeout(300);
+        logStep(`Enabled tool instance ${i + 1}: ${TOOL_NAMES.admin}`);
+      }
     }
 
     logStep("Tools auto-fetched and enabled via UI");
@@ -1598,17 +1606,23 @@ test.describe("MCP OAuth flows", () => {
       logStep("Verified server card is visible");
 
       // Tools list automatically expands after fetch - wait for tool toggle to appear
-      const curatorToolToggle = page.getByTestId(
+      const curatorToolToggles = page.getByTestId(
         `tool-toggle-${TOOL_NAMES.curator}`
       );
-      await expect(curatorToolToggle).toBeVisible({ timeout: 10000 });
-      const isEnabled = await curatorToolToggle.getAttribute("data-state");
-      if (isEnabled !== "checked") {
-        await curatorToolToggle.click();
-        await page.waitForTimeout(500);
-        logStep(`Enabled tool: ${TOOL_NAMES.curator} via UI`);
-      } else {
-        logStep(`Tool ${TOOL_NAMES.curator} already enabled`);
+      await expect(curatorToolToggles.first()).toBeVisible({ timeout: 10000 });
+
+      // Enable all matching tools (in case there are multiple on the page)
+      const toggleCount = await curatorToolToggles.count();
+      logStep(`Found ${toggleCount} instance(s) of ${TOOL_NAMES.curator}`);
+
+      for (let i = 0; i < toggleCount; i++) {
+        const toggle = curatorToolToggles.nth(i);
+        const isEnabled = await toggle.getAttribute("data-state");
+        if (isEnabled !== "checked") {
+          await toggle.click();
+          await page.waitForTimeout(300);
+          logStep(`Enabled tool instance ${i + 1}: ${TOOL_NAMES.curator}`);
+        }
       }
 
       logStep("Tools auto-fetched and enabled via UI");
