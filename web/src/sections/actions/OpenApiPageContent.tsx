@@ -362,7 +362,7 @@ export default function OpenApiPageContent() {
   }, [openApiTools, searchQuery]);
 
   return (
-    <>
+    <div className="flex flex-col h-full overflow-hidden">
       {popup}
       {showSharedOverlay && (
         <div
@@ -371,29 +371,33 @@ export default function OpenApiPageContent() {
           aria-hidden="true"
         />
       )}
-      <Actionbar
-        hasActions={(openApiTools?.length ?? 0) > 0}
-        searchQuery={searchQuery}
-        onSearchQueryChange={setSearchQuery}
-        onAddAction={handleAddAction}
-        buttonText="Add OpenAPI Action"
-        className="mb-4"
-      />
 
-      <div className="flex flex-col gap-4 w-full">
-        {filteredTools?.map((tool) => (
-          <OpenApiActionCard
-            key={tool.id}
-            tool={tool}
-            onAuthenticate={handleOpenAuthModal}
-            onManage={handleManageTool}
-            onDelete={handleDeleteTool}
-            onRename={handleRenameTool}
-            mutateOpenApiTools={mutateOpenApiTools}
-            setPopup={setPopup}
-            onOpenDisconnectModal={handleOpenDisconnectModal}
-          />
-        ))}
+      <div className="flex-shrink-0 mb-4">
+        <Actionbar
+          hasActions={(openApiTools?.length ?? 0) > 0}
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
+          onAddAction={handleAddAction}
+          buttonText="Add OpenAPI Action"
+        />
+      </div>
+
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="flex flex-col gap-4 w-full pb-4">
+          {filteredTools?.map((tool) => (
+            <OpenApiActionCard
+              key={tool.id}
+              tool={tool}
+              onAuthenticate={handleOpenAuthModal}
+              onManage={handleManageTool}
+              onDelete={handleDeleteTool}
+              onRename={handleRenameTool}
+              mutateOpenApiTools={mutateOpenApiTools}
+              setPopup={setPopup}
+              onOpenDisconnectModal={handleOpenDisconnectModal}
+            />
+          ))}
+        </div>
       </div>
 
       <addOpenAPIActionModal.Provider>
@@ -445,6 +449,6 @@ export default function OpenApiPageContent() {
         isDisconnecting={isDisconnecting || isDeleting}
         skipOverlay
       />
-    </>
+    </div>
   );
 }

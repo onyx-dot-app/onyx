@@ -1,17 +1,15 @@
 "use client";
-import SvgServer from "@/icons/server";
-import PageHeader from "@/refresh-components/headers/PageHeader";
+import SvgActions from "@/icons/actions";
+import { AdminPageLayout } from "@/refresh-components/layouts/AdminPageLayout";
 import OpenApiPageContent from "@/sections/actions/OpenApiPageContent";
 export default function Main() {
   return (
-    <div className="mx-auto container">
-      <PageHeader
-        icon={SvgServer}
-        title="OpenAPI Actions"
-        description="Connect OpenAPI servers to add custom actions and tools for your assistants."
-      />
-
+    <AdminPageLayout
+      icon={SvgActions}
+      title="OpenAPI Actions"
+      description="Connect OpenAPI servers to add custom actions and tools for your assistants."
+    >
       <OpenApiPageContent />
-    </div>
+    </AdminPageLayout>
   );
 }

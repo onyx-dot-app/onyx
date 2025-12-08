@@ -430,7 +430,7 @@ export default function MCPAuthenticationModal({
                       }}
                     />
                   </FormField>
-                  <Separator className="-my-2" />
+                  <Separator className="py-0" />
                 </div>
 
                 {/* OAuth Section */}

@@ -139,19 +139,3 @@ export enum MCPAuthenticationPerformer {
   PER_USER = "PER_USER",
 }
 
-export interface ApiResponse<T> {
-  data: T | null;
-  error: string | null;
-}
-
-export interface OAuthConfig {
-  id: number;
-  name: string;
-  authorization_url: string;
-  token_url: string;
-  scopes: string[] | null;
-  has_client_credentials: boolean;
-  tool_count: number;
-  created_at: string;
-  updated_at: string;
-}
