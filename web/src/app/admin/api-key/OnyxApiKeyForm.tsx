@@ -20,7 +20,7 @@ import { APIKey } from "./types";
 import { SearchMultiSelectDropdown } from "@/components/Dropdown";
 import { useUsers } from "@/lib/hooks";
 import { UsersIcon } from "@/components/icons/icons";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface OnyxApiKeyFormProps {
   onClose: () => void;
@@ -36,14 +36,6 @@ export const OnyxApiKeyForm = ({
   apiKey,
 }: OnyxApiKeyFormProps) => {
   const { t } = useTranslation();
-  const [selectedUser, setSelectedUser] = useState<
-    | {
-        name: string;
-        value: string;
-      }
-    | undefined
-  >();
-
   const isUpdate = apiKey !== undefined;
 
   const {
@@ -51,6 +43,28 @@ export const OnyxApiKeyForm = ({
     isLoading: userIsLoading,
     error: usersError,
   } = useUsers({ includeApiKeys: true });
+
+  const [selectedUser, setSelectedUser] = useState<
+    | {
+        name: string;
+        value: string;
+      }
+    | undefined
+  >(undefined);
+
+  useEffect(() => {
+    if (isUpdate && apiKey?.user_id && users?.accepted) {
+      const user = users.accepted.find((u) => u.id === apiKey.user_id);
+      if (user) {
+        setSelectedUser({
+          name: user.email,
+          value: apiKey.user_id,
+        });
+      }
+    }
+  }, [isUpdate, apiKey?.user_id, users]);
+
+  const showRoleField = isUpdate ? apiKey?.is_new_user === true : !selectedUser;
 
   return (
     <Modal onOutsideClick={onClose} width="w-2/6">
@@ -69,14 +83,25 @@ export const OnyxApiKeyForm = ({
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
 
-            // Prepare the payload with the UserRole
-            const payload = {
-              ...values,
-              role: values.role as UserRole, // Assign the role directly as a UserRole type
-              user_id: selectedUser?.value,
+            const payload: {
+              name?: string;
+              role?: UserRole;
+              user_id?: string;
+            } = {
+              name: values.name || undefined,
             };
 
-            console.log("TEST API_KEY", payload, selectedUser);
+            if (isUpdate) {
+              if (apiKey?.is_new_user) {
+                payload.role = values.role as UserRole;
+              }
+            } else {
+              if (!selectedUser) {
+                payload.role = values.role as UserRole;
+              } else {
+                payload.user_id = selectedUser.value;
+              }
+            }
 
             let response;
             if (isUpdate) {
@@ -121,57 +146,90 @@ export const OnyxApiKeyForm = ({
                 autoCompleteDisabled={true}
               />
 
-              <SelectorFormField
-                // defaultValue is managed by Formik
-                label={t(k.ROLE_LABEL)}
-                subtext={t(k.ROLE_SUBTEXT)}
-                name="role"
-                options={[
-                  {
-                    name: USER_ROLE_LABELS[UserRole.LIMITED],
-                    value: UserRole.LIMITED.toString(),
-                  },
-                  {
-                    name: USER_ROLE_LABELS[UserRole.BASIC],
-                    value: UserRole.BASIC.toString(),
-                  },
-                  {
-                    name: USER_ROLE_LABELS[UserRole.ADMIN],
-                    value: UserRole.ADMIN.toString(),
-                  },
-                ]}
-              />
+              {showRoleField && (
+                <SelectorFormField
+                  label={t(k.ROLE_LABEL)}
+                  subtext={t(k.ROLE_SUBTEXT)}
+                  name="role"
+                  options={[
+                    {
+                      name: USER_ROLE_LABELS[UserRole.LIMITED],
+                      value: UserRole.LIMITED.toString(),
+                    },
+                    {
+                      name: USER_ROLE_LABELS[UserRole.BASIC],
+                      value: UserRole.BASIC.toString(),
+                    },
+                    {
+                      name: USER_ROLE_LABELS[UserRole.ADMIN],
+                      value: UserRole.ADMIN.toString(),
+                    },
+                  ]}
+                />
+              )}
 
-              <SearchMultiSelectDropdown
-                options={
-                  !userIsLoading && users
-                    ? users.accepted
-                        .filter((user) => selectedUser?.value !== user.id)
-                        .filter((user) => !user.email.includes("api_key"))
-                        .map((user) => {
-                          return {
-                            name: user.email,
-                            value: user.id,
-                          };
-                        })
-                    : []
-                }
-                onSelect={(option) => {
-                  // @ts-ignore
-                  setSelectedUser(option);
-                }}
-                itemComponent={({ option }) => (
-                  <div className="flex px-4 py-2.5 cursor-pointer hover:bg-accent-background-hovered">
-                    <UsersIcon className="mr-2 my-auto" />
-                    {option.name}
-                    <div className="ml-auto my-auto">
-                      <FiPlus />
-                    </div>
+              {isUpdate && selectedUser && (
+                <div className="mb-4">
+                  <Text className="mb-2 text-sm font-medium">
+                    {t(k.ATTACHED_USER)}
+                  </Text>
+                  <div className="flex items-center bg-blue-50 text-blue-700 rounded-lg px-3 py-2 text-sm">
+                    <UsersIcon className="mr-2" />
+                    {selectedUser.name}
                   </div>
-                )}
-              />
+                  <Text className="mt-2 text-xs text-text-600">
+                    {apiKey?.is_new_user
+                      ? t(k.API_KEY_NEW_USER_DESC)
+                      : t(k.API_KEY_EXISTING_USER_DESC)}
+                  </Text>
+                </div>
+              )}
 
-              {selectedUser?.name && (
+              {!isUpdate && (
+                <div className="mb-4">
+                  <Text className="mb-2 text-sm font-medium">
+                    {t(k.SELECT_USER_OPTIONAL)}
+                  </Text>
+                  <Text className="mb-2 text-xs text-text-600">
+                    {selectedUser
+                      ? t(k.SELECT_USER_EXISTING_DESC)
+                      : t(k.SELECT_USER_NEW_DESC)}
+                  </Text>
+                </div>
+              )}
+
+              {!isUpdate && (
+                <SearchMultiSelectDropdown
+                  options={
+                    !userIsLoading && users
+                      ? users.accepted
+                          .filter((user) => selectedUser?.value !== user.id)
+                          .filter((user) => !user.email.includes("api_key"))
+                          .map((user) => {
+                            return {
+                              name: user.email,
+                              value: user.id,
+                            };
+                          })
+                      : []
+                  }
+                  onSelect={(option) => {
+                    // @ts-ignore
+                    setSelectedUser(option);
+                  }}
+                  itemComponent={({ option }) => (
+                    <div className="flex px-4 py-2.5 cursor-pointer hover:bg-accent-background-hovered">
+                      <UsersIcon className="mr-2 my-auto" />
+                      {option.name}
+                      <div className="ml-auto my-auto">
+                        <FiPlus />
+                      </div>
+                    </div>
+                  )}
+                />
+              )}
+
+              {!isUpdate && selectedUser?.name && (
                 <div className="mb-6">
                   <h4 className="text-sm font-medium text-text-700 mb-2">
                     {t(k.SELECTED_USERS)}
