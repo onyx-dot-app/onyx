@@ -188,18 +188,21 @@ test.describe("Default Assistant MCP Integration", () => {
     ).toBeVisible({ timeout: 20000 });
     console.log(`[test] Verified server card is visible`);
 
-    // Expand the server card to see tools by clicking "View X tools" button
-    const viewToolsButton = page.getByRole("button", {
-      name: new RegExp(`View \\d+ tool`, "i"),
-    });
-    if ((await viewToolsButton.count()) > 0) {
-      await viewToolsButton.first().click();
-      await page.waitForTimeout(1000);
-      console.log(`[test] Expanded server card to view tools`);
-    }
+    // Tools list automatically expands after fetch - wait for tool toggles to appear
+    const toolToggles = page.locator('[data-testid^="tool-toggle-"]');
+    await expect(toolToggles.first()).toBeVisible({ timeout: 10000 });
+    const toggleCount = await toolToggles.count();
+    console.log(`[test] Found ${toggleCount} tool toggles`);
 
-    // Tools are now visible and enabled by default in the new flow
-    console.log(`[test] Tools auto-fetched and available on server card`);
+    for (let i = 0; i < toggleCount; i++) {
+      const toggle = toolToggles.nth(i);
+      const isEnabled = await toggle.getAttribute("data-state");
+      if (isEnabled !== "checked") {
+        await toggle.click();
+        await page.waitForTimeout(300);
+      }
+    }
+    console.log(`[test] Enabled all tools via UI`);
     console.log(`[test] MCP server created with ID ${serverId}`);
   });
 

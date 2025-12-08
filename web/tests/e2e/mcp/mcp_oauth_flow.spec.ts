@@ -1305,19 +1305,19 @@ test.describe("MCP OAuth flows", () => {
     ).toBeVisible({ timeout: 20000 });
     logStep("Verified server card is visible");
 
-    // Expand the server card to see tools by clicking "View X tools" button
-    const viewToolsButton = page.getByRole("button", {
-      name: new RegExp(`View \\d+ tool`, "i"),
-    });
-    if ((await viewToolsButton.count()) > 0) {
-      await viewToolsButton.first().click();
-      await page.waitForTimeout(1000);
-      logStep("Expanded server card to view tools");
+    // Tools list automatically expands after fetch - wait for tool toggle to appear
+    const adminToolToggle = page.getByTestId(`tool-toggle-${TOOL_NAMES.admin}`);
+    await expect(adminToolToggle).toBeVisible({ timeout: 10000 });
+    const isEnabled = await adminToolToggle.getAttribute("data-state");
+    if (isEnabled !== "checked") {
+      await adminToolToggle.click();
+      await page.waitForTimeout(500);
+      logStep(`Enabled tool: ${TOOL_NAMES.admin} via UI`);
+    } else {
+      logStep(`Tool ${TOOL_NAMES.admin} already enabled`);
     }
 
-    // Tools are now visible and enabled by default in the new flow
-    // No need to manually select tools - they are automatically available
-    logStep("Tools auto-fetched and available on server card");
+    logStep("Tools auto-fetched and enabled via UI");
 
     const assistantEditorUrl =
       "http://localhost:3000/assistants/new?admin=true";
@@ -1597,18 +1597,21 @@ test.describe("MCP OAuth flows", () => {
       ).toBeVisible({ timeout: 20000 });
       logStep("Verified server card is visible");
 
-      // Expand the server card to see tools by clicking "View X tools" button
-      const viewToolsButton = page.getByRole("button", {
-        name: new RegExp(`View \\d+ tool`, "i"),
-      });
-      if ((await viewToolsButton.count()) > 0) {
-        await viewToolsButton.first().click();
-        await page.waitForTimeout(1000);
-        logStep("Expanded server card to view tools");
+      // Tools list automatically expands after fetch - wait for tool toggle to appear
+      const curatorToolToggle = page.getByTestId(
+        `tool-toggle-${TOOL_NAMES.curator}`
+      );
+      await expect(curatorToolToggle).toBeVisible({ timeout: 10000 });
+      const isEnabled = await curatorToolToggle.getAttribute("data-state");
+      if (isEnabled !== "checked") {
+        await curatorToolToggle.click();
+        await page.waitForTimeout(500);
+        logStep(`Enabled tool: ${TOOL_NAMES.curator} via UI`);
+      } else {
+        logStep(`Tool ${TOOL_NAMES.curator} already enabled`);
       }
 
-      // Tools are now visible and enabled by default in the new flow
-      logStep("Tools auto-fetched and available on server card");
+      logStep("Tools auto-fetched and enabled via UI");
 
       await page.goto("http://localhost:3000/assistants/new?admin=true");
       await page.waitForURL("**/assistants/new**", { timeout: 15000 });
