@@ -11,7 +11,7 @@ import { ToolSnapshot, ActionStatus, MethodSpec } from "@/lib/tools/interfaces";
 import ToolItem from "@/sections/actions/ToolItem";
 import { extractMethodSpecsFromDefinition } from "@/lib/tools/openApiService";
 import { updateToolStatus } from "@/lib/tools/mcpService";
-import { SvgServer } from "@opal/icons";
+import { SvgServer, SvgTrash } from "@opal/icons";
 
 export interface OpenApiActionCardProps {
   tool: ToolSnapshot;
@@ -192,6 +192,9 @@ export default function OpenApiActionCard({
       {deleteModal.isOpen && onDelete && (
         <ConfirmEntityModal
           danger
+          icon={() => (
+            <SvgTrash className="w-[1.5rem] h-[1.5rem] stroke-action-danger-05" />
+          )}
           actionButtonText="Delete"
           entityType="OpenAPI action"
           entityName={tool.name}

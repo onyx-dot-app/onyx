@@ -47,7 +47,9 @@ export default function DisconnectEntityModal({
         }}
       >
         <Modal.Header
-          icon={SvgUnplug}
+          icon={() => (
+            <SvgUnplug className="w-[1.5rem] h-[1.5rem] stroke-action-danger-05" />
+          )}
           title={`Disconnect ${name}`}
           className="p-4"
           onClose={onClose}

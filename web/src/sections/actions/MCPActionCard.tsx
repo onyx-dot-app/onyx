@@ -27,6 +27,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
+import SvgTrash from "@/icons/trash";
 
 export interface MCPActionCardProps {
   // Server identification
@@ -307,11 +308,14 @@ export default function MCPActionCard({
 
       {deleteModal.isOpen && (
         <ConfirmEntityModal
+          icon={() => (
+            <SvgTrash className="w-[1.5rem] h-[1.5rem] stroke-action-danger-05" />
+          )}
           danger
           actionButtonText="Delete"
           entityType="MCP server"
           entityName={title}
-          additionalDetails="This will permanently delete the server and all of its tools."
+          additionalDetails="All tools connected to this MCP server will be removed. Deletion is irreversible."
           onClose={() => deleteModal.toggle(false)}
           onSubmit={async () => {
             if (!onDelete) return;
