@@ -2651,7 +2651,7 @@ module.exports = {
   [k.GLOBAL_TOKEN_RATE_LIMITS]: `Глобальные ограничения скорости токенов`,
   [k.USER_TOKEN_RATE_LIMITS]: `Ограничения скорости токенов пользователя`,
   [k.USER_GROUP_TOKEN_RATE_LIMITS]: `Ограничения скорости токенов для групп пользователей`,
-  [k.TOKEN_RATE_LIMITS]: `Ограничения скорости токенов`,
+  [k.TOKEN_RATE_LIMITS]: `Лимиты токенов`,
   [k.NEW_DOCUMENT_SET]: `Новый набор документов`,
   [k.DOCUMENT_FEEDBACK]: `Отзыв о документе`,
   [k.SEARCH_SETTINGS]: `Настройки поиска`,
