@@ -314,7 +314,7 @@ packaging==24.2
     #   kombu
     #   setfit
     #   transformers
-pandas==2.2.3
+pandas==2.3.3
     # via
     #   datasets
     #   evaluate
