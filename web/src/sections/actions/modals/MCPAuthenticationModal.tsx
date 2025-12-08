@@ -380,6 +380,7 @@ export default function MCPAuthenticationModal({
                             );
                           }
                         }}
+                        data-testid="mcp-auth-method-select"
                       >
                         <InputSelect.Trigger placeholder="Select method" />
                         <InputSelect.Content>
@@ -638,6 +639,7 @@ export default function MCPAuthenticationModal({
                   disabled={
                     !isValid || isSubmitting || (isEditConfigsFlow && !dirty)
                   }
+                  data-testid="mcp-auth-connect-button"
                 >
                   {isSubmitting ? "Connecting..." : "Connect"}
                 </Button>

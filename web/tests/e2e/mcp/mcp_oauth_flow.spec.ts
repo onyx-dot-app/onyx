@@ -1234,9 +1234,7 @@ test.describe("MCP OAuth flows", () => {
     await page.waitForTimeout(500); // Ensure modal is fully rendered
 
     // Select OAuth as authentication method
-    const authMethodSelect = page
-      .locator('input[name="auth_type"]')
-      .locator("..");
+    const authMethodSelect = page.getByTestId("mcp-auth-method-select");
     await authMethodSelect.click();
     await page.getByRole("option", { name: "OAuth" }).click();
     logStep("Selected OAuth authentication method");
@@ -1247,7 +1245,7 @@ test.describe("MCP OAuth flows", () => {
     logStep("Filled OAuth credentials");
 
     // Click Connect button to trigger OAuth flow
-    const connectButton = page.getByRole("button", { name: "Connect" });
+    const connectButton = page.getByTestId("mcp-auth-connect-button");
     const navPromise = page
       .waitForNavigation({ waitUntil: "load" })
       .catch(() => null);
@@ -1524,9 +1522,7 @@ test.describe("MCP OAuth flows", () => {
       await page.waitForTimeout(500); // Ensure modal is fully rendered
 
       // Select OAuth as authentication method
-      const authMethodSelect = page
-        .locator('input[name="auth_type"]')
-        .locator("..");
+      const authMethodSelect = page.getByTestId("mcp-auth-method-select");
       await authMethodSelect.click();
       await page.getByRole("option", { name: "OAuth" }).click();
       logStep("Selected OAuth authentication method");
@@ -1539,7 +1535,7 @@ test.describe("MCP OAuth flows", () => {
       logStep("Filled OAuth credentials");
 
       // Click Connect button to trigger OAuth flow
-      const connectButton = page.getByRole("button", { name: "Connect" });
+      const connectButton = page.getByTestId("mcp-auth-connect-button");
       const navPromise = page
         .waitForNavigation({ waitUntil: "load" })
         .catch(() => null);

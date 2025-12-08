@@ -130,9 +130,7 @@ test.describe("Default Assistant MCP Integration", () => {
     await page.waitForTimeout(500); // Ensure modal is fully rendered
 
     // Select API Key as authentication method
-    const authMethodSelect = page
-      .locator('input[name="auth_type"]')
-      .locator("..");
+    const authMethodSelect = page.getByTestId("mcp-auth-method-select");
     await authMethodSelect.click();
     await page.getByRole("option", { name: "API Key" }).click();
     console.log(`[test] Selected API Key authentication method`);
@@ -154,7 +152,7 @@ test.describe("Default Assistant MCP Integration", () => {
     console.log(`[test] Filled API key`);
 
     // Click Connect button to submit authentication
-    const connectButton = page.getByRole("button", { name: "Connect" });
+    const connectButton = page.getByTestId("mcp-auth-connect-button");
     await expect(connectButton).toBeVisible({ timeout: 5000 });
     await connectButton.click();
     console.log(`[test] Clicked Connect button`);
