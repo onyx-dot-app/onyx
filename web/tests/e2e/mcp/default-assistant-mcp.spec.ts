@@ -157,9 +157,11 @@ test.describe("Default Assistant MCP Integration", () => {
     await connectButton.click();
     console.log(`[test] Clicked Connect button`);
 
-    // Wait for redirect and tools to auto-fetch
-    await page.waitForURL("**/admin/actions/mcp**", { timeout: 15000 });
-    console.log(`[test] Redirected back to MCP actions page`);
+    // Wait for redirect with server_id and trigger_fetch parameters
+    await page.waitForURL("**/admin/actions/mcp?**server_id=**", {
+      timeout: 15000,
+    });
+    console.log(`[test] Redirected back to MCP actions page with server_id`);
 
     // Extract server ID from URL
     const currentUrl = new URL(page.url());
