@@ -183,16 +183,19 @@ test.describe("Default Assistant MCP Integration", () => {
     console.log(`[test] Manually updated server status to CONNECTED`);
 
     // Verify server card is visible
-    await expect(
-      page.getByText(serverName, { exact: false }).first()
-    ).toBeVisible({ timeout: 20000 });
+    const serverCard = page
+      .locator("article")
+      .filter({ hasText: serverName })
+      .first();
+    await expect(serverCard).toBeVisible({ timeout: 20000 });
     console.log(`[test] Verified server card is visible`);
 
     // Tools list automatically expands after fetch - wait for tool toggles to appear
-    const toolToggles = page.locator('[data-testid^="tool-toggle-"]');
+    // Scope to this specific server's card
+    const toolToggles = serverCard.locator('[data-testid^="tool-toggle-"]');
     await expect(toolToggles.first()).toBeVisible({ timeout: 10000 });
     const toggleCount = await toolToggles.count();
-    console.log(`[test] Found ${toggleCount} tool toggles`);
+    console.log(`[test] Found ${toggleCount} tool toggles in server card`);
 
     for (let i = 0; i < toggleCount; i++) {
       const toggle = toolToggles.nth(i);
