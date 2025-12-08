@@ -179,7 +179,7 @@ cryptography==46.0.3
     #   sendgrid
 cyclopts==4.2.4
     # via fastmcp
-dask==2023.8.1
+dask==2025.11.0
     # via
     #   distributed
     #   onyx
