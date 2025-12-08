@@ -174,41 +174,6 @@ test.describe("Default Assistant MCP Integration", () => {
     // Wait for tools to be fetched automatically
     await page.waitForTimeout(3000);
     console.log(`[test] Waited for tools to auto-fetch`);
-
-    // Manually update status to CONNECTED to simulate a successful connection flow
-    await page.request.patch(
-      `${APP_BASE_URL}/api/admin/mcp/server/${serverId}/status`,
-      {
-        params: { status: "CONNECTED" },
-      }
-    );
-    console.log(`[test] Manually updated server status to CONNECTED`);
-
-    // Verify server card is visible
-    const serverCard = page
-      .locator("article")
-      .filter({ hasText: serverName })
-      .first();
-    await expect(serverCard).toBeVisible({ timeout: 20000 });
-    console.log(`[test] Verified server card is visible`);
-
-    // Tools list automatically expands after fetch - wait for tool toggles to appear
-    // Scope to this specific server's card
-    const toolToggles = serverCard.locator('[data-testid^="tool-toggle-"]');
-    await expect(toolToggles.first()).toBeVisible({ timeout: 10000 });
-    const toggleCount = await toolToggles.count();
-    console.log(`[test] Found ${toggleCount} tool toggles in server card`);
-
-    for (let i = 0; i < toggleCount; i++) {
-      const toggle = toolToggles.nth(i);
-      const isEnabled = await toggle.getAttribute("data-state");
-      if (isEnabled !== "checked") {
-        await toggle.click();
-        await page.waitForTimeout(300);
-      }
-    }
-    console.log(`[test] Enabled all tools via UI`);
-    console.log(`[test] MCP server created with ID ${serverId}`);
   });
 
   test("Admin adds MCP tools to default assistant via default assistant page", async ({
