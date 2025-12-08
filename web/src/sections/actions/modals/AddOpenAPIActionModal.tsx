@@ -11,7 +11,7 @@ import Separator from "@/refresh-components/Separator";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { MethodSpec, ToolSnapshot } from "@/lib/tools/types";
+import { MethodSpec, ToolSnapshot } from "@/lib/tools/interfaces";
 import {
   validateToolDefinition,
   createCustomTool,

@@ -13,7 +13,7 @@ import {
   MCPServerCreateRequest,
   MCPServerStatus,
   MCPServer,
-} from "@/lib/tools/types";
+} from "@/lib/tools/interfaces";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Separator from "@/refresh-components/Separator";
 import IconButton from "@/refresh-components/buttons/IconButton";

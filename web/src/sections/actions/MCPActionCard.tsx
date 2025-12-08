@@ -13,10 +13,13 @@ import ToolItem from "@/sections/actions/ToolItem";
 import ToolsList from "@/sections/actions/ToolsList";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import { ActionStatus } from "@/lib/tools/types";
+import {
+  ActionStatus,
+  ToolSnapshot,
+  MCPServerStatus,
+  MCPServer,
+} from "@/lib/tools/interfaces";
 import { useServerTools } from "@/sections/actions/useServerTools";
-import { MCPServerStatus, MCPServer } from "@/lib/tools/types";
-import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { KeyedMutator } from "swr";
 import type { IconProps } from "@opal/types";
 import { SvgRefreshCw, SvgServer } from "@opal/icons";

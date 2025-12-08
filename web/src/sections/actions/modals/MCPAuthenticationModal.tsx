@@ -18,6 +18,8 @@ import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
   MCPTransportType,
+  MCPServerStatus,
+  MCPServer,
 } from "@/lib/tools/interfaces";
 import Separator from "@/refresh-components/Separator";
 import {
@@ -27,7 +29,6 @@ import {
   TabsContent,
 } from "@/refresh-components/tabs/tabs";
 import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
-import { MCPServerStatus, MCPServer } from "@/lib/tools/types";
 import { updateMCPServerStatus, upsertMCPServer } from "@/lib/tools/mcpService";
 import Message from "@/refresh-components/messages/Message";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
