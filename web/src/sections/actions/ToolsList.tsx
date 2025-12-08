@@ -92,7 +92,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
       </div>
 
       {/* Footer showing enabled tool count with filter toggle */}
-      {showFooter && !isEmpty && !isFetching && (
+      {showFooter && !(totalCount === 0) && !isFetching && (
         <FadeDiv>
           <div className="flex items-center justify-between gap-2 w-full">
             {/* Left action area */}
