@@ -223,7 +223,7 @@ export default function AddMCPServerModal({
                   />
                 </FormField>
 
-                <Separator className="-my-2" />
+                <Separator className="py-0" />
 
                 <FormField
                   id="server_url"
