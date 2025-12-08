@@ -389,9 +389,11 @@ export default function MCPAuthenticationModal({
                             );
                           }
                         }}
-                        data-testid="mcp-auth-method-select"
                       >
-                        <InputSelect.Trigger placeholder="Select method" />
+                        <InputSelect.Trigger
+                          placeholder="Select method"
+                          data-testid="mcp-auth-method-select"
+                        />
                         <InputSelect.Content>
                           <InputSelect.Item
                             value={MCPAuthenticationType.OAUTH}
