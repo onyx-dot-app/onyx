@@ -704,7 +704,7 @@ packaging==24.2
     #   opentelemetry-instrumentation
     #   pytest
     #   pywikibot
-pandas==2.2.3
+pandas==2.3.3
     # via markitdown
 parameterized==0.9.0
     # via cohere
