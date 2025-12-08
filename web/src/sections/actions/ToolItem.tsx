@@ -227,6 +227,7 @@ const ToolItem: React.FC<ToolItemProps> = ({
               checked={isEnabled}
               onCheckedChange={onToggle}
               disabled={!isAvailable}
+              data-testid={`tool-toggle-${name}`}
             />
           </div>
         </div>
