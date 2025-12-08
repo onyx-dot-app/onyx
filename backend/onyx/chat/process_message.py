@@ -558,6 +558,7 @@ def stream_chat_message_objects(
                 llm_override=new_msg_req.llm_override or chat_session.llm_override,
                 additional_headers=litellm_additional_headers,
                 long_term_logger=long_term_logger,
+                user_email=user.email,
             )
         except GenAIDisabledException:
             raise RuntimeError("LLM is disabled. Can't use chat flow without LLM.")
@@ -1081,6 +1082,7 @@ def stream_chat_message_objects(
                             new_msg_req.llm_override or chat_session.llm_override
                         ),
                         additional_headers=litellm_additional_headers,
+                        user_email=user.email if user else None,
                     )
                 )
             ),

@@ -523,7 +523,7 @@ def handle_send_message_simple_with_history(
     )
 
     # Получение LLM модели для ассистента
-    llm, _ = get_llms_for_persona(persona=chat_session.persona)
+    llm, _ = get_llms_for_persona(persona=chat_session.persona, user_email=user.email if user else None)
 
     # Получение токенизатора для подсчета токенов
     llm_tokenizer = get_tokenizer(
@@ -570,6 +570,7 @@ def handle_send_message_simple_with_history(
     rephrased_query = req.query_override or thread_based_query_rephrase(
         user_query=current_user_query,
         history_str=history_str,
+        user_email=user.email,
     )
 
     # Конфигурация параметров поиска

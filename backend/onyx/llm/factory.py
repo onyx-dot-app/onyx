@@ -47,10 +47,11 @@ def get_llms_for_persona(
     llm_override: LLMOverride | None = None,
     additional_headers: dict[str, str] | None = None,
     long_term_logger: LongTermLogger | None = None,
+    user_email: str | None = None,
 ) -> tuple[LLM, LLM]:
     if persona is None:
         logger.warning("No persona provided, using default LLMs")
-        return get_default_llms()
+        return get_default_llms(user_email=user_email)
 
     model_provider_override = llm_override.model_provider if llm_override else None
     model_version_override = llm_override.model_version if llm_override else None
@@ -62,6 +63,7 @@ def get_llms_for_persona(
             temperature=temperature_override or GEN_AI_TEMPERATURE,
             additional_headers=additional_headers,
             long_term_logger=long_term_logger,
+            user_email=user_email
         )
 
     with get_session_context_manager() as db_session:
@@ -89,6 +91,7 @@ def get_llms_for_persona(
             temperature=temperature_override,
             additional_headers=additional_headers,
             long_term_logger=long_term_logger,
+            user_email=user_email,
         )
 
     return _create_llm(model), _create_llm(fast_model)
@@ -164,6 +167,7 @@ def llm_from_provider(
     temperature: float | None = None,
     additional_headers: dict[str, str] | None = None,
     long_term_logger: LongTermLogger | None = None,
+    user_email: str | None = None,
 ) -> LLM:
     return get_llm(
         provider=llm_provider.provider,
@@ -177,6 +181,7 @@ def llm_from_provider(
         temperature=temperature,
         additional_headers=additional_headers,
         long_term_logger=long_term_logger,
+        user_email=user_email,
     )
 
 
@@ -196,6 +201,7 @@ def get_default_llms(
     temperature: float | None = None,
     additional_headers: dict[str, str] | None = None,
     long_term_logger: LongTermLogger | None = None,
+    user_email: str | None = None,
 ) -> tuple[LLM, LLM]:
     if DISABLE_GENERATIVE_AI:
         raise GenAIDisabledException()
@@ -223,6 +229,7 @@ def get_default_llms(
             temperature=temperature,
             additional_headers=additional_headers,
             long_term_logger=long_term_logger,
+            user_email=user_email,
         )
 
     return _create_llm(model_name), _create_llm(fast_model_name)
@@ -242,6 +249,7 @@ def get_llm(
     timeout: int | None = None,
     additional_headers: dict[str, str] | None = None,
     long_term_logger: LongTermLogger | None = None,
+    user_email: str | None = None,
 ) -> LLM:
     if temperature is None:
         temperature = GEN_AI_TEMPERATURE
@@ -252,7 +260,8 @@ def get_llm(
                 api_key=api_key,
                 endpoint=api_base,
                 model=model,
-                custom_config=custom_config
+                custom_config=custom_config,
+                user_email=user_email,
             )
         return _gigachat_instances[key]
     elif provider == "yandexgpt":
@@ -274,4 +283,5 @@ def get_llm(
         extra_headers=build_llm_extra_headers(additional_headers),
         model_kwargs=_build_extra_model_kwargs(provider),
         long_term_logger=long_term_logger,
+        user_email=user_email,
     )
