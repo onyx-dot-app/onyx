@@ -1,7 +1,9 @@
+import datetime
 from typing import cast
 from uuid import UUID
 
 from sqlalchemy import and_
+from sqlalchemy import delete
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
@@ -124,6 +126,7 @@ def update_mcp_server__no_commit(
     auth_performer: MCPAuthenticationPerformer | None = None,
     transport: MCPTransport | None = None,
     status: MCPServerStatus | None = None,
+    last_refreshed_at: datetime.datetime | None = None,
 ) -> MCPServer:
     """Update an existing MCP server"""
     server = get_mcp_server_by_id(server_id, db_session)
@@ -144,6 +147,8 @@ def update_mcp_server__no_commit(
         server.transport = transport
     if status is not None:
         server.status = status
+    if last_refreshed_at is not None:
+        server.last_refreshed_at = last_refreshed_at
 
     db_session.flush()  # Don't commit yet, let caller decide when to commit
     return server
@@ -330,3 +335,15 @@ def delete_user_connection_configs_for_server(
         db_session.delete(config)
 
     db_session.commit()
+
+
+def delete_all_user_connection_configs_for_server(
+    server_id: int, db_session: Session
+) -> None:
+    """Delete all user connection configs for a specific MCP server (excluding admin config)"""
+    db_session.execute(
+        delete(MCPConnectionConfig).where(
+            MCPConnectionConfig.mcp_server_id == server_id
+        )
+    )
+    db_session.flush()  # Don't commit yet, let caller decide when to commit
