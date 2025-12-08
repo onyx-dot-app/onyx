@@ -57,7 +57,7 @@ export function AdminPageLayout({
             description={description}
             rightChildren={rightChildren}
           />
-          <Separator />
+          <Separator className="py-0" />
         </div>
         <div className="px-4 pb-6 flex-1 overflow-y-auto min-h-0">
           {children}
