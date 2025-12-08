@@ -110,6 +110,7 @@ from smartsearch.onyx.server.manage.standard_answer import router as standard_an
 from smartsearch.onyx.server.query_and_chat.query_backend import (
     basic_router as query_router_,
 )
+from smartsearch.onyx.server.token_rate_limits.api import router as token_rate_limit_settings_router_groups
 from onyx.server.query_and_chat.chat_backend import router as chat_router
 from onyx.server.query_and_chat.query_backend import (
     admin_router as admin_query_router,
@@ -388,6 +389,9 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     # Token rate limit settings
     include_router_with_global_prefix_prepended(
         application, token_rate_limit_settings_router
+    )
+    include_router_with_global_prefix_prepended(
+        application, token_rate_limit_settings_router_groups
     )
     include_router_with_global_prefix_prepended(application, settings_router_)
     include_router_with_global_prefix_prepended(application, usage_export_router)
