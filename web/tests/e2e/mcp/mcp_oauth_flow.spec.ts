@@ -1290,15 +1290,6 @@ test.describe("MCP OAuth flows", () => {
     await page.waitForTimeout(3000);
     logStep("Waited for tools to auto-fetch");
 
-    // Manually update status to CONNECTED (for test purposes)
-    await page.request.patch(
-      `${APP_BASE_URL}/api/admin/mcp/server/${serverId}/status`,
-      {
-        params: { status: "CONNECTED" },
-      }
-    );
-    logStep("Manually updated server status to CONNECTED");
-
     // Verify server card is visible with tools
     await expect(
       page.getByText(serverName, { exact: false }).first()
@@ -1589,15 +1580,6 @@ test.describe("MCP OAuth flows", () => {
       // Wait for tools to be fetched automatically
       await page.waitForTimeout(3000);
       logStep("Waited for tools to auto-fetch");
-
-      // Manually update status to CONNECTED (for test purposes)
-      await page.request.patch(
-        `${APP_BASE_URL}/api/admin/mcp/server/${serverId}/status`,
-        {
-          params: { status: "CONNECTED" },
-        }
-      );
-      logStep("Manually updated server status to CONNECTED (curator)");
 
       // Verify server card is visible with tools
       await expect(
