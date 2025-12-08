@@ -174,6 +174,33 @@ test.describe("Default Assistant MCP Integration", () => {
     // Wait for tools to be fetched automatically
     await page.waitForTimeout(3000);
     console.log(`[test] Waited for tools to auto-fetch`);
+
+    // Verify server card is visible with tools
+    await expect(
+      page.getByText(serverName, { exact: false }).first()
+    ).toBeVisible({ timeout: 20000 });
+    console.log(`[test] Verified server card is visible`);
+
+    // Tools list automatically expands after fetch - wait for tool toggle to appear
+    const toolToggles = page.getByTestId(`tool-toggle-tool_0`);
+    await expect(toolToggles.first()).toBeVisible({ timeout: 10000 });
+    console.log(`[test] Tool toggles are visible`);
+
+    // Enable all matching tools (in case there are multiple on the page)
+    const toggleCount = await toolToggles.count();
+    console.log(`[test] Found ${toggleCount} instance(s) of tool_0`);
+
+    for (let i = 0; i < toggleCount; i++) {
+      const toggle = toolToggles.nth(i);
+      const isEnabled = await toggle.getAttribute("data-state");
+      if (isEnabled !== "checked") {
+        await toggle.click();
+        await page.waitForTimeout(300);
+        console.log(`[test] Enabled tool instance ${i + 1}: tool_0`);
+      }
+    }
+
+    console.log(`[test] Tools auto-fetched and enabled via UI`);
   });
 
   test("Admin adds MCP tools to default assistant via default assistant page", async ({
