@@ -1,5 +1,5 @@
 "use client";
-import { ToolSnapshot } from "@/lib/tools/types";
+import { ToolSnapshot } from "@/lib/tools/interfaces";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";

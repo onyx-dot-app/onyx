@@ -11,7 +11,7 @@ import {
   MCPServer,
   MCPServersResponse,
   ToolSnapshot,
-} from "@/lib/tools/types";
+} from "@/lib/tools/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
