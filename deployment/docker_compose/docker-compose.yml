@@ -37,6 +37,23 @@
 name: onyx
 
 services:
+  qdrant:
+      image: qdrant/qdrant:latest
+      restart: always
+      container_name: qdrant
+      ports:
+        - 6333:6333
+        - 6334:6334
+      expose:
+        - 6333
+        - 6334
+        - 6335
+      configs:
+        - source: qdrant_config
+          target: /qdrant/config/production.yaml
+      volumes:
+        - qdrant_data:/qdrant/storage
+
   api_server:
     image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
     build:
@@ -450,6 +467,7 @@ volumes:
   db_volume:
   vespa_volume: # Created by the container itself
   minio_data:
+  qdrant_data:
   # Caches to prevent re-downloading models, not strictly necessary
   model_cache_huggingface:
   indexing_huggingface_model_cache:
@@ -459,3 +477,8 @@ volumes:
   mcp_server_logs:
   inference_model_server_logs:
   indexing_model_server_logs:
+
+configs:
+  qdrant_config:
+    content: |
+      log_level: INFO
