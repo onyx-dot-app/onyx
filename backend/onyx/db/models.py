@@ -2437,6 +2437,11 @@ class ModelConfiguration(Base):
 
     supports_image_input: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
+    # Human-readable display name for the model.
+    # For dynamic providers (OpenRouter, Bedrock, Ollama), this comes from the source API.
+    # For static providers (OpenAI, Anthropic), this may be null and will fall back to LiteLLM.
+    display_name: Mapped[str | None] = mapped_column(String, nullable=True)
+
     llm_provider: Mapped["LLMProvider"] = relationship(
         "LLMProvider",
         back_populates="model_configurations",

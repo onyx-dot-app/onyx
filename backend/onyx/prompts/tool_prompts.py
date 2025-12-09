@@ -7,7 +7,8 @@ TOOL_SECTION_HEADER = "\n\n# Tools\n"
 TOOL_DESCRIPTION_SEARCH_GUIDANCE = """
 For knowledge that you already have and that is unlikely to change, answer the user directly without using any tools.
 
-When using any search type tool, do not make any assumptions and stay as faithful to the user's query as possible. Between internal and web search, think about if the user's query is likely better answered by team internal sources or online web pages. For queries that are short phrases, ambiguous/unclear, or keyword heavy, prioritize internal search. If ambiguious, prioritize internal search.
+When using any search type tool, do not make any assumptions and stay as faithful to the user's query as possible. Between internal and web search, think about if the user's query is likely better answered by team internal sources or online web pages. \
+For queries that are short phrases, ambiguous/unclear, or keyword heavy, prioritize internal search. If ambiguious, prioritize internal search.
 When searching for information, if the initial results cannot fully answer the user's query, try again with different tools or arguments. Do not repeat the same or very similar queries if it already has been run in the chat history.
 """
 
@@ -45,12 +46,11 @@ PYTHON_TOOL_GUIDANCE = """
 
 ## python
 Use the `python` tool to execute Python code in an isolated sandbox. The tool will respond with the output of the execution or time out after 60.0 seconds.
-Any files uploaded to the chat will be automatically be available in the execution environment's current directory.
-The current directory in the file system can be used to save and persist user files. Files written to the current directory will be returned with a `file_link`. Use this to give the user a way to download the file OR to display generated images.
+Any files uploaded to the chat will be automatically be available in the execution environment's current directory. \
+The current directory in the file system can be used to save and persist user files. Files written to the current directory will be returned with a `file_link`. \
+Use this to give the user a way to download the file OR to display generated images.
 Internet access for this session is disabled. Do not make external web requests or API calls as they will fail.
-
 Use `openpyxl` to read and write Excel files. You have access to libraries like numpy, pandas, scipy, matplotlib, and PIL.
-
 IMPORTANT: each call to this tool is independent. Variables from previous calls will NOT be available in the current call.
 """
 

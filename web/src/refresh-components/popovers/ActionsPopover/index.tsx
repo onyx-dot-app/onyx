@@ -23,7 +23,7 @@ import { FilterManager, useSourcePreferences } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";
 import SvgChevronRight from "@/icons/chevron-right";
 import SvgKey from "@/icons/key";
-import { MCPApiKeyModal } from "@/components/chat/MCPApiKeyModal";
+import MCPApiKeyModal from "@/components/chat/MCPApiKeyModal";
 import { ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";

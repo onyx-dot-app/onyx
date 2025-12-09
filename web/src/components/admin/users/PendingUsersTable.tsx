@@ -70,13 +70,14 @@ const PendingUsersTable = ({
   }
 
   const handleAcceptRequest = async (email: string) => {
+    const normalizedEmail = email.toLowerCase();
     try {
       await fetch("/api/tenants/users/invite/approve", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: normalizedEmail }),
       });
       mutate();
       setUserToApprove(null);
@@ -120,7 +121,7 @@ const PendingUsersTable = ({
                   <div className="flex justify-end">
                     <Button
                       secondary
-                      onClick={() => setUserToApprove(user.email)}
+                      onClick={() => setUserToApprove(user.email.toLowerCase())}
                       leftIcon={SvgCheck}
                     >
                       Accept Join Request

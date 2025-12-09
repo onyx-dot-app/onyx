@@ -46,9 +46,9 @@ class ChatStateContainer:
 
 def run_chat_llm_with_state_containers(
     func: Callable[..., None],
+    is_connected: Callable[[], bool],
     emitter: Emitter,
     state_container: ChatStateContainer,
-    is_connected: Callable[[], bool],
     *args: Any,
     **kwargs: Any,
 ) -> Generator[Packet, None]:

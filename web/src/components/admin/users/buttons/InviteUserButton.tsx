@@ -6,7 +6,7 @@ import {
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import useSWRMutation from "swr/mutation";
 import Button from "@/refresh-components/buttons/Button";
-import { GenericConfirmModal } from "@/components/modals/GenericConfirmModal";
+import GenericConfirmModal from "@/components/modals/GenericConfirmModal";
 import { useState } from "react";
 
 export const InviteUserButton = ({
@@ -99,10 +99,11 @@ export const InviteUserButton = ({
   const [showInviteModal, setShowInviteModal] = useState(false);
 
   const handleConfirm = () => {
+    const normalizedEmail = user.email.toLowerCase();
     if (invited) {
-      uninviteTrigger({ user_email: user.email });
+      uninviteTrigger({ user_email: normalizedEmail });
     } else {
-      inviteTrigger({ emails: [user.email] });
+      inviteTrigger({ emails: [normalizedEmail] });
     }
   };
 
