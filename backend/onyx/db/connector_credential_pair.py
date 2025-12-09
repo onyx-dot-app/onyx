@@ -447,10 +447,11 @@ def set_cc_pair_repeated_error_state(
     values: dict = {"in_repeated_error_state": in_repeated_error_state}
 
     # When entering repeated error state, also pause the connector
-    # to prevent continued indexing retry attempts.
+    # to prevent continued indexing retry attempts burning through embedding credits.
     # However, don't pause if there's an active manual indexing trigger,
     # which indicates the user wants to retry immediately.
-    # Only pause for cloud deployments - self-hosted users manage their own connectors.
+    # NOTE: only for Cloud, since most self-hosted users use self-hosted embedding
+    # models. Also, they are more prone to repeated failures -> eventual success.
     if in_repeated_error_state and AUTH_TYPE == AuthType.CLOUD:
         cc_pair = get_connector_credential_pair_from_id(
             db_session=db_session,
