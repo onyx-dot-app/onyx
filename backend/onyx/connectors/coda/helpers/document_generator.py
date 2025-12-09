@@ -381,12 +381,12 @@ class CodaDocumentGenerator:
         logger.info("Fetching all Coda doc IDs for deletion detection")
 
         all_docs = self.client.fetch_all_docs()
-        filtered_docs = self.filter_by_id(doc_ids, all_docs)
+        filtered_docs = self.filter_by_id(self.doc_ids, all_docs)
 
         for doc in filtered_docs:
             # Fetch all pages
             all_pages = self.client.fetch_all_pages(doc.id)
-            filtered_pages = self.filter_by_id(all_pages)
+            filtered_pages = self.filter_by_id(self.page_ids, all_pages)
 
             for page in filtered_pages:
                 page_key = f"{doc.id}:{page.id}"

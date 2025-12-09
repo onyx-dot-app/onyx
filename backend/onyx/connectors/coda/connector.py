@@ -116,10 +116,7 @@ class CodaConnector(LoadConnector, PollConnector, SlimConnector):
         if not self.generator:
             raise ConnectorValidationError("Generator not initialized.")
 
-        documents = self.generator.generate_all_slim_documents(
-            doc_ids=self.doc_ids,
-            page_ids=self.page_ids,
-        )
+        documents = self.generator.generate_all_slim_documents()
 
         yield from batch_generator(documents, self.batch_size)
 
