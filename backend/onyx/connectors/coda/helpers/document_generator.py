@@ -8,7 +8,7 @@ from onyx.connectors.coda.api.client import CodaAPIClient
 from onyx.connectors.coda.helpers.parser import CodaParser
 from onyx.connectors.coda.models.doc import CodaDoc
 from onyx.connectors.coda.models.page import CodaPage
-from onyx.connectors.coda.models.table import CodaTableReference
+from onyx.connectors.coda.models.table.table import CodaTableReference
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import Document
 from onyx.connectors.models import SlimDocument

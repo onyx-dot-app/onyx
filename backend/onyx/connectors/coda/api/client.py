@@ -6,11 +6,11 @@ from typing import Any
 
 import requests
 
-from onyx.connectors.coda.models.column import CodaColumn
 from onyx.connectors.coda.models.doc import CodaDoc
 from onyx.connectors.coda.models.page import CodaPage
-from onyx.connectors.coda.models.table import CodaRow
-from onyx.connectors.coda.models.table import CodaTableReference
+from onyx.connectors.coda.models.table.column import CodaColumn
+from onyx.connectors.coda.models.table.row import CodaRow
+from onyx.connectors.coda.models.table.table import CodaTableReference
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rl_requests
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError

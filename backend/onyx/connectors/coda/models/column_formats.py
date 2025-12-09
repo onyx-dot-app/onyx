@@ -6,7 +6,7 @@ from typing import Optional
 from pydantic import Field
 from pydantic.main import BaseModel
 
-from onyx.connectors.coda.models.table import CodaTableReference
+from onyx.connectors.coda.models.table.table import CodaTableReference
 
 
 class CodaColumnFormatType(StrEnum):

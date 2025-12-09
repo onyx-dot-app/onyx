@@ -29,6 +29,33 @@ from onyx.connectors.coda.models.column_formats import CodaTextColumnFormat
 from onyx.connectors.coda.models.column_formats import CodaTimeColumnFormat
 from onyx.connectors.coda.models.common import CodaObjectType
 
+CodaColumnFormat = Annotated[
+    Union[
+        CodaTextColumnFormat,
+        CodaPersonColumnFormat,
+        CodaLookupColumnFormat,
+        CodaNumberColumnFormat,
+        CodaPercentageColumnFormat,
+        CodaCurrencyColumnFormat,
+        CodaDateColumnFormat,
+        CodaDateTimeColumnFormat,
+        CodaTimeColumnFormat,
+        CodaDurationColumnFormat,
+        CodaSliderColumnFormat,
+        CodaScaleColumnFormat,
+        CodaImageColumnFormat,
+        CodaImageReferenceColumnFormat,
+        CodaAttachmentColumnFormat,
+        CodaButtonColumnFormat,
+        CodaCheckboxColumnFormat,
+        CodaSelectColumnFormat,
+        CodaPackObjectColumnFormat,
+        CodaCanvasColumnFormat,
+        CodaOtherColumnFormat,
+    ],
+    Field(discriminator="type"),
+]
+
 
 class CodaColumn(BaseModel):
     """Represents a Coda Table Column"""
@@ -54,29 +81,4 @@ class CodaColumn(BaseModel):
     defaultValue: Optional[str] = Field(
         description="Default value for the column.", example="Test"
     )
-    format: Annotated[
-        Union[
-            CodaTextColumnFormat,
-            CodaPersonColumnFormat,
-            CodaLookupColumnFormat,
-            CodaNumberColumnFormat,
-            CodaPercentageColumnFormat,
-            CodaCurrencyColumnFormat,
-            CodaDateColumnFormat,
-            CodaDateTimeColumnFormat,
-            CodaTimeColumnFormat,
-            CodaDurationColumnFormat,
-            CodaSliderColumnFormat,
-            CodaScaleColumnFormat,
-            CodaImageColumnFormat,
-            CodaImageReferenceColumnFormat,
-            CodaAttachmentColumnFormat,
-            CodaButtonColumnFormat,
-            CodaCheckboxColumnFormat,
-            CodaSelectColumnFormat,
-            CodaPackObjectColumnFormat,
-            CodaCanvasColumnFormat,
-            CodaOtherColumnFormat,
-        ],
-        Field(discriminator="type"),
-    ]
+    format: CodaColumnFormat
