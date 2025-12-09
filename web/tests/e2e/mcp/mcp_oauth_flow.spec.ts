@@ -1710,7 +1710,7 @@ test.describe("MCP OAuth flows", () => {
         { email: curatorTwoCredentials!.email, role: "curator" },
         "CuratorFlow secondary login"
       );
-      await curatorTwoPage.goto("http://localhost:3000/admin/actions");
+      await curatorTwoPage.goto("http://localhost:3000/admin/actions/mcp");
       const serverLocator = curatorTwoPage.getByText(serverName, {
         exact: false,
       });
