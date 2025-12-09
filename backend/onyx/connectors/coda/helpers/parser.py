@@ -382,3 +382,8 @@ class CodaParser:
         }
 
         return {k: v for k, v in metadata.items() if v is not None}
+
+    @staticmethod
+    def create_page_map(pages: list[CodaPage]) -> dict[str, CodaPage]:
+        """Create a mapping of page IDs to page objects."""
+        return {page.id: page for page in pages}

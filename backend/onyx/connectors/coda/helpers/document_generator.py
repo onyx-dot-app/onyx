@@ -199,10 +199,6 @@ class CodaDocumentGenerator:
                 )
                 continue
 
-    def create_page_map(self, pages: list[CodaPage]) -> dict[str, CodaPage]:
-        """Create a mapping of page IDs to page objects."""
-        return {page.id: page for page in pages}
-
     def filter_pages_by_update_time(
         self,
         pages: list[CodaPage],
@@ -282,6 +278,7 @@ class CodaDocumentGenerator:
         Args:
             doc_ids: Optional set of doc IDs to process. If None, processes all.
             page_ids: Optional set of page IDs to process. If None, processes all.
+            include_tables: Optional boolean to include table documents. Defaults to True.
 
         Yields:
             Document: All page and table documents
@@ -290,7 +287,7 @@ class CodaDocumentGenerator:
 
         all_docs = self.client.fetch_all_docs()
 
-        filtered_docs = self.filter_by_id(doc_ids, all_docs)
+        filtered_docs: list[CodaDoc] = self.filter_by_id(doc_ids, all_docs)
 
         for doc in filtered_docs:
             logger.info(f"Processing doc: {doc.name}")
@@ -302,7 +299,7 @@ class CodaDocumentGenerator:
             pages_to_process = self.filter_by_id(page_ids, all_pages)
 
             # Build map for hierarchy
-            page_map = self.create_page_map(pages_to_process)
+            page_map = self.parser.create_page_map(pages_to_process)
 
             # Generate documents from pages
             yield from self.generate_page_documents(doc, pages_to_process, page_map)
@@ -355,7 +352,7 @@ class CodaDocumentGenerator:
             )
 
             # Build map for hierarchy
-            page_map = self.create_page_map(pages_to_process)
+            page_map = self.parser.create_page_map(pages_to_process)
 
             # Generate documents from pages
             yield from self.generate_page_documents(doc, pages_to_process, page_map)
