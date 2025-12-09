@@ -78,7 +78,7 @@ class CodaDocumentGenerator:
                 self.skipped_pages.add(page.id)
                 continue
 
-            page_key = f"{doc.id}:{page.id}"
+            page_key = self.create_page_key(doc.id, page.id)
 
             # Skip already indexed pages
             if page_key in self.indexed_pages:
@@ -151,7 +151,7 @@ class CodaDocumentGenerator:
             Document: Table documents with metadata and markdown content
         """
         for table in tables:
-            table_key = f"{doc.id}:table:{table.id}"
+            table_key = self.parser.create_table_key(doc, table)
 
             # Skip already indexed tables
             if table_key in self.indexed_tables:
@@ -366,9 +366,7 @@ class CodaDocumentGenerator:
                 if all_tables:
                     yield from self.generate_table_documents(doc, all_tables)
 
-    def generate_all_slim_documents(
-        self, doc_ids: set[str] | None = None, include_tables: bool = True
-    ) -> Generator[SlimDocument, None, None]:
+    def generate_all_slim_documents(self) -> Generator[SlimDocument, None, None]:
         """Generate slim documents (IDs only) for all accessible Coda content.
 
         Args:
@@ -389,12 +387,12 @@ class CodaDocumentGenerator:
             filtered_pages = self.filter_by_id(self.page_ids, all_pages)
 
             for page in filtered_pages:
-                page_key = f"{doc.id}:{page.id}"
+                page_key = self.parser.create_page_key(doc, page)
                 yield SlimDocument(id=page_key)
 
             # Fetch all tables if enabled
-            if include_tables:
+            if self.include_tables:
                 all_tables = self.client.fetch_all_tables(doc.id)
                 for table in all_tables:
-                    table_key = f"{doc.id}:table:{table.id}"
+                    table_key = self.parser.create_table_key(doc, table)
                     yield SlimDocument(id=table_key)

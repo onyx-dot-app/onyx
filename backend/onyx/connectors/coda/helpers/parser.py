@@ -387,3 +387,13 @@ class CodaParser:
     def create_page_map(pages: list[CodaPage]) -> dict[str, CodaPage]:
         """Create a mapping of page IDs to page objects."""
         return {page.id: page for page in pages}
+
+    @staticmethod
+    def create_page_key(doc: CodaDoc, page: CodaPage) -> str:
+        """Create a unique key for a page."""
+        return f"{doc.id}:{page.id}"
+
+    @staticmethod
+    def create_table_key(doc: CodaDoc, table: CodaTableReference) -> str:
+        """Create a unique key for a table."""
+        return f"{doc.id}:table:{table.id}"
