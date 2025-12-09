@@ -180,19 +180,25 @@ export default function OpenAPIAuthenticationModal({
           otherwise: (schema) => schema.notRequired(),
         }),
         scopes: Yup.string().notRequired(),
-        headers: Yup.array()
-          .of(
-            Yup.object({
-              key: Yup.string().required("Header key is required"),
-              value: Yup.string().required("Header value is required"),
-            })
-          )
-          .when("authMethod", {
-            is: "custom-header",
-            then: (schema) =>
-              schema.min(1, "Add at least one authentication header"),
-            otherwise: (schema) => schema.optional(),
-          }),
+        headers: Yup.array().when("authMethod", {
+          is: "custom-header",
+          then: () =>
+            Yup.array()
+              .of(
+                Yup.object({
+                  key: Yup.string().required("Header key is required"),
+                  value: Yup.string().required("Header value is required"),
+                })
+              )
+              .min(1, "Add at least one authentication header"),
+          otherwise: () =>
+            Yup.array().of(
+              Yup.object({
+                key: Yup.string(),
+                value: Yup.string(),
+              })
+            ),
+        }),
       }),
     [isEditingOAuthConfig]
   );
