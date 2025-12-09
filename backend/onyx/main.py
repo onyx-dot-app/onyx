@@ -107,6 +107,7 @@ from smartsearch.onyx.server.user_group.api import router as user_group_router
 from smartsearch.onyx.server.analytics.api import router as analytics_router
 from smartsearch.onyx.server.query_history.api import router as query_history_router
 from smartsearch.onyx.server.manage.standard_answer import router as standard_answer_router
+from smartsearch.onyx.server.users.api import router as users_router
 from smartsearch.onyx.server.query_and_chat.query_backend import (
     basic_router as query_router_,
 )
@@ -377,6 +378,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, query_router)
     include_router_with_global_prefix_prepended(application, chat_router)
     include_router_with_global_prefix_prepended(application, standard_answer_router)
+    include_router_with_global_prefix_prepended(application, users_router)
     include_router_with_global_prefix_prepended(application, query_router_)
 
 

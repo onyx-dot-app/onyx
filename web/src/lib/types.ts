@@ -114,6 +114,11 @@ export interface MinimalUserSnapshot {
   email: string;
 }
 
+export interface MinimalUsersSnapshot {
+  id: string;
+  email: string;
+}
+
 export type ValidInputTypes =
   | "load_state"
   | "poll"
