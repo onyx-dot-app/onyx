@@ -1,5 +1,4 @@
 from enum import StrEnum
-from typing import Any
 from typing import Literal
 from typing import Optional
 from typing import Union
@@ -233,9 +232,11 @@ RichSingleValue = Union[
     RowValue,
 ]
 
-RichValue = Union[RichSingleValue, list["RichValue"]]
+RichValue = Union[RichSingleValue, list[RichSingleValue]]
 
-CodaCellValue = Union[RichSingleValue, RichValue, ScalarValue]
+Value = Union[ScalarValue, list[ScalarValue]]
+
+CodaCellValue = Union[RichValue, Value]
 
 
 class CodaRow(CodaObjectBase):
@@ -246,4 +247,4 @@ class CodaRow(CodaObjectBase):
     browserLink: str
     createdAt: str
     updatedAt: str
-    values: dict[str, Any]
+    values: dict[str, CodaCellValue]

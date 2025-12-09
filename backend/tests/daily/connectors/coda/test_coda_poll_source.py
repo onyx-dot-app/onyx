@@ -6,7 +6,7 @@ Run with: pytest test_load_from_state.py -v
 
 Prerequisites:
 - Set CODA_API_TOKEN environment variable
-- Have a Coda workspace with at least 1 doc and multiple pages
+- Set CODA_FOLDER_ID environment variable
 """
 
 import os
