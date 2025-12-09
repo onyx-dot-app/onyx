@@ -772,7 +772,8 @@ if [ "$RESTART_ISSUES" = true ]; then
     print_error "Some containers are experiencing issues!"
     echo ""
     print_info "Please check the logs for more information:"
-    echo "  (cd \"${INSTALL_ROOT}/deployment\" && \$COMPOSE_CMD -f docker-compose.yml logs)"
+    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD -f docker-compose.yml logs)"
+
     echo ""
     print_info "If the issue persists, please contact: founders@onyx.app"
     echo "Include the output of the logs command in your message."
