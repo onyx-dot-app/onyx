@@ -4,7 +4,6 @@ from typing import Optional
 from typing import Union
 
 from pydantic import Field
-from pydantic.main import BaseModel
 
 from onyx.connectors.coda.models.column_formats import CodaAttachmentColumnFormat
 from onyx.connectors.coda.models.column_formats import CodaButtonColumnFormat
@@ -27,6 +26,7 @@ from onyx.connectors.coda.models.column_formats import CodaSelectColumnFormat
 from onyx.connectors.coda.models.column_formats import CodaSliderColumnFormat
 from onyx.connectors.coda.models.column_formats import CodaTextColumnFormat
 from onyx.connectors.coda.models.column_formats import CodaTimeColumnFormat
+from onyx.connectors.coda.models.common import CodaObjectBase
 from onyx.connectors.coda.models.common import CodaObjectType
 
 CodaColumnFormat = Annotated[
@@ -57,7 +57,7 @@ CodaColumnFormat = Annotated[
 ]
 
 
-class CodaColumn(BaseModel):
+class CodaColumn(CodaObjectBase):
     """Represents a Coda Table Column"""
 
     id: str = Field(description="The ID of the column", example="c-tuVwxYz")
