@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import ActionCardHeader from "@/sections/actions/ActionCardHeader";
 import ToolsSection from "@/sections/actions/ToolsSection";
 import { cn } from "@/lib/utils";
-import { ActionStatus } from "@/lib/tools/types";
+import { ActionStatus } from "@/lib/tools/interfaces";
 import { IconProps } from "@/icons";
 import SvgServer from "@/icons/server";
 import {

@@ -19,6 +19,8 @@ import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
   MCPTransportType,
+  MCPServerStatus,
+  MCPServer,
 } from "@/lib/tools/interfaces";
 import Separator from "@/refresh-components/Separator";
 import {
@@ -28,7 +30,6 @@ import {
   TabsContent,
 } from "@/refresh-components/tabs/tabs";
 import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
-import { MCPServerStatus, MCPServer } from "@/lib/tools/types";
 import { updateMCPServerStatus, upsertMCPServer } from "@/lib/tools/mcpService";
 import Message from "@/refresh-components/messages/Message";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
@@ -381,7 +382,10 @@ export default function MCPAuthenticationModal({
                           }
                         }}
                       >
-                        <InputSelect.Trigger placeholder="Select method" />
+                        <InputSelect.Trigger
+                          placeholder="Select method"
+                          data-testid="mcp-auth-method-select"
+                        />
                         <InputSelect.Content>
                           <InputSelect.Item
                             value={MCPAuthenticationType.OAUTH}
@@ -418,7 +422,7 @@ export default function MCPAuthenticationModal({
                       }}
                     />
                   </FormField>
-                  <Separator className="-my-2" />
+                  <Separator className="py-0" />
                 </div>
 
                 {/* OAuth Section */}
@@ -638,6 +642,7 @@ export default function MCPAuthenticationModal({
                   disabled={
                     !isValid || isSubmitting || (isEditConfigsFlow && !dirty)
                   }
+                  data-testid="mcp-auth-connect-button"
                 >
                   {isSubmitting ? "Connecting..." : "Connect"}
                 </Button>

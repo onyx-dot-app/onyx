@@ -15,7 +15,7 @@ import Separator from "@/refresh-components/Separator";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { MethodSpec, ToolSnapshot } from "@/lib/tools/types";
+import { MethodSpec, ToolSnapshot } from "@/lib/tools/interfaces";
 import {
   validateToolDefinition,
   createCustomTool,
@@ -29,7 +29,6 @@ import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import InfoBlock from "@/refresh-components/messages/InfoBlock";
-import Message from "@/refresh-components/messages/Message";
 import SvgAlertCircle from "@/icons/alert-circle";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 

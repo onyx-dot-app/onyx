@@ -13,18 +13,23 @@ import ActionCard from "@/sections/actions/ActionCard";
 import Actions from "@/sections/actions/Actions";
 import ToolItem from "@/sections/actions/ToolItem";
 import ToolsList from "@/sections/actions/ToolsList";
-import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import { ActionStatus } from "@/lib/tools/types";
+import {
+  ActionStatus,
+  ToolSnapshot,
+  MCPServerStatus,
+  MCPServer,
+} from "@/lib/tools/interfaces";
 import { useServerTools } from "@/sections/actions/useServerTools";
-import { MCPServerStatus, MCPServer } from "@/lib/tools/types";
-import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { KeyedMutator } from "swr";
 import { IconProps } from "@/icons";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
+import SvgTrash from "@/icons/trash";
+import Modal from "@/refresh-components/layouts/ConfirmationModalLayout";
 
 export interface MCPActionCardProps {
   // Server identification
@@ -304,19 +309,33 @@ export default function MCPActionCard({
       </ActionCard>
 
       {deleteModal.isOpen && (
-        <ConfirmEntityModal
-          danger
-          actionButtonText="Delete"
-          entityType="MCP server"
-          entityName={title}
-          additionalDetails="This will permanently delete the server and all of its tools."
+        <Modal
+          icon={() => (
+            <SvgTrash className="w-[1.5rem] h-[1.5rem] stroke-action-danger-05" />
+          )}
+          title="Delete MCP server"
           onClose={() => deleteModal.toggle(false)}
-          onSubmit={async () => {
-            if (!onDelete) return;
-            onDelete();
-            deleteModal.toggle(false);
-          }}
-        />
+          submit={
+            <Button
+              danger
+              onClick={async () => {
+                if (!onDelete) return;
+                onDelete();
+                deleteModal.toggle(false);
+              }}
+            >
+              Delete
+            </Button>
+          }
+        >
+          <div className="flex flex-col gap-4">
+            <Text text03>
+              All tools connected to <b>{title}</b> will be removed. Deletion is
+              irreversible.
+            </Text>
+            <Text text03>Are you sure you want to delete this MCP server?</Text>
+          </div>
+        </Modal>
       )}
     </>
   );

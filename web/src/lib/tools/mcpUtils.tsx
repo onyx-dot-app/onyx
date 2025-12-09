@@ -1,6 +1,5 @@
 import { SOURCE_METADATA_MAP } from "../sources";
 import SvgServer from "@/icons/server";
-import { MCPServer } from "./interfaces";
 import { DatabaseIcon, FileIcon } from "@/components/icons/icons";
 import { IconProps } from "@/icons";
 
@@ -37,8 +36,4 @@ export function getActionIcon(
   }
 
   return SvgServer;
-}
-
-export function getMCPServerDisplayName(server: MCPServer): string {
-  return server.name;
 }

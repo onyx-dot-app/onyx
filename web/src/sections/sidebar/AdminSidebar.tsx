@@ -41,6 +41,7 @@ import SvgActions from "@/icons/actions";
 import SvgUser from "@/icons/user";
 import SvgFileText from "@/icons/file-text";
 import SvgServer from "@/icons/server";
+import SvgMcp from "@/icons/mcp";
 
 const connectors_items = () => [
   {
@@ -86,25 +87,25 @@ const custom_assistants_items = (
   ];
 
   if (!isCurator) {
-    items.push(
-      {
-        name: "Slack Bots",
-        icon: SlackIconSkeleton,
-        link: "/admin/bots",
-      },
-      {
-        name: "Actions",
-        icon: SvgActions,
-        link: "/admin/actions",
-      }
-    );
-  } else {
     items.push({
-      name: "Actions",
-      icon: SvgActions,
-      link: "/admin/actions",
+      name: "Slack Bots",
+      icon: SlackIconSkeleton,
+      link: "/admin/bots",
     });
   }
+
+  items.push(
+    {
+      name: "MCP Actions",
+      icon: SvgMcp,
+      link: "/admin/actions/mcp",
+    },
+    {
+      name: "OpenAPI Actions",
+      icon: SvgActions,
+      link: "/admin/actions/open-api",
+    }
+  );
 
   if (enableEnterprise) {
     items.push({
