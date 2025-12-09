@@ -4,6 +4,7 @@ from sqlalchemy import and_
 from sqlalchemy import delete
 from sqlalchemy import or_
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -43,17 +44,26 @@ def create_or_add_document_tag(
     if not document:
         raise ValueError("Invalid Document, cannot attach Tags")
 
+    # Use upsert to avoid race condition when multiple workers try to create the same tag
+    insert_stmt = pg_insert(Tag).values(
+        tag_key=tag_key,
+        tag_value=tag_value,
+        source=source,
+        is_list=False,
+    )
+    insert_stmt = insert_stmt.on_conflict_do_nothing(
+        index_elements=["tag_key", "tag_value", "source", "is_list"]
+    )
+    db_session.execute(insert_stmt)
+
+    # Now fetch the tag (either just inserted or already existed)
     tag_stmt = select(Tag).where(
         Tag.tag_key == tag_key,
         Tag.tag_value == tag_value,
         Tag.source == source,
         Tag.is_list.is_(False),
     )
-    tag = db_session.execute(tag_stmt).scalar_one_or_none()
-
-    if not tag:
-        tag = Tag(tag_key=tag_key, tag_value=tag_value, source=source, is_list=False)
-        db_session.add(tag)
+    tag = db_session.execute(tag_stmt).scalar_one()
 
     if tag not in document.tags:
         document.tags.append(tag)
@@ -79,31 +89,27 @@ def create_or_add_document_tag_list(
     if not document:
         raise ValueError("Invalid Document, cannot attach Tags")
 
-    existing_tags_stmt = select(Tag).where(
+    # Use upsert to avoid race condition when multiple workers try to create the same tags
+    for tag_value in valid_tag_values:
+        insert_stmt = pg_insert(Tag).values(
+            tag_key=tag_key,
+            tag_value=tag_value,
+            source=source,
+            is_list=True,
+        )
+        insert_stmt = insert_stmt.on_conflict_do_nothing(
+            index_elements=["tag_key", "tag_value", "source", "is_list"]
+        )
+        db_session.execute(insert_stmt)
+
+    # Now fetch all tags (either just inserted or already existed)
+    all_tags_stmt = select(Tag).where(
         Tag.tag_key == tag_key,
         Tag.tag_value.in_(valid_tag_values),
         Tag.source == source,
         Tag.is_list.is_(True),
     )
-    existing_tags = list(db_session.execute(existing_tags_stmt).scalars().all())
-    existing_tag_values = {tag.tag_value for tag in existing_tags}
-
-    new_tags = []
-    for tag_value in valid_tag_values:
-        if tag_value not in existing_tag_values:
-            new_tag = Tag(
-                tag_key=tag_key, tag_value=tag_value, source=source, is_list=True
-            )
-            db_session.add(new_tag)
-            new_tags.append(new_tag)
-            existing_tag_values.add(tag_value)
-
-    if new_tags:
-        logger.debug(
-            f"Created new tags: {', '.join([f'{tag.tag_key}:{tag.tag_value}' for tag in new_tags])}"
-        )
-
-    all_tags = existing_tags + new_tags
+    all_tags = list(db_session.execute(all_tags_stmt).scalars().all())
 
     for tag in all_tags:
         if tag not in document.tags:
