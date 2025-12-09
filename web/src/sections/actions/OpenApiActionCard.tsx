@@ -5,13 +5,15 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 import ActionCard from "@/sections/actions/ActionCard";
 import Actions from "@/sections/actions/Actions";
 import ToolsList from "@/sections/actions/ToolsList";
-import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { ToolSnapshot, ActionStatus, MethodSpec } from "@/lib/tools/interfaces";
 import ToolItem from "@/sections/actions/ToolItem";
 import { extractMethodSpecsFromDefinition } from "@/lib/tools/openApiService";
 import { updateToolStatus } from "@/lib/tools/mcpService";
 import { SvgServer, SvgTrash } from "@opal/icons";
+import Modal from "@/refresh-components/layouts/ConfirmationModalLayout";
+import Button from "@/refresh-components/buttons/Button";
+import Text from "@/refresh-components/texts/Text";
 
 export interface OpenApiActionCardProps {
   tool: ToolSnapshot;
@@ -190,21 +192,34 @@ export default function OpenApiActionCard({
       </ActionCard>
 
       {deleteModal.isOpen && onDelete && (
-        <ConfirmEntityModal
-          danger
+        <Modal
           icon={() => (
             <SvgTrash className="w-[1.5rem] h-[1.5rem] stroke-action-danger-05" />
           )}
-          actionButtonText="Delete"
-          entityType="OpenAPI action"
-          entityName={tool.name}
-          additionalDetails="This action will permanently delete the OpenAPI action and its configuration."
+          title="Delete OpenAPI action"
           onClose={() => deleteModal.toggle(false)}
-          onSubmit={async () => {
-            await onDelete(tool);
-            deleteModal.toggle(false);
-          }}
-        />
+          submit={
+            <Button
+              danger
+              onClick={async () => {
+                await onDelete(tool);
+                deleteModal.toggle(false);
+              }}
+            >
+              Delete
+            </Button>
+          }
+        >
+          <div className="flex flex-col gap-4">
+            <Text text03>
+              This will permanently delete the OpenAPI action <b>{tool.name}</b>{" "}
+              and its configuration.
+            </Text>
+            <Text text03>
+              Are you sure you want to delete this OpenAPI action?
+            </Text>
+          </div>
+        </Modal>
       )}
     </>
   );
