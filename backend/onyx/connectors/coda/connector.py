@@ -71,8 +71,6 @@ class CodaConnector(LoadConnector, PollConnector, SlimConnector):
         self.generator = CodaDocumentGenerator(
             client=self.client,
             parser=self.parser,
-            page_ids=self.page_ids,
-            max_table_rows=self.max_table_rows,
         )
 
         return None
@@ -94,7 +92,7 @@ class CodaConnector(LoadConnector, PollConnector, SlimConnector):
 
         documents = self.generator.generate_all_documents(
             doc_ids=self.doc_ids,
-            include_tables=self.include_tables,
+            page_ids=self.page_ids,
         )
 
         yield from batch_generator(documents, self.batch_size)
@@ -110,6 +108,7 @@ class CodaConnector(LoadConnector, PollConnector, SlimConnector):
             start=start,
             end=end,
             doc_ids=self.doc_ids,
+            page_ids=self.page_ids,
             include_tables=self.include_tables,
         )
 
@@ -122,7 +121,7 @@ class CodaConnector(LoadConnector, PollConnector, SlimConnector):
 
         documents = self.generator.generate_all_slim_documents(
             doc_ids=self.doc_ids,
-            include_tables=self.include_tables,
+            page_ids=self.page_ids,
         )
 
         yield from batch_generator(documents, self.batch_size)

@@ -34,8 +34,6 @@ class CodaDocumentGenerator:
         self,
         client: CodaAPIClient,
         parser: CodaParser,
-        page_ids: set[str] | None = None,
-        max_table_rows: int = 1000,
     ) -> None:
         """Initialize with dependencies.
 
@@ -47,8 +45,6 @@ class CodaDocumentGenerator:
         """
         self.client = client
         self.parser = parser
-        self.page_ids = page_ids
-        self.max_table_rows = max_table_rows
         self.indexed_pages: set[str] = set()
         self.indexed_tables: set[str] = set()
         self.skipped_pages: set[str] = set()
@@ -70,6 +66,7 @@ class CodaDocumentGenerator:
             # Skip hidden pages
             if page.isHidden:
                 logger.debug(f"Skipping hidden page '{page.name}'.")
+                self.skipped_pages.add(page.id)
                 continue
 
             page_key = f"{doc.id}:{page.id}"
@@ -110,7 +107,7 @@ class CodaDocumentGenerator:
 
             if len(sections) == 0:
                 self.skipped_pages.add(page.id)
-                logger.debug(f"Skipping page '{page.name}': no content")
+                logger.debug(f"Skipping page '{page_title}': no content")
                 continue
 
             yield Document(
@@ -202,37 +199,110 @@ class CodaDocumentGenerator:
                 )
                 continue
 
+    def create_page_map(self, pages: list[CodaPage]) -> dict[str, CodaPage]:
+        """Create a mapping of page IDs to page objects."""
+        return {page.id: page for page in pages}
+
+    def filter_pages_by_update_time(
+        self,
+        pages: list[CodaPage],
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+    ) -> list[CodaPage]:
+        """Filter pages based on update time."""
+
+        updated_pages = []
+        for page in pages:
+            if not page.updatedAt:
+                logger.debug(f"Skipping page: {page.name} has no update time")
+                self.skipped_pages.add(page.id)
+                continue
+
+            page_updated_at = self.parser.parse_timestamp(page.updatedAt)
+
+            if start - 20000 < page_updated_at < end + 20000:
+                logger.debug(
+                    f"Processing page: {page.name} updated within time range at: {page_updated_at}. Start: {start}, End: {end}"
+                )
+                updated_pages.append(page)
+            else:
+                self.skipped_pages.add(page.id)
+                logger.debug(
+                    f"Skipping page: {page.name} updated outside time range at: {page_updated_at}. Start: {start}, End: {end}"
+                )
+
+        return updated_pages
+
+    def filter_by_id(
+        self,
+        object_ids: set[str] | None,
+        objects: list[CodaDoc] | list[CodaTableReference],
+    ) -> list[CodaDoc] | list[CodaTableReference]:
+        if object_ids:
+            return [object for object in objects if object.id in object_ids]
+        return objects
+
+    def filter_docs_by_update_time(
+        self,
+        docs: list[CodaDoc],
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+    ) -> list[CodaDoc]:
+        """Filter docs based on update time."""
+
+        updated_docs = []
+        for doc in docs:
+            if not doc.updatedAt:
+                logger.debug(f"Skipping doc: {doc.name} has no update time")
+                self.skipped_docs.add(doc.id)
+                continue
+            doc_updated_at = self.parser.parse_timestamp(doc.updatedAt)
+
+            if start - 20000 < doc_updated_at < end + 20000:
+                logger.debug(
+                    f"Processing doc: {doc.name} updated within time range at: {doc_updated_at}. Start: {start}, End: {end}"
+                )
+                updated_docs.append(doc)
+            else:
+                self.skipped_docs.add(doc.id)
+                logger.debug(
+                    f"Skipping doc: {doc.name} updated outside time range at: {doc_updated_at}. Start: {start}, End: {end}"
+                )
+
+        return updated_docs
+
     def generate_all_documents(
-        self, doc_ids: set[str] | None = None, include_tables: bool = True
+        self,
+        doc_ids: set[str] | None = None,
+        page_ids: set[str] | None = None,
+        include_tables: bool = True,
     ) -> Generator[Document, None, None]:
         """Generate all documents from accessible Coda workspace.
 
         Args:
             doc_ids: Optional set of doc IDs to process. If None, processes all.
-            include_tables: Whether to include table documents
+            page_ids: Optional set of page IDs to process. If None, processes all.
 
         Yields:
             Document: All page and table documents
         """
         logger.info("Starting full load of Coda docs and pages")
 
-        for doc in self.client.fetch_all_docs():
-            # Filter by doc_ids if specified
-            if doc_ids and doc.id not in doc_ids:
-                continue
+        all_docs = self.client.fetch_all_docs()
 
+        filtered_docs = self.filter_by_id(doc_ids, all_docs)
+
+        for doc in filtered_docs:
             logger.info(f"Processing doc: {doc.name}")
 
             # Fetch all pages for this doc to build hierarchy
             all_pages = self.client.fetch_all_pages(doc.id)
 
-            # Build map for hierarchy
-            page_map = {p.id: p for p in all_pages}
-
             # Filter pages if page_ids specified
-            pages_to_process = all_pages
-            if self.page_ids:
-                pages_to_process = [p for p in all_pages if p.id in self.page_ids]
+            pages_to_process = self.filter_by_id(page_ids, all_pages)
+
+            # Build map for hierarchy
+            page_map = self.create_page_map(pages_to_process)
 
             # Generate documents from pages
             yield from self.generate_page_documents(doc, pages_to_process, page_map)
@@ -264,61 +334,38 @@ class CodaDocumentGenerator:
         """
         logger.info(f"Polling Coda for updates between {start} and {end}")
 
-        for doc in self.client.fetch_all_docs():
-            # Filter by doc_ids if specified
-            if doc_ids and doc.id not in doc_ids:
-                continue
+        all_docs = self.client.fetch_all_docs()
 
-            doc_updated_at = self.parser.parse_timestamp(doc.updatedAt)
+        updated_docs = self.filter_docs_by_update_time(all_docs, start, end)
 
-            logger.debug(
-                f"Processing doc: {doc.name} updated at {doc_updated_at} {start} {end}"
-            )
+        filtered_docs = self.filter_by_id(doc_ids, updated_docs)
 
-            # Skip docs outside time window
-            if doc_updated_at < start - 20000 or doc_updated_at > end + 20000:
-                logger.debug(f"Skipping doc: {doc.name} updated at {doc_updated_at}")
-                continue
-
-            logger.info(f"Processing updated doc: {doc.name}")
+        for doc in filtered_docs:
+            logger.info(f"Processing doc: {doc.name}")
 
             # Fetch all pages for this doc to build hierarchy
             all_pages = self.client.fetch_all_pages(doc.id)
-            page_map = {p.id: p for p in all_pages}
+
+            # Filter pages if page_ids specified
+            filtered_pages = self.filter_by_id(all_pages)
 
             # Filter pages by update time
-            updated_pages = []
-            for page in all_pages:
-                if not page.updatedAt:
-                    continue
-                page_updated_at = self.parser.parse_timestamp(page.updatedAt)
+            pages_to_process = self.filter_pages_by_update_time(
+                filtered_pages, start, end
+            )
 
-                logger.debug(
-                    f"Processing page: {page.name} updated at {page_updated_at} {start} {end}"
-                )
-                if start - 20000 < page_updated_at < end + 20000:
-                    updated_pages.append(page)
+            # Build map for hierarchy
+            page_map = self.create_page_map(pages_to_process)
 
-            if updated_pages:
-                if self.page_ids:
-                    updated_pages = [p for p in updated_pages if p.id in self.page_ids]
+            # Generate documents from pages
+            yield from self.generate_page_documents(doc, pages_to_process, page_map)
 
-                yield from self.generate_page_documents(doc, updated_pages, page_map)
-
-            # Process tables for updated docs if enabled
-            # Since tables don't have individual timestamps, we re-index all tables
-            # for any doc that has been updated
+            # Process tables if enabled
             if include_tables:
-                all_updated_pages_ids = {p.id for p in updated_pages}
                 all_tables = self.client.fetch_all_tables(doc.id)
 
-                updated_tables = []
-                for table in all_tables:
-                    if table.parent and table.parent.id in all_updated_pages_ids:
-                        updated_tables.append(table)
-
-                if updated_tables:
-                    yield from self.generate_table_documents(doc, updated_tables)
+                if all_tables:
+                    yield from self.generate_table_documents(doc, all_tables)
 
     def generate_all_slim_documents(
         self, doc_ids: set[str] | None = None, include_tables: bool = True
@@ -334,14 +381,15 @@ class CodaDocumentGenerator:
         """
         logger.info("Fetching all Coda doc IDs for deletion detection")
 
-        for doc in self.client.fetch_all_docs():
-            # Filter by doc_ids if specified
-            if doc_ids and doc.id not in doc_ids:
-                continue
+        all_docs = self.client.fetch_all_docs()
+        filtered_docs = self.filter_by_id(doc_ids, all_docs)
 
+        for doc in filtered_docs:
             # Fetch all pages
             all_pages = self.client.fetch_all_pages(doc.id)
-            for page in all_pages:
+            filtered_pages = self.filter_by_id(all_pages)
+
+            for page in filtered_pages:
                 page_key = f"{doc.id}:{page.id}"
                 yield SlimDocument(id=page_key)
 
