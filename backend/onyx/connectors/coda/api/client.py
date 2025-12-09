@@ -6,9 +6,9 @@ from typing import Any
 
 import requests
 
+from onyx.connectors.coda.models.column import CodaColumn
 from onyx.connectors.coda.models.doc import CodaDoc
 from onyx.connectors.coda.models.page import CodaPage
-from onyx.connectors.coda.models.table import CodaColumn
 from onyx.connectors.coda.models.table import CodaRow
 from onyx.connectors.coda.models.table import CodaTableReference
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rl_requests
@@ -188,7 +188,7 @@ class CodaAPIClient:
         Raises:
             Exception: If the API request fails
         """
-        logger.debug(f"Creating doc '{title or 'Untitled'}'")
+        logger.debug(f"Creating doc '{title or 'Untitled'}' in folder '{folder_id}'")
 
         body = {
             "title": title,
@@ -387,6 +387,7 @@ class CodaAPIClient:
         params: dict[str, Any] = {
             "limit": limit or _CODA_PAGE_SIZE,
             "useColumnNames": False,
+            "valueFormat": "rich",
         }
         if page_token:
             params["pageToken"] = page_token

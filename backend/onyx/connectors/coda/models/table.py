@@ -1,4 +1,5 @@
 from enum import StrEnum
+from typing import Any
 from typing import Literal
 from typing import Optional
 from typing import Union
@@ -245,4 +246,4 @@ class CodaRow(CodaObjectBase):
     browserLink: str
     createdAt: str
     updatedAt: str
-    values: dict[str, CodaCellValue]
+    values: dict[str, Any]

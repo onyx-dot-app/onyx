@@ -24,6 +24,8 @@ class CodaColumnFormatType(StrEnum):
     DATETIME = "datetime"
     TIME = "time"
     DURATION = "duration"
+    EMAIL = "email"
+    LINK = "link"
     SLIDER = "slider"
     SCALE = "scale"
     IMAGE = "image"
@@ -33,6 +35,7 @@ class CodaColumnFormatType(StrEnum):
     CHECKBOX = "checkbox"
     SELECT = "select"
     PACK_OBJECT = "packObject"
+    REACTION = "reaction"
     CANVAS = "canvas"
     OTHER = "other"
 
@@ -47,7 +50,7 @@ class CodaSimpleColumnFormat(BaseModel):
 class CodaNumericColumnFormat(CodaSimpleColumnFormat):
     """Format of a numeric column"""
 
-    type: Literal[CodaColumnFormatType.number]
+    type: Literal[CodaColumnFormatType.NUMBER]
     precision: Optional[int] = Field(ge=0, le=10)
     useThousandsSeparator: Optional[bool]
 
@@ -55,7 +58,7 @@ class CodaNumericColumnFormat(CodaSimpleColumnFormat):
 class CodaButtonColumnFormat(CodaSimpleColumnFormat):
     """Format of a button column"""
 
-    type: Literal[CodaColumnFormatType.button]
+    type: Literal[CodaColumnFormatType.BUTTON]
     label: Optional[str] = Field(
         description="Label formula for the button.", example="Click me"
     )
@@ -71,7 +74,7 @@ class CodaButtonColumnFormat(CodaSimpleColumnFormat):
 class CodaDateColumnFormat(CodaSimpleColumnFormat):
     """Format of a date column"""
 
-    type: Literal[CodaColumnFormatType.date]
+    type: Literal[CodaColumnFormatType.DATE]
     format: Optional[str] = Field(
         description="A format string using Moment syntax: https://momentjs.com/docs/#/displaying/",
         example="YYYY-MM-DD",
@@ -86,7 +89,7 @@ class CodaCheckboxDisplayType(StrEnum):
 class CodaCheckboxColumnFormat(CodaSimpleColumnFormat):
     """Format of a checkbox column"""
 
-    type: Literal[CodaColumnFormatType.checkbox]
+    type: Literal[CodaColumnFormatType.CHECKBOX]
     displayType: CodaCheckboxDisplayType = Field(
         description="Display type for the checkbox column.", example="text"
     )
@@ -95,7 +98,7 @@ class CodaCheckboxColumnFormat(CodaSimpleColumnFormat):
 class CodaDateTimeColumnFormat(CodaSimpleColumnFormat):
     """Format of a date column."""
 
-    type: Literal[CodaColumnFormatType.datetime]
+    type: Literal[CodaColumnFormatType.DATETIME]
     dateFormat: Optional[str] = Field(
         description="A format string using Moment syntax: https://momentjs.com/docs/#/displaying/",
         example="YYYY-MM-DD",
@@ -116,7 +119,7 @@ class CodaDurationUnit(StrEnum):
 class CodaDurationColumnFormat(CodaSimpleColumnFormat):
     """Format of a duration column."""
 
-    type: Literal[CodaColumnFormatType.duration]
+    type: Literal[CodaColumnFormatType.DURATION]
     precision: Optional[int] = Field(ge=0, le=10)
     maxUnit: Optional[CodaDurationUnit] = Field(
         description="Maximum unit for the duration column.", example="days"
@@ -132,7 +135,7 @@ class CodaEmailDisplayType(StrEnum):
 class CodaEmailColumnFormat(CodaSimpleColumnFormat):
     """Format of an email column."""
 
-    type: Literal[CodaColumnFormatType.email]
+    type: Literal[CodaColumnFormatType.EMAIL]
     display: Optional[Literal[CodaEmailDisplayType]]
     autocomplete: Optional[bool]
 
@@ -148,7 +151,7 @@ class CodaCurrencyFormatType(StrEnum):
 class CodaCurrencyColumnFormat(CodaSimpleColumnFormat):
     """Format of a currency column."""
 
-    type: Literal[CodaColumnFormatType.currency]
+    type: Literal[CodaColumnFormatType.CURRENCY]
     currencyCode: Optional[str] = Field(
         description="Currency code for the currency column.", example="$"
     )
@@ -174,7 +177,7 @@ class CodaImageReferenceStyle(StrEnum):
 class CodaImageReferenceColumnFormat(CodaSimpleColumnFormat):
     """Format of an image reference column."""
 
-    type: Literal[CodaColumnFormatType.image_reference]
+    type: Literal[CodaColumnFormatType.IMAGE_REFERENCE]
     width: CodaNumberOrNumberFormula
     height: CodaNumberOrNumberFormula
     style: Optional[CodaImageReferenceStyle]
@@ -183,7 +186,6 @@ class CodaImageReferenceColumnFormat(CodaSimpleColumnFormat):
 class CodaReferenceColumnFormat(CodaSimpleColumnFormat):
     """Format of a column that refers to another table."""
 
-    type: Literal[CodaColumnFormatType.reference]
     table: CodaTableReference
 
 
@@ -202,7 +204,7 @@ class CodaSelectOption(BaseModel):
 class CodaSelectColumnFormat(CodaSimpleColumnFormat):
     """Format of a select column."""
 
-    type: Literal[CodaColumnFormatType.select]
+    type: Literal[CodaColumnFormatType.SELECT]
     options: Optional[List[CodaSelectOption]] = Field(
         description="Only returned for select lists that used a fixed set of options. Returns the first 5000 options"
     )
@@ -235,7 +237,7 @@ class CodaImageReferenceStyle(StrEnum):
 class CodaScaleColumnFormat(CodaSimpleColumnFormat):
     """Format of a numeric column that renders as a scale, like star ratings."""
 
-    type: Literal[CodaColumnFormatType.scale]
+    type: Literal[CodaColumnFormatType.SCALE]
     maximum: Optional[int] = Field(
         description="The maximum number allowed for this scale.", example=5
     )
@@ -251,7 +253,7 @@ class CodaSliderDisplayType(StrEnum):
 class CodaSliderColumnFormat(CodaSimpleColumnFormat):
     """Format of a numeric column that renders as a slider."""
 
-    type: Literal[CodaColumnFormatType.slider]
+    type: Literal[CodaColumnFormatType.SLIDER]
     minimum: Optional[CodaNumberOrNumberFormula] = Field(
         description="The minimum number allowed for this slider.", example=0
     )
@@ -273,7 +275,7 @@ class CodaSliderColumnFormat(CodaSimpleColumnFormat):
 class CodaTimeColumnFormat(CodaSimpleColumnFormat):
     """Format of a time column."""
 
-    type: Literal[CodaColumnFormatType.time]
+    type: Literal[CodaColumnFormatType.TIME]
     format: Optional[str] = Field(
         description="A format string using Moment syntax: https://momentjs.com/docs/#/displaying/",
         example="h:mm:ss A",
@@ -283,58 +285,58 @@ class CodaTimeColumnFormat(CodaSimpleColumnFormat):
 class CodaTextColumnFormat(CodaSimpleColumnFormat):
     """Format of a text column."""
 
-    type: Literal[CodaColumnFormatType.text]
+    type: Literal[CodaColumnFormatType.TEXT]
 
 
 class CodaNumberColumnFormat(CodaNumericColumnFormat):
     """Format of a number column."""
 
-    type: Literal[CodaColumnFormatType.number]
+    type: Literal[CodaColumnFormatType.NUMBER]
 
 
 class CodaPersonColumnFormat(CodaReferenceColumnFormat):
     """Format of a person column."""
 
-    type: Literal[CodaColumnFormatType.person]
+    type: Literal[CodaColumnFormatType.PERSON]
 
 
 class CodaLookupColumnFormat(CodaReferenceColumnFormat):
     """Format of a lookup column."""
 
-    type: Literal[CodaColumnFormatType.lookup]
+    type: Literal[CodaColumnFormatType.LOOKUP]
 
 
 class CodaPercentageColumnFormat(CodaNumericColumnFormat):
     """Format of a percentage column."""
 
-    type: Literal[CodaColumnFormatType.percentage]
+    type: Literal[CodaColumnFormatType.PERCENT]
 
 
 class CodaImageColumnFormat(CodaSimpleColumnFormat):
     """Format of an image column."""
 
-    type: Literal[CodaColumnFormatType.image]
+    type: Literal[CodaColumnFormatType.IMAGE]
 
 
 class CodaAttachmentColumnFormat(CodaSimpleColumnFormat):
     """Format of an attachment column."""
 
-    type: Literal[CodaColumnFormatType.attachment]
+    type: Literal[CodaColumnFormatType.ATTACHMENTS]
 
 
 class CodaPackObjectColumnFormat(CodaSimpleColumnFormat):
     """Format of a pack object column."""
 
-    type: Literal[CodaColumnFormatType.pack_object]
+    type: Literal[CodaColumnFormatType.PACK_OBJECT]
 
 
 class CodaCanvasColumnFormat(CodaSimpleColumnFormat):
     """Format of a canvas column."""
 
-    type: Literal[CodaColumnFormatType.canvas]
+    type: Literal[CodaColumnFormatType.CANVAS]
 
 
 class CodaOtherColumnFormat(CodaSimpleColumnFormat):
     """Format of an other column."""
 
-    type: Literal[CodaColumnFormatType.other]
+    type: Literal[CodaColumnFormatType.OTHER]

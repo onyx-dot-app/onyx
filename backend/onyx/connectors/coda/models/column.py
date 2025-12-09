@@ -77,5 +77,6 @@ class CodaColumn(BaseModel):
             CodaPackObjectColumnFormat,
             CodaCanvasColumnFormat,
             CodaOtherColumnFormat,
-        ]
+        ],
+        Field(discriminator="type"),
     ]
