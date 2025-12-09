@@ -71,6 +71,9 @@ class CodaConnector(LoadConnector, PollConnector, SlimConnector):
         self.generator = CodaDocumentGenerator(
             client=self.client,
             parser=self.parser,
+            doc_ids=self.doc_ids,
+            page_ids=self.page_ids,
+            include_tables=self.include_tables,
         )
 
         return None
@@ -90,10 +93,7 @@ class CodaConnector(LoadConnector, PollConnector, SlimConnector):
         if not self.generator:
             raise ConnectorValidationError("Generator not initialized.")
 
-        documents = self.generator.generate_all_documents(
-            doc_ids=self.doc_ids,
-            page_ids=self.page_ids,
-        )
+        documents = self.generator.generate_all_documents()
 
         yield from batch_generator(documents, self.batch_size)
 
@@ -107,9 +107,6 @@ class CodaConnector(LoadConnector, PollConnector, SlimConnector):
         documents = self.generator.generate_updated_documents(
             start=start,
             end=end,
-            doc_ids=self.doc_ids,
-            page_ids=self.page_ids,
-            include_tables=self.include_tables,
         )
 
         yield from batch_generator(documents, self.batch_size)

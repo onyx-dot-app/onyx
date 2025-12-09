@@ -94,7 +94,7 @@ def reference_data(
     for doc in all_docs:
         pages = api_client.fetch_all_pages(doc)
 
-        # Only count non-hidden pages
+        # Only count non-hidden and non-skipped pages
         non_hidden_pages = [
             p
             for p in pages

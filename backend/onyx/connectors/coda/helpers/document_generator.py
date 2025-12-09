@@ -1,6 +1,7 @@
 from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
+from typing import Optional
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.coda.api.client import CodaAPIClient
@@ -34,6 +35,9 @@ class CodaDocumentGenerator:
         self,
         client: CodaAPIClient,
         parser: CodaParser,
+        page_ids: Optional[set[str]] = None,
+        doc_ids: Optional[set[str]] = None,
+        include_tables: bool = True,
     ) -> None:
         """Initialize with dependencies.
 
@@ -41,13 +45,18 @@ class CodaDocumentGenerator:
             client: CodaAPIClient for API calls
             parser: CodaParser for data transformation
             page_ids: Optional set of page IDs to index. If None, indexes all.
-            max_table_rows: Maximum rows to fetch per table
+            doc_ids: Optional set of doc IDs to index. If None, indexes all.
+            include_tables: Whether to include table documents
         """
         self.client = client
         self.parser = parser
+        self.page_ids: Optional[set[str]] = page_ids
+        self.doc_ids: Optional[set[str]] = doc_ids
+        self.include_tables: bool = include_tables
         self.indexed_pages: set[str] = set()
         self.indexed_tables: set[str] = set()
         self.skipped_pages: set[str] = set()
+        self.skipped_docs: set[str] = set()
 
     def generate_page_documents(
         self, doc: CodaDoc, pages: list[CodaPage], page_map: dict[str, CodaPage]
@@ -96,7 +105,6 @@ class CodaDocumentGenerator:
 
             # Parse page title and content
             page_title = self.parser.build_page_title(page)
-
             sections = self.parser.parse_html_content(content)
 
             # Build metadata
@@ -199,79 +207,77 @@ class CodaDocumentGenerator:
                 )
                 continue
 
-    def filter_pages_by_update_time(
-        self,
-        pages: list[CodaPage],
-        start: SecondsSinceUnixEpoch,
-        end: SecondsSinceUnixEpoch,
-    ) -> list[CodaPage]:
-        """Filter pages based on update time."""
-
-        updated_pages = []
-        for page in pages:
-            if not page.updatedAt:
-                logger.debug(f"Skipping page: {page.name} has no update time")
-                self.skipped_pages.add(page.id)
-                continue
-
-            page_updated_at = self.parser.parse_timestamp(page.updatedAt)
-
-            if start - 20000 < page_updated_at < end + 20000:
-                logger.debug(
-                    f"Processing page: {page.name} updated within time range at: {page_updated_at}. Start: {start}, End: {end}"
-                )
-                updated_pages.append(page)
-            else:
-                self.skipped_pages.add(page.id)
-                logger.debug(
-                    f"Skipping page: {page.name} updated outside time range at: {page_updated_at}. Start: {start}, End: {end}"
-                )
-
-        return updated_pages
-
     def filter_by_id(
         self,
         object_ids: set[str] | None,
         objects: list[CodaDoc] | list[CodaTableReference],
     ) -> list[CodaDoc] | list[CodaTableReference]:
+        filtered = []
         if object_ids:
-            return [object for object in objects if object.id in object_ids]
-        return objects
+            for object in objects:
+                if object.id in object_ids:
+                    filtered.append(object)
+                else:
+                    if isinstance(object, CodaDoc):
+                        self.skipped_docs.add(object.id)
+                        logger.debug(
+                            f"Skipping doc: {object.name}:{object.id}, not found in doc_ids to process"
+                        )
+                    else:
+                        self.skipped_pages.add(object.id)
+                        logger.debug(
+                            f"Skipping page: {object.name}:{object.id}, not found in page_ids to process"
+                        )
+            return filtered
+        else:
+            logger.debug("No filter to apply.")
+            return objects
 
-    def filter_docs_by_update_time(
+    def filter_by_update_time(
         self,
-        docs: list[CodaDoc],
+        objects: list[CodaDoc] | list[CodaPage],
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
-    ) -> list[CodaDoc]:
-        """Filter docs based on update time."""
+    ) -> list[CodaDoc] | list[CodaPage]:
+        """Filter docs and pages based on update time."""
 
-        updated_docs = []
-        for doc in docs:
-            if not doc.updatedAt:
-                logger.debug(f"Skipping doc: {doc.name} has no update time")
-                self.skipped_docs.add(doc.id)
+        updated_objects = []
+        for object in objects:
+            if not object.updatedAt:
+                if isinstance(object, CodaDoc):
+                    logger.debug(f"Skipping doc: {object.name} has no update time")
+                    self.skipped_docs.add(object.id)
+                else:
+                    logger.debug(f"Skipping page: {object.name} has no update time")
+                    self.skipped_pages.add(object.id)
                 continue
-            doc_updated_at = self.parser.parse_timestamp(doc.updatedAt)
 
-            if start - 20000 < doc_updated_at < end + 20000:
+            object_updated_at = self.parser.parse_timestamp(object.updatedAt)
+
+            if start - 20000 < object_updated_at < end + 20000:
                 logger.debug(
-                    f"Processing doc: {doc.name} updated within time range at: {doc_updated_at}. Start: {start}, End: {end}"
+                    f"Processing doc: {object.name} updated within time range at: {object_updated_at}."
+                    f"Start: {start - 20000}, End: {end + 20000}"
                 )
-                updated_docs.append(doc)
+                updated_objects.append(object)
             else:
-                self.skipped_docs.add(doc.id)
-                logger.debug(
-                    f"Skipping doc: {doc.name} updated outside time range at: {doc_updated_at}. Start: {start}, End: {end}"
-                )
+                if isinstance(object, CodaDoc):
+                    self.skipped_docs.add(object.id)
+                    logger.debug(
+                        f"Skipping doc: {object.name} updated outside time range at: {object_updated_at}."
+                        f"Start: {start - 20000}, End: {end + 20000}"
+                    )
+                else:
+                    self.skipped_pages.add(object.id)
+                    logger.debug(
+                        f"Skipping page: {object.name} updated outside time range at: {object_updated_at}."
+                        f"Start: {start - 20000}, End: {end + 20000}"
+                    )
 
-        return updated_docs
+        return updated_objects
 
     def generate_all_documents(
         self,
-        doc_ids: set[str] | None = None,
-        page_ids: set[str] | None = None,
-        include_tables: bool = True,
     ) -> Generator[Document, None, None]:
         """Generate all documents from accessible Coda workspace.
 
@@ -287,7 +293,7 @@ class CodaDocumentGenerator:
 
         all_docs = self.client.fetch_all_docs()
 
-        filtered_docs: list[CodaDoc] = self.filter_by_id(doc_ids, all_docs)
+        filtered_docs: list[CodaDoc] = self.filter_by_id(self.doc_ids, all_docs)
 
         for doc in filtered_docs:
             logger.info(f"Processing doc: {doc.name}")
@@ -296,7 +302,7 @@ class CodaDocumentGenerator:
             all_pages = self.client.fetch_all_pages(doc.id)
 
             # Filter pages if page_ids specified
-            pages_to_process = self.filter_by_id(page_ids, all_pages)
+            pages_to_process = self.filter_by_id(self.page_ids, all_pages)
 
             # Build map for hierarchy
             page_map = self.parser.create_page_map(pages_to_process)
@@ -305,7 +311,7 @@ class CodaDocumentGenerator:
             yield from self.generate_page_documents(doc, pages_to_process, page_map)
 
             # Process tables if enabled
-            if include_tables:
+            if self.include_tables:
                 all_tables = self.client.fetch_all_tables(doc.id)
 
                 if all_tables:
@@ -315,8 +321,6 @@ class CodaDocumentGenerator:
         self,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
-        doc_ids: set[str] | None = None,
-        include_tables: bool = True,
     ) -> Generator[Document, None, None]:
         """Generate documents that were updated within a time period.
 
@@ -333,9 +337,9 @@ class CodaDocumentGenerator:
 
         all_docs = self.client.fetch_all_docs()
 
-        updated_docs = self.filter_docs_by_update_time(all_docs, start, end)
+        updated_docs = self.filter_by_update_time(all_docs, start, end)
 
-        filtered_docs = self.filter_by_id(doc_ids, updated_docs)
+        filtered_docs = self.filter_by_id(self.doc_ids, updated_docs)
 
         for doc in filtered_docs:
             logger.info(f"Processing doc: {doc.name}")
@@ -344,12 +348,10 @@ class CodaDocumentGenerator:
             all_pages = self.client.fetch_all_pages(doc.id)
 
             # Filter pages if page_ids specified
-            filtered_pages = self.filter_by_id(all_pages)
+            filtered_pages = self.filter_by_id(self.page_ids, all_pages)
 
             # Filter pages by update time
-            pages_to_process = self.filter_pages_by_update_time(
-                filtered_pages, start, end
-            )
+            pages_to_process = self.filter_by_update_time(filtered_pages, start, end)
 
             # Build map for hierarchy
             page_map = self.parser.create_page_map(pages_to_process)
@@ -358,7 +360,7 @@ class CodaDocumentGenerator:
             yield from self.generate_page_documents(doc, pages_to_process, page_map)
 
             # Process tables if enabled
-            if include_tables:
+            if self.include_tables:
                 all_tables = self.client.fetch_all_tables(doc.id)
 
                 if all_tables:
