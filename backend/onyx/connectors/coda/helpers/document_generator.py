@@ -78,7 +78,7 @@ class CodaDocumentGenerator:
                 self.skipped_pages.add(page.id)
                 continue
 
-            page_key = self.create_page_key(doc.id, page.id)
+            page_key = self.parser.create_page_key(doc, page)
 
             # Skip already indexed pages
             if page_key in self.indexed_pages:
