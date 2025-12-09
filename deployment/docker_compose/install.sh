@@ -44,6 +44,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+INSTALL_ROOT="${INSTALL_PREFIX:-$HOME/.onyx_data}"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -86,11 +88,11 @@ if [ "$SHUTDOWN_MODE" = true ]; then
     echo -e "${BLUE}${BOLD}=== Shutting down Onyx ===${NC}"
     echo ""
     
-    if [ -d "onyx_data/deployment" ]; then
+    if [ -d "${INSTALL_ROOT}/deployment" ]; then
         print_info "Stopping Onyx containers..."
 
         # Check if docker-compose.yml exists
-        if [ -f "onyx_data/deployment/docker-compose.yml" ]; then
+        if [ -f "${INSTALL_ROOT}/deployment/docker-compose.yml" ]; then
             # Determine compose command
             if docker compose version &> /dev/null; then
                 COMPOSE_CMD="docker compose"
@@ -102,7 +104,7 @@ if [ "$SHUTDOWN_MODE" = true ]; then
             fi
 
             # Stop containers (without removing them)
-            (cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml stop)
+            (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD -f docker-compose.yml stop)
             if [ $? -eq 0 ]; then
                 print_success "Onyx containers stopped (paused)"
             else
@@ -110,7 +112,7 @@ if [ "$SHUTDOWN_MODE" = true ]; then
                 exit 1
             fi
         else
-            print_warning "docker-compose.yml not found in onyx_data/deployment"
+            print_warning "docker-compose.yml not found in ${INSTALL_ROOT}/deployment"
         fi
     else
         print_warning "Onyx data directory not found. Nothing to shutdown."
@@ -141,9 +143,9 @@ if [ "$DELETE_DATA_MODE" = true ]; then
     
     print_info "Removing Onyx containers and volumes..."
     
-    if [ -d "onyx_data/deployment" ]; then
+    if [ -d "${INSTALL_ROOT}/deployment" ]; then
         # Check if docker-compose.yml exists
-        if [ -f "onyx_data/deployment/docker-compose.yml" ]; then
+        if [ -f "${INSTALL_ROOT}/deployment/docker-compose.yml" ]; then
             # Determine compose command
             if docker compose version &> /dev/null; then
                 COMPOSE_CMD="docker compose"
@@ -155,7 +157,7 @@ if [ "$DELETE_DATA_MODE" = true ]; then
             fi
 
             # Stop and remove containers with volumes
-            (cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml down -v)
+            (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD -f docker-compose.yml down -v)
             if [ $? -eq 0 ]; then
                 print_success "Onyx containers and volumes removed"
             else
@@ -165,11 +167,11 @@ if [ "$DELETE_DATA_MODE" = true ]; then
     fi
     
     print_info "Removing data directories..."
-    if [ -d "onyx_data" ]; then
-        rm -rf onyx_data
+    if [ -d "${INSTALL_ROOT}" ]; then
+        rm -rf "${INSTALL_ROOT}"
         print_success "Data directories removed"
     else
-        print_warning "No onyx_data directory found"
+        print_warning "No ${INSTALL_ROOT} directory found"
     fi
     
     echo ""
@@ -195,7 +197,7 @@ echo ""
 
 # User acknowledgment section
 echo -e "${YELLOW}${BOLD}This script will:${NC}"
-echo "1. Download deployment files for Onyx into a new 'onyx_data' directory"
+echo "1. Download deployment files for Onyx into a new '${INSTALL_ROOT}' directory"
 echo "2. Check your system resources (Docker, memory, disk space)"
 echo "3. Guide you through deployment options (version, authentication)"
 echo ""
@@ -362,12 +364,12 @@ fi
 
 # Create directory structure
 print_step "Creating directory structure"
-if [ -d "onyx_data" ]; then
+if [ -d "${INSTALL_ROOT}" ]; then
     print_info "Directory structure already exists"
-    print_success "Using existing onyx_data directory"
+    print_success "Using existing ${INSTALL_ROOT} directory"
 else
-    mkdir -p onyx_data/deployment
-    mkdir -p onyx_data/data/nginx/local
+    mkdir -p "${INSTALL_ROOT}/deployment"
+    mkdir -p "${INSTALL_ROOT}/data/nginx/local"
     print_success "Directory structure created"
 fi
 
@@ -384,7 +386,7 @@ echo "  • README.md - Documentation and setup instructions"
 echo ""
 
 # Download Docker Compose file
-COMPOSE_FILE="onyx_data/deployment/docker-compose.yml"
+COMPOSE_FILE="${INSTALL_ROOT}/deployment/docker-compose.yml"
 print_info "Downloading docker-compose.yml..."
 if curl -fsSL -o "$COMPOSE_FILE" "${GITHUB_RAW_URL}/docker-compose.yml" 2>/dev/null; then
     print_success "Docker Compose file downloaded successfully"
@@ -425,7 +427,7 @@ else
 fi
 
 # Download env.template file
-ENV_TEMPLATE="onyx_data/deployment/env.template"
+ENV_TEMPLATE="${INSTALL_ROOT}/deployment/env.template"
 print_info "Downloading env.template..."
 if curl -fsSL -o "$ENV_TEMPLATE" "${GITHUB_RAW_URL}/env.template" 2>/dev/null; then
     print_success "Environment template downloaded successfully"
@@ -439,7 +441,7 @@ fi
 NGINX_BASE_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/data/nginx"
 
 # Download app.conf.template
-NGINX_CONFIG="onyx_data/data/nginx/app.conf.template"
+NGINX_CONFIG="${INSTALL_ROOT}/data/nginx/app.conf.template"
 print_info "Downloading nginx configuration template..."
 if curl -fsSL -o "$NGINX_CONFIG" "$NGINX_BASE_URL/app.conf.template" 2>/dev/null; then
     print_success "Nginx configuration template downloaded"
@@ -450,7 +452,7 @@ else
 fi
 
 # Download run-nginx.sh script
-NGINX_RUN_SCRIPT="onyx_data/data/nginx/run-nginx.sh"
+NGINX_RUN_SCRIPT="${INSTALL_ROOT}/data/nginx/run-nginx.sh"
 print_info "Downloading nginx startup script..."
 if curl -fsSL -o "$NGINX_RUN_SCRIPT" "$NGINX_BASE_URL/run-nginx.sh" 2>/dev/null; then
     chmod +x "$NGINX_RUN_SCRIPT"
@@ -462,7 +464,7 @@ else
 fi
 
 # Download README file
-README_FILE="onyx_data/README.md"
+README_FILE="${INSTALL_ROOT}/README.md"
 print_info "Downloading README.md..."
 if curl -fsSL -o "$README_FILE" "${GITHUB_RAW_URL}/README.md" 2>/dev/null; then
     print_success "README.md downloaded successfully"
@@ -473,15 +475,14 @@ else
 fi
 
 # Create empty local directory marker (if needed)
-touch "onyx_data/data/nginx/local/.gitkeep"
+touch "${INSTALL_ROOT}/data/nginx/local/.gitkeep"
 print_success "All configuration files downloaded successfully"
 
 # Set up deployment configuration
 print_step "Setting up deployment configs"
-ENV_FILE="onyx_data/deployment/.env"
-
+ENV_FILE="${INSTALL_ROOT}/deployment/.env"
 # Check if services are already running
-if [ -d "onyx_data/deployment" ] && [ -f "onyx_data/deployment/docker-compose.yml" ]; then
+if [ -d "${INSTALL_ROOT}/deployment" ] && [ -f "${INSTALL_ROOT}/deployment/docker-compose.yml" ]; then
     # Determine compose command
     if docker compose version &> /dev/null; then
         COMPOSE_CMD="docker compose"
@@ -493,7 +494,7 @@ if [ -d "onyx_data/deployment" ] && [ -f "onyx_data/deployment/docker-compose.ym
 
     if [ -n "$COMPOSE_CMD" ]; then
         # Check if any containers are running
-        RUNNING_CONTAINERS=$(cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml ps -q 2>/dev/null | wc -l)
+        RUNNING_CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD -f docker-compose.yml ps -q 2>/dev/null | wc -l)
         if [ "$RUNNING_CONTAINERS" -gt 0 ]; then
             print_error "Onyx services are currently running!"
             echo ""
@@ -704,7 +705,7 @@ print_step "Pulling Docker images"
 print_info "This may take several minutes depending on your internet connection..."
 echo ""
 print_info "Downloading Docker images (this may take a while)..."
-(cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml pull --quiet)
+(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD -f docker-compose.yml pull --quiet)
 if [ $? -eq 0 ]; then
     print_success "Docker images downloaded successfully"
 else
@@ -718,9 +719,9 @@ print_info "Launching containers..."
 echo ""
 if [ "$USE_LATEST" = true ]; then
     print_info "Force pulling latest images and recreating containers..."
-    (cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml up -d --pull always --force-recreate)
+    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD -f docker-compose.yml up -d --pull always --force-recreate)
 else
-    (cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml up -d)
+    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD -f docker-compose.yml up -d)
 fi
 if [ $? -ne 0 ]; then
     print_error "Failed to start Onyx services"
@@ -742,10 +743,11 @@ echo ""
 # Check for restart loops
 print_info "Checking container health status..."
 RESTART_ISSUES=false
-CONTAINERS=$(cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml ps -q 2>/dev/null)
+CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD -f docker-compose.yml ps -q 2>/dev/null)
 
 for CONTAINER in $CONTAINERS; do
-    CONTAINER_NAME=$(docker inspect --format '{{.Name}}' "$CONTAINER" | sed 's/^\/\|^onyx_data_deployment_//g')
+    PROJECT_NAME="$(basename "$INSTALL_ROOT")_deployment_"
+    CONTAINER_NAME=$(docker inspect --format '{{.Name}}' "$CONTAINER" | sed "s/^\/\|^${PROJECT_NAME}//g")
     RESTART_COUNT=$(docker inspect --format '{{.RestartCount}}' "$CONTAINER")
     STATUS=$(docker inspect --format '{{.State.Status}}' "$CONTAINER")
 
@@ -770,7 +772,7 @@ if [ "$RESTART_ISSUES" = true ]; then
     print_error "Some containers are experiencing issues!"
     echo ""
     print_info "Please check the logs for more information:"
-    echo "  (cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml logs)"
+    echo "  (cd \"${INSTALL_ROOT}/deployment\" && \$COMPOSE_CMD -f docker-compose.yml logs)"
     echo ""
     print_info "If the issue persists, please contact: founders@onyx.app"
     echo "Include the output of the logs command in your message."
@@ -845,7 +847,7 @@ print_info "If authentication is enabled, you can create your admin account here
 echo "   • Visit http://localhost:${HOST_PORT}/auth/signup to create your admin account"
 echo "   • The first user created will automatically have admin privileges"
 echo ""
-print_info "Refer to the README in the onyx_data directory for more information."
+print_info "Refer to the README in the ${INSTALL_ROOT} directory for more information."
 echo ""
 print_info "For help or issues, contact: founders@onyx.app"
 echo ""
