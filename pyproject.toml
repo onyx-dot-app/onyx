@@ -19,10 +19,11 @@ dependencies = [
     "pydantic==2.11.7",
     "prometheus_client==0.21.0",
     "prometheus_fastapi_instrumentator==7.1.0",
-    "retry==0.9.2",  # This pulls in py which is in CVE-2022-42969, must remove py from image
+    "retry==0.9.2", # This pulls in py which is in CVE-2022-42969, must remove py from image
     "sentry-sdk==2.14.0",
     "uvicorn==0.35.0",
     "voyageai==0.2.3",
+    "brotli>=1.2.0",
 ]
 
 [dependency-groups]
