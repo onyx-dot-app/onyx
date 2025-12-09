@@ -660,11 +660,13 @@ export function useChatController({
           : undefined;
 
         const stack = new CurrentMessageFIFO();
+        // Use overrideFileDescriptors if provided, otherwise convert currentMessageFiles to fileDescriptors
+        const fileDescriptorsToSend = overrideFileDescriptors || projectFilesToFileDescriptors(currentMessageFiles);
         updateCurrentMessageFIFO(stack, {
           signal: controller.signal,
           message: currMessage,
           alternateAssistantId: liveAssistant?.id,
-          fileDescriptors: overrideFileDescriptors,
+          fileDescriptors: fileDescriptorsToSend,
           parentMessageId: (() => {
             const parentId =
               regenerationRequest?.parentMessage.messageId ||

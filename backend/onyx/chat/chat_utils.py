@@ -37,6 +37,7 @@ from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.models import UserFile
+from onyx.db.user_file import get_file_id_by_user_file_id
 from onyx.db.search_settings import get_current_search_settings
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
@@ -472,19 +473,104 @@ def process_kg_commands(
 def load_chat_file(
     file_descriptor: FileDescriptor, db_session: Session
 ) -> ChatLoadedFile:
-    file_io = get_default_file_store().read_file(file_descriptor["id"], mode="b")
-    content = file_io.read()
+    logger.info(
+        f"load_chat_file called with file_descriptor: id={file_descriptor.get('id')}, "
+        f"type={file_descriptor.get('type')}, name={file_descriptor.get('name')}, "
+        f"user_file_id={file_descriptor.get('user_file_id')}"
+    )
+    # Get the actual file_id - similar to how fetch_chat_file works
+    # Priority: Always use file_id from UserFile if user_file_id is available
+    # This ensures we get the correct extracted text file (for PDFs, the text is extracted and stored separately)
+    file_id = file_descriptor["id"]
+    user_file_id_str = file_descriptor.get("user_file_id")
+    
+    # First priority: If user_file_id is provided, always use it to get the file_id from UserFile
+    # This is the most reliable way to get the correct file (extracted text for PDFs)
+    if user_file_id_str:
+        try:
+            file_id_from_user_file = get_file_id_by_user_file_id(user_file_id_str, db_session)
+            if file_id_from_user_file:
+                file_id = file_id_from_user_file
+                logger.debug(
+                    f"Resolved file_id from user_file_id {user_file_id_str}: {file_id}"
+                )
+            else:
+                logger.warning(
+                    f"Could not resolve file_id from user_file_id {user_file_id_str}, using descriptor id: {file_descriptor['id']}"
+                )
+        except Exception as e:
+            logger.warning(
+                f"Error resolving file_id from user_file_id {user_file_id_str}: {e}, using descriptor id: {file_descriptor['id']}"
+            )
+    
+    # Fallback: Also check if the file_id itself is a UUID (UserFile.id) and resolve it
+    # This handles cases where user_file_id is not set but file_id is a UUID
+    if not user_file_id_str:
+        try:
+            UUID(file_id)
+            # It's a UUID, try to resolve it as a UserFile.id
+            file_id_from_user_file = get_file_id_by_user_file_id(file_id, db_session)
+            if file_id_from_user_file:
+                file_id = file_id_from_user_file
+                logger.debug(f"Resolved file_id from UUID {file_descriptor['id']}: {file_id}")
+        except (ValueError, TypeError):
+            # Not a UUID, assume it's already a file_id
+            pass
+    
+    try:
+        logger.info(f"Loading file from file_store with file_id: {file_id}")
+        file_io = get_default_file_store().read_file(file_id, mode="b")
+        content = file_io.read()
+        logger.info(f"Loaded {len(content)} bytes from file {file_id}")
+    except Exception as e:
+        logger.error(
+            f"Failed to load file {file_id} (original id: {file_descriptor['id']}, name: {file_descriptor.get('name', 'unknown')}): {e}"
+        )
+        # Return an empty file to prevent crashes, but log the error
+        content = b""
 
     # Extract text content if it's a text file type (not an image)
+    # For PDFs and other documents, the text is already extracted and stored as text/plain
+    # We need to extract it from the content bytes
     content_text = None
     file_type = file_descriptor["type"]
-    if file_type.is_text_file():
+    # Convert string to ChatFileType if necessary (JSONB stores it as string)
+    if isinstance(file_type, str):
         try:
-            content_text = content.decode("utf-8")
-        except UnicodeDecodeError:
+            file_type = ChatFileType(file_type)
+        except (ValueError, TypeError):
             logger.warning(
-                f"Failed to decode text content for file {file_descriptor['id']}"
+                f"Invalid file_type '{file_type}' for file {file_descriptor.get('id')}, treating as PLAIN_TEXT"
             )
+            file_type = ChatFileType.PLAIN_TEXT
+    
+    if file_type.is_text_file() and content:
+        try:
+            # Use errors="ignore" to handle any encoding issues, similar to project file extraction
+            content_text = content.decode("utf-8", errors="ignore")
+            # Strip null bytes that might cause issues
+            if content_text:
+                content_text = content_text.replace("\x00", "")
+                # If content is empty after stripping, set to None
+                if not content_text.strip():
+                    content_text = None
+                    logger.warning(
+                        f"Text file {file_descriptor['id']} ({file_descriptor.get('name', 'unknown')}) "
+                        f"has content bytes ({len(content)} bytes) but decoded text is empty after stripping."
+                    )
+                else:
+                    logger.info(
+                        f"Successfully extracted {len(content_text)} characters from file {file_descriptor['id']} ({file_descriptor.get('name', 'unknown')})"
+                    )
+        except Exception as e:
+            logger.warning(
+                f"Failed to decode text content for file {file_descriptor['id']}: {e}"
+            )
+    elif file_type.is_text_file() and not content:
+        logger.warning(
+            f"Text file {file_descriptor['id']} ({file_descriptor.get('name', 'unknown')}) "
+            "has no content bytes to extract text from."
+        )
 
     # Get token count from UserFile if available
     token_count = 0
@@ -521,6 +607,16 @@ def load_all_chat_files(
     for chat_message in chat_messages:
         if chat_message.files:
             file_descriptors_for_history.extend(chat_message.files)
+    
+    logger.info(
+        f"load_all_chat_files: Found {len(file_descriptors_for_history)} file descriptors "
+        f"from {len(chat_messages)} chat messages"
+    )
+    
+    if file_descriptors_for_history:
+        logger.info(
+            f"File descriptors: {[{'id': f.get('id'), 'name': f.get('name'), 'user_file_id': f.get('user_file_id')} for f in file_descriptors_for_history]}"
+        )
 
     files = cast(
         list[ChatLoadedFile],
@@ -531,6 +627,12 @@ def load_all_chat_files(
             ]
         ),
     )
+    
+    logger.info(
+        f"load_all_chat_files: Loaded {len(files)} files. "
+        f"Files with content_text: {sum(1 for f in files if f.content_text)}"
+    )
+    
     return files
 
 
@@ -575,12 +677,28 @@ def convert_chat_history(
                         else:
                             # Text files (DOC, PLAIN_TEXT, CSV) are added as separate messages
                             text_files.append(loaded_file)
+                    else:
+                        logger.warning(
+                            f"File {file_id} ({file_descriptor.get('name', 'unknown')}) not found in file_map. "
+                            f"Available file IDs: {list(file_map.keys())[:10]}"
+                        )
 
             # Add text files as separate messages before the user message
             for text_file in text_files:
+                content_text = text_file.content_text or ""
+                if not content_text:
+                    logger.warning(
+                        f"Text file {text_file.file_id} ({text_file.filename}) has no content_text. "
+                        "The LLM will receive an empty message for this file."
+                    )
+                else:
+                    logger.info(
+                        f"Adding text file to chat history: {text_file.filename} "
+                        f"({len(content_text)} characters, {text_file.token_count} tokens)"
+                    )
                 simple_messages.append(
                     ChatMessageSimple(
-                        message=text_file.content_text or "",
+                        message=content_text,
                         token_count=text_file.token_count,
                         message_type=MessageType.USER,
                         image_files=None,
