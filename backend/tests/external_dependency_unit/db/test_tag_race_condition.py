@@ -9,6 +9,7 @@ isn't properly implemented.
 from concurrent.futures import as_completed
 from concurrent.futures import Future
 from concurrent.futures import ThreadPoolExecutor
+from typing import Union
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -246,7 +247,7 @@ class TestTagRaceCondition:
 
         # Run both types of operations concurrently
         with ThreadPoolExecutor(max_workers=num_documents * 2) as executor:
-            futures: list[Future[[Tag | None] | list[Tag]]] = []
+            futures: list[Future[Union[Tag | None] | list[Tag]]] = []
             for doc_id in doc_ids_single:
                 futures.append(executor.submit(create_single_tag, doc_id))
             for doc_id in doc_ids_list:
