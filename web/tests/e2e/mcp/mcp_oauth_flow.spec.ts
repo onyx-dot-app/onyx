@@ -1718,7 +1718,7 @@ test.describe("MCP OAuth flows", () => {
         exact: false,
       });
       const visibleCount = await serverLocator.count();
-      // await expect(visibleCount).toBeGreaterThan(0);
+      await expect(visibleCount).toBeGreaterThan(0);
 
       const editResponse = await curatorTwoPage.request.get(
         `http://localhost:3000/api/admin/mcp/servers/${serverId}`
