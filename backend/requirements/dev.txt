@@ -47,6 +47,8 @@ botocore==1.39.11
     #   aiobotocore
     #   boto3
     #   s3transfer
+brotli==1.2.0
+    # via onyx
 cachetools==6.2.2
     # via google-auth
 celery-types==0.19.0
@@ -260,7 +262,7 @@ numpy==1.26.4
     #   pandas-stubs
     #   shapely
     #   voyageai
-onyx-devtools==0.0.2
+onyx-devtools==0.1.0
     # via onyx
 openai==2.6.1
     # via
