@@ -6,6 +6,8 @@ import httpx
 from onyx.background.celery.tasks.docprocessing.utils import (
     NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE,
 )
+from onyx.configs.app_configs import AUTH_TYPE
+from onyx.configs.constants import AuthType
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.mock_connector.connector import MockConnectorCheckpoint
 from onyx.connectors.models import InputType
@@ -122,11 +124,12 @@ def test_repeated_error_state_detection_and_recovery(
             )
             assert cc_pair_obj is not None
             if cc_pair_obj.in_repeated_error_state:
-                # Verify the connector is also paused to prevent further indexing attempts
-                assert cc_pair_obj.status == ConnectorCredentialPairStatus.PAUSED, (
-                    f"Expected status to be PAUSED when in repeated error state, "
-                    f"but got {cc_pair_obj.status}"
-                )
+                # Pausing only happens for cloud deployments
+                if AUTH_TYPE == AuthType.CLOUD:
+                    assert cc_pair_obj.status == ConnectorCredentialPairStatus.PAUSED, (
+                        f"Expected status to be PAUSED when in repeated error state, "
+                        f"but got {cc_pair_obj.status}"
+                    )
                 break
 
         if time.monotonic() - start_time > 30:
