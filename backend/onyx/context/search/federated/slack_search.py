@@ -3,6 +3,7 @@ import re
 import time
 from datetime import datetime
 from typing import Any
+from typing import cast
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
@@ -15,11 +16,11 @@ from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
 from onyx.configs.chat_configs import DOC_TIME_DECAY
 from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import TextSection
+from onyx.context.search.federated.models import ChannelMetadata
 from onyx.context.search.federated.models import SlackMessage
 from onyx.context.search.federated.slack_search_utils import ALL_CHANNEL_TYPES
 from onyx.context.search.federated.slack_search_utils import build_channel_query_filter
 from onyx.context.search.federated.slack_search_utils import build_slack_queries
-from onyx.context.search.federated.slack_search_utils import ChannelTypeString
 from onyx.context.search.federated.slack_search_utils import get_channel_type
 from onyx.context.search.federated.slack_search_utils import (
     get_channel_type_for_missing_scope,
@@ -62,7 +63,7 @@ CHANNEL_METADATA_RETRY_DELAY = 1  # Initial retry delay in seconds (exponential 
 
 def fetch_and_cache_channel_metadata(
     access_token: str, team_id: str, include_private: bool = True
-) -> dict[str, dict[str, Any]]:
+) -> dict[str, ChannelMetadata]:
     """
     Fetch ALL channel metadata in one API call and cache it.
 
@@ -84,13 +85,13 @@ def fetch_and_cache_channel_metadata(
             cached_str: str = (
                 cached.decode("utf-8") if isinstance(cached, bytes) else str(cached)
             )
-            cached_data: dict[str, dict[str, Any]] = json.loads(cached_str)
+            cached_data = cast(dict[str, ChannelMetadata], json.loads(cached_str))
             logger.debug(f"Loaded {len(cached_data)} channels from cache")
             if not include_private:
-                filtered = {
+                filtered: dict[str, ChannelMetadata] = {
                     k: v
                     for k, v in cached_data.items()
-                    if v.get("type") != "private_channel"
+                    if v.get("type") != ChannelType.PRIVATE_CHANNEL.value
                 }
                 logger.debug(f"Filtered to {len(filtered)} channels (exclude private)")
                 return filtered
@@ -101,7 +102,7 @@ def fetch_and_cache_channel_metadata(
     # Cache miss - fetch from Slack API with retry logic
     logger.debug(f"Channel metadata cache MISS for team {team_id} - fetching from API")
     slack_client = WebClient(token=access_token)
-    channel_metadata: dict[str, dict[str, Any]] = {}
+    channel_metadata: dict[str, ChannelMetadata] = {}
 
     # Retry logic with exponential backoff
     last_exception = None
@@ -133,7 +134,7 @@ def fetch_and_cache_channel_metadata(
 
                     # Determine channel type
                     channel_type_enum = get_channel_type(channel_info=ch)
-                    channel_type = channel_type_enum.value
+                    channel_type = ChannelType(channel_type_enum.value)
 
                     channel_metadata[channel_id] = {
                         "name": ch.get("name", ""),
@@ -326,7 +327,7 @@ def batch_get_user_profiles(
 
 def _extract_channel_data_from_entities(
     entities: dict[str, Any] | None,
-    channel_metadata_dict: dict[str, dict[str, Any]] | None,
+    channel_metadata_dict: dict[str, ChannelMetadata] | None,
 ) -> list[str] | None:
     """Extract available channels list from metadata based on entity configuration.
 
@@ -351,7 +352,7 @@ def _extract_channel_data_from_entities(
                 if meta["name"]
                 and (
                     parsed_entities.include_private_channels
-                    or meta.get("type") != ChannelTypeString.PRIVATE_CHANNEL.value
+                    or meta.get("type") != ChannelType.PRIVATE_CHANNEL.value
                 )
             ]
     except ValidationError:
@@ -366,7 +367,7 @@ def _should_skip_channel(
     bot_token: str | None,
     access_token: str,
     include_dm: bool,
-    channel_metadata_dict: dict[str, dict[str, Any]] | None = None,
+    channel_metadata_dict: dict[str, ChannelMetadata] | None = None,
 ) -> bool:
     """Bot context filtering: skip private channels unless explicitly allowed.
 
@@ -430,7 +431,7 @@ def query_slack(
     include_dm: bool = False,
     entities: dict[str, Any] | None = None,
     available_channels: list[str] | None = None,
-    channel_metadata_dict: dict[str, dict[str, Any]] | None = None,
+    channel_metadata_dict: dict[str, ChannelMetadata] | None = None,
 ) -> SlackQueryResult:
 
     # Check if query has channel override (user specified channels in query)
@@ -450,7 +451,7 @@ def query_slack(
             # Add channel filter to query
             final_query = f"{query_string} {channel_filter}"
 
-    logger.debug(f"Final query to slack: {final_query}")
+    logger.info(f"Final query to slack: {final_query}")
 
     # Detect if query asks for most recent results
     sort_by_time = is_recency_query(original_query.query)
@@ -474,7 +475,7 @@ def query_slack(
         messages: dict[str, Any] = response.get("messages", {})
         matches: list[dict[str, Any]] = messages.get("matches", [])
 
-        logger.debug(f"Slack search found {len(matches)} messages")
+        logger.info(f"Slack search found {len(matches)} messages")
     except SlackApiError as slack_error:
         logger.error(f"Slack API error in search_messages: {slack_error}")
         logger.error(

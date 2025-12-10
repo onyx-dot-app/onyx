@@ -9,22 +9,21 @@ import {
   AVAILABLE_MODELS,
   HostedEmbeddingModel,
   EmbeddingProvider,
-} from "../../../components/embedding/interfaces";
-import OpenEmbeddingPage from "./pages/OpenEmbeddingPage";
-import CloudEmbeddingPage from "./pages/CloudEmbeddingPage";
-import { ProviderCreationModal } from "./modals/ProviderCreationModal";
-
-import { DeleteCredentialsModal } from "./modals/DeleteCredentialsModal";
-import { SelectModelModal } from "./modals/SelectModelModal";
-import { ChangeCredentialsModal } from "./modals/ChangeCredentialsModal";
-import { ModelSelectionConfirmationModal } from "./modals/ModelSelectionModal";
-import { AlreadyPickedModal } from "./modals/AlreadyPickedModal";
-import { ModelOption } from "../../../components/embedding/ModelSelector";
+} from "@/components/embedding/interfaces";
+import OpenEmbeddingPage from "@/app/admin/embeddings/pages/OpenEmbeddingPage";
+import CloudEmbeddingPage from "@/app/admin/embeddings/pages/CloudEmbeddingPage";
+import ProviderCreationModal from "@/app/admin/embeddings/modals/ProviderCreationModal";
+import DeleteCredentialsModal from "@/app/admin/embeddings/modals/DeleteCredentialsModal";
+import SelectModelModal from "@/app/admin/embeddings/modals/SelectModelModal";
+import ChangeCredentialsModal from "@/app/admin/embeddings/modals/ChangeCredentialsModal";
+import ModelSelectionConfirmationModal from "@/app/admin/embeddings/modals/ModelSelectionModal";
+import AlreadyPickedModal from "@/app/admin/embeddings/modals/AlreadyPickedModal";
+import { ModelOption } from "@/components/embedding/ModelSelector";
 import {
   EMBEDDING_MODELS_ADMIN_URL,
   EMBEDDING_PROVIDERS_ADMIN_URL,
-} from "../configuration/llm/constants";
-import { AdvancedSearchConfiguration } from "./interfaces";
+} from "@/app/admin/configuration/llm/constants";
+import { AdvancedSearchConfiguration } from "@/app/admin/embeddings/interfaces";
 
 export interface EmbeddingDetails {
   api_key?: string;
@@ -35,15 +34,7 @@ export interface EmbeddingDetails {
   provider_type: EmbeddingProvider;
 }
 
-export function EmbeddingModelSelection({
-  selectedProvider,
-  currentEmbeddingModel,
-  updateSelectedProvider,
-  modelTab,
-  setModelTab,
-  updateCurrentModel,
-  advancedEmbeddingDetails,
-}: {
+export interface EmbeddingModelSelectionProps {
   modelTab: "open" | "cloud" | null;
   setModelTab: Dispatch<SetStateAction<"open" | "cloud" | null>>;
   currentEmbeddingModel: CloudEmbeddingModel | HostedEmbeddingModel;
@@ -56,7 +47,17 @@ export function EmbeddingModelSelection({
     provider_type: EmbeddingProvider
   ) => void;
   advancedEmbeddingDetails: AdvancedSearchConfiguration;
-}) {
+}
+
+export default function EmbeddingModelSelection({
+  selectedProvider,
+  currentEmbeddingModel,
+  updateSelectedProvider,
+  modelTab,
+  setModelTab,
+  updateCurrentModel,
+  advancedEmbeddingDetails,
+}: EmbeddingModelSelectionProps) {
   // Cloud Provider based modals
   const [showTentativeProvider, setShowTentativeProvider] =
     useState<CloudEmbeddingProvider | null>(null);

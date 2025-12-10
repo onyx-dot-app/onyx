@@ -1044,6 +1044,8 @@ export function useChatController({
 
   // fetch # of allowed document tokens for the selected Persona
   useEffect(() => {
+    if (!liveAssistant?.id) return; // avoid calling with undefined persona id
+
     async function fetchMaxTokens() {
       const response = await fetch(
         `/api/chat/max-selected-document-tokens?persona_id=${liveAssistant?.id}`

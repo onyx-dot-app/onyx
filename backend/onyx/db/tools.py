@@ -4,6 +4,7 @@ from typing import Type
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from sqlalchemy import func
 from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -49,7 +50,12 @@ def get_tools(
         query = query.where(Tool.enabled.is_(True))
 
     if only_openapi:
-        query = query.where(Tool.openapi_schema.is_not(None))
+        query = query.where(
+            Tool.openapi_schema.is_not(None),
+            # To avoid showing rows that have JSON literal `null` stored in the column to the user.
+            # tools from mcp servers will not have an openapi schema but it has `null`, so we need to exclude them.
+            func.jsonb_typeof(Tool.openapi_schema) == "object",
+        )
 
     return list(db_session.scalars(query).all())
 

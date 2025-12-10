@@ -1,6 +1,6 @@
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import { LLMProviderView, WellKnownLLMProviderDescriptor } from "./interfaces";
-import { Modal } from "@/components/Modal";
+import Modal from "@/refresh-components/Modal";
 import { LLMProviderUpdateForm } from "./LLMProviderUpdateForm";
 import { CustomLLMProviderUpdateForm } from "./CustomLLMProviderUpdateForm";
 import { useState } from "react";
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import { cn, isSubset } from "@/lib/utils";
+import SvgSettings from "@/icons/settings";
 
 function LLMProviderUpdateModal({
   llmProviderDescriptor,
@@ -31,29 +32,34 @@ function LLMProviderUpdateModal({
       "Custom LLM Provider";
 
   return (
-    <Modal
-      title={`${llmProviderDescriptor ? "Configure" : "Setup"} ${providerName}`}
-      onOutsideClick={() => onClose()}
-      hideOverflow={true}
-    >
-      <div className="max-h-[70vh] overflow-y-auto px-4">
-        {llmProviderDescriptor ? (
-          <LLMProviderUpdateForm
-            llmProviderDescriptor={llmProviderDescriptor}
-            onClose={onClose}
-            existingLlmProvider={existingLlmProvider}
-            shouldMarkAsDefault={shouldMarkAsDefault}
-            setPopup={setPopup}
-          />
-        ) : (
-          <CustomLLMProviderUpdateForm
-            onClose={onClose}
-            existingLlmProvider={existingLlmProvider}
-            shouldMarkAsDefault={shouldMarkAsDefault}
-            setPopup={setPopup}
-          />
-        )}
-      </div>
+    <Modal open onOpenChange={onClose}>
+      <Modal.Content medium>
+        <Modal.Header
+          icon={SvgSettings}
+          title={`${
+            llmProviderDescriptor ? "Configure" : "Setup"
+          } ${providerName}`}
+          onClose={onClose}
+        />
+        <Modal.Body className="max-h-[70vh] overflow-y-auto">
+          {llmProviderDescriptor ? (
+            <LLMProviderUpdateForm
+              llmProviderDescriptor={llmProviderDescriptor}
+              onClose={onClose}
+              existingLlmProvider={existingLlmProvider}
+              shouldMarkAsDefault={shouldMarkAsDefault}
+              setPopup={setPopup}
+            />
+          ) : (
+            <CustomLLMProviderUpdateForm
+              onClose={onClose}
+              existingLlmProvider={existingLlmProvider}
+              shouldMarkAsDefault={shouldMarkAsDefault}
+              setPopup={setPopup}
+            />
+          )}
+        </Modal.Body>
+      </Modal.Content>
     </Modal>
   );
 }

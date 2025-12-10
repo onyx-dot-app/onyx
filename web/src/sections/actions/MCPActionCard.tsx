@@ -1,17 +1,25 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, {
+  useState,
+  useMemo,
+  useEffect,
+  useRef,
+  useCallback,
+} from "react";
 import SvgServer from "@/icons/server";
-import ActionCardHeader from "@/sections/actions/ActionCardHeader";
+import ActionCard from "@/sections/actions/ActionCard";
 import Actions from "@/sections/actions/Actions";
-import ToolsSection from "@/sections/actions/ToolsSection";
+import ToolItem from "@/sections/actions/ToolItem";
 import ToolsList from "@/sections/actions/ToolsList";
-import { cn } from "@/lib/utils";
-import { MCPActionStatus } from "@/lib/tools/types";
+import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { ActionStatus } from "@/lib/tools/types";
 import { useServerTools } from "@/sections/actions/useServerTools";
 import { MCPServerStatus, MCPServerWithStatus } from "@/lib/tools/types";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { KeyedMutator } from "swr";
+import { IconProps } from "@/icons";
 
 export interface MCPActionCardProps {
   // Server identification
@@ -21,10 +29,10 @@ export interface MCPActionCardProps {
   // Core content
   title: string;
   description: string;
-  logo?: React.ReactNode;
+  logo?: React.FunctionComponent<IconProps>;
 
   // Status
-  status?: MCPActionStatus;
+  status: ActionStatus;
 
   // Initial expanded state
   initialExpanded?: boolean;
@@ -39,6 +47,7 @@ export interface MCPActionCardProps {
   onDelete?: () => void;
   onAuthenticate?: () => void; // For pending state
   onReconnect?: () => void; // For disconnected state
+  onRename?: (serverId: number, newName: string) => Promise<void>; // For renaming
 
   // Tool-related actions (now includes SWR mutate function for optimistic updates)
   onToolToggle?: (
@@ -68,7 +77,7 @@ export default function MCPActionCard({
   title,
   description,
   logo,
-  status = MCPActionStatus.CONNECTED,
+  status,
   initialExpanded = false,
   toolCount,
   onDisconnect,
@@ -77,6 +86,7 @@ export default function MCPActionCard({
   onDelete,
   onAuthenticate,
   onReconnect,
+  onRename,
   onToolToggle,
   onRefreshTools,
   onDisableAllTools,
@@ -84,6 +94,8 @@ export default function MCPActionCard({
 }: MCPActionCardProps) {
   const [isToolsExpanded, setIsToolsExpanded] = useState(initialExpanded);
   const [searchQuery, setSearchQuery] = useState("");
+  const [showOnlyEnabled, setShowOnlyEnabled] = useState(false);
+  const deleteModal = useCreateModal();
 
   // Update expanded state when initialExpanded changes
   const hasInitializedExpansion = useRef(false);
@@ -96,6 +108,7 @@ export default function MCPActionCard({
     }
   }, [initialExpanded]);
 
+  // Collapse tools when server becomes disconnected or awaiting auth
   useEffect(() => {
     if (
       server.status === MCPServerStatus.DISCONNECTED ||
@@ -112,113 +125,156 @@ export default function MCPActionCard({
     isExpanded: isToolsExpanded,
   });
 
-  const isConnected = status === MCPActionStatus.CONNECTED;
-  const isDisconnected = status === MCPActionStatus.DISCONNECTED;
-  const isNotAuthenticated = status === MCPActionStatus.PENDING;
+  const isNotAuthenticated = status === ActionStatus.PENDING;
 
-  // Filter tools based on search query
+  // Filter tools based on search query and enabled status
   const filteredTools = useMemo(() => {
     if (!tools) return [];
-    if (!searchQuery.trim()) return tools;
 
-    const query = searchQuery.toLowerCase();
-    return tools.filter(
-      (tool) =>
-        tool.name.toLowerCase().includes(query) ||
-        tool.description.toLowerCase().includes(query)
-    );
-  }, [tools, searchQuery]);
+    let filtered = tools;
 
-  const icon = !isNotAuthenticated ? (
-    logo
-  ) : (
-    <SvgServer className="h-5 w-5 stroke-text-04" aria-hidden="true" />
-  );
+    // Filter by enabled status if showOnlyEnabled is true
+    if (showOnlyEnabled) {
+      filtered = filtered.filter((tool) => tool.isEnabled);
+    }
 
-  const backgroundColor = isConnected
-    ? "bg-background-tint-00"
-    : isDisconnected
-      ? "bg-background-neutral-02"
-      : "";
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (tool) =>
+          tool.name.toLowerCase().includes(query) ||
+          tool.description.toLowerCase().includes(query)
+      );
+    }
 
-  const handleToggleTools = () => {
+    return filtered;
+  }, [tools, searchQuery, showOnlyEnabled]);
+
+  const icon = isNotAuthenticated ? SvgServer : logo;
+
+  const handleToggleTools = useCallback(() => {
     setIsToolsExpanded((prev) => !prev);
     if (isToolsExpanded) {
       setSearchQuery("");
     }
-  };
+  }, [isToolsExpanded]);
 
   const handleFold = () => {
     setIsToolsExpanded(false);
     setSearchQuery("");
+    setShowOnlyEnabled(false);
+  };
+
+  const handleToggleShowOnlyEnabled = () => {
+    setShowOnlyEnabled((prev) => !prev);
+  };
+
+  // Build the actions component
+  const actionsComponent = useMemo(
+    () => (
+      <Actions
+        status={status}
+        serverName={title}
+        onDisconnect={onDisconnect}
+        onManage={onManage}
+        onAuthenticate={onAuthenticate}
+        onReconnect={onReconnect}
+        onDelete={onDelete ? () => deleteModal.toggle(true) : undefined}
+        toolCount={toolCount}
+        isToolsExpanded={isToolsExpanded}
+        onToggleTools={handleToggleTools}
+      />
+    ),
+    [
+      deleteModal,
+      handleToggleTools,
+      isToolsExpanded,
+      onAuthenticate,
+      onDelete,
+      onDisconnect,
+      onManage,
+      onReconnect,
+      status,
+      title,
+      toolCount,
+    ]
+  );
+
+  const handleRename = async (newName: string) => {
+    if (onRename) {
+      await onRename(serverId, newName);
+    }
   };
 
   return (
-    <div
-      className={cn(
-        "w-full",
-        backgroundColor,
-        "border border-border-01 rounded-16",
-        className
+    <>
+      <ActionCard
+        title={title}
+        description={description}
+        icon={icon}
+        status={status}
+        actions={actionsComponent}
+        onEdit={onEdit}
+        onRename={handleRename}
+        isExpanded={isToolsExpanded}
+        onExpandedChange={setIsToolsExpanded}
+        enableSearch={true}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        onRefresh={() => onRefreshTools?.(serverId, mutate)}
+        onDisableAll={() => {
+          const toolIds = tools.map((tool) => parseInt(tool.id));
+          onDisableAllTools?.(serverId, toolIds, mutate);
+        }}
+        onFold={handleFold}
+        className={className}
+        ariaLabel={`${title} MCP server card`}
+      >
+        <ToolsList
+          isFetching={server.status === MCPServerStatus.FETCHING_TOOLS}
+          onRetry={() => mutate()}
+          totalCount={tools.length}
+          enabledCount={tools.filter((tool) => tool.isEnabled).length}
+          showOnlyEnabled={showOnlyEnabled}
+          onToggleShowOnlyEnabled={handleToggleShowOnlyEnabled}
+          isEmpty={filteredTools.length === 0}
+          searchQuery={searchQuery}
+          emptyMessage="No tools available"
+          emptySearchMessage="No tools found"
+        >
+          {filteredTools.map((tool) => (
+            <ToolItem
+              key={tool.id}
+              name={tool.name}
+              description={tool.description}
+              icon={tool.icon}
+              isAvailable={tool.isAvailable}
+              isEnabled={tool.isEnabled}
+              onToggle={(enabled) =>
+                onToolToggle?.(serverId, tool.id, enabled, mutate)
+              }
+              variant="mcp"
+            />
+          ))}
+        </ToolsList>
+      </ActionCard>
+
+      {deleteModal.isOpen && (
+        <ConfirmEntityModal
+          danger
+          actionButtonText="Delete"
+          entityType="MCP server"
+          entityName={title}
+          additionalDetails="This will permanently delete the server and all of its tools."
+          onClose={() => deleteModal.toggle(false)}
+          onSubmit={async () => {
+            if (!onDelete) return;
+            onDelete();
+            deleteModal.toggle(false);
+          }}
+        />
       )}
-      role="article"
-      aria-label={`${title} MCP server card`}
-    >
-      <div className="flex flex-col w-full">
-        {/* Header Section */}
-        <div className="flex items-start justify-between pb-2 pl-3 pt-3 pr-2 w-full">
-          <ActionCardHeader
-            title={title}
-            description={description}
-            icon={icon}
-            status={status}
-            onEdit={onEdit}
-          />
-
-          {/* Action Buttons */}
-          <Actions
-            status={status}
-            serverName={title}
-            onDisconnect={onDisconnect}
-            onManage={onManage}
-            onAuthenticate={onAuthenticate}
-            onReconnect={onReconnect}
-            onDelete={onDelete}
-            toolCount={toolCount}
-            isToolsExpanded={isToolsExpanded}
-            onToggleTools={handleToggleTools}
-          />
-        </div>
-
-        {/* Tools Section (Only when expanded) */}
-        {isToolsExpanded && (
-          <ToolsSection
-            onRefresh={() => onRefreshTools?.(serverId, mutate)}
-            onDisableAll={() => {
-              const toolIds = tools.map((tool) => parseInt(tool.id));
-              onDisableAllTools?.(serverId, toolIds, mutate);
-            }}
-            onFold={handleFold}
-            searchQuery={searchQuery}
-            onSearchQueryChange={setSearchQuery}
-          />
-        )}
-      </div>
-
-      {/* Tools List - Only render when expanded */}
-      {isToolsExpanded && (
-        <div className="animate-in fade-in slide-in-from-top-2 duration-300 p-2 border-t border-border-01">
-          <ToolsList
-            tools={filteredTools}
-            searchQuery={searchQuery}
-            onToolToggle={(toolId, enabled) =>
-              onToolToggle?.(serverId, toolId, enabled, mutate)
-            }
-            isFetching={server.status === MCPServerStatus.FETCHING_TOOLS}
-            onRetry={() => mutate()}
-          />
-        </div>
-      )}
-    </div>
+    </>
   );
 }
