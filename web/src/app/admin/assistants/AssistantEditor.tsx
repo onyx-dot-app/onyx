@@ -45,7 +45,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import * as Yup from "yup";
-import { FullPersona, PersonaLabel, StarterMessage } from "./interfaces";
+import { FullPersona, PersonaLabel, StarterMessage, LangflowFileNode } from "./interfaces";
 import {
   PersonaUpsertParameters,
   createPersona,
@@ -104,6 +104,7 @@ import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { TabToggle } from "@/components/ui/TabToggle";
 import { MAX_CHARACTERS_PERSONA_DESCRIPTION } from "@/lib/constants";
 import { KnowledgeMapCreationRequest } from "@/app/admin/documents/knowledge_maps/lib";
+import { APIKey } from "../guardrails/types";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
@@ -111,6 +112,10 @@ function findSearchTool(tools: ToolSnapshot[]) {
 
 function findLangflowTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === "LangflowTool");
+}
+
+function findDocGeneratorTool(tools: ToolSnapshot[]) {
+  return tools.find((tool) => tool.in_code_tool_id === "DocGeneratorTool");
 }
 
 function findDocFormatterTool(tools: ToolSnapshot[]) {
@@ -242,6 +247,7 @@ export function AssistantEditor({
 
   const searchTool = findSearchTool(tools);
   const langflowTool = findLangflowTool(tools);
+  const docGeneratorTool = findDocGeneratorTool(tools);
   const docFormatterTool = findDocFormatterTool(tools);
   const imageGenerationTool = findImageGenerationTool(tools);
   const internetSearchTool = findInternetSearchTool(tools);
@@ -254,6 +260,7 @@ export function AssistantEditor({
       tool.in_code_tool_id !== searchTool?.in_code_tool_id &&
       tool.in_code_tool_id !== imageGenerationTool?.in_code_tool_id &&
       tool.in_code_tool_id !== langflowTool?.in_code_tool_id &&
+      tool.in_code_tool_id !== docGeneratorTool?.in_code_tool_id &&
       tool.in_code_tool_id !== docFormatterTool?.in_code_tool_id &&
       tool.in_code_tool_id !== internetSearchTool?.in_code_tool_id &&
       tool.in_code_tool_id !== knowledgeMapTool?.in_code_tool_id
@@ -264,6 +271,7 @@ export function AssistantEditor({
     ...(searchTool ? [searchTool] : []),
     ...(langflowTool ? [langflowTool] : []),
     ...(docFormatterTool ? [docFormatterTool] : []),
+    ...(docGeneratorTool ? [docGeneratorTool] : []),
     ...(imageGenerationTool ? [imageGenerationTool] : []),
     ...(internetSearchTool ? [internetSearchTool] : []),
     ...(knowledgeMapTool ? [knowledgeMapTool] : []),
@@ -318,7 +326,7 @@ export function AssistantEditor({
       existingPersona?.users?.filter(
         (u) => u.id !== existingPersona.owner?.id
       ) ?? [],
-    selectedGroups: existingPersona?.groups ?? [],
+    selectedGroups: existingPersona?.groups?.map((group) => group.id) ?? [],
     user_file_ids: existingPersona?.user_file_ids ?? [],
     user_folder_ids: existingPersona?.user_folder_ids ?? [],
 
@@ -331,6 +339,10 @@ export function AssistantEditor({
     pipeline_id: existingPersona?.pipeline_id,
     use_default: existingPersona?.use_default,
     template_file: null,
+    selectedValidators: existingPersona?.validators ?? [],
+    langflow_file_nodes: existingPersona?.langflow_file_nodes?.length
+      ? existingPersona.langflow_file_nodes
+      : [{ file_node_id: "" }],
   };
 
   interface AssistantPrompt {
@@ -390,6 +402,11 @@ export function AssistantEditor({
 
   const { data: users } = useSWR<MinimalUserSnapshot[]>(
     "/api/users",
+    errorHandlingFetcher
+  );
+
+  const { data: validators } = useSWR<APIKey[]>(
+    "/api/validators",
     errorHandlingFetcher
   );
 
@@ -537,6 +554,13 @@ export function AssistantEditor({
             selectedGroups: Yup.array().of(Yup.number()),
             knowledge_source: Yup.string().required(),
             is_default_persona: Yup.boolean().required(),
+            pipeline_id: Yup.string().nullable(),
+            template_file: Yup.mixed().nullable(),
+            langflow_file_nodes: Yup.array().of(
+              Yup.object().shape({
+                file_node_id: Yup.string(),
+              })
+            ),
           })
           .test(
             "system-prompt-or-task-prompt",
@@ -601,7 +625,9 @@ export function AssistantEditor({
           const knowledgeMapToolEnabled = knowledgeMapTool
             ? enabledTools.includes(knowledgeMapTool.id)
             : false;
-
+          const docGeneratorToolEnabled = docGeneratorTool
+            ? enabledTools.includes(docGeneratorTool.id)
+            : false;
           // if disable_retrieval is set, set num_chunks to 0
           // to tell the backend to not fetch any documents
           const numChunks = searchToolEnabled ? values.num_chunks || 10 : 0;
@@ -637,6 +663,12 @@ export function AssistantEditor({
             num_chunks: numChunks,
             user_file_ids: selectedFiles.map((file) => file.id),
             user_folder_ids: selectedFolders.map((folder) => folder.id),
+            validator_ids: values.selectedValidators.map((validator) =>
+              String(validator.id)
+            ),
+            langflow_file_nodes: values.langflow_file_nodes.filter(
+              (node: LangflowFileNode) => node.file_node_id.trim() !== ""
+            ),
           };
 
           let personaResponse;
@@ -724,6 +756,13 @@ export function AssistantEditor({
               ? true
               : false;
           }
+
+          function docGeneratorToolEnabled() {
+              return (
+                docGeneratorTool &&
+                values.enabled_tools_map[docGeneratorTool.id]
+              );
+            }
 
           console.log("TEST LANGFLOW", langflowTool, langflowToolEnabled());
           console.log(
@@ -1380,6 +1419,122 @@ export function AssistantEditor({
                       </>
                     )}
 
+                    {docGeneratorTool && (
+                      <>
+                        <BooleanFormField
+                          name={`enabled_tools_map.${docGeneratorTool.id}`}
+                          label={t(k.DOC_GENERATOR_LABEL)} 
+                          subtext={t(k.DOC_GENERATOR_SUBTEXT)}
+                          onChange={() => {
+                            toggleToolInValues(docGeneratorTool.id);
+                          }}
+                        />
+
+                        {docGeneratorToolEnabled() && (
+                          <div className="pl-4 border-l-2 ml-4 border-border flex flex-col gap-4 mb-4">
+                            <>
+                              <TextFormField
+                                name="pipeline_id"
+                                label={t(k.PIPELINE_ID_LABEL)}
+                                placeholder={t(k.PIPELINE_ID_PLACEHOLDER)}
+                                subtext={t(k.PIPELINE_ID_SUBTEXT)}
+                              />
+
+                              <BooleanFormField
+                                name="use_default"
+                                label={t(k.USE_DEFAULT_LABEL)}
+                                subtext={t(k.USE_DEFAULT_SUBTEXT)}
+                              />
+
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="text-xs flex justify-start gap-x-2"
+                                onClick={() => {
+                                  const fileInput = document.createElement("input");
+                                  fileInput.type = "file";
+                                  fileInput.onchange = (e) => {
+                                    const file = (e.target as HTMLInputElement).files?.[0];
+                                    if (file) {
+                                      setFieldValue("template_file", file);
+                                    }
+                                  };
+                                  fileInput.click();
+                                }}
+                              >
+                                <CameraIcon size={14} />
+                                {t(k.UPLOAD_TEMPLATE_FILE)}
+                              </Button>
+                              <div className="mb-4">
+                              <Label>Langflow File Node IDs</Label>
+                              <SubLabel>
+                                {t(k.FILE_NODES_DESCRIPTION)}
+                              </SubLabel>
+                              <FieldArray
+                                name="langflow_file_nodes"
+                                render={(arrayHelpers: ArrayHelpers) => (
+                                  <div>
+                                    {values.langflow_file_nodes &&
+                                    values.langflow_file_nodes.length > 0 ? (
+                                      values.langflow_file_nodes.map(
+                                        (node: any, index: number) => (
+                                          <div
+                                            key={index}
+                                            className="flex items-center gap-2 mb-2"
+                                          >
+                                            <div className="flex-grow">
+                                              <TextFormField
+                                                label="" // <--- ДОБАВЛЕНО: Удовлетворяет требование типа
+                                                removeLabel={true} // <--- ДОБАВЛЕНО: Скрывает пустой label
+                                                name={`langflow_file_nodes.${index}.file_node_id`}
+                                                placeholder="e.g., File-XYZ"
+                                              />
+                                            </div>
+                                            <Button
+                                              type="button"
+                                              variant="ghost"
+                                              size="icon"
+                                              onClick={() =>
+                                                arrayHelpers.remove(index)
+                                              }
+                                            >
+                                              <TrashIcon className="h-4 w-4" />
+                                            </Button>
+                                          </div>
+                                        )
+                                      )
+                                    ) : (
+                                      <div className="text-sm text-text-500">
+                                        {t(k.NO_FILE_NODES_SPECIFIED)}
+                                      </div>
+                                    )}
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() =>
+                                        arrayHelpers.push({ file_node_id: "" })
+                                      }
+                                    >
+                                      + {t(k.ADD_NODE_ID)}
+                                    </Button>
+                                  </div>
+                                )}
+                              />
+                              </div>
+
+                              {values.template_file && (
+                                <div className="text-sm text-neutral-600 dark:text-neutral-300 mb-2">
+                                  {values.template_file.name}
+                                </div>
+                              )}
+                            </>
+                          </div>
+                        )}
+                      </>
+                    )}
+
                     {customTools.length > 0 &&
                       customTools.map((tool) => (
                         <BooleanFormField
@@ -1839,6 +1994,56 @@ export function AssistantEditor({
                     explanationLink="https://docs.onyx.app/guides/assistants"
                     className="[&_textarea]:placeholder:text-text-muted/50"
                   />
+
+                  <div className="mt-2">
+                    <Label className="mb-2" small>
+                      Выберите валидаторы
+                    </Label>
+
+                    <SearchMultiSelectDropdown
+                      options={[
+                        ...(Array.isArray(validators) ? validators : [])
+                          .filter(
+                            (u: APIKey) =>
+                              !values.selectedValidators?.some(
+                                (su: APIKey) => su.id === u.id
+                              )
+                          )
+                          ?.map((u: APIKey) => ({
+                            name: u.name,
+                            value: u.id,
+                          })),
+                      ]}
+                      onSelect={(selected: DropdownOption<string | number>) => {
+                        const option = selected as {
+                          name: string;
+                          value: string | number;
+                          type: "user" | "group";
+                        };
+                        setFieldValue("selectedValidators", [
+                          ...values.selectedValidators,
+                          { id: option.value, name: option.name },
+                        ]);
+                      }}
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {values.selectedValidators?.map((user: APIKey) => (
+                      <SourceChip
+                        key={user.id}
+                        onRemove={() => {
+                          setFieldValue(
+                            "selectedValidators",
+                            values.selectedValidators?.filter(
+                              (u: APIKey) => u.id !== user.id
+                            )
+                          );
+                        }}
+                        title={user.name}
+                        icon={<UserIcon size={12} />}
+                      />
+                    ))}
+                  </div>
                 </>
               )}
 

@@ -22,7 +22,6 @@ class OnyxVersion:
 
 
 global_version = OnyxVersion()
-global_version.set_ee()
 
 
 def set_is_ee_based_on_env_variable() -> None:
@@ -59,30 +58,34 @@ def fetch_versioned_implementation(module: str, attribute: str) -> Any:
     is_ee = global_version.is_ee_version()
     logger.info(is_ee)
 
-    module_full = f"ee.{module}" if is_ee else module
+    module_full = f"ee.{module}" if is_ee else f"smartsearch.{module}"
     try:
         return getattr(importlib.import_module(module_full), attribute)
     except ModuleNotFoundError as e:
-        logger.warning(
-            "Failed to fetch versioned implementation for %s.%s: %s",
-            module_full,
-            attribute,
-            e,
-        )
-
-        if is_ee:
-            if "ee.onyx" not in str(e):
-                # If it's a non Onyx related import failure, this is likely because
-                # a dependent library has not been installed. Should raise this failure
-                # instead of letting the server start up
-                raise e
-
-            # Use the MIT version as a fallback, this allows us to develop MIT
-            # versions independently and later add additional EE functionality
-            # similar to feature flagging
+        try:
             return getattr(importlib.import_module(module), attribute)
+        except ModuleNotFoundError as e:
+            logger.warning(
+                "Failed to fetch versioned implementation for %s.%s: %s",
+                module_full,
+                attribute,
+                e,
+            )
 
-        raise
+
+            if is_ee:
+                if "ee.onyx" not in str(e):
+                    # If it's a non Onyx related import failure, this is likely because
+                    # a dependent library has not been installed. Should raise this failure
+                    # instead of letting the server start up
+                    raise e
+
+                # Use the MIT version as a fallback, this allows us to develop MIT
+                # versions independently and later add additional EE functionality
+                # similar to feature flagging
+                return getattr(importlib.import_module(module), attribute)
+
+            raise
 
 
 T = TypeVar("T")
@@ -141,7 +144,10 @@ def fetch_ee_implementation_or_noop(
     Raises:
         Exception: If EE is enabled but the fetch fails.
     """
-    if not global_version.is_ee_version():
+    try:
+        return fetch_versioned_implementation(module, attribute)
+    except Exception as e:
+        logger.warning(f"Failed to fetch implementation for {module}.{attribute}: {e}")
         if inspect.iscoroutinefunction(noop_return_value):
 
             async def async_noop(*args: Any, **kwargs: Any) -> Any:
@@ -155,8 +161,3 @@ def fetch_ee_implementation_or_noop(
                 return noop_return_value
 
             return sync_noop
-    try:
-        return fetch_versioned_implementation(module, attribute)
-    except Exception as e:
-        logger.error(f"Failed to fetch implementation for {module}.{attribute}: {e}")
-        raise

@@ -31,6 +31,11 @@ class MinimalUserSnapshot(BaseModel):
     email: str
 
 
+class MinimalUserGroupSnapshot(BaseModel):
+    id: int
+    name: str
+
+
 class FullUserSnapshot(BaseModel):
     id: UUID
     email: str

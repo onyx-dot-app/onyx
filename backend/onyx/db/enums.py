@@ -94,3 +94,34 @@ class EmbeddingPrecision(str, PyEnum):
     # good reason to specify anything else
     BFLOAT16 = "bfloat16"
     FLOAT = "float"
+
+
+class ValidatorType(str, PyEnum):
+    """Типы валидаторов для проверки контента и безопасности.
+
+    - DETECT_PII: Обнаружение персональных данных (Personal Identifiable Information);
+    - TOXIC_LANGUAGE: Валидация токсичности контента;
+    - NSFW_TEXT: Проверка на неприемлемый для работы контент (Not Safe For Work);
+    - SENSITIVE_TOPIC: Валидация запретных и чувствительных тем;
+    - BAN_LIST: Проверка на наличие запрещенных слов и оборотов;
+    - TEXT_STYLE: Валидация соответствия определённому стилю общения;
+    - VALID_LENGTH: Проверка длины контента;
+    - VALID_JSON: Валидация JSON-структур и синтаксиса;
+    - COMPETITOR_CHECK: Проверка на упоминание конкурентов и ключевых сущностей;
+    - HALLUCINATION: Обнаружение галлюцинаций в выводе языковых моделей;
+    - TOPIC_RESTRICTION: Классификация и перенаправление запросов по тематикам;
+    - JAILBREAKING: Защита от манипулирования и взлома языковых моделей;
+    """
+
+    DETECT_PII = "DETECT_PII"
+    TOXIC_LANGUAGE = "TOXIC_LANGUAGE"
+    NSFW_TEXT = "NSFW_TEXT"
+    SENSITIVE_TOPIC = "SENSITIVE_TOPIC"
+    BAN_LIST = "BAN_LIST"
+    TEXT_STYLE = "TEXT_STYLE"
+    VALID_LENGTH = "VALID_LENGTH"
+    VALID_JSON = "VALID_JSON"
+    COMPETITOR_CHECK = "COMPETITOR_CHECK"
+    HALLUCINATION = "HALLUCINATION"
+    TOPIC_RESTRICTION = "TOPIC_RESTRICTION"
+    JAILBREAKING = "JAILBREAKING"

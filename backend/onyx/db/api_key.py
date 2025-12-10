@@ -15,7 +15,7 @@ from onyx.configs.constants import DANSWER_API_KEY_PREFIX
 from onyx.configs.constants import UNNAMED_KEY_PLACEHOLDER
 from onyx.db.models import ApiKey
 from onyx.db.models import User
-from onyx.server.api_key.models import APIKeyArgs
+from onyx.server.api_key.models import APIKeyArgs, APIKeyUpdateArgs
 from shared_configs.contextvars import get_current_tenant_id
 
 
@@ -40,6 +40,7 @@ def fetch_api_keys(db_session: Session) -> list[ApiKeyDescriptor]:
             api_key_display=api_key.api_key_display,
             api_key_name=api_key.name,
             user_id=api_key.user_id,
+            is_new_user=api_key.is_new_user,
         )
         for api_key in api_keys
     ]
@@ -65,7 +66,10 @@ def get_api_key_fake_email(
 
 
 def insert_api_key(
-    db_session: Session, api_key_args: APIKeyArgs, user_id: uuid.UUID | None
+    db_session: Session,
+    user: User,
+    api_key_args: APIKeyArgs,
+    user_id: uuid.UUID | None
 ) -> ApiKeyDescriptor:
     std_password_helper = PasswordHelper()
 
@@ -74,68 +78,88 @@ def insert_api_key(
 
     api_key = generate_api_key(tenant_id)
     if user_id is None:
-        api_key_user_id = uuid.uuid4()
+        if api_key_args.role:
+            api_key_user_id = uuid.uuid4()
 
-        display_name = api_key_args.name or UNNAMED_KEY_PLACEHOLDER
-        api_key_user_row = User(
-            id=api_key_user_id,
-            email=get_api_key_fake_email(display_name, str(api_key_user_id)),
-            # a random password for the "user"
-            hashed_password=std_password_helper.hash(std_password_helper.generate()),
-            is_active=True,
-            is_superuser=False,
-            is_verified=True,
-            role=api_key_args.role,
-        )
-        db_session.add(api_key_user_row)
+            display_name = api_key_args.name or UNNAMED_KEY_PLACEHOLDER
+            api_key_user_row = User(
+                id=api_key_user_id,
+                email=get_api_key_fake_email(display_name, str(api_key_user_id)),
+                # a random password for the "user"
+                hashed_password=std_password_helper.hash(std_password_helper.generate()),
+                is_active=True,
+                is_superuser=False,
+                is_verified=True,
+                role=api_key_args.role,
+            )
+            db_session.add(api_key_user_row)
+            is_new_user_bool = True
+        else:
+            raise ValueError(f"For a new user you need to transfer his new role")
     else:
+        api_key_user = db_session.scalar(select(User).where(User.id == user_id))
+        if api_key_user is None:
+            raise ValueError(f"User with id {user_id} does not exist")
+
         api_key_user_id = user_id
+        is_new_user_bool = False
 
     api_key_row = ApiKey(
         name=api_key_args.name,
         hashed_api_key=hash_api_key(api_key),
         api_key_display=build_displayable_api_key(api_key),
         user_id=api_key_user_id,
-        owner_id=user_id,
+        is_new_user=is_new_user_bool,
+        owner_id=user.id,
     )
     db_session.add(api_key_row)
 
     db_session.commit()
     return ApiKeyDescriptor(
         api_key_id=api_key_row.id,
-        api_key_role=api_key_args.role,
+        api_key_role=api_key_args.role if is_new_user_bool else user.role,
         api_key_display=api_key_row.api_key_display,
         api_key=api_key,
         api_key_name=api_key_args.name,
         user_id=api_key_user_id,
+        is_new_user=is_new_user_bool,
     )
 
 
 def update_api_key(
-    db_session: Session, api_key_id: int, api_key_args: APIKeyArgs
+    db_session: Session,
+    api_key_id: int,
+    api_key_args: APIKeyUpdateArgs
 ) -> ApiKeyDescriptor:
     existing_api_key = db_session.scalar(select(ApiKey).where(ApiKey.id == api_key_id))
     if existing_api_key is None:
-        raise ValueError(f"API key with id {api_key_id} does not exist")
+        raise ValueError(f"API key with id {api_key_id} does not exist.")
 
-    existing_api_key.name = api_key_args.name
-    api_key_user = db_session.scalar(
-        select(User).where(User.id == existing_api_key.user_id)  # type: ignore
-    )
-    if api_key_user is None:
-        raise RuntimeError("API Key does not have associated user.")
+    if existing_api_key.is_new_user:
+        if api_key_args.name is not None:
+            existing_api_key.name = api_key_args.name
+        if api_key_args.role is not None:
+            api_key_user = db_session.scalar(
+                select(User).where(User.id == existing_api_key.user_id)  # type: ignore
+            )
+            if api_key_user is None:
+                raise RuntimeError("API Key does not have associated user.")
 
-    email_name = api_key_args.name or UNNAMED_KEY_PLACEHOLDER
-    api_key_user.email = get_api_key_fake_email(email_name, str(api_key_user.id))
-    api_key_user.role = api_key_args.role
+            api_key_user.role = api_key_args.role
+    else:
+        existing_api_key.name = api_key_args.name
+        if api_key_args.role:
+            raise ValueError(f"You cannot change the role of an existing user.")
+
     db_session.commit()
 
     return ApiKeyDescriptor(
         api_key_id=existing_api_key.id,
         api_key_display=existing_api_key.api_key_display,
-        api_key_name=api_key_args.name,
-        api_key_role=api_key_user.role,
+        api_key_name=existing_api_key.name,
+        api_key_role=existing_api_key.user.role,
         user_id=existing_api_key.user_id,
+        is_new_user=existing_api_key.is_new_user,
     )
 
 
@@ -163,6 +187,7 @@ def regenerate_api_key(db_session: Session, api_key_id: int) -> ApiKeyDescriptor
         api_key_name=existing_api_key.name,
         api_key_role=api_key_user.role,
         user_id=existing_api_key.user_id,
+        is_new_user=existing_api_key.is_new_user,
     )
 
 
@@ -170,6 +195,8 @@ def remove_api_key(db_session: Session, api_key_id: int) -> None:
     existing_api_key = db_session.scalar(select(ApiKey).where(ApiKey.id == api_key_id))
     if existing_api_key is None:
         raise ValueError(f"API key with id {api_key_id} does not exist")
+
+    db_session.delete(existing_api_key)
 
     user_associated_with_key = db_session.scalar(
         select(User).where(User.id == existing_api_key.user_id)  # type: ignore
@@ -179,6 +206,7 @@ def remove_api_key(db_session: Session, api_key_id: int) -> None:
             f"User associated with API key with id {api_key_id} does not exist. This should not happen."
         )
 
-    db_session.delete(existing_api_key)
-    db_session.delete(user_associated_with_key)
+    if existing_api_key.is_new_user:
+        db_session.delete(user_associated_with_key)
+
     db_session.commit()

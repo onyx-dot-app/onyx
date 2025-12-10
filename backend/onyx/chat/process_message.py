@@ -12,7 +12,7 @@ from onyx.agents.agent_search.orchestration.nodes.call_tool import ToolCallExcep
 from onyx.chat.answer import Answer
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.chat_utils import create_temporary_persona
-from onyx.chat.models import AgenticMessageResponseIDInfo, LangflowToolResponse, ResumeToolResponse
+from onyx.chat.models import AgenticMessageResponseIDInfo, LangflowToolResponse, ResumeToolResponse, DocGeneratorToolResponse
 from onyx.chat.models import AgentMessageIDInfo
 from onyx.chat.models import AgentSearchPacket
 from onyx.chat.models import AllCitations
@@ -105,6 +105,7 @@ from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
+from onyx.server.features.guardrails.services.validator_service import ValidatorManager
 from onyx.server.utils import get_json_line
 from onyx.tools.force import ForceUseTool
 from onyx.tools.models import SearchToolOverrideKwargs
@@ -140,6 +141,11 @@ from onyx.tools.tool_implementations.internet_search.internet_search_tool import
 from onyx.tools.tool_implementations.knowledge_map.knowledge_map_tool import KnowledgeMapTool
 from onyx.tools.tool_implementations.langflow.langflow_tool import LANGFLOW_RESPONSE_SUMMARY_ID, \
     LangflowResponseSummary, LangflowTool
+from onyx.tools.tool_implementations.doc_generator.doc_generator_tool import (
+    DOC_GENERATOR_RESPONSE_SUMMARY_ID,
+    DocGeneratorResponseSummary,
+    DocGeneratorTool,
+)
 from onyx.tools.tool_implementations.resume.resume_tool import ResumeTool, ResumeResponseSummary
 from onyx.tools.tool_implementations.search.search_tool import (
     FINAL_CONTEXT_DOCUMENTS_ID,
@@ -162,6 +168,30 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
+
+
+def merge_packets(packets: list[OnyxAnswerPiece]) -> str:
+    """Объединяет пакеты OnyxAnswerPiece в один текст"""
+    merged_text = ""
+
+    for packet in packets:
+        if isinstance(packet, OnyxAnswerPiece):
+            if packet.answer_piece is not None:
+                merged_text += packet.answer_piece
+
+    return merged_text
+
+
+def split_packets(text: str, chunk_size: int = 3) -> list[OnyxAnswerPiece]:
+    """Разделяет текст на пакеты OnyxAnswerPiece"""
+    packets = []
+
+    # Разбиваем текст на куски указанного размера
+    for idx in range(0, len(text), chunk_size):
+        chunk = text[idx:idx + chunk_size]
+        packets.append(OnyxAnswerPiece(answer_piece=chunk))
+
+    return packets
 
 
 def _translate_citations(
@@ -444,7 +474,6 @@ def stream_chat_message_objects(
             db_session=db_session,
         )
 
-        message_text = new_msg_req.message
         chat_session_id = new_msg_req.chat_session_id
         parent_id = new_msg_req.parent_message_id
         reference_doc_ids = new_msg_req.search_doc_ids
@@ -478,6 +507,14 @@ def stream_chat_message_objects(
 
         if not persona:
             raise RuntimeError("No persona specified or found for chat session")
+
+        # Валидация сообщения пользователя
+        validator_manager = ValidatorManager(persona=persona)
+        validated_user_message = validator_manager.validate_message(
+            message=new_msg_req.message, direction="input"
+        )
+
+        message_text = new_msg_req.message
 
         multi_assistant_milestone, _is_new = create_milestone_if_not_exists(
             user=user,
@@ -521,6 +558,7 @@ def stream_chat_message_objects(
                 llm_override=new_msg_req.llm_override or chat_session.llm_override,
                 additional_headers=litellm_additional_headers,
                 long_term_logger=long_term_logger,
+                user_email=user.email,
             )
         except GenAIDisabledException:
             raise RuntimeError("LLM is disabled. Can't use chat flow without LLM.")
@@ -687,7 +725,7 @@ def stream_chat_message_objects(
                     new_file.to_file_descriptor() for new_file in latest_query_files
                 ],
                 db_session=db_session,
-                commit=False,
+                commit=True, # Может что-то сломать, но может исправить проблемы с переименованием (say1ts)
             )
 
         selected_db_search_docs = None
@@ -853,6 +891,7 @@ def stream_chat_message_objects(
                 message_id=user_message.id if user_message else None,
                 additional_headers=custom_tool_additional_headers,
             ),
+            user_file_files=user_file_files,
         )
 
         tools: list[Tool] = []
@@ -862,9 +901,11 @@ def stream_chat_message_objects(
         force_use_tool = _get_force_search_settings(
             new_msg_req, tools, user_file_ids, user_folder_ids
         )
+        langflow_tool_present = any(isinstance(tool, LangflowTool) for tool in tools)
+        doc_generator_tool_present = any(isinstance(tool, DocGeneratorTool) for tool in tools)
 
         # Set force_use if user files exceed token limit
-        if use_search_for_user_files:
+        if use_search_for_user_files and not langflow_tool_present and not doc_generator_tool_present:
             try:
                 # Check if search tool is available in the tools list
                 search_tool_available = any(
@@ -913,7 +954,7 @@ def stream_chat_message_objects(
 
                 # Set query argument if not already set
                 if not force_use_tool.args:
-                    force_use_tool.args = {"query": final_msg.message}
+                    force_use_tool.args = {"query": validated_user_message}
 
                 # Pass the user file IDs to the search tool
                 if user_file_ids or user_folder_ids:
@@ -983,7 +1024,7 @@ def stream_chat_message_objects(
             )
 
         search_request = SearchRequest(
-            query=final_msg.message,
+            query=validated_user_message,
             evaluation_type=(
                 LLMEvaluationType.SKIP
                 if search_for_ordering_only
@@ -1012,7 +1053,7 @@ def stream_chat_message_objects(
 
         prompt_builder = AnswerPromptBuilder(
             user_message=default_build_user_message(
-                user_query=final_msg.message,
+                user_query=validated_user_message,
                 prompt_config=prompt_config,
                 files=latest_query_files,
                 single_message_history=single_message_history,
@@ -1020,7 +1061,7 @@ def stream_chat_message_objects(
             system_message=default_build_system_message(prompt_config, llm.config),
             message_history=message_history,
             llm_config=llm.config,
-            raw_user_query=final_msg.message,
+            raw_user_query=validated_user_message,
             raw_user_uploaded_files=latest_query_files or [],
             single_message_history=single_message_history,
         )
@@ -1041,6 +1082,7 @@ def stream_chat_message_objects(
                             new_msg_req.llm_override or chat_session.llm_override
                         ),
                         additional_headers=litellm_additional_headers,
+                        user_email=user.email if user else None,
                     )
                 )
             ),
@@ -1054,6 +1096,49 @@ def stream_chat_message_objects(
             use_agentic_search=new_msg_req.use_agentic_search,
         )
 
+        validated_llm_answer = answer.llm_answer
+
+        if persona.validators:
+            logger.info("Обработка ответа от LLM валидаторами")
+
+            onyx_answer_piece_packets = []
+            stream_stop_info_packets = []
+            other_packets = []
+
+            for packet in answer.processed_streamed_output:
+                if isinstance(packet, OnyxAnswerPiece):
+                    onyx_answer_piece_packets.append(packet)
+                elif isinstance(packet, StreamStopInfo):
+                    stream_stop_info_packets.append(packet)
+                else:
+                    other_packets.append(packet)
+
+            if onyx_answer_piece_packets:
+                # 1. Собираем ответ LLM из пакетов OnyxAnswerPiece
+                llm_answer = merge_packets(packets=onyx_answer_piece_packets)
+
+                if llm_answer and llm_answer.strip():
+
+                    # 2. Отправляем ответ LLM на валидацию
+                    validated_llm_answer = validator_manager.validate_message(
+                        message=llm_answer, direction="output"
+                    )
+
+                    # 3. Разбиваем валидированный ответ LLM обратно на пакеты OnyxAnswerPiece
+                    splitted_onyx_answer_piece_packets = split_packets(text=validated_llm_answer)
+
+                    # 4. Добавляем в общий список пакетов: пакеты OnyxAnswerPiece
+                    other_packets.extend(splitted_onyx_answer_piece_packets)
+            else:
+                logger.warning("\nПакетов OnyxAnswerPiece не обнаружено!")
+
+            other_packets.extend(stream_stop_info_packets)
+            all_packets = other_packets
+
+        else:
+            all_packets = answer.processed_streamed_output
+            logger.info("Ответ от LLM не обрабатывается валидаторами")
+
         # reference_db_search_docs = None
         # qa_docs_response = None
         # # any files to associate with the AI message e.g. dall-e generated images
@@ -1066,7 +1151,9 @@ def stream_chat_message_objects(
             lambda: AnswerPostInfo(ai_message_files=[])
         )
         refined_answer_improvement = True
-        for packet in answer.processed_streamed_output:
+
+        # 5. Отправляем пакеты пользователю
+        for packet in all_packets:
             if isinstance(packet, ToolResponse):
                 level, level_question_num = (
                     (packet.level, packet.level_question_num)
@@ -1243,13 +1330,20 @@ def stream_chat_message_objects(
                     tool_response = cast(LangflowResponseSummary, packet.response)
 
                     yield LangflowToolResponse(
-                        response=tool_response.tool_result,
+                        response=tool_response.tool_result,  # Текст
                         tool_name=tool_response.tool_name,
                     )
                 elif packet.id == LANGFLOW_RESPONSE_SUMMARY_ID:
                     tool_response = cast(ResumeResponseSummary, packet.response)
 
                     yield ResumeToolResponse(
+                        response=tool_response.tool_result,  # Текст
+                        tool_name=tool_response.tool_name,
+                    )
+                elif packet.id == DOC_GENERATOR_RESPONSE_SUMMARY_ID:
+                    tool_response = cast(DocGeneratorResponseSummary, packet.response)
+
+                    yield DocGeneratorToolResponse(
                         response=tool_response.tool_result,
                         tool_name=tool_response.tool_name,
                     )
@@ -1279,7 +1373,7 @@ def stream_chat_message_objects(
                         )
                     else:
                         yield CustomToolResponse(
-                            response=custom_tool_response.tool_result,
+                            response=custom_tool_response.tool_result,  # Текст
                             tool_name=custom_tool_response.tool_name,
                         )
 
@@ -1369,13 +1463,13 @@ def stream_chat_message_objects(
             ]
         )
         gen_ai_response_message = partial_response(
-            message=answer.llm_answer,
+            message=validated_llm_answer,
             rephrased_query=(
                 info.qa_docs_response.rephrased_query if info.qa_docs_response else None
             ),
             reference_docs=info.reference_db_search_docs,
             files=info.ai_message_files,
-            token_count=len(llm_tokenizer_encode_func(answer.llm_answer)),
+            token_count=len(llm_tokenizer_encode_func(validated_llm_answer)),
             citations=(
                 info.message_specific_citations.citation_map
                 if info.message_specific_citations

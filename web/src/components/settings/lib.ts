@@ -22,11 +22,11 @@ export async function fetchStandardSettingsSS() {
 }
 
 export async function fetchEnterpriseSettingsSS() {
-  return fetchSS("/enterprise-settings");
+  return fetchSS("/smartsearch-settings");
 }
 
 export async function fetchCustomAnalyticsScriptSS() {
-  return fetchSS("/enterprise-settings/custom-analytics-script");
+  return fetchSS("/smartsearch-settings/custom-analytics-script");
 }
 
 export async function fetchSettingsSS(): Promise<CombinedSettings | null> {

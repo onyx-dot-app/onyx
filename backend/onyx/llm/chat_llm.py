@@ -269,6 +269,7 @@ class DefaultMultiLLM(LLM):
         extra_body: dict | None = LITELLM_EXTRA_BODY,
         model_kwargs: dict[str, Any] | None = None,
         long_term_logger: LongTermLogger | None = None,
+        user_email: str | None = None,
     ):
         self._timeout = timeout
         if timeout is None:
@@ -287,6 +288,7 @@ class DefaultMultiLLM(LLM):
         self._api_version = api_version
         self._custom_llm_provider = custom_llm_provider
         self._long_term_logger = long_term_logger
+        self._user_email = user_email
         self.langfuse = Langfuse(
             public_key=LANGFUSE_PUBLIC_KEY,
             secret_key=LANGFUSE_SECRET_KEY,
@@ -428,6 +430,10 @@ class DefaultMultiLLM(LLM):
         processed_prompt = _prompt_to_dict(prompt)
         self._record_call(processed_prompt)
 
+        metadata = {}
+        if self._user_email:
+            metadata["trace_user_id"] = str(self._user_email)
+
         try:
             return litellm.completion(
                 mock_response=MOCK_LLM_RESPONSE,
@@ -450,6 +456,7 @@ class DefaultMultiLLM(LLM):
                 # model params
                 temperature=self._temperature,
                 timeout=timeout_override or self._timeout,
+                metadata=metadata if metadata else None,
                 # For now, we don't support parallel tool calls
                 # NOTE: we can't pass this in if tools are not specified
                 # or else OpenAI throws an error

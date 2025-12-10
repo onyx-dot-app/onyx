@@ -130,7 +130,6 @@ services:
     volumes:
       - telegram_bot_logs:/var/log
 
-
   web_server:
     image: onyxdotapp/onyx-web-server:${IMAGE_TAG:-latest}
     build:
@@ -204,7 +203,7 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
-
+  
   indexing_model_server:
     image: onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}
     build:
@@ -327,7 +326,7 @@ services:
       retries: 3
 
   langflow:
-    image: langflowai/langflow:latest
+    build: .
     container_name: Langflow
     user: root
     ports:
@@ -347,6 +346,10 @@ services:
       LANGFLOW_SUPERUSER: ${LANGFLOW_SUPERUSER:-langflow}
       LANGFLOW_SUPERUSER_PASSWORD: ${LANGFLOW_SUPERUSER_PASSWORD:-langflow}
       LANGFLOW_AUTO_LOGIN: False
+      LANGFLOW_CORS_ORIGINS: "*"
+      LANGFLOW_CORS_ALLOW_CREDENTIALS: true
+      LANGFLOW_CORS_ALLOW_HEADERS: "*"
+      LANGFLOW_CORS_ALLOW_METHODS: "*"
     volumes:
       - langflow:/var/lib/langflow:rw
     logging:
@@ -354,7 +357,7 @@ services:
       options:
         max-size: "200m"
         max-file: "3"  
-
+  
   unoconv:
     image: ghcr.io/unoconv/unoserver-docker
     volumes:

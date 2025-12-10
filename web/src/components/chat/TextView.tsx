@@ -14,6 +14,9 @@ import { Download, XIcon, ZoomIn, ZoomOut } from "lucide-react";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 
+// Импортируем mammoth для конвертации .docx
+import * as mammoth from "mammoth";
+
 interface TextViewProps {
   presentingDocument: MinimalOnyxDocument;
   onClose: () => void;
@@ -30,6 +33,7 @@ export default function TextView({
   const [fileName, setFileName] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [fileType, setFileType] = useState("application/octet-stream");
+  const [docxHtml, setDocxHtml] = useState(""); // Для HTML предпросмотра .docx
 
   // Detect if a given MIME type is one of the recognized markdown formats
   const isMarkdownFormat = (mimeType: string): boolean => {
@@ -40,16 +44,7 @@ export default function TextView({
       "text/x-rst",
       "text/x-org",
       "txt",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // .docx
     ];
-
-    // Special case: .docx is not a markdown format, but we want to support it for preview
-    if (
-      mimeType ===
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    ) {
-      return true;
-    }
 
     return markdownFormats.some((format) => mimeType.startsWith(format));
   };
@@ -64,6 +59,14 @@ export default function TextView({
 
     return imageFormats.some((format) => mimeType.startsWith(format));
   };
+
+  // Detect .docx files
+  const isDocxFormat = (mimeType: string): boolean => {
+    return mimeType.includes(
+      "vnd.openxmlformats-officedocument.wordprocessingml"
+    );
+  };
+
   // Detect if a given MIME type can be rendered in an <iframe>
   const isSupportedIframeFormat = (mimeType: string): boolean => {
     const supportedFormats = [
@@ -72,13 +75,23 @@ export default function TextView({
       "image/jpeg",
       "image/gif",
       "image/svg+xml",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // .docx
     ];
 
     return supportedFormats.some((format) => mimeType.startsWith(format));
   };
 
   const { document_id, semantic_identifier } = presentingDocument;
+  // Функция для конвертации .docx в HTML
+  const convertDocxToHtml = async (blob: Blob): Promise<string> => {
+    try {
+      const arrayBuffer = await blob.arrayBuffer();
+      const result = await mammoth.convertToHtml({ arrayBuffer });
+      return result.value;
+    } catch (error) {
+      console.error("Error converting DOCX to HTML:", error);
+      return "<p>Не удалось загрузить предпросмотр документа</p>";
+    }
+  };
 
   const fetchFile = useCallback(async () => {
     setIsLoading(true);
@@ -111,8 +124,13 @@ export default function TextView({
       }
       setFileType(contentType);
 
+      // Если это .docx файл - конвертируем в HTML для предпросмотра
+      if (isDocxFormat(contentType)) {
+        const html = await convertDocxToHtml(blob);
+        setDocxHtml(html);
+      }
       // If the final content type looks like markdown, read its text
-      if (isMarkdownFormat(contentType)) {
+      else if (isMarkdownFormat(contentType)) {
         const text = await blob.text();
         setFileContent(text);
       }
@@ -198,6 +216,12 @@ export default function TextView({
                     src={fileUrl}
                     alt={fileName}
                     className="w-full h-auto object-contain object-center"
+                  />
+                ) : isDocxFormat(fileType) ? (
+                  // Предпросмотр .docx как HTML
+                  <div
+                    className="w-full h-full p-6 overflow-y-auto bg-white"
+                    dangerouslySetInnerHTML={{ __html: docxHtml }}
                   />
                 ) : isSupportedIframeFormat(fileType) ? (
                   <iframe

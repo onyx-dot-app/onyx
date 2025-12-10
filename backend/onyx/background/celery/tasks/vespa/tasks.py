@@ -61,7 +61,6 @@ from onyx.utils.variable_functionality import fetch_versioned_implementation
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
 )
-from onyx.utils.variable_functionality import global_version
 from onyx.utils.variable_functionality import noop_fallback
 
 logger = setup_logger()
@@ -127,31 +126,30 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
 
         # check if any user groups are not synced
         lock_beat.reacquire()
-        if global_version.is_ee_version():
-            try:
-                fetch_user_groups = fetch_versioned_implementation(
-                    "onyx.db.user_group", "fetch_user_groups"
+        try:
+            fetch_user_groups = fetch_versioned_implementation(
+                "onyx.db.user_group", "fetch_user_groups"
+            )
+        except ModuleNotFoundError:
+            # Always exceptions on the MIT version, which is expected
+            # We shouldn't actually get here if the ee version check works
+            pass
+        else:
+            usergroup_ids: list[int] = []
+            with get_session_with_current_tenant() as db_session:
+                user_groups = fetch_user_groups(
+                    db_session=db_session, only_up_to_date=False
                 )
-            except ModuleNotFoundError:
-                # Always exceptions on the MIT version, which is expected
-                # We shouldn't actually get here if the ee version check works
-                pass
-            else:
-                usergroup_ids: list[int] = []
+
+                for usergroup in user_groups:
+                    usergroup_ids.append(usergroup.id)
+
+            for usergroup_id in usergroup_ids:
+                lock_beat.reacquire()
                 with get_session_with_current_tenant() as db_session:
-                    user_groups = fetch_user_groups(
-                        db_session=db_session, only_up_to_date=False
+                    try_generate_user_group_sync_tasks(
+                        self.app, usergroup_id, db_session, r, lock_beat, tenant_id
                     )
-
-                    for usergroup in user_groups:
-                        usergroup_ids.append(usergroup.id)
-
-                for usergroup_id in usergroup_ids:
-                    lock_beat.reacquire()
-                    with get_session_with_current_tenant() as db_session:
-                        try_generate_user_group_sync_tasks(
-                            self.app, usergroup_id, db_session, r, lock_beat, tenant_id
-                        )
 
         # 2/3: VALIDATE: TODO
 

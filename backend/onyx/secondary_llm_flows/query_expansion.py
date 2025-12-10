@@ -137,6 +137,7 @@ def thread_based_query_rephrase(
     llm: LLM | None = None,
     size_heuristic: int = 200,
     punctuation_heuristic: int = 10,
+    user_email: str | None = None,
 ) -> str:
     if not history_str:
         return user_query
@@ -149,7 +150,7 @@ def thread_based_query_rephrase(
 
     if llm is None:
         try:
-            llm, _ = get_default_llms()
+            llm, _ = get_default_llms(user_email=user_email)
         except GenAIDisabledException:
             # If Generative AI is turned off, just return the original query
             return user_query

@@ -12,6 +12,7 @@ from onyx.db.models import Tool as ToolDBModel
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
+from onyx.tools.tool_implementations.doc_generator.doc_generator_tool import DocGeneratorTool
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
     InternetSearchTool,
 )
@@ -65,6 +66,12 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
         description="Инструмент резюме",
         in_code_tool_id=ResumeTool.__name__,
         display_name=ResumeTool._DISPLAY_NAME
+    ),
+    InCodeToolInfo(
+        cls=DocGeneratorTool,
+        description="Инструмент для генерации документов Word по шаблону на основе JSON из Langflow.",
+        in_code_tool_id=DocGeneratorTool.__name__,
+        display_name=DocGeneratorTool._DISPLAY_NAME,
     ),
     # don't show the InternetSearchTool as an option if BING_API_KEY is not available
     *(

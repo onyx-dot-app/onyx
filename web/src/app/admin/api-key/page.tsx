@@ -167,6 +167,7 @@ function Main() {
             <TableHead>{t(k.NAME)}</TableHead>
             <TableHead>{t(k.API_KEY)}</TableHead>
             <TableHead>{t(k.ROLE)}</TableHead>
+            <TableHead>Новый пользователь</TableHead>
             <TableHead>{t(k.REGENERATE)}</TableHead>
             <TableHead>{t(k.DELETE)}</TableHead>
           </TableRow>
@@ -198,6 +199,7 @@ function Main() {
               <TableCell className="max-w-64">
                 {apiKey.api_key_role.toUpperCase()}
               </TableCell>
+              <TableCell>{apiKey.is_new_user ? t(k.YES) : t(k.NO)}</TableCell>
               <TableCell>
                 <div
                   className={`

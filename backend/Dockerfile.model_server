@@ -11,16 +11,16 @@ ARG ONYX_VERSION=0.0.0-dev
 ENV ONYX_VERSION=${ONYX_VERSION} \
     DANSWER_RUNNING_IN_DOCKER="true"
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
 
 COPY ./requirements/model_server.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir --upgrade \
-        --retries 5 \
-        --timeout 30 \
-        -r /tmp/requirements.txt
+RUN uv pip install --system --no-cache-dir --upgrade \
+        -r /tmp/requirements.txt && \
+    rm -rf ~/.cache/uv /tmp/*.txt
 
-RUN apt-get remove -y --allow-remove-essential perl-base && \ 
+RUN apt-get remove -y --allow-remove-essential perl-base && \
     apt-get autoremove -y
 
 # Pre-downloading models for setups with limited egress

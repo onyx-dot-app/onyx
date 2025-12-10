@@ -14,7 +14,6 @@ import {
   GroupsIconSkeleton,
   KeyIconSkeleton,
   ShieldIconSkeleton,
-  DatabaseIconSkeleton,
   SettingsIconSkeleton,
   PaintingIconSkeleton,
   ZoomInIconSkeleton,
@@ -301,6 +300,16 @@ export function ClientLayout({
                         },
                       ]
                     : []),
+                  {
+                    name: (
+                      <div className="flex">
+                        <ShieldIconSkeleton className="text-text-700" />
+                        <div className="ml-1">{t(k.VALIDATORS)}</div>
+                      </div>
+                    ),
+
+                    link: "/admin/guardrails",
+                  },
                 ],
               },
               ...(isCurator
@@ -458,27 +467,6 @@ export function ClientLayout({
 
                                 link: t(k.ADMIN_PERFORMANCE_USAGE),
                               },
-                              ...(settings?.settings.query_history_type !==
-                              t(k.DISABLED1)
-                                ? [
-                                    {
-                                      name: (
-                                        <div className="flex">
-                                          <DatabaseIconSkeleton
-                                            className="text-text-700"
-                                            size={18}
-                                          />
-
-                                          <div className="ml-1">
-                                            {t(k.QUERY_HISTORY)}
-                                          </div>
-                                        </div>
-                                      ),
-
-                                      link: t(k.ADMIN_PERFORMANCE_QUERY_HISTO),
-                                    },
-                                  ]
-                                : []),
                               {
                                 name: (
                                   <div className="flex">

@@ -1,6 +1,7 @@
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { DocumentSet, MinimalUserSnapshot } from "@/lib/types";
 import { KnowledgeMapAnswer } from "@/app/admin/documents/knowledge_maps/lib";
+import { APIKey } from "../guardrails/types";
 
 export interface StarterMessageBase {
   message: string;
@@ -40,7 +41,7 @@ export interface Persona {
   labels?: PersonaLabel[];
   owner: MinimalUserSnapshot | null;
   users: MinimalUserSnapshot[];
-  groups: number[];
+  groups: PersonaLabel[];
   document_sets: DocumentSet[];
   knowledge_maps: KnowledgeMapAnswer[];
   llm_model_provider_override?: string;
@@ -56,9 +57,16 @@ export interface FullPersona extends Persona {
   pipeline_id?: string;
   use_default?: boolean;
   template_file?: File | null;
+  selectedValidators?: Array<{ id: string; name: string }>;
+  validators?: APIKey[];
+  langflow_file_nodes?: LangflowFileNode[];
 }
 
 export interface PersonaLabel {
   id: number;
   name: string;
+}
+
+export interface LangflowFileNode {
+  file_node_id: string;
 }

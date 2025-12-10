@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import { Label, ManualErrorMessage } from "./admin/connectors/Field";
 import CreatableSelect from "react-select/creatable";
@@ -49,19 +51,47 @@ const MultiSelectDropdown = ({
 
   const handleCreateOption = async (inputValue: string) => {
     if (creatable) {
-      if (!onCreate) {
-        console.error("onCreate is required for creatable");
-        return;
-      }
-      try {
-        const newOption = await onCreate(inputValue);
-        if (newOption) {
-          setAllOptions([...options, newOption]);
-          setSelectedOptions([...selectedOptions, newOption]);
-          onChange([...selectedOptions, newOption]);
+      // Support entering multiple values separated by commas or spaces
+      const tokens = inputValue
+        .split(/[\s,]+/)
+        .map((t) => t.trim())
+        .filter((t) => t.length > 0);
+
+      // If a custom onCreate is provided, create each token through it; otherwise create locally
+      const createOne = async (token: string): Promise<Option | null> => {
+        if (onCreate) {
+          try {
+            const created = await onCreate(token);
+            return created || null;
+          } catch (error) {
+            console.error("Error creating option:", error);
+            return null;
+          }
         }
-      } catch (error) {
-        console.error("Error creating option:", error);
+        return { value: token, label: token };
+      };
+
+      const createdOptions: Option[] = [];
+      for (const token of tokens) {
+        const created = await createOne(token);
+        if (created) {
+          createdOptions.push(created);
+        }
+      }
+
+      if (createdOptions.length > 0) {
+        const newAll = [...allOptions];
+        const newSelected = [...selectedOptions];
+        createdOptions.forEach((opt) => {
+          // avoid duplicates by value
+          const existsInAll = newAll.some((o) => o.value === opt.value);
+          if (!existsInAll) newAll.push(opt);
+          const existsInSel = newSelected.some((o) => o.value === opt.value);
+          if (!existsInSel) newSelected.push(opt);
+        });
+        setAllOptions(newAll);
+        setSelectedOptions(newSelected);
+        onChange(newSelected);
       }
     } else {
       return;

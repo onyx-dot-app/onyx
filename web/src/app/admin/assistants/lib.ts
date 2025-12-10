@@ -1,5 +1,5 @@
 import { LLMProviderView } from "../configuration/llm/interfaces";
-import { Persona, StarterMessage } from "./interfaces";
+import { Persona, StarterMessage, LangflowFileNode } from "./interfaces";
 
 interface PersonaUpsertRequest {
   name: string;
@@ -34,6 +34,8 @@ interface PersonaUpsertRequest {
   pipeline_id?: string;
   use_default?: boolean;
   template_file?: string | null;
+  validator_ids?: string[];
+  langflow_file_nodes: LangflowFileNode[] | null;
 }
 
 export interface PersonaUpsertParameters {
@@ -66,6 +68,8 @@ export interface PersonaUpsertParameters {
   pipeline_id?: string;
   use_default?: boolean;
   template_file?: File | null;
+  validator_ids?: string[];
+  langflow_file_nodes: LangflowFileNode[];
 }
 
 export const createPersonaLabel = (name: string) => {
@@ -130,6 +134,8 @@ function buildPersonaUpsertRequest(
     pipeline_id,
     use_default,
     template_file,
+    validator_ids,
+    langflow_file_nodes,
   } = creationRequest;
 
   return {
@@ -167,6 +173,8 @@ function buildPersonaUpsertRequest(
     pipeline_id,
     use_default,
     template_file: template_file_id,
+    validator_ids,
+    langflow_file_nodes: langflow_file_nodes ?? null,
   };
 }
 

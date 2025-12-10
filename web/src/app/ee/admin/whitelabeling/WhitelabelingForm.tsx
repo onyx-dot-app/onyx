@@ -36,7 +36,7 @@ export function WhitelabelingForm() {
   const enterpriseSettings = settings.enterpriseSettings;
 
   async function updateEnterpriseSettings(newValues: EnterpriseSettings) {
-    const response = await fetch("/api/admin/enterprise-settings", {
+    const response = await fetch("/api/admin/smartsearch-settings", {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -99,7 +99,7 @@ export function WhitelabelingForm() {
             formData.append("file", selectedLogo);
             setSelectedLogo(null);
             const response = await fetch(
-              "/api/admin/enterprise-settings/logo",
+              "/api/admin/smartsearch-settings/logo",
               {
                 method: "PUT",
                 body: formData,
@@ -120,7 +120,7 @@ export function WhitelabelingForm() {
             formData.append("file", selectedLogotype);
             setSelectedLogotype(null);
             const response = await fetch(
-              "/api/admin/enterprise-settings/logo?is_logotype=true",
+              "/api/admin/smartsearch-settings/logo?is_logotype=true",
               {
                 method: "PUT",
                 body: formData,
@@ -154,7 +154,7 @@ export function WhitelabelingForm() {
               <div className="mt-3">
                 <SubLabel>{t(k.CURRENT_CUSTOM_LOGO)}</SubLabel>
                 <img
-                  src={"/api/enterprise-settings/logo?u=" + Date.now()}
+                  src={"/api/smartsearch-settings/logo?u=" + Date.now()}
                   alt="logo"
                   style={{ objectFit: "contain" }}
                   className="w-32 h-32 mb-10 mt-4"
@@ -291,7 +291,7 @@ export function WhitelabelingForm() {
                       <SubLabel>{t(k.CURRENT_CUSTOM_LOGOTYPE)}</SubLabel>
                       <img
                         src={
-                          "/api/enterprise-settings/logotype?u=" + Date.now()
+                          "/api/smartsearch-settings/logotype?u=" + Date.now()
                         }
                         alt="logotype"
                         style={{ objectFit: "contain" }}

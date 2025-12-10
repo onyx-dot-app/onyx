@@ -38,7 +38,7 @@ from onyx.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from onyx.configs.model_configs import GEN_AI_MAX_TOKENS
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.configs.model_configs import GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
-from onyx.file_processing.extract_file_text import read_pdf_file
+from onyx.file_processing.extract_file_text import extract_file_text, read_pdf_file
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.interfaces import LLM
@@ -150,11 +150,25 @@ def _build_content(
         except UnicodeDecodeError:
             # Try to decode as binary
             try:
-                file_content, _, _ = read_pdf_file(io.BytesIO(file.content))
-            except Exception:
+                # extract_file_text ожидает IO-поток
+                file_stream = io.BytesIO(file.content)
+
+                # Убедимся, что у файла есть имя для определения расширения
+                file_name_for_parser = file.filename or "unknown_file"
+
+                file_content = extract_file_text(
+                    file=file_stream,
+                    file_name=file_name_for_parser,
+                    break_on_unprocessable=False  # Не роняем все, если парсинг не удался
+                )
+
+                if not file_content:
+                     file_content = f"[Binary file content - {file.file_type} format - could not parse]"
+
+            except Exception as e:
                 file_content = f"[Binary file content - {file.file_type} format]"
                 logger.exception(
-                    f"Could not decode binary file content for file type: {file.file_type}"
+                    f"Could not decode binary file content for file type: {file.file_type} with error: {e}"
                 )
                 # logger.warning(f"Could not decode binary file content for file type: {file.file_type}")
         file_name_section = f"DOCUMENT: {file.filename}\n" if file.filename else ""

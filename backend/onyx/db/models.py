@@ -26,7 +26,7 @@ from sqlalchemy import ForeignKey
 from sqlalchemy import func
 from sqlalchemy import Index
 from sqlalchemy import Integer
-
+from sqlalchemy import PickleType
 from sqlalchemy import Sequence
 from sqlalchemy import String
 from sqlalchemy import Text
@@ -52,6 +52,7 @@ from onyx.db.enums import (
     IndexingMode,
     SyncType,
     SyncStatus,
+    ValidatorType,
 )
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import SearchFeedbackType
@@ -217,6 +218,9 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         "UserFolder", back_populates="user"
     )
     files: Mapped[list["UserFile"]] = relationship("UserFile", back_populates="user")
+    owned_validators: Mapped[list["Validator"]] = relationship(
+        "Validator", back_populates="user", foreign_keys="Validator.user_id"
+    )
 
     @validates("email")
     def validate_email(self, key: str, value: str) -> str:
@@ -243,6 +247,7 @@ class ApiKey(Base):
     api_key_display: Mapped[str] = mapped_column(String, unique=True)
     # the ID of the "user" who represents the access credentials for the API key
     user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
+    is_new_user: Mapped[bool] = mapped_column(Boolean, default=False)
     # the ID of the user who owns the key
     owner_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
@@ -318,6 +323,27 @@ class Persona__User(Base):
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), primary_key=True, nullable=True
+    )
+
+
+class Persona__Validator(Base):
+    __tablename__ = "persona__validator"
+
+    persona_id: Mapped[int] = mapped_column(
+        ForeignKey(
+            "persona.id",
+            ondelete="CASCADE",
+            name="persona__validator_persona_id_fkey",
+        ),
+        primary_key=True,
+    )
+    validator_id: Mapped[int] = mapped_column(
+        ForeignKey(
+            "validator.id",
+            ondelete="CASCADE",
+            name="persona__validator_validator_id_fkey",
+        ),
+        primary_key=True,
     )
 
 
@@ -1173,6 +1199,58 @@ class DocumentByConnectorCredentialPair(Base):
     )
 
 
+class Validator(Base):
+    __tablename__ = "validator"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=True)
+
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str] = mapped_column(String, nullable=True)
+    validator_type: Mapped[ValidatorType] = mapped_column(
+        Enum(ValidatorType, native_enum=False, length=30),
+        nullable=False,
+    )
+    config: Mapped[Any] = mapped_column(postgresql.JSONB(), nullable=False)
+
+    # Использует ли валидатор LLM
+    include_llm: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Подключенный к валидатору LLM-провайдер
+    llm_provider_id: Mapped[int | None] = mapped_column(
+        ForeignKey("llm_provider.id"),
+        nullable=True  # Опционально, т.к. не все валидаторы используют LLM
+    )
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), server_default=func.now()
+    )
+
+    # cвязь с пользователем-владельцем
+    user: Mapped[User | None] = relationship(
+        "User",
+        back_populates="owned_validators",
+        foreign_keys=[user_id]
+    )
+    # связь валидатора с llm-провайдером
+    llm_provider: Mapped[Optional["LLMProvider"]] = relationship(
+        "LLMProvider",
+        back_populates="validators",
+        foreign_keys=[llm_provider_id]
+    )
+    # cвязь с ассистентом
+    personas: Mapped[list["Persona"]] = relationship(
+        "Persona",
+        secondary="persona__validator",
+        back_populates="validators"
+    )
+
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_validator_name"),
+    )
+
 """
 Messages Tables
 """
@@ -1591,6 +1669,11 @@ class LLMProvider(Base):
         secondary="llm_provider__user_group",
         viewonly=True,
     )
+    validators: Mapped[list["Validator"]] = relationship(
+        "Validator",
+        back_populates="llm_provider",
+        foreign_keys="Validator.llm_provider_id"
+    )
 
 
 class CloudEmbeddingProvider(Base):
@@ -1861,6 +1944,19 @@ class Persona(Base):
         secondary=Persona__PersonaLabel.__table__,
         back_populates="personas",
     )
+    # Guardrails validators
+    validators: Mapped[list["Validator"]] = relationship(
+        "Validator",
+        secondary="persona__validator",
+        back_populates="personas"
+    )
+
+    langflow_file_nodes: Mapped[list["LangflowFileNode"]] = relationship(
+    "LangflowFileNode",
+    back_populates="persona",
+    cascade="all, delete-orphan",
+    )
+
     # Default personas loaded via yaml cannot have the same name
     __table_args__ = (
         Index(
@@ -2537,3 +2633,13 @@ class KnowledgeMapAnswer(Base):
     knowledge_map_id: Mapped[int] = mapped_column(ForeignKey("knowledge_map.id", ondelete="CASCADE"))
     topic: Mapped[str] = mapped_column(String)
     answer: Mapped[str] = mapped_column(String)
+
+
+class LangflowFileNode(Base):
+    __tablename__ = "langflow_file_node"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    file_node_id: Mapped[str] = mapped_column(String, nullable=False)
+
+    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id", ondelete="CASCADE"))
+    persona: Mapped["Persona"] = relationship(back_populates="langflow_file_nodes")

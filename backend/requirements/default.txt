@@ -15,10 +15,12 @@ fastapi==0.115.12
 fastapi-users==14.0.1
 fastapi-users-db-sqlalchemy==5.0.0
 filelock==3.15.4
+fuzzysearch==0.8.0
 google-api-python-client==2.86.0
 google-cloud-aiplatform==1.58.0
 google-auth-httplib2==0.1.0
 google-auth-oauthlib==1.0.0
+guardrails-ai==0.6.7
 # GPT4All library has issues running on Macs and python:3.11.4-slim-bookworm
 # will reintroduce this when library version catches up
 # gpt4all==2.0.2
@@ -52,6 +54,8 @@ openai==1.75.0
 openpyxl==3.1.2
 passlib==1.7.4
 playwright==1.41.2
+presidio_analyzer==2.2.360
+presidio_anonymizer==2.2.360
 psutil==5.9.5
 psycopg2-binary==2.9.9
 puremagic==1.28
@@ -105,4 +109,3 @@ docxtpl==0.20.0
 minio==7.2.15
 APScheduler==3.11.0
 pyTelegramBotAPI==4.27.0
-vllm

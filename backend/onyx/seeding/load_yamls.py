@@ -6,6 +6,7 @@ from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.configs.chat_configs import PERSONAS_YAML
 from onyx.configs.chat_configs import PROMPTS_YAML
 from onyx.configs.chat_configs import USER_FOLDERS_YAML
+from onyx.configs.chat_configs import VALIDATORS_YAML
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.document_set import get_or_create_document_set_by_name
 from onyx.db.input_prompt import insert_input_prompt_if_not_exists
@@ -13,10 +14,14 @@ from onyx.db.models import DocumentSet as DocumentSetDBModel
 from onyx.db.models import Persona
 from onyx.db.models import Prompt as PromptDBModel
 from onyx.db.models import Tool as ToolDBModel
+from onyx.db.models import Validator
 from onyx.db.persona import upsert_persona
 from onyx.db.prompts import get_prompt_by_name
 from onyx.db.prompts import upsert_prompt
 from onyx.db.user_documents import upsert_user_folder
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 def load_user_folders_from_yaml(
@@ -196,6 +201,80 @@ def load_personas_from_yaml(
         )
 
 
+def load_validators_templates_from_yaml(
+    db_session: Session,
+    validators_yaml: str = VALIDATORS_YAML,
+) -> None:
+    """Создаёт новые или обновляет существующие
+     шаблоны валидаторов при инициализации системы
+     """
+
+    with open(validators_yaml, "r") as file:
+        data = yaml.safe_load(file)
+
+    all_validators_templates = data.get("validators", [])
+
+    for validator_template in all_validators_templates:
+
+        try:
+            validator_id = validator_template["id"]
+            existing_validator: Validator | None = None
+
+            if validator_id is not None:
+                existing_validator = (
+                    db_session.query(Validator)
+                    .filter(Validator.id == validator_id)
+                    .first()
+                )
+
+            # Обновление шаблона валидатора
+            if existing_validator:
+                existing_validator.name = validator_template["name"]
+                existing_validator.description = validator_template.get("description")
+                existing_validator.validator_type = validator_template["validator_type"]
+                existing_validator.config = validator_template["config"]
+                existing_validator.include_llm = validator_template["include_llm"]
+
+                db_session.commit()
+
+                logger.info(
+                    "Обновлён шаблон валидатора (name: %s, id: %s)",
+                    validator_template["name"],
+                    validator_id
+                )
+
+            # Создание шаблона валидатора
+            else:
+                validator = Validator(
+                    id=validator_id,
+                    name=validator_template["name"],
+                    description=validator_template.get("description"),
+                    validator_type=validator_template["validator_type"],
+                    config=validator_template["config"],
+                    include_llm=validator_template["include_llm"],
+                )
+
+                db_session.add(validator)
+                db_session.commit()
+
+                logger.info(
+                    "Создан шаблон валидатора (name: %s, id: %s)",
+                    validator_template["name"],
+                    validator_id
+                )
+
+        except Exception as e:
+            db_session.rollback()
+            logger.error(
+                "Ошибка при обработке шаблона валидатора из %s (name: %s, id: %s): %s",
+                validators_yaml,
+                validator_template.get("name", "UNKNOWN"),
+                validator_template.get("id", "UNKNOWN"),
+                repr(e),
+            )
+            continue
+
+
 def load_chat_yamls(
     db_session: Session,
     prompt_yaml: str = PROMPTS_YAML,
@@ -206,3 +285,4 @@ def load_chat_yamls(
     load_personas_from_yaml(db_session, personas_yaml)
     load_input_prompts_from_yaml(db_session, input_prompts_yaml)
     load_user_folders_from_yaml(db_session)
+    load_validators_templates_from_yaml(db_session)

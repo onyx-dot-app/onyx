@@ -24,6 +24,7 @@ from onyx.configs.constants import NotificationType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
 from onyx.db.models import DocumentSet
+from onyx.db.models import LangflowFileNode
 from onyx.db.models import Persona
 from onyx.db.models import Persona__User
 from onyx.db.models import Persona__UserGroup
@@ -36,6 +37,7 @@ from onyx.db.models import User__UserGroup
 from onyx.db.models import UserFile
 from onyx.db.models import UserFolder
 from onyx.db.models import UserGroup
+from onyx.db.models import Validator
 from onyx.db.notification import create_notification
 from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import PersonaSharedNotificationData
@@ -255,6 +257,8 @@ def create_update_persona(
             user_folder_ids=create_persona_request.user_folder_ids,
             pipeline_id=create_persona_request.pipeline_id,
             template_file=create_persona_request.template_file,
+            validator_ids=create_persona_request.validator_ids,
+            langflow_file_nodes=create_persona_request.langflow_file_nodes,
         )
 
         versioned_make_persona_private = fetch_versioned_implementation(
@@ -451,6 +455,8 @@ def upsert_persona(
     chunks_below: int = CONTEXT_CHUNKS_BELOW,
     pipeline_id: str | None = None,
     template_file: bytes | None = None,
+    validator_ids: list[int] | None = None,
+    langflow_file_nodes: list[dict] | None = None,
 ) -> Persona:
     """
     NOTE: This operation cannot update persona configuration options that
@@ -513,6 +519,33 @@ def upsert_persona(
         if not user_folders and user_folder_ids:
             raise ValueError("user_folders not found")
 
+    # Запрос и выдача объектов Validator по переданным id
+    validators = None
+    if validator_ids is not None:
+        validators = (
+            db_session.query(Validator)
+            .filter(Validator.id.in_(validator_ids))
+            .all()  # загружаем объекты Validator по переданным validator_ids
+        )
+        if (
+            not validators and validator_ids
+        ):  # проверка, что все запрошенные валидаторы существуют
+            raise ValueError("validators not found")
+
+        # Проверка подключения к ассистенту валидаторов
+        # одного типа (с одинаковой функциональностью)
+        seen = set()
+        for validator in validators:
+            if validator.validator_type in seen:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Вы пытаетесь подключить несколько типов валидаторов "
+                        f"с одинаковой функциональностью: {validator.name}"
+                    ),
+                )
+            seen.add(validator.validator_type)
+
     # Fetch and attach prompts by IDs
     prompts = None
     if prompt_ids is not None:
@@ -534,6 +567,7 @@ def upsert_persona(
     if tools:
         validate_persona_tools(tools)
 
+    # если Persona (ассистент) существует, то есть = редактирование ассистента
     if existing_persona:
         # Built-in personas can only be updated through YAML configuration.
         # This ensures that core system personas are not modified unintentionally.
@@ -590,6 +624,24 @@ def upsert_persona(
             existing_persona.user_folders.clear()
             existing_persona.user_folders = user_folders or []
 
+        if langflow_file_nodes is not None:
+            # Удаляем старые связи
+            db_session.query(LangflowFileNode).filter(
+                LangflowFileNode.persona_id == existing_persona.id
+            ).delete(synchronize_session=False)
+            # Добавляем новые
+            existing_persona.langflow_file_nodes = [
+                LangflowFileNode(file_node_id=node["file_node_id"])
+                for node in langflow_file_nodes
+            ]
+
+        # Если передали validator_ids:
+        # - удаляем старые связи ассистента с валидаторами, то есть отвязываем их;
+        # - далее устанавливаем новые связи.
+        if validator_ids is not None:
+            existing_persona.validators.clear()
+            existing_persona.validators = validators or []
+
         # We should only update display priority if it is not already set
         if existing_persona.display_priority is None:
             existing_persona.display_priority = display_priority
@@ -602,6 +654,7 @@ def upsert_persona(
 
         persona = existing_persona
 
+    # если Persona (ассистент) не существует, то есть = создание нового ассистента
     else:
         if not prompts:
             raise ValueError(
@@ -642,6 +695,15 @@ def upsert_persona(
             labels=labels or [],
             pipeline_id=pipeline_id,
             template_file=template_file,
+            validators=validators or [],
+            langflow_file_nodes=(
+                [
+                    LangflowFileNode(file_node_id=node["file_node_id"])
+                    for node in langflow_file_nodes
+                ]
+                if langflow_file_nodes
+                else []
+            ),
         )
         db_session.add(new_persona)
         persona = new_persona
@@ -725,6 +787,7 @@ def get_persona_by_id(
         .outerjoin(Persona.users)
         .outerjoin(UserGroup.user_group_relationships)
         .where(Persona.id == persona_id)
+        .options(selectinload(Persona.langflow_file_nodes))
     )
 
     if not include_deleted:

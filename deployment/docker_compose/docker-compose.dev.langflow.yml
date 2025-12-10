@@ -4,8 +4,11 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
+      args:
+        - GUARDRAILS_TOKEN=${GUARDRAILS_TOKEN}
     command: >
-      /bin/sh -c "alembic upgrade head &&
+      /bin/sh -c "
+      alembic upgrade head &&
       echo \"Starting Onyx Api Server\" &&
       uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
     depends_on:
@@ -14,120 +17,22 @@ services:
       - cache
       - inference_model_server
     restart: always
+    env_file:
+      - .env
     environment:
-      - CUSTOM_ANALYTICS_SECRET_KEY=${CUSTOM_ANALYTICS_SECRET_KEY}
-      # Langfuse
-      - LANGFUSE_HOST=${LANGFUSE_HOST:-http://217.198.9.110:3004}
-      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-pk-lf-74076f76-9e36-4a65-93f0-dfc78c17b0ce}
-      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-sk-lf-7535a7c1-e421-4587-97d0-864aaa83ef23}
-      # Auth Settings
-      - AUTH_TYPE=${AUTH_TYPE:-disabled}
-      - SESSION_EXPIRE_TIME_SECONDS=${SESSION_EXPIRE_TIME_SECONDS:-}
-      - ENCRYPTION_KEY_SECRET=${ENCRYPTION_KEY_SECRET:-}
-      - VALID_EMAIL_DOMAINS=${VALID_EMAIL_DOMAINS:-}
-      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID:-}
-      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET:-}
-      - REQUIRE_EMAIL_VERIFICATION=${REQUIRE_EMAIL_VERIFICATION:-}
-      - SMTP_SERVER=${SMTP_SERVER:-} # For sending verification emails, if unspecified then defaults to 'smtp.gmail.com'
-      - SMTP_PORT=${SMTP_PORT:-587} # For sending verification emails, if unspecified then defaults to '587'
-      - SMTP_USER=${SMTP_USER:-}
-      - SMTP_PASS=${SMTP_PASS:-}
-      - ENABLE_EMAIL_INVITES=${ENABLE_EMAIL_INVITES:-} # If enabled, will send users (using SMTP settings) an email to join the workspace
-      - EMAIL_FROM=${EMAIL_FROM:-}
-      - OAUTH_CLIENT_ID=${OAUTH_CLIENT_ID:-}
-      - OAUTH_CLIENT_SECRET=${OAUTH_CLIENT_SECRET:-}
-      - OPENID_CONFIG_URL=${OPENID_CONFIG_URL:-}
-      - TRACK_EXTERNAL_IDP_EXPIRY=${TRACK_EXTERNAL_IDP_EXPIRY:-}
-      - CORS_ALLOWED_ORIGIN=${CORS_ALLOWED_ORIGIN:-}
-      - INTEGRATION_TESTS_MODE=${INTEGRATION_TESTS_MODE:-}
-      # Gen AI Settings
-      - GEN_AI_MAX_TOKENS=${GEN_AI_MAX_TOKENS:-}
-      - QA_TIMEOUT=${QA_TIMEOUT:-}
-      - MAX_CHUNKS_FED_TO_CHAT=${MAX_CHUNKS_FED_TO_CHAT:-}
-      - DISABLE_LLM_CHOOSE_SEARCH=${DISABLE_LLM_CHOOSE_SEARCH:-}
-      - DISABLE_LLM_QUERY_REPHRASE=${DISABLE_LLM_QUERY_REPHRASE:-}
-      - DISABLE_GENERATIVE_AI=${DISABLE_GENERATIVE_AI:-}
-      - DISABLE_LITELLM_STREAMING=${DISABLE_LITELLM_STREAMING:-}
-      - LITELLM_EXTRA_HEADERS=${LITELLM_EXTRA_HEADERS:-}
-      - BING_API_KEY=${BING_API_KEY:-}
-      - DISABLE_LLM_DOC_RELEVANCE=${DISABLE_LLM_DOC_RELEVANCE:-}
-      - GEN_AI_API_KEY=${GEN_AI_API_KEY:-}
-      # if set, allows for the use of the token budget system
-      - TOKEN_BUDGET_GLOBALLY_ENABLED=${TOKEN_BUDGET_GLOBALLY_ENABLED:-}
-      # Query Options
-      - DOC_TIME_DECAY=${DOC_TIME_DECAY:-} # Recency Bias for search results, decay at 1 / (1 + DOC_TIME_DECAY * x years)
-      - HYBRID_ALPHA=${HYBRID_ALPHA:-} # Hybrid Search Alpha (0 for entirely keyword, 1 for entirely vector)
-      - EDIT_KEYWORD_QUERY=${EDIT_KEYWORD_QUERY:-}
-      - MULTILINGUAL_QUERY_EXPANSION=${MULTILINGUAL_QUERY_EXPANSION:-}
-      - LANGUAGE_HINT=${LANGUAGE_HINT:-}
-      - LANGUAGE_CHAT_NAMING_HINT=${LANGUAGE_CHAT_NAMING_HINT:-}
-      - QA_PROMPT_OVERRIDE=${QA_PROMPT_OVERRIDE:-}
-      # Other services
+      - AUTH_TYPE=${AUTH_TYPE:-oidc}
       - POSTGRES_HOST=relational_db
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
-      - POSTGRES_DEFAULT_SCHEMA=${POSTGRES_DEFAULT_SCHEMA:-}
-      - POSTGRES_USE_NULL_POOL=${POSTGRES_USE_NULL_POOL:-}
-      - POSTGRES_API_SERVER_POOL_SIZE=${POSTGRES_API_SERVER_POOL_SIZE:-}
-      - POSTGRES_API_SERVER_POOL_OVERFLOW=${POSTGRES_API_SERVER_POOL_OVERFLOW:-}
-      - POSTGRES_IDLE_SESSIONS_TIMEOUT=${POSTGRES_IDLE_SESSIONS_TIMEOUT:-}
-      - POSTGRES_POOL_RECYCLE=${POSTGRES_POOL_RECYCLE:-}
       - VESPA_HOST=index
       - REDIS_HOST=cache
-      - WEB_DOMAIN=${WEB_DOMAIN:-} # For frontend redirect auth purpose
-      # Don't change the NLP model configs unless you know what you're doing
-      - EMBEDDING_BATCH_SIZE=${EMBEDDING_BATCH_SIZE:-}
-      - DOCUMENT_ENCODER_MODEL=${DOCUMENT_ENCODER_MODEL:-}
-      - DOC_EMBEDDING_DIM=${DOC_EMBEDDING_DIM:-}
-      - NORMALIZE_EMBEDDINGS=${NORMALIZE_EMBEDDINGS:-}
-      - ASYM_QUERY_PREFIX=${ASYM_QUERY_PREFIX:-}
-      - DISABLE_RERANK_FOR_STREAMING=${DISABLE_RERANK_FOR_STREAMING:-}
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
-      - MODEL_SERVER_PORT=${MODEL_SERVER_PORT:-}
-      # Leave this on pretty please? Nothing sensitive is collected!
-      # https://docs.onyx.app/more/telemetry
-      - DISABLE_TELEMETRY=${DISABLE_TELEMETRY:-}
-      - LOG_LEVEL=${LOG_LEVEL:-info} # Set to debug to get more fine-grained logs
-      - LOG_ALL_MODEL_INTERACTIONS=${LOG_ALL_MODEL_INTERACTIONS:-} # LiteLLM Verbose Logging
-      # Log all of Onyx prompts and interactions with the LLM
-      - LOG_DANSWER_MODEL_INTERACTIONS=${LOG_DANSWER_MODEL_INTERACTIONS:-}
-      - LOG_INDIVIDUAL_MODEL_TOKENS=${LOG_INDIVIDUAL_MODEL_TOKENS:-}
-      # If set to `true` will enable additional logs about Vespa query performance
-      # (time spent on finding the right docs + time spent fetching summaries from disk)
-      - LOG_VESPA_TIMING_INFORMATION=${LOG_VESPA_TIMING_INFORMATION:-}
-      - LOG_ENDPOINT_LATENCY=${LOG_ENDPOINT_LATENCY:-}
-      - LOG_POSTGRES_LATENCY=${LOG_POSTGRES_LATENCY:-}
-      - LOG_POSTGRES_CONN_COUNTS=${LOG_POSTGRES_CONN_COUNTS:-}
-      - CELERY_BROKER_POOL_LIMIT=${CELERY_BROKER_POOL_LIMIT:-}
-      - LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS=${LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS:-}
-      # Egnyte OAuth Configs
-      - EGNYTE_CLIENT_ID=${EGNYTE_CLIENT_ID:-}
-      - EGNYTE_CLIENT_SECRET=${EGNYTE_CLIENT_SECRET:-}
-      - EGNYTE_LOCALHOST_OVERRIDE=${EGNYTE_LOCALHOST_OVERRIDE:-}
-      # Lienar OAuth Configs
-      - LINEAR_CLIENT_ID=${LINEAR_CLIENT_ID:-}
-      - LINEAR_CLIENT_SECRET=${LINEAR_CLIENT_SECRET:-}
-
-      # Demo purposes
-      - MOCK_CONNECTOR_FILE_PATH=${MOCK_CONNECTOR_FILE_PATH:-}
-
-      # Analytics Configs
-      - SENTRY_DSN=${SENTRY_DSN:-}
-
-      # Chat Configs
-      - HARD_DELETE_CHATS=${HARD_DELETE_CHATS:-}
-
-      # Enables the use of bedrock models or IAM Auth
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
-      - AWS_REGION_NAME=${AWS_REGION_NAME:-}
-
-      # Enterprise Edition only
-      - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${ENABLE_PAID_ENTERPRISE_EDITION_FEATURES:-false}
-      - API_KEY_HASH_ROUNDS=${API_KEY_HASH_ROUNDS:-}
-      # Seeding configuration
-      - USE_IAM_AUTH=${USE_IAM_AUTH:-}
-      - ONYX_QUERY_HISTORY_TYPE=${ONYX_QUERY_HISTORY_TYPE:-}
+      - USE_IAM_AUTH=${USE_IAM_AUTH}
+      - AWS_REGION_NAME=${AWS_REGION_NAME-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY-}
+      - LANGFUSE_HOST=${LANGFUSE_HOST:-http://host.docker.internal:3004}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-pk-lf-f526c658-9741-48fa-94cf-a5204927476a}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-sk-lf-1a62298f-3d5f-4a22-b48d-d8cdd24d3533}
+      - GUARDRAILS_TOKEN=${GUARDRAILS_TOKEN}
     # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -138,15 +43,16 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
-    # optional, only for debugging purposes
     volumes:
-      - onyx_api_server_logs:/var/log
+      - api_server_logs:/var/log
 
   background:
     image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile
+      args:
+        - GUARDRAILS_TOKEN=${GUARDRAILS_TOKEN}
     command: >
       /bin/sh -c "
       if [ -f /etc/ssl/certs/custom-ca.crt ]; then
@@ -160,115 +66,27 @@ services:
       - inference_model_server
       - indexing_model_server
     restart: always
+    env_file:
+      - .env
     environment:
-      - ENCRYPTION_KEY_SECRET=${ENCRYPTION_KEY_SECRET:-}
-      - JWT_PUBLIC_KEY_URL=${JWT_PUBLIC_KEY_URL:-} # used for JWT authentication of users via API
-      # Gen AI Settings (Needed by OnyxBot)
-      - GEN_AI_MAX_TOKENS=${GEN_AI_MAX_TOKENS:-}
-      - QA_TIMEOUT=${QA_TIMEOUT:-}
-      - MAX_CHUNKS_FED_TO_CHAT=${MAX_CHUNKS_FED_TO_CHAT:-}
-      - DISABLE_LLM_CHOOSE_SEARCH=${DISABLE_LLM_CHOOSE_SEARCH:-}
-      - DISABLE_LLM_QUERY_REPHRASE=${DISABLE_LLM_QUERY_REPHRASE:-}
-      - DISABLE_GENERATIVE_AI=${DISABLE_GENERATIVE_AI:-}
-      - GENERATIVE_MODEL_ACCESS_CHECK_FREQ=${GENERATIVE_MODEL_ACCESS_CHECK_FREQ:-}
-      - DISABLE_LITELLM_STREAMING=${DISABLE_LITELLM_STREAMING:-}
-      - LITELLM_EXTRA_HEADERS=${LITELLM_EXTRA_HEADERS:-}
-      - GEN_AI_API_KEY=${GEN_AI_API_KEY:-}
-      - BING_API_KEY=${BING_API_KEY:-}
-      # Query Options
-      - DOC_TIME_DECAY=${DOC_TIME_DECAY:-} # Recency Bias for search results, decay at 1 / (1 + DOC_TIME_DECAY * x years)
-      - HYBRID_ALPHA=${HYBRID_ALPHA:-} # Hybrid Search Alpha (0 for entirely keyword, 1 for entirely vector)
-      - EDIT_KEYWORD_QUERY=${EDIT_KEYWORD_QUERY:-}
-      - MULTILINGUAL_QUERY_EXPANSION=${MULTILINGUAL_QUERY_EXPANSION:-}
-      - LANGUAGE_HINT=${LANGUAGE_HINT:-}
-      - LANGUAGE_CHAT_NAMING_HINT=${LANGUAGE_CHAT_NAMING_HINT:-}
-      - QA_PROMPT_OVERRIDE=${QA_PROMPT_OVERRIDE:-}
-      # Other Services
+      - AUTH_TYPE=${AUTH_TYPE:-oidc}
       - POSTGRES_HOST=relational_db
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
-      - POSTGRES_DB=${POSTGRES_DB:-}
-      - POSTGRES_DEFAULT_SCHEMA=${POSTGRES_DEFAULT_SCHEMA:-}
-      - POSTGRES_USE_NULL_POOL=${POSTGRES_USE_NULL_POOL:-}
       - VESPA_HOST=index
       - REDIS_HOST=cache
-      - WEB_DOMAIN=${WEB_DOMAIN:-} # For frontend redirect auth purpose for OAuth2 connectors
-      # Don't change the NLP model configs unless you know what you're doing
-      - DOCUMENT_ENCODER_MODEL=${DOCUMENT_ENCODER_MODEL:-}
-      - DOC_EMBEDDING_DIM=${DOC_EMBEDDING_DIM:-}
-      - NORMALIZE_EMBEDDINGS=${NORMALIZE_EMBEDDINGS:-}
-      - ASYM_QUERY_PREFIX=${ASYM_QUERY_PREFIX:-} # Needed by OnyxBot
-      - ASYM_PASSAGE_PREFIX=${ASYM_PASSAGE_PREFIX:-}
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
-      - MODEL_SERVER_PORT=${MODEL_SERVER_PORT:-}
       - INDEXING_MODEL_SERVER_HOST=${INDEXING_MODEL_SERVER_HOST:-indexing_model_server}
-      # Indexing Configs
-      - VESPA_SEARCHER_THREADS=${VESPA_SEARCHER_THREADS:-}
-      - NUM_INDEXING_WORKERS=${NUM_INDEXING_WORKERS:-}
-      - ENABLED_CONNECTOR_TYPES=${ENABLED_CONNECTOR_TYPES:-}
-      - DISABLE_INDEX_UPDATE_ON_SWAP=${DISABLE_INDEX_UPDATE_ON_SWAP:-}
-      - DASK_JOB_CLIENT_ENABLED=${DASK_JOB_CLIENT_ENABLED:-}
-      - CONTINUE_ON_CONNECTOR_FAILURE=${CONTINUE_ON_CONNECTOR_FAILURE:-}
-      - EXPERIMENTAL_CHECKPOINTING_ENABLED=${EXPERIMENTAL_CHECKPOINTING_ENABLED:-}
-      - CONFLUENCE_CONNECTOR_LABELS_TO_SKIP=${CONFLUENCE_CONNECTOR_LABELS_TO_SKIP:-}
-      - JIRA_CONNECTOR_LABELS_TO_SKIP=${JIRA_CONNECTOR_LABELS_TO_SKIP:-}
-      - WEB_CONNECTOR_VALIDATE_URLS=${WEB_CONNECTOR_VALIDATE_URLS:-}
-      - JIRA_API_VERSION=${JIRA_API_VERSION:-}
-      - GONG_CONNECTOR_START_TIME=${GONG_CONNECTOR_START_TIME:-}
-      - NOTION_CONNECTOR_ENABLE_RECURSIVE_PAGE_LOOKUP=${NOTION_CONNECTOR_ENABLE_RECURSIVE_PAGE_LOOKUP:-}
-      - GITHUB_CONNECTOR_BASE_URL=${GITHUB_CONNECTOR_BASE_URL:-}
-      - MAX_DOCUMENT_CHARS=${MAX_DOCUMENT_CHARS:-}
-      - MAX_FILE_SIZE_BYTES=${MAX_FILE_SIZE_BYTES:-}
-      # Egnyte OAuth Configs
-      - EGNYTE_CLIENT_ID=${EGNYTE_CLIENT_ID:-}
-      - EGNYTE_CLIENT_SECRET=${EGNYTE_CLIENT_SECRET:-}
-      - EGNYTE_LOCALHOST_OVERRIDE=${EGNYTE_LOCALHOST_OVERRIDE:-}
-      # Lienar OAuth Configs
-      - LINEAR_CLIENT_ID=${LINEAR_CLIENT_ID:-}
-      - LINEAR_CLIENT_SECRET=${LINEAR_CLIENT_SECRET:-}
-      # Celery Configs (defaults are set in the supervisord.conf file.
-      # prefer doing that to have one source of defaults)
-      - CELERY_WORKER_INDEXING_CONCURRENCY=${CELERY_WORKER_INDEXING_CONCURRENCY:-}
-      - CELERY_WORKER_LIGHT_CONCURRENCY=${CELERY_WORKER_LIGHT_CONCURRENCY:-}
-      - CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER=${CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER:-}
-
-      # Onyx SlackBot Configs
-      - DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER=${DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER:-}
-      - DANSWER_BOT_FEEDBACK_VISIBILITY=${DANSWER_BOT_FEEDBACK_VISIBILITY:-}
-      - DANSWER_BOT_DISPLAY_ERROR_MSGS=${DANSWER_BOT_DISPLAY_ERROR_MSGS:-}
-      - DANSWER_BOT_RESPOND_EVERY_CHANNEL=${DANSWER_BOT_RESPOND_EVERY_CHANNEL:-}
-      - DANSWER_BOT_DISABLE_COT=${DANSWER_BOT_DISABLE_COT:-} # Currently unused
-      - NOTIFY_SLACKBOT_NO_ANSWER=${NOTIFY_SLACKBOT_NO_ANSWER:-}
-      - DANSWER_BOT_MAX_QPM=${DANSWER_BOT_MAX_QPM:-}
-      - DANSWER_BOT_MAX_WAIT_TIME=${DANSWER_BOT_MAX_WAIT_TIME:-}
-      # Logging
-      # Leave this on pretty please? Nothing sensitive is collected!
-      # https://docs.onyx.app/more/telemetry
-      - DISABLE_TELEMETRY=${DISABLE_TELEMETRY:-}
-      - LOG_LEVEL=${LOG_LEVEL:-info} # Set to debug to get more fine-grained logs
-      - LOG_ALL_MODEL_INTERACTIONS=${LOG_ALL_MODEL_INTERACTIONS:-} # LiteLLM Verbose Logging
-      # Log all of Onyx prompts and interactions with the LLM
-      - LOG_DANSWER_MODEL_INTERACTIONS=${LOG_DANSWER_MODEL_INTERACTIONS:-}
-      - LOG_INDIVIDUAL_MODEL_TOKENS=${LOG_INDIVIDUAL_MODEL_TOKENS:-}
-      - LOG_VESPA_TIMING_INFORMATION=${LOG_VESPA_TIMING_INFORMATION:-}
-
-      # Analytics Configs
-      - SENTRY_DSN=${SENTRY_DSN:-}
-
-      # Enterprise Edition stuff
-      - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${ENABLE_PAID_ENTERPRISE_EDITION_FEATURES:-false}
-      - USE_IAM_AUTH=${USE_IAM_AUTH:-}
-      - AWS_REGION_NAME=${AWS_REGION_NAME:-}
+      - USE_IAM_AUTH=${USE_IAM_AUTH}
+      - AWS_REGION_NAME=${AWS_REGION_NAME-}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID-}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY-}
+      - GUARDRAILS_TOKEN=${GUARDRAILS_TOKEN}
     # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    # optional, only for debugging purposes
     volumes:
-      - onyx_background_logs:/var/log
+      - background_logs:/var/log
     logging:
       driver: json-file
       options:
@@ -279,10 +97,47 @@ services:
     # If present, the custom CA certificate is mounted as a volume
     # The container checks for its existence and updates the system's CA certificates
     # This allows for secure communication with services using custom SSL certificates
-    # Optional volume mount for CA certificate
     # volumes:
     #   # Maps to the CA_CERT_PATH environment variable in the Dockerfile
     #   - ${CA_CERT_PATH:-./custom-ca.crt}:/etc/ssl/certs/custom-ca.crt:ro
+
+  telegram_bot:
+    image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+      args:
+        - GUARDRAILS_TOKEN=${GUARDRAILS_TOKEN}
+    command: >
+      /bin/sh -c "
+      echo \"Starting Telegram Bot\" &&
+      python -m telegram"
+    depends_on:
+      - relational_db
+      - index
+      - cache
+      - inference_model_server
+      - api_server
+    restart: always
+    env_file:
+      - .env
+    environment:
+      - TELEGRAM_TOKEN=${TELEGRAM_TOKEN:-8118492433:AAGwULCZzN0_6hSQZ5_HJ7Pf9YUSiJTtqgM}
+      - POSTGRES_HOST=relational_db
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - POSTGRES_DB=${POSTGRES_DB:-postgres}
+      - REDIS_HOST=cache
+      - GUARDRAILS_TOKEN=${GUARDRAILS_TOKEN}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+    volumes:
+      - telegram_bot_logs:/var/log
 
   web_server:
     image: onyxdotapp/onyx-web-server:${IMAGE_TAG:-latest}
@@ -295,24 +150,40 @@ services:
         - NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS=${NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS:-}
         - NEXT_PUBLIC_NEGATIVE_PREDEFINED_FEEDBACK_OPTIONS=${NEXT_PUBLIC_NEGATIVE_PREDEFINED_FEEDBACK_OPTIONS:-}
         - NEXT_PUBLIC_DISABLE_LOGOUT=${NEXT_PUBLIC_DISABLE_LOGOUT:-}
-        - NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN=${NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN:-}
-        - NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=${NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED:-}
-        # Enterprise Edition only
         - NEXT_PUBLIC_THEME=${NEXT_PUBLIC_THEME:-}
-        # DO NOT TURN ON unless you have EXPLICIT PERMISSION from Onyx.
-        - NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED=${NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED:-false}
+        - NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=${NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED:-}
+        - NEXT_PUBLIC_ENABLE_LANGFLOW_EDITOR=${NEXT_PUBLIC_ENABLE_LANGFLOW_EDITOR:-true}
+        - NEXT_PUBLIC_ENABLE_LANGFUSE_EDITOR=${NEXT_PUBLIC_ENABLE_LANGFUSE_EDITOR:-true}
+        - REACT_APP_LANGFLOW_URL=${REACT_APP_LANGFLOW_URL:-http://217.198.9.110:8082}
+        - REACT_APP_LANGFUSE_URL=${REACT_APP_LANGFUSE_URL:-http://217.198.9.110:3004}
     depends_on:
       - api_server
     restart: always
+    env_file:
+      - .env
     environment:
       - INTERNAL_URL=http://api_server:8080
-      - WEB_DOMAIN=${WEB_DOMAIN:-}
-      - THEME_IS_DARK=${THEME_IS_DARK:-}
-      - DISABLE_LLM_DOC_RELEVANCE=${DISABLE_LLM_DOC_RELEVANCE:-}
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
 
-      # Enterprise Edition only
-      - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${ENABLE_PAID_ENTERPRISE_EDITION_FEATURES:-false}
-      - NEXT_PUBLIC_CUSTOM_REFRESH_URL=${NEXT_PUBLIC_CUSTOM_REFRESH_URL:-}
+  relational_db:
+    image: postgres:15.2-alpine
+    command: -c 'max_connections=250'
+    restart: always
+    # POSTGRES_USER and POSTGRES_PASSWORD should be set in .env file
+    env_file:
+      - .env
+    volumes:
+      - db_volume:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
 
   inference_model_server:
     image: onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}
@@ -331,20 +202,17 @@ services:
       - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
       # Set to debug to get more fine-grained logs
       - LOG_LEVEL=${LOG_LEVEL:-info}
-
-      # Analytics Configs
-      - SENTRY_DSN=${SENTRY_DSN:-}
     volumes:
       # Not necessary, this is just to reduce download time during startup
-      - onyx_model_cache_huggingface:/root/.cache/huggingface/
+      - model_cache_huggingface:/root/.cache/huggingface/
       # optional, only for debugging purposes
-      - onyx_inference_model_server_logs:/var/log
+      - inference_model_server_logs:/var/log
     logging:
       driver: json-file
       options:
         max-size: "50m"
         max-file: "6"
-
+  
   indexing_model_server:
     image: onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}
     build:
@@ -359,43 +227,28 @@ services:
       fi"
     restart: on-failure
     environment:
-      - INDEX_BATCH_SIZE=${INDEX_BATCH_SIZE:-}
       - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
       - INDEXING_ONLY=True
       # Set to debug to get more fine-grained logs
       - LOG_LEVEL=${LOG_LEVEL:-info}
-      - CLIENT_EMBEDDING_TIMEOUT=${CLIENT_EMBEDDING_TIMEOUT:-}
-
-      # Analytics Configs
-      - SENTRY_DSN=${SENTRY_DSN:-}
+      - VESPA_SEARCHER_THREADS=${VESPA_SEARCHER_THREADS:-1}
     volumes:
       # Not necessary, this is just to reduce download time during startup
-      - onyx_indexing_huggingface_model_cache:/root/.cache/huggingface/
+      - indexing_huggingface_model_cache:/root/.cache/huggingface/
       # optional, only for debugging purposes
-      - onyx_indexing_model_server_logs:/var/log
+      - indexing_model_server_logs:/var/log
     logging:
       driver: json-file
       options:
         max-size: "50m"
         max-file: "6"
 
-  relational_db:
-    image: postgres:15.2-alpine
-    command: -c 'max_connections=250'
-    restart: always
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
-    volumes:
-      - onyx_db_volume:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
-
   # This container name cannot have an underscore in it due to Vespa expectations of the URL
   index:
     image: vespaengine/vespa:8.277.17
     restart: always
     volumes:
-      - onyx_vespa_volume:/opt/vespa/var
+      - vespa_volume:/opt/vespa/var
     logging:
       driver: json-file
       options:
@@ -462,11 +315,11 @@ services:
       retries: 3
 
   langflow:
-    image: langflowai/langflow:1.4.2
+    build: .
     container_name: Langflow
     user: root
     ports:
-      - 8080:7860
+      - 8082:7860
     healthcheck:
       test: timeout 10s bash -c ':> /dev/tcp/127.0.0.1/7860' || exit 1
       interval: 10s
@@ -482,25 +335,35 @@ services:
       LANGFLOW_SUPERUSER: ${LANGFLOW_SUPERUSER:-langflow}
       LANGFLOW_SUPERUSER_PASSWORD: ${LANGFLOW_SUPERUSER_PASSWORD:-langflow}
       LANGFLOW_AUTO_LOGIN: False
+      LANGFLOW_CORS_ORIGINS: "*"
+      LANGFLOW_CORS_ALLOW_CREDENTIALS: true
+      LANGFLOW_CORS_ALLOW_HEADERS: "*"
+      LANGFLOW_CORS_ALLOW_METHODS: "*"
     volumes:
       - langflow:/var/lib/langflow:rw
-
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200m"
+        max-file: "3"  
+  
   unoconv:
     image: ghcr.io/unoconv/unoserver-docker
     volumes:
       - /tmp/downloads:/data
 
 volumes:
-  onyx_db_volume:
-  onyx_vespa_volume: # Created by the container itself
-
-  onyx_model_cache_huggingface:
-  onyx_indexing_huggingface_model_cache:
+  db_volume:
+  vespa_volume:
+  # Created by the container itself
+  model_cache_huggingface:
+  indexing_huggingface_model_cache:
   # for logs that we don't want to lose on container restarts
-  onyx_api_server_logs:
-  onyx_background_logs:
-  onyx_inference_model_server_logs:
-  onyx_indexing_model_server_logs:
+  api_server_logs:
+  background_logs:
+  inference_model_server_logs:
+  indexing_model_server_logs:
+  langflow:
   minio-storage:
   keydb_volume:
-  langflow:
+  telegram_bot_logs:

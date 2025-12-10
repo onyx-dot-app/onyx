@@ -42,6 +42,7 @@ from onyx.tools.tool_implementations.internet_search.internet_search_tool import
 )
 from onyx.tools.tool_implementations.knowledge_map.knowledge_map_tool import KnowledgeMapTool
 from onyx.tools.tool_implementations.langflow.langflow_tool import LangflowTool
+from onyx.tools.tool_implementations.doc_generator.doc_generator_tool import DocGeneratorTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.utils import compute_all_tool_tokens
 from onyx.tools.utils import explicit_tool_calling_supported
@@ -237,9 +238,11 @@ def construct_tools(
                     LangflowTool(
                         db_session=db_session,
                         pipeline_id=persona.pipeline_id,
+                        file_node_ids=persona.langflow_file_nodes,
                         prompt_config=prompt_config,
                         llm_config=llm.config,
                         chat_session_id=custom_tool_config.chat_session_id,
+                        docs=user_file_files,
                     )
                 ]
             elif tool_cls.__name__ == KnowledgeMapTool.__name__:
@@ -260,6 +263,24 @@ def construct_tools(
                         db_session,
                         pipeline_id=persona.pipeline_id,
                         docs=user_file_files,
+                        template_file=template_file_name,
+                        prompt_config=prompt_config,
+                        llm_config=llm.config
+                    )
+                ]
+            elif tool_cls.__name__ == DocGeneratorTool.__name__:
+                template_file_name = f'doc_gen_{persona.name}.docx'
+                template_file_name, persona.template_file = minio_put_template_bytes(
+                    template_file_name,
+                    persona.template_file
+                )
+                tool_dict[db_tool_model.id] = [
+                    DocGeneratorTool(
+                        db_session=db_session,
+                        pipeline_id=persona.pipeline_id,
+                        file_node_ids=persona.langflow_file_nodes,
+                        docs=user_file_files,
+                        chat_session_id=custom_tool_config.chat_session_id,
                         template_file=template_file_name,
                         prompt_config=prompt_config,
                         llm_config=llm.config

@@ -103,7 +103,8 @@ class GigachatModelServer(LLM):
         custom_config: str | None = None,
         timeout: int = GIGACHAT_TIMEOUT,
         max_output_tokens: int = GIGACHAT_MAX_OUTPUT_TOKENS,
-        model: str | None = None
+        model: str | None = None,
+        user_email: str | None = None,
     ):
         if not endpoint:
             raise ValueError(
@@ -124,19 +125,24 @@ class GigachatModelServer(LLM):
         self._expires_at: datetime = datetime.min
         self._model = model
         self._scope = custom_config['scope']
+        self._user_email = user_email
 
     @observe(as_type="generation")
-    def _execute(self, input: LanguageModelInput, tools: list[dict] | None = None,
-                 tool_choice: ToolChoiceOptions | None = None) -> AIMessage:
+    def _execute(
+        self,
+        input: LanguageModelInput, 
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None
+    ) -> AIMessage:
+        # Check langfuse_context availability
+        try:
+            current_trace = langfuse_context.get_current_trace()
+        except Exception as e:
+            logger.warning(
+                f"[GigachatModelServer._execute] Error accessing langfuse_context: {e}"
+            )
+        
         token = self.get_token()
-        langfuse_context.update_current_observation(
-            input=input,
-            model=self._model,
-            model_parameters={
-                "stream": False,
-                "repetition_penalty": 1
-            },
-        )
 
         headers = {
             "Content-Type": "application/json",
@@ -160,24 +166,78 @@ class GigachatModelServer(LLM):
         })
 
         @retry(10, 10)
-        def get_answer() -> str:
+        def get_answer() -> tuple[str, dict]:
             try:
                 response = requests.request("POST", self._endpoint, headers=headers, data=data, verify=False)
+
                 response_content_request = json.loads(response.text)
-                langfuse_context.update_current_observation(
-                    output=response_content_request
-                )
+
+                usage_data = response_content_request.get("usage", {})
+                prompt_tokens = usage_data.get("prompt_tokens", 0)
+                completion_tokens = usage_data.get("completion_tokens", 0)
+                total_tokens = usage_data.get("total_tokens", prompt_tokens + completion_tokens)
+
                 response_content = response_content_request["choices"][0]["message"]["content"]
-                return response_content
+
+                return response_content, {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                    "response": response_content_request
+                }
             except Timeout as error:
                 raise Timeout(f"Model inference to {self._endpoint} timed out") from error
 
-        response_content = get_answer()
+        response_content, metrics = get_answer()
+        model_config = self.config
+
+        usage = None
+        if metrics["prompt_tokens"] > 0 or metrics["completion_tokens"] > 0:
+            usage = {
+                "prompt_tokens": metrics["prompt_tokens"],
+                "completion_tokens": metrics["completion_tokens"],
+                "total_tokens": metrics["total_tokens"],
+            }
+
+        user_email_str = str(self._user_email) if self._user_email else None
+        
+        langfuse_context.update_current_trace(
+            name=f"{model_config.model_provider}",
+            input=input,
+            output=response_content,
+            user_id=user_email_str,
+            tags=[f"{model_config.model_provider}"],
+            metadata={
+                "model_provider": model_config.model_provider,
+                "model_name": model_config.model_name,
+                "endpoint": self._endpoint,
+                "repetition_penalty": 1,
+                "profanity_check": False,
+            },
+        )
+
+        langfuse_context.update_current_observation(
+            input=input,
+            output=metrics["response"],
+            user_id=user_email_str,
+            model=self._model,
+            model_parameters={
+                "stream": False,
+                "repetition_penalty": 1,
+                "temperature": model_config.temperature,
+            },
+            tags=[f"{model_config.model_provider}"],
+            usage=usage,
+            metadata={
+                "model_provider": model_config.model_provider,
+                "model_name": model_config.model_name,
+                "endpoint": self._endpoint,
+                "repetition_penalty": 1,
+                "profanity_check": False,
+            },
+        )
 
         return AIMessage(content=response_content)
-
-
-
 
     def log_model_configs(self) -> None:
         logger.debug(f"Custom model at: {self._endpoint}")

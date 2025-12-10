@@ -1,0 +1,68 @@
+validators:
+  - id: -1
+    name: "Валидатор персональных данных"
+    description: "Обнаружение и маскирование персональных данных при запросе от пользователя, а также демаскирование данных после ответа от LLM"
+    validator_type: "DETECT_PII"
+    config:
+      - type: "text"
+        name: "user_description"
+        label: "Описание валидатора"
+      - type: "multiselect"
+        name: "pii_entities"
+        label: "Типы персональных данных для маскирования"
+        values:
+          - "RUS_PHONE_NUMBER"
+          - "RUS_PERSON"
+          - "RUS_BANK_CARD"
+          - "RUS_INN"
+          - "RUS_OGRNIP"
+          - "RUS_SNILS"
+          - "RUS_OMS_POLICY"
+          - "RUS_PASSPORT"
+          - "RUS_DRIVER_LICENSE"
+          - "RUS_LOCATION"
+          - "EMAIL_ADDRESS"
+          - "IP_ADDRESS"
+          - "DATE_TIME"
+          - "URL"
+          - "DOMAIN_NAME"
+    include_llm: false
+  - id: -2
+    name: "Валидатор запретных слов"
+    description: "Обнаружение и маскирование запретных слов в ответе от LLM"
+    validator_type: "BAN_LIST"
+    config:
+      - type: "text"
+        name: "user_description"
+        label: "Описание валидатора"
+      - type: "tags"
+        name: "banned_words"
+        label: "Список запретных слов для маскирования"
+    include_llm: false
+  - id: -3
+    name: "Валидатор запретных тем"
+    description: "Обнаружение и блокировка ответа, содержащего запретные темы"
+    validator_type: "SENSITIVE_TOPIC"
+    config:
+      - type: "text"
+        name: "user_description"
+        label: "Описание валидатора"
+      - type: "tags"
+        name: "sensitive_topics"
+        label: "Список запретных тем"
+      - type: "text"
+        name: "rejection_message"
+        label: "Сообщение при обнаружении запретной темы в ответе от LLM"
+    include_llm: true
+  - id: -4
+    name: "Валидатор стиля общения"
+    description: "Анализирует и корректирует стиль текста ответа от LLM согласно заданным требованиям"
+    validator_type: "TEXT_STYLE"
+    config:
+      - type: "text"
+        name: "user_description"
+        label: "Описание валидатора"
+      - type: "tags"
+        name: "text_styles"
+        label: "Список стилей общения"
+    include_llm: true

@@ -110,7 +110,7 @@ export const HealthCheckBanner = () => {
             }
 
             const response = await fetch(
-              "/api/enterprise-settings/refresh-token",
+              "/api/smartsearch-settings/refresh-token",
               {
                 method: "POST",
                 headers: {

@@ -10,7 +10,9 @@ from onyx.db.models import PersonaLabel
 from onyx.db.models import Prompt
 from onyx.db.models import StarterMessage
 from onyx.server.features.document_set.models import DocumentSet
+from onyx.server.features.guardrails.core.schemas_validator import ValidatorResponse
 from onyx.server.features.tool.models import ToolSnapshot
+from onyx.server.models import MinimalUserGroupSnapshot
 from onyx.server.models import MinimalUserSnapshot
 from onyx.utils.logger import setup_logger
 
@@ -89,6 +91,8 @@ class PersonaUpsertRequest(BaseModel):
     display_priority: int | None = None
     user_file_ids: list[int] | None = None
     user_folder_ids: list[int] | None = None
+    validator_ids: list[int] | None = None
+    langflow_file_nodes: list[dict] | None = None
 
 
 class PersonaSnapshot(BaseModel):
@@ -110,13 +114,14 @@ class PersonaSnapshot(BaseModel):
     labels: list["PersonaLabelSnapshot"] = Field(default_factory=list)
     owner: MinimalUserSnapshot | None = None
     users: list[MinimalUserSnapshot] = Field(default_factory=list)
-    groups: list[int] = Field(default_factory=list)
+    groups: list[MinimalUserGroupSnapshot] = Field(default_factory=list)
     document_sets: list[DocumentSet] = Field(default_factory=list)
     llm_model_provider_override: str | None = None
     llm_model_version_override: str | None = None
     num_chunks: float | None = None
     pipeline_id: str | None = None
     template_file: bytes | None = None
+    validators: list[ValidatorResponse] = Field(default_factory=list)
 
     @classmethod
     def from_model(cls, persona: Persona) -> "PersonaSnapshot":
@@ -146,10 +151,18 @@ class PersonaSnapshot(BaseModel):
                 MinimalUserSnapshot(id=user.id, email=user.email)
                 for user in persona.users
             ],
-            groups=[user_group.id for user_group in persona.groups],
+            # groups=[user_group.id for user_group in persona.groups],
+            groups=[
+                MinimalUserGroupSnapshot(id=user_group.id, name=user_group.name)
+                for user_group in persona.groups
+            ],
             document_sets=[
                 DocumentSet.from_model(document_set_model)
                 for document_set_model in persona.document_sets
+            ],
+            validators=[
+                ValidatorResponse.from_model(validator)
+                for validator in persona.validators
             ],
             llm_model_provider_override=persona.llm_model_provider_override,
             llm_model_version_override=persona.llm_model_version_override,
@@ -166,6 +179,7 @@ class FullPersonaSnapshot(PersonaSnapshot):
     prompts: list[PromptSnapshot] = Field(default_factory=list)
     llm_relevance_filter: bool = False
     llm_filter_extraction: bool = False
+    langflow_file_nodes: list[dict[str, str]] = Field(default_factory=list)
 
     @classmethod
     def from_model(
@@ -195,6 +209,14 @@ class FullPersonaSnapshot(PersonaSnapshot):
             starter_messages=persona.starter_messages,
             tools=[ToolSnapshot.from_model(tool) for tool in persona.tools],
             labels=[PersonaLabelSnapshot.from_model(label) for label in persona.labels],
+            users=[
+                MinimalUserSnapshot(id=user.id, email=user.email)
+                for user in persona.users
+            ],
+            groups=[
+                MinimalUserGroupSnapshot(id=user_group.id, name=user_group.name)
+                for user_group in persona.groups
+            ],
             owner=(
                 MinimalUserSnapshot(id=persona.user.id, email=persona.user.email)
                 if persona.user
@@ -204,10 +226,26 @@ class FullPersonaSnapshot(PersonaSnapshot):
                 DocumentSet.from_model(document_set_model)
                 for document_set_model in persona.document_sets
             ],
+            validators=[
+                ValidatorResponse.from_model(validator)
+                for validator in persona.validators
+            ],
             search_start_date=persona.search_start_date,
+            pipeline_id=persona.pipeline_id,
             prompts=[PromptSnapshot.from_model(prompt) for prompt in persona.prompts],
+            llm_model_provider_override=persona.llm_model_provider_override,
+            llm_model_version_override=persona.llm_model_version_override,
             llm_relevance_filter=persona.llm_relevance_filter,
             llm_filter_extraction=persona.llm_filter_extraction,
+            num_chunks=persona.num_chunks,
+            langflow_file_nodes=(
+                [
+                    {"file_node_id": node.file_node_id}
+                    for node in persona.langflow_file_nodes
+                ]
+                if persona.langflow_file_nodes
+                else []
+            ),
         )
 
 
