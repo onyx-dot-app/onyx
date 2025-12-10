@@ -272,11 +272,27 @@ export const DocumentsProvider: React.FC<DocumentsProviderProps> = ({
   const downloadItem = useCallback(
     async (documentId: string): Promise<Blob> => {
       try {
-        const blob = await documentsService.downloadItem(documentId);
+        // documentsService.downloadItem might return { blob, filename } object
+        const result = await documentsService.downloadItem(documentId);
+        let blob: Blob;
+        let filename = "document";
+
+        // Try to get blob and filename properly
+        if (result instanceof Blob) {
+          blob = result;
+        } else if ('blob' in result && result.blob instanceof Blob) {
+          blob = result.blob;
+          if ('filename' in result && typeof result.filename === 'string') {
+            filename = result.filename;
+          }
+        } else {
+          throw new Error("Downloaded file is in an unexpected format");
+        }
+
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = "document";
+        link.download = filename;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);

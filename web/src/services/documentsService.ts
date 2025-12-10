@@ -130,9 +130,12 @@ export async function renameItem(
   }
 }
 
-export async function downloadItem(documentId: string): Promise<Blob> {
+export async function downloadItem(documentId: string): Promise<{ blob: Blob; filename: string }> {
+  // Extract file_id from document_id if it contains USER_FILE_CONNECTOR__ prefix
+  const cleanDocumentId = documentId.replace(/^USER_FILE_CONNECTOR__/, "");
+    
   const response = await fetch(
-    `/api/chat/file/${encodeURIComponent(documentId)}`,
+    `/api/chat/file/${encodeURIComponent(cleanDocumentId)}`,
     {
       method: "GET",
     }
@@ -140,5 +143,30 @@ export async function downloadItem(documentId: string): Promise<Blob> {
   if (!response.ok) {
     throw new Error("Failed to fetch file");
   }
-  return response.blob();
+  
+  // Extract filename from Content-Disposition header
+  const contentDisposition = response.headers.get("Content-Disposition");
+  let filename = "document";
+  
+  if (contentDisposition) {
+    // Try to extract filename from RFC 2231 format: filename*=UTF-8''encoded_name
+    const utf8Match = contentDisposition.match(/filename\*=UTF-8''(.+?)(?:;|$)/);
+    if (utf8Match) {
+      filename = decodeURIComponent(utf8Match[1]);
+    } else {
+      // Fallback to standard filename format: filename="name"
+      const standardMatch = contentDisposition.match(/filename="(.+?)"/);
+      if (standardMatch) {
+        filename = standardMatch[1];
+      } else {
+        // Try without quotes
+        const unquotedMatch = contentDisposition.match(/filename=([^;]+)/);
+        if (unquotedMatch) {
+          filename = unquotedMatch[1].trim();
+        }
+      }
+    }
+  }
+  
+  return { blob: await response.blob(), filename };
 }

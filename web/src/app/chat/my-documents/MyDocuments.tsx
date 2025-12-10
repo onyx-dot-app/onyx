@@ -154,9 +154,22 @@ export default function MyDocuments() {
           });
         }
       }
+    } else {
+      try {
+        await deleteItem(itemId, isFolder);
+        setPopup({
+          message: `Folder deleted successfully`,
+          type: "success",
+        });
+        await refreshFolders();
+      } catch (error) {
+        console.error("Error deleting folder:", error);
+        setPopup({
+          message: `Failed to delete Folder`,
+          type: "error",
+        });
+      }
     }
-
-    // If it's a folder, the SharedFolderItem component will handle it
   };
 
   const handleMoveItem = async (
