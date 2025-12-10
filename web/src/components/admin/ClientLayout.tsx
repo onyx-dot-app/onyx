@@ -29,7 +29,7 @@ import { UserDropdown } from "../UserDropdown";
 import { User } from "@/lib/types";
 import { usePathname } from "next/navigation";
 import { SettingsContext } from "../settings/SettingsProvider";
-import { useContext, useState } from "react";
+import { useContext, useRef, useEffect, useState } from "react";
 import { MdOutlineCreditCard } from "react-icons/md";
 import { UserSettingsModal } from "@/app/chat/modal/UserSettingsModal";
 import { usePopup } from "./connectors/Popup";
@@ -60,6 +60,34 @@ export function ClientLayout({
   };
   const { llmProviders } = useChatContext();
   const { popup, setPopup } = usePopup();
+  const sidebarRef = useRef<HTMLDivElement | null>(null);
+
+  // Сохраняем положение скролла сайдбара между переходами по страницам админки
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const key = "admin-sidebar-scroll";
+    const sidebarEl = sidebarRef.current;
+    if (!sidebarEl) return;
+
+    // Восстановить сохранённую позицию
+    const stored = window.sessionStorage.getItem(key);
+    if (stored) {
+      const value = parseInt(stored, 10);
+      if (!Number.isNaN(value)) {
+        sidebarEl.scrollTop = value;
+      }
+    }
+
+    const handleScroll = () => {
+      window.sessionStorage.setItem(key, String(sidebarEl.scrollTop));
+    };
+
+    sidebarEl.addEventListener("scroll", handleScroll);
+    return () => {
+      sidebarEl.removeEventListener("scroll", handleScroll);
+    };
+  }, []);
 
   const isLangflowEditorEnable =
     process.env.NEXT_PUBLIC_ENABLE_LANGFLOW_EDITOR === "true";
@@ -110,7 +138,10 @@ export function ClientLayout({
           </div>
         )}
 
-        <div className="default-scrollbar flex-none text-text-settings-sidebar bg-background-sidebar dark:bg-[#000] w-[250px] overflow-x-hidden z-20 pt-2 pb-8 h-full border-r border-border dark:border-none miniscroll overflow-auto">
+        <div
+          ref={sidebarRef}
+          className="default-scrollbar flex-none text-text-settings-sidebar bg-background-sidebar dark:bg-[#000] w-[250px] overflow-x-hidden z-20 pt-2 pb-8 h-full border-r border-border dark:border-none miniscroll overflow-auto"
+        >
           <AdminSidebar
             collections={[
               {

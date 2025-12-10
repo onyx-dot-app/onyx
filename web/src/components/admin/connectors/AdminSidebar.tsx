@@ -7,6 +7,7 @@ import Link from "next/link";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { CgArrowsExpandUpLeft } from "react-icons/cg";
 import { LogoComponent } from "@/components/logo/FixedLogo";
+import { useUser } from "@/components/user/UserProvider";
 
 interface Item {
   name: string | JSX.Element;
@@ -22,6 +23,7 @@ interface Collection {
 export function AdminSidebar({ collections }: { collections: Collection[] }) {
   const { t } = useTranslation();
   const combinedSettings = useContext(SettingsContext);
+  const { isAdmin, isCurator } = useUser();
   if (!combinedSettings) {
     return null;
   }
@@ -44,7 +46,9 @@ export function AdminSidebar({ collections }: { collections: Collection[] }) {
             <button className="text-sm text-text-700 hover:bg-background-settings-hover dark:hover:bg-neutral-800 flex items-center block w-52 py-2.5 flex px-2 text-left hover:bg-opacity-80 cursor-pointer rounded">
               <CgArrowsExpandUpLeft className="my-auto" size={18} />
               <p className="ml-1 break-words line-clamp-2 ellipsis leading-none">
-                {t(k.EXIT_ADMIN)}
+                {t(
+                  !isAdmin && isCurator ? k.EXIT_CURATOR : k.EXIT_ADMIN
+                )}
               </p>
             </button>
           </Link>

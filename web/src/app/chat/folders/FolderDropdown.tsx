@@ -25,6 +25,7 @@ import { Popover } from "@/components/popover/Popover";
 import { useChatContext } from "@/components/context/ChatContext";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { CHAT_SESSION_ID_KEY } from "@/lib/drag/constants";
 
 interface FolderDropdownProps {
   folder: Folder;
@@ -146,8 +147,11 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
     const handleDrop = useCallback(
       (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
-        const chatSessionId = e.dataTransfer.getData("text/plain");
-        if (folder.folder_id && onDrop) {
+        const chatSessionId =
+          e.dataTransfer.getData(CHAT_SESSION_ID_KEY) ||
+          e.dataTransfer.getData("text/plain");
+
+        if (folder.folder_id && onDrop && chatSessionId) {
           onDrop(folder.folder_id, chatSessionId);
         }
       },

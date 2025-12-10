@@ -1955,6 +1955,7 @@ module.exports = {
   [k.CURATORS_MUST_SELECT_ONE_OR_MO]: `Curators must select one or more groups to give access to
                     this Connector`,
   [k.EXIT_ADMIN]: `Exit Admin`,
+  [k.EXIT_CURATOR]: `Exit Curator Panel`,
   [k.ONYX_VERSION]: `SmartSearch version:`,
   [k.FORGOT_PASSWORD1]: `Forgot password?`,
   [k.MARKDOWN]: `Markdown`,

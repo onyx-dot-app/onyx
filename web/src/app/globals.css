@@ -385,8 +385,8 @@
 .default-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: #888 transparent;
-  overflow: overlay;
-  overflow-y: scroll;
+  /* Показываем скроллбар только при переполнении по вертикали */
+  overflow-y: auto;
   overflow-x: hidden;
 }
 
