@@ -26,7 +26,7 @@ export function AdminPageHeader({
   return (
     <div className="flex flex-col">
       <div className="flex flex-row justify-between items-center gap-4">
-        <Icon className="stroke-text-04 h-[1.75rem] w-[1.75rem]" />
+        <Icon className="stroke-text-04 h-8 w-8" />
         {rightChildren}
       </div>
       <div className="flex flex-col">
@@ -50,7 +50,7 @@ export function AdminPageLayout({
 }: AdminPageLayoutProps) {
   return (
     <div className="flex flex-col w-full h-full overflow-hidden">
-      <div className="container max-w-[60rem] flex flex-col h-full overflow-hidden">
+      <div className="container mx-auto max-w-[60rem] flex flex-col h-full overflow-hidden">
         <div className="px-4 pt-14 pb-6 gap-6 flex flex-col flex-shrink-0">
           <AdminPageHeader
             icon={icon}

@@ -56,6 +56,7 @@ export const FormFieldLabel: React.FC<LabelProps> = ({
   leftIcon,
   rightIcon,
   optional,
+  rightAction,
   className,
   children,
   ...props
@@ -79,6 +80,9 @@ export const FormFieldLabel: React.FC<LabelProps> = ({
         </Text>
       ) : null}
       {rightIcon && <span className="flex items-center">{rightIcon}</span>}
+      {rightAction && (
+        <span className="ml-auto flex items-center">{rightAction}</span>
+      )}
     </label>
   );
 };
