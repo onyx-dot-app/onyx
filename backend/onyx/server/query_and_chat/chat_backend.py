@@ -8,6 +8,7 @@ import uuid
 from collections.abc import Callable
 from collections.abc import Generator
 from datetime import timedelta
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -835,13 +836,14 @@ def upload_files_for_chat(
 
 @router.get("/file/{file_id:path}")
 def fetch_chat_file(
-    file_id: str,
-    db_session: Session = Depends(get_session),
-    _: User | None = Depends(current_user),
+        file_id: str,
+        db_session: Session = Depends(get_session),
+        _: User | None = Depends(current_user),
 ) -> Response:
     file_store = get_default_file_store(db_session)
-    file_record = file_store.read_file_record(file_id)
-    if not file_record:
+    try:
+        file_record = file_store.read_file_record(file_id)
+    except RuntimeError:
         raise HTTPException(status_code=404, detail="File not found")
 
     original_file_name = file_record.display_name
@@ -859,7 +861,18 @@ def fetch_chat_file(
     media_type = file_record.file_type
     file_io = file_store.read_file(file_id, mode="b")
 
-    return StreamingResponse(file_io, media_type=media_type)
+    ascii_filename = original_file_name.encode('ascii', 'ignore').decode('ascii')
+    if not ascii_filename:
+        ascii_filename = "document"
+
+    encoded_filename = quote(original_file_name, safe='')
+
+    content_disposition = f'attachment; filename="{ascii_filename}"; filename*=UTF-8\'\'{encoded_filename}'
+    headers = {
+        "Content-Disposition": content_disposition
+    }
+
+    return StreamingResponse(file_io, media_type=media_type, headers=headers)
 
 
 @router.get("/search")
