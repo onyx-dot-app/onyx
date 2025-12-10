@@ -9,13 +9,8 @@ Prerequisites:
 - Set CODA_FOLDER_ID environment variable
 """
 
-import os
 from collections.abc import Generator
-from time import sleep
-from time import time
 from typing import Any
-
-import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.coda.api.client import CodaAPIClient
@@ -29,204 +24,38 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-@pytest.fixture(scope="module")
-def api_token() -> str:
-    """Fixture to get and validate API token."""
-    token = os.environ.get("CODA_API_TOKEN")
-    if not token:
-        pytest.skip("CODA_API_TOKEN not set")
-    return token
-
-
-@pytest.fixture(scope="module")
-def coda_folder_id() -> str:
-    """Fixture to get docs from a specific folder."""
-    token = os.environ.get("CODA_FOLDER_ID")
-    if not token:
-        pytest.skip("CODA_FOLDER_ID not set")
-    return token
-
-
-@pytest.fixture(scope="module")
-def api_client(api_token: str) -> CodaAPIClient:
-    """Fixture to create and authenticate API client."""
-    client = CodaAPIClient(api_token)
-    client.validate_credentials()
-    return client
-
-
-@pytest.fixture(scope="module")
-def connector(
-    request: pytest.FixtureRequest, api_token: str, test_doc: dict[str, Any]
-) -> CodaConnector:
-    """Fixture to create and authenticate connector."""
-    conn = CodaConnector(
-        batch_size=5,
-        doc_ids=[test_doc["id"]],
-    )
-    conn.load_credentials({"coda_api_token": api_token})
-    conn.validate_connector_settings()
-    return conn
-
-
-@pytest.fixture(scope="module")
-def reference_data(
-    api_client: CodaAPIClient,
-    connector: CodaConnector,
-    test_doc: dict[str, Any],
-    all_batches: list[list[Document]],
-) -> dict[str, Any]:
-    """Fixture to fetch reference data from API.
-
-    Builds a map of docs and their pages for validation.
-    Depends on test_doc to ensure the test document exists before fetching.
-    """
-    all_docs = connector.doc_ids
-    logger.info(f"All docs: {all_docs}")
-
-    if not all_docs:
-        pytest.skip("No docs found in Coda workspace")
-
-    # Count expected non-hidden pages across all docs
-    expected_page_count = 0
-    expected_pages_by_doc = {}
-
-    for doc in all_docs:
-        pages = api_client.fetch_all_pages(doc)
-
-        # Only count non-hidden and non-skipped pages
-        non_hidden_pages = [
-            p
-            for p in pages
-            if not p.isHidden and p.id not in connector.generator.skipped_pages
-        ]
-        expected_pages_by_doc[doc] = non_hidden_pages
-        expected_page_count += len(non_hidden_pages)
-
-    if expected_page_count == 0:
-        pytest.skip("No visible pages found in Coda workspace")
-
-    return {
-        "docs": all_docs,
-        "total_pages": expected_page_count,
-        "pages_by_doc": expected_pages_by_doc,
-    }
-
-
-@pytest.fixture(scope="module")
-def all_batches(connector: CodaConnector) -> list[list[Document]]:
-    """Fixture that loads all batches once and caches them.
-
-    This avoids calling load_from_state() multiple times across tests,
-    significantly reducing API calls and test execution time.
-    """
-    assert connector.generator is not None
-    connector.generator.indexed_pages.clear()
-    connector.generator.indexed_tables.clear()
-
-    logger.info("Loading all batches...")
-    gen = connector.load_from_state()
-    batches = list(gen)
-    return batches
-
-
-@pytest.fixture(scope="module")
-def all_documents(all_batches: list[list[Document]]) -> list[Document]:
-    """Fixture that flattens all batches into a single list of documents."""
-    all_docs = []
-    for batch in all_batches:
-        all_docs.extend(batch)
-    return all_docs
-
-
-@pytest.fixture(scope="module")
-def test_doc(
-    api_token: str, coda_folder_id: str
-) -> Generator[dict[str, Any], None, None]:
-    """Fixture that creates a test doc once for the entire test session.
-
-    Creates a doc by copying from a template, yields it for tests,
-    and cleans it up after all tests complete.
-    """
-    # Create a temporary API client for setup/teardown
-    client = CodaAPIClient(api_token)
-
-    # Create the test doc
-    response = client.create_doc(
-        title="Two-way writeups: Coda's secret to shipping fast",
-        source_doc="_WhgwP-IEe",
-        folder_id=coda_folder_id,
-    )
-
-    logger.info(f"[SETUP] Created test doc: {response['name']}")
-    logger.info(f"[SETUP] Doc ID: {response['id']}")
-    logger.info(f"[SETUP] Browser link: {response['browserLink']}")
-
-    # Poll for doc availability instead of hard sleep
-    logger.info("[SETUP] Polling for doc availability...")
-    start_time = time()
-    timeout = 60
-    doc_available = False
-
-    while time() - start_time < timeout:
-        try:
-            # Try to fetch the doc
-            check_response = client._make_request("GET", f"/docs/{response['id']}")
-            if check_response and check_response.get("id") == response["id"]:
-                logger.info(f"[SETUP] Doc available after {time() - start_time:.1f}s")
-                doc_available = True
-                break
-        except Exception:
-            pass
-        sleep(2)
-
-    if not doc_available:
-        logger.warning(
-            f"[SETUP] Warning: Doc not available after {timeout}s, tests may fail"
-        )
-
-    # Yield the doc info for tests to use
-    yield response
-
-    # Cleanup: Delete the doc after all tests complete
-    try:
-        client._make_request("DELETE", f"/docs/{response['id']}")
-        logger.info(f"[TEARDOWN] Deleted test doc: {response['id']}")
-    except Exception as e:
-        logger.warning(
-            f"[TEARDOWN] Warning: Failed to delete test doc {response['id']}: {e}"
-        )
-
-
 class TestDocCreation:
     """Test suite for doc creation and manipulation."""
 
-    def test_doc_was_created(self, test_doc: dict[str, Any]) -> None:
+    def test_doc_was_created(self, template_test_doc: dict[str, Any]) -> None:
         """Test that the test doc fixture was created successfully."""
         # Verify response structure
-        assert "id" in test_doc, "Response should contain doc ID"
-        assert "name" in test_doc, "Response should contain doc name"
-        assert "href" in test_doc, "Response should contain API href"
-        assert "browserLink" in test_doc, "Response should contain browser link"
+        assert "id" in template_test_doc, "Response should contain doc ID"
+        assert "name" in template_test_doc, "Response should contain doc name"
+        assert "href" in template_test_doc, "Response should contain API href"
+        assert (
+            "browserLink" in template_test_doc
+        ), "Response should contain browser link"
 
         # Verify the doc was created with correct title
         assert (
-            test_doc["name"] == "Two-way writeups: Coda's secret to shipping fast"
-        ), f"Doc name should match, got: {test_doc['name']}"
+            template_test_doc["name"]
+            == "Two-way writeups: Coda's secret to shipping fast"
+        ), f"Doc name should match, got: {template_test_doc['name']}"
 
         # Verify doc type
-        assert test_doc.get("type") == "doc", "Response type should be 'doc'"
+        assert template_test_doc.get("type") == "doc", "Response type should be 'doc'"
 
         # Log the doc info
-        logger.info(f"Test doc verified: {test_doc['name']}")
-        logger.info(f"Doc ID: {test_doc['id']}")
-        logger.info(f"Browser link: {test_doc['browserLink']}")
+        logger.info(f"Test doc verified: {template_test_doc['name']}")
+        logger.info(f"Doc ID: {template_test_doc['id']}")
+        logger.info(f"Browser link: {template_test_doc['browserLink']}")
 
     def test_can_fetch_created_doc(
-        self, api_client: CodaAPIClient, test_doc: dict[str, Any]
+        self, api_client: CodaAPIClient, template_test_doc: dict[str, Any]
     ) -> None:
         """Test that we can fetch the created doc via the API."""
-        doc_id = test_doc["id"]
+        doc_id = template_test_doc["id"]
 
         # Fetch the doc
         response = api_client._make_request("GET", f"/docs/{doc_id}")
@@ -240,19 +69,19 @@ class TestDocCreation:
 class TestLoadFromStateEndToEnd:
     """Test suite for load_from_state end-to-end functionality."""
 
-    def test_returns_generator(self, connector: CodaConnector) -> None:
+    def test_returns_generator(self, template_connector: CodaConnector) -> None:
         """Test that load_from_state returns a generator."""
-        gen = connector.load_from_state()
+        gen = template_connector.load_from_state()
         assert isinstance(gen, Generator), "load_from_state should return a Generator"
 
     def test_batch_sizes_respect_config(
         self,
-        connector: CodaConnector,
-        test_doc: dict[str, Any],
+        template_connector: CodaConnector,
+        template_test_doc: dict[str, Any],
         all_batches: list[list[Document]],
     ) -> None:
         """Test that batches respect the configured batch_size."""
-        batch_size = connector.batch_size
+        batch_size = template_connector.batch_size
 
         batch_sizes = []
         for batch in all_batches:
@@ -276,7 +105,6 @@ class TestLoadFromStateEndToEnd:
         self,
         all_documents: list[Document],
         reference_data: dict[str, Any],
-        connector: CodaConnector,
     ) -> None:
         """Test that documents are generated from non-hidden pages.
 
@@ -301,7 +129,6 @@ class TestLoadFromStateEndToEnd:
     def test_document_required_fields(
         self,
         all_documents: list[Document],
-        connector: CodaConnector,
         reference_data: dict[str, Any],
     ) -> None:
         """Test that all documents have required fields."""
@@ -364,7 +191,7 @@ class TestLoadFromStateEndToEnd:
         ), f"Found {len(document_ids) - len(unique_ids)} duplicate documents"
 
     def test_all_docs_processed(
-        self, all_documents: list[Document], connector: CodaConnector
+        self, all_documents: list[Document], template_connector: CodaConnector
     ) -> None:
         """Test that pages from all docs are included."""
         processed_doc_ids = set[str]()
@@ -373,9 +200,9 @@ class TestLoadFromStateEndToEnd:
             processed_doc_ids.add(doc_id)
 
         logger.info(f"Processed doc IDs: {processed_doc_ids}")
-        logger.info(f"Expected doc IDs: {connector.doc_ids}")
+        logger.info(f"Expected doc IDs: {template_connector.doc_ids}")
 
-        expected_doc_ids = connector.doc_ids
+        expected_doc_ids = template_connector.doc_ids
         assert (
             processed_doc_ids == expected_doc_ids
         ), f"Not all docs were processed. Expected {expected_doc_ids}, got {processed_doc_ids}"
@@ -384,7 +211,7 @@ class TestLoadFromStateEndToEnd:
         self,
         all_documents: list[Document],
         reference_data: dict[str, Any],
-        connector: CodaConnector,
+        template_connector: CodaConnector,
     ) -> None:
         """Test that all documents have meaningful content (not just title)."""
         for doc in all_documents:
