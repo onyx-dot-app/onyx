@@ -104,25 +104,25 @@ class CodaDocumentGenerator:
             self.indexed_pages.add(page_key)
 
             # Parse page title and content
-            page_title = self.parser.build_page_title(page)
+            semantic_identifier = self.parser.build_semantic_identifier(page)
             sections = self.parser.parse_html_content(content)
 
             # Build metadata
-            metadata = self.parser.build_page_metadata(doc, page, page_map)
+            metadata = self.parser.build_metadata(doc, page, page_map)
 
             # Build owners
-            primary_owners, secondary_owners = self.parser.build_page_owners(page)
+            primary_owners, secondary_owners = self.parser.build_owners(page)
 
             if len(sections) == 0:
                 self.skipped_pages.add(page.id)
-                logger.debug(f"Skipping page '{page_title}': no content")
+                logger.debug(f"Skipping page '{semantic_identifier}': no content")
                 continue
 
             yield Document(
                 id=page_key,
                 sections=sections,
                 source=DocumentSource.CODA,
-                semantic_identifier=page_title,
+                semantic_identifier=semantic_identifier,
                 doc_updated_at=(
                     datetime.fromtimestamp(
                         self.parser.parse_timestamp(
