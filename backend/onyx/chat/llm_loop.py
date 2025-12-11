@@ -27,6 +27,7 @@ from onyx.db.models import Persona
 from onyx.file_store.models import ChatFileType
 from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
+from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.message_types import AssistantMessage
 from onyx.llm.message_types import ChatCompletionMessage
@@ -409,6 +410,7 @@ def run_llm_loop(
     token_counter: Callable[[str], int],
     db_session: Session,
     forced_tool_id: int | None = None,
+    user_identity: LLMUserIdentity | None = None,
 ) -> None:
     with trace("run_llm_loop", metadata={"tenant_id": get_current_tenant_id()}):
         # Fix some LiteLLM issues,
@@ -572,6 +574,7 @@ def run_llm_loop(
                 # immediately yield the full set of found documents. This gives us the option to show the
                 # final set of documents immediately if desired.
                 final_documents=gathered_documents,
+                user_identity=user_identity,
             )
 
             # Consume the generator, emitting packets and capturing the final result
