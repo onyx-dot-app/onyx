@@ -88,10 +88,9 @@ class CodaApiClient:
     def __init__(
         self, 
         bearer_token: str, 
-        base_url: str, 
     ) -> None:
         self.bearer_token = bearer_token
-        self.base_url = base_url
+        self.base_url = "https://coda.io/apis/v1" #makes api calls nicer to look at further down the file
     
     def get(self, endpoint: str, params: Optional[dict[str, str]] = None) -> dict[str, Any]:
         url = self._build_url(endpoint)
@@ -531,7 +530,6 @@ class CodaConnector(LoadConnector, PollConnector):
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Load and validate Coda credentials."""
         self.coda_client = CodaApiClient(
-            base_url=credentials["coda_base_url"],
             bearer_token=credentials["coda_bearer_token"]
         )
 
