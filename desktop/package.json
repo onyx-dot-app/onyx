@@ -1,0 +1,16 @@
+{
+  "name": "onyx-desktop",
+  "version": "0.1.0",
+  "description": "Lightweight desktop app for Onyx Cloud",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "build:dmg": "tauri build --target universal-apple-darwin"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.0.0"
+  }
+}
