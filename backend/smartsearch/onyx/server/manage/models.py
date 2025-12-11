@@ -34,7 +34,7 @@ class StandardAnswer(BaseModel):
     id: int = Field(description="Уникальный идентификатор стандартного ответа")
     keyword: str = Field(description="Ключевое слово или regex-паттерн для поиска")
     answer: str = Field(description="Стандартный ответ, который будет возвращен при совпадении")
-    categories: list[int] = Field(description="Список идентификаторов категорий для ответа")
+    categories: list[StandardAnswerCategory] = Field(description="Список идентификаторов категорий для ответа")
     match_regex: bool = Field(description="Флаг использования regex")
     match_any_keywords: bool = Field(description="Флаг совпадения с любым ключевым словом")
 

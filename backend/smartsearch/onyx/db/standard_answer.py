@@ -54,6 +54,14 @@ def insert_standard_answer(
     if len(retrieved_cats) != len(category_ids):
         raise ValueError(f"Не все категории с ID {category_ids} существуют")
 
+    existing_answer = db_session.scalar(
+        select(StandardAnswer).where(StandardAnswer.keyword == keyword)
+    )
+    if existing_answer is not None:
+        raise ValueError(
+            f"Стандартный ответ с ключевым словом '{keyword}' уже существует"
+        )
+
     new_answer = StandardAnswer(
         keyword=keyword,
         answer=answer,
