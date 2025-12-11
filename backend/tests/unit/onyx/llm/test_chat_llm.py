@@ -2,15 +2,15 @@ from unittest.mock import patch
 
 import litellm
 import pytest
-from langchain_core.messages import AIMessage
-from langchain_core.messages import AIMessageChunk
-from langchain_core.messages import HumanMessage
 from litellm.types.utils import ChatCompletionDeltaToolCall
 from litellm.types.utils import Delta
 from litellm.types.utils import Function as LiteLLMFunction
 
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.llm.chat_llm import LitellmLLM
+from onyx.llm.message_types import AssistantMessage
+from onyx.llm.message_types import LanguageModelInput
+from onyx.llm.message_types import UserMessage
 from onyx.llm.utils import get_max_input_tokens
 
 
@@ -84,7 +84,9 @@ def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
         mock_completion.return_value = mock_response
 
         # Define input messages
-        messages = [HumanMessage(content="What's the weather and time in New York?")]
+        messages: LanguageModelInput = [
+            UserMessage(content="What's the weather and time in New York?")
+        ]
 
         # Define available tools
         tools = [
@@ -115,26 +117,27 @@ def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
         ]
 
         # Call the _invoke_implementation method
-        result = default_multi_llm.invoke_langchain(messages, tools)
+        result = default_multi_llm.invoke(messages, tools)
 
-        # Assert that the result is an AIMessage
-        assert isinstance(result, AIMessage)
+        # Assert that the result is an AssistantMessage
+        assert isinstance(result, AssistantMessage)
 
         # Assert that the content is None (as per the mock response)
-        assert result.content == ""
+        assert result.content is None or result.content == ""
 
         # Assert that there are two tool calls
+        assert result.tool_calls is not None
         assert len(result.tool_calls) == 2
 
         # Assert the details of the first tool call
-        assert result.tool_calls[0]["id"] == "call_1"
-        assert result.tool_calls[0]["name"] == "get_weather"
-        assert result.tool_calls[0]["args"] == {"location": "New York"}
+        assert result.tool_calls[0].id == "call_1"
+        assert result.tool_calls[0].function.name == "get_weather"
+        assert result.tool_calls[0].function.arguments == '{"location": "New York"}'
 
         # Assert the details of the second tool call
-        assert result.tool_calls[1]["id"] == "call_2"
-        assert result.tool_calls[1]["name"] == "get_time"
-        assert result.tool_calls[1]["args"] == {"timezone": "EST"}
+        assert result.tool_calls[1].id == "call_2"
+        assert result.tool_calls[1].function.name == "get_time"
+        assert result.tool_calls[1].function.arguments == '{"timezone": "EST"}'
 
         # Verify that litellm.completion was called with the correct arguments
         mock_completion.assert_called_once_with(
@@ -230,7 +233,9 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
         mock_completion.return_value = mock_response
 
         # Define input messages and tools (same as in the non-streaming test)
-        messages = [HumanMessage(content="What's the weather and time in New York?")]
+        messages: LanguageModelInput = [
+            UserMessage(content="What's the weather and time in New York?")
+        ]
 
         tools = [
             {
@@ -260,26 +265,27 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
         ]
 
         # Call the stream method
-        stream_result = list(default_multi_llm.stream_langchain(messages, tools))
+        stream_result = list(default_multi_llm.stream(messages, tools))
 
         # Assert that we received the correct number of chunks
         assert len(stream_result) == 3
 
-        # Combine all chunks into a single AIMessage
-        combined_result: AIMessage = AIMessageChunk(content="")
-        for chunk in stream_result:
-            combined_result += chunk  # type: ignore
+        # Get the final AssistantMessage from the stream
+        final_result = stream_result[-1]
 
-        # Assert that the combined result matches our expectations
-        assert isinstance(combined_result, AIMessage)
-        assert combined_result.content == ""
-        assert len(combined_result.tool_calls) == 2
-        assert combined_result.tool_calls[0]["id"] == "call_1"
-        assert combined_result.tool_calls[0]["name"] == "get_weather"
-        assert combined_result.tool_calls[0]["args"] == {"location": "New York"}
-        assert combined_result.tool_calls[1]["id"] == "call_2"
-        assert combined_result.tool_calls[1]["name"] == "get_time"
-        assert combined_result.tool_calls[1]["args"] == {"timezone": "EST"}
+        # Assert that the final result matches our expectations
+        assert isinstance(final_result, AssistantMessage)
+        assert final_result.content is None or final_result.content == ""
+        assert final_result.tool_calls is not None
+        assert len(final_result.tool_calls) == 2
+        assert final_result.tool_calls[0].id == "call_1"
+        assert final_result.tool_calls[0].function.name == "get_weather"
+        assert (
+            final_result.tool_calls[0].function.arguments == '{"location": "New York"}'
+        )
+        assert final_result.tool_calls[1].id == "call_2"
+        assert final_result.tool_calls[1].function.name == "get_time"
+        assert final_result.tool_calls[1].function.arguments == '{"timezone": "EST"}'
 
         # Verify that litellm.completion was called with the correct arguments
         mock_completion.assert_called_once_with(

@@ -34,10 +34,8 @@ from onyx.configs.onyxbot_configs import (
 from onyx.connectors.slack.utils import SlackTextCleaner
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.users import get_user_by_email
-from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_default_llms
-from onyx.llm.utils import dict_based_prompt_to_langchain_prompt
-from onyx.llm.utils import message_to_string
+from onyx.llm.utils import llm_response_to_string
 from onyx.onyxbot.slack.constants import FeedbackVisibility
 from onyx.onyxbot.slack.models import ChannelType
 from onyx.onyxbot.slack.models import ThreadMessage
@@ -143,24 +141,9 @@ def check_message_limit() -> bool:
 
 
 def rephrase_slack_message(msg: str) -> str:
-    def _get_rephrase_message() -> list[dict[str, str]]:
-        messages = [
-            {
-                "role": "user",
-                "content": SLACK_LANGUAGE_REPHRASE_PROMPT.format(query=msg),
-            },
-        ]
-
-        return messages
-
-    try:
-        llm, _ = get_default_llms(timeout=5)
-    except GenAIDisabledException:
-        logger.warning("Unable to rephrase Slack user message, Gen AI disabled")
-        return msg
-    messages = _get_rephrase_message()
-    filled_llm_prompt = dict_based_prompt_to_langchain_prompt(messages)
-    model_output = message_to_string(llm.invoke_langchain(filled_llm_prompt))
+    llm, _ = get_default_llms(timeout=5)
+    prompt = SLACK_LANGUAGE_REPHRASE_PROMPT.format(query=msg)
+    model_output = llm_response_to_string(llm.invoke(prompt))
     logger.debug(model_output)
 
     return model_output

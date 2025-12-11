@@ -5,7 +5,6 @@ from onyx.context.search.models import ContextExpansionType
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
 from onyx.llm.interfaces import LLM
-from onyx.llm.message_types import UserMessage
 from onyx.prompts.search_prompts import DOCUMENT_CONTEXT_SELECTION_PROMPT
 from onyx.prompts.search_prompts import DOCUMENT_SELECTION_PROMPT
 from onyx.tools.tool_implementations.search.constants import (
@@ -116,19 +115,12 @@ def classify_section_relevance(
         user_query=user_query,
     )
 
-    user_msg: UserMessage = {
-        "role": "user",
-        "content": prompt_text,
-    }
-
-    messages = [user_msg]
-
     # Default to MAIN_SECTION_ONLY
     default_classification = ContextExpansionType.MAIN_SECTION_ONLY
 
     # Call LLM for classification
     try:
-        response = llm.invoke(prompt=messages)
+        response = llm.invoke(prompt=prompt_text)
         llm_response = response.choice.message.content
 
         if not llm_response:
@@ -260,16 +252,9 @@ def select_sections_for_expansion(
         user_query=user_query,
     )
 
-    user_msg: UserMessage = {
-        "role": "user",
-        "content": prompt_text,
-    }
-
-    messages = [user_msg]
-
     # Call LLM for selection
     try:
-        response = llm.invoke(prompt=messages)
+        response = llm.invoke(prompt=prompt_text)
         llm_response = response.choice.message.content
 
         if not llm_response:

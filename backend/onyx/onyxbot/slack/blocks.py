@@ -16,7 +16,6 @@ from slack_sdk.models.blocks.basic_components import MarkdownTextObject
 from slack_sdk.models.blocks.block_elements import ImageElement
 
 from onyx.chat.models import ChatBasicResponse
-from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import SearchFeedbackType
@@ -255,9 +254,7 @@ def _build_documents_blocks(
     message_id: int | None,
     num_docs_to_display: int = ONYX_BOT_NUM_DOCS_TO_DISPLAY,
 ) -> list[Block]:
-    header_text = (
-        "Retrieved Documents" if DISABLE_GENERATIVE_AI else "Reference Documents"
-    )
+    header_text = "Reference Documents"
     seen_docs_identifiers = set()
     section_blocks: list[Block] = [HeaderBlock(text=header_text)]
     included_docs = 0

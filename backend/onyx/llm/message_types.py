@@ -1,22 +1,29 @@
+from enum import Enum
 from typing import Literal
-from typing import NotRequired
 
-from typing_extensions import TypedDict
+from pydantic import BaseModel
+
+
+class ToolChoiceOptions(str, Enum):
+    REQUIRED = "required"
+    AUTO = "auto"
+    NONE = "none"
 
 
 # Content part structures for multimodal messages
-class TextContentPart(TypedDict):
-    type: Literal["text"]
+# The classes in this mirror the OpenAI Chat Completions message types and work well with routers like LiteLLM
+class TextContentPart(BaseModel):
+    type: Literal["text"] = "text"
     text: str
 
 
-class ImageUrlDetail(TypedDict):
+class ImageUrlDetail(BaseModel):
     url: str
-    detail: NotRequired[Literal["auto", "low", "high"]]
+    detail: Literal["auto", "low", "high"] | None = None
 
 
-class ImageContentPart(TypedDict):
-    type: Literal["image_url"]
+class ImageContentPart(BaseModel):
+    type: Literal["image_url"] = "image_url"
     image_url: ImageUrlDetail
 
 
@@ -24,47 +31,40 @@ ContentPart = TextContentPart | ImageContentPart
 
 
 # Tool call structures
-class FunctionCall(TypedDict):
+class FunctionCall(BaseModel):
     name: str
     arguments: str
 
 
-class ToolCall(TypedDict):
+class ToolCall(BaseModel):
+    type: Literal["function"] = "function"
     id: str
-    type: Literal["function"]
     function: FunctionCall
 
 
 # Message types
-class SystemMessage(TypedDict):
-    role: Literal["system"]
+class SystemMessage(BaseModel):
+    role: Literal["system"] = "system"
     content: str
 
 
-class UserMessageWithText(TypedDict):
-    role: Literal["user"]
-    content: str
+class UserMessage(BaseModel):
+    role: Literal["user"] = "user"
+    content: str | list[ContentPart]
 
 
-class UserMessageWithParts(TypedDict):
-    role: Literal["user"]
-    content: list[ContentPart]
+class AssistantMessage(BaseModel):
+    role: Literal["assistant"] = "assistant"
+    content: str | None = None
+    tool_calls: list[ToolCall] | None = None
 
 
-UserMessage = UserMessageWithText | UserMessageWithParts
-
-
-class AssistantMessage(TypedDict):
-    role: Literal["assistant"]
-    content: NotRequired[str | None]
-    tool_calls: NotRequired[list[ToolCall]]
-
-
-class ToolMessage(TypedDict):
-    role: Literal["tool"]
+class ToolMessage(BaseModel):
+    role: Literal["tool"] = "tool"
     content: str
     tool_call_id: str
 
 
 # Union type for all OpenAI Chat Completions messages
 ChatCompletionMessage = SystemMessage | UserMessage | AssistantMessage | ToolMessage
+LanguageModelInput = list[ChatCompletionMessage] | str

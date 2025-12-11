@@ -1,45 +1,20 @@
-import json
 import os
 import traceback
 from collections.abc import Iterator
-from collections.abc import Sequence
 from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
 from typing import Union
 
-from httpx import RemoteProtocolError
-from langchain.schema.language_model import (
-    LanguageModelInput as LangChainLanguageModelInput,
-)
-from langchain_core.messages import AIMessage
-from langchain_core.messages import AIMessageChunk
 from langchain_core.messages import BaseMessage
-from langchain_core.messages import BaseMessageChunk
-from langchain_core.messages import ChatMessage
-from langchain_core.messages import ChatMessageChunk
-from langchain_core.messages import FunctionMessage
-from langchain_core.messages import FunctionMessageChunk
-from langchain_core.messages import HumanMessage
-from langchain_core.messages import HumanMessageChunk
-from langchain_core.messages import SystemMessage
-from langchain_core.messages import SystemMessageChunk
-from langchain_core.messages.tool import ToolCallChunk
-from langchain_core.messages.tool import ToolMessage
-from langchain_core.prompt_values import PromptValue
 
-from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.configs.chat_configs import QA_TIMEOUT
-from onyx.configs.model_configs import (
-    DISABLE_LITELLM_STREAMING,
-)
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
 from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.interfaces import STANDARD_TOOL_CHOICE_OPTIONS
 from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.llm_provider_options import AZURE_PROVIDER_NAME
 from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
@@ -57,14 +32,12 @@ from onyx.utils.special_types import JSON_ro
 logger = setup_logger()
 
 if TYPE_CHECKING:
-    from litellm import CustomStreamWrapper, Message
+    from litellm import CustomStreamWrapper
 
 
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
 LEGACY_MAX_TOKENS_KWARG = "max_tokens"
 STANDARD_MAX_TOKENS_KWARG = "max_completion_tokens"
-
-LegacyPromptDict = Sequence[str | list[str] | dict[str, Any] | tuple[str, str]]
 
 
 class LLMTimeoutError(Exception):
@@ -79,199 +52,8 @@ class LLMRateLimitError(Exception):
     """
 
 
-def _base_msg_to_role(msg: BaseMessage) -> str:
-    if isinstance(msg, HumanMessage) or isinstance(msg, HumanMessageChunk):
-        return "user"
-    if isinstance(msg, AIMessage) or isinstance(msg, AIMessageChunk):
-        return "assistant"
-    if isinstance(msg, SystemMessage) or isinstance(msg, SystemMessageChunk):
-        return "system"
-    if isinstance(msg, FunctionMessage) or isinstance(msg, FunctionMessageChunk):
-        return "function"
-    return "unknown"
-
-
-def _convert_litellm_message_to_langchain_message(
-    litellm_message: "Message",
-) -> BaseMessage:
-    from onyx.llm.litellm_singleton import litellm
-
-    # Extracting the basic attributes from the litellm message
-    content = litellm_message.content or ""
-    role = litellm_message.role
-
-    # Handling function calls and tool calls if present
-    tool_calls = (
-        cast(
-            list[litellm.ChatCompletionMessageToolCall],
-            litellm_message.tool_calls,
-        )
-        if hasattr(litellm_message, "tool_calls")
-        else []
-    )
-
-    # Create the appropriate langchain message based on the role
-    if role == "user":
-        return HumanMessage(content=content)
-    elif role == "assistant":
-        return AIMessage(
-            content=content,
-            tool_calls=(
-                [
-                    {
-                        "name": tool_call.function.name or "",
-                        "args": json.loads(tool_call.function.arguments),
-                        "id": tool_call.id,
-                    }
-                    for tool_call in tool_calls
-                ]
-                if tool_calls
-                else []
-            ),
-        )
-    elif role == "system":
-        return SystemMessage(content=content)
-    else:
-        raise ValueError(f"Unknown role type received: {role}")
-
-
-def _convert_message_to_dict(message: BaseMessage) -> dict:
-    """Adapted from langchain_community.chat_models.litellm._convert_message_to_dict"""
-    if isinstance(message, ChatMessage):
-        message_dict = {"role": message.role, "content": message.content}
-    elif isinstance(message, HumanMessage):
-        message_dict = {"role": "user", "content": message.content}
-    elif isinstance(message, AIMessage):
-        message_dict = {"role": "assistant", "content": message.content}
-        if message.tool_calls:
-            message_dict["tool_calls"] = [
-                {
-                    "id": tool_call.get("id"),
-                    "function": {
-                        "name": tool_call["name"],
-                        "arguments": json.dumps(tool_call["args"]),
-                    },
-                    "type": "function",
-                    "index": tool_call.get("index", 0),
-                }
-                for tool_call in message.tool_calls
-            ]
-        if "function_call" in message.additional_kwargs:
-            message_dict["function_call"] = message.additional_kwargs["function_call"]
-    elif isinstance(message, SystemMessage):
-        message_dict = {"role": "system", "content": message.content}
-    elif isinstance(message, FunctionMessage):
-        message_dict = {
-            "role": "function",
-            "content": message.content,
-            "name": message.name,
-        }
-    elif isinstance(message, ToolMessage):
-        message_dict = {
-            "tool_call_id": message.tool_call_id,
-            "role": "tool",
-            "name": message.name or "",
-            "content": message.content,
-        }
-    else:
-        raise ValueError(f"Got unknown type {message}")
-    if "name" in message.additional_kwargs:
-        message_dict["name"] = message.additional_kwargs["name"]
-    return message_dict
-
-
-def _convert_delta_to_message_chunk(
-    _dict: dict[str, Any],
-    curr_msg: BaseMessage | None,
-    stop_reason: str | None = None,
-) -> BaseMessageChunk:
-    from litellm.utils import ChatCompletionDeltaToolCall
-
-    """Adapted from langchain_community.chat_models.litellm._convert_delta_to_message_chunk"""
-    role = _dict.get("role") or (_base_msg_to_role(curr_msg) if curr_msg else "unknown")
-    content = _dict.get("content") or ""
-    additional_kwargs = {}
-    if _dict.get("function_call"):
-        additional_kwargs.update({"function_call": dict(_dict["function_call"])})
-    tool_calls = cast(list[ChatCompletionDeltaToolCall] | None, _dict.get("tool_calls"))
-
-    if role == "user":
-        return HumanMessageChunk(content=content)
-    # NOTE: if tool calls are present, then it's an assistant.
-    # In Ollama, the role will be None for tool-calls
-    elif role == "assistant" or tool_calls:
-        if tool_calls:
-            tool_call = tool_calls[0]
-            tool_name = tool_call.function.name or (curr_msg and curr_msg.name) or ""
-            idx = tool_call.index
-
-            tool_call_chunk = ToolCallChunk(
-                name=tool_name,
-                id=tool_call.id,
-                args=tool_call.function.arguments,
-                index=idx,
-            )
-
-            return AIMessageChunk(
-                content=content,
-                tool_call_chunks=[tool_call_chunk],
-                additional_kwargs={
-                    "usage_metadata": {"stop": stop_reason},
-                    **additional_kwargs,
-                },
-            )
-
-        return AIMessageChunk(
-            content=content,
-            additional_kwargs={
-                "usage_metadata": {"stop": stop_reason},
-                **additional_kwargs,
-            },
-        )
-    elif role == "system":
-        return SystemMessageChunk(content=content)
-    elif role == "function":
-        return FunctionMessageChunk(content=content, name=_dict["name"])
-    elif role:
-        return ChatMessageChunk(content=content, role=role)
-
-    raise ValueError(f"Unknown role: {role}")
-
-
-def _prompt_to_dict(
-    prompt: LanguageModelInput | LangChainLanguageModelInput,
-) -> LegacyPromptDict:
-    # NOTE: this must go first, since it is also a Sequence
-    if isinstance(prompt, str):
-        return [_convert_message_to_dict(HumanMessage(content=prompt))]
-
-    if isinstance(prompt, (list, Sequence)):
-        normalized_prompt: list[str | list[str] | dict[str, Any] | tuple[str, str]] = []
-        for msg in prompt:
-            if isinstance(msg, BaseMessage):
-                normalized_prompt.append(_convert_message_to_dict(msg))
-            elif isinstance(msg, dict):
-                normalized_prompt.append(dict(msg))
-            else:
-                normalized_prompt.append(msg)
-        return normalized_prompt
-
-    if isinstance(prompt, BaseMessage):
-        return [_convert_message_to_dict(prompt)]
-
-    if isinstance(prompt, PromptValue):
-        return [_convert_message_to_dict(message) for message in prompt.to_messages()]
-
-    raise TypeError(f"Unsupported prompt type: {type(prompt)}")
-
-
-def _prompt_as_json(
-    prompt: LanguageModelInput | LangChainLanguageModelInput,
-    *,
-    is_legacy_langchain: bool,
-) -> JSON_ro:
-    prompt_payload = _prompt_to_dict(prompt) if is_legacy_langchain else prompt
-    return cast(JSON_ro, prompt_payload)
+def _prompt_as_json(prompt: LanguageModelInput) -> JSON_ro:
+    return cast(JSON_ro, prompt)
 
 
 class LitellmLLM(LLM):
@@ -371,18 +153,12 @@ class LitellmLLM(LLM):
             dump["credentials_file"] = mask_string(credentials_file)
         return dump
 
-    def log_model_configs(self) -> None:
-        logger.debug(f"Config: {self._safe_model_config()}")
-
     def _record_call(
         self,
-        prompt: LanguageModelInput | LangChainLanguageModelInput,
-        is_legacy_langchain: bool = False,
+        prompt: LanguageModelInput,
     ) -> None:
         if self._long_term_logger:
-            prompt_json = _prompt_as_json(
-                prompt, is_legacy_langchain=is_legacy_langchain
-            )
+            prompt_json = _prompt_as_json(prompt)
             self._long_term_logger.record(
                 {
                     "prompt": prompt_json,
@@ -393,14 +169,11 @@ class LitellmLLM(LLM):
 
     def _record_result(
         self,
-        prompt: LanguageModelInput | LangChainLanguageModelInput,
+        prompt: LanguageModelInput,
         model_output: BaseMessage,
-        is_legacy_langchain: bool,
     ) -> None:
         if self._long_term_logger:
-            prompt_json = _prompt_as_json(
-                prompt, is_legacy_langchain=is_legacy_langchain
-            )
+            prompt_json = _prompt_as_json(prompt)
             tool_calls = (
                 model_output.tool_calls if hasattr(model_output, "tool_calls") else []
             )
@@ -416,14 +189,11 @@ class LitellmLLM(LLM):
 
     def _record_error(
         self,
-        prompt: LanguageModelInput | LangChainLanguageModelInput,
+        prompt: LanguageModelInput,
         error: Exception,
-        is_legacy_langchain: bool,
     ) -> None:
         if self._long_term_logger:
-            prompt_json = _prompt_as_json(
-                prompt, is_legacy_langchain=is_legacy_langchain
-            )
+            prompt_json = _prompt_as_json(prompt)
             self._long_term_logger.record(
                 {
                     "prompt": prompt_json,
@@ -440,7 +210,7 @@ class LitellmLLM(LLM):
 
     def _completion(
         self,
-        prompt: LanguageModelInput | LangChainLanguageModelInput,
+        prompt: LanguageModelInput,
         tools: list[dict] | None,
         tool_choice: ToolChoiceOptions | None,
         stream: bool,
@@ -449,39 +219,17 @@ class LitellmLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        is_legacy_langchain: bool = False,
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
-        # litellm doesn't accept LangChain BaseMessage objects, so we need to convert them
-        # to a dict representation
-        processed_prompt: LegacyPromptDict | LanguageModelInput
-        if is_legacy_langchain:
-            processed_prompt = _prompt_to_dict(prompt)
-        else:
-            processed_prompt = cast(LanguageModelInput, prompt)
-
-        # Record the original prompt (not the processed one) for logging
-        original_prompt = prompt
-        self._record_call(original_prompt, is_legacy_langchain)
+        self._record_call(prompt)
         from onyx.llm.litellm_singleton import litellm
         from litellm.exceptions import Timeout, RateLimitError
-
-        tool_choice_formatted: dict[str, Any] | str | None
-        if not tools:
-            tool_choice_formatted = None
-        elif tool_choice and tool_choice not in STANDARD_TOOL_CHOICE_OPTIONS:
-            tool_choice_formatted = {
-                "type": "function",
-                "function": {"name": tool_choice},
-            }
-        else:
-            tool_choice_formatted = tool_choice
 
         is_reasoning = model_is_reasoning_model(
             self.config.model_name, self.config.model_provider
         )
 
         # Needed to get reasoning tokens from the model
-        if not is_legacy_langchain and (
+        if (
             is_true_openai_model(self.config.model_provider, self.config.model_name)
             or self.config.model_provider == AZURE_PROVIDER_NAME
         ):
@@ -502,9 +250,9 @@ class LitellmLLM(LLM):
                 api_version=self._api_version or None,
                 custom_llm_provider=self._custom_llm_provider or None,
                 # actual input
-                messages=processed_prompt,
+                messages=prompt,
                 tools=tools,
-                tool_choice=tool_choice_formatted,
+                tool_choice=tool_choice if tools else None,
                 # streaming choice
                 stream=stream,
                 # model params
@@ -557,7 +305,7 @@ class LitellmLLM(LLM):
             )
         except Exception as e:
 
-            self._record_error(original_prompt, e, is_legacy_langchain)
+            self._record_error(prompt, e)
             # for break pointing
             if isinstance(e, Timeout):
                 raise LLMTimeoutError(e)
@@ -587,134 +335,7 @@ class LitellmLLM(LLM):
             max_input_tokens=self._max_input_tokens,
         )
 
-    def _invoke_implementation_langchain(
-        self,
-        prompt: LangChainLanguageModelInput,
-        tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
-        structured_response_format: dict | None = None,
-        timeout_override: int | None = None,
-        max_tokens: int | None = None,
-    ) -> BaseMessage:
-        from litellm import ModelResponse
-
-        if LOG_ONYX_MODEL_INTERACTIONS:
-            self.log_model_configs()
-
-        response = cast(
-            ModelResponse,
-            self._completion(
-                is_legacy_langchain=True,
-                prompt=prompt,
-                tools=tools,
-                tool_choice=tool_choice,
-                stream=False,
-                structured_response_format=structured_response_format,
-                timeout_override=timeout_override,
-                max_tokens=max_tokens,
-                parallel_tool_calls=False,
-            ),
-        )
-        choice = response.choices[0]
-        if hasattr(choice, "message"):
-            output = _convert_litellm_message_to_langchain_message(choice.message)
-            if output:
-                self._record_result(prompt, output, is_legacy_langchain=True)
-            return output
-        else:
-            raise ValueError("Unexpected response choice type")
-
-    def _stream_implementation_langchain(
-        self,
-        prompt: LangChainLanguageModelInput,
-        tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
-        structured_response_format: dict | None = None,
-        timeout_override: int | None = None,
-        max_tokens: int | None = None,
-    ) -> Iterator[BaseMessage]:
-        from litellm import CustomStreamWrapper
-
-        if LOG_ONYX_MODEL_INTERACTIONS:
-            self.log_model_configs()
-
-        if DISABLE_LITELLM_STREAMING:
-            yield self.invoke_langchain(
-                prompt,
-                tools,
-                tool_choice,
-                structured_response_format,
-                timeout_override,
-                max_tokens,
-            )
-            return
-
-        output = None
-        response = cast(
-            CustomStreamWrapper,
-            self._completion(
-                is_legacy_langchain=True,
-                prompt=prompt,
-                tools=tools,
-                tool_choice=tool_choice,
-                stream=True,
-                structured_response_format=structured_response_format,
-                timeout_override=timeout_override,
-                max_tokens=max_tokens,
-                parallel_tool_calls=False,
-                reasoning_effort="minimal",
-            ),
-        )
-        try:
-            for part in response:
-                if not part["choices"]:
-                    continue
-
-                choice = part["choices"][0]
-                message_chunk = _convert_delta_to_message_chunk(
-                    choice["delta"],
-                    output,
-                    stop_reason=choice["finish_reason"],
-                )
-
-                if output is None:
-                    output = message_chunk
-                else:
-                    output += message_chunk
-
-                yield message_chunk
-
-        except RemoteProtocolError:
-            raise RuntimeError(
-                "The AI model failed partway through generation, please try again."
-            )
-
-        if output:
-            self._record_result(prompt, output, is_legacy_langchain=True)
-
-        if LOG_ONYX_MODEL_INTERACTIONS and output:
-            content = output.content or ""
-            if isinstance(output, AIMessage):
-                if content:
-                    log_msg = content
-                elif output.tool_calls:
-                    log_msg = "Tool Calls: " + str(
-                        [
-                            {
-                                key: value
-                                for key, value in tool_call.items()
-                                if key != "index"
-                            }
-                            for tool_call in output.tool_calls
-                        ]
-                    )
-                else:
-                    log_msg = ""
-                logger.debug(f"Raw Model Output:\n{log_msg}")
-            else:
-                logger.debug(f"Raw Model Output:\n{content}")
-
-    def _invoke_implementation(
+    def invoke(
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
@@ -727,9 +348,6 @@ class LitellmLLM(LLM):
         from litellm import ModelResponse as LiteLLMModelResponse
 
         from onyx.llm.model_response import from_litellm_model_response
-
-        if LOG_ONYX_MODEL_INTERACTIONS:
-            self.log_model_configs()
 
         response = cast(
             LiteLLMModelResponse,
@@ -748,7 +366,7 @@ class LitellmLLM(LLM):
 
         return from_litellm_model_response(response)
 
-    def _stream_implementation(
+    def stream(
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
@@ -760,9 +378,6 @@ class LitellmLLM(LLM):
     ) -> Iterator[ModelResponseStream]:
         from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
         from onyx.llm.model_response import from_litellm_model_response_stream
-
-        if LOG_ONYX_MODEL_INTERACTIONS:
-            self.log_model_configs()
 
         response = cast(
             LiteLLMCustomStreamWrapper,
