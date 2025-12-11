@@ -25,7 +25,7 @@ ARG NODE_OPTIONS
 COPY . .
 
 # Install dependencies
-RUN npm ci --legacy-peer-deps
+RUN npm ci
 
 # needed to get the `standalone` dir we expect later
 ENV NEXT_PRIVATE_STANDALONE=true
