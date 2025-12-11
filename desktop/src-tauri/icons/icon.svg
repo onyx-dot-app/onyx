@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea"/>
+      <stop offset="100%" style="stop-color:#764ba2"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Rounded square background -->
+  <rect width="1024" height="1024" rx="220" ry="220" fill="url(#bg)"/>
+  
+  <!-- Onyx "O" letter -->
+  <circle cx="512" cy="512" r="280" fill="none" stroke="white" stroke-width="80"/>
+  
+  <!-- Inner detail - gem facet effect -->
+  <path d="M512 300 L650 450 L512 724 L374 450 Z" fill="white" opacity="0.3"/>
+</svg>
