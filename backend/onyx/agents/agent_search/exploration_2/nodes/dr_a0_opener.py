@@ -491,6 +491,9 @@ def opener(
     # Perform a commit to ensure the message_id is set and saved
     db_session.commit()
 
+    # query_independent_context = _get_query_independent_context(db_session)
+    # query_dependent_context = _get_query_dependent_context(db_session)
+
     # get the connected tools and format for the Deep Research flow
     kg_enabled = graph_config.behavior.kg_config_settings.KG_ENABLED
     db_session = graph_config.persistence.db_session
