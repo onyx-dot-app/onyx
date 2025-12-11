@@ -32,6 +32,7 @@ from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 
 _CODA_CALL_TIMEOUT = 30
+CODA_BASE_URL = "https://coda.io/apis/v1"
 
 logger = setup_logger()
 
@@ -90,7 +91,7 @@ class CodaApiClient:
         bearer_token: str, 
     ) -> None:
         self.bearer_token = bearer_token
-        self.base_url = "https://coda.io/apis/v1" #makes api calls nicer to look at further down the file
+        self.base_url = CODA_BASE_URL #makes api calls nicer to look at further down the file
     
     def get(self, endpoint: str, params: Optional[dict[str, str]] = None) -> dict[str, Any]:
         url = self._build_url(endpoint)
