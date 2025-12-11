@@ -9,8 +9,12 @@ from litellm.types.utils import Function as LiteLLMFunction
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.llm.chat_llm import LitellmLLM
 from onyx.llm.message_types import AssistantMessage
+from onyx.llm.message_types import FunctionCall
 from onyx.llm.message_types import LanguageModelInput
+from onyx.llm.message_types import ToolCall
 from onyx.llm.message_types import UserMessage
+from onyx.llm.model_response import ModelResponse
+from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.utils import get_max_input_tokens
 
 
@@ -24,6 +28,89 @@ def _create_delta(
     # get set, so we have to do it this way
     delta.tool_calls = tool_calls
     return delta
+
+
+def _model_response_to_assistant_message(response: ModelResponse) -> AssistantMessage:
+    """Convert a ModelResponse to an AssistantMessage for testing."""
+    message = response.choice.message
+    tool_calls = None
+    if message.tool_calls:
+        tool_calls = [
+            ToolCall(
+                id=tc.id,
+                function=FunctionCall(
+                    name=tc.function.name or "",
+                    arguments=tc.function.arguments or "",
+                ),
+            )
+            for tc in message.tool_calls
+        ]
+    return AssistantMessage(
+        role="assistant",
+        content=message.content,
+        tool_calls=tool_calls,
+    )
+
+
+def _accumulate_stream_to_assistant_message(
+    stream_chunks: list[ModelResponseStream],
+) -> AssistantMessage:
+    """Accumulate streaming deltas into a final AssistantMessage for testing."""
+    accumulated_content = ""
+    tool_calls_map: dict[int, dict[str, str]] = {}
+
+    for chunk in stream_chunks:
+        delta = chunk.choice.delta
+
+        # Accumulate content
+        if delta.content:
+            accumulated_content += delta.content
+
+        # Accumulate tool calls
+        if delta.tool_calls:
+            for tool_call_delta in delta.tool_calls:
+                index = tool_call_delta.index
+
+                if index not in tool_calls_map:
+                    tool_calls_map[index] = {
+                        "id": "",
+                        "name": "",
+                        "arguments": "",
+                    }
+
+                if tool_call_delta.id:
+                    tool_calls_map[index]["id"] = tool_call_delta.id
+
+                if tool_call_delta.function:
+                    if tool_call_delta.function.name:
+                        tool_calls_map[index]["name"] = tool_call_delta.function.name
+                    if tool_call_delta.function.arguments:
+                        tool_calls_map[index][
+                            "arguments"
+                        ] += tool_call_delta.function.arguments
+
+    # Convert accumulated tool calls to ToolCall list, sorted by index
+    tool_calls = None
+    if tool_calls_map:
+        tool_calls = [
+            ToolCall(
+                type="function",
+                id=tc_data["id"],
+                function=FunctionCall(
+                    name=tc_data["name"],
+                    arguments=tc_data["arguments"],
+                ),
+            )
+            for index in sorted(tool_calls_map.keys())
+            for tc_data in [tool_calls_map[index]]
+            if tc_data["id"] and tc_data["name"]
+        ]
+
+    return AssistantMessage(
+        role="assistant",
+        content=accumulated_content if accumulated_content else None,
+        tool_calls=tool_calls,
+    )
 
 
 @pytest.fixture
@@ -116,32 +203,37 @@ def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
             },
         ]
 
-        # Call the _invoke_implementation method
+        # Call the invoke method
         result = default_multi_llm.invoke(messages, tools)
 
-        # Assert that the result is an AssistantMessage
-        assert isinstance(result, AssistantMessage)
+        # Assert that the result is a ModelResponse
+        assert isinstance(result, ModelResponse)
+
+        # Convert to AssistantMessage for easier assertion
+        assistant_msg = _model_response_to_assistant_message(result)
 
         # Assert that the content is None (as per the mock response)
-        assert result.content is None or result.content == ""
+        assert assistant_msg.content is None or assistant_msg.content == ""
 
         # Assert that there are two tool calls
-        assert result.tool_calls is not None
-        assert len(result.tool_calls) == 2
+        assert assistant_msg.tool_calls is not None
+        assert len(assistant_msg.tool_calls) == 2
 
         # Assert the details of the first tool call
-        assert result.tool_calls[0].id == "call_1"
-        assert result.tool_calls[0].function.name == "get_weather"
-        assert result.tool_calls[0].function.arguments == '{"location": "New York"}'
+        assert assistant_msg.tool_calls[0].id == "call_1"
+        assert assistant_msg.tool_calls[0].function.name == "get_weather"
+        assert (
+            assistant_msg.tool_calls[0].function.arguments == '{"location": "New York"}'
+        )
 
         # Assert the details of the second tool call
-        assert result.tool_calls[1].id == "call_2"
-        assert result.tool_calls[1].function.name == "get_time"
-        assert result.tool_calls[1].function.arguments == '{"timezone": "EST"}'
+        assert assistant_msg.tool_calls[1].id == "call_2"
+        assert assistant_msg.tool_calls[1].function.name == "get_time"
+        assert assistant_msg.tool_calls[1].function.arguments == '{"timezone": "EST"}'
 
         # Verify that litellm.completion was called with the correct arguments
         mock_completion.assert_called_once_with(
-            model="openai/gpt-3.5-turbo",
+            model="openai/responses/gpt-3.5-turbo",
             api_key="test_key",
             base_url=None,
             api_version=None,
@@ -154,7 +246,7 @@ def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
             stream=False,
             temperature=0.0,  # Default value from GEN_AI_TEMPERATURE
             timeout=30,
-            parallel_tool_calls=False,
+            parallel_tool_calls=True,
             mock_response=MOCK_LLM_RESPONSE,
         )
 
@@ -270,8 +362,12 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
         # Assert that we received the correct number of chunks
         assert len(stream_result) == 3
 
-        # Get the final AssistantMessage from the stream
-        final_result = stream_result[-1]
+        # Assert that each chunk is a ModelResponseStream
+        for chunk in stream_result:
+            assert isinstance(chunk, ModelResponseStream)
+
+        # Accumulate the stream chunks into a final AssistantMessage
+        final_result = _accumulate_stream_to_assistant_message(stream_result)
 
         # Assert that the final result matches our expectations
         assert isinstance(final_result, AssistantMessage)
@@ -289,7 +385,7 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
 
         # Verify that litellm.completion was called with the correct arguments
         mock_completion.assert_called_once_with(
-            model="openai/gpt-3.5-turbo",
+            model="openai/responses/gpt-3.5-turbo",
             api_key="test_key",
             base_url=None,
             api_version=None,
@@ -302,7 +398,7 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
             stream=True,
             temperature=0.0,  # Default value from GEN_AI_TEMPERATURE
             timeout=30,
-            parallel_tool_calls=False,
+            parallel_tool_calls=True,
             mock_response=MOCK_LLM_RESPONSE,
             stream_options={"include_usage": True},
         )
