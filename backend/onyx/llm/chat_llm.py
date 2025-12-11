@@ -52,14 +52,14 @@ class LLMRateLimitError(Exception):
     """
 
 
-def _prompt_to_dicts(prompt: LanguageModelInput) -> list[dict[str, Any]] | str:
+def _prompt_to_dicts(prompt: LanguageModelInput) -> list[dict[str, Any]]:
     """Convert Pydantic message models to dictionaries for LiteLLM.
 
     LiteLLM expects messages to be dictionaries (with .get() method),
     not Pydantic models. This function serializes the messages.
     """
     if isinstance(prompt, str):
-        return prompt
+        return [{"role": "user", "content": prompt}]
     return [msg.model_dump(exclude_none=True) for msg in prompt]
 
 
