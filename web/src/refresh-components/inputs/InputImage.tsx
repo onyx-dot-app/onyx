@@ -61,11 +61,7 @@ export default function InputImage({
   const renderContent = () => {
     switch (content) {
       case "placeholder":
-        return (
-          <div className="flex items-center justify-center p-[2px] w-7 h-7">
-            <SvgPlus className="w-6 h-6 stroke-text-03" />
-          </div>
-        );
+        return <SvgPlus className="w-6 h-6 stroke-text-02" />;
 
       case "upload":
         return (

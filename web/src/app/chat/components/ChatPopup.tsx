@@ -26,7 +26,8 @@ export function ChatPopup() {
   const isConsentScreen = enterpriseSettings?.enable_consent_screen;
   if (
     (!enterpriseSettings?.custom_popup_content && !isConsentScreen) ||
-    completedFlow
+    completedFlow ||
+    !enterpriseSettings?.show_first_visit_notice
   ) {
     return null;
   }

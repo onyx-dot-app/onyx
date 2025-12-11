@@ -3,6 +3,7 @@
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { cn } from "@/lib/utils";
+import { OnyxIcon } from "@/components/icons/icons";
 
 export interface PreviewProps {
   logoDisplayStyle: "logo_and_name" | "logo_only" | "none";
@@ -11,6 +12,7 @@ export interface PreviewProps {
   chat_header_content: string;
   greeting_message: string;
   className?: string;
+  logoSrc?: string;
 }
 
 export function InputPreview() {
@@ -27,17 +29,33 @@ function PreviewStart({
   chat_footer_content,
   chat_header_content,
   greeting_message,
+  logoSrc,
 }: PreviewProps) {
   return (
     <div className="flex h-60 rounded-12 shadow-00 bg-background-tint-01 relative">
       {/* Sidebar */}
-      <div className="flex w-[5.75rem] h-full bg-background-tint-02 rounded-l-12 p-2">
-        <div className="flex justify-center h-fit w-full">
-          {/* TODO: Add logo here */}
-          {logoDisplayStyle === "logo_and_name" && (
-            <Text text04 className="origin-top-left scale-75">
-              {applicationDisplayName}
-            </Text>
+      <div className="flex w-[6rem] h-full bg-background-tint-02 rounded-l-12 p-1 justify-center">
+        <div className="flex flex-col h-fit w-full justify-center">
+          {logoDisplayStyle !== "none" && (
+            <div className="flex flex-row items-center justify-center w-28 gap-1 origin-top-left scale-75">
+              {logoSrc ? (
+                <img
+                  src={logoSrc}
+                  alt="Logo"
+                  style={{
+                    objectFit: "contain",
+                    height: "18px",
+                    width: "18px",
+                  }}
+                  className="flex-shrink-0"
+                />
+              ) : (
+                <OnyxIcon size={18} className="flex-shrink-0" />
+              )}
+              {logoDisplayStyle === "logo_and_name" && (
+                <Truncated headingH3>{applicationDisplayName}</Truncated>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -116,6 +134,7 @@ export function Preview({
   chat_footer_content,
   chat_header_content,
   greeting_message,
+  logoSrc,
   className,
 }: PreviewProps) {
   return (
@@ -126,6 +145,7 @@ export function Preview({
         chat_footer_content={chat_footer_content}
         chat_header_content={chat_header_content}
         greeting_message={greeting_message}
+        logoSrc={logoSrc}
       />
       <PreviewChat
         chat_header_content={chat_header_content}

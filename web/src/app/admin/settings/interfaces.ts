@@ -69,6 +69,7 @@ export interface EnterpriseSettings {
   application_name: string | null;
   use_custom_logo: boolean;
   use_custom_logotype: boolean;
+  logo_display_style: string | null; // "logo_and_name", "logo_only", or "none"
 
   // custom navigation
   custom_nav_items: NavigationItem[];
@@ -80,6 +81,8 @@ export interface EnterpriseSettings {
   custom_popup_header: string | null;
   custom_popup_content: string | null;
   enable_consent_screen: boolean | null;
+  show_first_visit_notice: boolean | null;
+  custom_greeting_message: string | null;
 }
 
 export interface CombinedSettings {

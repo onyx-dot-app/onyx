@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Logo from "@/refresh-components/Logo";
 import { SvgSidebar } from "@opal/icons";
+import { useSettingsContext } from "@/components/settings/SettingsProvider";
 
 interface LogoSectionProps {
   folded?: boolean;
@@ -26,6 +27,8 @@ function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
     [onFoldClick]
   );
 
+  const settings = useSettingsContext();
+
   return (
     <div
       className={cn(
@@ -35,8 +38,12 @@ function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
         // If you want to modify it, you'll also have to modify the size of the sidebar (located at the bottom of this file, annotated with `@HERE`).
         //
         // - @raunakab
-        "flex flex-row items-center py-1 gap-1 min-h-[3.5rem] px-3.5",
-        folded ? "justify-start" : "justify-between"
+        "flex flex-row items-center py-1 gap-1 min-h-[3.5rem] px-3.5 ",
+        folded
+          ? "justify-start"
+          : settings.enterpriseSettings?.logo_display_style === "logo_and_name"
+            ? "justify-between"
+            : "justify-center"
       )}
     >
       {folded === undefined ? (
