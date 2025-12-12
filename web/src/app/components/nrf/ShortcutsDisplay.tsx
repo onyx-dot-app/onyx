@@ -30,7 +30,7 @@ export const ShortcutsDisplay: React.FC<ShortcutsDisplayProps> = ({
         }
       `}
     >
-      {shortCuts.map((shortCut: Shortcut, index: number) => (
+      {shortCuts?.map((shortCut: Shortcut, index: number) => (
         <ShortCut
           key={index}
           onEdit={() => {

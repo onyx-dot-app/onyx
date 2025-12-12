@@ -1,53 +1,93 @@
+"use client";
+
 import Switch from "@/refresh-components/inputs/Switch";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
 import { useNRFPreferences } from "../../../components/context/NRFPreferencesContext";
 import {
   darkExtensionImages,
   lightExtensionImages,
 } from "@/lib/extension/constants";
+import Text from "@/refresh-components/texts/Text";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import SvgX from "@/icons/x";
+import SvgSettings from "@/icons/settings";
+import SvgSun from "@/icons/sun";
+import SvgMoon from "@/icons/moon";
+import { cn } from "@/lib/utils";
 
-const SidebarSwitch = ({
-  checked,
-  onCheckedChange,
-  label,
-}: {
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
+interface SettingRowProps {
   label: string;
-}) => (
-  <div className="flex justify-between items-center py-2">
-    <span className="text-sm text-text-300">{label}</span>
-    <Switch checked={checked} onCheckedChange={onCheckedChange} />
+  description?: string;
+  children: React.ReactNode;
+}
+
+const SettingRow = ({ label, description, children }: SettingRowProps) => (
+  <div className="flex justify-between items-center py-3">
+    <div className="flex flex-col gap-0.5">
+      <Text mainUiBody textLight05>
+        {label}
+      </Text>
+      {description && (
+        <Text secondaryBody textLight03>
+          {description}
+        </Text>
+      )}
+    </div>
+    {children}
   </div>
 );
 
-const RadioOption = ({
-  value,
-  label,
-  description,
-  groupValue,
-  onChange,
-}: {
-  value: string;
-  label: string;
-  description: string;
-  groupValue: string;
-  onChange: (value: string) => void;
-}) => (
-  <div className="flex items-start space-x-2 mb-2">
-    <RadioGroupItem
-      value={value}
-      id={value}
-      className="mt-1 border border-background-600 data-[state=checked]:border-white data-[state=checked]:bg-white"
+interface BackgroundThumbnailProps {
+  url: string;
+  isSelected: boolean;
+  onClick: () => void;
+}
+
+const BackgroundThumbnail = ({
+  url,
+  isSelected,
+  onClick,
+}: BackgroundThumbnailProps) => (
+  <button
+    onClick={onClick}
+    className={cn(
+      "relative overflow-hidden rounded-12 transition-all duration-200",
+      "aspect-[16/9]",
+      "group"
+    )}
+  >
+    <div
+      className="absolute inset-0 bg-cover bg-center transition-transform duration-300 group-hover:scale-105"
+      style={{ backgroundImage: `url(${url})` }}
     />
-    <Label htmlFor={value} className="flex flex-col">
-      <span className="text-sm text-text-300">{label}</span>
-      {description && (
-        <span className="text-xs text-text-500">{description}</span>
+    <div
+      className={cn(
+        "absolute inset-0 transition-all duration-200",
+        isSelected
+          ? "ring-2 ring-inset ring-white/80"
+          : "ring-1 ring-inset ring-white/20 group-hover:ring-white/40"
       )}
-    </Label>
-  </div>
+      style={{ borderRadius: "inherit" }}
+    />
+    {isSelected && (
+      <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white flex items-center justify-center">
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 12 12"
+          fill="none"
+          className="text-background-800"
+        >
+          <path
+            d="M10 3L4.5 8.5L2 6"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </div>
+    )}
+  </button>
 );
 
 export const SettingsPanel = ({
@@ -83,91 +123,126 @@ export const SettingsPanel = ({
     }
   };
 
+  const currentBackgroundUrl =
+    theme === "light" ? defaultLightBackgroundUrl : defaultDarkBackgroundUrl;
+  const backgroundImages =
+    theme === "dark" ? darkExtensionImages : lightExtensionImages;
+
   return (
-    <div
-      className="fixed top-0 right-0 w-[360px] h-full bg-background-800 text-text-300 overflow-y-auto z-20 transition-transform duration-300 ease-in-out transform"
-      style={{
-        transform: settingsOpen ? "translateX(0)" : "translateX(100%)",
-        boxShadow: "-2px 0 10px rgba(0,0,0,0.3)",
-      }}
-    >
-      <div className="p-6">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-semibold text-white">
-            Home page settings
-          </h2>
-          <button
-            aria-label="Close"
-            onClick={toggleSettings}
-            className="text-text-400 hover:text-white"
-          >
-            ✕
-          </button>
+    <>
+      {/* Backdrop overlay */}
+      <div
+        className={cn(
+          "fixed inset-0 bg-black/40 backdrop-blur-sm z-40 transition-opacity duration-300",
+          settingsOpen
+            ? "opacity-100 pointer-events-auto"
+            : "opacity-0 pointer-events-none"
+        )}
+        onClick={toggleSettings}
+      />
+
+      {/* Settings panel */}
+      <div
+        className={cn(
+          "fixed top-0 right-0 w-[400px] h-full z-50",
+          "bg-gradient-to-b from-background-900/95 to-background-800/95",
+          "backdrop-blur-xl",
+          "border-l border-white/10",
+          "overflow-y-auto",
+          "transition-transform duration-300 ease-out",
+          settingsOpen ? "translate-x-0" : "translate-x-full"
+        )}
+      >
+        {/* Header */}
+        <div className="sticky top-0 z-10 bg-gradient-to-b from-background-900/95 to-transparent pb-4">
+          <div className="flex items-center justify-between p-6 pb-2">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center justify-center w-10 h-10 rounded-12 bg-white/10">
+                <SvgSettings size={20} className="text-white" />
+              </div>
+              <Text headingH3 textLight05>
+                Settings
+              </Text>
+            </div>
+            <div className="flex items-center gap-3">
+              {/* Theme Toggle */}
+              <button
+                onClick={() =>
+                  toggleTheme(theme === "light" ? "dark" : "light")
+                }
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 rounded-full transition-all duration-200",
+                  "bg-white/10 hover:bg-white/15 border border-white/10"
+                )}
+                aria-label={`Switch to ${
+                  theme === "light" ? "dark" : "light"
+                } theme`}
+              >
+                {theme === "light" ? (
+                  <SvgSun size={16} className="text-white" />
+                ) : (
+                  <SvgMoon size={16} className="text-white" />
+                )}
+              </button>
+              <IconButton
+                icon={SvgX}
+                onClick={toggleSettings}
+                tertiary
+                className="hover:bg-white/10"
+              />
+            </div>
+          </div>
         </div>
 
-        <h3 className="text-sm font-semibold mb-2">General</h3>
-        <SidebarSwitch
-          checked={useOnyxAsNewTab}
-          onCheckedChange={handleUseOnyxToggle}
-          label="Use Onyx as new tab page"
-        />
-
-        <SidebarSwitch
-          checked={showShortcuts}
-          onCheckedChange={setShowShortcuts}
-          label="Show bookmarks"
-        />
-
-        <h3 className="text-sm font-semibold mt-6 mb-2">Theme</h3>
-        <RadioGroup
-          value={theme}
-          onValueChange={toggleTheme}
-          className="space-y-2"
-        >
-          <RadioOption
-            value="light"
-            label="Light theme"
-            description="Light theme"
-            groupValue={theme}
-            onChange={toggleTheme}
-          />
-          <RadioOption
-            value="dark"
-            label="Dark theme"
-            description="Dark theme"
-            groupValue={theme}
-            onChange={toggleTheme}
-          />
-        </RadioGroup>
-
-        <h3 className="text-sm font-semibold mt-6 mb-2">Background</h3>
-        <div className="grid grid-cols-4 gap-2">
-          {(theme === "dark" ? darkExtensionImages : lightExtensionImages).map(
-            (bg: string, index: number) => (
-              <div
-                key={bg}
-                onClick={() => updateBackgroundUrl(bg)}
-                className={`relative ${
-                  index === 0 ? "col-span-2 row-span-2" : ""
-                } cursor-pointer rounded-sm overflow-hidden`}
-                style={{
-                  paddingBottom: index === 0 ? "100%" : "50%",
-                }}
-              >
-                <div
-                  className="absolute inset-0 bg-cover bg-center"
-                  style={{ backgroundImage: `url(${bg})` }}
+        <div className="px-6 pb-8 space-y-8">
+          {/* General Section */}
+          <section>
+            <Text
+              secondaryAction
+              textLight03
+              className="uppercase tracking-wider mb-3"
+            >
+              General
+            </Text>
+            <div className="space-y-1 bg-white/5 rounded-16 px-4">
+              <SettingRow label="Use Onyx as new tab page">
+                <Switch
+                  checked={useOnyxAsNewTab}
+                  onCheckedChange={handleUseOnyxToggle}
                 />
-                {(theme === "light"
-                  ? defaultLightBackgroundUrl
-                  : defaultDarkBackgroundUrl) === bg && (
-                  <div className="absolute inset-0 border-2 border-blue-400 rounded" />
-                )}
-              </div>
-            )
-          )}
+              </SettingRow>
+              <div className="h-px bg-white/10" />
+              <SettingRow label="Show bookmarks">
+                <Switch
+                  checked={showShortcuts}
+                  onCheckedChange={setShowShortcuts}
+                />
+              </SettingRow>
+            </div>
+          </section>
+
+          {/* Background Section */}
+          <section>
+            <Text
+              secondaryAction
+              textLight03
+              className="uppercase tracking-wider mb-3"
+            >
+              Background
+            </Text>
+            <div className="grid grid-cols-3 gap-2">
+              {backgroundImages.map((bg: string) => (
+                <BackgroundThumbnail
+                  key={bg}
+                  url={bg}
+                  isSelected={currentBackgroundUrl === bg}
+                  onClick={() => updateBackgroundUrl(bg)}
+                />
+              ))}
+            </div>
+          </section>
         </div>
       </div>
-    </div>
+    </>
   );
 };

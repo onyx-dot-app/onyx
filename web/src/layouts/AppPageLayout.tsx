@@ -39,6 +39,7 @@ export interface AppPageLayoutProps
   extends React.HtmlHTMLAttributes<HTMLDivElement> {
   settings: CombinedSettings | null;
   chatSession: ChatSession | null;
+  hideShareChat?: boolean;
 }
 
 // AppPageLayout wraps chat pages with the shared header/footer white-labelling chrome.
@@ -49,6 +50,7 @@ export default function AppPageLayout({
   settings,
   chatSession,
   className,
+  hideShareChat = false,
   ...rest
 }: AppPageLayoutProps) {
   const { isMobile } = useScreenSize();
@@ -244,52 +246,53 @@ export default function AppPageLayout({
       )}
 
       <div className="flex flex-col h-full w-full">
-        {(isMobile || customHeaderContent || !showCenteredInput) && (
-          <header className="w-full flex flex-row justify-center items-center py-3 px-4 h-16">
-            <div className="flex-1">
-              <IconButton
-                icon={SvgSidebar}
-                onClick={() => setFolded(false)}
-                className={cn(!isMobile && "invisible")}
-                internal
-              />
-            </div>
-            <div className="flex-1 flex flex-col items-center">
-              <Text text03>{customHeaderContent}</Text>
-            </div>
-            <div className="flex-1 flex flex-row items-center justify-end px-1">
-              <Button
-                leftIcon={SvgShare}
-                transient={showShareModal}
-                tertiary
-                onClick={() => setShowShareModal(true)}
-                className={cn(showCenteredInput && "invisible")}
-              >
-                Share Chat
-              </Button>
-              <div className={cn(showCenteredInput && "invisible")}>
-                <SimplePopover
-                  trigger={
-                    <IconButton
-                      icon={SvgMoreHorizontal}
-                      className="ml-2"
-                      transient={popoverOpen}
-                      tertiary
-                    />
-                  }
-                  onOpenChange={(state) => {
-                    setPopoverOpen(state);
-                    if (!state) setShowMoveOptions(false);
-                  }}
-                  side="bottom"
-                  align="end"
-                >
-                  <PopoverMenu>{popoverItems}</PopoverMenu>
-                </SimplePopover>
+        {(isMobile || customHeaderContent || !showCenteredInput) &&
+          !hideShareChat && (
+            <header className="w-full flex flex-row justify-center items-center py-3 px-4 h-16">
+              <div className="flex-1">
+                <IconButton
+                  icon={SvgSidebar}
+                  onClick={() => setFolded(false)}
+                  className={cn(!isMobile && "invisible")}
+                  internal
+                />
               </div>
-            </div>
-          </header>
-        )}
+              <div className="flex-1 flex flex-col items-center">
+                <Text text03>{customHeaderContent}</Text>
+              </div>
+              <div className="flex-1 flex flex-row items-center justify-end px-1">
+                <Button
+                  leftIcon={SvgShare}
+                  transient={showShareModal}
+                  tertiary
+                  onClick={() => setShowShareModal(true)}
+                  className={cn(showCenteredInput && "invisible")}
+                >
+                  Share Chat
+                </Button>
+                <div className={cn(showCenteredInput && "invisible")}>
+                  <SimplePopover
+                    trigger={
+                      <IconButton
+                        icon={SvgMoreHorizontal}
+                        className="ml-2"
+                        transient={popoverOpen}
+                        tertiary
+                      />
+                    }
+                    onOpenChange={(state) => {
+                      setPopoverOpen(state);
+                      if (!state) setShowMoveOptions(false);
+                    }}
+                    side="bottom"
+                    align="end"
+                  >
+                    <PopoverMenu>{popoverItems}</PopoverMenu>
+                  </SimplePopover>
+                </div>
+              </div>
+            </header>
+          )}
 
         <div className={cn("flex-1 overflow-auto", className)} {...rest} />
 
