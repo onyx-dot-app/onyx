@@ -109,22 +109,22 @@ export const DocumentFeedbackTable = ({
         <TableBody>
           {documents
             .slice((page - 1) * numToDisplay, page * numToDisplay)
-            .map((document) => {
+            .map((doc) => {
               return (
-                <TableRow key={document.document_id}>
+                <TableRow key={doc.document_id}>
                   <TableCell className="whitespace-normal break-all">
                     <a
                       className="text-blue-600"
-                      href={document.link}
+                      href={doc.link}
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      {document.semantic_id}
+                      {doc.semantic_id}
                     </a>
                   </TableCell>
                   <TableCell>
                     <IsVisibleSection
-                      document={document}
+                      document={doc}
                       onUpdate={async (response) => {
                         if (response.ok) {
                           refresh();
@@ -141,13 +141,10 @@ export const DocumentFeedbackTable = ({
                   </TableCell>
                   <TableCell>
                     <div className="relative">
-                      <div
-                        key={document.document_id}
-                        className="h-10 ml-auto mr-8"
-                      >
+                      <div key={doc.document_id} className="h-10 ml-auto mr-8">
                         <ScoreSection
-                          documentId={document.document_id}
-                          initialScore={document.boost}
+                          documentId={doc.document_id}
+                          initialScore={doc.boost}
                           refresh={refresh}
                           setPopup={setPopup}
                         />
