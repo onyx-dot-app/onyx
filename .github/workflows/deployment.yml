@@ -222,11 +222,11 @@ jobs:
         working-directory: ./desktop
         shell: pwsh
         run: |
-          $SHORT_SHA = "${{ needs.determine-builds.outputs.short-sha }}"
+          # Windows MSI requires numeric-only build metadata, so we skip the SHA suffix
           if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            $VERSION = "0.0.0-dev+$SHORT_SHA"
+            $VERSION = "0.0.0"
           } else {
-            $VERSION = ("$env:GITHUB_REF_NAME" -replace '^v', '') + "+$SHORT_SHA"
+            $VERSION = "$env:GITHUB_REF_NAME" -replace '^v', ''
           }
           Write-Host "Injecting version: $VERSION"
 
