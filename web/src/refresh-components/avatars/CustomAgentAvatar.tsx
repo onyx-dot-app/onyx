@@ -9,6 +9,7 @@ import SvgSearch from "@/icons/search";
 import { IconProps } from "@/icons";
 import Text from "@/refresh-components/texts/Text";
 import Image from "next/image";
+import { DEFAULT_AGENT_AVATAR_SIZE_PX } from "@/lib/constants";
 
 interface IconConfig {
   Icon: React.FunctionComponent<IconProps>;
@@ -50,7 +51,7 @@ export default function CustomAgentAvatar({
   src,
   iconName,
 
-  size = 18,
+  size = DEFAULT_AGENT_AVATAR_SIZE_PX,
 }: CustomAgentAvatarProps) {
   if (src) {
     return (
