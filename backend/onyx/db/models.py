@@ -3975,3 +3975,54 @@ class TemporaryUserCheatSheetContext(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+# HACKATHON CHANGES
+
+
+class SubscriptionRegistration(Base):
+    """
+    Represents a user's subscription registration with document extraction contexts
+    and search questions.
+    """
+
+    __tablename__ = "subscription_registrations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
+    doc_extraction_contexts: Mapped[dict[str, str]] = mapped_column(
+        postgresql.JSONB(), nullable=False
+    )
+    search_questions: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class SubscriptionResult(Base):
+    """
+    Represents the results of a subscription for a user, including notifications.
+    """
+
+    __tablename__ = "subscription_results"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
+    date: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    type: Mapped[str] = mapped_column(String, nullable=False)
+    notifications: Mapped[dict[str, Any]] = mapped_column(
+        postgresql.JSONB(), nullable=False
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
