@@ -1,6 +1,6 @@
 [package]
-name = "Onyx"
-version = "0.1.0"
+name = "onyx"
+version = "0.0.0-dev"
 description = "Lightweight desktop app for Onyx Cloud"
 authors = ["you"]
 edition = "2021"
