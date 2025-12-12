@@ -23,6 +23,7 @@
         "fullscreen": false,
         "decorations": true,
         "transparent": true,
+        "backgroundColor": "#1a1a2e",
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
         "acceptFirstMouse": true,

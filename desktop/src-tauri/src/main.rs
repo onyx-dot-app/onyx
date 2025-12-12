@@ -168,6 +168,9 @@ fn trigger_new_window(app: &AppHandle) {
             .title_bar_style(tauri::TitleBarStyle::Overlay)
             .hidden_title(true);
 
+        #[cfg(target_os = "linux")]
+        let builder = builder.background_color(tauri::window::Color(0x1a, 0x1a, 0x2e, 0xff));
+
         if let Ok(window) = builder.build() {
             #[cfg(target_os = "macos")]
             {
@@ -355,6 +358,9 @@ async fn new_window(app: AppHandle, state: tauri::State<'_, ConfigState>) -> Res
     let builder = builder
         .title_bar_style(tauri::TitleBarStyle::Overlay)
         .hidden_title(true);
+
+    #[cfg(target_os = "linux")]
+    let builder = builder.background_color(tauri::window::Color(0x1a, 0x1a, 0x2e, 0xff));
 
     let window = builder.build().map_err(|e| e.to_string())?;
 
