@@ -32,6 +32,18 @@ export default function AnimatedMessageBubble({
   const [tintBg, setTintBg] = useState<string>("var(--background-tint-02)");
   const prevTargetRectRef = useRef<DOMRect | null>(null);
 
+  const handleAnimationComplete = React.useCallback(() => {
+    if (targetRef?.current && bubbleRef.current) {
+      const finalRect = targetRef.current.getBoundingClientRect();
+      const finalDeltaX = finalRect.left - startRect.left;
+      const finalDeltaY = finalRect.top - startRect.top;
+      bubbleRef.current.style.transform = `translate(${finalDeltaX}px, ${finalDeltaY}px)`;
+      bubbleRef.current.style.width = `${finalRect.width}px`;
+      bubbleRef.current.style.height = `${finalRect.height}px`;
+    }
+    onAnimationComplete();
+  }, [onAnimationComplete, startRect.left, startRect.top, targetRef]);
+
   // Read the CSS variable so styling controls duration.
   useLayoutEffect(() => {
     if (!bubbleRef.current) return;
@@ -67,10 +79,10 @@ export default function AnimatedMessageBubble({
       const prevRect = prevTargetRectRef.current;
       const changed =
         !prevRect ||
-        Math.abs(prevRect.left - nextRect.left) > 0.5 ||
-        Math.abs(prevRect.top - nextRect.top) > 0.5 ||
-        Math.abs(prevRect.width - nextRect.width) > 0.5 ||
-        Math.abs(prevRect.height - nextRect.height) > 0.5;
+        Math.abs(prevRect.left - nextRect.left) > 0.01 ||
+        Math.abs(prevRect.top - nextRect.top) > 0.01 ||
+        Math.abs(prevRect.width - nextRect.width) > 0.01 ||
+        Math.abs(prevRect.height - nextRect.height) > 0.01;
 
       if (changed) {
         prevTargetRectRef.current = nextRect;
@@ -98,8 +110,8 @@ export default function AnimatedMessageBubble({
   const targetRect = liveTargetRect ?? initialTargetRect;
   const targetWidth = targetRect?.width ?? startRect.width;
   const targetHeight = targetRect?.height ?? startRect.height;
-  const deltaX = targetRect ? targetRect.left - startRect.left : 0;
-  const deltaY = targetRect ? targetRect.top - startRect.top : 0;
+  const targetLeft = targetRect?.left ?? startRect.left;
+  const targetTop = targetRect?.top ?? startRect.top;
 
   return (
     <motion.div
@@ -108,21 +120,19 @@ export default function AnimatedMessageBubble({
         "fixed pointer-events-none z-[9999] whitespace-break-spaces rounded-t-16 rounded-bl-16 py-2 px-3 text-user-text overflow-hidden animated-message-bubble box-border"
       )}
       style={{
-        left: startRect.left,
-        top: startRect.top,
         willChange: "transform, width, height, background-color",
         boxSizing: "border-box",
       }}
       initial={{
-        x: 0,
-        y: 0,
+        left: startRect.left,
+        top: startRect.top,
         width: startRect.width,
         height: startRect.height,
         backgroundColor: neutralBg,
       }}
       animate={{
-        x: deltaX,
-        y: deltaY,
+        left: targetLeft,
+        top: targetTop,
         width: targetWidth,
         height: targetHeight,
         backgroundColor: tintBg,
@@ -132,7 +142,7 @@ export default function AnimatedMessageBubble({
         ease: [0.25, 0.1, 0.25, 1],
         backgroundColor: { duration: animationDurationS },
       }}
-      onAnimationComplete={onAnimationComplete}
+      onAnimationComplete={handleAnimationComplete}
     >
       <Text mainContentBody>{content}</Text>
     </motion.div>

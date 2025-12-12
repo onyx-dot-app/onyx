@@ -478,7 +478,7 @@ function ChatInputBarInner({
               event.preventDefault();
               if (message) {
                 // Capture the textarea position before submit
-                if (hasMessages) {
+                if (hasMessages && chatState === "input") {
                   const sourceEl =
                     inputContainerRef.current ?? textAreaRef.current;
                   if (sourceEl) {
@@ -664,7 +664,7 @@ function ChatInputBarInner({
                   stopGenerating();
                 } else if (message) {
                   // Capture the textarea position before submit
-                  if (hasMessages) {
+                  if (hasMessages && chatState === "input") {
                     const sourceEl =
                       inputContainerRef.current ?? textAreaRef.current;
                     if (sourceEl) {

@@ -237,7 +237,7 @@ export default function HumanMessage({
   return (
     <div
       id="onyx-human-message"
-      className="pt-5 pb-1 w-full lg:px-5 flex -mr-6 relative"
+      className="pt-5 pb-1 w-full lg:px-5 flex -mr-6 relative dbg-red"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -252,7 +252,7 @@ export default function HumanMessage({
             <FileDisplay alignBubble files={files || []} />
 
             <div className="flex justify-end mt-1">
-              <div className="w-full ml-8 flex w-full w-[800px] break-words">
+              <div className="w-full ml-8 flex dbg-red break-words">
                 {isEditing ? (
                   <MessageEditing
                     content={content}
@@ -295,7 +295,7 @@ export default function HumanMessage({
                     <div
                       ref={bubbleRef}
                       className={cn(
-                        "max-w-[25rem] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3",
+                        "max-w-[25rem] whitespace-break-spaces rounded-t-16 rounded-bl-16 dbg-red bg-background-tint-02 py-2 px-3",
                         !(
                           onEdit &&
                           isHovered &&
