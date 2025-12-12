@@ -22,7 +22,7 @@ import { truncateString, cn, hasNonImageFiles } from "@/lib/utils";
 import { useUser } from "@/components/user/UserProvider";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import { FileCard } from "./FileCard";
+import { FileCard } from "@/app/chat/components/input/FileCard";
 import {
   ProjectFile,
   UserFileStatus,
@@ -38,7 +38,8 @@ import SvgPlusCircle from "@/icons/plus-circle";
 import {
   getIconForAction,
   hasSearchToolsAvailable,
-} from "../../services/actionUtils";
+} from "@/app/chat/services/actionUtils";
+import { useMessageAnimation } from "@/refresh-components/contexts/MessageAnimationContext";
 
 const MAX_INPUT_HEIGHT = 200;
 
@@ -134,6 +135,8 @@ function ChatInputBarInner({
   const { user } = useUser();
   const { forcedToolIds, setForcedToolIds } = useForcedTools();
   const { currentMessageFiles, setCurrentMessageFiles } = useProjectsContext();
+  const { startMessageAnimation } = useMessageAnimation();
+  const inputContainerRef = React.useRef<HTMLDivElement>(null);
 
   const currentIndexingFiles = useMemo(() => {
     return currentMessageFiles.filter(
@@ -417,7 +420,10 @@ function ChatInputBarInner({
         </div>
       )}
 
-      <div className="w-full h-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16">
+      <div
+        ref={inputContainerRef}
+        className="w-full h-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16"
+      >
         {currentMessageFiles.length > 0 && (
           <div className="p-1 rounded-t-16 flex flex-wrap gap-2">
             {currentMessageFiles.map((file) => (
@@ -469,6 +475,12 @@ function ChatInputBarInner({
             ) {
               event.preventDefault();
               if (message) {
+                // Capture the textarea position before submit
+                if (textAreaRef.current) {
+                  const rect = textAreaRef.current.getBoundingClientRect();
+                  startMessageAnimation(message, rect);
+                }
+
                 onSubmit();
               }
             }
@@ -645,6 +657,11 @@ function ChatInputBarInner({
                 if (chatState == "streaming") {
                   stopGenerating();
                 } else if (message) {
+                  // Capture the textarea position before submit
+                  if (textAreaRef.current) {
+                    const rect = textAreaRef.current.getBoundingClientRect();
+                    startMessageAnimation(message, rect);
+                  }
                   onSubmit();
                 }
               }}

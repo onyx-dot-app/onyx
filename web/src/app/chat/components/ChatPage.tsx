@@ -81,6 +81,11 @@ import AppPageLayout from "@/layouts/AppPageLayout";
 import { HeaderData } from "@/lib/headers/fetchHeaderDataSS";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgChevronDown from "@/icons/chevron-down";
+import {
+  MessageAnimationProvider,
+  useMessageAnimation,
+} from "@/refresh-components/contexts/MessageAnimationContext";
+import AnimatedMessageBubble from "@/app/chat/components/AnimatedMessageBubble";
 
 const DEFAULT_CONTEXT_TOKENS = 120_000;
 
@@ -90,11 +95,25 @@ interface ChatPageProps {
   headerData: HeaderData;
 }
 
-export default function ChatPage({
+function ChatPageInner({
   documentSidebarInitialWidth,
   firstMessage,
   headerData,
 }: ChatPageProps) {
+  const { animatingMessage, clearAnimation } = useMessageAnimation();
+  const [targetMessageRect, setTargetMessageRect] = useState<DOMRect | null>(
+    null
+  );
+  const latestUserMessageRef = useRef<HTMLDivElement | null>(null);
+
+  // Track the position of the latest user message for animation
+  useEffect(() => {
+    if (animatingMessage && latestUserMessageRef.current) {
+      const rect = latestUserMessageRef.current.getBoundingClientRect();
+      setTargetMessageRect(rect);
+    }
+  }, [animatingMessage]);
+
   // Performance tracking
   // Keeping this here in case we need to track down slow renders in the future
   // const renderCount = useRef(0);
@@ -768,6 +787,17 @@ export default function ChatPage({
     <>
       <HealthCheckBanner />
 
+      {/* Animated flying bubble during message send */}
+      {animatingMessage && targetMessageRect && (
+        <AnimatedMessageBubble
+          content={animatingMessage.content}
+          startRect={animatingMessage.startRect}
+          targetRect={targetMessageRect}
+          onAnimationComplete={clearAnimation}
+          targetRef={latestUserMessageRef}
+        />
+      )}
+
       {/* ChatPopup is a custom popup that displays a admin-specified message on initial user visit.
       Only used in the EE version of the app. */}
       {popup}
@@ -873,6 +903,7 @@ export default function ChatPage({
                         hasPerformedInitialScroll={hasPerformedInitialScroll}
                         chatSessionId={chatSessionId}
                         enterpriseSettings={enterpriseSettings}
+                        latestUserMessageRef={latestUserMessageRef}
                       />
                     </div>
 
@@ -997,5 +1028,13 @@ export default function ChatPage({
         </AppPageLayout>
       </div>
     </>
+  );
+}
+
+export default function ChatPage(props: ChatPageProps) {
+  return (
+    <MessageAnimationProvider>
+      <ChatPageInner {...props} />
+    </MessageAnimationProvider>
   );
 }

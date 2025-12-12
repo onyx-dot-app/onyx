@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { RefObject, useCallback } from "react";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { FileDescriptor } from "@/app/chat/interfaces";
 import HumanMessage from "./HumanMessage";
@@ -12,6 +12,7 @@ interface BaseMemoizedHumanMessageProps {
   shared?: boolean;
   stopGenerating?: () => void;
   disableSwitchingForStreaming?: boolean;
+  bubbleRef?: RefObject<HTMLDivElement | null>;
 }
 
 interface InternalMemoizedHumanMessageProps
@@ -33,6 +34,7 @@ const _MemoizedHumanMessage = React.memo(function _MemoizedHumanMessage({
   stopGenerating,
   disableSwitchingForStreaming,
   onEdit,
+  bubbleRef,
 }: InternalMemoizedHumanMessageProps) {
   return (
     <HumanMessage
@@ -45,6 +47,7 @@ const _MemoizedHumanMessage = React.memo(function _MemoizedHumanMessage({
       stopGenerating={stopGenerating}
       disableSwitchingForStreaming={disableSwitchingForStreaming}
       onEdit={onEdit}
+      bubbleRef={bubbleRef}
     />
   );
 });
@@ -59,6 +62,7 @@ export const MemoizedHumanMessage = ({
   stopGenerating,
   disableSwitchingForStreaming,
   handleEditWithMessageId,
+  bubbleRef,
 }: MemoizedHumanMessageProps) => {
   const onEdit = useCallback(
     (editedContent: string) => {
@@ -85,6 +89,7 @@ export const MemoizedHumanMessage = ({
       stopGenerating={stopGenerating}
       disableSwitchingForStreaming={disableSwitchingForStreaming}
       onEdit={onEdit}
+      bubbleRef={bubbleRef}
     />
   );
 };

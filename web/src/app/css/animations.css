@@ -1,0 +1,8 @@
+.animated-message-bubble {
+  --message-send-duration: 0.3s;
+  background-color: var(--background-neutral-00);
+}
+
+.animated-message-bubble--target {
+  background-color: var(--background-tint-02);
+}

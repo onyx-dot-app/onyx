@@ -48,6 +48,7 @@ interface MessagesDisplayProps {
   hasPerformedInitialScroll: boolean;
   chatSessionId: string | null;
   enterpriseSettings?: EnterpriseSettings | null;
+  latestUserMessageRef?: RefObject<HTMLDivElement | null>;
 }
 
 export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
@@ -72,6 +73,7 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
   hasPerformedInitialScroll,
   chatSessionId,
   enterpriseSettings,
+  latestUserMessageRef,
 }) => {
   // Stable fallbacks to avoid changing prop identities on each render
   const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
@@ -114,6 +116,17 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
     return null;
   }
 
+  // Find the last user message index for animation
+  const lastUserMessageIndex = useMemo(() => {
+    for (let i = messageHistory.length - 1; i >= 0; i--) {
+      const message = messageHistory[i];
+      if (message && message.type === "user") {
+        return i;
+      }
+    }
+    return -1;
+  }, [messageHistory]);
+
   return (
     <div
       style={{ overflowAnchor: "none" }}
@@ -135,6 +148,7 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
         if (message.type === "user") {
           const nextMessage =
             messageHistory.length > i + 1 ? messageHistory[i + 1] : null;
+          const isLatestUserMessage = i === lastUserMessageIndex;
 
           return (
             <div id={messageReactComponentKey} key={messageReactComponentKey}>
@@ -151,6 +165,9 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
                   parentMessage?.childrenNodeIds ?? emptyChildrenIds
                 }
                 onMessageSelection={onMessageSelection}
+                bubbleRef={
+                  isLatestUserMessage ? latestUserMessageRef : undefined
+                }
               />
             </div>
           );

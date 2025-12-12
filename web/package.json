@@ -64,6 +64,7 @@
     "date-fns": "^3.6.0",
     "favicon-fetch": "^1.0.0",
     "formik": "^2.2.9",
+    "framer-motion": "^12.23.26",
     "highlight.js": "^11.11.1",
     "js-cookie": "^3.0.5",
     "katex": "^0.16.17",

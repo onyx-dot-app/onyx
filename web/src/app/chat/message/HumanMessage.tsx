@@ -14,6 +14,7 @@ import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import SvgEdit from "@/icons/edit";
 import Button from "@/refresh-components/buttons/Button";
 import ExpandableContentWrapper from "@/components/tools/ExpandableContentWrapper";
+import { useMessageAnimation } from "@/refresh-components/contexts/MessageAnimationContext";
 
 interface FileDisplayProps {
   files: FileDescriptor[];
@@ -177,6 +178,9 @@ interface HumanMessageProps {
   // Streaming and generation
   stopGenerating?: () => void;
   disableSwitchingForStreaming?: boolean;
+
+  // Animation ref
+  bubbleRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 export default function HumanMessage({
@@ -189,6 +193,7 @@ export default function HumanMessage({
   shared,
   stopGenerating = () => null,
   disableSwitchingForStreaming = false,
+  bubbleRef,
 }: HumanMessageProps) {
   // TODO (@raunakab):
   //
@@ -198,6 +203,10 @@ export default function HumanMessage({
 
   const [isHovered, setIsHovered] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+
+  // Check if this message is currently animating
+  const { animatingMessage } = useMessageAnimation();
+  const isAnimating = animatingMessage?.content === content && !!bubbleRef;
 
   const currentMessageInd = messageId
     ? otherMessagesCanSwitchTo?.indexOf(messageId)
@@ -284,6 +293,7 @@ export default function HumanMessage({
                     </div>
 
                     <div
+                      ref={bubbleRef}
                       className={cn(
                         "max-w-[25rem] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3",
                         !(
@@ -291,7 +301,8 @@ export default function HumanMessage({
                           isHovered &&
                           !isEditing &&
                           (!files || files.length === 0)
-                        ) && "ml-auto"
+                        ) && "ml-auto",
+                        isAnimating && "opacity-0"
                       )}
                     >
                       <Text mainContentBody>{content}</Text>
