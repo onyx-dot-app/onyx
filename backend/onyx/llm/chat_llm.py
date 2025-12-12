@@ -15,11 +15,14 @@ from onyx.configs.model_configs import LITELLM_EXTRA_BODY
 from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
+from onyx.llm.interfaces import ReasoningEffort
 from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.llm_provider_options import AZURE_PROVIDER_NAME
 from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
 from onyx.llm.llm_provider_options import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.llm_provider_options import VERTEX_LOCATION_KWARG
+from onyx.llm.message_types import CLAUDE_REASONING_BUDGET_TOKENS
+from onyx.llm.message_types import OPENAI_REASONING_EFFORT
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.utils import is_true_openai_model
@@ -226,7 +229,7 @@ class LitellmLLM(LLM):
         tool_choice: ToolChoiceOptions | None,
         stream: bool,
         parallel_tool_calls: bool,
-        reasoning_effort: str | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
@@ -291,8 +294,16 @@ class LitellmLLM(LLM):
                 # Anthropic Claude uses `thinking` with budget_tokens for extended thinking
                 # This applies to Claude models on any provider (anthropic, vertex_ai, bedrock)
                 **(
-                    {"thinking": {"type": "enabled", "budget_tokens": 10000}}
+                    {
+                        "thinking": {
+                            "type": "enabled",
+                            "budget_tokens": CLAUDE_REASONING_BUDGET_TOKENS[
+                                reasoning_effort
+                            ],
+                        }
+                    }
                     if reasoning_effort
+                    and reasoning_effort != ReasoningEffort.OFF
                     and is_reasoning
                     and "claude" in self.config.model_name.lower()
                     else {}
@@ -300,8 +311,9 @@ class LitellmLLM(LLM):
                 # OpenAI and other providers use reasoning_effort
                 # (litellm maps this to thinking_level for Gemini 3 models)
                 **(
-                    {"reasoning_effort": reasoning_effort}
+                    {"reasoning_effort": OPENAI_REASONING_EFFORT[reasoning_effort]}
                     if reasoning_effort
+                    and reasoning_effort != ReasoningEffort.OFF
                     and is_reasoning
                     and "claude" not in self.config.model_name.lower()
                     else {}
@@ -354,7 +366,7 @@ class LitellmLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        reasoning_effort: str | None = "medium",
+        reasoning_effort: ReasoningEffort | None = ReasoningEffort.MEDIUM,
     ) -> ModelResponse:
         from litellm import ModelResponse as LiteLLMModelResponse
 
@@ -385,7 +397,7 @@ class LitellmLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        reasoning_effort: str | None = "medium",
+        reasoning_effort: ReasoningEffort | None = ReasoningEffort.MEDIUM,
     ) -> Iterator[ModelResponseStream]:
         from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
         from onyx.llm.model_response import from_litellm_model_response_stream

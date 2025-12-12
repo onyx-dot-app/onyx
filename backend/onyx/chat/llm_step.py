@@ -21,6 +21,7 @@ from onyx.llm.message_types import ChatCompletionMessage
 from onyx.llm.message_types import FunctionCall
 from onyx.llm.message_types import ImageContentPart
 from onyx.llm.message_types import ImageUrlDetail
+from onyx.llm.message_types import ReasoningEffort
 from onyx.llm.message_types import SystemMessage
 from onyx.llm.message_types import TextContentPart
 from onyx.llm.message_types import ToolCall
@@ -386,6 +387,7 @@ def run_llm_step(
             tools=tool_definitions,
             tool_choice=tool_choice,
             structured_response_format=None,  # TODO
+            reasoning_effort=ReasoningEffort.OFF,
         ):
             if packet.usage:
                 usage = packet.usage

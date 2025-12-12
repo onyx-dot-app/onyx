@@ -10,6 +10,38 @@ class ToolChoiceOptions(str, Enum):
     NONE = "none"
 
 
+class ReasoningEffort(str, Enum):
+    """Reasoning effort levels for models that support extended thinking.
+
+    Different providers map these values differently:
+    - OpenAI: Uses "low", "medium", "high" directly for reasoning_effort
+    - Claude: Uses budget_tokens with different values for each level
+    - Gemini: Uses "none", "low", "medium", "high" for thinking_budget (via litellm mapping)
+    """
+
+    OFF = "off"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+# Budget tokens for Claude extended thinking at each reasoning effort level
+CLAUDE_REASONING_BUDGET_TOKENS: dict[ReasoningEffort, int] = {
+    ReasoningEffort.OFF: 0,
+    ReasoningEffort.LOW: 1000,
+    ReasoningEffort.MEDIUM: 5000,
+    ReasoningEffort.HIGH: 10000,
+}
+
+# OpenAI reasoning effort mapping (direct string values)
+OPENAI_REASONING_EFFORT: dict[ReasoningEffort, str] = {
+    ReasoningEffort.OFF: "none",  # this only works for the 5 series though
+    ReasoningEffort.LOW: "low",
+    ReasoningEffort.MEDIUM: "medium",
+    ReasoningEffort.HIGH: "high",
+}
+
+
 # Content part structures for multimodal messages
 # The classes in this mirror the OpenAI Chat Completions message types and work well with routers like LiteLLM
 class TextContentPart(BaseModel):

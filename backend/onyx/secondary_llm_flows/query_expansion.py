@@ -5,6 +5,7 @@ from onyx.llm.factory import get_default_llms
 from onyx.llm.interfaces import LLM
 from onyx.llm.message_types import AssistantMessage
 from onyx.llm.message_types import ChatCompletionMessage
+from onyx.llm.message_types import ReasoningEffort
 from onyx.llm.message_types import SystemMessage
 from onyx.llm.message_types import UserMessage
 from onyx.llm.utils import llm_response_to_string
@@ -134,7 +135,7 @@ def semantic_query_rephrase(
     messages.append(final_user_msg)
 
     # Call LLM and return result
-    response = llm.invoke(prompt=messages)
+    response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.OFF)
 
     final_query = response.choice.message.content
 
@@ -211,7 +212,7 @@ def keyword_query_expansion(
     messages.append(final_user_msg)
 
     # Call LLM and return result
-    response = llm.invoke(prompt=messages)
+    response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.OFF)
     content = response.choice.message.content
 
     # Parse the response - each line is a separate keyword query
@@ -226,7 +227,9 @@ def llm_multilingual_query_expansion(query: str, language: str) -> str:
     _, fast_llm = get_default_llms(timeout=5)
 
     prompt = LANGUAGE_REPHRASE_PROMPT.format(query=query, target_language=language)
-    model_output = llm_response_to_string(fast_llm.invoke(prompt))
+    model_output = llm_response_to_string(
+        fast_llm.invoke(prompt, reasoning_effort=ReasoningEffort.OFF)
+    )
     logger.debug(model_output)
 
     return model_output
