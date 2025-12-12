@@ -7,6 +7,7 @@
   const TITLEBAR_ID = "onyx-desktop-titlebar";
   const TITLEBAR_HEIGHT = 36;
   const STYLE_ID = "onyx-desktop-titlebar-style";
+  const VIEWPORT_VAR = "--onyx-desktop-viewport-height";
 
   // Wait for DOM to be ready
   if (document.readyState === "loading") {
@@ -61,8 +62,51 @@
     const style = document.createElement("style");
     style.id = STYLE_ID;
     style.textContent = `
+      :root {
+        --onyx-desktop-titlebar-height: ${TITLEBAR_HEIGHT}px;
+        --onyx-desktop-viewport-height: 100dvh;
+        --onyx-desktop-safe-height: calc(var(--onyx-desktop-viewport-height) - var(--onyx-desktop-titlebar-height));
+      }
+
+      @supports not (height: 100dvh) {
+        :root {
+          --onyx-desktop-viewport-height: 100vh;
+        }
+      }
+
+      html,
       body {
-        padding-top: ${TITLEBAR_HEIGHT}px !important;
+        height: var(--onyx-desktop-viewport-height);
+        min-height: var(--onyx-desktop-viewport-height);
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+
+      body {
+        padding-top: var(--onyx-desktop-titlebar-height) !important;
+        box-sizing: border-box;
+      }
+
+      body > div#__next,
+      body > div#root,
+      body > main {
+        height: var(--onyx-desktop-safe-height);
+        min-height: var(--onyx-desktop-safe-height);
+        overflow: auto;
+      }
+
+      /* Override common Tailwind viewport helpers so content fits under the titlebar */
+      .h-screen {
+        height: var(--onyx-desktop-safe-height) !important;
+      }
+
+      .min-h-screen {
+        min-height: var(--onyx-desktop-safe-height) !important;
+      }
+
+      .max-h-screen {
+        max-height: var(--onyx-desktop-safe-height) !important;
       }
 
       #${TITLEBAR_ID} {
@@ -71,6 +115,7 @@
         user-select: none !important;
         -webkit-app-region: drag;
         background: rgba(255, 255, 255, 0.85);
+        height: var(--onyx-desktop-titlebar-height);
       }
 
       /* Dark mode support */
@@ -151,8 +196,27 @@
     console.log("[Onyx Desktop] Title bar injected");
   }
 
+  function syncViewportHeight() {
+    const viewportHeight =
+      window.visualViewport?.height ??
+      document.documentElement?.clientHeight ??
+      window.innerHeight;
+
+    if (viewportHeight) {
+      document.documentElement.style.setProperty(
+        VIEWPORT_VAR,
+        `${viewportHeight}px`,
+      );
+    }
+  }
+
   function init() {
     mountTitleBar();
+    syncViewportHeight();
+    window.addEventListener("resize", syncViewportHeight, { passive: true });
+    window.visualViewport?.addEventListener("resize", syncViewportHeight, {
+      passive: true,
+    });
 
     // Keep it around even if the app DOM re-renders
     const observer = new MutationObserver(() => {
