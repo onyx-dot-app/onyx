@@ -16,7 +16,8 @@ When searching for information, if the initial results cannot fully answer the u
 INTERNAL_SEARCH_GUIDANCE = """
 
 ## internal_search
-Use the `internal_search` tool to search connected applications for information. Some examples of when to use `internal_search` include:
+Use the `internal_search` tool to search connected applications for information. Never provide more than 3 queries to the tool at once. It should typically be a single query since there are query expansion flows downstream.
+Some examples of when to use `internal_search` include:
 - Internal information: any time where there may be some information stored in internal applications that could help better answer the query.
 - Niche/Specific information: information that is likely not found in public sources, things specific to a project or product, team, process, etc.
 - Keyword Queries: queries that are heavily keyword based are often internal document search queries.

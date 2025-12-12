@@ -21,7 +21,6 @@ from onyx.llm.message_types import ChatCompletionMessage
 from onyx.llm.message_types import FunctionCall
 from onyx.llm.message_types import ImageContentPart
 from onyx.llm.message_types import ImageUrlDetail
-from onyx.llm.message_types import ReasoningEffort
 from onyx.llm.message_types import SystemMessage
 from onyx.llm.message_types import TextContentPart
 from onyx.llm.message_types import ToolCall
@@ -67,78 +66,57 @@ def _format_message_history_for_logging(
 
     # Handle sequence of messages
     for i, msg in enumerate(message_history):
-        # Type guard: ensure msg is a dict-like object (TypedDict)
-        if not isinstance(msg, dict):
+        # Handle Pydantic models
+        if isinstance(msg, SystemMessage):
+            formatted_lines.append(f"Message {i + 1} [system]:")
+            formatted_lines.append(separator)
+            formatted_lines.append(f"{msg.content}")
+
+        elif isinstance(msg, UserMessage):
+            formatted_lines.append(f"Message {i + 1} [user]:")
+            formatted_lines.append(separator)
+            if isinstance(msg.content, str):
+                formatted_lines.append(f"{msg.content}")
+            elif isinstance(msg.content, list):
+                # Handle multimodal content (text + images)
+                for part in msg.content:
+                    if isinstance(part, TextContentPart):
+                        formatted_lines.append(f"{part.text}")
+                    elif isinstance(part, ImageContentPart):
+                        url = part.image_url.url
+                        formatted_lines.append(f"[Image: {url[:50]}...]")
+
+        elif isinstance(msg, AssistantMessage):
+            formatted_lines.append(f"Message {i + 1} [assistant]:")
+            formatted_lines.append(separator)
+            if msg.content:
+                formatted_lines.append(f"{msg.content}")
+
+            if msg.tool_calls:
+                formatted_lines.append("Tool calls:")
+                for tool_call in msg.tool_calls:
+                    tool_call_dict: dict[str, Any] = {
+                        "id": tool_call.id,
+                        "type": tool_call.type,
+                        "function": {
+                            "name": tool_call.function.name,
+                            "arguments": tool_call.function.arguments,
+                        },
+                    }
+                    tool_call_json = json.dumps(tool_call_dict, indent=4)
+                    formatted_lines.append(tool_call_json)
+
+        elif isinstance(msg, ToolMessage):
+            formatted_lines.append(f"Message {i + 1} [tool]:")
+            formatted_lines.append(separator)
+            formatted_lines.append(f"Tool call ID: {msg.tool_call_id}")
+            formatted_lines.append(f"Response: {msg.content}")
+
+        else:
+            # Fallback for unknown message types
             formatted_lines.append(f"Message {i + 1} [unknown]:")
             formatted_lines.append(separator)
             formatted_lines.append(f"{msg}")
-            if i < len(message_history) - 1:
-                formatted_lines.append(separator)
-            continue
-
-        role = msg.get("role", "unknown")
-        formatted_lines.append(f"Message {i + 1} [{role}]:")
-        formatted_lines.append(separator)
-
-        if role == "system":
-            content = msg.get("content", "")
-            if isinstance(content, str):
-                formatted_lines.append(f"{content}")
-
-        elif role == "user":
-            content = msg.get("content", "")
-            if isinstance(content, str):
-                formatted_lines.append(f"{content}")
-            elif isinstance(content, list):
-                # Handle multimodal content (text + images)
-                for part in content:
-                    if isinstance(part, dict):
-                        part_type = part.get("type")
-                        if part_type == "text":
-                            text = part.get("text", "")
-                            if isinstance(text, str):
-                                formatted_lines.append(f"{text}")
-                        elif part_type == "image_url":
-                            image_url_dict = part.get("image_url")
-                            if isinstance(image_url_dict, dict):
-                                url = image_url_dict.get("url", "")
-                                if isinstance(url, str):
-                                    formatted_lines.append(f"[Image: {url[:50]}...]")
-
-        elif role == "assistant":
-            content = msg.get("content")
-            if content and isinstance(content, str):
-                formatted_lines.append(f"{content}")
-
-            tool_calls = msg.get("tool_calls")
-            if tool_calls and isinstance(tool_calls, list):
-                formatted_lines.append("Tool calls:")
-                for tool_call in tool_calls:
-                    if isinstance(tool_call, dict):
-                        tool_call_dict: dict[str, Any] = {}
-                        tool_call_id = tool_call.get("id")
-                        tool_call_type = tool_call.get("type")
-                        function_dict = tool_call.get("function")
-
-                        if tool_call_id:
-                            tool_call_dict["id"] = tool_call_id
-                        if tool_call_type:
-                            tool_call_dict["type"] = tool_call_type
-                        if isinstance(function_dict, dict):
-                            tool_call_dict["function"] = {
-                                "name": function_dict.get("name", ""),
-                                "arguments": function_dict.get("arguments", ""),
-                            }
-
-                        tool_call_json = json.dumps(tool_call_dict, indent=4)
-                        formatted_lines.append(tool_call_json)
-
-        elif role == "tool":
-            content = msg.get("content", "")
-            tool_call_id = msg.get("tool_call_id", "")
-            if isinstance(content, str) and isinstance(tool_call_id, str):
-                formatted_lines.append(f"Tool call ID: {tool_call_id}")
-                formatted_lines.append(f"Response: {content}")
 
         # Add separator before next message (or at end)
         if i < len(message_history) - 1:
@@ -387,7 +365,7 @@ def run_llm_step(
             tools=tool_definitions,
             tool_choice=tool_choice,
             structured_response_format=None,  # TODO
-            reasoning_effort=ReasoningEffort.OFF,
+            # reasoning_effort=ReasoningEffort.OFF,  # Can set this for dev/testing.
         ):
             if packet.usage:
                 usage = packet.usage

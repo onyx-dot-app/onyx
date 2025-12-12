@@ -135,7 +135,7 @@ def semantic_query_rephrase(
     messages.append(final_user_msg)
 
     # Call LLM and return result
-    response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.OFF)
+    response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.LOW)
 
     final_query = response.choice.message.content
 
@@ -212,7 +212,7 @@ def keyword_query_expansion(
     messages.append(final_user_msg)
 
     # Call LLM and return result
-    response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.OFF)
+    response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.LOW)
     content = response.choice.message.content
 
     # Parse the response - each line is a separate keyword query

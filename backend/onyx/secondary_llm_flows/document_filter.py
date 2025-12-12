@@ -1,6 +1,8 @@
 import json
 import re
 
+from backend.onyx.llm.message_types import ReasoningEffort
+
 from onyx.context.search.models import ContextExpansionType
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
@@ -120,7 +122,7 @@ def classify_section_relevance(
 
     # Call LLM for classification
     try:
-        response = llm.invoke(prompt=prompt_text)
+        response = llm.invoke(prompt=prompt_text, reasoning_effort=ReasoningEffort.OFF)
         llm_response = response.choice.message.content
 
         if not llm_response:
@@ -254,7 +256,7 @@ def select_sections_for_expansion(
 
     # Call LLM for selection
     try:
-        response = llm.invoke(prompt=prompt_text)
+        response = llm.invoke(prompt=prompt_text, reasoning_effort=ReasoningEffort.OFF)
         llm_response = response.choice.message.content
 
         if not llm_response:
