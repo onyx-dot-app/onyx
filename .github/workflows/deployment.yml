@@ -6,8 +6,9 @@ on:
       - "*"
   workflow_dispatch:
 
-permissions:
-  contents: read
+# Set restrictive default permissions for all jobs. Jobs that need more permissions
+# should explicitly declare them.
+permissions: {}
 
 env:
   IS_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' }}
@@ -20,6 +21,7 @@ jobs:
     runs-on: ubuntu-slim
     timeout-minutes: 90
     outputs:
+      build-desktop: ${{ steps.check.outputs.build-desktop }}
       build-web: ${{ steps.check.outputs.build-web }}
       build-web-cloud: ${{ steps.check.outputs.build-web-cloud }}
       build-backend: ${{ steps.check.outputs.build-backend }}
@@ -30,6 +32,7 @@ jobs:
       is-stable-standalone: ${{ steps.check.outputs.is-stable-standalone }}
       is-beta-standalone: ${{ steps.check.outputs.is-beta-standalone }}
       sanitized-tag: ${{ steps.check.outputs.sanitized-tag }}
+      short-sha: ${{ steps.check.outputs.short-sha }}
     steps:
       - name: Check which components to build and version info
         id: check
@@ -38,6 +41,7 @@ jobs:
           # Sanitize tag name by replacing slashes with hyphens (for Docker tag compatibility)
           SANITIZED_TAG=$(echo "$TAG" | tr '/' '-')
           IS_CLOUD=false
+          BUILD_DESKTOP=false
           BUILD_WEB=false
           BUILD_WEB_CLOUD=false
           BUILD_BACKEND=true
@@ -52,6 +56,7 @@ jobs:
             BUILD_WEB_CLOUD=true
           else
             BUILD_WEB=true
+            BUILD_DESKTOP=true
           fi
 
           # Version checks (for web - any stable version)
@@ -70,7 +75,9 @@ jobs:
             IS_BETA_STANDALONE=true
           fi
 
+          SHORT_SHA="${GITHUB_SHA::7}"
           {
+            echo "build-desktop=$BUILD_DESKTOP"
             echo "build-web=$BUILD_WEB"
             echo "build-web-cloud=$BUILD_WEB_CLOUD"
             echo "build-backend=$BUILD_BACKEND"
@@ -81,6 +88,7 @@ jobs:
             echo "is-stable-standalone=$IS_STABLE_STANDALONE"
             echo "is-beta-standalone=$IS_BETA_STANDALONE"
             echo "sanitized-tag=$SANITIZED_TAG"
+            echo "short-sha=$SHORT_SHA"
           } >> "$GITHUB_OUTPUT"
 
   check-version-tag:
@@ -95,7 +103,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@1e862dfacbd1d6d858c55d9b792c756523627244 # ratchet:astral-sh/setup-uv@v7.1.4
+        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a # ratchet:astral-sh/setup-uv@v7.1.5
         with:
           # NOTE: This isn't caching much and zizmor suggests this could be poisoned, so disable.
           enable-cache: false
@@ -124,6 +132,134 @@ jobs:
           title: "🚨 Version Tag Check Failed"
           ref-name: ${{ github.ref_name }}
 
+  build-desktop:
+    needs: determine-builds
+    if: needs.determine-builds.outputs.build-desktop == 'true'
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest' # Build a universal image for macOS.
+            args: '--target universal-apple-darwin'
+          - platform: 'ubuntu-24.04'
+            args: '--bundles deb,rpm'
+          - platform: 'ubuntu-24.04-arm' # Only available in public repos.
+            args: '--bundles deb,rpm'
+          - platform: 'windows-latest'
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6.0.1
+        with:
+          # NOTE: persist-credentials is needed for tauri-action to create GitHub releases.
+          persist-credentials: true # zizmor: ignore[artipacked]
+
+      - name: install dependencies (ubuntu only)
+        if: startsWith(matrix.platform, 'ubuntu-')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libglib2.0-dev \
+            libgirepository1.0-dev \
+            libgtk-3-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            gobject-introspection \
+            pkg-config \
+            curl \
+            xdg-utils
+
+      - name: setup node
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # ratchet:actions/setup-node@v6.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # ratchet:dtolnay/rust-toolchain@stable
+        with:
+          # Those targets are only used on macos runners so it's in an `if` to slightly speed up windows and linux builds.
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: install frontend dependencies
+        working-directory: ./desktop
+        run: npm install
+
+      - name: Inject version (Unix)
+        if: runner.os != 'Windows'
+        working-directory: ./desktop
+        env:
+          SHORT_SHA: ${{ needs.determine-builds.outputs.short-sha }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "${EVENT_NAME}" == "workflow_dispatch" ]; then
+            VERSION="0.0.0-dev+${SHORT_SHA}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}+${SHORT_SHA}"
+          fi
+          echo "Injecting version: $VERSION"
+
+          # Update Cargo.toml
+          sed "s/^version = .*/version = \"$VERSION\"/" src-tauri/Cargo.toml > src-tauri/Cargo.toml.tmp
+          mv src-tauri/Cargo.toml.tmp src-tauri/Cargo.toml
+
+          # Update tauri.conf.json
+          jq --arg v "$VERSION" '.version = $v' src-tauri/tauri.conf.json > src-tauri/tauri.conf.json.tmp
+          mv src-tauri/tauri.conf.json.tmp src-tauri/tauri.conf.json
+
+          # Update package.json
+          jq --arg v "$VERSION" '.version = $v' package.json > package.json.tmp
+          mv package.json.tmp package.json
+
+          echo "Versions set to: $VERSION"
+
+      - name: Inject version (Windows)
+        if: runner.os == 'Windows'
+        working-directory: ./desktop
+        shell: pwsh
+        run: |
+          # Windows MSI requires numeric-only build metadata, so we skip the SHA suffix
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $VERSION = "0.0.0"
+          } else {
+            $VERSION = "$env:GITHUB_REF_NAME" -replace '^v', ''
+          }
+          Write-Host "Injecting version: $VERSION"
+
+          # Update Cargo.toml
+          $cargo = Get-Content src-tauri/Cargo.toml -Raw
+          $cargo = $cargo -replace '(?m)^version = .*', "version = `"$VERSION`""
+          Set-Content src-tauri/Cargo.toml $cargo -NoNewline
+
+          # Update tauri.conf.json
+          $json = Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json
+          $json.version = $VERSION
+          $json | ConvertTo-Json -Depth 100 | Set-Content src-tauri/tauri.conf.json
+
+          # Update package.json
+          $pkg = Get-Content package.json | ConvertFrom-Json
+          $pkg.version = $VERSION
+          $pkg | ConvertTo-Json -Depth 100 | Set-Content package.json
+
+          Write-Host "Versions set to: $VERSION"
+
+      - uses: tauri-apps/tauri-action@19b93bb55601e3e373a93cfb6eb4242e45f5af20 # ratchet:tauri-apps/tauri-action@action-v0.6.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.event_name != 'workflow_dispatch' && 'v__VERSION__' || format('v0.0.0-dev+{0}', needs.determine-builds.outputs.short-sha) }}
+          releaseName: ${{ github.event_name != 'workflow_dispatch' && 'v__VERSION__' || format('v0.0.0-dev+{0}', needs.determine-builds.outputs.short-sha) }}
+          releaseBody: 'See the assets to download this version and install.'
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
+
   build-web-amd64:
     needs: determine-builds
     if: needs.determine-builds.outputs.build-web == 'true'
@@ -147,7 +283,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # ratchet:docker/metadata-action@v5
         with:
           images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
@@ -205,7 +341,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # ratchet:docker/metadata-action@v5
         with:
           images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
@@ -267,7 +403,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # ratchet:docker/metadata-action@v5
         with:
           images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
@@ -313,7 +449,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # ratchet:docker/metadata-action@v5
         with:
           images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
@@ -379,7 +515,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # ratchet:docker/metadata-action@v5
         with:
           images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
@@ -449,7 +585,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # ratchet:docker/metadata-action@v5
         with:
           images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
@@ -492,7 +628,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # ratchet:docker/metadata-action@v5
         with:
           images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
@@ -549,7 +685,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # ratchet:docker/metadata-action@v5
         with:
           images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
@@ -610,7 +746,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # ratchet:docker/metadata-action@v5
         with:
           images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
@@ -657,7 +793,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # ratchet:docker/metadata-action@v5
         with:
           images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
@@ -721,7 +857,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # ratchet:docker/metadata-action@v5
         with:
           images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
@@ -788,7 +924,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # ratchet:docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # ratchet:docker/metadata-action@v5
         with:
           images: ${{ github.event_name == 'workflow_dispatch' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           flavor: |
@@ -980,6 +1116,7 @@ jobs:
 
   notify-slack-on-failure:
     needs:
+      - build-desktop
       - build-web-amd64
       - build-web-arm64
       - merge-web
@@ -1007,6 +1144,9 @@ jobs:
         shell: bash
         run: |
           FAILED_JOBS=""
+          if [ "${NEEDS_BUILD_DESKTOP_RESULT}" == "failure" ]; then
+            FAILED_JOBS="${FAILED_JOBS}• build-desktop\\n"
+          fi
           if [ "${NEEDS_BUILD_WEB_AMD64_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• build-web-amd64\\n"
           fi
@@ -1047,6 +1187,7 @@ jobs:
           FAILED_JOBS=$(printf '%s' "$FAILED_JOBS" | sed 's/\\n$//')
           echo "jobs=$FAILED_JOBS" >> "$GITHUB_OUTPUT"
         env:
+          NEEDS_BUILD_DESKTOP_RESULT: ${{ needs.build-desktop.result }}
           NEEDS_BUILD_WEB_AMD64_RESULT: ${{ needs.build-web-amd64.result }}
           NEEDS_BUILD_WEB_ARM64_RESULT: ${{ needs.build-web-arm64.result }}
           NEEDS_MERGE_WEB_RESULT: ${{ needs.merge-web.result }}
