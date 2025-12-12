@@ -1,7 +1,6 @@
 import {
   Packet,
   PacketType,
-  CitationDelta,
   CitationInfo,
   SearchToolDocumentsDelta,
   StreamingCitation,
@@ -276,7 +275,7 @@ export default function AIMessage({
         groupedPacketsMapRef.current.set(packet.turn_index, [packet]);
       }
 
-      // Citations - handle both CITATION_INFO (individual) and CITATION_DELTA (batched)
+      // Citations - handle CITATION_INFO packets
       if (packet.obj.type === PacketType.CITATION_INFO) {
         // Individual citation packet from backend streaming
         const citationInfo = packet.obj as CitationInfo;
@@ -290,20 +289,6 @@ export default function AIMessage({
             citation_num: citationInfo.citation_number,
             document_id: citationInfo.document_id,
           });
-        }
-      } else if (packet.obj.type === PacketType.CITATION_DELTA) {
-        // Batched citation packet (for backwards compatibility)
-        const citationDelta = packet.obj as CitationDelta;
-        if (citationDelta.citations) {
-          for (const citation of citationDelta.citations) {
-            // Add to citation map for rendering
-            citationMapRef.current[citation.citation_num] =
-              citation.document_id;
-            if (!seenCitationDocIdsRef.current.has(citation.document_id)) {
-              seenCitationDocIdsRef.current.add(citation.document_id);
-              citationsRef.current.push(citation);
-            }
-          }
         }
       }
 

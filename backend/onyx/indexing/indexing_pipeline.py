@@ -54,8 +54,8 @@ from onyx.llm.chat_llm import LLMRateLimitError
 from onyx.llm.factory import get_default_llm_with_vision
 from onyx.llm.factory import get_llm_for_contextual_rag
 from onyx.llm.interfaces import LLM
+from onyx.llm.utils import llm_response_to_string
 from onyx.llm.utils import MAX_CONTEXT_TOKENS
-from onyx.llm.utils import message_to_string
 from onyx.natural_language_processing.search_nlp_models import (
     InformationContentClassificationModel,
 )
@@ -542,8 +542,8 @@ def add_document_summaries(
     doc_tokens = tokenizer.encode(chunks_by_doc[0].source_document.get_text_content())
     doc_content = tokenizer_trim_middle(doc_tokens, trunc_doc_tokens, tokenizer)
     summary_prompt = DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
-    doc_summary = message_to_string(
-        llm.invoke_langchain(summary_prompt, max_tokens=MAX_CONTEXT_TOKENS)
+    doc_summary = llm_response_to_string(
+        llm.invoke(summary_prompt, max_tokens=MAX_CONTEXT_TOKENS)
     )
 
     for chunk in chunks_by_doc:
@@ -583,8 +583,8 @@ def add_chunk_summaries(
     if not doc_info:
         # This happens if the document is too long AND document summaries are turned off
         # In this case we compute a doc summary using the LLM
-        doc_info = message_to_string(
-            llm.invoke_langchain(
+        doc_info = llm_response_to_string(
+            llm.invoke(
                 DOCUMENT_SUMMARY_PROMPT.format(document=doc_content),
                 max_tokens=MAX_CONTEXT_TOKENS,
             )
@@ -595,8 +595,8 @@ def add_chunk_summaries(
     def assign_context(chunk: DocAwareChunk) -> None:
         context_prompt2 = CONTEXTUAL_RAG_PROMPT2.format(chunk=chunk.content)
         try:
-            chunk.chunk_context = message_to_string(
-                llm.invoke_langchain(
+            chunk.chunk_context = llm_response_to_string(
+                llm.invoke(
                     context_prompt1 + context_prompt2,
                     max_tokens=MAX_CONTEXT_TOKENS,
                 )
