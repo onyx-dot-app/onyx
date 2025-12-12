@@ -133,6 +133,10 @@ class MCPToolCreateRequest(BaseModel):
 
 class MCPToolUpdateRequest(BaseModel):
     server_id: int = Field(..., description="ID of the MCP server")
+    name: Optional[str] = Field(None, description="Updated name of the MCP server")
+    description: Optional[str] = Field(
+        None, description="Updated description of the MCP server"
+    )
     selected_tools: Optional[List[str]] = Field(
         None, description="List of selected tool names to create"
     )
@@ -307,6 +311,7 @@ class MCPServerUpdateResponse(BaseModel):
     """Response for updating multiple MCP tools"""
 
     server_id: int
+    server_name: str
     updated_tools: int
 
 
