@@ -151,15 +151,14 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
 
   // Initialize message from URL input parameter (for Chrome extension)
-  // Using useLayoutEffect to set state before paint, avoiding flash of empty input
   const initializedRef = useRef(false);
   useEffect(() => {
     if (initializedRef.current) return;
     initializedRef.current = true;
     const urlParams = new URLSearchParams(window.location.search);
-    const inputParam = urlParams.get("input");
-    if (inputParam) {
-      setMessage(inputParam);
+    const userPrompt = urlParams.get("user-prompt");
+    if (userPrompt) {
+      setMessage(userPrompt);
     }
   }, []);
 
