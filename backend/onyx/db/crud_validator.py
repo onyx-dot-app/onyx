@@ -30,23 +30,30 @@ def _add_user_filters(
         return stmt
 
     stmt = stmt.distinct()
-    Persona__UG = aliased(Persona__UserGroup)
-    User__UG = aliased(User__UserGroup)
 
-    stmt = (
-        stmt.outerjoin(Validator.personas)
-        .outerjoin(
-            Persona__UG,
-            Persona__UG.persona_id == Persona.id,
-        )
-        .outerjoin(
-            User__UG,
-            User__UG.user_group_id == Persona__UG.user_group_id,
-        )
+    # Создаем алиасы для таблиц связей пользователь-группа
+    ValidatorCreator_UserGroup = aliased(User__UserGroup)
+    CurrentUser_UserGroup = aliased(User__UserGroup)
+
+    # Делаем join к таблице связей пользователь-группа для создателя валидатора
+    stmt = stmt.outerjoin(
+        ValidatorCreator_UserGroup,
+        ValidatorCreator_UserGroup.user_id == Validator.user_id
     )
 
-    where_clause = (User__UG.user_id == user.id) & (User__UG.is_curator == True)
-    where_clause |= Validator.user_id == user.id
+    # Делаем join к таблице связей пользователь-группа для текущего пользователя
+    # Проверяем, что текущий пользователь находится в той же группе
+    stmt = stmt.outerjoin(
+        CurrentUser_UserGroup,
+        (CurrentUser_UserGroup.user_group_id == ValidatorCreator_UserGroup.user_group_id) &
+        (CurrentUser_UserGroup.user_id == user.id)
+    )
+
+    # Условия видимости валидатора:
+    # 1. Валидатор создан самим пользователем
+    # 2. Пользователь находится в той же группе, что и создатель валидатора
+    where_clause = Validator.user_id == user.id
+    where_clause |= CurrentUser_UserGroup.user_id.is_not(None)
 
     return stmt.where(where_clause)
 

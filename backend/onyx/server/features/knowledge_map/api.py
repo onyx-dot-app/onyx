@@ -41,7 +41,7 @@ async def patch_knowledge_map(
 
 @router.get("/")
 async def get_all_knowledge_maps(
-        _: User | None = Depends(current_curator_or_admin_user),
+        _: User | None = Depends(current_user),
         db_session: Session = Depends(get_session),
 ) -> list[KnowledgeMap]:
     knowledge_maps: list[KnowledgeMap] = []

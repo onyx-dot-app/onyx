@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Path
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_curator_or_admin_user
+from onyx.auth.users import current_curator_or_admin_user, current_user
 from onyx.db import crud_validator
 from onyx.db.engine import get_session
 from onyx.db.models import User
@@ -60,7 +60,7 @@ def create_validator(
     summary="Получить список пользовательских валидаторов",
 )
 def get_validators(
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> list[ValidatorResponse]:
     """Получить список пользовательских валидаторов"""

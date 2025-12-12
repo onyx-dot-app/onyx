@@ -23,6 +23,7 @@ from smartsearch.onyx.server.user_group.models import (
 from onyx.auth.users import (
     current_admin_user,
     current_curator_or_admin_user,
+    current_user,
 )
 from onyx.db.engine import get_session
 from onyx.db.models import (
@@ -42,7 +43,7 @@ router = APIRouter(tags=["Управление группой пользоват
     response_model=list[UserGroup],
 )
 def list_user_groups(
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> list[UserGroup]:
     """Получение списка групп пользователей в зависимости

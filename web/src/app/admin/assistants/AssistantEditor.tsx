@@ -105,6 +105,7 @@ import { TabToggle } from "@/components/ui/TabToggle";
 import { MAX_CHARACTERS_PERSONA_DESCRIPTION } from "@/lib/constants";
 import { KnowledgeMapCreationRequest } from "@/app/admin/documents/knowledge_maps/lib";
 import { APIKey } from "../guardrails/types";
+import { MinimalUsersSnapshot } from "@/lib/types";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
@@ -400,8 +401,8 @@ export function AssistantEditor({
 
   const { data: userGroups } = useUserGroups();
 
-  const { data: users } = useSWR<MinimalUserSnapshot[]>(
-    "/api/users",
+  const { data: users } = useSWR<MinimalUsersSnapshot[]>(
+    "/api/users/by-my-groups",
     errorHandlingFetcher
   );
 
