@@ -1,17 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#667eea"/>
-      <stop offset="100%" style="stop-color:#764ba2"/>
-    </linearGradient>
-  </defs>
-  
-  <!-- Rounded square background -->
-  <rect width="1024" height="1024" rx="220" ry="220" fill="url(#bg)"/>
-  
-  <!-- Onyx "O" letter -->
-  <circle cx="512" cy="512" r="280" fill="none" stroke="white" stroke-width="80"/>
-  
-  <!-- Inner detail - gem facet effect -->
-  <path d="M512 300 L650 450 L512 724 L374 450 Z" fill="white" opacity="0.3"/>
+<svg viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- macOS requires 10% transparent padding around icons -->
+    <!-- Visible icon area: 819.2 x 819.2 (80% of 1024) centered with 102.4px margin on all sides -->
+
+    <!-- Rounded square background - white, with proper margins -->
+    <rect x="102.4" y="102.4" width="819.2" height="819.2" rx="176" ry="176" fill="white"/>
+
+    <!-- Onyx logo centered at 65% of visible area (black on white) -->
+    <g transform="translate(245.76, 245.76) scale(9.52)">
+        <path fill-rule="evenodd" clip-rule="evenodd"
+            d="M27.9998 0L10.8691 7.76944L27.9998 15.5389L45.1305 7.76944L27.9998 0ZM27.9998 40.4611L10.8691 48.2306L27.9998 56L45.1305 48.2306L27.9998 40.4611ZM48.2309 10.8691L56.0001 28.0003L48.2309 45.1314L40.4617 28.0003L48.2309 10.8691ZM15.5385 28.0001L7.76923 10.869L0 28.0001L7.76923 45.1313L15.5385 28.0001Z"
+            fill="black" />
+    </g>
 </svg>
