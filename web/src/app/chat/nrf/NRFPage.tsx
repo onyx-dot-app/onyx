@@ -22,11 +22,6 @@ import {
 import Button from "@/refresh-components/buttons/Button";
 import ChatInputBar from "@/app/chat/components/input/ChatInputBar";
 import { Menu, ExternalLink } from "lucide-react";
-import { Shortcut } from "./interfaces";
-import {
-  MaxShortcutsReachedModal,
-  NewShortCutModal,
-} from "@/components/extension/Shortcuts";
 import Modal from "@/refresh-components/Modal";
 import SvgUser from "@/icons/user";
 import { useNightTime } from "@/lib/dateUtils";
@@ -36,7 +31,6 @@ import Dropzone from "react-dropzone";
 import { useSendMessageToParent } from "@/lib/extension/utils";
 import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
 import { SettingsPanel } from "../../components/nrf/SettingsPanel";
-import { ShortcutsDisplay } from "../../components/nrf/ShortcutsDisplay";
 import LoginPage from "../../auth/login/LoginPage";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
 import ApiKeyModal from "@/components/llm/ApiKeyModal";
@@ -60,12 +54,11 @@ import { MessagesDisplay } from "@/app/chat/components/MessagesDisplay";
 import { useChatSessions } from "@/lib/hooks/useChatSessions";
 import { useScrollonStream } from "@/app/chat/services/lib";
 import { cn } from "@/lib/utils";
-import { Logo } from "@/components/logo/Logo";
+import Logo from "@/refresh-components/Logo";
 import useScreenSize from "@/hooks/useScreenSize";
 import TextView from "@/components/chat/TextView";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
-
-const DEFAULT_CONTEXT_TOKENS = 120_000;
+import DEFAULT_CONTEXT_TOKENS from "@/app/chat/components/ChatPage";
 
 interface NRFPageProps {
   isSidePanel?: boolean;
@@ -76,10 +69,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     theme,
     defaultLightBackgroundUrl,
     defaultDarkBackgroundUrl,
-    shortcuts: shortCuts,
-    setShortcuts: setShortCuts,
     setUseOnyxAsNewTab,
-    showShortcuts,
   } = useNRFPreferences();
 
   const searchParams = useSearchParams();
@@ -162,7 +152,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     }
   }, []);
 
-  const [editingShortcut, setEditingShortcut] = useState<Shortcut | null>(null);
   const [backgroundUrl, setBackgroundUrl] = useState<string>(
     theme === "light" ? defaultLightBackgroundUrl : defaultDarkBackgroundUrl
   );
@@ -174,8 +163,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Modals
   const [showTurnOffModal, setShowTurnOffModal] = useState<boolean>(false);
-  const [showShortCutModal, setShowShortCutModal] = useState(false);
-  const [showMaxShortcutsModal, setShowMaxShortcutsModal] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState<boolean>(!user);
 
   // Refs for scrolling
@@ -418,8 +405,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       {isSidePanel && (
         <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-background">
           <div className="flex items-center gap-2">
-            <Logo size="small" />
-            <span className="text-lg font-semibold text-text-900">Onyx</span>
+            <Logo />
           </div>
           <button
             onClick={handleOpenInOnyx}
@@ -437,7 +423,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           <button
             aria-label="Open settings"
             onClick={toggleSettings}
-            className="bg-white/70 dark:bg-neutral-900/70 backdrop-blur-md rounded-full p-2.5 cursor-pointer hover:bg-white/80 dark:hover:bg-neutral-900/80 transition-colors duration-200 shadow-lg"
+            className="bg-white/70 dark:bg-neutral-500/70 backdrop-blur-md rounded-full p-2.5 cursor-pointer hover:bg-white/80 dark:hover:bg-neutral-700/80 transition-colors duration-200 shadow-lg"
           >
             <Menu
               size={12}
@@ -544,7 +530,9 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                       currentSessionFileTokenCount={
                         currentSessionFileTokenCount
                       }
-                      availableContextTokens={DEFAULT_CONTEXT_TOKENS * 0.5}
+                      availableContextTokens={
+                        Number(DEFAULT_CONTEXT_TOKENS) * 0.5
+                      }
                       selectedAssistant={liveAssistant ?? undefined}
                       handleFileUpload={handleFileUpload}
                       textAreaRef={textAreaRef}
@@ -597,7 +585,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   onSubmit={handleChatInputSubmit}
                   chatState={currentChatState}
                   currentSessionFileTokenCount={currentSessionFileTokenCount}
-                  availableContextTokens={DEFAULT_CONTEXT_TOKENS * 0.5}
+                  availableContextTokens={Number(DEFAULT_CONTEXT_TOKENS) * 0.5}
                   selectedAssistant={liveAssistant ?? undefined}
                   handleFileUpload={handleFileUpload}
                   textAreaRef={textAreaRef}
@@ -605,23 +593,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                     !llmManager.isLoadingProviders && !llmManager.hasAnyProvider
                   }
                 />
-
-                {!isSidePanel && (
-                  <ShortcutsDisplay
-                    shortCuts={shortCuts}
-                    showShortcuts={showShortcuts}
-                    setEditingShortcut={setEditingShortcut}
-                    setShowShortCutModal={setShowShortCutModal}
-                    openShortCutModal={() => {
-                      if (shortCuts.length >= 6) {
-                        setShowMaxShortcutsModal(true);
-                      } else {
-                        setEditingShortcut(null);
-                        setShowShortCutModal(true);
-                      }
-                    }}
-                  />
-                )}
               </div>
             )}
           </div>
@@ -631,41 +602,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       {/* Modals - only show when not in side panel mode */}
       {!isSidePanel && (
         <>
-          {showMaxShortcutsModal && (
-            <MaxShortcutsReachedModal
-              onClose={() => setShowMaxShortcutsModal(false)}
-            />
-          )}
-          {showShortCutModal && (
-            <NewShortCutModal
-              setPopup={setPopup}
-              onDelete={(shortcut: Shortcut) => {
-                setShortCuts(
-                  shortCuts.filter((s: Shortcut) => s.name !== shortcut.name)
-                );
-                setShowShortCutModal(false);
-              }}
-              isOpen={showShortCutModal}
-              onClose={() => {
-                setEditingShortcut(null);
-                setShowShortCutModal(false);
-              }}
-              onAdd={(shortCut: Shortcut) => {
-                if (editingShortcut) {
-                  setShortCuts(
-                    shortCuts
-                      .filter((s) => s.name !== editingShortcut.name)
-                      .concat(shortCut)
-                  );
-                } else {
-                  setShortCuts([...shortCuts, shortCut]);
-                }
-                setShowShortCutModal(false);
-              }}
-              editingShortcut={editingShortcut}
-            />
-          )}
-
           <SettingsPanel
             settingsOpen={settingsOpen}
             toggleSettings={toggleSettings}

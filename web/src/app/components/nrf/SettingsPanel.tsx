@@ -107,8 +107,6 @@ export const SettingsPanel = ({
     defaultDarkBackgroundUrl,
     setDefaultDarkBackgroundUrl,
     useOnyxAsNewTab,
-    showShortcuts,
-    setShowShortcuts,
   } = useNRFPreferences();
 
   const toggleTheme = (newTheme: string) => {
@@ -209,13 +207,6 @@ export const SettingsPanel = ({
                 <Switch
                   checked={useOnyxAsNewTab}
                   onCheckedChange={handleUseOnyxToggle}
-                />
-              </SettingRow>
-              <div className="h-px bg-white/10" />
-              <SettingRow label="Show bookmarks">
-                <Switch
-                  checked={showShortcuts}
-                  onCheckedChange={setShowShortcuts}
                 />
               </SettingRow>
             </div>
