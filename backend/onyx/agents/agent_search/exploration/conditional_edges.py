@@ -17,12 +17,13 @@ def decision_router(state: MainState) -> list[Send | Hashable] | DRPath | str:
     available_tools = state.available_tools
     if next_tool_name == DRPath.THINKING.value:
         return DRPath.ORCHESTRATOR  # thinking alteady done
+    elif next_tool_name == DRPath.END.value:
+        return END
     elif not available_tools:
         raise ValueError("No tool is available. This should not happen.")
     if next_tool_name in available_tools:
         next_tool_path = available_tools[next_tool_name].path
-    elif next_tool_name == DRPath.END.value:
-        return END
+
     elif next_tool_name == DRPath.LOGGER.value:
         return DRPath.LOGGER
     elif next_tool_name == DRPath.CLOSER.value:

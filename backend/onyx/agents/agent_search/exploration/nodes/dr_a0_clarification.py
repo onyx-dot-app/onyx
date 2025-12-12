@@ -20,6 +20,7 @@ from onyx.agents.agent_search.exploration.dr_experimentation_prompts import (
 )
 from onyx.agents.agent_search.exploration.enums import DRPath
 from onyx.agents.agent_search.exploration.enums import ResearchAnswerPurpose
+from onyx.agents.agent_search.exploration.hackathon_functions import get_notifications
 from onyx.agents.agent_search.exploration.hackathon_functions import (
     process_notifications,
 )
@@ -34,6 +35,7 @@ from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.chat_utils import build_citation_map_from_numbers
 from onyx.chat.chat_utils import saved_search_docs_from_llm_docs
 from onyx.chat.memories import get_memories
@@ -71,6 +73,9 @@ from onyx.prompts.dr_prompts import TOOL_DESCRIPTION
 from onyx.prompts.prompt_template import PromptTemplate
 from onyx.prompts.prompt_utils import handle_company_awareness
 from onyx.prompts.prompt_utils import handle_memories
+from onyx.server.query_and_chat.streaming_models import MessageDelta
+from onyx.server.query_and_chat.streaming_models import MessageStart
+from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -516,8 +521,50 @@ def clarifier(
         else None
     )
 
-    if original_question == "process_notifications" and user and user.id:
-        process_notifications(db_session, user.id)
+    continue_to_answer = True
+    if original_question == "process_notifications" and user:
+        process_notifications(db_session, llm=graph_config.tooling.fast_llm, user=user)
+        continue_to_answer = False
+
+        # Stream the notifications message
+        write_custom_event(
+            current_step_nr,
+            MessageStart(content="", final_documents=None),
+            writer,
+        )
+        write_custom_event(
+            current_step_nr,
+            MessageDelta(content="Done!"),
+            writer,
+        )
+        write_custom_event(current_step_nr, SectionEnd(), writer)
+
+    elif original_question == "get_notifications" and user:
+        notifications = get_notifications(db_session, user)
+        if notifications:
+            # Stream the notifications message
+            write_custom_event(
+                current_step_nr,
+                MessageStart(content="", final_documents=None),
+                writer,
+            )
+            write_custom_event(
+                current_step_nr,
+                MessageDelta(content=notifications),
+                writer,
+            )
+            write_custom_event(current_step_nr, SectionEnd(), writer)
+        continue_to_answer = False
+
+    if not continue_to_answer:
+        return OrchestrationSetup(
+            original_question=original_question,
+            chat_history_string="",
+            tools_used=[DRPath.END.value],
+            query_list=[],
+            iteration_nr=0,
+            current_step_nr=current_step_nr,
+        )
 
     memories = get_memories(user, db_session)
     assistant_system_prompt = handle_company_awareness(assistant_system_prompt)
