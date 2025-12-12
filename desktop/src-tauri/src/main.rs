@@ -8,7 +8,12 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::RwLock;
 use std::time::Duration;
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, SubmenuBuilder, HELP_SUBMENU_ID};
+use tauri::image::Image;
+use tauri::menu::{
+    CheckMenuItem, Menu, MenuBuilder, MenuItem, PredefinedMenuItem, SubmenuBuilder, HELP_SUBMENU_ID,
+};
+use tauri::tray::{TrayIconBuilder, TrayIconEvent};
+use tauri::Wry;
 use tauri::{
     webview::PageLoadPayload, AppHandle, Manager, Webview, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder,
@@ -25,6 +30,11 @@ use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
 const DEFAULT_SERVER_URL: &str = "https://cloud.onyx.app";
 const CONFIG_FILE_NAME: &str = "config.json";
 const TITLEBAR_SCRIPT: &str = include_str!("../../src/titlebar.js");
+const TRAY_ID: &str = "onyx-tray";
+const TRAY_ICON_BYTES: &[u8] = include_bytes!("../icons/tray-icon.png");
+const TRAY_MENU_OPEN_CHAT_ID: &str = "tray_open_chat";
+const TRAY_MENU_SHOW_IN_BAR_ID: &str = "tray_show_in_menu_bar";
+const TRAY_MENU_QUIT_ID: &str = "tray_quit";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -114,6 +124,16 @@ fn save_config(config: &AppConfig) -> Result<(), String> {
 
 // Global config state
 struct ConfigState(RwLock<AppConfig>);
+
+fn focus_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    } else {
+        trigger_new_window(app);
+    }
+}
 
 fn trigger_new_chat(app: &AppHandle) {
     let state = app.state::<ConfigState>();
@@ -472,6 +492,83 @@ fn setup_app_menu(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
+    let open_chat = MenuItem::with_id(
+        app,
+        TRAY_MENU_OPEN_CHAT_ID,
+        "Open Chat Window",
+        true,
+        None::<&str>,
+    )?;
+    let show_in_menu_bar = CheckMenuItem::with_id(
+        app,
+        TRAY_MENU_SHOW_IN_BAR_ID,
+        "Show in Menu Bar",
+        true,
+        true,
+        None::<&str>,
+    )?;
+    // Keep it visible/pinned without letting users uncheck (avoids orphaning the tray)
+    let _ = show_in_menu_bar.set_enabled(false);
+    let quit = PredefinedMenuItem::quit(app, Some("Quit Onyx"))?;
+
+    MenuBuilder::new(app)
+        .item(&open_chat)
+        .separator()
+        .item(&show_in_menu_bar)
+        .separator()
+        .item(&quit)
+        .build()
+}
+
+fn handle_tray_menu_event(app: &AppHandle, id: &str) {
+    match id {
+        TRAY_MENU_OPEN_CHAT_ID => {
+            focus_main_window(app);
+            trigger_new_chat(app);
+        }
+        TRAY_MENU_QUIT_ID => {
+            app.exit(0);
+        }
+        TRAY_MENU_SHOW_IN_BAR_ID => {
+            // No-op for now; the item stays checked/disabled to indicate it's pinned.
+        }
+        _ => {}
+    }
+}
+
+fn setup_tray_icon(app: &AppHandle) -> tauri::Result<()> {
+    let mut builder = TrayIconBuilder::with_id(TRAY_ID).tooltip("Onyx");
+
+    let tray_icon = Image::from_bytes(TRAY_ICON_BYTES)
+        .ok()
+        .or_else(|| app.default_window_icon().cloned());
+
+    if let Some(icon) = tray_icon {
+        builder = builder.icon(icon);
+
+        #[cfg(target_os = "macos")]
+        {
+            builder = builder.icon_as_template(true);
+        }
+    }
+
+    if let Ok(menu) = build_tray_menu(app) {
+        builder = builder.menu(&menu);
+    }
+
+    builder
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click { .. } = event {
+                focus_main_window(tray.app_handle());
+            }
+        })
+        .on_menu_event(|app, event| handle_tray_menu_event(app, event.id().as_ref()))
+        .build(app)?;
+
+    Ok(())
+}
+
 // ============================================================================
 // Main
 // ============================================================================
@@ -522,6 +619,10 @@ fn main() {
 
             if let Err(e) = setup_app_menu(&app_handle) {
                 eprintln!("Failed to setup menu: {}", e);
+            }
+
+            if let Err(e) = setup_tray_icon(&app_handle) {
+                eprintln!("Failed to setup tray icon: {}", e);
             }
 
             // Update main window URL to configured server and inject title bar
