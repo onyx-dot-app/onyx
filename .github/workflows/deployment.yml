@@ -164,6 +164,7 @@ jobs:
             libgtk-3-dev \
             libjavascriptcoregtk-4.1-dev \
             libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
             gobject-introspection \
             pkg-config \
             curl \
@@ -180,6 +181,11 @@ jobs:
         with:
           # Those targets are only used on macos runners so it's in an `if` to slightly speed up windows and linux builds.
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './desktop/src-tauri -> target'
 
       - name: install frontend dependencies
         working-directory: ./desktop
