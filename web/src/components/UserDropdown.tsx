@@ -15,7 +15,11 @@ import { LOGOUT_DISABLED } from "@/lib/constants";
 import { SettingsContext } from "./settings/SettingsProvider";
 import { BellIcon, LightSettingsIcon, UserIcon } from "./icons/icons";
 import { pageType } from "@/app/chat/sessionSidebar/types";
-import { NavigationItem, Notification } from "@/app/admin/settings/interfaces";
+import {
+  NavigationItem,
+  Notification,
+  NotificationType,
+} from "@/app/admin/settings/interfaces";
 import DynamicFaIcon, { preloadIcons } from "./icons/DynamicFaIcon";
 import { useUser } from "./user/UserProvider";
 import { usePaidEnterpriseFeaturesEnabled } from "./settings/usePaidEnterpriseFeaturesEnabled";
@@ -89,6 +93,29 @@ export function UserDropdown({
     error,
     mutate: refreshNotifications,
   } = useSWR<Notification[]>("/api/notifications", errorHandlingFetcher);
+
+  // Filter notifications to only count those that will be displayed
+  const visibleNotifications = notifications
+    ? notifications.filter((notification) => {
+        const notifType = notification.notif_type.toLowerCase();
+        // Count persona_shared notifications (they will be filtered further in Notifications component)
+        if (
+          notifType === NotificationType.PERSONA_SHARED &&
+          notification.additional_data?.persona_id !== undefined
+        ) {
+          return true;
+        }
+        // Count other supported notification types
+        if (
+          notifType === "reindex" ||
+          notifType === NotificationType.REINDEX_NEEDED ||
+          notifType === NotificationType.TRIAL_ENDS_TWO_DAYS
+        ) {
+          return true;
+        }
+        return false;
+      })
+    : [];
 
   useEffect(() => {
     const iconNames = customNavItems
@@ -169,7 +196,7 @@ export function UserDropdown({
             >
               {user && user.email ? user.email[0].toUpperCase() : t(k.A1)}
             </div>
-            {notifications && notifications.length > 0 && (
+            {visibleNotifications && visibleNotifications.length > 0 && (
               <div className="absolute -right-0.5 -top-0.5 w-3 h-3 bg-red-500 rounded-full"></div>
             )}
           </div>
@@ -300,8 +327,8 @@ export function UserDropdown({
                   }}
                   icon={<BellIcon size={16} className="my-auto" />}
                   label={`${t(k.NOTIFICATIONS)} ${
-                    notifications && notifications.length > 0
-                      ? `${t(k._4)}${notifications.length}${t(k._5)}`
+                    visibleNotifications && visibleNotifications.length > 0
+                      ? `${t(k._4)}${visibleNotifications.length}${t(k._5)}`
                       : ""
                   }`}
                 />
