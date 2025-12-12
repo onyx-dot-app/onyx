@@ -9,6 +9,7 @@ import { EnterpriseSettings } from "@/app/admin/settings/interfaces";
 import { FileDescriptor } from "@/app/chat/interfaces";
 import AIMessage from "@/app/chat/message/messageComponents/AIMessage";
 import { ProjectFile } from "@/app/chat/projects/projectsService";
+import { cn } from "@/lib/utils";
 
 export interface MessagesDisplayProps {
   messageHistory: Message[];
@@ -115,12 +116,11 @@ export default function MessagesDisplay({
     <div
       style={{ overflowAnchor: "none" }}
       key={chatSessionId}
-      className={
-        (hasPerformedInitialScroll ? "" : " hidden ") +
-        "desktop:-ml-4 w-full mx-auto " +
-        "absolute mobile:top-0 desktop:top-0 left-0 " +
-        (enterpriseSettings?.two_lines_for_chat_header ? "pt-20 " : "pt-4 ")
-      }
+      className={cn(
+        // "desktop:-ml-4 w-full mx-auto absolute mobile:top-0 desktop:top-0 left-0",
+        // enterpriseSettings?.two_lines_for_chat_header ? "pt-20" : "pt-4",
+        !hasPerformedInitialScroll && "hidden"
+      )}
     >
       {messageHistory.map((message, i) => {
         const messageTree = completeMessageTree;

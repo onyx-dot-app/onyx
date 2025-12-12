@@ -781,7 +781,6 @@ export default function ChatPage({
         <AppPageLayout
           settings={headerData.settings}
           chatSession={headerData.chatSession}
-          className="flex flex-row h-full w-full"
         >
           <Dropzone
             onDrop={(acceptedFiles) =>
@@ -790,51 +789,46 @@ export default function ChatPage({
             noClick
           >
             {({ getRootProps }) => (
-              <div
-                className="h-full w-full relative flex-auto min-w-0"
-                {...getRootProps()}
-              >
-                {messageHistory.length > 0 && (
-                  <div
-                    ref={scrollableDivRef}
-                    onScroll={handleScroll}
-                    className="w-full dbg-red flex flex-col default-scrollbar overflow-y-auto overflow-x-hidden relative"
-                  >
-                    <MessagesDisplay
-                      messageHistory={messageHistory}
-                      completeMessageTree={completeMessageTree}
-                      liveAssistant={liveAssistant}
-                      llmManager={llmManager}
-                      deepResearchEnabled={deepResearchEnabled}
-                      currentMessageFiles={currentMessageFiles}
-                      setPresentingDocument={setPresentingDocument}
-                      onSubmit={onSubmit}
-                      onMessageSelection={onMessageSelection}
-                      stopGenerating={stopGenerating}
-                      uncaughtError={uncaughtError}
-                      loadingError={loadingError}
-                      handleResubmitLastMessage={handleResubmitLastMessage}
-                      autoScrollEnabled={autoScrollEnabled}
-                      getContainerHeight={getContainerHeight}
-                      lastMessageRef={lastMessageRef}
-                      endDivRef={endDivRef}
-                      hasPerformedInitialScroll={hasPerformedInitialScroll}
-                      chatSessionId={chatSessionId}
-                      enterpriseSettings={enterpriseSettings}
+              <div className="h-full w-full flex flex-col" {...getRootProps()}>
+                {/*{!showCenteredInput && aboveHorizon && (
+                  <div className="mx-auto flex justify-center py-4">
+                    <IconButton
+                      icon={SvgChevronDown}
+                      onClick={() => clientScrollToBottom()}
                     />
                   </div>
-                )}
+                )}*/}
+
+                <div
+                  ref={scrollableDivRef}
+                  onScroll={handleScroll}
+                  className="w-full flex-1 flex flex-col default-scrollbar overflow-y-auto overflow-x-hidden relative"
+                >
+                  <MessagesDisplay
+                    messageHistory={messageHistory}
+                    completeMessageTree={completeMessageTree}
+                    liveAssistant={liveAssistant}
+                    llmManager={llmManager}
+                    deepResearchEnabled={deepResearchEnabled}
+                    currentMessageFiles={currentMessageFiles}
+                    setPresentingDocument={setPresentingDocument}
+                    onSubmit={onSubmit}
+                    onMessageSelection={onMessageSelection}
+                    stopGenerating={stopGenerating}
+                    uncaughtError={uncaughtError}
+                    loadingError={loadingError}
+                    handleResubmitLastMessage={handleResubmitLastMessage}
+                    autoScrollEnabled={autoScrollEnabled}
+                    getContainerHeight={getContainerHeight}
+                    lastMessageRef={lastMessageRef}
+                    endDivRef={endDivRef}
+                    hasPerformedInitialScroll={hasPerformedInitialScroll}
+                    chatSessionId={chatSessionId}
+                    enterpriseSettings={enterpriseSettings}
+                  />
+                </div>
 
                 <div ref={inputRef} className="w-full">
-                  {!showCenteredInput && aboveHorizon && (
-                    <div className="mx-auto flex justify-center py-4">
-                      <IconButton
-                        icon={SvgChevronDown}
-                        onClick={() => clientScrollToBottom()}
-                      />
-                    </div>
-                  )}
-
                   <div
                     className={cn(
                       "pointer-events-auto w-[95%] mx-auto relative text-text-04 justify-center",
