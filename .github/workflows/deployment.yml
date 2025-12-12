@@ -182,7 +182,7 @@ jobs:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: Inject version from git tag (Unix)
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' && github.event_name != 'workflow_dispatch'
         working-directory: ./desktop/src-tauri
         run: |
           # Extract version from git tag (strip 'v' prefix if present)
@@ -204,7 +204,7 @@ jobs:
           jq '.version' tauri.conf.json
 
       - name: Inject version from git tag (Windows)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && github.event_name != 'workflow_dispatch'
         working-directory: ./desktop/src-tauri
         shell: pwsh
         run: |
