@@ -1,17 +1,16 @@
-import React, { RefObject, useCallback, useMemo } from "react";
-import { Message } from "../interfaces";
+import { RefObject, useCallback, useMemo } from "react";
+import { Message } from "@/app/chat/interfaces";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
-import { MemoizedHumanMessage } from "../message/MemoizedHumanMessage";
-import { ErrorBanner } from "../message/Resubmit";
-import { FeedbackType } from "@/app/chat/interfaces";
+import HumanMessage from "@/app/chat/message/HumanMessage";
+import { ErrorBanner } from "@/app/chat/message/Resubmit";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { EnterpriseSettings } from "@/app/admin/settings/interfaces";
 import { FileDescriptor } from "@/app/chat/interfaces";
-import { MemoizedAIMessage } from "../message/messageComponents/MemoizedAIMessage";
-import { ProjectFile } from "../projects/projectsService";
+import AIMessage from "@/app/chat/message/messageComponents/AIMessage";
+import { ProjectFile } from "@/app/chat/projects/projectsService";
 
-interface MessagesDisplayProps {
+export interface MessagesDisplayProps {
   messageHistory: Message[];
   completeMessageTree: Map<number, Message> | null | undefined;
   liveAssistant: MinimalPersonaSnapshot | undefined;
@@ -50,7 +49,7 @@ interface MessagesDisplayProps {
   enterpriseSettings?: EnterpriseSettings | null;
 }
 
-export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
+export default function MessagesDisplay({
   messageHistory,
   completeMessageTree,
   liveAssistant,
@@ -72,7 +71,7 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
   hasPerformedInitialScroll,
   chatSessionId,
   enterpriseSettings,
-}) => {
+}: MessagesDisplayProps) {
   // Stable fallbacks to avoid changing prop identities on each render
   const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
   const emptyChildrenIds = useMemo<number[]>(() => [], []);
@@ -138,7 +137,7 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
 
           return (
             <div id={messageReactComponentKey} key={messageReactComponentKey}>
-              <MemoizedHumanMessage
+              <HumanMessage
                 disableSwitchingForStreaming={
                   (nextMessage && nextMessage.is_generating) || false
                 }
@@ -146,7 +145,14 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
                 content={message.message}
                 files={message.files}
                 messageId={message.messageId}
-                handleEditWithMessageId={handleEditWithMessageId}
+                onEdit={(editedContent) => {
+                  if (
+                    message.messageId !== undefined &&
+                    message.messageId !== null
+                  ) {
+                    handleEditWithMessageId(editedContent, message.messageId);
+                  }
+                }}
                 otherMessagesCanSwitchTo={
                   parentMessage?.childrenNodeIds ?? emptyChildrenIds
                 }
@@ -176,6 +182,22 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
           // since this is a "parsed" version of the message tree
           // so the previous message is guaranteed to be the parent of the current message
           const previousMessage = i !== 0 ? messageHistory[i - 1] : null;
+          const regenerate =
+            message.messageId !== undefined && previousMessage
+              ? createRegenerator({
+                  messageId: message.messageId,
+                  parentMessage: previousMessage,
+                })
+              : undefined;
+          const chatState = {
+            assistant: liveAssistant,
+            docs: message.documents ?? emptyDocs,
+            citations: message.citations,
+            setPresentingDocument,
+            regenerate,
+            overriddenModel: llmManager.currentLlm?.modelName,
+            researchType: message.researchType,
+          };
           return (
             <div
               className="text-text"
@@ -183,24 +205,17 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
               key={messageReactComponentKey}
               ref={i === messageHistory.length - 1 ? lastMessageRef : null}
             >
-              <MemoizedAIMessage
+              <AIMessage
                 rawPackets={message.packets}
-                assistant={liveAssistant}
-                docs={message.documents ?? emptyDocs}
-                citations={message.citations}
-                setPresentingDocument={setPresentingDocument}
-                createRegenerator={createRegenerator}
-                parentMessage={previousMessage!}
+                chatState={chatState}
+                nodeId={message.nodeId}
                 messageId={message.messageId}
                 currentFeedback={message.currentFeedback}
-                overriddenModel={llmManager.currentLlm?.modelName}
-                nodeId={message.nodeId}
                 llmManager={llmManager}
                 otherMessagesCanSwitchTo={
                   parentMessage?.childrenNodeIds ?? emptyChildrenIds
                 }
                 onMessageSelection={onMessageSelection}
-                researchType={message.researchType}
               />
             </div>
           );
@@ -230,4 +245,4 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
       <div ref={endDivRef} />
     </div>
   );
-};
+}
