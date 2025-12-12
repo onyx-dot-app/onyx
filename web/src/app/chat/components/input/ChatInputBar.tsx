@@ -476,8 +476,10 @@ function ChatInputBarInner({
               event.preventDefault();
               if (message) {
                 // Capture the textarea position before submit
-                if (textAreaRef.current) {
-                  const rect = textAreaRef.current.getBoundingClientRect();
+                const sourceEl =
+                  inputContainerRef.current ?? textAreaRef.current;
+                if (sourceEl) {
+                  const rect = sourceEl.getBoundingClientRect();
                   startMessageAnimation(message, rect);
                 }
 
@@ -658,8 +660,10 @@ function ChatInputBarInner({
                   stopGenerating();
                 } else if (message) {
                   // Capture the textarea position before submit
-                  if (textAreaRef.current) {
-                    const rect = textAreaRef.current.getBoundingClientRect();
+                  const sourceEl =
+                    inputContainerRef.current ?? textAreaRef.current;
+                  if (sourceEl) {
+                    const rect = sourceEl.getBoundingClientRect();
                     startMessageAnimation(message, rect);
                   }
                   onSubmit();

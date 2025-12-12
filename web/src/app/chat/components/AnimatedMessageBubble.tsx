@@ -3,7 +3,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import Text from "@/refresh-components/texts/Text";
-import { MESSAGE_SEND_ANIMATION_DURATION_S } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 interface AnimatedMessageBubbleProps {
@@ -24,6 +23,19 @@ export default function AnimatedMessageBubble({
   const bubbleRef = useRef<HTMLDivElement>(null);
   const [liveTargetRect, setLiveTargetRect] = useState<DOMRect | null>(null);
   const [animationStarted, setAnimationStarted] = useState(false);
+  const [animationDurationS, setAnimationDurationS] = useState(0.3);
+
+  // Read the CSS variable so styling controls duration.
+  useEffect(() => {
+    if (!bubbleRef.current) return;
+    const raw = getComputedStyle(bubbleRef.current).getPropertyValue(
+      "--message-send-duration"
+    );
+    const parsed = raw.trim().toLowerCase();
+    let seconds = parseFloat(parsed);
+    if (Number.isNaN(seconds) || seconds <= 0) return;
+    setAnimationDurationS(seconds);
+  }, []);
 
   // Continuously track the latest target rect so the animation follows scroll/resize
   useEffect(() => {
@@ -81,12 +93,9 @@ export default function AnimatedMessageBubble({
         backgroundColor: "var(--background-tint-02)",
       }}
       transition={{
-        type: "spring",
-        stiffness: 520,
-        damping: 32,
-        mass: 0.8,
-        restDelta: 0.5,
-        backgroundColor: { duration: MESSAGE_SEND_ANIMATION_DURATION_S },
+        duration: animationDurationS,
+        ease: [0.25, 0.1, 0.25, 1],
+        backgroundColor: { duration: animationDurationS },
       }}
       onAnimationComplete={onAnimationComplete}
     >
