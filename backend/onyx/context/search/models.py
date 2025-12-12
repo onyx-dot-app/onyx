@@ -129,6 +129,8 @@ class UserFileFilters(BaseModel):
 class IndexFilters(BaseFilters, UserFileFilters):
     access_control_list: list[str] | None
     tenant_id: str | None = None
+    # Filter documents by primary owner email (for avatar queries)
+    primary_owner_emails: list[str] | None = None
 
 
 class ChunkMetric(BaseModel):

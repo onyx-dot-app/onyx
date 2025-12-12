@@ -12,6 +12,7 @@ from onyx.document_index.vespa_constants import DOCUMENT_ID
 from onyx.document_index.vespa_constants import DOCUMENT_SETS
 from onyx.document_index.vespa_constants import HIDDEN
 from onyx.document_index.vespa_constants import METADATA_LIST
+from onyx.document_index.vespa_constants import PRIMARY_OWNERS
 from onyx.document_index.vespa_constants import SOURCE_TYPE
 from onyx.document_index.vespa_constants import TENANT_ID
 from onyx.document_index.vespa_constants import USER_PROJECT
@@ -164,6 +165,10 @@ def build_vespa_filters(
         filter_str += _build_or_filters(
             ACCESS_CONTROL_LIST, filters.access_control_list
         )
+
+    # Primary owner filter (for avatar queries)
+    if filters.primary_owner_emails:
+        filter_str += _build_or_filters(PRIMARY_OWNERS, filters.primary_owner_emails)
 
     # Source type filters
     source_strs = (

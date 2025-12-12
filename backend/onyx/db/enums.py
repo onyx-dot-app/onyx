@@ -194,3 +194,20 @@ class SwitchoverType(str, PyEnum):
     REINDEX = "reindex"
     ACTIVE_ONLY = "active_only"
     INSTANT = "instant"
+
+
+class AvatarQueryMode(str, PyEnum):
+    """Mode for querying an avatar's knowledge."""
+
+    OWNED_DOCUMENTS = "owned_documents"  # Query only docs where user is primary_owner
+    ACCESSIBLE_DOCUMENTS = "accessible_documents"  # Query all docs user can access
+
+
+class AvatarPermissionRequestStatus(str, PyEnum):
+    """Status of an avatar permission request."""
+
+    PENDING = "pending"
+    APPROVED = "approved"
+    DENIED = "denied"
+    EXPIRED = "expired"
+    NO_ANSWER = "no_answer"  # Query ran but found nothing useful

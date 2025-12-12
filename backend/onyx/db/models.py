@@ -54,6 +54,8 @@ from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MessageType
 from onyx.db.enums import (
     AccessType,
+    AvatarPermissionRequestStatus,
+    AvatarQueryMode,
     EmbeddingPrecision,
     IndexingMode,
     SyncType,
@@ -254,6 +256,13 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     oauth_user_tokens: Mapped[list["OAuthUserToken"]] = relationship(
         "OAuthUserToken",
         back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    # User's queryable avatar (1:1 relationship)
+    avatar: Mapped["Avatar | None"] = relationship(
+        "Avatar",
+        back_populates="user",
+        uselist=False,
         cascade="all, delete-orphan",
     )
 
@@ -3911,3 +3920,187 @@ class ExternalGroupPermissionSyncAttempt(Base):
 
     def is_finished(self) -> bool:
         return self.status.is_terminal()
+
+
+"""
+Avatar Models
+Avatars are queryable mirrors of individual users within Onyx.
+"""
+
+
+class Avatar(Base):
+    """User's queryable knowledge avatar - mirrors their document ownership/access."""
+
+    __tablename__ = "avatar"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+
+    # Display settings
+    name: Mapped[str | None] = mapped_column(String, nullable=True)
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # Query mode settings
+    default_query_mode: Mapped[AvatarQueryMode] = mapped_column(
+        Enum(AvatarQueryMode, native_enum=False),
+        default=AvatarQueryMode.OWNED_DOCUMENTS,
+        nullable=False,
+    )
+    allow_accessible_mode: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False
+    )
+
+    # Auto-approval rules: {"user_ids": [...], "group_ids": [...], "all_users": false}
+    auto_approve_rules: Mapped[dict | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+
+    # Privacy settings
+    show_query_in_request: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False
+    )
+
+    # Rate limiting
+    max_requests_per_day: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, default=100
+    )
+
+    # Timestamps
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    user: Mapped["User"] = relationship("User", back_populates="avatar")
+    permission_requests: Mapped[list["AvatarPermissionRequest"]] = relationship(
+        "AvatarPermissionRequest",
+        back_populates="avatar",
+        cascade="all, delete-orphan",
+    )
+    queries: Mapped[list["AvatarQuery"]] = relationship(
+        "AvatarQuery",
+        back_populates="avatar",
+        cascade="all, delete-orphan",
+    )
+
+
+class AvatarPermissionRequest(Base):
+    """Tracks permission requests for accessible-mode avatar queries."""
+
+    __tablename__ = "avatar_permission_request"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    # The avatar being queried
+    avatar_id: Mapped[int] = mapped_column(
+        ForeignKey("avatar.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    # Who is requesting
+    requester_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    # The query context
+    query_text: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )  # May be hidden per privacy settings
+    chat_session_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("chat_session.id", ondelete="SET NULL"), nullable=True
+    )
+    chat_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="SET NULL"), nullable=True
+    )
+
+    # Cached answer (stored until approval/denial)
+    cached_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cached_search_doc_ids: Mapped[list[int] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+    answer_quality_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Status
+    status: Mapped[AvatarPermissionRequestStatus] = mapped_column(
+        Enum(AvatarPermissionRequestStatus, native_enum=False),
+        default=AvatarPermissionRequestStatus.PENDING,
+        nullable=False,
+        index=True,
+    )
+
+    # Response from avatar owner
+    denial_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Timestamps
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    expires_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    resolved_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Relationships
+    avatar: Mapped["Avatar"] = relationship(
+        "Avatar", back_populates="permission_requests"
+    )
+    requester: Mapped["User"] = relationship("User", foreign_keys=[requester_id])
+    chat_session: Mapped["ChatSession | None"] = relationship("ChatSession")
+
+    __table_args__ = (
+        Index(
+            "ix_avatar_permission_request_avatar_status",
+            "avatar_id",
+            "status",
+        ),
+        Index(
+            "ix_avatar_permission_request_requester_created",
+            "requester_id",
+            "created_at",
+        ),
+    )
+
+
+class AvatarQuery(Base):
+    """Tracks avatar queries for rate limiting and analytics."""
+
+    __tablename__ = "avatar_query"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    avatar_id: Mapped[int] = mapped_column(
+        ForeignKey("avatar.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    requester_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    query_mode: Mapped[AvatarQueryMode] = mapped_column(
+        Enum(AvatarQueryMode, native_enum=False), nullable=False
+    )
+    query_text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    # Relationships
+    avatar: Mapped["Avatar"] = relationship("Avatar", back_populates="queries")
+    requester: Mapped["User"] = relationship("User", foreign_keys=[requester_id])
+
+    # Index for rate limiting queries
+    __table_args__ = (
+        Index(
+            "ix_avatar_query_rate_limit",
+            "avatar_id",
+            "requester_id",
+            "created_at",
+        ),
+    )

@@ -597,3 +597,116 @@ export interface IndexingStatusRequest {
   source?: ValidSources;
   get_all_connectors?: boolean;
 }
+
+// ============================================================================
+// Avatar Types
+// ============================================================================
+
+export enum AvatarQueryMode {
+  OWNED_DOCUMENTS = "owned_documents",
+  ACCESSIBLE_DOCUMENTS = "accessible_documents",
+}
+
+export enum AvatarPermissionRequestStatus {
+  PENDING = "pending",
+  APPROVED = "approved",
+  DENIED = "denied",
+  EXPIRED = "expired",
+  NO_ANSWER = "no_answer",
+}
+
+export interface Avatar {
+  id: number;
+  user_id: string;
+  user_email: string;
+  name: string | null;
+  description: string | null;
+  is_enabled: boolean;
+  default_query_mode: AvatarQueryMode;
+  allow_accessible_mode: boolean;
+  show_query_in_request: boolean;
+  max_requests_per_day: number | null;
+  created_at: string;
+}
+
+export interface AvatarListItem {
+  id: number;
+  user_id: string;
+  user_email: string;
+  name: string | null;
+  description: string | null;
+  default_query_mode: AvatarQueryMode;
+  allow_accessible_mode: boolean;
+}
+
+export interface AvatarUpdateRequest {
+  name?: string | null;
+  description?: string | null;
+  is_enabled?: boolean;
+  default_query_mode?: AvatarQueryMode;
+  allow_accessible_mode?: boolean;
+  show_query_in_request?: boolean;
+  max_requests_per_day?: number | null;
+  auto_approve_rules?: AutoApproveRules | null;
+}
+
+export interface AutoApproveRules {
+  user_ids: string[];
+  group_ids: number[];
+  all_users: boolean;
+}
+
+export interface AvatarQueryRequest {
+  query: string;
+  query_mode?: AvatarQueryMode;
+  chat_session_id?: string | null;
+}
+
+export interface AvatarQueryResponse {
+  status:
+    | "success"
+    | "pending_permission"
+    | "no_results"
+    | "rate_limited"
+    | "disabled"
+    | "error";
+  answer?: string | null;
+  permission_request_id?: number | null;
+  source_document_ids?: string[] | null;
+  message?: string | null;
+}
+
+export interface BroadcastQueryRequest {
+  avatar_ids: number[];
+  query: string;
+  query_mode?: AvatarQueryMode;
+}
+
+export interface BroadcastQueryResponse {
+  results: Record<number, AvatarQueryResponse>;
+}
+
+export interface PermissionRequest {
+  id: number;
+  avatar_id: number;
+  avatar_user_email: string;
+  requester_id: string;
+  requester_email: string;
+  query_text: string | null;
+  status: AvatarPermissionRequestStatus;
+  denial_reason: string | null;
+  created_at: string;
+  expires_at: string;
+  resolved_at: string | null;
+}
+
+export interface PermissionRequestDenyRequest {
+  denial_reason?: string | null;
+}
+
+export interface PermissionRequestApproveResponse {
+  request_id: number;
+  status: AvatarPermissionRequestStatus;
+  answer: string | null;
+  source_document_ids: number[] | null;
+}

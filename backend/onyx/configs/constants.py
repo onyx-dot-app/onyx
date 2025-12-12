@@ -235,6 +235,10 @@ class NotificationType(str, Enum):
     REINDEX = "reindex"
     PERSONA_SHARED = "persona_shared"
     TRIAL_ENDS_TWO_DAYS = "two_day_trial_ending"  # 2 days left in trial
+    # Avatar permission requests
+    AVATAR_PERMISSION_REQUEST = "avatar_permission_request"
+    AVATAR_REQUEST_APPROVED = "avatar_request_approved"
+    AVATAR_REQUEST_DENIED = "avatar_request_denied"
 
 
 class BlobType(str, Enum):

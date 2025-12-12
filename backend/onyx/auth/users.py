@@ -400,6 +400,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     user = await self.update(user_update, user)
                 if user_created:
                     await self._assign_default_pinned_assistants(user, db_session)
+                    await self._create_user_avatar(user, db_session)
                 remove_user_from_invited_users(user_create.email)
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
@@ -433,6 +434,21 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             {"pinned_assistants": default_persona_ids},
         )
         user.pinned_assistants = default_persona_ids
+
+    async def _create_user_avatar(self, user: User, db_session: AsyncSession) -> None:
+        """Create a default avatar for a newly registered user."""
+        from onyx.db.avatar import create_avatar_for_user_async
+
+        try:
+            await create_avatar_for_user_async(
+                user_id=user.id,
+                db_session=db_session,
+                name=None,  # Will default to user's email in UI
+                description=None,
+            )
+        except Exception as e:
+            # Log but don't fail user creation if avatar creation fails
+            logger.warning(f"Failed to create avatar for user {user.id}: {e}")
 
     async def validate_password(self, password: str, _: schemas.UC | models.UP) -> None:
         # Validate password according to configurable security policy (defined via environment variables)
@@ -555,6 +571,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     user = await self.user_db.create(user_dict)
                     await self.user_db.add_oauth_account(user, oauth_account_dict)
                     await self._assign_default_pinned_assistants(user, db_session)
+                    await self._create_user_avatar(user, db_session)
                     await self.on_after_register(user, request)
 
             else:
