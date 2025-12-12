@@ -1,35 +1,39 @@
-import os, time
-
+import os
+from datetime import datetime, timezone
 from collections.abc import Generator
 from typing import Any, Dict, List, Optional, cast
+
 from pydantic import BaseModel
 from retry import retry
-from datetime import datetime, timezone
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
-
 from onyx.configs.constants import DocumentSource
+
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
     rl_requests,
 )
-
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-
-from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import ConnectorMissingCredentialError
-
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    ImageSection,
+    TextSection,
+)
 
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
+
 
 _CODA_CALL_TIMEOUT = 30
 CODA_BASE_URL = "https://coda.io/apis/v1"
@@ -91,7 +95,7 @@ class CodaApiClient:
         bearer_token: str, 
     ) -> None:
         self.bearer_token = bearer_token
-        self.base_url = CODA_BASE_URL #makes api calls nicer to look at further down the file
+        self.base_url = os.environ.get("CODA_BASE_URL", CODA_BASE_URL)  
     
     def get(self, endpoint: str, params: Optional[dict[str, str]] = None) -> dict[str, Any]:
         url = self._build_url(endpoint)
@@ -523,10 +527,6 @@ class CodaConnector(LoadConnector, PollConnector):
                 "row_count": str(len(rows)),
             },
         )
-
-    # Skeletons for potential future conversion functions if we want more granularity:
-    # def _convert_doc_to_document(doc: CodaDoc) -> Document:
-    # def _convert_row_to_document(row: CodaRow) -> Document: note** we kind of handle this in the table conversion
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Load and validate Coda credentials."""

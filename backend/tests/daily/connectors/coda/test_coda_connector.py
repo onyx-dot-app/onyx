@@ -7,20 +7,19 @@ import pytest
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.coda.connector import CodaConnector
 from onyx.connectors.models import Document
+import onyx.connectors.exceptions as ConnectorMissingCredentialError
 
 
 @pytest.fixture
 def coda_credentials():
     """Fixture to get and validate Coda credentials."""
     bearer_token = os.environ.get("CODA_BEARER_TOKEN")
-    base_url = os.environ.get("CODA_BASE_URL", "https://coda.io/apis/v1")
     
     if not bearer_token:
         pytest.skip("CODA_BEARER_TOKEN not set")
     
     return {
         "coda_bearer_token": bearer_token,
-        "coda_base_url": base_url,
     }
 
 
@@ -107,7 +106,7 @@ class TestCodaConnectorValidation:
         """Test that invalid credentials are rejected."""
         conn = CodaConnector()
         
-        with pytest.raises(ConnectorMissingCredentialError):
+        with pytest.raises(ConnectorMissingCredentialError):  
             conn.load_credentials({
                 "coda_bearer_token": "invalid_token_12345",
                 "coda_base_url": "https://coda.io/apis/v1",
