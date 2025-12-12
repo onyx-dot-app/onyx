@@ -82,7 +82,6 @@ import { HeaderData } from "@/lib/headers/fetchHeaderDataSS";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgChevronDown from "@/icons/chevron-down";
 import { AvatarModeIndicator } from "@/app/chat/components/avatar/AvatarModeIndicator";
-import { AvatarQueryResult } from "@/app/chat/components/avatar/AvatarQueryResult";
 import { useAvatarContextOptional } from "@/app/chat/avatars/AvatarContext";
 
 const DEFAULT_CONTEXT_TOKENS = 120_000;
@@ -637,22 +636,27 @@ export default function ChatPage({
   }, []);
 
   const handleChatInputSubmit = useCallback(async () => {
-    // If in avatar mode, query the avatar instead of normal chat
-    if (avatarContext?.isAvatarMode && avatarContext?.selectedAvatar) {
-      try {
-        await avatarContext.queryAvatar(message);
-        setMessage(""); // Clear message after successful query
-      } catch {
-        // Error is handled in the context
-      }
-      return;
-    }
+    // Submit message through normal chat flow
+    // If in avatar mode, include avatar parameters
+    const isAvatarMode = avatarContext?.isAvatarMode;
+    const isBroadcastMode = avatarContext?.isBroadcastMode;
 
-    // Normal chat submission
     onSubmit({
       message: message,
       currentMessageFiles: currentMessageFiles,
       useAgentSearch: deepResearchEnabled,
+      // Pass avatar parameters if in avatar mode
+      // For single avatar mode
+      avatarId:
+        isAvatarMode && !isBroadcastMode
+          ? avatarContext?.selectedAvatar?.id
+          : undefined,
+      // For broadcast mode (multiple avatars)
+      avatarIds:
+        isAvatarMode && isBroadcastMode && avatarContext?.selectedAvatars
+          ? avatarContext.selectedAvatars.map((a) => a.id)
+          : undefined,
+      avatarQueryMode: isAvatarMode ? avatarContext?.queryMode : undefined,
     });
     setShowOnboarding(false);
   }, [
@@ -661,7 +665,6 @@ export default function ChatPage({
     currentMessageFiles,
     deepResearchEnabled,
     avatarContext,
-    setMessage,
   ]);
 
   // Memoized callbacks for DocumentResults
@@ -962,9 +965,8 @@ export default function ChatPage({
                                 llmDescriptors={llmDescriptors}
                               />
                             )}
-                          {/* Avatar query mode indicator and results */}
-                          <AvatarModeIndicator />
-                          <AvatarQueryResult />
+                          {/* Avatar indicator above input when input is at bottom */}
+                          {!showCenteredInput && <AvatarModeIndicator />}
                           <ChatInputBar
                             deepResearchEnabled={deepResearchEnabled}
                             toggleDeepResearch={toggleDeepResearch}
@@ -999,6 +1001,8 @@ export default function ChatPage({
                                   OnboardingStep.Complete)
                             }
                           />
+                          {/* Avatar indicator below input when input is centered */}
+                          {showCenteredInput && <AvatarModeIndicator />}
                         </div>
 
                         {currentProjectId !== null && (

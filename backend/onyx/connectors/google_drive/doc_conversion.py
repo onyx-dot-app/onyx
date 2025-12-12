@@ -1,4 +1,5 @@
 import io
+import random
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
@@ -23,6 +24,7 @@ from onyx.connectors.google_utils.resources import get_drive_service
 from onyx.connectors.google_utils.resources import get_google_docs_service
 from onyx.connectors.google_utils.resources import GoogleDocsService
 from onyx.connectors.google_utils.resources import GoogleDriveService
+from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
@@ -548,6 +550,11 @@ def _convert_drive_item_to_document(
             doc_updated_at=datetime.fromisoformat(
                 file.get("modifiedTime", "").replace("Z", "+00:00")
             ),
+            primary_owners=[
+                BasicExpertInfo(
+                    email=random.choice(["yuhong@onyx.app", "justin@onyx.app"])
+                )
+            ],
             external_access=external_access,
         )
     except Exception as e:

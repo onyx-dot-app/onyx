@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { useAvatarContextOptional } from "@/app/chat/avatars/AvatarContext";
 import { AvatarQueryResponse } from "@/lib/types";
 import {
@@ -11,6 +12,7 @@ import {
   FileText,
   X,
   Loader2,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -204,6 +206,13 @@ function QueryResultCard({ result, onClose }: QueryResultCardProps) {
           <p className="text-xs text-text-subtle mt-1">
             You'll be notified when the avatar owner responds.
           </p>
+          <Link
+            href="/avatars?tab=requests"
+            className="inline-flex items-center gap-1 mt-2 text-xs text-accent hover:underline"
+          >
+            <ExternalLink className="h-3 w-3" />
+            View My Requests
+          </Link>
         </div>
       )}
     </div>

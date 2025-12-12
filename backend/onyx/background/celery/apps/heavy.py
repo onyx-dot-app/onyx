@@ -98,5 +98,6 @@ for bootstep in base_bootsteps:
 celery_app.autodiscover_tasks(
     [
         "onyx.background.celery.tasks.pruning",
+        "onyx.background.celery.tasks.avatar",
     ]
 )

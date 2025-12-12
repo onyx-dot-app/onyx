@@ -4036,6 +4036,9 @@ class AvatarPermissionRequest(Base):
         index=True,
     )
 
+    # Background task tracking (for PROCESSING status)
+    task_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+
     # Response from avatar owner
     denial_reason: Mapped[str | None] = mapped_column(String, nullable=True)
 

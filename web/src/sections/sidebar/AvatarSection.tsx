@@ -1,14 +1,18 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import Link from "next/link";
 import { AvatarListItem } from "@/lib/types";
-import { useQueryableAvatars } from "@/lib/avatar";
+import {
+  useQueryableAvatars,
+  useIncomingPermissionRequests,
+} from "@/lib/avatar";
 import { useAvatarContextOptional } from "@/app/chat/avatars/AvatarContext";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import SvgUsers from "@/icons/users";
 import SvgX from "@/icons/x";
-import { Search, User, Lock, Unlock, Loader2, X } from "lucide-react";
+import { Search, User, Loader2, Radio, Bell, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 
@@ -16,9 +20,12 @@ interface AvatarSectionProps {
   folded?: boolean;
 }
 
+const MAX_AVATARS_TO_SHOW = 6;
+
 export default function AvatarSection({ folded }: AvatarSectionProps) {
   const avatarContext = useAvatarContextOptional();
   const { avatars, loading, error } = useQueryableAvatars();
+  const { requests: incomingRequests } = useIncomingPermissionRequests();
   const [searchExpanded, setSearchExpanded] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -27,11 +34,20 @@ export default function AvatarSection({ folded }: AvatarSectionProps) {
     return null;
   }
 
-  const { isAvatarMode, selectedAvatar, enableAvatarMode, disableAvatarMode } =
-    avatarContext;
+  const pendingRequestCount = incomingRequests.length;
+
+  const {
+    isAvatarMode,
+    isBroadcastMode,
+    selectedAvatar,
+    selectedAvatars,
+    enableAvatarMode,
+    disableAvatarMode,
+    enableBroadcastMode,
+  } = avatarContext;
 
   const filteredAvatars = useMemo(() => {
-    if (!searchTerm) return avatars.slice(0, 5); // Show first 5 by default
+    if (!searchTerm) return avatars.slice(0, MAX_AVATARS_TO_SHOW); // Show first MAX_AVATARS_TO_SHOW by default
     return avatars.filter(
       (avatar) =>
         avatar.user_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -40,6 +56,7 @@ export default function AvatarSection({ folded }: AvatarSectionProps) {
   }, [avatars, searchTerm]);
 
   const handleAvatarClick = (avatar: AvatarListItem) => {
+    // Toggle selection for single avatar mode
     if (selectedAvatar?.id === avatar.id) {
       disableAvatarMode();
     } else {
@@ -47,6 +64,11 @@ export default function AvatarSection({ folded }: AvatarSectionProps) {
     }
     setSearchExpanded(false);
     setSearchTerm("");
+  };
+
+  const handleEnableBroadcastMode = () => {
+    // Enable broadcast mode with all avatars automatically selected
+    enableBroadcastMode(avatars);
   };
 
   if (folded) {
@@ -70,19 +92,45 @@ export default function AvatarSection({ folded }: AvatarSectionProps) {
     <SidebarSection
       title="Avatars"
       action={
-        <IconButton
-          icon={searchExpanded ? SvgX : Search}
-          internal
-          tooltip={searchExpanded ? "Close Search" : "Search Avatars"}
-          onClick={() => {
-            setSearchExpanded(!searchExpanded);
-            if (!searchExpanded) setSearchTerm("");
-          }}
-        />
+        <div className="flex items-center gap-1">
+          {/* Pending requests indicator */}
+          <Link href="/avatars?tab=requests&subtab=incoming">
+            <div className="relative">
+              <IconButton
+                icon={Bell}
+                internal
+                tooltip={
+                  pendingRequestCount > 0
+                    ? `${pendingRequestCount} pending request${
+                        pendingRequestCount !== 1 ? "s" : ""
+                      }`
+                    : "No pending requests"
+                }
+              />
+              {pendingRequestCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-error text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                  {pendingRequestCount > 9 ? "9+" : pendingRequestCount}
+                </span>
+              )}
+            </div>
+          </Link>
+          <Link href="/avatars?tab=settings">
+            <IconButton icon={Settings} internal tooltip="Avatar Settings" />
+          </Link>
+          <IconButton
+            icon={searchExpanded ? SvgX : Search}
+            internal
+            tooltip={searchExpanded ? "Close Search" : "Search Avatars"}
+            onClick={() => {
+              setSearchExpanded(!searchExpanded);
+              if (!searchExpanded) setSearchTerm("");
+            }}
+          />
+        </div>
       }
     >
-      {/* Active avatar indicator */}
-      {isAvatarMode && selectedAvatar && (
+      {/* Active avatar indicator - Single mode */}
+      {isAvatarMode && !isBroadcastMode && selectedAvatar && (
         <div className="mx-2 mb-2 p-2 bg-accent/10 border border-accent/30 rounded-08">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 min-w-0">
@@ -105,6 +153,50 @@ export default function AvatarSection({ folded }: AvatarSectionProps) {
         </div>
       )}
 
+      {/* Active avatar indicator - Broadcast mode */}
+      {isAvatarMode && isBroadcastMode && (
+        <div className="mx-2 mb-2 p-2 bg-accent/10 border border-accent/30 rounded-08">
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              <Radio className="h-3 w-3 text-accent" />
+              <span className="text-xs font-medium text-accent">
+                Broadcast Mode
+              </span>
+            </div>
+            <IconButton
+              icon={SvgX}
+              internal
+              tooltip="Exit Avatar Mode"
+              onClick={disableAvatarMode}
+            />
+          </div>
+          <div className="text-[10px] text-accent/80">
+            {selectedAvatars.length === 0
+              ? "Select avatars to query"
+              : `${selectedAvatars.length} avatar${
+                  selectedAvatars.length !== 1 ? "s" : ""
+                } selected`}
+          </div>
+          {selectedAvatars.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1.5">
+              {selectedAvatars.slice(0, 3).map((avatar) => (
+                <span
+                  key={avatar.id}
+                  className="text-[10px] bg-accent/20 px-1.5 py-0.5 rounded text-accent"
+                >
+                  {avatar.name || avatar.user_email.split("@")[0]}
+                </span>
+              ))}
+              {selectedAvatars.length > 3 && (
+                <span className="text-[10px] text-accent/60">
+                  +{selectedAvatars.length - 3} more
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Search input */}
       {searchExpanded && (
         <div className="mx-2 mb-2">
@@ -118,6 +210,24 @@ export default function AvatarSection({ folded }: AvatarSectionProps) {
               className="w-full pl-7 pr-2 py-1.5 text-xs border border-border rounded bg-background focus:outline-none focus:ring-1 focus:ring-accent"
               autoFocus
             />
+          </div>
+        </div>
+      )}
+
+      {/* Broadcast (Everyone) option - always show at top when not in broadcast mode */}
+      {!loading && avatars.length > 0 && !isBroadcastMode && (
+        <div
+          onClick={handleEnableBroadcastMode}
+          className="flex items-center gap-2 px-3 py-2 mx-1 mb-1 rounded-08 cursor-pointer hover:bg-accent/10 text-text-03 hover:text-accent border-b border-border transition-colors"
+        >
+          <div className="w-6 h-6 rounded-full bg-accent/10 flex items-center justify-center flex-shrink-0">
+            <Radio className="h-3 w-3 text-accent" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-medium">Broadcast</div>
+            <div className="text-[10px] text-text-02">
+              Ask everyone at the company at once.
+            </div>
           </div>
         </div>
       )}
@@ -142,6 +252,8 @@ export default function AvatarSection({ folded }: AvatarSectionProps) {
                 : "No avatars available"}
             </div>
           ) : (
+            // Don't show individual avatars in broadcast mode (everyone is selected)
+            !isBroadcastMode &&
             filteredAvatars.map((avatar) => (
               <AvatarRow
                 key={avatar.id}
@@ -152,16 +264,17 @@ export default function AvatarSection({ folded }: AvatarSectionProps) {
             ))
           )}
 
-          {/* Show more if there are more avatars */}
-          {!searchTerm && avatars.length > 5 && (
-            <SidebarTab
-              leftIcon={SvgUsers}
-              lowlight
-              onClick={() => setSearchExpanded(true)}
-            >
-              {avatars.length - 5} more avatars
-            </SidebarTab>
-          )}
+          {/* Show more if there are more avatars - only in single mode */}
+          {!isBroadcastMode &&
+            !searchTerm &&
+            avatars.length > MAX_AVATARS_TO_SHOW && (
+              <div
+                className="text-xs text-text-03 hover:text-text-04 cursor-pointer ml-4 mt-3"
+                onClick={() => setSearchExpanded(true)}
+              >
+                {avatars.length - MAX_AVATARS_TO_SHOW} more avatars
+              </div>
+            )}
         </>
       )}
     </SidebarSection>
@@ -205,11 +318,6 @@ function AvatarRow({ avatar, isSelected, onClick }: AvatarRowProps) {
           </div>
         )}
       </div>
-      {avatar.allow_accessible_mode ? (
-        <Unlock className="h-3 w-3 text-success flex-shrink-0" />
-      ) : (
-        <Lock className="h-3 w-3 text-text-02 flex-shrink-0" />
-      )}
     </div>
   );
 }

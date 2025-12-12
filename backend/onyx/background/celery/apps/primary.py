@@ -315,6 +315,7 @@ for bootstep in base_bootsteps:
 
 celery_app.autodiscover_tasks(
     [
+        "onyx.background.celery.tasks.avatar",
         "onyx.background.celery.tasks.connector_deletion",
         "onyx.background.celery.tasks.docprocessing",
         "onyx.background.celery.tasks.evals",

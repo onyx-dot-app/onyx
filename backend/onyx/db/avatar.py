@@ -181,8 +181,25 @@ def create_permission_request(
     cached_search_doc_ids: list[int] | None = None,
     answer_quality_score: float | None = None,
     expires_in_days: int = DEFAULT_REQUEST_EXPIRY_DAYS,
+    status: AvatarPermissionRequestStatus = AvatarPermissionRequestStatus.PENDING,
+    task_id: str | None = None,
 ) -> AvatarPermissionRequest:
-    """Create a new permission request."""
+    """Create a new permission request.
+
+    Args:
+        avatar_id: The avatar being queried
+        requester_id: The user making the request
+        query_text: The query text (may be hidden per privacy settings)
+        db_session: Database session
+        chat_session_id: Optional chat session for context
+        chat_message_id: Optional chat message for context
+        cached_answer: Pre-computed answer (for sync queries)
+        cached_search_doc_ids: Document IDs from the search
+        answer_quality_score: Quality score of the answer
+        expires_in_days: How long before the request expires
+        status: Initial status (PENDING for sync, PROCESSING for async)
+        task_id: Celery task ID for async processing
+    """
     request = AvatarPermissionRequest(
         avatar_id=avatar_id,
         requester_id=requester_id,
@@ -192,10 +209,25 @@ def create_permission_request(
         cached_answer=cached_answer,
         cached_search_doc_ids=cached_search_doc_ids,
         answer_quality_score=answer_quality_score,
-        status=AvatarPermissionRequestStatus.PENDING,
+        status=status,
+        task_id=task_id,
         expires_at=datetime.utcnow() + timedelta(days=expires_in_days),
     )
     db_session.add(request)
+    db_session.flush()
+    return request
+
+
+def update_permission_request_task_id(
+    request_id: int,
+    task_id: str,
+    db_session: Session,
+) -> AvatarPermissionRequest | None:
+    """Update the task_id for a permission request after queuing."""
+    request = get_permission_request_by_id(request_id, db_session)
+    if not request:
+        return None
+    request.task_id = task_id
     db_session.flush()
     return request
 
@@ -240,6 +272,27 @@ def get_permission_requests_by_requester(
     if status:
         query = query.filter(AvatarPermissionRequest.status == status)
     return query.order_by(AvatarPermissionRequest.created_at.desc()).all()
+
+
+def get_permission_requests_by_chat_session(
+    chat_session_id: UUID,
+    requester_id: UUID,
+    db_session: Session,
+) -> list[AvatarPermissionRequest]:
+    """Get all permission requests for a specific chat session.
+
+    Only returns requests made by the specified requester for security.
+    Returns all statuses so the UI can show pending, approved, and denied requests.
+    """
+    return (
+        db_session.query(AvatarPermissionRequest)
+        .filter(
+            AvatarPermissionRequest.chat_session_id == chat_session_id,
+            AvatarPermissionRequest.requester_id == requester_id,
+        )
+        .order_by(AvatarPermissionRequest.created_at.desc())
+        .all()
+    )
 
 
 def approve_permission_request(

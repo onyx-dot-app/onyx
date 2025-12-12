@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { PermissionRequest, AvatarPermissionRequestStatus } from "@/lib/types";
 import {
   useIncomingPermissionRequests,
@@ -20,8 +21,22 @@ import {
 
 type TabType = "incoming" | "outgoing";
 
+function isValidSubTab(tab: string | null): tab is TabType {
+  return tab === "incoming" || tab === "outgoing";
+}
+
 export function PermissionRequests() {
-  const [activeTab, setActiveTab] = useState<TabType>("incoming");
+  const searchParams = useSearchParams();
+  const subtabParam = searchParams.get("subtab");
+  const initialSubTab = isValidSubTab(subtabParam) ? subtabParam : "outgoing";
+  const [activeTab, setActiveTab] = useState<TabType>(initialSubTab);
+
+  // Update state if URL changes externally
+  useEffect(() => {
+    if (isValidSubTab(subtabParam) && subtabParam !== activeTab) {
+      setActiveTab(subtabParam);
+    }
+  }, [subtabParam, activeTab]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -215,6 +230,21 @@ function IncomingRequestsList() {
 
 function OutgoingRequestsList() {
   const { requests, loading, error } = useOutgoingPermissionRequests();
+  const [expandedAnswers, setExpandedAnswers] = useState<Set<number>>(
+    new Set()
+  );
+
+  const toggleAnswer = (requestId: number) => {
+    setExpandedAnswers((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(requestId)) {
+        newSet.delete(requestId);
+      } else {
+        newSet.add(requestId);
+      }
+      return newSet;
+    });
+  };
 
   if (loading) {
     return (
@@ -265,6 +295,60 @@ function OutgoingRequestsList() {
             </div>
           )}
 
+          {/* Show View Answer button for approved requests */}
+          {request.status === AvatarPermissionRequestStatus.APPROVED &&
+            request.cached_answer && (
+              <div className="mb-3">
+                <button
+                  onClick={() => toggleAnswer(request.id)}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-success/10 text-success border border-success/30 rounded hover:bg-success/20 transition-colors text-sm"
+                >
+                  <CheckCircle className="h-4 w-4" />
+                  {expandedAnswers.has(request.id)
+                    ? "Hide Answer"
+                    : "View Answer"}
+                </button>
+
+                {expandedAnswers.has(request.id) && (
+                  <div className="mt-3 bg-background p-4 rounded border border-success/30">
+                    <div className="text-xs font-medium text-success mb-2">
+                      Approved Answer
+                    </div>
+                    <div className="text-sm whitespace-pre-wrap">
+                      {request.cached_answer}
+                    </div>
+
+                    {request.cached_search_doc_ids &&
+                      request.cached_search_doc_ids.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-border">
+                          <div className="text-xs font-medium text-text-subtle mb-2">
+                            Source Chunks (
+                            {request.cached_search_doc_ids.length})
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {request.cached_search_doc_ids
+                              .slice(0, 5)
+                              .map((chunkId, idx) => (
+                                <span
+                                  key={idx}
+                                  className="text-xs bg-background-subtle px-2 py-1 rounded border border-border"
+                                >
+                                  Chunk #{chunkId}
+                                </span>
+                              ))}
+                            {request.cached_search_doc_ids.length > 5 && (
+                              <span className="text-xs text-text-subtle">
+                                +{request.cached_search_doc_ids.length - 5} more
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                  </div>
+                )}
+              </div>
+            )}
+
           {request.denial_reason && (
             <div className="bg-error/10 p-3 rounded border border-error/50 mb-3">
               <div className="text-xs text-error mb-1">Denial Reason</div>
@@ -289,6 +373,11 @@ function StatusBadge({ status }: { status: AvatarPermissionRequestStatus }) {
       icon: <Clock className="h-3 w-3" />,
       text: "Pending",
       className: "bg-warning/20 text-warning",
+    },
+    [AvatarPermissionRequestStatus.PROCESSING]: {
+      icon: <Loader2 className="h-3 w-3 animate-spin" />,
+      text: "Processing",
+      className: "bg-accent/20 text-accent",
     },
     [AvatarPermissionRequestStatus.APPROVED]: {
       icon: <CheckCircle className="h-3 w-3" />,

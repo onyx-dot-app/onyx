@@ -11,7 +11,6 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import NotificationType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import QueryExpansionType
@@ -24,11 +23,15 @@ from onyx.db.avatar import create_permission_request
 from onyx.db.avatar import get_avatar_by_id
 from onyx.db.avatar import log_avatar_query
 from onyx.db.avatar import should_auto_approve
+from onyx.db.enums import AvatarPermissionRequestStatus
 from onyx.db.enums import AvatarQueryMode
 from onyx.db.models import Avatar
 from onyx.db.models import User
-from onyx.db.notification import create_notification
 from onyx.document_index.factory import get_current_primary_default_document_index
+from onyx.llm.factory import get_default_llms
+from onyx.llm.factory import get_main_llm_from_tuple
+from onyx.llm.message_types import SystemMessage
+from onyx.llm.message_types import UserMessageWithText
 from onyx.server.features.avatar.models import AvatarQueryResponse
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -36,6 +39,32 @@ from shared_configs.contextvars import get_current_tenant_id
 
 
 logger = setup_logger()
+
+
+# Prompt for generating answers from avatar query results
+AVATAR_ANSWER_SYSTEM_PROMPT = """You are a helpful assistant answering questions based on documents \
+owned by or accessible to a specific user (the "avatar").
+
+Your task is to synthesize information from the provided document excerpts and \
+generate a clear, accurate answer to the user's question.
+
+Guidelines:
+- Base your answer ONLY on the provided document excerpts
+- Be concise but thorough
+- If the documents don't contain enough information to fully answer the question, \
+acknowledge what information is available and what is missing
+- Use a professional, helpful tone
+- When referencing specific information, indicate which document it came from using [1], [2], etc."""
+
+AVATAR_ANSWER_USER_PROMPT_TEMPLATE = """Based on the following document excerpts from {avatar_name}'s \
+documents, please answer this question:
+
+Question: {query}
+
+Document Excerpts:
+{context}
+
+Please provide a clear, helpful answer based on the information above."""
 
 
 # Minimum score threshold for considering results "good enough"
@@ -46,6 +75,8 @@ MIN_CHUNKS_FOR_ANSWER = 1
 
 def _build_owned_documents_filters(
     avatar: Avatar,
+    user: User,
+    db_session: Session,
 ) -> IndexFilters:
     """Build filters for querying documents owned by the avatar's user."""
     return IndexFilters(
@@ -53,7 +84,8 @@ def _build_owned_documents_filters(
         document_set=None,
         time_cutoff=None,
         tags=None,
-        access_control_list=None,  # No ACL filtering for owned docs
+        # should still only give back docs the query user has access to
+        access_control_list=list(build_access_filters_for_user(user, db_session)),
         primary_owner_emails=[avatar.user.email],
         tenant_id=get_current_tenant_id() if MULTI_TENANT else None,
     )
@@ -115,25 +147,73 @@ def _execute_search(
 def _generate_answer(
     query: str,
     chunks: list[InferenceChunk],
+    avatar: Avatar,
 ) -> str | None:
-    """Generate an answer from the retrieved chunks.
+    """Generate an answer from the retrieved chunks using the LLM.
 
-    For now, this returns a simple summary of the found documents.
-    In production, this should use the LLM to generate a proper answer.
+    Uses the default LLM to generate a contextual answer based on the
+    retrieved document chunks, similar to the normal chat flow.
     """
     if not chunks:
         return None
 
-    # Build a simple summary of found content
-    summary_parts = []
+    # Build context from chunks
+    context_parts = []
     for i, chunk in enumerate(chunks[:5], 1):
         source = chunk.semantic_identifier or chunk.document_id
-        preview = (
-            chunk.content[:200] + "..." if len(chunk.content) > 200 else chunk.content
-        )
-        summary_parts.append(f"[{i}] {source}: {preview}")
+        context_parts.append(f"[{i}] Source: {source}\n{chunk.content}")
 
-    return "\n\n".join(summary_parts)
+    context = "\n\n---\n\n".join(context_parts)
+
+    # Get avatar display name
+    avatar_name = avatar.name or avatar.user.email
+
+    # Build the user prompt
+    user_prompt = AVATAR_ANSWER_USER_PROMPT_TEMPLATE.format(
+        avatar_name=avatar_name,
+        query=query,
+        context=context,
+    )
+
+    try:
+        # Get the default LLM (use the fast model for avatar queries)
+        llms = get_default_llms()
+        llm = get_main_llm_from_tuple(llms)
+
+        # Generate the answer with properly typed messages
+        system_msg: SystemMessage = {
+            "role": "system",
+            "content": AVATAR_ANSWER_SYSTEM_PROMPT,
+        }
+        user_msg: UserMessageWithText = {
+            "role": "user",
+            "content": user_prompt,
+        }
+
+        response = llm.invoke([system_msg, user_msg])
+
+        # Access the content from the ModelResponse structure
+        if response and response.choice and response.choice.message:
+            content = response.choice.message.content
+            if content:
+                return content
+
+        return None
+
+    except Exception as e:
+        logger.error(f"Failed to generate LLM answer for avatar query: {e}")
+        # Fall back to simple summary if LLM fails
+        summary_parts = []
+        for i, chunk in enumerate(chunks[:5], 1):
+            source = chunk.semantic_identifier or chunk.document_id
+            preview = (
+                chunk.content[:200] + "..."
+                if len(chunk.content) > 200
+                else chunk.content
+            )
+            summary_parts.append(f"[{i}] {source}: {preview}")
+
+        return "\n\n".join(summary_parts)
 
 
 def _has_good_results(chunks: list[InferenceChunk]) -> bool:
@@ -215,7 +295,7 @@ def execute_avatar_query(
 
     if query_mode == AvatarQueryMode.OWNED_DOCUMENTS:
         # Direct search on owned documents - no permission needed
-        filters = _build_owned_documents_filters(avatar)
+        filters = _build_owned_documents_filters(avatar, requester, db_session)
         chunks = _execute_search(query, filters, db_session)
 
         if not _has_good_results(chunks):
@@ -224,8 +304,8 @@ def execute_avatar_query(
                 message="No relevant documents found",
             )
 
-        # Generate answer from chunks
-        answer = _generate_answer(query, chunks)
+        # Generate answer from chunks using LLM
+        answer = _generate_answer(query, chunks, avatar)
 
         return AvatarQueryResponse(
             status="success",
@@ -246,7 +326,7 @@ def execute_avatar_query(
                     message="No relevant documents found",
                 )
 
-            answer = _generate_answer(query, chunks)
+            answer = _generate_answer(query, chunks, avatar)
 
             return AvatarQueryResponse(
                 status="success",
@@ -254,28 +334,8 @@ def execute_avatar_query(
                 source_document_ids=[chunk.document_id for chunk in chunks],
             )
 
-        # Preview query to check if good answer exists
-        filters = _build_accessible_documents_filters(avatar, db_session)
-        chunks = _execute_search(query, filters, db_session)
-
-        if not _has_good_results(chunks):
-            # No good results - don't create permission request
-            return AvatarQueryResponse(
-                status="no_results",
-                message="No relevant documents found",
-            )
-
-        # Generate and cache the answer
-        cached_answer = _generate_answer(query, chunks)
-        cached_doc_ids = [chunk.chunk_id for chunk in chunks[:10]]
-
-        # Calculate answer quality score (simple heuristic based on top chunk scores)
-        if chunks and chunks[0].score:
-            answer_quality = sum(c.score or 0 for c in chunks[:3]) / min(3, len(chunks))
-        else:
-            answer_quality = None
-
-        # Create permission request with cached answer
+        # For non-auto-approved requests, run the query in the background
+        # Create permission request in PROCESSING status
         permission_request = create_permission_request(
             avatar_id=avatar_id,
             requester_id=requester.id,
@@ -283,29 +343,39 @@ def execute_avatar_query(
             db_session=db_session,
             chat_session_id=chat_session_id,
             chat_message_id=chat_message_id,
-            cached_answer=cached_answer,
-            cached_search_doc_ids=cached_doc_ids,
-            answer_quality_score=answer_quality,
+            status=AvatarPermissionRequestStatus.PROCESSING,
         )
 
-        # Notify the avatar owner
-        create_notification(
-            user_id=avatar.user_id,
-            notif_type=NotificationType.AVATAR_PERMISSION_REQUEST,
-            db_session=db_session,
-            additional_data={
-                "request_id": permission_request.id,
-                "requester_email": requester.email,
-                "query_preview": query[:100] if avatar.show_query_in_request else None,
+        # Commit to get the request ID before queuing the task
+        db_session.commit()
+
+        # Queue the background task via Celery client app
+        from onyx.background.celery.versioned_apps.client import app as client_app
+        from onyx.configs.constants import OnyxCeleryTask
+
+        task = client_app.send_task(
+            OnyxCeleryTask.AVATAR_QUERY_TASK,
+            kwargs={
+                "permission_request_id": permission_request.id,
+                "tenant_id": get_current_tenant_id() if MULTI_TENANT else None,
             },
         )
 
+        # Update with task ID
+        permission_request.task_id = task.id
         db_session.commit()
 
+        logger.info(
+            f"Queued avatar query task {task.id} for permission request {permission_request.id}"
+        )
+
         return AvatarQueryResponse(
-            status="pending_permission",
+            status="processing",
             permission_request_id=permission_request.id,
-            message="Your request has been sent to the avatar owner for approval",
+            message=(
+                "Your query is being processed. You will be notified if an answer "
+                f"is found AND {avatar.user.email} approves the request.."
+            ),
         )
 
     return AvatarQueryResponse(

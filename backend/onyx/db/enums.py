@@ -206,7 +206,8 @@ class AvatarQueryMode(str, PyEnum):
 class AvatarPermissionRequestStatus(str, PyEnum):
     """Status of an avatar permission request."""
 
-    PENDING = "pending"
+    PENDING = "pending"  # Awaiting owner approval (accessible mode)
+    PROCESSING = "processing"  # Query is being executed in background
     APPROVED = "approved"
     DENIED = "denied"
     EXPIRED = "expired"

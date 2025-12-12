@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { AvatarQueryPanel } from "./components/AvatarQueryPanel";
 import { AvatarSettings } from "./components/AvatarSettings";
 import { PermissionRequests } from "./components/PermissionRequests";
@@ -8,8 +9,29 @@ import { Search, Settings, Bell, Users } from "lucide-react";
 
 type TabType = "query" | "requests" | "settings";
 
+function isValidTab(tab: string | null): tab is TabType {
+  return tab === "query" || tab === "requests" || tab === "settings";
+}
+
 export default function AvatarsPage() {
-  const [activeTab, setActiveTab] = useState<TabType>("query");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const tabParam = searchParams.get("tab");
+  const initialTab = isValidTab(tabParam) ? tabParam : "query";
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
+
+  // Sync URL when tab changes
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    router.replace(`/avatars?tab=${tab}`, { scroll: false });
+  };
+
+  // Update state if URL changes externally
+  useEffect(() => {
+    if (isValidTab(tabParam) && tabParam !== activeTab) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam, activeTab]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -29,7 +51,7 @@ export default function AvatarsPage() {
         {/* Navigation Tabs */}
         <div className="flex border-b border-border mb-6">
           <button
-            onClick={() => setActiveTab("query")}
+            onClick={() => handleTabChange("query")}
             className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors ${
               activeTab === "query"
                 ? "border-accent text-accent"
@@ -40,7 +62,7 @@ export default function AvatarsPage() {
             Query Avatars
           </button>
           <button
-            onClick={() => setActiveTab("requests")}
+            onClick={() => handleTabChange("requests")}
             className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors ${
               activeTab === "requests"
                 ? "border-accent text-accent"
@@ -51,7 +73,7 @@ export default function AvatarsPage() {
             Permission Requests
           </button>
           <button
-            onClick={() => setActiveTab("settings")}
+            onClick={() => handleTabChange("settings")}
             className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors ${
               activeTab === "settings"
                 ? "border-accent text-accent"

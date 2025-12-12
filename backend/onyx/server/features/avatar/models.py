@@ -104,9 +104,15 @@ class AvatarQueryRequest(BaseModel):
 class AvatarQueryResponse(BaseModel):
     """Response from an avatar query."""
 
-    status: (
-        str  # "success", "pending_permission", "no_results", "rate_limited", "disabled"
-    )
+    status: str
+    # Possible status values:
+    # - "success": Query completed, answer available
+    # - "processing": Query is running in background (All mode)
+    # - "pending_permission": Query done, awaiting owner approval (All mode)
+    # - "no_results": No relevant documents found
+    # - "rate_limited": Rate limit exceeded
+    # - "disabled": Avatar is disabled
+    # - "error": General error
     answer: str | None = None
     permission_request_id: int | None = None
     source_document_ids: list[str] | None = None
@@ -142,17 +148,29 @@ class PermissionRequestSnapshot(BaseModel):
     requester_email: str
     query_text: str | None  # May be hidden based on avatar settings
     status: AvatarPermissionRequestStatus
+    task_id: str | None = None  # Celery task ID for PROCESSING status
     denial_reason: str | None
     created_at: datetime
     expires_at: datetime
     resolved_at: datetime | None
+    # Only included for approved requests when the user is the requester
+    cached_answer: str | None = None
+    cached_search_doc_ids: list[int] | None = None
 
     @classmethod
     def from_model(
         cls,
         request: AvatarPermissionRequest,
         show_query: bool = True,
+        include_answer: bool = False,
     ) -> "PermissionRequestSnapshot":
+        # Only include the cached answer for approved requests when requested
+        cached_answer = None
+        cached_search_doc_ids = None
+        if include_answer and request.status == AvatarPermissionRequestStatus.APPROVED:
+            cached_answer = request.cached_answer
+            cached_search_doc_ids = request.cached_search_doc_ids
+
         return PermissionRequestSnapshot(
             id=request.id,
             avatar_id=request.avatar_id,
@@ -161,10 +179,13 @@ class PermissionRequestSnapshot(BaseModel):
             requester_email=request.requester.email,
             query_text=request.query_text if show_query else None,
             status=request.status,
+            task_id=request.task_id,
             denial_reason=request.denial_reason,
             created_at=request.created_at,
             expires_at=request.expires_at,
             resolved_at=request.resolved_at,
+            cached_answer=cached_answer,
+            cached_search_doc_ids=cached_search_doc_ids,
         )
 
 

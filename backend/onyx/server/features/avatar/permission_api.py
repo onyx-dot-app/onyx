@@ -14,6 +14,7 @@ from onyx.db.avatar import deny_permission_request
 from onyx.db.avatar import get_avatar_by_user_id
 from onyx.db.avatar import get_pending_requests_for_avatar_owner
 from onyx.db.avatar import get_permission_request_by_id
+from onyx.db.avatar import get_permission_requests_by_chat_session
 from onyx.db.avatar import get_permission_requests_by_requester
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AvatarPermissionRequestStatus
@@ -56,8 +57,40 @@ def get_outgoing_permission_requests(
 ) -> list[PermissionRequestSnapshot]:
     """Get all permission requests made by the current user."""
     requests = get_permission_requests_by_requester(user.id, db_session, status=status)
+    # Include the answer for the requester's own requests
     return [
-        PermissionRequestSnapshot.from_model(req, show_query=True) for req in requests
+        PermissionRequestSnapshot.from_model(req, show_query=True, include_answer=True)
+        for req in requests
+    ]
+
+
+@router.get("/chat-session/{chat_session_id}")
+def get_permission_requests_for_chat_session(
+    chat_session_id: str,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> list[PermissionRequestSnapshot]:
+    """Get all permission requests for a specific chat session.
+
+    Returns requests with all statuses so the UI can show:
+    - Pending requests (awaiting approval)
+    - Approved requests (with answers)
+    - Denied requests (with denial reason)
+    """
+    from uuid import UUID
+
+    try:
+        session_uuid = UUID(chat_session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid chat session ID")
+
+    requests = get_permission_requests_by_chat_session(
+        session_uuid, user.id, db_session
+    )
+    # Include the answer for the requester's own requests
+    return [
+        PermissionRequestSnapshot.from_model(req, show_query=True, include_answer=True)
+        for req in requests
     ]
 
 
@@ -81,8 +114,12 @@ def get_permission_request(
 
     # Show query to requester, but respect avatar owner's preference
     show_query = is_requester or request.avatar.show_query_in_request
+    # Include answer only for the requester
+    include_answer = is_requester
 
-    return PermissionRequestSnapshot.from_model(request, show_query=show_query)
+    return PermissionRequestSnapshot.from_model(
+        request, show_query=show_query, include_answer=include_answer
+    )
 
 
 @router.post("/{request_id}/approve")

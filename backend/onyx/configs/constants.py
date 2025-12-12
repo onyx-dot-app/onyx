@@ -546,6 +546,9 @@ class OnyxCeleryTask:
 
     EVAL_RUN_TASK = "eval_run_task"
 
+    # Avatar queries
+    AVATAR_QUERY_TASK = "avatar_query_task"
+
     EXPORT_QUERY_HISTORY_TASK = "export_query_history_task"
     EXPORT_QUERY_HISTORY_CLEANUP_TASK = "export_query_history_cleanup_task"
 

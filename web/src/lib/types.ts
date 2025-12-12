@@ -609,6 +609,7 @@ export enum AvatarQueryMode {
 
 export enum AvatarPermissionRequestStatus {
   PENDING = "pending",
+  PROCESSING = "processing", // Query running in background
   APPROVED = "approved",
   DENIED = "denied",
   EXPIRED = "expired",
@@ -665,7 +666,8 @@ export interface AvatarQueryRequest {
 export interface AvatarQueryResponse {
   status:
     | "success"
-    | "pending_permission"
+    | "processing" // Query running in background (All mode)
+    | "pending_permission" // Query done, awaiting owner approval
     | "no_results"
     | "rate_limited"
     | "disabled"
@@ -694,10 +696,14 @@ export interface PermissionRequest {
   requester_email: string;
   query_text: string | null;
   status: AvatarPermissionRequestStatus;
+  task_id: string | null; // Celery task ID for PROCESSING status
   denial_reason: string | null;
   created_at: string;
   expires_at: string;
   resolved_at: string | null;
+  // Only included for approved requests when the user is the requester
+  cached_answer: string | null;
+  cached_search_doc_ids: number[] | null;
 }
 
 export interface PermissionRequestDenyRequest {

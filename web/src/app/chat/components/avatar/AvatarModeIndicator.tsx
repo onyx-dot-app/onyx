@@ -3,37 +3,57 @@
 import React from "react";
 import { useAvatarContextOptional } from "@/app/chat/avatars/AvatarContext";
 import { AvatarQueryMode } from "@/lib/types";
-import { User, X, Lock, Unlock } from "lucide-react";
+import { User, X, Lock, Unlock, Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function AvatarModeIndicator() {
   const avatarContext = useAvatarContextOptional();
 
-  if (
-    !avatarContext ||
-    !avatarContext.isAvatarMode ||
-    !avatarContext.selectedAvatar
-  ) {
+  if (!avatarContext || !avatarContext.isAvatarMode) {
     return null;
   }
 
-  const { selectedAvatar, queryMode, setQueryMode, disableAvatarMode } =
-    avatarContext;
+  const {
+    isBroadcastMode,
+    selectedAvatar,
+    selectedAvatars,
+    queryMode,
+    setQueryMode,
+    disableAvatarMode,
+  } = avatarContext;
+
+  // Don't show if no avatar selected (single mode)
+  if (!isBroadcastMode && !selectedAvatar) {
+    return null;
+  }
+
+  // Check if all selected avatars allow accessible mode
+  const allAllowAccessible = isBroadcastMode
+    ? selectedAvatars.every((a) => a.allow_accessible_mode)
+    : selectedAvatar?.allow_accessible_mode;
 
   return (
-    <div className="w-full max-w-[50rem] mb-2">
-      <div className="bg-accent/5 border border-accent/20 rounded-lg p-3">
+    <div className="w-full max-w-[50rem] my-2">
+      <div className="bg-background border border-accent/20 rounded-lg p-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center">
-              <User className="h-4 w-4 text-accent" />
+              {isBroadcastMode ? (
+                <Radio className="h-4 w-4 text-accent" />
+              ) : (
+                <User className="h-4 w-4 text-accent" />
+              )}
             </div>
             <div>
               <div className="text-sm font-medium text-accent">
-                Avatar Query Mode
+                {isBroadcastMode ? "Broadcast" : "Avatar Query"}
               </div>
               <div className="text-xs text-text-subtle">
-                Querying: {selectedAvatar.name || selectedAvatar.user_email}
+                {isBroadcastMode
+                  ? "Asking everyone at the company"
+                  : `Asking: ${
+                      selectedAvatar?.name || selectedAvatar?.user_email
+                    }`}
               </div>
             </div>
           </div>
@@ -53,7 +73,7 @@ export function AvatarModeIndicator() {
                 <Lock className="h-3 w-3" />
                 Owned
               </button>
-              {selectedAvatar.allow_accessible_mode && (
+              {allAllowAccessible && (
                 <button
                   onClick={() =>
                     setQueryMode(AvatarQueryMode.ACCESSIBLE_DOCUMENTS)
@@ -85,7 +105,7 @@ export function AvatarModeIndicator() {
         {queryMode === AvatarQueryMode.ACCESSIBLE_DOCUMENTS && (
           <div className="mt-2 text-xs text-warning bg-warning/10 px-2 py-1 rounded">
             Note: Accessible mode queries require permission from the avatar
-            owner
+            owner{isBroadcastMode && "s"}
           </div>
         )}
       </div>
