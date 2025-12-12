@@ -36,7 +36,10 @@ export function useVisionProviders(setPopup: SetPopup) {
           defaultProvider.default_vision_model ||
           defaultProvider.default_model_name;
 
-        if (modelToUse && defaultProvider.vision_models.includes(modelToUse)) {
+        const visionModelNames = defaultProvider.model_configurations.map(
+          (m) => m.name
+        );
+        if (modelToUse && visionModelNames.includes(modelToUse)) {
           setVisionLLM(
             structureValue(
               defaultProvider.name,

@@ -417,12 +417,10 @@ export function SettingsForm() {
               <>
                 <LLMSelector
                   userSettings={false}
-                  llmProviders={visionProviders.map((provider) => ({
-                    ...provider,
-                    model_names: provider.vision_models,
-                    display_model_names: provider.vision_models,
-                  }))}
+                  llmProviders={visionProviders}
                   currentLlm={visionLLM}
+                  requiresImageInput={true}
+                  visibleModelsOnly={false}
                   onSelect={(value) => setVisionLLM(value)}
                 />
                 <Button
