@@ -3,11 +3,11 @@ from collections.abc import Callable
 from onyx.configs.constants import MessageType
 from onyx.llm.factory import get_default_llms
 from onyx.llm.interfaces import LLM
-from onyx.llm.message_types import AssistantMessage
-from onyx.llm.message_types import ChatCompletionMessage
-from onyx.llm.message_types import ReasoningEffort
-from onyx.llm.message_types import SystemMessage
-from onyx.llm.message_types import UserMessage
+from onyx.llm.models import AssistantMessage
+from onyx.llm.models import ChatCompletionMessage
+from onyx.llm.models import ReasoningEffort
+from onyx.llm.models import SystemMessage
+from onyx.llm.models import UserMessage
 from onyx.llm.utils import llm_response_to_string
 from onyx.prompts.miscellaneous_prompts import LANGUAGE_REPHRASE_PROMPT
 from onyx.prompts.prompt_utils import get_current_llm_day_time
@@ -135,7 +135,7 @@ def semantic_query_rephrase(
     messages.append(final_user_msg)
 
     # Call LLM and return result
-    response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.LOW)
+    response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.OFF)
 
     final_query = response.choice.message.content
 
@@ -212,7 +212,7 @@ def keyword_query_expansion(
     messages.append(final_user_msg)
 
     # Call LLM and return result
-    response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.LOW)
+    response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.OFF)
     content = response.choice.message.content
 
     # Parse the response - each line is a separate keyword query

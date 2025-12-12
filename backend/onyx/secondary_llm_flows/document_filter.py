@@ -1,12 +1,11 @@
 import json
 import re
 
-from backend.onyx.llm.message_types import ReasoningEffort
-
 from onyx.context.search.models import ContextExpansionType
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
 from onyx.llm.interfaces import LLM
+from onyx.llm.models import ReasoningEffort
 from onyx.prompts.search_prompts import DOCUMENT_CONTEXT_SELECTION_PROMPT
 from onyx.prompts.search_prompts import DOCUMENT_SELECTION_PROMPT
 from onyx.tools.tool_implementations.search.constants import (

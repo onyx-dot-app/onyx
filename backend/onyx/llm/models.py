@@ -14,7 +14,8 @@ class ReasoningEffort(str, Enum):
     """Reasoning effort levels for models that support extended thinking.
 
     Different providers map these values differently:
-    - OpenAI: Uses "low", "medium", "high" directly for reasoning_effort
+    - OpenAI: Uses "low", "medium", "high" directly for reasoning_effort. Recently added "none" for 5 series
+              which is like "minimal"
     - Claude: Uses budget_tokens with different values for each level
     - Gemini: Uses "none", "low", "medium", "high" for thinking_budget (via litellm mapping)
     """

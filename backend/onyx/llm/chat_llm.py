@@ -21,10 +21,10 @@ from onyx.llm.llm_provider_options import AZURE_PROVIDER_NAME
 from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
 from onyx.llm.llm_provider_options import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.llm_provider_options import VERTEX_LOCATION_KWARG
-from onyx.llm.message_types import CLAUDE_REASONING_BUDGET_TOKENS
-from onyx.llm.message_types import OPENAI_REASONING_EFFORT
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.model_response import ModelResponseStream
+from onyx.llm.models import CLAUDE_REASONING_BUDGET_TOKENS
+from onyx.llm.models import OPENAI_REASONING_EFFORT
 from onyx.llm.utils import is_true_openai_model
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.utils import mask_string

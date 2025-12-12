@@ -16,16 +16,16 @@ from onyx.file_store.models import ChatFileType
 from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import ToolChoiceOptions
-from onyx.llm.message_types import AssistantMessage
-from onyx.llm.message_types import ChatCompletionMessage
-from onyx.llm.message_types import FunctionCall
-from onyx.llm.message_types import ImageContentPart
-from onyx.llm.message_types import ImageUrlDetail
-from onyx.llm.message_types import SystemMessage
-from onyx.llm.message_types import TextContentPart
-from onyx.llm.message_types import ToolCall
-from onyx.llm.message_types import ToolMessage
-from onyx.llm.message_types import UserMessage
+from onyx.llm.models import AssistantMessage
+from onyx.llm.models import ChatCompletionMessage
+from onyx.llm.models import FunctionCall
+from onyx.llm.models import ImageContentPart
+from onyx.llm.models import ImageUrlDetail
+from onyx.llm.models import SystemMessage
+from onyx.llm.models import TextContentPart
+from onyx.llm.models import ToolCall
+from onyx.llm.models import ToolMessage
+from onyx.llm.models import UserMessage
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
@@ -66,7 +66,6 @@ def _format_message_history_for_logging(
 
     # Handle sequence of messages
     for i, msg in enumerate(message_history):
-        # Handle Pydantic models
         if isinstance(msg, SystemMessage):
             formatted_lines.append(f"Message {i + 1} [system]:")
             formatted_lines.append(separator)

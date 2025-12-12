@@ -8,13 +8,13 @@ from litellm.types.utils import Function as LiteLLMFunction
 
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.llm.chat_llm import LitellmLLM
-from onyx.llm.message_types import AssistantMessage
-from onyx.llm.message_types import FunctionCall
-from onyx.llm.message_types import LanguageModelInput
-from onyx.llm.message_types import ToolCall
-from onyx.llm.message_types import UserMessage
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.model_response import ModelResponseStream
+from onyx.llm.models import AssistantMessage
+from onyx.llm.models import FunctionCall
+from onyx.llm.models import LanguageModelInput
+from onyx.llm.models import ToolCall
+from onyx.llm.models import UserMessage
 from onyx.llm.utils import get_max_input_tokens
 
 
