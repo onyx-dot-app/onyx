@@ -207,6 +207,8 @@ def construct_tools(
             continue
 
         if db_tool_model.in_code_tool_id:
+            if db_tool_model.in_code_tool_id != "SearchTool":
+                continue
             tool_cls = get_built_in_tool_by_id(db_tool_model.in_code_tool_id)
 
             try:

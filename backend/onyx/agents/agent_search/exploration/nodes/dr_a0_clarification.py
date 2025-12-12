@@ -20,6 +20,9 @@ from onyx.agents.agent_search.exploration.dr_experimentation_prompts import (
 )
 from onyx.agents.agent_search.exploration.enums import DRPath
 from onyx.agents.agent_search.exploration.enums import ResearchAnswerPurpose
+from onyx.agents.agent_search.exploration.hackathon_functions import (
+    process_notifications,
+)
 from onyx.agents.agent_search.exploration.models import OrchestrationClarificationInfo
 from onyx.agents.agent_search.exploration.models import OrchestrationPlan
 from onyx.agents.agent_search.exploration.models import OrchestratorTool
@@ -446,21 +449,15 @@ def clarifier(
         model_provider=llm_provider,
     )
 
-    graph_config.tooling.using_tool_calling_llm
     db_session = graph_config.persistence.db_session
 
     original_question = graph_config.inputs.prompt_builder.raw_user_query
-
-    graph_config.tooling.force_use_tool
-
-    graph_config.persistence.message_id
 
     # Perform a commit to ensure the message_id is set and saved
     db_session.commit()
 
     # get the connected tools and format for the Deep Research flow
     kg_enabled = graph_config.behavior.kg_config_settings.KG_ENABLED
-    db_session = graph_config.persistence.db_session
     active_source_types = fetch_unique_document_sources(db_session)
 
     available_tools = _get_available_tools(
@@ -518,6 +515,9 @@ def clarifier(
         if graph_config.tooling.search_tool
         else None
     )
+
+    if original_question == "process_notifications" and user and user.id:
+        process_notifications(db_session, user.id)
 
     memories = get_memories(user, db_session)
     assistant_system_prompt = handle_company_awareness(assistant_system_prompt)

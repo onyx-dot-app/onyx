@@ -4013,9 +4013,7 @@ class SubscriptionResult(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
-    date: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+
     type: Mapped[str] = mapped_column(String, nullable=False)
     notifications: Mapped[dict[str, Any]] = mapped_column(
         postgresql.JSONB(), nullable=False
