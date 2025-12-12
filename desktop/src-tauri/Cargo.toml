@@ -19,6 +19,7 @@ uuid = { version = "1.0", features = ["v4"] }
 directories = "5.0"
 tokio = { version = "1", features = ["time"] }
 window-vibrancy = "0.5"
+url = "2.5"
 
 [features]
 default = ["custom-protocol"]

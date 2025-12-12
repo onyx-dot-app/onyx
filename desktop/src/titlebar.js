@@ -6,6 +6,7 @@
 
   const TITLEBAR_ID = "onyx-desktop-titlebar";
   const TITLEBAR_HEIGHT = 36;
+  const STYLE_ID = "onyx-desktop-titlebar-style";
 
   // Wait for DOM to be ready
   if (document.readyState === "loading") {
@@ -55,21 +56,37 @@
     }
   }
 
-  async function init() {
-    console.log("[Onyx Desktop] Initializing title bar");
+  function injectStyles() {
+    if (document.getElementById(STYLE_ID)) return;
+    const style = document.createElement("style");
+    style.id = STYLE_ID;
+    style.textContent = `
+      body {
+        padding-top: ${TITLEBAR_HEIGHT}px !important;
+      }
 
-    // Remove any existing title bar
-    const existing = document.getElementById(TITLEBAR_ID);
-    if (existing) {
-      existing.remove();
-    }
+      #${TITLEBAR_ID} {
+        cursor: default !important;
+        -webkit-user-select: none !important;
+        user-select: none !important;
+        -webkit-app-region: drag;
+        background: rgba(255, 255, 255, 0.85);
+      }
 
-    // Create title bar element
+      /* Dark mode support */
+      .dark #${TITLEBAR_ID} {
+        background: linear-gradient(180deg, rgba(18, 18, 18, 0.82) 0%, rgba(18, 18, 18, 0.72) 100%);
+        border-bottom-color: rgba(255, 255, 255, 0.08);
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function buildTitleBar() {
     const titleBar = document.createElement("div");
     titleBar.id = TITLEBAR_ID;
     titleBar.setAttribute("data-tauri-drag-region", "");
 
-    // Make it draggable using Tauri's API
     titleBar.addEventListener("mousedown", (e) => {
       // Only start drag on left click and not on buttons/inputs
       const nonDraggable = [
@@ -82,7 +99,6 @@
       ];
       if (e.button === 0 && !nonDraggable.includes(e.target.tagName)) {
         e.preventDefault();
-
         startWindowDrag();
       }
     });
@@ -94,8 +110,9 @@
       left: 0;
       right: 0;
       height: ${TITLEBAR_HEIGHT}px;
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.72) 100%);
-      border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(255, 255, 255, 0.78) 100%);
+      border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.04);
       z-index: 999999;
       display: flex;
       align-items: center;
@@ -110,36 +127,50 @@
       padding: 0 12px;
     `;
 
-    // Insert at the beginning of body
-    if (document.body) {
-      document.body.insertBefore(titleBar, document.body.firstChild);
+    return titleBar;
+  }
 
-      // Add padding to body to account for title bar
-      const style = document.createElement("style");
-      style.textContent = `
-        body {
-          padding-top: ${TITLEBAR_HEIGHT}px !important;
-        }
-
-        #onyx-desktop-titlebar {
-          cursor: default !important;
-          -webkit-user-select: none !important;
-          user-select: none !important;
-          -webkit-app-region: drag;
-          background: rgba(255, 255, 255, 0.72);
-        }
-
-        /* Dark mode support */
-        .dark #onyx-desktop-titlebar {
-          background: linear-gradient(180deg, rgba(18, 18, 18, 0.82) 0%, rgba(18, 18, 18, 0.72) 100%);
-          border-bottom-color: rgba(255, 255, 255, 0.08);
-        }
-      `;
-      document.head.appendChild(style);
-
-      console.log("[Onyx Desktop] Title bar injected successfully");
-    } else {
+  function mountTitleBar() {
+    if (!document.body) {
       console.error("[Onyx Desktop] document.body not found");
+      return;
     }
+
+    const existing = document.getElementById(TITLEBAR_ID);
+    if (existing?.parentElement === document.body) {
+      return;
+    }
+
+    if (existing) {
+      existing.remove();
+    }
+
+    const titleBar = buildTitleBar();
+    document.body.insertBefore(titleBar, document.body.firstChild);
+    injectStyles();
+    console.log("[Onyx Desktop] Title bar injected");
+  }
+
+  function init() {
+    mountTitleBar();
+
+    // Keep it around even if the app DOM re-renders
+    const observer = new MutationObserver(() => {
+      if (!document.getElementById(TITLEBAR_ID)) {
+        mountTitleBar();
+      }
+    });
+
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+    });
+
+    // Fallback keep-alive check
+    setInterval(() => {
+      if (!document.getElementById(TITLEBAR_ID)) {
+        mountTitleBar();
+      }
+    }, 1500);
   }
 })();
