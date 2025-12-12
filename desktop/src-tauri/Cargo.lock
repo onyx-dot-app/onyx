@@ -15,6 +15,7 @@ dependencies = [
  "tauri-plugin-shell",
  "tauri-plugin-window-state",
  "tokio",
+ "url",
  "uuid",
  "window-vibrancy 0.5.3",
 ]

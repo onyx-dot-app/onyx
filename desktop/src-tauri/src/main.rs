@@ -7,10 +7,14 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::RwLock;
 use std::time::Duration;
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{
+    webview::PageLoadPayload, AppHandle, Manager, Webview, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder,
+};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
 use tokio::time::sleep;
 use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+use url::Url;
 
 // ============================================================================
 // Configuration
@@ -18,6 +22,7 @@ use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
 
 const DEFAULT_SERVER_URL: &str = "https://cloud.onyx.app";
 const CONFIG_FILE_NAME: &str = "config.json";
+const TITLEBAR_SCRIPT: &str = include_str!("../../src/titlebar.js");
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -266,15 +271,7 @@ async fn new_window(app: AppHandle, state: tauri::State<'_, ConfigState>) -> Res
         let _ = apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, None);
     }
 
-    // Inject title bar script after window loads (with retries)
-    let window_clone = window.clone();
-    tauri::async_runtime::spawn(async move {
-        let titlebar_script = include_str!("../../src/titlebar.js");
-        for i in 0..5 {
-            sleep(Duration::from_millis(1000 + i * 1000)).await;
-            let _ = window_clone.eval(titlebar_script);
-        }
-    });
+    inject_titlebar(window.clone());
 
     Ok(())
 }
@@ -286,6 +283,20 @@ fn reset_config(state: tauri::State<ConfigState>) -> Result<(), String> {
     *config = AppConfig::default();
     save_config(&config)?;
     Ok(())
+}
+
+fn inject_titlebar(window: WebviewWindow) {
+    let script = TITLEBAR_SCRIPT.to_string();
+    tauri::async_runtime::spawn(async move {
+        // Keep trying for a few seconds to survive navigations and slow loads
+        let delays = [0u64, 200, 600, 1200, 2000, 4000, 6000, 8000, 10000];
+        for delay in delays {
+            if delay > 0 {
+                sleep(Duration::from_millis(delay)).await;
+            }
+            let _ = window.eval(&script);
+        }
+    });
 }
 
 /// Start dragging the window
@@ -353,15 +364,7 @@ fn setup_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                             let _ = apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, None);
                         }
 
-                        // Inject title bar (with retries)
-                        let window_clone = window.clone();
-                        tauri::async_runtime::spawn(async move {
-                            let titlebar_script = include_str!("../../src/titlebar.js");
-                            for i in 0..5 {
-                                sleep(Duration::from_millis(1000 + i * 1000)).await;
-                                let _ = window_clone.eval(titlebar_script);
-                            }
-                        });
+                        inject_titlebar(window.clone());
                     }
                 });
             }
@@ -419,24 +422,26 @@ fn main() {
                     let _ = apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, None);
                 }
 
-                let _ = window.eval(&format!("window.location.href = '{}'", server_url));
-
-                // Inject title bar script after page loads (with retries)
-                let window_clone = window.clone();
-                tauri::async_runtime::spawn(async move {
-                    let titlebar_script = include_str!("../../src/titlebar.js");
-
-                    // Try injecting multiple times to ensure it works
-                    for i in 0..5 {
-                        sleep(Duration::from_millis(1000 + i * 1000)).await;
-                        let _ = window_clone.eval(titlebar_script);
+                if let Ok(target) = Url::parse(&server_url) {
+                    if let Ok(current) = window.url() {
+                        if current != target {
+                            let _ = window.navigate(target);
+                        }
+                    } else {
+                        let _ = window.navigate(target);
                     }
-                });
+                }
+
+                inject_titlebar(window.clone());
 
                 let _ = window.set_focus();
             }
 
             Ok(())
+        })
+        .on_page_load(|webview: &Webview, _payload: &PageLoadPayload| {
+            // Re-inject titlebar after every navigation/page load
+            let _ = webview.eval(TITLEBAR_SCRIPT);
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
