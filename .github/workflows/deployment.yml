@@ -191,44 +191,7 @@ jobs:
         working-directory: ./desktop
         run: npm install
 
-      # macOS: Manual build with npm run build:dmg
-      - name: Build macOS app
-        if: matrix.platform == 'macos-latest'
-        working-directory: ./desktop
-        run: |
-          # Ensure targets are available
-          rustup target add aarch64-apple-darwin x86_64-apple-darwin
-
-          # Build universal macOS app
-          npm run build:dmg
-
-      - name: Upload macOS artifacts to release
-        if: matrix.platform == 'macos-latest'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG_NAME="${{ github.event_name != 'workflow_dispatch' && github.ref_name || format('v0.0.0-dev+{0}', needs.determine-builds.outputs.short-sha) }}"
-
-          # Create release if it doesn't exist
-          gh release view "$TAG_NAME" || gh release create "$TAG_NAME" \
-            --title "$TAG_NAME" \
-            --notes "See the assets to download this version and install." \
-            --draft
-
-          # Upload all macOS artifacts
-          for file in desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg; do
-            [ -f "$file" ] && gh release upload "$TAG_NAME" "$file" --clobber
-          done
-          for file in desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz; do
-            [ -f "$file" ] && gh release upload "$TAG_NAME" "$file" --clobber
-          done
-          for file in desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig; do
-            [ -f "$file" ] && gh release upload "$TAG_NAME" "$file" --clobber
-          done
-
-      # Linux/Windows: Use tauri-action
       - uses: tauri-apps/tauri-action@19b93bb55601e3e373a93cfb6eb4242e45f5af20 # ratchet:tauri-apps/tauri-action@action-v0.6.0
-        if: matrix.platform != 'macos-latest'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPIMAGE_EXTRACT_AND_RUN: 1
