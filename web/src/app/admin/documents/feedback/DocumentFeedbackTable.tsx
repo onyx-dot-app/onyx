@@ -20,6 +20,7 @@ import { getErrorMsg } from "@/lib/fetchUtils";
 import { HoverPopup } from "@/components/HoverPopup";
 import { CustomCheckbox } from "@/components/CustomCheckbox";
 import { ScoreSection } from "../ScoreEditor";
+import { downloadItem } from "@/services/documentsService";
 
 const IsVisibleSection = ({
   document,
@@ -95,6 +96,41 @@ export const DocumentFeedbackTable = ({
   const { t } = useTranslation();
   const [page, setPage] = useState(1);
   const { popup, setPopup } = usePopup();
+  const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
+
+  const handleDownload = async (doc: DocumentBoostStatus) => {
+    if (downloadingIds.has(doc.document_id)) {
+      return; // Prevent multiple simultaneous downloads
+    }
+
+    setDownloadingIds((prev) => new Set(prev).add(doc.document_id));
+
+    try {
+      const { blob, filename } = await downloadItem(doc.document_id);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename || doc.semantic_id || "document";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Failed to download document:", error);
+      setPopup({
+        message: `${t(k.ERROR_DOWNLOADING_DOCUMENT)}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        type: "error",
+      });
+    } finally {
+      setDownloadingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(doc.document_id);
+        return next;
+      });
+    }
+  };
 
   return (
     <div>
@@ -113,14 +149,13 @@ export const DocumentFeedbackTable = ({
               return (
                 <TableRow key={doc.document_id}>
                   <TableCell className="whitespace-normal break-all">
-                    <a
-                      className="text-blue-600"
-                      href={doc.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      onClick={() => handleDownload(doc)}
+                      disabled={downloadingIds.has(doc.document_id)}
+                      className="text-blue-600 hover:text-blue-800 hover:underline disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                     >
                       {doc.semantic_id}
-                    </a>
+                    </button>
                   </TableCell>
                   <TableCell>
                     <IsVisibleSection

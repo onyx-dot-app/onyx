@@ -2,7 +2,7 @@
 import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../i18n/keys";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -34,6 +34,7 @@ export default function TextView({
   const [isLoading, setIsLoading] = useState(true);
   const [fileType, setFileType] = useState("application/octet-stream");
   const [docxHtml, setDocxHtml] = useState(""); // Для HTML предпросмотра .docx
+  const fileUrlRef = useRef<string>(""); // Ref для хранения URL для cleanup
 
   // Detect if a given MIME type is one of the recognized markdown formats
   const isMarkdownFormat = (mimeType: string): boolean => {
@@ -107,9 +108,46 @@ export default function TextView({
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       setFileUrl(url);
+      fileUrlRef.current = url; // Сохраняем URL в ref для cleanup
 
-      const originalFileName = semantic_identifier || "document";
-      setFileName(originalFileName);
+      // Extract filename from Content-Disposition header (same logic as documentsService)
+      const contentDisposition = response.headers.get("Content-Disposition");
+      let extractedFileName = semantic_identifier || "document";
+      
+      if (contentDisposition) {
+        // Try to extract filename from RFC 2231 format: filename*=UTF-8''encoded_name
+        const utf8Match = contentDisposition.match(/filename\*=UTF-8''(.+?)(?:;|$)/);
+        if (utf8Match) {
+          extractedFileName = decodeURIComponent(utf8Match[1]);
+        } else {
+          // Fallback to standard filename format: filename="name"
+          const standardMatch = contentDisposition.match(/filename="(.+?)"/);
+          if (standardMatch) {
+            extractedFileName = standardMatch[1];
+          } else {
+            // Try without quotes
+            const unquotedMatch = contentDisposition.match(/filename=([^;]+)/);
+            if (unquotedMatch) {
+              extractedFileName = unquotedMatch[1].trim();
+            }
+          }
+        }
+      }
+
+      // Clean up filename - remove any USER_FILE_CONNECTOR patterns
+      extractedFileName = extractedFileName.replace(/USER_FILE_CONNECTOR[^/]*\//g, "");
+
+      // If filename still looks like a GUID or path, use semantic_identifier
+      if (!extractedFileName || extractedFileName === "document" || extractedFileName.includes("/")) {
+        extractedFileName = semantic_identifier || "document";
+      }
+
+      // Ensure we have a valid filename
+      if (!extractedFileName || extractedFileName.trim() === "") {
+        extractedFileName = "document";
+      }
+
+      setFileName(extractedFileName);
 
       let contentType =
         response.headers.get("Content-Type") || "application/octet-stream";
@@ -117,8 +155,8 @@ export default function TextView({
       // If it's octet-stream but file name suggests a markdown extension, override and attempt to read as markdown
       if (
         contentType === "application/octet-stream" &&
-        (originalFileName.toLowerCase().endsWith(".md") ||
-          originalFileName.toLowerCase().endsWith(".markdown"))
+        (extractedFileName.toLowerCase().endsWith(".md") ||
+          extractedFileName.toLowerCase().endsWith(".markdown"))
       ) {
         contentType = "text/markdown";
       }
@@ -146,12 +184,22 @@ export default function TextView({
 
   useEffect(() => {
     fetchFile();
+    
+    // Cleanup: освобождаем URL при размонтировании компонента
+    return () => {
+      if (fileUrlRef.current) {
+        window.URL.revokeObjectURL(fileUrlRef.current);
+        fileUrlRef.current = "";
+      }
+    };
   }, [fetchFile]);
 
   const handleDownload = () => {
+    if (!fileUrl) return;
+    
     const link = document.createElement("a");
     link.href = fileUrl;
-    link.download = presentingDocument.document_id || fileName;
+    link.download = fileName; // Используем fileName вместо document_id
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -204,48 +252,67 @@ export default function TextView({
                 </p>
               </div>
             ) : (
-              <div
-                className="inline-block transition-all duration-300 ease-in-out"
-                style={{
-                  width: `${zoom}%`,
-                  minWidth: `${zoom}%`,
-                }}
-              >
-                {isImageFormat(fileType) ? (
-                  <img
-                    src={fileUrl}
-                    alt={fileName}
-                    className="w-full h-auto object-contain object-center"
-                  />
-                ) : isDocxFormat(fileType) ? (
-                  // Предпросмотр .docx как HTML
-                  <div
-                    className="w-full h-full p-6 overflow-y-auto bg-white"
-                    dangerouslySetInnerHTML={{ __html: docxHtml }}
-                  />
-                ) : isSupportedIframeFormat(fileType) ? (
-                  <iframe
-                    src={`${fileUrl}#toolbar=0`}
-                    className="w-full h-[70vh] border-none"
-                    title={t(k.VIEW_FILES)}
-                  />
-                ) : isMarkdownFormat(fileType) ? (
-                  <div className="w-full h-full p-6 overflow-auto">
-                    <MinimalMarkdown
-                      content={fileContent}
-                      className="w-full pb-4 h-full text-lg break-words"
+              <div className="flex items-start justify-center w-full h-full overflow-auto">
+                <div
+                  className="transition-all duration-300 ease-in-out"
+                  style={{
+                    transform: `scale(${zoom / 100})`,
+                    transformOrigin: "top center",
+                    width: isSupportedIframeFormat(fileType) ? "100%" : "auto",
+                  }}
+                >
+                  {isImageFormat(fileType) ? (
+                    <img
+                      src={fileUrl}
+                      alt={fileName}
+                      className="h-auto object-contain object-center"
+                      style={{
+                        width: "100%",
+                        maxWidth: "100%",
+                      }}
                     />
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full">
-                    <p className="text-lg font-medium text-muted-foreground">
-                      {t(k.THIS_FILE_FORMAT_IS_NOT_SUPPOR)}
-                    </p>
-                    <Button className="mt-4" onClick={handleDownload}>
-                      {t(k.DOWNLOAD_FILE)}
-                    </Button>
-                  </div>
-                )}
+                  ) : isDocxFormat(fileType) ? (
+                    // Предпросмотр .docx как HTML
+                    <div
+                      className="p-6 bg-white"
+                      style={{
+                        width: "100%",
+                      }}
+                      dangerouslySetInnerHTML={{ __html: docxHtml }}
+                    />
+                  ) : isSupportedIframeFormat(fileType) ? (
+                    <iframe
+                      src={`${fileUrl}#toolbar=0`}
+                      className="border-none"
+                      style={{
+                        width: "100%",
+                        height: "70vh",
+                      }}
+                      title={t(k.VIEW_FILES)}
+                    />
+                  ) : isMarkdownFormat(fileType) ? (
+                    <div
+                      className="p-6"
+                      style={{
+                        width: "100%",
+                      }}
+                    >
+                      <MinimalMarkdown
+                        content={fileContent}
+                        className="w-full pb-4 h-full text-lg break-words"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full">
+                      <p className="text-lg font-medium text-muted-foreground">
+                        {t(k.THIS_FILE_FORMAT_IS_NOT_SUPPOR)}
+                      </p>
+                      <Button className="mt-4" onClick={handleDownload}>
+                        {t(k.DOWNLOAD_FILE)}
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>

@@ -12,14 +12,16 @@ const predefinedPositiveFeedbackOptions = process.env
   ? process.env.NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS.split(",")
   : [];
 
-const predefinedNegativeFeedbackOptions = process.env
-  .NEXT_PUBLIC_NEGATIVE_PREDEFINED_FEEDBACK_OPTIONS
-  ? process.env.NEXT_PUBLIC_NEGATIVE_PREDEFINED_FEEDBACK_OPTIONS.split(",")
-  : [
-      "Retrieved documents were not relevant",
-      "AI misread the documents",
-      "Cited source had incorrect information",
-    ];
+const getPredefinedNegativeFeedbackOptions = () => {
+  if (process.env.NEXT_PUBLIC_NEGATIVE_PREDEFINED_FEEDBACK_OPTIONS) {
+    return process.env.NEXT_PUBLIC_NEGATIVE_PREDEFINED_FEEDBACK_OPTIONS.split(",");
+  }
+  return [
+    k.FEEDBACK_DOCUMENTS_NOT_RELEVANT,
+    k.FEEDBACK_AI_MISREAD_DOCUMENTS,
+    k.FEEDBACK_SOURCE_INCORRECT_INFO,
+  ];
+};
 
 interface FeedbackModalProps {
   feedbackType: FeedbackType;
@@ -52,7 +54,7 @@ export const FeedbackModal = ({
   const predefinedFeedbackOptions =
     feedbackType === "like"
       ? predefinedPositiveFeedbackOptions
-      : predefinedNegativeFeedbackOptions;
+      : getPredefinedNegativeFeedbackOptions();
 
   return (
     <Modal onOutsideClick={onClose} width="w-full max-w-3xl">
@@ -75,16 +77,27 @@ export const FeedbackModal = ({
         </h2>
 
         <div className="mb-4 flex flex-wrap justify-start">
-          {predefinedFeedbackOptions.map((feedback, index) => (
-            <button
-              key={index}
-              className={`bg-background-dark hover:bg-accent-background-hovered text-default py-2 px-4 rounded m-1 
-                ${predefinedFeedback === feedback && "ring-2 ring-accent/20"}`}
-              onClick={() => handlePredefinedFeedback(feedback)}
-            >
-              {feedback}
-            </button>
-          ))}
+          {predefinedFeedbackOptions.map((feedback, index) => {
+            // Check if feedback is one of our translation keys (for negative feedback defaults)
+            const isTranslationKey = feedbackType === "dislike" && (
+              feedback === k.FEEDBACK_DOCUMENTS_NOT_RELEVANT ||
+              feedback === k.FEEDBACK_AI_MISREAD_DOCUMENTS ||
+              feedback === k.FEEDBACK_SOURCE_INCORRECT_INFO
+            );
+            const displayText = isTranslationKey 
+              ? i18n.t(feedback as keyof typeof k)
+              : feedback;
+            return (
+              <button
+                key={index}
+                className={`bg-background-dark hover:bg-accent-background-hovered text-default py-2 px-4 rounded m-1 
+                  ${predefinedFeedback === feedback && "ring-2 ring-accent/20"}`}
+                onClick={() => handlePredefinedFeedback(feedback)}
+              >
+                {displayText}
+              </button>
+            );
+          })}
         </div>
 
         <textarea
