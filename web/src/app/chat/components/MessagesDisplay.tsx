@@ -42,7 +42,6 @@ export interface MessagesDisplayProps {
   autoScrollEnabled: boolean;
   getContainerHeight: () => string | undefined;
   lastMessageRef: RefObject<HTMLDivElement | null>;
-  endPaddingRef: RefObject<HTMLDivElement | null>;
   endDivRef: RefObject<HTMLDivElement | null>;
   hasPerformedInitialScroll: boolean;
   chatSessionId: string | null;
@@ -66,7 +65,6 @@ export default function MessagesDisplay({
   autoScrollEnabled,
   getContainerHeight,
   lastMessageRef,
-  endPaddingRef,
   endDivRef,
   hasPerformedInitialScroll,
   chatSessionId,
@@ -233,15 +231,6 @@ export default function MessagesDisplay({
           </div>
         ))}
 
-      {messageHistory.length > 0 && (
-        <div
-          style={{
-            height: !autoScrollEnabled ? getContainerHeight() : undefined,
-          }}
-        />
-      )}
-
-      <div ref={endPaddingRef} className="h-[95px]" />
       <div ref={endDivRef} />
     </div>
   );

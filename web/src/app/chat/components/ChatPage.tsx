@@ -297,7 +297,6 @@ export default function ChatPage({
   const lastMessageRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLDivElement>(null);
   const endDivRef = useRef<HTMLDivElement>(null);
-  const endPaddingRef = useRef<HTMLDivElement>(null);
 
   const scrollInitialized = useRef(false);
 
@@ -325,16 +324,9 @@ export default function ChatPage({
         if (
           previousHeight.current &&
           heightDifference != 0 &&
-          endPaddingRef.current &&
           scrollableDivRef &&
           scrollableDivRef.current
         ) {
-          endPaddingRef.current.style.transition = "height 0.3s ease-out";
-          endPaddingRef.current.style.height = `${Math.max(
-            newHeight - 50,
-            0
-          )}px`;
-
           if (autoScrollEnabled) {
             scrollableDivRef?.current.scrollBy({
               left: 0,
@@ -351,9 +343,6 @@ export default function ChatPage({
   const resetInputBar = useCallback(() => {
     setMessage("");
     setCurrentMessageFiles([]);
-    if (endPaddingRef.current) {
-      endPaddingRef.current.style.height = `95px`;
-    }
   }, [setMessage, setCurrentMessageFiles]);
 
   const debounceNumber = 100; // time for debouncing
@@ -368,26 +357,6 @@ export default function ChatPage({
   const chatSessionIdRef = useRef<string | null>(existingChatSessionId);
   const loadedIdSessionRef = useRef<string | null>(existingChatSessionId);
   const submitOnLoadPerformed = useRef<boolean>(false);
-
-  // used for resizing of the document sidebar
-  const masterFlexboxRef = useRef<HTMLDivElement>(null);
-  const [maxDocumentSidebarWidth, setMaxDocumentSidebarWidth] = useState<
-    number | null
-  >(null);
-  function adjustDocumentSidebarWidth() {
-    if (masterFlexboxRef.current && document.documentElement.clientWidth) {
-      // numbers below are based on the actual width the center section for different
-      // screen sizes. `1700` corresponds to the custom "3xl" tailwind breakpoint
-      // NOTE: some buffer is needed to account for scroll bars
-      if (document.documentElement.clientWidth > 1700) {
-        setMaxDocumentSidebarWidth(masterFlexboxRef.current.clientWidth - 950);
-      } else if (document.documentElement.clientWidth > 1420) {
-        setMaxDocumentSidebarWidth(masterFlexboxRef.current.clientWidth - 760);
-      } else {
-        setMaxDocumentSidebarWidth(masterFlexboxRef.current.clientWidth - 660);
-      }
-    }
-  }
 
   function loadNewPageLogic(event: MessageEvent) {
     if (event.data.type === SUBMIT_MESSAGE_TYPES.PAGE_CHANGE) {
@@ -408,19 +377,12 @@ export default function ChatPage({
   }, [searchParams, router]);
 
   useEffect(() => {
-    adjustDocumentSidebarWidth();
-    window.addEventListener("resize", adjustDocumentSidebarWidth);
     window.addEventListener("message", loadNewPageLogic);
 
     return () => {
       window.removeEventListener("message", loadNewPageLogic);
-      window.removeEventListener("resize", adjustDocumentSidebarWidth);
     };
   }, []);
-
-  if (!documentSidebarInitialWidth && maxDocumentSidebarWidth) {
-    documentSidebarInitialWidth = Math.min(700, maxDocumentSidebarWidth);
-  }
 
   const [selectedDocuments, setSelectedDocuments] = useState<OnyxDocument[]>(
     []
@@ -431,7 +393,6 @@ export default function ChatPage({
   const chatSessionId = useChatSessionStore((state) => state.currentSessionId);
   const uncaughtError = useUncaughtError();
   const isReady = useIsReady();
-  const maxTokens = useMaxTokens();
   const completeMessageTree = useCurrentMessageTree();
   const hasPerformedInitialScroll = useHasPerformedInitialScroll();
   const currentSessionHasSentLocalUserMessage = useHasSentLocalUserMessage();
@@ -816,175 +777,158 @@ export default function ChatPage({
 
       <div className="flex h-full w-full flex-row-reverse">
         {desktopDocumentSidebar}
+
         <AppPageLayout
           settings={headerData.settings}
           chatSession={headerData.chatSession}
           className="flex flex-row h-full w-full"
         >
-          <div className="flex flex-row h-full w-full">
-            <div
-              ref={masterFlexboxRef}
-              className="flex h-full w-full overflow-x-hidden"
-            >
-              <Dropzone
-                onDrop={(acceptedFiles) =>
-                  handleMessageSpecificFileUpload(acceptedFiles)
-                }
-                noClick
+          <Dropzone
+            onDrop={(acceptedFiles) =>
+              handleMessageSpecificFileUpload(acceptedFiles)
+            }
+            noClick
+          >
+            {({ getRootProps }) => (
+              <div
+                className="h-full w-full relative flex-auto min-w-0"
+                {...getRootProps()}
               >
-                {({ getRootProps }) => (
+                {messageHistory.length > 0 && (
                   <div
-                    className="h-full w-full relative flex-auto min-w-0"
-                    {...getRootProps()}
+                    ref={scrollableDivRef}
+                    onScroll={handleScroll}
+                    className="w-full dbg-red flex flex-col default-scrollbar overflow-y-auto overflow-x-hidden relative"
                   >
+                    <MessagesDisplay
+                      messageHistory={messageHistory}
+                      completeMessageTree={completeMessageTree}
+                      liveAssistant={liveAssistant}
+                      llmManager={llmManager}
+                      deepResearchEnabled={deepResearchEnabled}
+                      currentMessageFiles={currentMessageFiles}
+                      setPresentingDocument={setPresentingDocument}
+                      onSubmit={onSubmit}
+                      onMessageSelection={onMessageSelection}
+                      stopGenerating={stopGenerating}
+                      uncaughtError={uncaughtError}
+                      loadingError={loadingError}
+                      handleResubmitLastMessage={handleResubmitLastMessage}
+                      autoScrollEnabled={autoScrollEnabled}
+                      getContainerHeight={getContainerHeight}
+                      lastMessageRef={lastMessageRef}
+                      endDivRef={endDivRef}
+                      hasPerformedInitialScroll={hasPerformedInitialScroll}
+                      chatSessionId={chatSessionId}
+                      enterpriseSettings={enterpriseSettings}
+                    />
+                  </div>
+                )}
+
+                <div ref={inputRef} className="w-full">
+                  {!showCenteredInput && aboveHorizon && (
+                    <div className="mx-auto flex justify-center py-4">
+                      <IconButton
+                        icon={SvgChevronDown}
+                        onClick={() => clientScrollToBottom()}
+                      />
+                    </div>
+                  )}
+
+                  <div
+                    className={cn(
+                      "pointer-events-auto w-[95%] mx-auto relative text-text-04 justify-center",
+                      showCenteredHero
+                        ? "h-full grid grid-rows-[1fr_auto_1fr]"
+                        : "mb-8"
+                    )}
+                  >
+                    {currentProjectId == null && showCenteredInput && (
+                      <WelcomeMessage
+                        agent={liveAssistant}
+                        isDefaultAgent={isDefaultAgent}
+                      />
+                    )}
                     <div
-                      onScroll={handleScroll}
-                      className="w-full h-[calc(100dvh-100px)] flex flex-col default-scrollbar overflow-y-auto overflow-x-hidden relative"
-                      ref={scrollableDivRef}
+                      className={cn(
+                        "flex flex-col items-center justify-center",
+                        showCenteredHero && "row-start-2"
+                      )}
                     >
-                      <MessagesDisplay
-                        messageHistory={messageHistory}
-                        completeMessageTree={completeMessageTree}
-                        liveAssistant={liveAssistant}
-                        llmManager={llmManager}
+                      {currentProjectId !== null && projectPanelVisible && (
+                        <ProjectContextPanel
+                          projectTokenCount={projectContextTokenCount}
+                          availableContextTokens={availableContextTokens}
+                          setPresentingDocument={setPresentingDocument}
+                        />
+                      )}
+
+                      {(showOnboarding ||
+                        (user?.role !== UserRole.ADMIN &&
+                          !user?.personalization?.name)) &&
+                        currentProjectId === null && (
+                          <OnboardingFlow
+                            handleHideOnboarding={() =>
+                              setShowOnboarding(false)
+                            }
+                            state={onboardingState}
+                            actions={onboardingActions}
+                            llmDescriptors={llmDescriptors}
+                          />
+                        )}
+                      <ChatInputBar
                         deepResearchEnabled={deepResearchEnabled}
-                        currentMessageFiles={currentMessageFiles}
-                        setPresentingDocument={setPresentingDocument}
-                        onSubmit={onSubmit}
-                        onMessageSelection={onMessageSelection}
+                        toggleDeepResearch={toggleDeepResearch}
+                        toggleDocumentSidebar={toggleDocumentSidebar}
+                        filterManager={filterManager}
+                        llmManager={llmManager}
+                        removeDocs={() => setSelectedDocuments([])}
+                        retrievalEnabled={retrievalEnabled}
+                        selectedDocuments={selectedDocuments}
+                        message={message}
+                        setMessage={setMessage}
                         stopGenerating={stopGenerating}
-                        uncaughtError={uncaughtError}
-                        loadingError={loadingError}
-                        handleResubmitLastMessage={handleResubmitLastMessage}
-                        autoScrollEnabled={autoScrollEnabled}
-                        getContainerHeight={getContainerHeight}
-                        lastMessageRef={lastMessageRef}
-                        endPaddingRef={endPaddingRef}
-                        endDivRef={endDivRef}
-                        hasPerformedInitialScroll={hasPerformedInitialScroll}
-                        chatSessionId={chatSessionId}
-                        enterpriseSettings={enterpriseSettings}
+                        onSubmit={handleChatInputSubmit}
+                        chatState={currentChatState}
+                        currentSessionFileTokenCount={
+                          existingChatSessionId
+                            ? currentSessionFileTokenCount
+                            : projectContextTokenCount
+                        }
+                        availableContextTokens={availableContextTokens}
+                        selectedAssistant={selectedAssistant || liveAssistant}
+                        handleFileUpload={handleMessageSpecificFileUpload}
+                        textAreaRef={textAreaRef}
+                        setPresentingDocument={setPresentingDocument}
+                        disabled={
+                          (!llmManager.isLoadingProviders &&
+                            llmManager.hasAnyProvider === false) ||
+                          (!isLoadingOnboarding &&
+                            onboardingState.currentStep !==
+                              OnboardingStep.Complete)
+                        }
                       />
                     </div>
 
-                    <div
-                      ref={inputRef}
-                      className={cn(
-                        "absolute z-10 w-full",
-                        showCenteredHero
-                          ? "inset-0"
-                          : currentProjectId !== null && showCenteredInput
-                            ? "top-0 left-0 right-0"
-                            : "bottom-0 left-0 right-0 translate-y-0"
-                      )}
-                    >
-                      {!showCenteredInput && aboveHorizon && (
-                        <div className="mx-auto flex justify-center py-4">
-                          <IconButton
-                            icon={SvgChevronDown}
-                            onClick={() => clientScrollToBottom()}
-                          />
-                        </div>
-                      )}
-
-                      <div
-                        className={cn(
-                          "pointer-events-auto w-[95%] mx-auto relative text-text-04 justify-center",
-                          showCenteredHero
-                            ? "h-full grid grid-rows-[1fr_auto_1fr]"
-                            : "mb-8"
-                        )}
-                      >
-                        {currentProjectId == null && showCenteredInput && (
-                          <WelcomeMessage
-                            agent={liveAssistant}
-                            isDefaultAgent={isDefaultAgent}
-                          />
-                        )}
-                        <div
-                          className={cn(
-                            "flex flex-col items-center justify-center",
-                            showCenteredHero && "row-start-2"
-                          )}
-                        >
-                          {currentProjectId !== null && projectPanelVisible && (
-                            <ProjectContextPanel
-                              projectTokenCount={projectContextTokenCount}
-                              availableContextTokens={availableContextTokens}
-                              setPresentingDocument={setPresentingDocument}
-                            />
-                          )}
-
-                          {(showOnboarding ||
-                            (user?.role !== UserRole.ADMIN &&
-                              !user?.personalization?.name)) &&
-                            currentProjectId === null && (
-                              <OnboardingFlow
-                                handleHideOnboarding={() =>
-                                  setShowOnboarding(false)
-                                }
-                                state={onboardingState}
-                                actions={onboardingActions}
-                                llmDescriptors={llmDescriptors}
-                              />
-                            )}
-                          <ChatInputBar
-                            deepResearchEnabled={deepResearchEnabled}
-                            toggleDeepResearch={toggleDeepResearch}
-                            toggleDocumentSidebar={toggleDocumentSidebar}
-                            filterManager={filterManager}
-                            llmManager={llmManager}
-                            removeDocs={() => setSelectedDocuments([])}
-                            retrievalEnabled={retrievalEnabled}
-                            selectedDocuments={selectedDocuments}
-                            message={message}
-                            setMessage={setMessage}
-                            stopGenerating={stopGenerating}
-                            onSubmit={handleChatInputSubmit}
-                            chatState={currentChatState}
-                            currentSessionFileTokenCount={
-                              existingChatSessionId
-                                ? currentSessionFileTokenCount
-                                : projectContextTokenCount
-                            }
-                            availableContextTokens={availableContextTokens}
-                            selectedAssistant={
-                              selectedAssistant || liveAssistant
-                            }
-                            handleFileUpload={handleMessageSpecificFileUpload}
-                            textAreaRef={textAreaRef}
-                            setPresentingDocument={setPresentingDocument}
-                            disabled={
-                              (!llmManager.isLoadingProviders &&
-                                llmManager.hasAnyProvider === false) ||
-                              (!isLoadingOnboarding &&
-                                onboardingState.currentStep !==
-                                  OnboardingStep.Complete)
-                            }
-                          />
-                        </div>
-
-                        {currentProjectId !== null && (
-                          <div className="transition-all duration-700 ease-out">
-                            <ProjectChatSessionList />
-                          </div>
-                        )}
-
-                        {liveAssistant?.starter_messages &&
-                          liveAssistant.starter_messages.length > 0 &&
-                          messageHistory.length === 0 &&
-                          showCenteredHero && (
-                            <div className="mt-6 row-start-3 max-w-[50rem]">
-                              <Suggestions onSubmit={onSubmit} />
-                            </div>
-                          )}
+                    {currentProjectId !== null && (
+                      <div className="transition-all duration-700 ease-out">
+                        <ProjectChatSessionList />
                       </div>
-                    </div>
+                    )}
+
+                    {liveAssistant?.starter_messages &&
+                      liveAssistant.starter_messages.length > 0 &&
+                      messageHistory.length === 0 &&
+                      showCenteredHero && (
+                        <div className="mt-6 row-start-3 max-w-[50rem]">
+                          <Suggestions onSubmit={onSubmit} />
+                        </div>
+                      )}
                   </div>
-                )}
-              </Dropzone>
-            </div>
-          </div>
+                </div>
+              </div>
+            )}
+          </Dropzone>
         </AppPageLayout>
       </div>
     </>
