@@ -21,6 +21,7 @@ use tauri::{
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
 use tokio::time::sleep;
 use url::Url;
+#[cfg(target_os = "macos")]
 use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
 
 // ============================================================================
@@ -152,7 +153,7 @@ fn trigger_new_window(app: &AppHandle) {
 
     tauri::async_runtime::spawn(async move {
         let window_label = format!("onyx-{}", uuid::Uuid::new_v4());
-        if let Ok(window) = WebviewWindowBuilder::new(
+        let builder = WebviewWindowBuilder::new(
             &handle,
             &window_label,
             WebviewUrl::External(server_url.parse().unwrap()),
@@ -160,11 +161,14 @@ fn trigger_new_window(app: &AppHandle) {
         .title("Onyx")
         .inner_size(1200.0, 800.0)
         .min_inner_size(800.0, 600.0)
-        .transparent(true)
-        .title_bar_style(tauri::TitleBarStyle::Overlay)
-        .hidden_title(true)
-        .build()
-        {
+        .transparent(true);
+
+        #[cfg(target_os = "macos")]
+        let builder = builder
+            .title_bar_style(tauri::TitleBarStyle::Overlay)
+            .hidden_title(true);
+
+        if let Ok(window) = builder.build() {
             #[cfg(target_os = "macos")]
             {
                 let _ = apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, None);
@@ -333,7 +337,7 @@ async fn new_window(app: AppHandle, state: tauri::State<'_, ConfigState>) -> Res
     let server_url = state.0.read().unwrap().server_url.clone();
     let window_label = format!("onyx-{}", uuid::Uuid::new_v4());
 
-    let window = WebviewWindowBuilder::new(
+    let builder = WebviewWindowBuilder::new(
         &app,
         &window_label,
         WebviewUrl::External(
@@ -345,11 +349,14 @@ async fn new_window(app: AppHandle, state: tauri::State<'_, ConfigState>) -> Res
     .title("Onyx")
     .inner_size(1200.0, 800.0)
     .min_inner_size(800.0, 600.0)
-    .transparent(true)
-    .title_bar_style(tauri::TitleBarStyle::Overlay)
-    .hidden_title(true)
-    .build()
-    .map_err(|e| e.to_string())?;
+    .transparent(true);
+
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .title_bar_style(tauri::TitleBarStyle::Overlay)
+        .hidden_title(true);
+
+    let window = builder.build().map_err(|e| e.to_string())?;
 
     // Apply vibrancy effect
     #[cfg(target_os = "macos")]
