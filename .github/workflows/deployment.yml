@@ -181,58 +181,48 @@ jobs:
           # Those targets are only used on macos runners so it's in an `if` to slightly speed up windows and linux builds.
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-      - name: Inject version from git tag (Unix)
-        if: runner.os != 'Windows' && github.event_name != 'workflow_dispatch'
-        working-directory: ./desktop/src-tauri
-        run: |
-          # Extract version from git tag (strip 'v' prefix if present)
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "Injecting version: $VERSION"
-
-          # Update Cargo.toml (use temp file for cross-platform sed compatibility)
-          sed "s/^version = .*/version = \"$VERSION\"/" Cargo.toml > Cargo.toml.tmp
-          mv Cargo.toml.tmp Cargo.toml
-
-          # Update tauri.conf.json
-          jq --arg v "$VERSION" '.version = $v' tauri.conf.json > tauri.conf.json.tmp
-          mv tauri.conf.json.tmp tauri.conf.json
-
-          # Verify changes
-          echo "Cargo.toml version:"
-          grep '^version' Cargo.toml
-          echo "tauri.conf.json version:"
-          jq '.version' tauri.conf.json
-
-      - name: Inject version from git tag (Windows)
-        if: runner.os == 'Windows' && github.event_name != 'workflow_dispatch'
-        working-directory: ./desktop/src-tauri
-        shell: pwsh
-        run: |
-          # Extract version from git tag (strip 'v' prefix if present)
-          $VERSION = "$env:GITHUB_REF_NAME" -replace '^v', ''
-          Write-Host "Injecting version: $VERSION"
-
-          # Update Cargo.toml
-          $cargo = Get-Content Cargo.toml -Raw
-          $cargo = $cargo -replace '(?m)^version = .*', "version = `"$VERSION`""
-          Set-Content Cargo.toml $cargo -NoNewline
-
-          # Update tauri.conf.json
-          $json = Get-Content tauri.conf.json | ConvertFrom-Json
-          $json.version = $VERSION
-          $json | ConvertTo-Json -Depth 100 | Set-Content tauri.conf.json
-
-          # Verify changes
-          Write-Host "Cargo.toml version:"
-          Select-String -Path Cargo.toml -Pattern '^version'
-          Write-Host "tauri.conf.json version:"
-          (Get-Content tauri.conf.json | ConvertFrom-Json).version
-
       - name: install frontend dependencies
         working-directory: ./desktop
         run: npm install
 
+      # macOS: Manual build with npm run build:dmg
+      - name: Build macOS app
+        if: matrix.platform == 'macos-latest'
+        working-directory: ./desktop
+        run: |
+          # Ensure targets are available
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+          # Build universal macOS app
+          npm run build:dmg
+
+      - name: Upload macOS artifacts to release
+        if: matrix.platform == 'macos-latest'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME="${{ github.event_name != 'workflow_dispatch' && github.ref_name || format('v0.0.0-dev+{0}', needs.determine-builds.outputs.short-sha) }}"
+
+          # Create release if it doesn't exist
+          gh release view "$TAG_NAME" || gh release create "$TAG_NAME" \
+            --title "$TAG_NAME" \
+            --notes "See the assets to download this version and install." \
+            --draft
+
+          # Upload all macOS artifacts
+          for file in desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg; do
+            [ -f "$file" ] && gh release upload "$TAG_NAME" "$file" --clobber
+          done
+          for file in desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz; do
+            [ -f "$file" ] && gh release upload "$TAG_NAME" "$file" --clobber
+          done
+          for file in desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig; do
+            [ -f "$file" ] && gh release upload "$TAG_NAME" "$file" --clobber
+          done
+
+      # Linux/Windows: Use tauri-action
       - uses: tauri-apps/tauri-action@19b93bb55601e3e373a93cfb6eb4242e45f5af20 # ratchet:tauri-apps/tauri-action@action-v0.6.0
+        if: matrix.platform != 'macos-latest'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPIMAGE_EXTRACT_AND_RUN: 1
