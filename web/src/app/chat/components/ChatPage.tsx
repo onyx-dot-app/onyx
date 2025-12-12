@@ -1001,6 +1001,7 @@ function ChatPageInner({
                                 onboardingState.currentStep !==
                                   OnboardingStep.Complete)
                             }
+                            hasMessages={messageHistory.length > 0}
                           />
                         </div>
 

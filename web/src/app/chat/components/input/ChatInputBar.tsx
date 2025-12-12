@@ -106,6 +106,7 @@ export interface ChatInputBarProps {
   setPresentingDocument?: (document: MinimalOnyxDocument) => void;
   toggleDeepResearch: () => void;
   disabled: boolean;
+  hasMessages: boolean;
 }
 
 function ChatInputBarInner({
@@ -131,6 +132,7 @@ function ChatInputBarInner({
   toggleDeepResearch,
   setPresentingDocument,
   disabled,
+  hasMessages,
 }: ChatInputBarProps) {
   const { user } = useUser();
   const { forcedToolIds, setForcedToolIds } = useForcedTools();
@@ -476,11 +478,13 @@ function ChatInputBarInner({
               event.preventDefault();
               if (message) {
                 // Capture the textarea position before submit
-                const sourceEl =
-                  inputContainerRef.current ?? textAreaRef.current;
-                if (sourceEl) {
-                  const rect = sourceEl.getBoundingClientRect();
-                  startMessageAnimation(message, rect);
+                if (hasMessages) {
+                  const sourceEl =
+                    inputContainerRef.current ?? textAreaRef.current;
+                  if (sourceEl) {
+                    const rect = sourceEl.getBoundingClientRect();
+                    startMessageAnimation(message, rect);
+                  }
                 }
 
                 onSubmit();
@@ -660,11 +664,13 @@ function ChatInputBarInner({
                   stopGenerating();
                 } else if (message) {
                   // Capture the textarea position before submit
-                  const sourceEl =
-                    inputContainerRef.current ?? textAreaRef.current;
-                  if (sourceEl) {
-                    const rect = sourceEl.getBoundingClientRect();
-                    startMessageAnimation(message, rect);
+                  if (hasMessages) {
+                    const sourceEl =
+                      inputContainerRef.current ?? textAreaRef.current;
+                    if (sourceEl) {
+                      const rect = sourceEl.getBoundingClientRect();
+                      startMessageAnimation(message, rect);
+                    }
                   }
                   onSubmit();
                 }
