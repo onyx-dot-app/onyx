@@ -189,8 +189,9 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           echo "Injecting version: $VERSION"
 
-          # Update Cargo.toml
-          sed -i "s/^version = .*/version = \"$VERSION\"/" Cargo.toml
+          # Update Cargo.toml (use temp file for cross-platform sed compatibility)
+          sed "s/^version = .*/version = \"$VERSION\"/" Cargo.toml > Cargo.toml.tmp
+          mv Cargo.toml.tmp Cargo.toml
 
           # Update tauri.conf.json
           jq --arg v "$VERSION" '.version = $v' tauri.conf.json > tauri.conf.json.tmp
