@@ -366,7 +366,7 @@ class LitellmLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        reasoning_effort: ReasoningEffort | None = ReasoningEffort.MEDIUM,
+        reasoning_effort: ReasoningEffort | None = None,
     ) -> ModelResponse:
         from litellm import ModelResponse as LiteLLMModelResponse
 
@@ -397,7 +397,7 @@ class LitellmLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        reasoning_effort: ReasoningEffort | None = ReasoningEffort.MEDIUM,
+        reasoning_effort: ReasoningEffort | None = None,
     ) -> Iterator[ModelResponseStream]:
         from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
         from onyx.llm.model_response import from_litellm_model_response_stream

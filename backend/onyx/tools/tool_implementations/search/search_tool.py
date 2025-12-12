@@ -339,7 +339,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                         QUERIES_FIELD: {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "List of search queries to execute, typically a single query, no more than 3.",
+                            "description": "List of search queries to execute, typically a single query.",
                         },
                     },
                     "required": [QUERIES_FIELD],
