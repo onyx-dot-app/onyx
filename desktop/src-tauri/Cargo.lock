@@ -3,24 +3,6 @@
 version = 4
 
 [[package]]
-name = "Onyx"
-version = "0.1.0"
-dependencies = [
- "directories",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-shell",
- "tauri-plugin-window-state",
- "tokio",
- "url",
- "uuid",
- "window-vibrancy 0.5.3",
-]
-
-[[package]]
 name = "adler2"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2256,6 +2238,24 @@ name = "once_cell"
 version = "1.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
+
+[[package]]
+name = "onyx"
+version = "0.0.0-dev"
+dependencies = [
+ "directories",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-shell",
+ "tauri-plugin-window-state",
+ "tokio",
+ "url",
+ "uuid",
+ "window-vibrancy 0.5.3",
+]
 
 [[package]]
 name = "open"
