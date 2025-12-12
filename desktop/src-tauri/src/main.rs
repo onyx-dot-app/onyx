@@ -6,8 +6,11 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::RwLock;
+use std::time::Duration;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+use tokio::time::sleep;
+use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
 
 // ============================================================================
 // Configuration
@@ -242,8 +245,8 @@ fn go_forward(window: tauri::WebviewWindow) {
 async fn new_window(app: AppHandle, state: tauri::State<'_, ConfigState>) -> Result<(), String> {
     let server_url = state.0.read().unwrap().server_url.clone();
     let window_label = format!("onyx-{}", uuid::Uuid::new_v4());
-    
-    WebviewWindowBuilder::new(
+
+    let window = WebviewWindowBuilder::new(
         &app,
         &window_label,
         WebviewUrl::External(server_url.parse().map_err(|e| format!("Invalid URL: {}", e))?),
@@ -251,9 +254,28 @@ async fn new_window(app: AppHandle, state: tauri::State<'_, ConfigState>) -> Res
     .title("Onyx")
     .inner_size(1200.0, 800.0)
     .min_inner_size(800.0, 600.0)
+    .transparent(true)
+    .title_bar_style(tauri::TitleBarStyle::Overlay)
+    .hidden_title(true)
     .build()
     .map_err(|e| e.to_string())?;
-    
+
+    // Apply vibrancy effect
+    #[cfg(target_os = "macos")]
+    {
+        let _ = apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, None);
+    }
+
+    // Inject title bar script after window loads (with retries)
+    let window_clone = window.clone();
+    tauri::async_runtime::spawn(async move {
+        let titlebar_script = include_str!("../../src/titlebar.js");
+        for i in 0..5 {
+            sleep(Duration::from_millis(1000 + i * 1000)).await;
+            let _ = window_clone.eval(titlebar_script);
+        }
+    });
+
     Ok(())
 }
 
@@ -264,6 +286,12 @@ fn reset_config(state: tauri::State<ConfigState>) -> Result<(), String> {
     *config = AppConfig::default();
     save_config(&config)?;
     Ok(())
+}
+
+/// Start dragging the window
+#[tauri::command]
+async fn start_drag_window(window: tauri::Window) -> Result<(), String> {
+    window.start_dragging().map_err(|e| e.to_string())
 }
 
 // ============================================================================
@@ -307,7 +335,7 @@ fn setup_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                 let url = server_url.clone();
                 tauri::async_runtime::spawn(async move {
                     let window_label = format!("onyx-{}", uuid::Uuid::new_v4());
-                    let _ = WebviewWindowBuilder::new(
+                    if let Ok(window) = WebviewWindowBuilder::new(
                         &handle,
                         &window_label,
                         WebviewUrl::External(url.parse().unwrap()),
@@ -315,7 +343,26 @@ fn setup_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                     .title("Onyx")
                     .inner_size(1200.0, 800.0)
                     .min_inner_size(800.0, 600.0)
-                    .build();
+                    .transparent(true)
+                    .title_bar_style(tauri::TitleBarStyle::Overlay)
+                    .hidden_title(true)
+                    .build() {
+                        // Apply vibrancy
+                        #[cfg(target_os = "macos")]
+                        {
+                            let _ = apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, None);
+                        }
+
+                        // Inject title bar (with retries)
+                        let window_clone = window.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let titlebar_script = include_str!("../../src/titlebar.js");
+                            for i in 0..5 {
+                                sleep(Duration::from_millis(1000 + i * 1000)).await;
+                                let _ = window_clone.eval(titlebar_script);
+                            }
+                        });
+                    }
                 });
             }
         },
@@ -355,7 +402,8 @@ fn main() {
             go_back,
             go_forward,
             new_window,
-            reset_config
+            reset_config,
+            start_drag_window
         ])
         .setup(move |app| {
             // Setup global shortcuts
@@ -363,9 +411,28 @@ fn main() {
                 eprintln!("Failed to setup shortcuts: {}", e);
             }
 
-            // Update main window URL to configured server
+            // Update main window URL to configured server and inject title bar
             if let Some(window) = app.get_webview_window("main") {
+                // Apply vibrancy effect for translucent glass look
+                #[cfg(target_os = "macos")]
+                {
+                    let _ = apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, None);
+                }
+
                 let _ = window.eval(&format!("window.location.href = '{}'", server_url));
+
+                // Inject title bar script after page loads (with retries)
+                let window_clone = window.clone();
+                tauri::async_runtime::spawn(async move {
+                    let titlebar_script = include_str!("../../src/titlebar.js");
+
+                    // Try injecting multiple times to ensure it works
+                    for i in 0..5 {
+                        sleep(Duration::from_millis(1000 + i * 1000)).await;
+                        let _ = window_clone.eval(titlebar_script);
+                    }
+                });
+
                 let _ = window.set_focus();
             }
 
