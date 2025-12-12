@@ -393,7 +393,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
         "relative w-full h-full flex flex-col min-h-screen overflow-hidden",
         isSidePanel
           ? "bg-background"
-          : "bg-cover bg-center bg-no-repeat transition-[background-image] duration-300 ease-in-out"
+          : "bg-cover bg-center bg-no-repeat transition-[background-image] duration-150 ease-in-out"
       )}
       style={
         isSidePanel ? undefined : { backgroundImage: `url(${backgroundUrl})` }
