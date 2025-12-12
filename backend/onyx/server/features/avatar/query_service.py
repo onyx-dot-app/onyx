@@ -14,9 +14,11 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import NotificationType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
+from onyx.context.search.models import QueryExpansionType
 from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
+from onyx.context.search.utils import get_query_embedding
 from onyx.db.avatar import check_rate_limit
 from onyx.db.avatar import create_permission_request
 from onyx.db.avatar import get_avatar_by_id
@@ -26,11 +28,7 @@ from onyx.db.enums import AvatarQueryMode
 from onyx.db.models import Avatar
 from onyx.db.models import User
 from onyx.db.notification import create_notification
-from onyx.document_index.vespa.chunk_retrieval import query_vespa
-from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
-    build_vespa_filters,
-)
-from onyx.document_index.vespa_constants import YQL_BASE
+from onyx.document_index.factory import get_current_primary_default_document_index
 from onyx.server.features.avatar.models import AvatarQueryResponse
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -81,34 +79,33 @@ def _build_accessible_documents_filters(
 def _execute_search(
     query: str,
     filters: IndexFilters,
+    db_session: Session,
     num_results: int = 10,
 ) -> list[InferenceChunk]:
-    """Execute a simple keyword search with the given filters.
+    """Execute a hybrid search with the given filters.
 
-    This is a simplified search that uses Vespa directly.
-    For production use, this should be extended to use the full search pipeline
-    with embeddings, reranking, etc.
+    Uses the document index's hybrid_retrieval which combines
+    semantic (embedding) and keyword search.
     """
-    # Build the filter string
-    filter_str = build_vespa_filters(filters, remove_trailing_and=True)
-
-    # Build YQL query for keyword search
-    yql = f"{YQL_BASE} where "
-    if filter_str:
-        yql += f"({filter_str}) and "
-    yql += f'(default contains "{query}")'
-
-    query_params: dict[str, str | int | float] = {
-        "yql": yql,
-        "hits": num_results,
-        "query": query,
-        "ranking": "keyword_search",
-    }
-
     try:
-        uncleaned_chunks = query_vespa(query_params)
-        # Convert uncleaned chunks to inference chunks
-        chunks = [chunk.to_inference_chunk() for chunk in uncleaned_chunks]
+        # Get query embedding
+        query_embedding = get_query_embedding(query, db_session)
+
+        # Get document index
+        document_index = get_current_primary_default_document_index(db_session)
+
+        # Execute hybrid search
+        chunks = document_index.hybrid_retrieval(
+            query=query,
+            query_embedding=query_embedding,
+            final_keywords=None,
+            filters=filters,
+            hybrid_alpha=0.5,  # Balance between semantic and keyword
+            time_decay_multiplier=1.0,
+            num_to_retrieve=num_results,
+            ranking_profile_type=QueryExpansionType.SEMANTIC,
+        )
+
         return chunks[:num_results]
     except Exception as e:
         logger.error(f"Search failed: {e}")
@@ -219,7 +216,7 @@ def execute_avatar_query(
     if query_mode == AvatarQueryMode.OWNED_DOCUMENTS:
         # Direct search on owned documents - no permission needed
         filters = _build_owned_documents_filters(avatar)
-        chunks = _execute_search(query, filters)
+        chunks = _execute_search(query, filters, db_session)
 
         if not _has_good_results(chunks):
             return AvatarQueryResponse(
@@ -241,7 +238,7 @@ def execute_avatar_query(
         if should_auto_approve(avatar, requester):
             # Execute search and return results directly
             filters = _build_accessible_documents_filters(avatar, db_session)
-            chunks = _execute_search(query, filters)
+            chunks = _execute_search(query, filters, db_session)
 
             if not _has_good_results(chunks):
                 return AvatarQueryResponse(
@@ -259,7 +256,7 @@ def execute_avatar_query(
 
         # Preview query to check if good answer exists
         filters = _build_accessible_documents_filters(avatar, db_session)
-        chunks = _execute_search(query, filters)
+        chunks = _execute_search(query, filters, db_session)
 
         if not _has_good_results(chunks):
             # No good results - don't create permission request

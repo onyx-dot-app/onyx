@@ -81,6 +81,9 @@ import AppPageLayout from "@/layouts/AppPageLayout";
 import { HeaderData } from "@/lib/headers/fetchHeaderDataSS";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgChevronDown from "@/icons/chevron-down";
+import { AvatarModeIndicator } from "@/app/chat/components/avatar/AvatarModeIndicator";
+import { AvatarQueryResult } from "@/app/chat/components/avatar/AvatarQueryResult";
+import { useAvatarContextOptional } from "@/app/chat/avatars/AvatarContext";
 
 const DEFAULT_CONTEXT_TOKENS = 120_000;
 
@@ -131,6 +134,9 @@ export default function ChatPage({
   } = useProjectsContext();
 
   const { height: screenHeight } = useScreenSize();
+
+  // Avatar context for avatar query mode
+  const avatarContext = useAvatarContextOptional();
 
   // handle redirect if chat page is disabled
   // NOTE: this must be done here, in a client component since
@@ -630,14 +636,33 @@ export default function ChatPage({
     );
   }, []);
 
-  const handleChatInputSubmit = useCallback(() => {
+  const handleChatInputSubmit = useCallback(async () => {
+    // If in avatar mode, query the avatar instead of normal chat
+    if (avatarContext?.isAvatarMode && avatarContext?.selectedAvatar) {
+      try {
+        await avatarContext.queryAvatar(message);
+        setMessage(""); // Clear message after successful query
+      } catch {
+        // Error is handled in the context
+      }
+      return;
+    }
+
+    // Normal chat submission
     onSubmit({
       message: message,
       currentMessageFiles: currentMessageFiles,
       useAgentSearch: deepResearchEnabled,
     });
     setShowOnboarding(false);
-  }, [message, onSubmit, currentMessageFiles, deepResearchEnabled]);
+  }, [
+    message,
+    onSubmit,
+    currentMessageFiles,
+    deepResearchEnabled,
+    avatarContext,
+    setMessage,
+  ]);
 
   // Memoized callbacks for DocumentResults
   const handleMobileDocumentSidebarClose = useCallback(() => {
@@ -937,6 +962,9 @@ export default function ChatPage({
                                 llmDescriptors={llmDescriptors}
                               />
                             )}
+                          {/* Avatar query mode indicator and results */}
+                          <AvatarModeIndicator />
+                          <AvatarQueryResult />
                           <ChatInputBar
                             deepResearchEnabled={deepResearchEnabled}
                             toggleDeepResearch={toggleDeepResearch}

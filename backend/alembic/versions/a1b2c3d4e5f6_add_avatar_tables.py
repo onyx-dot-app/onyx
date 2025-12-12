@@ -170,6 +170,37 @@ def upgrade() -> None:
         ["avatar_id", "requester_id", "created_at"],
     )
 
+    # Create avatars for all existing users
+    # Using raw SQL to avoid ORM dependencies in migrations
+    connection = op.get_bind()
+    connection.execute(
+        sa.text(
+            """
+            INSERT INTO avatar (
+                user_id,
+                is_enabled,
+                default_query_mode,
+                allow_accessible_mode,
+                show_query_in_request,
+                max_requests_per_day,
+                created_at,
+                updated_at
+            )
+            SELECT
+                id,
+                true,
+                'OWNED_DOCUMENTS',
+                true,
+                true,
+                100,
+                NOW(),
+                NOW()
+            FROM "user"
+            WHERE id NOT IN (SELECT user_id FROM avatar)
+            """
+        )
+    )
+
 
 def downgrade() -> None:
     # Drop avatar_query table and indexes
