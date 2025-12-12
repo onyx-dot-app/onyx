@@ -81,11 +81,6 @@ function ChatDocumentDisplayWrapper({
 interface DocumentResultsProps {
   closeSidebar: () => void;
   selectedDocuments: OnyxDocument[] | null;
-  toggleDocumentSelection: (document: OnyxDocument) => void;
-  clearSelectedDocuments: () => void;
-  selectedDocumentTokens: number;
-  maxTokens: number;
-  isSharedChat?: boolean;
   modal: boolean;
   setPresentingDocument: Dispatch<SetStateAction<MinimalOnyxDocument | null>>;
 }
@@ -94,10 +89,6 @@ function DocumentResultsInner({
   closeSidebar,
   modal,
   selectedDocuments,
-  toggleDocumentSelection,
-  selectedDocumentTokens,
-  maxTokens,
-  isSharedChat,
   setPresentingDocument,
 }: DocumentResultsProps) {
   const idOfMessageToDisplay = useSelectedNodeForDocDisplay();
@@ -136,7 +127,6 @@ function DocumentResultsInner({
     selectedDocuments?.map((document) => document.document_id) || [];
   const currentDocuments = selectedMessage.documents || null;
   const dedupedDocuments = removeDuplicateDocs(currentDocuments || []);
-  const tokenLimitReached = selectedDocumentTokens > maxTokens - 75;
   const citedDocuments = dedupedDocuments.filter(
     (doc) =>
       doc.document_id !== null &&
@@ -166,21 +156,11 @@ function DocumentResultsInner({
                 <ChatDocumentDisplay
                   key={document.document_id}
                   setPresentingDocument={setPresentingDocument}
-                  closeSidebar={closeSidebar}
                   modal={modal}
                   document={document}
                   isSelected={selectedDocumentIds.includes(
                     document.document_id
                   )}
-                  handleSelect={(documentId) => {
-                    toggleDocumentSelection(
-                      dedupedDocuments.find(
-                        (doc) => doc.document_id === documentId
-                      )!
-                    );
-                  }}
-                  hideSelection={isSharedChat}
-                  tokenLimitReached={tokenLimitReached}
                 />
               ))}
             </ChatDocumentDisplayWrapper>
@@ -197,21 +177,11 @@ function DocumentResultsInner({
                 <ChatDocumentDisplay
                   key={document.document_id}
                   setPresentingDocument={setPresentingDocument}
-                  closeSidebar={closeSidebar}
                   modal={modal}
                   document={document}
                   isSelected={selectedDocumentIds.includes(
                     document.document_id
                   )}
-                  handleSelect={(documentId) => {
-                    toggleDocumentSelection(
-                      dedupedDocuments.find(
-                        (doc) => doc.document_id === documentId
-                      )!
-                    );
-                  }}
-                  hideSelection={isSharedChat}
-                  tokenLimitReached={tokenLimitReached}
                 />
               ))}
             </ChatDocumentDisplayWrapper>
@@ -226,7 +196,6 @@ function DocumentResultsInner({
                 <ChatDocumentDisplay
                   key={file.id}
                   setPresentingDocument={setPresentingDocument}
-                  closeSidebar={closeSidebar}
                   modal={modal}
                   document={buildOnyxDocumentFromFile(
                     file.id,
@@ -234,9 +203,6 @@ function DocumentResultsInner({
                     false
                   )}
                   isSelected={false}
-                  handleSelect={() => {}}
-                  hideSelection={true}
-                  tokenLimitReached={false}
                 />
               ))}
             </ChatDocumentDisplayWrapper>
