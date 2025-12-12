@@ -60,6 +60,7 @@ import { MessagesDisplay } from "@/app/chat/components/MessagesDisplay";
 import { useChatSessions } from "@/lib/hooks/useChatSessions";
 import { useScrollonStream } from "@/app/chat/services/lib";
 import { cn } from "@/lib/utils";
+import { Logo } from "@/components/logo/Logo";
 import useScreenSize from "@/hooks/useScreenSize";
 import TextView from "@/components/chat/TextView";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
@@ -148,6 +149,20 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   // State
   const [message, setMessage] = useState("");
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
+
+  // Initialize message from URL input parameter (for Chrome extension)
+  // Using useLayoutEffect to set state before paint, avoiding flash of empty input
+  const initializedRef = useRef(false);
+  useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+    const urlParams = new URLSearchParams(window.location.search);
+    const inputParam = urlParams.get("input");
+    if (inputParam) {
+      setMessage(inputParam);
+    }
+  }, []);
+
   const [editingShortcut, setEditingShortcut] = useState<Shortcut | null>(null);
   const [backgroundUrl, setBackgroundUrl] = useState<string>(
     theme === "light" ? defaultLightBackgroundUrl : defaultDarkBackgroundUrl
@@ -403,7 +418,10 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       {/* Side panel header */}
       {isSidePanel && (
         <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-background">
-          <span className="text-lg font-semibold text-text-900">Onyx</span>
+          <div className="flex items-center gap-2">
+            <Logo size="small" />
+            <span className="text-lg font-semibold text-text-900">Onyx</span>
+          </div>
           <button
             onClick={handleOpenInOnyx}
             className="flex items-center gap-1.5 text-sm text-text-600 hover:text-text-900 transition-colors"
