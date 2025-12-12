@@ -1623,6 +1623,19 @@ def update_mcp_server_with_tools(
             status_code=400, detail="MCP server has no admin connection config"
         )
 
+    name_changed = request.name is not None and request.name != mcp_server.name
+    description_changed = (
+        request.description is not None
+        and request.description != mcp_server.description
+    )
+    if name_changed or description_changed:
+        mcp_server = update_mcp_server__no_commit(
+            server_id=mcp_server.id,
+            db_session=db_session,
+            name=request.name if name_changed else None,
+            description=request.description if description_changed else None,
+        )
+
     selected_names = set(request.selected_tools or [])
     updated_tools = _sync_tools_for_server(
         mcp_server,
@@ -1634,6 +1647,7 @@ def update_mcp_server_with_tools(
 
     return MCPServerUpdateResponse(
         server_id=mcp_server.id,
+        server_name=mcp_server.name,
         updated_tools=updated_tools,
     )
 
