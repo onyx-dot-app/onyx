@@ -5,16 +5,18 @@ use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::process::Command;
 use std::sync::RwLock;
 use std::time::Duration;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, SubmenuBuilder, HELP_SUBMENU_ID};
 use tauri::{
     webview::PageLoadPayload, AppHandle, Manager, Webview, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder,
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
 use tokio::time::sleep;
-use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
 use url::Url;
+use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
 
 // ============================================================================
 // Configuration
@@ -28,7 +30,7 @@ const TITLEBAR_SCRIPT: &str = include_str!("../../src/titlebar.js");
 pub struct AppConfig {
     /// The Onyx server URL (default: https://cloud.onyx.app)
     pub server_url: String,
-    
+
     /// Optional: Custom window title
     #[serde(default = "default_window_title")]
     pub window_title: String,
@@ -113,6 +115,66 @@ fn save_config(config: &AppConfig) -> Result<(), String> {
 // Global config state
 struct ConfigState(RwLock<AppConfig>);
 
+fn trigger_new_chat(app: &AppHandle) {
+    let state = app.state::<ConfigState>();
+    let server_url = state.0.read().unwrap().server_url.clone();
+
+    if let Some(window) = app.get_webview_window("main") {
+        let url = format!("{}/chat", server_url);
+        let _ = window.eval(&format!("window.location.href = '{}'", url));
+    }
+}
+
+fn trigger_new_window(app: &AppHandle) {
+    let state = app.state::<ConfigState>();
+    let server_url = state.0.read().unwrap().server_url.clone();
+    let handle = app.clone();
+
+    tauri::async_runtime::spawn(async move {
+        let window_label = format!("onyx-{}", uuid::Uuid::new_v4());
+        if let Ok(window) = WebviewWindowBuilder::new(
+            &handle,
+            &window_label,
+            WebviewUrl::External(server_url.parse().unwrap()),
+        )
+        .title("Onyx")
+        .inner_size(1200.0, 800.0)
+        .min_inner_size(800.0, 600.0)
+        .transparent(true)
+        .title_bar_style(tauri::TitleBarStyle::Overlay)
+        .hidden_title(true)
+        .build()
+        {
+            #[cfg(target_os = "macos")]
+            {
+                let _ = apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, None);
+            }
+
+            inject_titlebar(window.clone());
+            let _ = window.set_focus();
+        }
+    });
+}
+
+fn open_docs() {
+    let url = "https://docs.onyx.app";
+    #[cfg(target_os = "macos")]
+    {
+        let _ = Command::new("open").arg(url).status();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = Command::new("xdg-open").arg(url).status();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = Command::new("rundll32")
+            .arg("url.dll,FileProtocolHandler")
+            .arg(url)
+            .status();
+    }
+}
+
 // ============================================================================
 // Tauri Commands
 // ============================================================================
@@ -134,7 +196,7 @@ fn set_server_url(state: tauri::State<ConfigState>, url: String) -> Result<Strin
     let mut config = state.0.write().unwrap();
     config.server_url = url.trim_end_matches('/').to_string();
     save_config(&config)?;
-    
+
     Ok(config.server_url.clone())
 }
 
@@ -150,7 +212,7 @@ fn get_config_path_cmd() -> Result<String, String> {
 #[tauri::command]
 fn open_config_file() -> Result<(), String> {
     let config_path = get_config_path().ok_or("Could not determine config path")?;
-    
+
     // Ensure config exists
     if !config_path.exists() {
         save_config(&AppConfig::default())?;
@@ -188,7 +250,7 @@ fn open_config_file() -> Result<(), String> {
 #[tauri::command]
 fn open_config_directory() -> Result<(), String> {
     let config_dir = get_config_dir().ok_or("Could not determine config directory")?;
-    
+
     // Ensure directory exists
     fs::create_dir_all(&config_dir).map_err(|e| format!("Failed to create config dir: {}", e))?;
 
@@ -254,7 +316,11 @@ async fn new_window(app: AppHandle, state: tauri::State<'_, ConfigState>) -> Res
     let window = WebviewWindowBuilder::new(
         &app,
         &window_label,
-        WebviewUrl::External(server_url.parse().map_err(|e| format!("Invalid URL: {}", e))?),
+        WebviewUrl::External(
+            server_url
+                .parse()
+                .map_err(|e| format!("Invalid URL: {}", e))?,
+        ),
     )
     .title("Onyx")
     .inner_size(1200.0, 800.0)
@@ -320,16 +386,21 @@ fn setup_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let app_handle = app.clone();
 
     app.global_shortcut().on_shortcuts(
-        [new_chat, reload, back, forward, new_window_shortcut, open_settings],
+        [
+            new_chat,
+            reload,
+            back,
+            forward,
+            new_window_shortcut,
+            open_settings,
+        ],
         move |_app, shortcut, _event| {
-            let state = app_handle.state::<ConfigState>();
-            let server_url = state.0.read().unwrap().server_url.clone();
+            if shortcut == &new_chat {
+                trigger_new_chat(&app_handle);
+            }
 
             if let Some(window) = app_handle.get_webview_window("main") {
-                if shortcut == &new_chat {
-                    let url = format!("{}/chat", server_url);
-                    let _ = window.eval(&format!("window.location.href = '{}'", url));
-                } else if shortcut == &reload {
+                if shortcut == &reload {
                     let _ = window.eval("window.location.reload()");
                 } else if shortcut == &back {
                     let _ = window.eval("window.history.back()");
@@ -342,35 +413,62 @@ fn setup_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
             }
 
             if shortcut == &new_window_shortcut {
-                let handle = app_handle.clone();
-                let url = server_url.clone();
-                tauri::async_runtime::spawn(async move {
-                    let window_label = format!("onyx-{}", uuid::Uuid::new_v4());
-                    if let Ok(window) = WebviewWindowBuilder::new(
-                        &handle,
-                        &window_label,
-                        WebviewUrl::External(url.parse().unwrap()),
-                    )
-                    .title("Onyx")
-                    .inner_size(1200.0, 800.0)
-                    .min_inner_size(800.0, 600.0)
-                    .transparent(true)
-                    .title_bar_style(tauri::TitleBarStyle::Overlay)
-                    .hidden_title(true)
-                    .build() {
-                        // Apply vibrancy
-                        #[cfg(target_os = "macos")]
-                        {
-                            let _ = apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, None);
-                        }
-
-                        inject_titlebar(window.clone());
-                    }
-                });
+                trigger_new_window(&app_handle);
             }
         },
     )?;
 
+    Ok(())
+}
+
+// ============================================================================
+// Menu Setup
+// ============================================================================
+
+fn setup_app_menu(app: &AppHandle) -> tauri::Result<()> {
+    let menu = app.menu().unwrap_or(Menu::default(app)?);
+
+    let new_chat_item = MenuItem::with_id(app, "new_chat", "New Chat", true, Some("CmdOrCtrl+N"))?;
+    let new_window_item = MenuItem::with_id(
+        app,
+        "new_window",
+        "New Window",
+        true,
+        Some("CmdOrCtrl+Shift+N"),
+    )?;
+    let docs_item = MenuItem::with_id(app, "open_docs", "Onyx Documentation", true, None::<&str>)?;
+
+    if let Some(file_menu) = menu
+        .items()?
+        .into_iter()
+        .filter_map(|item| item.as_submenu().cloned())
+        .find(|submenu| submenu.text().ok().as_deref() == Some("File"))
+    {
+        file_menu.insert_items(&[&new_chat_item, &new_window_item], 0)?;
+    } else {
+        let file_menu = SubmenuBuilder::new(app, "File")
+            .items(&[
+                &new_chat_item,
+                &new_window_item,
+                &PredefinedMenuItem::close_window(app, None)?,
+            ])
+            .build()?;
+        menu.prepend(&file_menu)?;
+    }
+
+    if let Some(help_menu) = menu
+        .get(HELP_SUBMENU_ID)
+        .and_then(|item| item.as_submenu().cloned())
+    {
+        help_menu.append(&docs_item)?;
+    } else {
+        let help_menu = SubmenuBuilder::with_id(app, HELP_SUBMENU_ID, "Help")
+            .item(&docs_item)
+            .build()?;
+        menu.append(&help_menu)?;
+    }
+
+    app.set_menu(menu)?;
     Ok(())
 }
 
@@ -382,7 +480,7 @@ fn main() {
     // Load config at startup
     let config = load_config();
     let server_url = config.server_url.clone();
-    
+
     println!("Starting Onyx Desktop");
     println!("Server URL: {}", server_url);
     if let Some(path) = get_config_path() {
@@ -408,10 +506,22 @@ fn main() {
             reset_config,
             start_drag_window
         ])
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "open_docs" => open_docs(),
+            "new_chat" => trigger_new_chat(app),
+            "new_window" => trigger_new_window(app),
+            _ => {}
+        })
         .setup(move |app| {
+            let app_handle = app.handle();
+
             // Setup global shortcuts
-            if let Err(e) = setup_shortcuts(app.handle()) {
+            if let Err(e) = setup_shortcuts(&app_handle) {
                 eprintln!("Failed to setup shortcuts: {}", e);
+            }
+
+            if let Err(e) = setup_app_menu(&app_handle) {
+                eprintln!("Failed to setup menu: {}", e);
             }
 
             // Update main window URL to configured server and inject title bar
