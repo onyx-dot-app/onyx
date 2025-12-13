@@ -114,11 +114,9 @@ export default function MessagesDisplay({
 
   return (
     <div
-      style={{ overflowAnchor: "none" }}
       key={chatSessionId}
       className={cn(
-        // "desktop:-ml-4 w-full mx-auto absolute mobile:top-0 desktop:top-0 left-0",
-        // enterpriseSettings?.two_lines_for_chat_header ? "pt-20" : "pt-4",
+        "h-full overflow-y-auto overflow-x-hidden",
         !hasPerformedInitialScroll && "hidden"
       )}
     >
