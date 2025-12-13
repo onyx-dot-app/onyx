@@ -7,6 +7,9 @@ import {
   CloudEmbeddingProvider,
   CloudEmbeddingModel,
   AVAILABLE_MODELS,
+  AVAILABLE_CLOUD_PROVIDERS,
+  LITELLM_CLOUD_PROVIDER,
+  AZURE_CLOUD_PROVIDER,
   HostedEmbeddingModel,
   EmbeddingProvider,
 } from "@/components/embedding/interfaces";
@@ -24,6 +27,7 @@ import {
   EMBEDDING_PROVIDERS_ADMIN_URL,
 } from "@/app/admin/configuration/llm/constants";
 import { AdvancedSearchConfiguration } from "@/app/admin/embeddings/interfaces";
+import Button from "@/refresh-components/buttons/Button";
 
 export interface EmbeddingDetails {
   api_key?: string;
@@ -272,6 +276,30 @@ export default function EmbeddingModelSelection({
               }
             />
           </button>
+          {currentEmbeddingModel?.provider_type && (
+            <div className="mt-2">
+              <Button
+                secondary
+                onClick={() => {
+                  const allProviders = [
+                    ...AVAILABLE_CLOUD_PROVIDERS,
+                    LITELLM_CLOUD_PROVIDER,
+                    AZURE_CLOUD_PROVIDER,
+                  ];
+                  const provider = allProviders.find(
+                    (p) =>
+                      p.provider_type === currentEmbeddingModel.provider_type
+                  );
+                  if (!provider) {
+                    return;
+                  }
+                  setChangeCredentialsProvider(provider);
+                }}
+              >
+                Update API key
+              </Button>
+            </div>
+          )}
         </>
       )}
     </div>

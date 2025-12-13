@@ -159,6 +159,9 @@ export default function ChangeCredentialsModal({
         );
       }
 
+      // Refresh cached provider details so the rest of the form sees the new key without forcing a re-index
+      await mutate(EMBEDDING_PROVIDERS_ADMIN_URL);
+
       onConfirm();
     } catch (error) {
       setTestError(
