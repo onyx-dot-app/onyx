@@ -118,7 +118,7 @@ export default function OpenApiPageContent() {
             } successfully.`,
             type: "success",
           });
-        } else {
+        } else if (values.authMethod === "custom-header") {
           const customHeaders = values.headers
             .map(({ key, value }) => ({
               key: key.trim(),
@@ -138,6 +138,19 @@ export default function OpenApiPageContent() {
 
           setPopup({
             message: `${selectedTool.name} authentication headers saved successfully.`,
+            type: "success",
+          });
+        } else if (values.authMethod === "pt-oauth") {
+          const response = await updateCustomTool(selectedTool.id, {
+            passthrough_auth: true,
+            oauth_config_id: null,
+            custom_headers: [],
+          });
+          if (response.error) {
+            throw new Error(response.error);
+          }
+          setPopup({
+            message: `${selectedTool.name} authentication passthrough saved successfully.`,
             type: "success",
           });
         }
@@ -414,6 +427,7 @@ export default function OpenApiPageContent() {
           defaultMethod={authenticationDefaultMethod}
           oauthConfigId={selectedTool?.oauth_config_id ?? null}
           initialHeaders={selectedTool?.custom_headers ?? null}
+          passthroughOAuthEnabled={selectedTool?.passthrough_auth ?? false}
           onConnect={handleConnect}
           onSkip={resetAuthModal}
         />
