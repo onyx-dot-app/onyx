@@ -813,7 +813,7 @@ redis:
     data: |
       appendonly no
       save ""
-      maxmemory 3gb
+      maxmemory 400mb
       maxmemory-policy allkeys-lru
       timeout 0
       tcp-keepalive 300
