@@ -393,6 +393,7 @@ def _add_user__user_group_relationships__no_commit(
             relationship = User__UserGroup(user_id=user_id, user_group_id=user_group_id)
             db_session.add(relationship)
             db_session.flush()  # Force immediate constraint check
+            savepoint.commit()  # Commit the savepoint on success
             added_relationships.append(relationship)
         except IntegrityError:
             # User was added by another concurrent transaction - rollback to savepoint
