@@ -30,6 +30,7 @@ Don't run these tests if you don't want to do this!
 Bring up the entire application.
 
 0. Install playwright dependencies
+
 ```cd web
 npx playwright install
 ```
