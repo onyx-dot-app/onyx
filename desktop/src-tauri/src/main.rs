@@ -32,6 +32,7 @@ const CONFIG_FILE_NAME: &str = "config.json";
 const TITLEBAR_SCRIPT: &str = include_str!("../../src/titlebar.js");
 const TRAY_ID: &str = "onyx-tray";
 const TRAY_ICON_BYTES: &[u8] = include_bytes!("../icons/tray-icon.png");
+const TRAY_MENU_OPEN_APP_ID: &str = "tray_open_app";
 const TRAY_MENU_OPEN_CHAT_ID: &str = "tray_open_chat";
 const TRAY_MENU_SHOW_IN_BAR_ID: &str = "tray_show_in_menu_bar";
 const TRAY_MENU_QUIT_ID: &str = "tray_quit";
@@ -401,6 +402,7 @@ fn setup_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let back = Shortcut::new(Some(Modifiers::SUPER), Code::BracketLeft);
     let forward = Shortcut::new(Some(Modifiers::SUPER), Code::BracketRight);
     let new_window_shortcut = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyN);
+    let show_app = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::Space);
     let open_settings = Shortcut::new(Some(Modifiers::SUPER), Code::Comma);
 
     let app_handle = app.clone();
@@ -412,6 +414,7 @@ fn setup_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
             back,
             forward,
             new_window_shortcut,
+            show_app,
             open_settings,
         ],
         move |_app, shortcut, _event| {
@@ -434,6 +437,8 @@ fn setup_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 
             if shortcut == &new_window_shortcut {
                 trigger_new_window(&app_handle);
+            } else if shortcut == &show_app {
+                focus_main_window(&app_handle);
             }
         },
     )?;
@@ -493,6 +498,13 @@ fn setup_app_menu(app: &AppHandle) -> tauri::Result<()> {
 }
 
 fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
+    let open_app = MenuItem::with_id(
+        app,
+        TRAY_MENU_OPEN_APP_ID,
+        "Open Onyx",
+        true,
+        Some("CmdOrCtrl+Shift+Space"),
+    )?;
     let open_chat = MenuItem::with_id(
         app,
         TRAY_MENU_OPEN_CHAT_ID,
@@ -513,6 +525,7 @@ fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let quit = PredefinedMenuItem::quit(app, Some("Quit Onyx"))?;
 
     MenuBuilder::new(app)
+        .item(&open_app)
         .item(&open_chat)
         .separator()
         .item(&show_in_menu_bar)
@@ -523,6 +536,9 @@ fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 
 fn handle_tray_menu_event(app: &AppHandle, id: &str) {
     match id {
+        TRAY_MENU_OPEN_APP_ID => {
+            focus_main_window(app);
+        }
         TRAY_MENU_OPEN_CHAT_ID => {
             focus_main_window(app);
             trigger_new_chat(app);
