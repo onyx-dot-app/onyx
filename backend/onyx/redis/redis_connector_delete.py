@@ -30,6 +30,7 @@ class RedisConnectorDelete:
 
     PREFIX = "connectordeletion"
     FENCE_PREFIX = f"{PREFIX}_fence"  # "connectordeletion_fence"
+    FENCE_TTL = 7 * 24 * 60 * 60  # 7 days - defensive TTL to prevent memory leaks
     TASKSET_PREFIX = f"{PREFIX}_taskset"  # "connectordeletion_taskset"
 
     # used to signal the overall workflow is still active
@@ -78,7 +79,7 @@ class RedisConnectorDelete:
             self.redis.delete(self.fence_key)
             return
 
-        self.redis.set(self.fence_key, payload.model_dump_json())
+        self.redis.set(self.fence_key, payload.model_dump_json(), ex=self.FENCE_TTL)
         self.redis.sadd(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
 
     def set_active(self) -> None:
