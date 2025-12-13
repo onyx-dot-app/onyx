@@ -14,7 +14,7 @@ import Truncated from "@/refresh-components/texts/Truncated";
 import { IconProps } from "@/icons";
 import SvgUser from "@/icons/user";
 import SvgActions from "@/icons/actions";
-import { usePinnedAgentsWithDetails } from "@/lib/hooks/useAgents";
+import { usePinnedAgentsWithDetails } from "@/hooks/useAgents";
 import { cn, noProp } from "@/lib/utils";
 import SvgEdit from "@/icons/edit";
 import { useRouter } from "next/navigation";

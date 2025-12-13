@@ -130,3 +130,4 @@ export const MAX_FILES_TO_SHOW = 3;
 // SIZES
 export const MOBILE_SIDEBAR_BREAKPOINT_PX = 640;
 export const DEFAULT_AGENT_AVATAR_SIZE_PX = 18;
+export const HORIZON_DISTANCE_PX = 800;

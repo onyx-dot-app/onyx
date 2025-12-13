@@ -58,7 +58,7 @@ import {
   useRouter,
   useSearchParams,
 } from "next/navigation";
-import { useChatSessions } from "@/lib/hooks/useChatSessions";
+import useChatSessions from "@/hooks/useChatSessions";
 import {
   useChatSessionStore,
   useCurrentMessageTree,

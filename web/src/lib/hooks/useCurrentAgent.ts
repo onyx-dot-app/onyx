@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import { useAgents } from "./useAgents";
+import { useAgents } from "../../hooks/useAgents";
 import { useSession } from "@/app/chat/stores/useChatSessionStore";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
