@@ -416,6 +416,9 @@ def get_persona_snapshots_for_user(
         selectinload(Persona.labels),
         selectinload(Persona.document_sets),
         selectinload(Persona.user),
+        selectinload(Persona.user_files),
+        selectinload(Persona.users),
+        selectinload(Persona.groups),
     )
 
     results = db_session.scalars(stmt).all()

@@ -182,7 +182,8 @@ export interface BackendMessage {
   latest_child_message: number | null;
   message: string;
   rephrased_query: string | null;
-  context_docs: { top_documents: OnyxDocument[] } | null;
+  // Backend sends context_docs as a flat array of documents
+  context_docs: OnyxDocument[] | null;
   time_sent: string;
   overridden_model: string;
   alternate_assistant_id: number | null;

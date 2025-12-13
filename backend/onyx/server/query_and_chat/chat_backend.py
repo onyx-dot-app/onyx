@@ -55,7 +55,6 @@ from onyx.db.projects import check_project_ownership
 from onyx.db.user_file import get_file_id_by_user_file_id
 from onyx.file_processing.extract_file_text import docx_to_txt_filename
 from onyx.file_store.file_store import get_default_file_store
-from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.factory import get_llms_for_persona
@@ -355,16 +354,11 @@ def rename_chat_session(
         chat_session_id=chat_session_id, db_session=db_session
     )
 
-    try:
-        llm, _ = get_default_llms(
-            additional_headers=extract_headers(
-                request.headers, LITELLM_PASS_THROUGH_HEADERS
-            )
+    llm, _ = get_default_llms(
+        additional_headers=extract_headers(
+            request.headers, LITELLM_PASS_THROUGH_HEADERS
         )
-    except GenAIDisabledException:
-        # This may be longer than what the LLM tends to produce but is the most
-        # clear thing we can do
-        return RenameChatSessionResponse(new_name=full_history[0].message)
+    )
 
     new_name = get_renamed_conversation_name(full_history=full_history, llm=llm)
 

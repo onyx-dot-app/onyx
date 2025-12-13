@@ -80,7 +80,11 @@ class PgRedisKVStore(KeyValueStore):
                 value = None
 
             try:
-                self.redis_client.set(REDIS_KEY_PREFIX + key, json.dumps(value))
+                self.redis_client.set(
+                    REDIS_KEY_PREFIX + key,
+                    json.dumps(value),
+                    ex=KV_REDIS_KEY_EXPIRATION,
+                )
             except Exception as e:
                 logger.error(f"Failed to set value in Redis for key '{key}': {str(e)}")
 

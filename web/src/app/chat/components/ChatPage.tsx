@@ -662,10 +662,6 @@ export default function ChatPage({
             modal={false}
             closeSidebar={handleDesktopDocumentSidebarClose}
             selectedDocuments={selectedDocuments}
-            toggleDocumentSelection={toggleDocumentSelection}
-            clearSelectedDocuments={() => setSelectedDocuments([])}
-            selectedDocumentTokens={0}
-            maxTokens={maxTokens}
           />
         </div>
       </div>
@@ -795,11 +791,6 @@ export default function ChatPage({
                   modal={true}
                   closeSidebar={handleMobileDocumentSidebarClose}
                   selectedDocuments={selectedDocuments}
-                  toggleDocumentSelection={toggleDocumentSelection}
-                  clearSelectedDocuments={() => setSelectedDocuments([])}
-                  // TODO (chris): fix
-                  selectedDocumentTokens={0}
-                  maxTokens={maxTokens}
                 />
               </Modal.Body>
             </Modal.Content>

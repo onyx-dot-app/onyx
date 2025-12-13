@@ -131,6 +131,7 @@ interface MCPServerCreateResponse {
 
 interface MCPToolsUpdateResponse {
   server_id: number;
+  server_name: string;
   updated_tools: number;
 }
 
@@ -175,6 +176,8 @@ export async function createMCPServer(serverData: {
 
 export async function attachMCPTools(toolsData: {
   server_id: number;
+  name?: string;
+  description?: string;
   selected_tools: string[];
 }): Promise<ApiResponse<MCPToolsUpdateResponse>> {
   try {

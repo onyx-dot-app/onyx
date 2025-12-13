@@ -1,7 +1,6 @@
 import { SourceIcon } from "@/components/SourceIcon";
 import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 import { FiTag } from "react-icons/fi";
-import DocumentSelector from "./DocumentSelector";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
 import { DocumentUpdatedAtBadge } from "@/components/search/DocumentUpdatedAtBadge";
 import { MetadataBadge } from "@/components/MetadataBadge";
@@ -14,13 +13,9 @@ import Truncated from "@/refresh-components/texts/Truncated";
 import Text from "@/refresh-components/texts/Text";
 
 interface DocumentDisplayProps {
-  closeSidebar: () => void;
   document: OnyxDocument;
   modal?: boolean;
   isSelected: boolean;
-  handleSelect: (documentId: string) => void;
-  tokenLimitReached: boolean;
-  hideSelection?: boolean;
   setPresentingDocument: Dispatch<SetStateAction<MinimalOnyxDocument | null>>;
 }
 
@@ -67,10 +62,7 @@ function DocumentMetadataBlock({
 export function ChatDocumentDisplay({
   document,
   modal,
-  hideSelection,
   isSelected,
-  handleSelect,
-  tokenLimitReached,
   setPresentingDocument,
 }: DocumentDisplayProps) {
   const isInternet = document.is_internet;
@@ -103,13 +95,6 @@ export function ChatDocumentDisplay({
         <Truncated className="line-clamp-2" side="left">
           {title}
         </Truncated>
-        {!isInternet && !hideSelection && (
-          <DocumentSelector
-            isSelected={isSelected}
-            handleSelect={() => handleSelect(document.document_id)}
-            isDisabled={tokenLimitReached && !isSelected}
-          />
-        )}
       </div>
 
       {hasMetadata && (

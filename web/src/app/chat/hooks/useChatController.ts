@@ -65,12 +65,7 @@ import {
   useCurrentChatState,
   useCurrentMessageHistory,
 } from "../stores/useChatSessionStore";
-import {
-  Packet,
-  CitationDelta,
-  MessageStart,
-  PacketType,
-} from "../services/streamingModels";
+import { Packet, MessageStart, PacketType } from "../services/streamingModels";
 import { useAssistantPreferences } from "@/app/chat/hooks/useAssistantPreferences";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile, useProjectsContext } from "../projects/ProjectsContext";
@@ -807,20 +802,6 @@ export function useChatController({
                   ...(citations || {}),
                   [citationInfo.citation_number]: citationInfo.document_id,
                 };
-              } else if (packetObj.type === "citation_delta") {
-                // Batched citation packet (for backwards compatibility)
-                const citationDelta = packetObj as CitationDelta;
-                if (citationDelta.citations) {
-                  citations = {
-                    ...(citations || {}),
-                    ...Object.fromEntries(
-                      citationDelta.citations.map((c) => [
-                        c.citation_num,
-                        c.document_id,
-                      ])
-                    ),
-                  };
-                }
               } else if (packetObj.type === "message_start") {
                 const messageStart = packetObj as MessageStart;
                 if (messageStart.final_documents) {

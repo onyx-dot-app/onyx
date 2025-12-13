@@ -239,6 +239,9 @@ export interface IconButtonProps
   tertiary?: boolean;
   internal?: boolean;
 
+  // Button size
+  large?: boolean;
+
   // Button states
   transient?: boolean;
   disabled?: boolean;

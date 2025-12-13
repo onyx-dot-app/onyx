@@ -19,6 +19,9 @@ from onyx.indexing.indexing_pipeline import filter_documents
 from onyx.indexing.indexing_pipeline import process_image_sections
 from onyx.indexing.models import ChunkEmbedding
 from onyx.indexing.models import IndexChunk
+from onyx.llm.model_response import Choice
+from onyx.llm.model_response import Message
+from onyx.llm.model_response import ModelResponse
 from onyx.llm.utils import get_max_input_tokens
 from onyx.natural_language_processing.search_nlp_models import (
     ContentClassificationPrediction,
@@ -293,12 +296,14 @@ def test_contextual_rag(
 
     mock_llm_invoke_count = 0
 
-    def mock_llm_invoke(self: Any, *args: Any, **kwargs: Any) -> Mock:
+    def mock_llm_invoke(*args: Any, **kwargs: Any) -> ModelResponse:
         nonlocal mock_llm_invoke_count
         mock_llm_invoke_count += 1
-        m = Mock()
-        m.content = f"Test{mock_llm_invoke_count}"
-        return m
+        return ModelResponse(
+            id=f"test-{mock_llm_invoke_count}",
+            created="2024-01-01T00:00:00Z",
+            choice=Choice(message=Message(content=f"Test{mock_llm_invoke_count}")),
+        )
 
     llm_tokenizer = embedder.embedding_model.tokenizer
 
@@ -306,7 +311,7 @@ def test_contextual_rag(
     mock_llm.config.max_input_tokens = get_max_input_tokens(
         model_provider="openai", model_name="gtp-4o"
     )
-    mock_llm.invoke_langchain = mock_llm_invoke
+    mock_llm.invoke = mock_llm_invoke
 
     chunker = Chunker(
         tokenizer=embedder.embedding_model.tokenizer,

@@ -361,7 +361,8 @@ def bulk_invite_users(
 
     try:
         for email in emails:
-            email_info = validate_email(email)
+            # Allow syntactically valid emails without DNS deliverability checks; tests use test domains
+            email_info = validate_email(email, check_deliverability=False)
             new_invited_emails.append(email_info.normalized)
 
     except (EmailUndeliverableError, EmailNotValidError) as e:

@@ -7,6 +7,7 @@ from shared_configs.contextvars import get_current_tenant_id
 # Redis key prefixes for chat session stop signals
 PREFIX = "chatsessionstop"
 FENCE_PREFIX = f"{PREFIX}_fence"
+FENCE_TTL = 24 * 60 * 60  # 24 hours - defensive TTL to prevent memory leaks
 
 
 def set_fence(chat_session_id: UUID, redis_client: Redis, value: bool) -> None:
@@ -24,7 +25,7 @@ def set_fence(chat_session_id: UUID, redis_client: Redis, value: bool) -> None:
         redis_client.delete(fence_key)
         return
 
-    redis_client.set(fence_key, 0)
+    redis_client.set(fence_key, 0, ex=FENCE_TTL)
 
 
 def is_connected(chat_session_id: UUID, redis_client: Redis) -> bool:

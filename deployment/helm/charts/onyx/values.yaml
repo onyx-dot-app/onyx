@@ -813,6 +813,10 @@ redis:
     data: |
       appendonly no
       save ""
+      maxmemory 400mb
+      maxmemory-policy allkeys-lru
+      timeout 0
+      tcp-keepalive 300
   storageSpec:
     volumeClaimTemplate:
       spec:
