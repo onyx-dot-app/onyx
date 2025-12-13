@@ -9,6 +9,7 @@ from datetime import timezone
 from typing import Any
 
 from jira import JIRA
+from jira.exceptions import JIRAError
 from jira.resources import Issue
 from more_itertools import chunked
 from typing_extensions import override
@@ -508,16 +509,36 @@ class JiraConnector(
 
         checkpoint_callback = make_checkpoint_callback(new_checkpoint)
 
-        for issue in _perform_jql_search(
-            jira_client=self.jira_client,
-            jql=jql,
-            start=current_offset,
-            max_results=_JIRA_FULL_PAGE_SIZE,
-            all_issue_ids=new_checkpoint.all_issue_ids,
-            checkpoint_callback=checkpoint_callback,
-            nextPageToken=new_checkpoint.cursor,
-            ids_done=new_checkpoint.ids_done,
-        ):
+        try:
+            issue_iterator = _perform_jql_search(
+                jira_client=self.jira_client,
+                jql=jql,
+                start=current_offset,
+                max_results=_JIRA_FULL_PAGE_SIZE,
+                all_issue_ids=new_checkpoint.all_issue_ids,
+                checkpoint_callback=checkpoint_callback,
+                nextPageToken=new_checkpoint.cursor,
+                ids_done=new_checkpoint.ids_done,
+            )
+        except Exception as e:
+            # Handle JQL query errors (e.g., invalid project, invalid JQL syntax)
+            if isinstance(e, JIRAError):
+                error_msg = (
+                    f"JQL query failed: {e.text if hasattr(e, 'text') else str(e)}"
+                )
+                logger.error(f"{error_msg}. JQL: {jql}")
+                yield ConnectorFailure(
+                    failed_document=None,
+                    failure_message=error_msg,
+                    exception=e,
+                )
+                # Mark checkpoint as complete so we don't retry indefinitely
+                new_checkpoint.has_more = False
+                yield new_checkpoint
+                return
+            raise
+
+        for issue in issue_iterator:
             issue_key = issue.key
             try:
                 if document := process_jira_issue(
