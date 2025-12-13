@@ -19,14 +19,17 @@ import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
 import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
-import { SettingsContext } from "@/components/settings/SettingsProvider";
+import {
+  SettingsContext,
+  useSettingsContext,
+} from "@/components/settings/SettingsProvider";
 import Dropzone from "react-dropzone";
 import ChatInputBar from "@/app/chat/components/input/ChatInputBar";
-import { useChatSessions } from "@/lib/hooks/useChatSessions";
+import useChatSessions from "@/hooks/useChatSessions";
 import { useCCPairs } from "@/lib/hooks/useCCPairs";
 import { useTags } from "@/lib/hooks/useTags";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
-import { useAgents } from "@/lib/hooks/useAgents";
+import { useAgents } from "@/hooks/useAgents";
 import { ChatPopup } from "@/app/chat/components/ChatPopup";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
@@ -40,7 +43,6 @@ import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import { getSourceMetadata } from "@/lib/sources";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { FederatedConnectorDetail, UserRole, ValidSources } from "@/lib/types";
-import useScreenSize from "@/hooks/useScreenSize";
 import { DocumentResults } from "@/app/chat/components/documentSidebar/DocumentResults";
 import { useChatController } from "@/app/chat/hooks/useChatController";
 import { useAssistantController } from "@/app/chat/hooks/useAssistantController";
@@ -109,11 +111,14 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
   const searchParams = useSearchParams();
 
   // Use SWR hooks for data fetching
-  const { chatSessions, refreshChatSessions } = useChatSessions();
+  const {
+    refreshChatSessions,
+    currentChatSession: selectedChatSession,
+    currentChatSessionId: existingChatSessionId,
+  } = useChatSessions();
   const { ccPairs } = useCCPairs();
   const { tags } = useTags();
   const { documentSets } = useDocumentSets();
-
   const {
     currentMessageFiles,
     setCurrentMessageFiles,
@@ -127,24 +132,16 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
   // NOTE: this must be done here, in a client component since
   // settings are passed in via Context and therefore aren't
   // available in server-side components
-  const settings = useContext(SettingsContext);
+  const settings = useSettingsContext();
 
   const isInitialLoad = useRef(true);
 
-  const { agents: availableAssistants, isLoading: isLoadingAgents } =
-    useAgents();
+  const { agents, isLoading: isLoadingAgents } = useAgents();
 
   // Also fetch federated connectors for the sources list
   const { data: federatedConnectorsData } = useFederatedConnectors();
 
-  const { user, isAdmin } = useUser();
-  const existingChatIdRaw = searchParams?.get("chatId");
-
-  const existingChatSessionId = existingChatIdRaw ? existingChatIdRaw : null;
-
-  const selectedChatSession = chatSessions.find(
-    (chatSession) => chatSession.id === existingChatSessionId
-  );
+  const { user } = useUser();
 
   function processSearchParamsAndSubmitMessage(searchParamsString: string) {
     const newSearchParams = new URLSearchParams(searchParamsString);
@@ -204,7 +201,10 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
     isLoading: isLoadingOnboarding,
   } = useOnboardingState(liveAssistant);
 
-  const llmManager = useLlmManager(selectedChatSession, liveAssistant);
+  const llmManager = useLlmManager(
+    selectedChatSession ?? undefined,
+    liveAssistant
+  );
 
   // On first render, open onboarding if there are no configured LLM providers.
   // Wait until providers have loaded before making this decision.
@@ -277,7 +277,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
   const isDefaultAgent = useIsDefaultAgent({
     liveAssistant,
     existingChatSessionId,
-    selectedChatSession,
+    selectedChatSession: selectedChatSession ?? undefined,
     settings,
   });
 
@@ -403,7 +403,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
     useChatController({
       filterManager,
       llmManager,
-      availableAssistants,
+      availableAssistants: agents,
       liveAssistant,
       existingChatSessionId,
       selectedDocuments,
@@ -528,7 +528,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
   }, [updateCurrentDocumentSidebarVisible]);
 
   const desktopDocumentSidebar =
-    retrievalEnabled && !settings?.isMobile ? (
+    retrievalEnabled && !settings.isMobile ? (
       <div
         className={cn(
           "flex-shrink-0 overflow-hidden transition-all duration-300 ease-in-out",
@@ -649,7 +649,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
 
       <ChatPopup />
 
-      {retrievalEnabled && documentSidebarVisible && settings?.isMobile && (
+      {retrievalEnabled && documentSidebarVisible && settings.isMobile && (
         <div className="md:hidden">
           <Modal
             open
@@ -709,24 +709,14 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
               <div className="flex flex-col flex-1 w-full relative overflow-hidden">
                 <MessagesDisplay
                   ref={messagesDisplayRef}
-                  messageHistory={messageHistory}
-                  completeMessageTree={completeMessageTree}
                   liveAssistant={liveAssistant}
                   llmManager={llmManager}
-                  deepResearchEnabled={deepResearchEnabled}
                   currentMessageFiles={currentMessageFiles}
                   setPresentingDocument={setPresentingDocument}
                   onSubmit={onSubmit}
                   onMessageSelection={onMessageSelection}
                   stopGenerating={stopGenerating}
-                  uncaughtError={uncaughtError}
-                  loadingError={loadingError}
                   handleResubmitLastMessage={handleResubmitLastMessage}
-                  autoScrollEnabled={autoScrollEnabled}
-                  chatState={currentChatState}
-                  isMobile={settings?.isMobile}
-                  hasPerformedInitialScroll={hasPerformedInitialScroll}
-                  chatSessionId={chatSessionId}
                 />
               </div>
 

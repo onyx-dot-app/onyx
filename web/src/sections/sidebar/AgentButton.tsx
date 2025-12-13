@@ -2,7 +2,7 @@
 
 import React, { memo } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import { usePinnedAgentsWithDetails } from "@/lib/hooks/useAgents";
+import { usePinnedAgentsWithDetails } from "@/hooks/useAgents";
 import { useAppRouter } from "@/hooks/appNavigation";
 import SvgPin from "@/icons/pin";
 import { cn, noProp } from "@/lib/utils";

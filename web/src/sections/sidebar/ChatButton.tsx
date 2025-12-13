@@ -3,7 +3,7 @@
 import React, { useState, memo, useMemo, useEffect } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import SvgMoreHorizontal from "@/icons/more-horizontal";
-import { useChatSessions } from "@/lib/hooks/useChatSessions";
+import useChatSessions from "@/hooks/useChatSessions";
 import { deleteChatSession, renameChatSession } from "@/app/chat/services/lib";
 import { ChatSession } from "@/app/chat/interfaces";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -48,6 +48,7 @@ import Truncated from "@/refresh-components/texts/Truncated";
 import Text from "@/refresh-components/texts/Text";
 import useAppFocus from "@/hooks/useAppFocus";
 import LineItem from "@/refresh-components/buttons/LineItem";
+import useIsMounted from "@/hooks/useIsMounted";
 
 // (no local constants; use shared constants/imports)
 
@@ -120,7 +121,7 @@ function ChatButtonInner({
       activeSidebarTab.id === chatSession.id,
     [activeSidebarTab, chatSession.id]
   );
-  const [mounted, setMounted] = useState(false);
+  const mounted = useIsMounted();
   const [displayName, setDisplayName] = useState(
     chatSession.name || UNNAMED_CHAT
   );
@@ -162,10 +163,6 @@ function ChatButtonInner({
       },
       disabled: !draggable || renaming,
     });
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   // Sync local name state when chatSession.name changes (e.g., after auto-naming)
   useEffect(() => {

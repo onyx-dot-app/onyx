@@ -17,12 +17,24 @@ import HumanMessage from "@/app/chat/message/HumanMessage";
 import { ErrorBanner } from "@/app/chat/message/Resubmit";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
-import { EnterpriseSettings } from "@/app/admin/settings/interfaces";
 import { FileDescriptor } from "@/app/chat/interfaces";
 import AIMessage from "@/app/chat/message/messageComponents/AIMessage";
 import { ProjectFile } from "@/app/chat/projects/projectsService";
 import { cn } from "@/lib/utils";
 import { useScrollonStream } from "@/app/chat/services/lib";
+import useScreenSize from "@/hooks/useScreenSize";
+import {
+  useChatPageLayout,
+  useCurrentChatState,
+  useCurrentMessageTree,
+  useHasPerformedInitialScroll,
+  useUncaughtError,
+  useChatSessionStore,
+} from "@/app/chat/stores/useChatSessionStore";
+import useChatSessions from "@/hooks/useChatSessions";
+import { useDeepResearchToggle } from "../hooks/useDeepResearchToggle";
+import { useUser } from "@/components/user/UserProvider";
+import { HORIZON_DISTANCE_PX } from "@/lib/constants";
 
 export interface MessagesDisplayHandle {
   scrollToBottom: (fast?: boolean) => boolean;
@@ -30,11 +42,8 @@ export interface MessagesDisplayHandle {
 }
 
 export interface MessagesDisplayProps {
-  messageHistory: Message[];
-  completeMessageTree: Map<number, Message> | null | undefined;
   liveAssistant: MinimalPersonaSnapshot | undefined;
   llmManager: LlmManager;
-  deepResearchEnabled: boolean;
   currentMessageFiles: ProjectFile[];
   setPresentingDocument: (doc: MinimalOnyxDocument | null) => void;
   onSubmit: (args: {
@@ -55,50 +64,47 @@ export interface MessagesDisplayProps {
   }) => Promise<void>;
   onMessageSelection: (nodeId: number) => void;
   stopGenerating: () => void;
-  uncaughtError: string | null;
-  loadingError: string | null;
   handleResubmitLastMessage: () => void;
-  autoScrollEnabled: boolean;
-  chatState: ChatState;
-  isMobile?: boolean;
-  hasPerformedInitialScroll: boolean;
-  chatSessionId: string | null;
 }
 
 const MessagesDisplay = React.forwardRef(
   (
     {
-      messageHistory,
-      completeMessageTree,
       liveAssistant,
       llmManager,
-      deepResearchEnabled,
       currentMessageFiles,
       setPresentingDocument,
       onSubmit,
       onMessageSelection,
       stopGenerating,
-      uncaughtError,
-      loadingError,
       handleResubmitLastMessage,
-      autoScrollEnabled,
-      chatState,
-      isMobile,
-      hasPerformedInitialScroll,
-      chatSessionId,
     }: MessagesDisplayProps,
     ref: ForwardedRef<MessagesDisplayHandle>
   ) => {
+    const { user } = useUser();
+    const { currentChatSessionId } = useChatSessions();
+    const { deepResearchEnabled } = useDeepResearchToggle({
+      chatSessionId: currentChatSessionId,
+      assistantId: liveAssistant?.id,
+    });
+    const { isMobile } = useScreenSize();
+    const { messageHistory: messages, loadingError: loadError } =
+      useChatPageLayout();
+    const error = useUncaughtError();
+    const messageTree = useCurrentMessageTree();
+    const hasScrolled = useHasPerformedInitialScroll();
+    const currentChatState = useCurrentChatState();
+
     // Stable fallbacks to avoid changing prop identities on each render
     const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
     const emptyChildrenIds = useMemo<number[]>(() => [], []);
+
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const endDivRef = useRef<HTMLDivElement>(null);
     const lastMessageRef = useRef<HTMLDivElement>(null);
     const scrollDist = useRef<number>(0);
     const [aboveHorizon, setAboveHorizon] = useState(false);
     const debounceNumber = 100;
-    const HORIZON_DISTANCE = 800;
 
     const createRegenerator = useCallback(
       (regenerationRequest: {
@@ -141,13 +147,13 @@ const MessagesDisplay = React.forwardRef(
         container.scrollHeight - (container.scrollTop + container.clientHeight);
 
       scrollDist.current = distanceFromBottom;
-      setAboveHorizon(distanceFromBottom > HORIZON_DISTANCE);
+      setAboveHorizon(distanceFromBottom > HORIZON_DISTANCE_PX);
     }, []);
 
     useEffect(() => {
       scrollDist.current = 0;
       setAboveHorizon(false);
-    }, [chatSessionId]);
+    }, []);
 
     const scrollToBottom = useCallback((fast?: boolean) => {
       if (!endDivRef.current) return false;
@@ -177,13 +183,13 @@ const MessagesDisplay = React.forwardRef(
     );
 
     useScrollonStream({
-      chatState,
+      chatState: currentChatState,
       scrollableDivRef: scrollContainerRef,
       scrollDist,
       endDivRef,
       debounceNumber,
       mobile: isMobile,
-      enableAutoScroll: autoScrollEnabled,
+      enableAutoScroll: user?.preferences.auto_scroll,
     });
 
     if (!liveAssistant) {
@@ -192,16 +198,16 @@ const MessagesDisplay = React.forwardRef(
 
     return (
       <div
-        key={chatSessionId}
+        key={currentChatSessionId}
         ref={scrollContainerRef}
         className={cn(
-          "overflow-y-auto overflow-x-hidden default-scrollbar",
-          !hasPerformedInitialScroll && "hidden"
+          "flex-1 min-h-0 overflow-y-auto overflow-x-hidden default-scrollbar",
+          !hasScrolled && "hidden"
         )}
         onScroll={handleScroll}
       >
         {aboveHorizon && (
-          <div className="absolute bottom-0 z-100 w-full pointer-events-auto mx-auto flex justify-center">
+          <div className="absolute bottom-0 z-[1000000] w-full pointer-events-auto mx-auto flex justify-center">
             <IconButton
               icon={SvgChevronDown}
               onClick={() => scrollToBottom()}
@@ -209,8 +215,7 @@ const MessagesDisplay = React.forwardRef(
           </div>
         )}
 
-        {messageHistory.map((message, i) => {
-          const messageTree = completeMessageTree;
+        {messages.map((message, i) => {
           const messageReactComponentKey = `message-${message.nodeId}`;
           const parentMessage = message.parentNodeId
             ? messageTree?.get(message.parentNodeId)
@@ -218,7 +223,7 @@ const MessagesDisplay = React.forwardRef(
 
           if (message.type === "user") {
             const nextMessage =
-              messageHistory.length > i + 1 ? messageHistory[i + 1] : null;
+              messages.length > i + 1 ? messages[i + 1] : null;
 
             return (
               <div id={messageReactComponentKey} key={messageReactComponentKey}>
@@ -246,10 +251,7 @@ const MessagesDisplay = React.forwardRef(
               </div>
             );
           } else if (message.type === "assistant") {
-            if (
-              (uncaughtError || loadingError) &&
-              i === messageHistory.length - 1
-            ) {
+            if ((error || loadError) && i === messages.length - 1) {
               return (
                 <div
                   key={`error-${message.nodeId}`}
@@ -257,7 +259,7 @@ const MessagesDisplay = React.forwardRef(
                 >
                   <ErrorBanner
                     resubmit={handleResubmitLastMessage}
-                    error={uncaughtError || loadingError || ""}
+                    error={error || loadError || ""}
                   />
                 </div>
               );
@@ -266,7 +268,7 @@ const MessagesDisplay = React.forwardRef(
             // NOTE: it's fine to use the previous entry in messageHistory
             // since this is a "parsed" version of the message tree
             // so the previous message is guaranteed to be the parent of the current message
-            const previousMessage = i !== 0 ? messageHistory[i - 1] : null;
+            const previousMessage = i !== 0 ? messages[i - 1] : null;
             const regenerate =
               message.messageId !== undefined && previousMessage
                 ? createRegenerator({
@@ -288,7 +290,7 @@ const MessagesDisplay = React.forwardRef(
                 className="text-text"
                 id={`message-${message.nodeId}`}
                 key={messageReactComponentKey}
-                ref={i === messageHistory.length - 1 ? lastMessageRef : null}
+                ref={i === messages.length - 1 ? lastMessageRef : null}
               >
                 <AIMessage
                   rawPackets={message.packets}
@@ -307,13 +309,13 @@ const MessagesDisplay = React.forwardRef(
           }
         })}
 
-        {((uncaughtError !== null || loadingError !== null) &&
-          messageHistory[messageHistory.length - 1]?.type === "user") ||
-          (messageHistory[messageHistory.length - 1]?.type === "error" && (
+        {((error !== null || loadError !== null) &&
+          messages[messages.length - 1]?.type === "user") ||
+          (messages[messages.length - 1]?.type === "error" && (
             <div className="max-w-message-max mx-auto">
               <ErrorBanner
                 resubmit={handleResubmitLastMessage}
-                error={uncaughtError || loadingError || ""}
+                error={error || loadError || ""}
               />
             </div>
           ))}

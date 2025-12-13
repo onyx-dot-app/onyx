@@ -15,7 +15,7 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import SvgFolderIn from "@/icons/folder-in";
 import SvgTrash from "@/icons/trash";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import { useChatSessions } from "@/lib/hooks/useChatSessions";
+import useChatSessions from "@/hooks/useChatSessions";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import {
   handleMoveOperation,
