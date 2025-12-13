@@ -8,6 +8,7 @@ from sqlalchemy import func
 from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ee.onyx.server.user_group.models import SetCuratorRequest
@@ -367,8 +368,11 @@ def _add_user__user_group_relationships__no_commit(
 
     This function is idempotent - it will skip users who are already in the group
     to avoid duplicate key violations during concurrent operations or re-syncs.
+
+    Uses a check-then-insert pattern with savepoint-based IntegrityError handling
+    to ensure atomicity even under race conditions without affecting the parent transaction.
     """
-    # Check which users are already in the group to avoid duplicate key errors
+    # First, check which users are already in the group to minimize unnecessary inserts
     existing_relationships = db_session.scalars(
         select(User__UserGroup).where(
             User__UserGroup.user_group_id == user_group_id,
@@ -379,14 +383,36 @@ def _add_user__user_group_relationships__no_commit(
     existing_user_ids = {rel.user_id for rel in existing_relationships}
     new_user_ids = [user_id for user_id in user_ids if user_id not in existing_user_ids]
 
-    relationships = [
-        User__UserGroup(user_id=user_id, user_group_id=user_group_id)
-        for user_id in new_user_ids
-    ]
-    db_session.add_all(relationships)
+    # Try to add each new relationship, catching IntegrityError for race conditions
+    # Use savepoints to avoid rolling back the entire transaction
+    added_relationships = []
+    for user_id in new_user_ids:
+        # Create a savepoint for this individual insert
+        savepoint = db_session.begin_nested()
+        try:
+            relationship = User__UserGroup(user_id=user_id, user_group_id=user_group_id)
+            db_session.add(relationship)
+            db_session.flush()  # Force immediate constraint check
+            added_relationships.append(relationship)
+        except IntegrityError:
+            # User was added by another concurrent transaction - rollback to savepoint
+            savepoint.rollback()
+            # Re-fetch the existing relationship that caused the conflict
+            existing_rel = db_session.scalar(
+                select(User__UserGroup).where(
+                    User__UserGroup.user_group_id == user_group_id,
+                    User__UserGroup.user_id == user_id,
+                )
+            )
+            if existing_rel:
+                existing_relationships.append(existing_rel)
+            logger.warning(
+                f"User {user_id} was concurrently added to group {user_group_id} - "
+                "skipping duplicate insert"
+            )
 
-    # Return all relationships (existing + new) for consistency
-    return list(existing_relationships) + relationships
+    # Return all relationships (existing + newly added) for consistency
+    return list(existing_relationships) + added_relationships
 
 
 def _add_user_group__cc_pair_relationships__no_commit(
