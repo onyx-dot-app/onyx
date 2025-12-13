@@ -163,7 +163,7 @@ class RedisConnectorPermissionSync:
             self.redis.delete(self.generator_complete_key)
             return
 
-        self.redis.set(self.generator_complete_key, payload)
+        self.redis.set(self.generator_complete_key, payload, ex=self.FENCE_TTL)
 
     def update_db(
         self,
