@@ -507,8 +507,7 @@ export function processRawChatHistory(
       assistantMessageInd++;
     }
 
-    const hasContextDocs =
-      (messageInfo?.context_docs?.top_documents || []).length > 0;
+    const hasContextDocs = (messageInfo?.context_docs || []).length > 0;
     let retrievalType;
     if (hasContextDocs) {
       if (messageInfo.rephrased_query) {
@@ -539,7 +538,7 @@ export function processRawChatHistory(
             retrievalType: retrievalType,
             researchType: messageInfo.research_type as ResearchType | undefined,
             query: messageInfo.rephrased_query,
-            documents: messageInfo?.context_docs?.top_documents || [],
+            documents: messageInfo?.context_docs || [],
             citations: messageInfo?.citations || {},
           }
         : {}),
