@@ -1,0 +1,21 @@
+server:
+  host: 0.0.0.0
+  port: 8080
+  debug: true
+
+logging:
+  level: info
+  format: json
+  output: stdout
+
+security:
+  enabled: true
+  ssl_verify: true
+  allowed_origins:
+    - http://localhost:3000
+    - https://app.example.com
+
+cache:
+  type: redis
+  ttl: 3600
+  max_size: 1000
