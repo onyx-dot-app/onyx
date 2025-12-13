@@ -212,6 +212,7 @@ class DocumentSource(str, Enum):
     IMAP = "imap"
     BITBUCKET = "bitbucket"
     TESTRAIL = "testrail"
+    CODA = "coda"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
