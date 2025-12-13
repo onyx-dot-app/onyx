@@ -41,6 +41,10 @@ class WebSearchProvider:
     def search(self, query: str) -> Sequence[WebSearchResult]:
         pass
 
+    @abstractmethod
+    def test_connection(self) -> dict[str, str]:
+        pass
+
 
 class WebContentProviderConfig(BaseModel):
     timeout_seconds: int | None = None
