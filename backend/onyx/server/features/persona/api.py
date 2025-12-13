@@ -200,6 +200,9 @@ def get_agents_admin_paginated(
     get_editable: bool = Query(
         False, description="If true, only returns editable personas."
     ),
+    include_default: bool = Query(
+        True, description="If true, includes builtin/default personas."
+    ),
 ) -> PaginatedReturn[PersonaSnapshot]:
     """Paginated endpoint for listing agents (formerly personas) (admin view).
 
@@ -212,6 +215,7 @@ def get_agents_admin_paginated(
         page_num=page_num,
         page_size=page_size,
         get_editable=get_editable,
+        include_default=include_default,
         include_deleted=include_deleted,
     )
 
@@ -219,6 +223,7 @@ def get_agents_admin_paginated(
         user=user,
         db_session=db_session,
         get_editable=get_editable,
+        include_default=include_default,
         include_deleted=include_deleted,
     )
 
@@ -441,6 +446,9 @@ def get_agents_paginated(
     get_editable: bool = Query(
         False, description="If true, only returns editable personas."
     ),
+    include_default: bool = Query(
+        True, description="If true, includes builtin/default personas."
+    ),
 ) -> PaginatedReturn[MinimalPersonaSnapshot]:
     """Paginated endpoint for listing agents available to the user.
 
@@ -456,6 +464,7 @@ def get_agents_paginated(
         page_num=page_num,
         page_size=page_size,
         get_editable=get_editable,
+        include_default=include_default,
         include_deleted=include_deleted,
     )
 
@@ -463,6 +472,7 @@ def get_agents_paginated(
         user=user,
         db_session=db_session,
         get_editable=get_editable,
+        include_default=include_default,
         include_deleted=include_deleted,
     )
 

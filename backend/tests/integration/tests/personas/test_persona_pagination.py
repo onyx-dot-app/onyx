@@ -13,6 +13,7 @@ def _get_agents_paginated(
     page_size: int,
     include_deleted: bool = False,
     get_editable: bool = False,
+    include_default: bool = True,
 ) -> tuple[dict, int]:
     """Fetches a paginated page of agents, with status code."""
     response = requests.get(
@@ -22,6 +23,7 @@ def _get_agents_paginated(
             "page_size": page_size,
             "include_deleted": include_deleted,
             "get_editable": get_editable,
+            "include_default": include_default,
         },
         headers=user.headers,
         cookies=user.cookies,
@@ -35,6 +37,7 @@ def _get_agents_admin_paginated(
     page_size: int,
     include_deleted: bool = False,
     get_editable: bool = False,
+    include_default: bool = True,
 ) -> tuple[dict, int]:
     """Fetches a paginated page of agents (admin endpoint) with status code."""
     response = requests.get(
@@ -44,6 +47,7 @@ def _get_agents_admin_paginated(
             "page_size": page_size,
             "include_deleted": include_deleted,
             "get_editable": get_editable,
+            "include_default": include_default,
         },
         headers=user.headers,
         cookies=user.cookies,
