@@ -1,7 +1,6 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { Shortcut } from "@/app/chat/nrf/interfaces";
 import { notifyExtensionOfThemeChange } from "@/lib/extension/utils";
 import {
   darkExtensionImages,
@@ -16,12 +15,8 @@ interface NRFPreferencesContextValue {
   setDefaultLightBackgroundUrl: (val: string) => void;
   defaultDarkBackgroundUrl: string;
   setDefaultDarkBackgroundUrl: (val: string) => void;
-  shortcuts: Shortcut[];
-  setShortcuts: (s: Shortcut[]) => void;
   useOnyxAsNewTab: boolean;
   setUseOnyxAsNewTab: (v: boolean) => void;
-  showShortcuts: boolean;
-  setShowShortcuts: (v: boolean) => void;
 }
 
 const NRFPreferencesContext = createContext<
@@ -72,14 +67,6 @@ export function NRFPreferencesProvider({
       LocalStorageKeys.DARK_BG_URL,
       firstDarkExtensionImage
     );
-  const [shortcuts, setShortcuts] = useLocalStorageState<Shortcut[]>(
-    LocalStorageKeys.SHORTCUTS,
-    []
-  );
-  const [showShortcuts, setShowShortcuts] = useLocalStorageState<boolean>(
-    LocalStorageKeys.SHOW_SHORTCUTS,
-    false
-  );
   const [useOnyxAsNewTab, setUseOnyxAsNewTab] = useLocalStorageState<boolean>(
     LocalStorageKeys.USE_ONYX_AS_NEW_TAB,
     true
@@ -102,12 +89,8 @@ export function NRFPreferencesProvider({
         setDefaultLightBackgroundUrl,
         defaultDarkBackgroundUrl,
         setDefaultDarkBackgroundUrl,
-        shortcuts,
-        setShortcuts,
         useOnyxAsNewTab,
         setUseOnyxAsNewTab,
-        showShortcuts,
-        setShowShortcuts,
       }}
     >
       {children}

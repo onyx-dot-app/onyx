@@ -82,7 +82,7 @@ import { HeaderData } from "@/lib/headers/fetchHeaderDataSS";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgChevronDown from "@/icons/chevron-down";
 
-const DEFAULT_CONTEXT_TOKENS = 120_000;
+export const DEFAULT_CONTEXT_TOKENS = 120_000;
 
 interface ChatPageProps {
   documentSidebarInitialWidth?: number;
