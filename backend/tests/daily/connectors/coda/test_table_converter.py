@@ -1,4 +1,5 @@
 from onyx.connectors.coda.helpers.table_converter import CodaRowsConverter
+from onyx.connectors.coda.models.table.row import CodaRow
 
 
 class TestCodaRowsConverter:
@@ -84,26 +85,44 @@ class TestCodaRowsConverter:
 
     def test_rows_to_dataframe_basic(self):
         """Test basic row conversion."""
-        row1 = {
-            "type": "Row",
-            "id": "row-1",
-            "index": 1,
-            "browserLink": "http://start",
-            "createdAt": "2024-01-01T00:00:00Z",
-            "updatedAt": "2024-01-02T00:00:00Z",
-            "values": {"col1": "val1", "col2": 2},
-            "parent": {"id": "table-1", "type": "Table", "name": "Table 1"},
-        }
-        row2 = {
-            "type": "Row",
-            "id": "row-2",
-            "index": 2,
-            "browserLink": "http://end",
-            "createdAt": "2024-01-03T00:00:00Z",
-            "updatedAt": "2024-01-04T00:00:00Z",
-            "values": {"col1": "val3", "col2": 4},
-            "parent": {"id": "table-1", "type": "Table", "name": "Table 1"},
-        }
+        row1 = CodaRow(
+            id="row-1",
+            index=1,
+            name="row-2",
+            href="http://end",
+            type="row",
+            browserLink="http://start",
+            createdAt="2024-01-01T00:00:00Z",
+            updatedAt="2024-01-02T00:00:00Z",
+            values={"col1": "val1", "col2": 2},
+            parent={
+                "href": "http://start",
+                "browserLink": "http://start",
+                "id": "table-1",
+                "type": "table",
+                "name": "Table 1",
+                "tableType": "table",
+            },
+        )
+        row2 = CodaRow(
+            id="row-2",
+            index=2,
+            name="row-2",
+            href="http://end",
+            type="row",
+            browserLink="http://start",
+            createdAt="2024-01-03T00:00:00Z",
+            updatedAt="2024-01-04T00:00:00Z",
+            values={"col1": "val3", "col2": 4},
+            parent={
+                "href": "http://start",
+                "browserLink": "http://start",
+                "id": "table-1",
+                "type": "table",
+                "name": "Table 1",
+                "tableType": "table",
+            },
+        )
 
         df = CodaRowsConverter.rows_to_dataframe([row1, row2])
 
@@ -114,50 +133,69 @@ class TestCodaRowsConverter:
         assert df.iloc[0]["col1"] == "val1"
         assert df.iloc[1]["col1"] == "val3"
 
-    # def test_rows_to_dataframe_no_metadata(self):
-    #     """Test conversion without metadata columns."""
-    #     row1 = CodaRow(
-    #         type="Row",
-    #         id="row-1",
-    #         index=1,
-    #         browserLink="http://start",
-    #         createdAt="2024-01-01",
-    #         updatedAt="2024-01-01",
-    #         values={"col1": "val1"},
-    #         parent={"id": "table-1", "type": "Table", "name": "Table 1"}
-    #     )
+    def test_rows_to_dataframe_no_metadata(self):
+        """Test conversion without metadata columns."""
+        row1 = CodaRow(
+            id="row-1",
+            index=1,
+            name="row-2",
+            href="http://end",
+            type="row",
+            browserLink="http://start",
+            createdAt="2024-01-01",
+            updatedAt="2024-01-01",
+            values={"col1": "val3", "col2": 4},
+            parent={
+                "href": "http://start",
+                "browserLink": "http://start",
+                "id": "table-1",
+                "type": "table",
+                "name": "Table 1",
+                "tableType": "table",
+            },
+        )
 
-    #     df = CodaRowsConverter.rows_to_dataframe([row1], include_metadata=False)
+        df = CodaRowsConverter.rows_to_dataframe([row1], include_metadata=False)
 
-    #     assert "_row_id" not in df.columns
-    #     assert "col1" in df.columns
-    #     assert len(df.columns) == 1
+        assert "_row_id" not in df.columns
+        assert "col1" in df.columns
+        assert "col2" in df.columns
+        assert len(df.columns) == 2
 
-    # def test_rows_to_formats(self):
-    #     """Test export to different formats."""
-    #     row1 = CodaRow(
-    #         type="Row",
-    #         id="row-1",
-    #         index=1,
-    #         browserLink="http://start",
-    #         createdAt="2024-01-01",
-    #         updatedAt="2024-01-01",
-    #         values={"col1": "val1"},
-    #         parent={"id": "table-1", "type": "Table", "name": "Table 1"}
-    #     )
+    def test_rows_to_formats(self):
+        """Test export to different formats."""
+        row1 = CodaRow(
+            id="row-1",
+            index=1,
+            name="row-2",
+            href="http://end",
+            type="row",
+            browserLink="http://start",
+            createdAt="2024-01-01",
+            updatedAt="2024-01-01",
+            values={"col1": "val1"},
+            parent={
+                "href": "http://start",
+                "browserLink": "http://start",
+                "id": "table-1",
+                "type": "table",
+                "name": "Table 1",
+                "tableType": "table",
+            },
+        )
 
-    #     # Test specific formats
-    #     formats = ["JSON", "CSV"]
-    #     eval_df = CodaRowsConverter.rows_to_formats([row1], formats=formats)
+        # Test specific formats
+        formats = ["JSON", "CSV"]
+        eval_df = CodaRowsConverter.rows_to_formats([row1], formats=formats)
 
-    #     assert len(eval_df) == 2
-    #     assert set(eval_df["Data Format"]) == {"JSON", "CSV"}
+        assert len(eval_df) == 2
+        assert set(eval_df["Data Format"]) == {"JSON", "CSV"}
 
-    #     # Test handling invalid format (should be skipped or handled gracefully)
-    #     # Based on implementation, it iterates through requested formats and checks dictionary
-    #     # So invalid format key just won't be in the result if we request it, wait...
-    #     # The implementation loops over requested formats and checks if key in format_converters
+        # Test handling invalid format (should be skipped or handled gracefully)
+        # Based on implementation, it iterates through requested formats and checks dictionary
+        # So invalid format key just won't be in the result if we request it, wait...
+        # The implementation loops over requested formats and checks if key in format_converters
 
-    #     # Test all formats (default)
-    #     eval_df_all = CodaRowsConverter.rows_to_formats([row1])
-    #     assert len(eval_df_all) >= 5 # Should have JSON, CSV, HTML, etc.
+        # Test all formats (default)
+        eval_df_all = CodaRowsConverter.rows_to_formats([row1])
+        assert len(eval_df_all) >= 5  # Should have JSON, CSV, HTML, etc.
