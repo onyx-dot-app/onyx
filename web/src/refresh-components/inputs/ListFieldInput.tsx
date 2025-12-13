@@ -8,6 +8,7 @@ interface ListFieldInputProps {
   onChange: (values: string[]) => void;
   placeholder?: string;
   disabled?: boolean;
+  error?: boolean;
 }
 
 /**
@@ -24,6 +25,7 @@ export function ListFieldInput({
   onChange,
   placeholder = "",
   disabled = false,
+  error = false,
 }: ListFieldInputProps) {
   const [inputValue, setInputValue] = useState("");
 
@@ -51,6 +53,7 @@ export function ListFieldInput({
         placeholder={placeholder}
         value={inputValue}
         disabled={disabled}
+        error={error}
         onChange={(e) => setInputValue(e.target.value)}
         onKeyDown={handleKeyDown}
       />
