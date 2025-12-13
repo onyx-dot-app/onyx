@@ -1,6 +1,6 @@
 {
   "name": "onyx-desktop",
-  "version": "0.1.0",
+  "version": "0.0.0-dev",
   "description": "Lightweight desktop app for Onyx Cloud",
   "scripts": {
     "dev": "tauri dev",
