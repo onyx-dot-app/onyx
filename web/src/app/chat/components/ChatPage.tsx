@@ -4,7 +4,6 @@ import { redirect, useRouter, useSearchParams } from "next/navigation";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import {
   personaIncludesRetrieval,
-  useScrollonStream,
   getAvailableContextTokens,
 } from "@/app/chat/services/lib";
 import {
@@ -62,7 +61,9 @@ import {
   useHasSentLocalUserMessage,
 } from "@/app/chat/stores/useChatSessionStore";
 import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
-import MessagesDisplay from "@/app/chat/components/MessagesDisplay";
+import MessagesDisplay, {
+  MessagesDisplayHandle,
+} from "@/app/chat/components/MessagesDisplay";
 import WelcomeMessage from "@/app/chat/components/WelcomeMessage";
 import ProjectContextPanel from "@/app/chat/components/projects/ProjectContextPanel";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
@@ -78,8 +79,6 @@ import { useOnboardingState } from "@/refresh-components/onboarding/useOnboardin
 import { OnboardingStep } from "@/refresh-components/onboarding/types";
 import AppPageLayout from "@/layouts/AppPageLayout";
 import { HeaderData } from "@/lib/headers/fetchHeaderDataSS";
-import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgChevronDown from "@/icons/chevron-down";
 
 const DEFAULT_CONTEXT_TOKENS = 120_000;
 
@@ -124,14 +123,11 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
     clearLastFailedFiles,
   } = useProjectsContext();
 
-  const { height: screenHeight } = useScreenSize();
-
   // handle redirect if chat page is disabled
   // NOTE: this must be done here, in a client component since
   // settings are passed in via Context and therefore aren't
   // available in server-side components
   const settings = useContext(SettingsContext);
-  const enterpriseSettings = settings?.enterpriseSettings;
 
   const isInitialLoad = useRef(true);
 
@@ -285,48 +281,24 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
     settings,
   });
 
-  const [aboveHorizon, setAboveHorizon] = useState(false);
-
-  const scrollableDivRef = useRef<HTMLDivElement>(null);
-  const lastMessageRef = useRef<HTMLDivElement>(null);
+  const messagesDisplayRef = useRef<MessagesDisplayHandle>(null);
   const inputRef = useRef<HTMLDivElement>(null);
-  const endDivRef = useRef<HTMLDivElement>(null);
 
   const scrollInitialized = useRef(false);
 
   const previousHeight = useRef<number>(
     inputRef.current?.getBoundingClientRect().height!
   );
-  const scrollDist = useRef<number>(0);
-
-  // Reset scroll state when switching chat sessions
-  useEffect(() => {
-    scrollDist.current = 0;
-    setAboveHorizon(false);
-  }, [existingChatSessionId]);
 
   function handleInputResize() {
     setTimeout(() => {
-      if (
-        inputRef.current &&
-        lastMessageRef.current &&
-        !waitForScrollRef.current
-      ) {
+      if (inputRef.current && !waitForScrollRef.current) {
         const newHeight: number =
           inputRef.current?.getBoundingClientRect().height!;
         const heightDifference = newHeight - previousHeight.current;
-        if (
-          previousHeight.current &&
-          heightDifference != 0 &&
-          scrollableDivRef &&
-          scrollableDivRef.current
-        ) {
+        if (previousHeight.current && heightDifference != 0) {
           if (autoScrollEnabled) {
-            scrollableDivRef?.current.scrollBy({
-              left: 0,
-              top: Math.max(heightDifference, 0),
-              behavior: "smooth",
-            });
+            messagesDisplayRef.current?.scrollBy(Math.max(heightDifference, 0));
           }
         }
         previousHeight.current = newHeight;
@@ -338,8 +310,6 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
     setMessage("");
     setCurrentMessageFiles([]);
   }, [setMessage, setCurrentMessageFiles]);
-
-  const debounceNumber = 100; // time for debouncing
 
   // handle re-sizing of the text area
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
@@ -414,23 +384,9 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
       waitForScrollRef.current = true;
 
       setTimeout(() => {
-        if (!endDivRef.current || !scrollableDivRef.current) {
-          console.error("endDivRef or scrollableDivRef not found");
-          return;
-        }
+        const didScroll = messagesDisplayRef.current?.scrollToBottom(fast);
 
-        const rect = endDivRef.current.getBoundingClientRect();
-        const isVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
-
-        if (isVisible) return;
-
-        // Check if all messages are currently rendered
-        // If all messages are already rendered, scroll immediately
-        endDivRef.current.scrollIntoView({
-          behavior: fast ? "auto" : "smooth",
-        });
-
-        if (chatSessionIdRef.current) {
+        if (didScroll && chatSessionIdRef.current) {
           updateHasPerformedInitialScroll(chatSessionIdRef.current, true);
         }
       }, 50);
@@ -481,29 +437,6 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
 
   const autoScrollEnabled = user?.preferences?.auto_scroll ?? false;
 
-  useScrollonStream({
-    chatState: currentChatState,
-    scrollableDivRef,
-    scrollDist,
-    endDivRef,
-    debounceNumber,
-    mobile: settings?.isMobile,
-    enableAutoScroll: autoScrollEnabled,
-  });
-
-  const getContainerHeight = useMemo(() => {
-    return () => {
-      if (!currentSessionHasSentLocalUserMessage) {
-        return undefined;
-      }
-      if (autoScrollEnabled) return undefined;
-
-      if (screenHeight < 600) return "40vh";
-      if (screenHeight < 1200) return "50vh";
-      return "60vh";
-    };
-  }, [autoScrollEnabled, screenHeight, currentSessionHasSentLocalUserMessage]);
-
   const waitForScrollRef = useRef(false);
 
   useSendMessageToParent();
@@ -532,15 +465,6 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
   const [stackTraceModalContent, setStackTraceModalContent] = useState<
     string | null
   >(null);
-
-  const HORIZON_DISTANCE = 800;
-  const handleScroll = useCallback(() => {
-    const scrollDistance =
-      endDivRef?.current?.getBoundingClientRect()?.top! -
-      inputRef?.current?.getBoundingClientRect()?.top!;
-    scrollDist.current = scrollDistance;
-    setAboveHorizon(scrollDist.current > HORIZON_DISTANCE);
-  }, []);
 
   function handleResubmitLastMessage() {
     // Grab the last user-type message
@@ -782,20 +706,9 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
           {({ getRootProps }) => (
             <div className="h-full w-full flex flex-col" {...getRootProps()}>
               {/* ChatUI */}
-              <div
-                ref={scrollableDivRef}
-                onScroll={handleScroll}
-                className="flex flex-col flex-1 w-full relative overflow-hidden"
-              >
-                {!showCenteredInput && aboveHorizon && (
-                  <div className="w-full z-100 pointer-events-auto mx-auto flex justify-center">
-                    <IconButton
-                      icon={SvgChevronDown}
-                      onClick={() => clientScrollToBottom()}
-                    />
-                  </div>
-                )}
+              <div className="flex flex-col flex-1 w-full relative overflow-hidden">
                 <MessagesDisplay
+                  ref={messagesDisplayRef}
                   messageHistory={messageHistory}
                   completeMessageTree={completeMessageTree}
                   liveAssistant={liveAssistant}
@@ -810,12 +723,10 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
                   loadingError={loadingError}
                   handleResubmitLastMessage={handleResubmitLastMessage}
                   autoScrollEnabled={autoScrollEnabled}
-                  getContainerHeight={getContainerHeight}
-                  lastMessageRef={lastMessageRef}
-                  endDivRef={endDivRef}
+                  chatState={currentChatState}
+                  isMobile={settings?.isMobile}
                   hasPerformedInitialScroll={hasPerformedInitialScroll}
                   chatSessionId={chatSessionId}
-                  enterpriseSettings={enterpriseSettings}
                 />
               </div>
 
