@@ -1,0 +1,18 @@
+Meeting Notes - December 11, 2025
+
+Attendees:
+- Alice Johnson
+- Bob Smith
+- Carol Williams
+
+Agenda:
+1. Review Q4 results
+2. Plan for 2026
+3. Discuss new connector implementation
+
+Action Items:
+- Alice: Send out Q4 report by Friday
+- Bob: Schedule follow-up meeting
+- Carol: Review connector documentation
+
+Next meeting: December 18, 2025

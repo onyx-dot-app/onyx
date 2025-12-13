@@ -1,0 +1,17 @@
+{
+  "application": {
+    "name": "Test Application",
+    "version": "1.0.0",
+    "environment": "development"
+  },
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "name": "testdb"
+  },
+  "features": {
+    "enableLogging": true,
+    "enableCaching": false,
+    "maxConnections": 100
+  }
+}
