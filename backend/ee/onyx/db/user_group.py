@@ -363,13 +363,30 @@ def _check_user_group_is_modifiable(user_group: UserGroup) -> None:
 def _add_user__user_group_relationships__no_commit(
     db_session: Session, user_group_id: int, user_ids: list[UUID]
 ) -> list[User__UserGroup]:
-    """NOTE: does not commit the transaction."""
+    """NOTE: does not commit the transaction.
+
+    This function is idempotent - it will skip users who are already in the group
+    to avoid duplicate key violations during concurrent operations or re-syncs.
+    """
+    # Check which users are already in the group to avoid duplicate key errors
+    existing_relationships = db_session.scalars(
+        select(User__UserGroup).where(
+            User__UserGroup.user_group_id == user_group_id,
+            User__UserGroup.user_id.in_(user_ids),
+        )
+    ).all()
+
+    existing_user_ids = {rel.user_id for rel in existing_relationships}
+    new_user_ids = [user_id for user_id in user_ids if user_id not in existing_user_ids]
+
     relationships = [
         User__UserGroup(user_id=user_id, user_group_id=user_group_id)
-        for user_id in user_ids
+        for user_id in new_user_ids
     ]
     db_session.add_all(relationships)
-    return relationships
+
+    # Return all relationships (existing + new) for consistency
+    return list(existing_relationships) + relationships
 
 
 def _add_user_group__cc_pair_relationships__no_commit(
