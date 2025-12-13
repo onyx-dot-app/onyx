@@ -39,6 +39,7 @@ from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import reserve_message_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import AvatarQueryMode
 from onyx.db.memory import get_memories
 from onyx.db.models import ChatMessage
 from onyx.db.models import User
@@ -50,16 +51,20 @@ from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.utils import load_in_memory_chat_files
 from onyx.file_store.utils import verify_user_files
+from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.factory import get_llms_for_persona
+from onyx.llm.factory import get_tokenizer
 from onyx.llm.interfaces import LLM
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.redis.redis_pool import get_redis_client
+from onyx.server.features.avatar.query_service import execute_avatar_query
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.utils import get_json_line
 from onyx.tools.tool import Tool
@@ -258,6 +263,220 @@ def _initialize_chat_session(
     return user_message
 
 
+def _stream_avatar_query(
+    avatar_id: int,
+    query: str,
+    query_mode: AvatarQueryMode | None,
+    user: User,
+    db_session: Session,
+    chat_session_id: UUID,
+    parent_message_id: int | None,
+) -> AnswerStream:
+    """Handle avatar query and yield streaming response packets.
+
+    This creates user and assistant messages and yields the avatar response
+    in the same streaming format as regular chat messages.
+    """
+
+    # Get a tokenizer for message initialization
+    llm, _ = get_default_llms()
+    token_counter = get_tokenizer(
+        model_name=llm.config.model_name, provider_type=llm.config.model_provider
+    )
+
+    # Initialize chat session to create user message
+    user_message = _initialize_chat_session(
+        message_text=query,
+        files=[],
+        token_counter=lambda text: len(token_counter.encode(text)),
+        parent_id=parent_message_id,
+        user_id=user.id,
+        chat_session_id=chat_session_id,
+        db_session=db_session,
+        use_existing_user_message=False,
+    )
+
+    # Commit user message
+    db_session.commit()
+
+    # Reserve assistant message ID
+    assistant_message = reserve_message_id(
+        db_session=db_session,
+        chat_session_id=chat_session_id,
+        parent_message=user_message.id,
+        message_type=MessageType.ASSISTANT,
+    )
+
+    # Yield message IDs first
+    yield MessageResponseIDInfo(
+        user_message_id=user_message.id,
+        reserved_assistant_message_id=assistant_message.id,
+    )
+
+    # Execute avatar query
+    result = execute_avatar_query(
+        avatar_id=avatar_id,
+        query=query,
+        query_mode=query_mode or AvatarQueryMode.OWNED_DOCUMENTS,
+        requester=user,
+        db_session=db_session,
+        chat_session_id=chat_session_id,
+        chat_message_id=user_message.id,
+    )
+
+    # Yield start packet
+    yield Packet(turn_index=0, obj=AgentResponseStart(final_documents=None))
+
+    # Build the response message based on status
+    if result.status == "success" and result.answer:
+        response_text = result.answer
+    elif result.status == "pending_permission":
+        response_text = (
+            f"Your request has been sent to the avatar owner for approval. "
+            f"Request ID: #{result.permission_request_id}\n\n"
+            f"You'll be notified when they respond."
+        )
+    elif result.status == "no_results":
+        response_text = result.message or "No relevant documents found."
+    elif result.status == "rate_limited":
+        response_text = (
+            result.message or "You have exceeded the rate limit for this avatar."
+        )
+    elif result.status == "disabled":
+        response_text = result.message or "This avatar is currently disabled."
+    else:
+        response_text = result.message or "An error occurred processing your request."
+
+    # Yield the response as delta packets (simulating streaming)
+    yield Packet(turn_index=0, obj=AgentResponseDelta(content=response_text))
+
+    # Yield stop packet to signal end of stream
+    yield Packet(turn_index=0, obj=OverallStop())
+
+    # Update the assistant message with the actual response
+    assistant_message.message = response_text
+    assistant_message.token_count = len(response_text.split())  # Simple token count
+    db_session.commit()
+
+
+def _stream_broadcast_avatar_query(
+    avatar_ids: list[int],
+    query: str,
+    query_mode: AvatarQueryMode | None,
+    user: User,
+    db_session: Session,
+    chat_session_id: UUID,
+    parent_message_id: int | None,
+) -> AnswerStream:
+    """Handle broadcast avatar query - query multiple avatars and aggregate results.
+
+    This creates user and assistant messages and yields the aggregated avatar responses
+    in the same streaming format as regular chat messages.
+    """
+    from onyx.db.avatar import get_avatar_by_id
+    from onyx.llm.utils import check_number_of_tokens
+
+    # Simple token counter for message initialization
+    def token_counter(text: str) -> int:
+        return check_number_of_tokens(text)
+
+    # Initialize chat session to create user message
+    user_message = _initialize_chat_session(
+        message_text=query,
+        files=[],
+        token_counter=token_counter,
+        parent_id=parent_message_id,
+        user_id=user.id,
+        chat_session_id=chat_session_id,
+        db_session=db_session,
+        use_existing_user_message=False,
+    )
+
+    # Commit user message
+    db_session.commit()
+
+    # Reserve assistant message ID
+    assistant_message = reserve_message_id(
+        db_session=db_session,
+        chat_session_id=chat_session_id,
+        parent_message=user_message.id,
+        message_type=MessageType.ASSISTANT,
+    )
+
+    # Yield message IDs first
+    yield MessageResponseIDInfo(
+        user_message_id=user_message.id,
+        reserved_assistant_message_id=assistant_message.id,
+    )
+
+    # Yield start packet
+    yield Packet(turn_index=0, obj=AgentResponseStart(final_documents=None))
+
+    # Execute queries for each avatar and collect results
+    results: list[tuple[str, str]] = []  # (avatar_name, response)
+
+    for avatar_id in avatar_ids:
+        avatar = get_avatar_by_id(avatar_id, db_session)
+        if not avatar:
+            results.append((f"Avatar #{avatar_id}", "Avatar not found"))
+            continue
+
+        avatar_name = (
+            avatar.name or avatar.user.email if avatar.user else f"Avatar #{avatar_id}"
+        )
+
+        result = execute_avatar_query(
+            avatar_id=avatar_id,
+            query=query,
+            query_mode=query_mode or AvatarQueryMode.OWNED_DOCUMENTS,
+            requester=user,
+            db_session=db_session,
+            chat_session_id=chat_session_id,
+            chat_message_id=user_message.id,
+        )
+
+        # Build response for this avatar
+        if result.status == "success" and result.answer:
+            results.append((avatar_name, result.answer))
+        elif result.status == "pending_permission":
+            results.append(
+                (
+                    avatar_name,
+                    f"⏳ Permission requested (Request #{result.permission_request_id})",
+                )
+            )
+        elif result.status == "no_results":
+            results.append((avatar_name, "No relevant documents found"))
+        elif result.status == "rate_limited":
+            results.append((avatar_name, "Rate limited"))
+        elif result.status == "disabled":
+            results.append((avatar_name, "Avatar disabled"))
+        else:
+            results.append((avatar_name, result.message or "Error"))
+
+    # Format the aggregated response
+    response_parts = []
+    for avatar_name, response in results:
+        response_parts.append(f"## {avatar_name}\n\n{response}")
+
+    response_text = "\n\n---\n\n".join(response_parts)
+
+    # If no results at all
+    if not results:
+        response_text = "No avatars were queried."
+
+    # Yield the response as delta packets
+    yield Packet(turn_index=0, obj=AgentResponseDelta(content=response_text))
+
+    # Yield stop packet to signal end of stream
+    yield Packet(turn_index=0, obj=OverallStop())
+
+    # Update the assistant message with the actual response
+    assistant_message.message = response_text
+    assistant_message.token_count = len(response_text.split())
+    db_session.commit()
+
+
 def stream_chat_message_objects(
     new_msg_req: CreateChatMessageRequest,
     user: User | None,
@@ -284,6 +503,41 @@ def stream_chat_message_objects(
 ) -> AnswerStream:
     tenant_id = get_current_tenant_id()
     use_existing_user_message = new_msg_req.use_existing_user_message
+
+    # Handle avatar queries - route to separate flow
+    # Single avatar query
+    if new_msg_req.avatar_id is not None:
+        if user is None:
+            yield StreamingError(error="Authentication required for avatar queries")
+            return
+
+        yield from _stream_avatar_query(
+            avatar_id=new_msg_req.avatar_id,
+            query=new_msg_req.message,
+            query_mode=new_msg_req.avatar_query_mode,
+            user=user,
+            db_session=db_session,
+            chat_session_id=new_msg_req.chat_session_id,
+            parent_message_id=new_msg_req.parent_message_id,
+        )
+        return
+
+    # Broadcast mode - multiple avatar queries
+    if new_msg_req.avatar_ids is not None and len(new_msg_req.avatar_ids) > 0:
+        if user is None:
+            yield StreamingError(error="Authentication required for avatar queries")
+            return
+
+        yield from _stream_broadcast_avatar_query(
+            avatar_ids=new_msg_req.avatar_ids,
+            query=new_msg_req.message,
+            query_mode=new_msg_req.avatar_query_mode,
+            user=user,
+            db_session=db_session,
+            chat_session_id=new_msg_req.chat_session_id,
+            parent_message_id=new_msg_req.parent_message_id,
+        )
+        return
 
     llm: LLM
 

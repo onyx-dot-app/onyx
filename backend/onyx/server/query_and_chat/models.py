@@ -24,6 +24,7 @@ from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SavedSearchDocWithContent
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import Tag
+from onyx.db.enums import AvatarQueryMode
 from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.models import ChatSession
 from onyx.file_store.models import FileDescriptor
@@ -143,8 +144,18 @@ class CreateChatMessageRequest(ChunkContext):
     # TODO: make this a single one since unclear how to force this for multiple at a time.
     forced_tool_ids: list[int] | None = None
 
+    # Avatar query mode - when set, routes the message through avatar query flow
+    # For single avatar query
+    avatar_id: int | None = None
+    # For broadcast mode (multiple avatars)
+    avatar_ids: list[int] | None = None
+    avatar_query_mode: AvatarQueryMode | None = None
+
     @model_validator(mode="after")
     def check_search_doc_ids_or_retrieval_options(self) -> "CreateChatMessageRequest":
+        # Avatar queries don't need search_doc_ids or retrieval_options
+        if self.avatar_id is not None or self.avatar_ids is not None:
+            return self
         if self.search_doc_ids is None and self.retrieval_options is None:
             raise ValueError(
                 "Either search_doc_ids or retrieval_options must be provided, but not both or neither."

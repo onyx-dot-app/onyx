@@ -235,6 +235,10 @@ class NotificationType(str, Enum):
     REINDEX = "reindex"
     PERSONA_SHARED = "persona_shared"
     TRIAL_ENDS_TWO_DAYS = "two_day_trial_ending"  # 2 days left in trial
+    # Avatar permission requests
+    AVATAR_PERMISSION_REQUEST = "avatar_permission_request"
+    AVATAR_REQUEST_APPROVED = "avatar_request_approved"
+    AVATAR_REQUEST_DENIED = "avatar_request_denied"
 
 
 class BlobType(str, Enum):
@@ -541,6 +545,9 @@ class OnyxCeleryTask:
     GENERATE_USAGE_REPORT_TASK = "generate_usage_report_task"
 
     EVAL_RUN_TASK = "eval_run_task"
+
+    # Avatar queries
+    AVATAR_QUERY_TASK = "avatar_query_task"
 
     EXPORT_QUERY_HISTORY_TASK = "export_query_history_task"
     EXPORT_QUERY_HISTORY_CLEANUP_TASK = "export_query_history_cleanup_task"

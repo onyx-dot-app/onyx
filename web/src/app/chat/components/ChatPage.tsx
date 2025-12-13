@@ -81,6 +81,8 @@ import AppPageLayout from "@/layouts/AppPageLayout";
 import { HeaderData } from "@/lib/headers/fetchHeaderDataSS";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgChevronDown from "@/icons/chevron-down";
+import { AvatarModeIndicator } from "@/app/chat/components/avatar/AvatarModeIndicator";
+import { useAvatarContextOptional } from "@/app/chat/avatars/AvatarContext";
 
 const DEFAULT_CONTEXT_TOKENS = 120_000;
 
@@ -131,6 +133,9 @@ export default function ChatPage({
   } = useProjectsContext();
 
   const { height: screenHeight } = useScreenSize();
+
+  // Avatar context for avatar query mode
+  const avatarContext = useAvatarContextOptional();
 
   // handle redirect if chat page is disabled
   // NOTE: this must be done here, in a client component since
@@ -630,14 +635,37 @@ export default function ChatPage({
     );
   }, []);
 
-  const handleChatInputSubmit = useCallback(() => {
+  const handleChatInputSubmit = useCallback(async () => {
+    // Submit message through normal chat flow
+    // If in avatar mode, include avatar parameters
+    const isAvatarMode = avatarContext?.isAvatarMode;
+    const isBroadcastMode = avatarContext?.isBroadcastMode;
+
     onSubmit({
       message: message,
       currentMessageFiles: currentMessageFiles,
       useAgentSearch: deepResearchEnabled,
+      // Pass avatar parameters if in avatar mode
+      // For single avatar mode
+      avatarId:
+        isAvatarMode && !isBroadcastMode
+          ? avatarContext?.selectedAvatar?.id
+          : undefined,
+      // For broadcast mode (multiple avatars)
+      avatarIds:
+        isAvatarMode && isBroadcastMode && avatarContext?.selectedAvatars
+          ? avatarContext.selectedAvatars.map((a) => a.id)
+          : undefined,
+      avatarQueryMode: isAvatarMode ? avatarContext?.queryMode : undefined,
     });
     setShowOnboarding(false);
-  }, [message, onSubmit, currentMessageFiles, deepResearchEnabled]);
+  }, [
+    message,
+    onSubmit,
+    currentMessageFiles,
+    deepResearchEnabled,
+    avatarContext,
+  ]);
 
   // Memoized callbacks for DocumentResults
   const handleMobileDocumentSidebarClose = useCallback(() => {
@@ -928,6 +956,8 @@ export default function ChatPage({
                                 llmDescriptors={llmDescriptors}
                               />
                             )}
+                          {/* Avatar indicator above input when input is at bottom */}
+                          {!showCenteredInput && <AvatarModeIndicator />}
                           <ChatInputBar
                             deepResearchEnabled={deepResearchEnabled}
                             toggleDeepResearch={toggleDeepResearch}
@@ -962,6 +992,8 @@ export default function ChatPage({
                                   OnboardingStep.Complete)
                             }
                           />
+                          {/* Avatar indicator below input when input is centered */}
+                          {showCenteredInput && <AvatarModeIndicator />}
                         </div>
 
                         {currentProjectId !== null && (

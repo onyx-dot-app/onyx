@@ -133,5 +133,7 @@ celery_app.autodiscover_tasks(
         "onyx.background.celery.tasks.docprocessing",
         # Docfetching worker tasks
         "onyx.background.celery.tasks.docfetching",
+        # Avatar query tasks
+        "onyx.background.celery.tasks.avatar",
     ]
 )
