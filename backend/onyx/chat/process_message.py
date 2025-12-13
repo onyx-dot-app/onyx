@@ -245,6 +245,10 @@ def _initialize_chat_session(
         token_count = token_counter(message_text)
 
     # Flushed for ID but not committed yet
+    logger.info(
+        f"_initialize_chat_session: Creating user message with {len(files or [])} files: "
+        f"{[(f.get('id'), f.get('name'), f.get('user_file_id')) for f in (files or [])]}"
+    )
     user_message = create_new_chat_message(
         chat_session_id=chat_session_id,
         parent_message=parent_message,
@@ -254,6 +258,9 @@ def _initialize_chat_session(
         files=files,
         db_session=db_session,
         commit=False,
+    )
+    logger.info(
+        f"_initialize_chat_session: Created user message {user_message.id} with files: {user_message.files}"
     )
     return user_message
 
@@ -333,6 +340,10 @@ def stream_chat_message_objects(
         token_counter = get_llm_token_counter(llm)
 
         # Verify that the user specified files actually belong to the user
+        logger.info(
+            f"Processing chat message with {len(new_msg_req.file_descriptors or [])} file_descriptors: "
+            f"{[(f.get('id'), f.get('name'), f.get('user_file_id')) for f in (new_msg_req.file_descriptors or [])]}"
+        )
         verify_user_files(
             user_files=new_msg_req.file_descriptors,
             user_id=user_id,
