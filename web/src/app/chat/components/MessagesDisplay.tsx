@@ -11,7 +11,7 @@ import React, {
 } from "react";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgChevronDown from "@/icons/chevron-down";
-import { ChatState, Message } from "@/app/chat/interfaces";
+import { Message } from "@/app/chat/interfaces";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import HumanMessage from "@/app/chat/message/HumanMessage";
 import { ErrorBanner } from "@/app/chat/message/Resubmit";
@@ -29,7 +29,6 @@ import {
   useCurrentMessageTree,
   useHasPerformedInitialScroll,
   useUncaughtError,
-  useChatSessionStore,
 } from "@/app/chat/stores/useChatSessionStore";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useDeepResearchToggle } from "../hooks/useDeepResearchToggle";
@@ -309,16 +308,16 @@ const MessagesDisplay = React.forwardRef(
           }
         })}
 
-        {((error !== null || loadError !== null) &&
+        {(((error !== null || loadError !== null) &&
           messages[messages.length - 1]?.type === "user") ||
-          (messages[messages.length - 1]?.type === "error" && (
-            <div className="max-w-message-max mx-auto">
-              <ErrorBanner
-                resubmit={handleResubmitLastMessage}
-                error={error || loadError || ""}
-              />
-            </div>
-          ))}
+          messages[messages.length - 1]?.type === "error") && (
+          <div className="max-w-message-max mx-auto">
+            <ErrorBanner
+              resubmit={handleResubmitLastMessage}
+              error={error || loadError || ""}
+            />
+          </div>
+        )}
 
         <div ref={endDivRef} />
       </div>
