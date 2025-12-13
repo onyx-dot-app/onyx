@@ -373,12 +373,14 @@ def _add_user__user_group_relationships__no_commit(
     to ensure atomicity even under race conditions without affecting the parent transaction.
     """
     # First, check which users are already in the group to minimize unnecessary inserts
-    existing_relationships = db_session.scalars(
-        select(User__UserGroup).where(
-            User__UserGroup.user_group_id == user_group_id,
-            User__UserGroup.user_id.in_(user_ids),
-        )
-    ).all()
+    existing_relationships = list(
+        db_session.scalars(
+            select(User__UserGroup).where(
+                User__UserGroup.user_group_id == user_group_id,
+                User__UserGroup.user_id.in_(user_ids),
+            )
+        ).all()
+    )
 
     existing_user_ids = {rel.user_id for rel in existing_relationships}
     new_user_ids = [user_id for user_id in user_ids if user_id not in existing_user_ids]
