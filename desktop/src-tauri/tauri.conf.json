@@ -1,0 +1,67 @@
+{
+  "$schema": "https://schema.tauri.app/config/2.0.0",
+  "productName": "Onyx",
+  "version": "0.1.0",
+  "identifier": "app.onyx.desktop",
+  "build": {
+    "beforeBuildCommand": "",
+    "beforeDevCommand": "",
+    "frontendDist": "../src"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "Onyx",
+        "label": "main",
+        "url": "https://cloud.onyx.app",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true,
+        "transparent": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "acceptFirstMouse": true,
+        "tabbingIdentifier": "onyx"
+      }
+    ],
+    "security": {
+      "csp": null
+    },
+    "macOSPrivateApi": true
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "Productivity",
+    "shortDescription": "Onyx Cloud Desktop App",
+    "longDescription": "A lightweight desktop wrapper for Onyx Cloud - your AI-powered knowledge assistant.",
+    "macOS": {
+      "entitlements": null,
+      "exceptionDomain": "cloud.onyx.app",
+      "minimumSystemVersion": "10.15",
+      "dmg": {
+        "windowSize": {
+          "width": 660,
+          "height": 400
+        }
+      }
+    }
+  },
+  "plugins": {
+    "shell": {
+      "open": true
+    }
+  }
+}
