@@ -1,6 +1,6 @@
 from typing import Annotated
+from typing import Any
 from typing import Literal
-from typing import Optional
 from typing import Union
 
 from pydantic import Field
@@ -21,6 +21,7 @@ from onyx.connectors.coda.models.column_formats import CodaOtherColumnFormat
 from onyx.connectors.coda.models.column_formats import CodaPackObjectColumnFormat
 from onyx.connectors.coda.models.column_formats import CodaPercentageColumnFormat
 from onyx.connectors.coda.models.column_formats import CodaPersonColumnFormat
+from onyx.connectors.coda.models.column_formats import CodaReactionColumnFormat
 from onyx.connectors.coda.models.column_formats import CodaScaleColumnFormat
 from onyx.connectors.coda.models.column_formats import CodaSelectColumnFormat
 from onyx.connectors.coda.models.column_formats import CodaSliderColumnFormat
@@ -52,6 +53,7 @@ CodaColumnFormat = Annotated[
         CodaPackObjectColumnFormat,
         CodaCanvasColumnFormat,
         CodaOtherColumnFormat,
+        CodaReactionColumnFormat,
     ],
     Field(discriminator="type"),
 ]
@@ -69,16 +71,4 @@ class CodaColumn(CodaObjectBase):
         example="https://coda.io/apis/v1/docs/AbCDeFGH/tables/grid-pqRst-U/columns/c-tuVwxYz",
     )
     name: str = Field(description="Name of the column.", example="Completed")
-    display: Optional[bool] = Field(
-        description="Whether the column is displayed in the table.", example=True
-    )
-    calculated: Optional[bool] = Field(
-        description="Whether the column has a formula set on it.", example=True
-    )
-    formula: Optional[str] = Field(
-        description="Formula for the column.", example="thisRow.Created()"
-    )
-    defaultValue: Optional[str] = Field(
-        description="Default value for the column.", example="Test"
-    )
-    format: CodaColumnFormat
+    format: Any

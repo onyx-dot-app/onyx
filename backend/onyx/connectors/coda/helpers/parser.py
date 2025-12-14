@@ -10,6 +10,7 @@ from onyx.connectors.coda.helpers.table_converter import CodaTableConverter
 from onyx.connectors.coda.models.common import CodaObjectType
 from onyx.connectors.coda.models.doc import CodaDoc
 from onyx.connectors.coda.models.page import CodaPage
+from onyx.connectors.coda.models.table.column import CodaColumn
 from onyx.connectors.coda.models.table.row import CodaRow
 from onyx.connectors.coda.models.table.table import CodaTableReference
 from onyx.connectors.models import BasicExpertInfo
@@ -432,6 +433,7 @@ class CodaParser:
 
     def parse_table(
         self,
+        columns: list[CodaColumn],
         rows: list[CodaRow],
     ) -> TextSection:
         """Convert table data to text format (Key: Value).
@@ -444,7 +446,7 @@ class CodaParser:
         Returns:
             TextSection: Text formatted table string
         """
-        formatted_value = self.table_converter.rows_to_formats(rows, ["JSON"])
+        formatted_value = self.table_converter.rows_to_formats(rows, columns, ["JSON"])
 
         logger.debug(formatted_value["Data raw"].to_string())
 

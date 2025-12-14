@@ -166,12 +166,14 @@ class CodaDocumentGenerator:
                     doc.id, table.id, max_rows=self.max_table_rows
                 )
 
+                columns = self.client.fetch_table_columns(doc.id, table.id)
+
                 if not rows:
                     logger.debug(f"Skipping table '{table.name}': no rows")
                     continue
 
                 logger.debug(f"Parsing table '{table.name}' in doc '{doc.name}'")
-                content = self.parser.parse_table(rows)
+                content = self.parser.parse_table(columns, rows)
                 logger.debug(
                     f"Successfully parsed table '{table.name}' in doc '{doc.name}'"
                 )

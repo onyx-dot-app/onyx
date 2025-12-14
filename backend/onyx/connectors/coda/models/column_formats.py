@@ -47,6 +47,12 @@ class CodaSimpleColumnFormat(BaseModel):
     isArray: bool
 
 
+class CodaReactionColumnFormat(CodaSimpleColumnFormat):
+    """Format of a reaction column"""
+
+    type: Literal[CodaColumnFormatType.REACTION]
+
+
 class CodaNumericColumnFormat(CodaSimpleColumnFormat):
     """Format of a numeric column"""
 

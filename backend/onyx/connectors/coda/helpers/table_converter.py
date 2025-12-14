@@ -1,5 +1,6 @@
 """
 Convert Coda table rows to pandas DataFrames with proper handling of rich values.
+Enhanced with human-readable column names for LLM consumption.
 """
 
 from typing import Any
@@ -9,6 +10,7 @@ import pandas as pd
 from pydantic import BaseModel
 
 from onyx.connectors.coda.models.table.cell import CodaCellValue
+from onyx.connectors.coda.models.table.column import CodaColumn
 from onyx.connectors.coda.models.table.row import CodaRow
 
 
@@ -95,8 +97,25 @@ class CodaTableConverter:
         return str(value) if value is not None else ""
 
     @staticmethod
+    def _build_column_map(columns: Optional[list[CodaColumn]]) -> dict[str, str]:
+        """
+        Build a mapping from column IDs to human-readable column names.
+
+        Args:
+            columns: List of CodaColumn objects with metadata
+
+        Returns:
+            Dictionary mapping column ID to column name
+        """
+        if not columns:
+            return {}
+
+        return {col.id: col.name for col in columns}
+
+    @staticmethod
     def rows_to_dataframe(
         rows: list[CodaRow],
+        columns: Optional[list[CodaColumn]] = None,
         use_display_values: bool = True,
         include_metadata: bool = True,
     ) -> pd.DataFrame:
@@ -105,6 +124,8 @@ class CodaTableConverter:
 
         Args:
             rows: List of CodaRow objects from the API
+            columns: Optional list of CodaColumn objects for column metadata.
+                    If provided, uses human-readable column names instead of IDs.
             use_display_values: If True, convert rich values to display strings.
                                If False, keep structured data (may not be DataFrame-friendly)
             include_metadata: If True, include row metadata columns (id, index, createdAt, etc.)
@@ -114,11 +135,15 @@ class CodaTableConverter:
 
         Example:
             >>> rows = [CodaRow(...), CodaRow(...)]
-            >>> df = CodaTableConverter.rows_to_dataframe(rows)
+            >>> columns = [CodaColumn(...), CodaColumn(...)]
+            >>> df = CodaTableConverter.rows_to_dataframe(rows, columns=columns)
             >>> print(df.head())
         """
         if not rows:
             return pd.DataFrame()
+
+        # Build column ID to name mapping
+        column_map = CodaTableConverter._build_column_map(columns)
 
         # Extract data from each row
         data = []
@@ -138,8 +163,11 @@ class CodaTableConverter:
                 row_data["_updated_at"] = row.updatedAt or "MISSING_UPDATED_AT"
                 row_data["_browser_link"] = row.browserLink or "MISSING_BROWSER_LINK"
 
-            # Extract column values
-            for col_name, cell_value in row.values.items():
+            # Extract column values with human-readable names
+            for col_id, cell_value in row.values.items():
+                # Use human-readable name if available, otherwise fall back to ID
+                col_name = column_map.get(col_id, col_id)
+
                 if use_display_values:
                     row_data[col_name] = CodaTableConverter.extract_display_value(
                         cell_value
@@ -155,13 +183,16 @@ class CodaTableConverter:
 
     @staticmethod
     def rows_to_formats(
-        rows: list[CodaRow], formats: Optional[list[str]] = None
+        rows: list[CodaRow],
+        columns: Optional[list[CodaColumn]] = None,
+        formats: Optional[list[str]] = None,
     ) -> pd.DataFrame:
         """
         Convert rows to multiple formats for evaluation/testing.
 
         Args:
             rows: List of CodaRow objects
+            columns: Optional list of CodaColumn objects for column metadata
             formats: List of format names to generate. If None, generates all formats.
                     Options: "JSON", "DICT", "CSV", "TSV", "HTML", "LaTeX",
                             "Markdown", "STRING", "NumPy", "XML"
@@ -172,11 +203,14 @@ class CodaTableConverter:
 
         Example:
             >>> rows = get_table_rows("table-123")
-            >>> eval_df = CodaTableConverter.rows_to_formats(rows)
+            >>> columns = get_table_columns("table-123")
+            >>> eval_df = CodaTableConverter.rows_to_formats(rows, columns=columns)
             >>> print(eval_df)
         """
-        # Convert rows to base DataFrame
-        df = CodaTableConverter.rows_to_dataframe(rows, use_display_values=True)
+        # Convert rows to base DataFrame with human-readable column names
+        df = CodaTableConverter.rows_to_dataframe(
+            rows, columns=columns, use_display_values=True
+        )
 
         # All available formats
         all_formats = [
