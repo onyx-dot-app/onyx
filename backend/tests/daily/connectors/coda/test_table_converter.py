@@ -194,11 +194,6 @@ class TestCodaTableConverter:
         assert len(eval_df) == 2
         assert set(eval_df["Data Format"]) == {"JSON", "CSV"}
 
-        # Test handling invalid format (should be skipped or handled gracefully)
-        # Based on implementation, it iterates through requested formats and checks dictionary
-        # So invalid format key just won't be in the result if we request it, wait...
-        # The implementation loops over requested formats and checks if key in format_converters
-
         # Test all formats (default)
         eval_df_all = CodaTableConverter.rows_to_formats([row1])
         assert len(eval_df_all) >= 5  # Should have JSON, CSV, HTML, etc.

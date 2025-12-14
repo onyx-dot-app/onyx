@@ -283,7 +283,10 @@ class CodaParser:
         return {k: v for k, v in metadata.items() if v is not None}
 
     @staticmethod
-    def parse_html_content(content: str) -> list[TextSection | ImageSection]:
+    def parse_html_content(
+        doc_id: str,
+        content: str,
+    ) -> list[TextSection | ImageSection]:
         """Parse HTML content into text and image sections.
 
         Args:
@@ -338,9 +341,11 @@ class CodaParser:
                     # Add newline for block elements to ensure text separation
                     current_text.append("\n")
                 elif element.name == "table":
+                    table_key = CodaParser.create_table_key(
+                        doc_id, element.get("data-coda-grid-id")
+                    )
                     # Extract table ID for reference
-                    table_id = element.get("data-coda-grid-id")
-                    placeholder = f"[[TABLE:{table_id}]]" if table_id else "[[TABLE]]"
+                    placeholder = f"[[TABLE:{table_key}]]" if table_key else "[[TABLE]]"
                     # Flush any accumulated text before inserting placeholder
                     flush_text()
                     # Create a dedicated TextSection for the placeholder
@@ -443,4 +448,4 @@ class CodaParser:
 
         logger.debug(formatted_value["Data raw"].to_string())
 
-        return TextSection(text=formatted_value["Data raw"].to_string(), link=None)
+        return TextSection(text=formatted_value.iloc[0]["Data raw"], link=None)

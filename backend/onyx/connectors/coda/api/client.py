@@ -409,11 +409,7 @@ class CodaAPIClient:
             limit = min(remaining, _CODA_PAGE_SIZE) if max_rows else _CODA_PAGE_SIZE
 
             response = self.fetch_table_rows(doc_id, table_id, page_token, limit)
-            for row in response.get("items", []):
-                logger.debug(f"Fetched row: {row}")
-                batch_rows = []
-                batch_rows.append(CodaRow(**row))
-            # batch_rows = [CodaRow(**row) for row in response.get("items", [])]
+            batch_rows = [CodaRow(**row) for row in response.get("items", [])]
 
             if not batch_rows:
                 break

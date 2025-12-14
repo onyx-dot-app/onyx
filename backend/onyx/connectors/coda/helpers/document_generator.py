@@ -105,7 +105,7 @@ class CodaDocumentGenerator:
 
             # Parse page title and content
             semantic_identifier = self.parser.build_semantic_identifier(page)
-            sections = self.parser.parse_html_content(content)
+            sections = self.parser.parse_html_content(doc_id=doc.id, content=content)
 
             # Build metadata
             metadata = self.parser.build_page_metadata(doc, page, page_map)
