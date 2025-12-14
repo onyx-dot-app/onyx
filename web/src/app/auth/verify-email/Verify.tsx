@@ -6,9 +6,14 @@ import { useCallback, useEffect, useState } from "react";
 import Text from "@/components/ui/text";
 import { RequestNewVerificationEmail } from "../waiting-on-verification/RequestNewVerificationEmail";
 import { User } from "@/lib/types";
-import { Logo } from "@/components/logo/Logo";
+import Logo from "@/refresh-components/Logo";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-export function Verify({ user }: { user: User | null }) {
+
+export interface VerifyProps {
+  user: User | null;
+}
+
+export default function Verify({ user }: VerifyProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -56,31 +61,24 @@ export function Verify({ user }: { user: User | null }) {
         <HealthCheckBanner />
       </div>
       <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-        <div>
-          <Logo
-            height={64}
-            width={64}
-            className="mx-auto w-fit animate-pulse"
-          />
+        <Logo folded size={64} className="mx-auto w-fit animate-pulse" />
+        {!error ? (
+          <Text className="mt-2">Verifying your email...</Text>
+        ) : (
+          <div>
+            <Text className="mt-2">{error}</Text>
 
-          {!error ? (
-            <Text className="mt-2">Verifying your email...</Text>
-          ) : (
-            <div>
-              <Text className="mt-2">{error}</Text>
-
-              {user && (
-                <div className="text-center">
-                  <RequestNewVerificationEmail email={user.email}>
-                    <Text className="mt-2 text-link">
-                      Get new verification email
-                    </Text>
-                  </RequestNewVerificationEmail>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+            {user && (
+              <div className="text-center">
+                <RequestNewVerificationEmail email={user.email}>
+                  <Text className="mt-2 text-link">
+                    Get new verification email
+                  </Text>
+                </RequestNewVerificationEmail>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </main>
   );

@@ -1,19 +1,23 @@
 import { useMemo } from "react";
 import { OnyxIcon, OnyxLogoTypeIcon } from "@/components/icons/icons";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
-import { NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED } from "@/lib/constants";
+import {
+  LOGO_FOLDED_SIZE_PX,
+  LOGO_UNFOLDED_SIZE_PX,
+  NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED,
+} from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 
-export const FOLDED_SIZE = 24;
-const UNFOLDED_SIZE = 88;
-
 export interface LogoProps {
   folded?: boolean;
+  size?: number;
   className?: string;
 }
 
-export default function Logo({ folded, className }: LogoProps) {
+export default function Logo({ folded, size, className }: LogoProps) {
+  const foldedSize = size ?? LOGO_FOLDED_SIZE_PX;
+  const unfoldedSize = size ?? LOGO_UNFOLDED_SIZE_PX;
   const settings = useSettingsContext();
 
   const logo = useMemo(
@@ -24,14 +28,14 @@ export default function Logo({ folded, className }: LogoProps) {
           alt="Logo"
           style={{
             objectFit: "contain",
-            height: FOLDED_SIZE,
-            width: FOLDED_SIZE,
+            height: foldedSize,
+            width: foldedSize,
           }}
           className={cn("flex-shrink-0", className)}
         />
       ) : (
         <OnyxIcon
-          size={FOLDED_SIZE}
+          size={foldedSize}
           className={cn("flex-shrink-0", className)}
         />
       ),
@@ -65,8 +69,8 @@ export default function Logo({ folded, className }: LogoProps) {
       )}
     </div>
   ) : folded ? (
-    <OnyxIcon size={FOLDED_SIZE} className={cn("flex-shrink-0", className)} />
+    <OnyxIcon size={foldedSize} className={cn("flex-shrink-0", className)} />
   ) : (
-    <OnyxLogoTypeIcon size={UNFOLDED_SIZE} className={className} />
+    <OnyxLogoTypeIcon size={unfoldedSize} className={className} />
   );
 }

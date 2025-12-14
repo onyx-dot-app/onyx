@@ -75,7 +75,7 @@ import {
 } from "@/app/chat/projects/projectsService";
 import ProjectChatSessionList from "@/app/chat/components/projects/ProjectChatSessionList";
 import { cn } from "@/lib/utils";
-import { Suggestions } from "@/sections/Suggestions";
+import Suggestions from "@/sections/Suggestions";
 import OnboardingFlow from "@/refresh-components/onboarding/OnboardingFlow";
 import { useOnboardingState } from "@/refresh-components/onboarding/useOnboardingState";
 import { OnboardingStep } from "@/refresh-components/onboarding/types";
@@ -704,7 +704,10 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
           noClick
         >
           {({ getRootProps }) => (
-            <div className="h-full w-full flex flex-col" {...getRootProps()}>
+            <div
+              className="h-full w-full flex flex-col items-center"
+              {...getRootProps()}
+            >
               {/* ChatUI */}
               <div className="flex flex-col flex-1 w-full relative overflow-hidden">
                 <MessagesDisplay
@@ -720,76 +723,69 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
                 />
               </div>
 
-              {/* ChatInputBar */}
+              {/* ChatInputBar container */}
               <div
                 ref={inputRef}
-                className="w-full pointer-events-auto mx-auto"
+                className="max-w-[50rem] w-full pointer-events-auto flex flex-col justify-center items-center"
               >
-                {currentProjectId == null && showCenteredInput && (
+                {currentProjectId === null && showCenteredInput && (
                   <WelcomeMessage
                     agent={liveAssistant}
                     isDefaultAgent={isDefaultAgent}
                   />
                 )}
 
-                <div
-                  className={cn(
-                    "flex flex-col items-center justify-center",
-                    showCenteredHero && "row-start-2"
-                  )}
-                >
-                  {currentProjectId !== null && projectPanelVisible && (
-                    <ProjectContextPanel
-                      projectTokenCount={projectContextTokenCount}
-                      availableContextTokens={availableContextTokens}
-                      setPresentingDocument={setPresentingDocument}
+                {currentProjectId !== null && projectPanelVisible && (
+                  <ProjectContextPanel
+                    projectTokenCount={projectContextTokenCount}
+                    availableContextTokens={availableContextTokens}
+                    setPresentingDocument={setPresentingDocument}
+                  />
+                )}
+
+                {(showOnboarding ||
+                  (user?.role !== UserRole.ADMIN &&
+                    !user?.personalization?.name)) &&
+                  currentProjectId === null && (
+                    <OnboardingFlow
+                      handleHideOnboarding={() => setShowOnboarding(false)}
+                      state={onboardingState}
+                      actions={onboardingActions}
+                      llmDescriptors={llmDescriptors}
                     />
                   )}
 
-                  {(showOnboarding ||
-                    (user?.role !== UserRole.ADMIN &&
-                      !user?.personalization?.name)) &&
-                    currentProjectId === null && (
-                      <OnboardingFlow
-                        handleHideOnboarding={() => setShowOnboarding(false)}
-                        state={onboardingState}
-                        actions={onboardingActions}
-                        llmDescriptors={llmDescriptors}
-                      />
-                    )}
-
-                  <ChatInputBar
-                    deepResearchEnabled={deepResearchEnabled}
-                    toggleDeepResearch={toggleDeepResearch}
-                    toggleDocumentSidebar={toggleDocumentSidebar}
-                    filterManager={filterManager}
-                    llmManager={llmManager}
-                    removeDocs={() => setSelectedDocuments([])}
-                    retrievalEnabled={retrievalEnabled}
-                    selectedDocuments={selectedDocuments}
-                    message={message}
-                    setMessage={setMessage}
-                    stopGenerating={stopGenerating}
-                    onSubmit={handleChatInputSubmit}
-                    chatState={currentChatState}
-                    currentSessionFileTokenCount={
-                      existingChatSessionId
-                        ? currentSessionFileTokenCount
-                        : projectContextTokenCount
-                    }
-                    availableContextTokens={availableContextTokens}
-                    selectedAssistant={selectedAssistant || liveAssistant}
-                    handleFileUpload={handleMessageSpecificFileUpload}
-                    textAreaRef={textAreaRef}
-                    setPresentingDocument={setPresentingDocument}
-                    disabled={
-                      (!llmManager.isLoadingProviders &&
-                        llmManager.hasAnyProvider === false) ||
-                      (!isLoadingOnboarding &&
-                        onboardingState.currentStep !== OnboardingStep.Complete)
-                    }
-                  />
-                </div>
+                <ChatInputBar
+                  deepResearchEnabled={deepResearchEnabled}
+                  toggleDeepResearch={toggleDeepResearch}
+                  toggleDocumentSidebar={toggleDocumentSidebar}
+                  filterManager={filterManager}
+                  llmManager={llmManager}
+                  removeDocs={() => setSelectedDocuments([])}
+                  retrievalEnabled={retrievalEnabled}
+                  selectedDocuments={selectedDocuments}
+                  message={message}
+                  setMessage={setMessage}
+                  stopGenerating={stopGenerating}
+                  onSubmit={handleChatInputSubmit}
+                  chatState={currentChatState}
+                  currentSessionFileTokenCount={
+                    existingChatSessionId
+                      ? currentSessionFileTokenCount
+                      : projectContextTokenCount
+                  }
+                  availableContextTokens={availableContextTokens}
+                  selectedAssistant={selectedAssistant || liveAssistant}
+                  handleFileUpload={handleMessageSpecificFileUpload}
+                  textAreaRef={textAreaRef}
+                  setPresentingDocument={setPresentingDocument}
+                  disabled={
+                    (!llmManager.isLoadingProviders &&
+                      llmManager.hasAnyProvider === false) ||
+                    (!isLoadingOnboarding &&
+                      onboardingState.currentStep !== OnboardingStep.Complete)
+                  }
+                />
 
                 {currentProjectId !== null && (
                   <div className="transition-all duration-700 ease-out">
@@ -800,11 +796,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
                 {liveAssistant?.starter_messages &&
                   liveAssistant.starter_messages.length > 0 &&
                   messageHistory.length === 0 &&
-                  showCenteredHero && (
-                    <div className="mt-6 row-start-3 max-w-[50rem]">
-                      <Suggestions onSubmit={onSubmit} />
-                    </div>
-                  )}
+                  showCenteredHero && <Suggestions onSubmit={onSubmit} />}
               </div>
 
               {/* SearchUI */}

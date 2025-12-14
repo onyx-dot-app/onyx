@@ -30,10 +30,10 @@ import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationMo
 import { PopoverMenu } from "@/components/ui/popover";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
-import { FOLDED_SIZE } from "@/refresh-components/Logo";
 import SvgSidebar from "@/icons/sidebar";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
 import useScreenSize from "@/hooks/useScreenSize";
+import { LOGO_FOLDED_SIZE_PX } from "@/lib/constants";
 
 export interface AppPageLayoutProps
   extends React.HtmlHTMLAttributes<HTMLDivElement> {
@@ -301,8 +301,8 @@ export default function AppPageLayout({
                 alt="Logo"
                 style={{
                   objectFit: "contain",
-                  height: FOLDED_SIZE,
-                  width: FOLDED_SIZE,
+                  height: LOGO_FOLDED_SIZE_PX,
+                  width: LOGO_FOLDED_SIZE_PX,
                 }}
                 className="flex-shrink-0"
               />
