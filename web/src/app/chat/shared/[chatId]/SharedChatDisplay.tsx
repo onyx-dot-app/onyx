@@ -14,7 +14,7 @@ import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import TextView from "@/components/chat/TextView";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import Text from "@/refresh-components/texts/Text";
-import useIsMounted from "@/hooks/useIsMounted";
+import useOnMount from "@/hooks/useOnMount";
 
 export interface SharedChatDisplayProps {
   chatSession: BackendChatSession | null;
@@ -28,7 +28,7 @@ export default function SharedChatDisplay({
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
 
-  const isMounted = useIsMounted();
+  const isMounted = useOnMount();
 
   if (!chatSession) {
     return (

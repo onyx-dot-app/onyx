@@ -12,7 +12,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import SvgX from "@/icons/x";
 import useAppFocus from "@/hooks/useAppFocus";
-import useIsMounted from "@/hooks/useIsMounted";
+import useOnMount from "@/hooks/useOnMount";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 
 interface SortableItemProps {
@@ -21,7 +21,7 @@ interface SortableItemProps {
 }
 
 function SortableItem({ id, children }: SortableItemProps) {
-  const isMounted = useIsMounted();
+  const isMounted = useOnMount();
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useSortable({ id });
 

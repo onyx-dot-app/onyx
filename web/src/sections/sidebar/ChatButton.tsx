@@ -48,7 +48,7 @@ import Truncated from "@/refresh-components/texts/Truncated";
 import Text from "@/refresh-components/texts/Text";
 import useAppFocus from "@/hooks/useAppFocus";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import useIsMounted from "@/hooks/useIsMounted";
+import useOnMount from "@/hooks/useOnMount";
 
 // (no local constants; use shared constants/imports)
 
@@ -121,7 +121,7 @@ function ChatButtonInner({
       activeSidebarTab.id === chatSession.id,
     [activeSidebarTab, chatSession.id]
   );
-  const mounted = useIsMounted();
+  const mounted = useOnMount();
   const [displayName, setDisplayName] = useState(
     chatSession.name || UNNAMED_CHAT
   );

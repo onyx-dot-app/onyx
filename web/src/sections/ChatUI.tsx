@@ -35,6 +35,7 @@ import { useDeepResearchToggle } from "../app/chat/hooks/useDeepResearchToggle";
 import { useUser } from "@/components/user/UserProvider";
 import { HORIZON_DISTANCE_PX } from "@/lib/constants";
 import Spacer from "@/refresh-components/Spacer";
+import useOnMount from "@/hooks/useOnMount";
 
 export interface ChatUIHandle {
   scrollToBottom: (fast?: boolean) => boolean;
@@ -147,13 +148,15 @@ const ChatUI = React.forwardRef(
         container.scrollHeight - (container.scrollTop + container.clientHeight);
 
       scrollDist.current = distanceFromBottom;
-      setAboveHorizon(distanceFromBottom > HORIZON_DISTANCE_PX);
-    }, []);
+      const isAboveScrollThreshold = distanceFromBottom > HORIZON_DISTANCE_PX;
+      const hasMessages = messages.length > 0;
+      setAboveHorizon(isAboveScrollThreshold && hasMessages);
+    }, [messages]);
 
-    useEffect(() => {
+    useOnMount(() => {
       scrollDist.current = 0;
       setAboveHorizon(false);
-    }, []);
+    });
 
     const scrollToBottom = useCallback((fast?: boolean) => {
       if (!endDivRef.current) return false;
