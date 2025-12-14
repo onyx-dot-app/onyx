@@ -196,10 +196,10 @@ const ChatUI = React.forwardRef(
       enableAutoScroll: user?.preferences.auto_scroll,
     });
 
-    if (!liveAssistant) return null;
+    // if (!liveAssistant) return null;
 
-    return (
-      <div className="flex flex-col flex-1 w-full relative overflow-hidden">
+    const content = liveAssistant ? (
+      <>
         {aboveHorizon && (
           <div className="absolute bottom-0 z-[1000000] left-1/2 -translate-x-1/2">
             <IconButton
@@ -333,6 +333,12 @@ const ChatUI = React.forwardRef(
 
           <div ref={endDivRef} />
         </div>
+      </>
+    ) : null;
+
+    return (
+      <div className="flex flex-col flex-1 w-full relative overflow-hidden">
+        {content}
       </div>
     );
   }

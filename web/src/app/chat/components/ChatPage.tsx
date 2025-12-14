@@ -344,11 +344,8 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
   // Access chat state directly from the store
   const currentChatState = useCurrentChatState();
   const chatSessionId = useChatSessionStore((state) => state.currentSessionId);
-  const uncaughtError = useUncaughtError();
   const isReady = useIsReady();
-  const completeMessageTree = useCurrentMessageTree();
   const hasPerformedInitialScroll = useHasPerformedInitialScroll();
-  const currentSessionHasSentLocalUserMessage = useHasSentLocalUserMessage();
   const documentSidebarVisible = useDocumentSidebarVisible();
   const updateHasPerformedInitialScroll = useChatSessionStore(
     (state) => state.updateHasPerformedInitialScroll
@@ -356,11 +353,8 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
   const updateCurrentDocumentSidebarVisible = useChatSessionStore(
     (state) => state.updateCurrentDocumentSidebarVisible
   );
-  const {
-    showCenteredInput: showCenteredInputRaw,
-    loadingError,
-    messageHistory,
-  } = useChatPageLayout();
+  const { showCenteredInput: showCenteredInputRaw, messageHistory } =
+    useChatPageLayout();
 
   // When loading an existing chat session, always show input at bottom
   // to prevent layout shift from centered → bottom position
