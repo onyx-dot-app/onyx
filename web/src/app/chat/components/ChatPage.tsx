@@ -81,6 +81,7 @@ import { useOnboardingState } from "@/refresh-components/onboarding/useOnboardin
 import { OnboardingStep } from "@/refresh-components/onboarding/types";
 import AppPageLayout from "@/layouts/AppPageLayout";
 import { HeaderData } from "@/lib/headers/fetchHeaderDataSS";
+import Spacer from "@/refresh-components/Spacer";
 
 const DEFAULT_CONTEXT_TOKENS = 120_000;
 
@@ -786,6 +787,8 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
                       onboardingState.currentStep !== OnboardingStep.Complete)
                   }
                 />
+
+                <Spacer />
 
                 {currentProjectId !== null && (
                   <div className="transition-all duration-700 ease-out">
