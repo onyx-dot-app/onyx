@@ -6,14 +6,7 @@ import {
   personaIncludesRetrieval,
   getAvailableContextTokens,
 } from "@/app/chat/services/lib";
-import {
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
@@ -496,14 +489,6 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
   if (!user) {
     redirect("/auth/login");
   }
-
-  const toggleDocumentSelection = useCallback((document: OnyxDocument) => {
-    setSelectedDocuments((prev) =>
-      prev.some((d) => d.document_id === document.document_id)
-        ? prev.filter((d) => d.document_id !== document.document_id)
-        : [...prev, document]
-    );
-  }, []);
 
   const handleChatInputSubmit = useCallback(() => {
     onSubmit({
