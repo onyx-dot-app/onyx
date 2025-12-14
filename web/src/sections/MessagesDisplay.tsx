@@ -31,7 +31,7 @@ import {
   useUncaughtError,
 } from "@/app/chat/stores/useChatSessionStore";
 import useChatSessions from "@/hooks/useChatSessions";
-import { useDeepResearchToggle } from "../hooks/useDeepResearchToggle";
+import { useDeepResearchToggle } from "../app/chat/hooks/useDeepResearchToggle";
 import { useUser } from "@/components/user/UserProvider";
 import { HORIZON_DISTANCE_PX } from "@/lib/constants";
 

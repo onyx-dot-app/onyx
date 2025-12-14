@@ -65,7 +65,7 @@ import {
 import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
 import MessagesDisplay, {
   MessagesDisplayHandle,
-} from "@/app/chat/components/MessagesDisplay";
+} from "@/sections/MessagesDisplay";
 import WelcomeMessage from "@/app/chat/components/WelcomeMessage";
 import ProjectContextPanel from "@/app/chat/components/projects/ProjectContextPanel";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
