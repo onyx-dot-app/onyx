@@ -346,9 +346,7 @@ class LitellmLLM(LLM):
                 if user_identity.user_id:
                     litellm_args["user"] = user_identity.user_id
 
-                if metadata:
-                    litellm_args["metadata"] = metadata
-            if metadata and not litellm_args.get("metadata"):
+            if metadata:
                 litellm_args["metadata"] = metadata
             return litellm.completion(**litellm_args)
         except Exception as e:
