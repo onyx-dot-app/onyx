@@ -295,18 +295,6 @@ export default function AppPageLayout({
 
         {(useCustomLogo || customFooterContent) && (
           <footer className="w-full flex flex-row justify-center items-center gap-2 py-3">
-            {useCustomLogo && (
-              <img
-                src="/api/enterprise-settings/logo"
-                alt="Logo"
-                style={{
-                  objectFit: "contain",
-                  height: FOLDED_SIZE,
-                  width: FOLDED_SIZE,
-                }}
-                className="flex-shrink-0"
-              />
-            )}
             {customFooterContent && (
               <Text text03 secondaryBody>
                 {customFooterContent}
