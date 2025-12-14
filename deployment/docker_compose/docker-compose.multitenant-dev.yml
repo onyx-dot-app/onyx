@@ -2,7 +2,7 @@ name: onyx
 
 services:
   api_server:
-    image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
+    image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
     build:
       context: ../../backend
       dockerfile: Dockerfile
@@ -50,13 +50,9 @@ services:
       - GEN_AI_MAX_TOKENS=${GEN_AI_MAX_TOKENS:-}
       - QA_TIMEOUT=${QA_TIMEOUT:-}
       - MAX_CHUNKS_FED_TO_CHAT=${MAX_CHUNKS_FED_TO_CHAT:-}
-      - DISABLE_LLM_CHOOSE_SEARCH=${DISABLE_LLM_CHOOSE_SEARCH:-}
       - DISABLE_LLM_QUERY_REPHRASE=${DISABLE_LLM_QUERY_REPHRASE:-}
-      - DISABLE_GENERATIVE_AI=${DISABLE_GENERATIVE_AI:-}
       - DISABLE_LITELLM_STREAMING=${DISABLE_LITELLM_STREAMING:-}
       - LITELLM_EXTRA_HEADERS=${LITELLM_EXTRA_HEADERS:-}
-      - BING_API_KEY=${BING_API_KEY:-}
-      - EXA_API_KEY=${EXA_API_KEY:-}
       - DISABLE_LLM_DOC_RELEVANCE=${DISABLE_LLM_DOC_RELEVANCE:-}
       - GEN_AI_API_KEY=${GEN_AI_API_KEY:-}
       - TOKEN_BUDGET_GLOBALLY_ENABLED=${TOKEN_BUDGET_GLOBALLY_ENABLED:-}
@@ -110,7 +106,7 @@ services:
 
       # Show extra/uncommon connectors
       - SHOW_EXTRA_CONNECTORS=${SHOW_EXTRA_CONNECTORS:-true}
-      
+
       # Enables the use of bedrock models or IAM Auth
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
@@ -120,7 +116,7 @@ services:
       - USE_IAM_AUTH=${USE_IAM_AUTH:-}
 
       # Vespa Language Forcing
-      # See: https://docs.vespa.ai/en/linguistics.html 
+      # See: https://docs.vespa.ai/en/linguistics.html
       - VESPA_LANGUAGE_OVERRIDE=${VESPA_LANGUAGE_OVERRIDE:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -131,7 +127,7 @@ services:
         max-file: "6"
 
   background:
-    image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
+    image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
     build:
       context: ../../backend
       dockerfile: Dockerfile
@@ -163,15 +159,11 @@ services:
       - GEN_AI_MAX_TOKENS=${GEN_AI_MAX_TOKENS:-}
       - QA_TIMEOUT=${QA_TIMEOUT:-}
       - MAX_CHUNKS_FED_TO_CHAT=${MAX_CHUNKS_FED_TO_CHAT:-}
-      - DISABLE_LLM_CHOOSE_SEARCH=${DISABLE_LLM_CHOOSE_SEARCH:-}
       - DISABLE_LLM_QUERY_REPHRASE=${DISABLE_LLM_QUERY_REPHRASE:-}
-      - DISABLE_GENERATIVE_AI=${DISABLE_GENERATIVE_AI:-}
       - GENERATIVE_MODEL_ACCESS_CHECK_FREQ=${GENERATIVE_MODEL_ACCESS_CHECK_FREQ:-}
       - DISABLE_LITELLM_STREAMING=${DISABLE_LITELLM_STREAMING:-}
       - LITELLM_EXTRA_HEADERS=${LITELLM_EXTRA_HEADERS:-}
       - GEN_AI_API_KEY=${GEN_AI_API_KEY:-}
-      - BING_API_KEY=${BING_API_KEY:-}
-      - EXA_API_KEY=${EXA_API_KEY:-}
       # Query Options
       - DOC_TIME_DECAY=${DOC_TIME_DECAY:-}
       - HYBRID_ALPHA=${HYBRID_ALPHA:-}
@@ -239,7 +231,6 @@ services:
       - ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER=${ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER:-}
       - ONYX_BOT_FEEDBACK_VISIBILITY=${ONYX_BOT_FEEDBACK_VISIBILITY:-}
       - ONYX_BOT_DISPLAY_ERROR_MSGS=${ONYX_BOT_DISPLAY_ERROR_MSGS:-}
-      - ONYX_BOT_RESPOND_EVERY_CHANNEL=${ONYX_BOT_RESPOND_EVERY_CHANNEL:-}
       - NOTIFY_SLACKBOT_NO_ANSWER=${NOTIFY_SLACKBOT_NO_ANSWER:-}
       - ONYX_BOT_MAX_QPM=${ONYX_BOT_MAX_QPM:-}
       - ONYX_BOT_MAX_WAIT_TIME=${ONYX_BOT_MAX_WAIT_TIME:-}
@@ -283,7 +274,7 @@ services:
     #   - ${CA_CERT_PATH:-./custom-ca.crt}:/etc/ssl/certs/custom-ca.crt:ro
 
   web_server:
-    image: onyxdotapp/onyx-web-server:${IMAGE_TAG:-latest}
+    image: ${ONYX_WEB_SERVER_IMAGE:-onyxdotapp/onyx-web-server:${IMAGE_TAG:-latest}}
     build:
       context: ../../web
       dockerfile: Dockerfile
@@ -310,13 +301,54 @@ services:
       - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${ENABLE_PAID_ENTERPRISE_EDITION_FEATURES:-false}
       - NEXT_PUBLIC_CUSTOM_REFRESH_URL=${NEXT_PUBLIC_CUSTOM_REFRESH_URL:-}
 
+  mcp_server:
+    image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    command: >
+      /bin/sh -c "if [ \"${MCP_SERVER_ENABLED:-}\" != \"True\" ] && [ \"${MCP_SERVER_ENABLED:-}\" != \"true\" ]; then
+        echo 'MCP server is disabled (MCP_SERVER_ENABLED=false), skipping...';
+        exit 0;
+      else
+        exec python -m onyx.mcp_server_main;
+      fi"
+    ports:
+      - "8090:8090"
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      - relational_db
+      - cache
+    restart: "no"
+    environment:
+      - POSTGRES_HOST=relational_db
+      - REDIS_HOST=cache
+      # MCP Server Configuration
+      - MCP_SERVER_ENABLED=${MCP_SERVER_ENABLED:-false}
+      - MCP_SERVER_PORT=${MCP_SERVER_PORT:-8090}
+      - MCP_SERVER_CORS_ORIGINS=${MCP_SERVER_CORS_ORIGINS:-}
+      - API_SERVER_PROTOCOL=${API_SERVER_PROTOCOL:-http}
+      - API_SERVER_HOST=api_server
+      - API_SERVER_PORT=8080
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+    volumes:
+      - mcp_server_logs:/var/log/onyx
+
   inference_model_server:
-    image: onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}
+    image: ${ONYX_MODEL_SERVER_IMAGE:-onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}}
     build:
       context: ../../backend
       dockerfile: Dockerfile.model_server
     command: >
-      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-false}\" = \"True\" ]; then
+      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER:-}\" = \"true\" ]; then
         echo 'Skipping service...';
         exit 0;
       else
@@ -340,12 +372,12 @@ services:
         max-file: "6"
 
   indexing_model_server:
-    image: onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}
+    image: ${ONYX_MODEL_SERVER_IMAGE:-onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}}
     build:
       context: ../../backend
       dockerfile: Dockerfile.model_server
     command: >
-      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-false}\" = \"True\" ]; then
+      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER:-}\" = \"true\" ]; then
         echo 'Skipping service...';
         exit 0;
       else
@@ -388,7 +420,7 @@ services:
 
   # This container name cannot have an underscore in it due to Vespa expectations of the URL
   index:
-    image: vespaengine/vespa:8.526.15
+    image: vespaengine/vespa:8.609.39
     restart: unless-stopped
     environment:
       - VESPA_SKIP_UPGRADE_CHECK=true
@@ -404,7 +436,7 @@ services:
         max-file: "6"
 
   nginx:
-    image: nginx:1.23.4-alpine
+    image: nginx:1.25.5-alpine
     restart: unless-stopped
     # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
     # if api_server / web_server are not up
@@ -414,8 +446,8 @@ services:
     environment:
       - DOMAIN=localhost
     ports:
-      - "80:80"
-      - "3000:80" # allow for localhost:3000 usage, since that is the norm
+      - "${HOST_PORT_80:-80}:80"
+      - "${HOST_PORT:-3000}:80" # allow for localhost:3000 usage, since that is the norm
     volumes:
       - ../data/nginx:/etc/nginx/conf.d
     logging:
@@ -429,7 +461,7 @@ services:
     # NOTE: we have to use dos2unix to remove Carriage Return chars from the file
     # in order to make this work on both Unix-like systems and windows
     command: >
-      /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh 
+      /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh
       && /etc/nginx/conf.d/run-nginx.sh app.conf.template"
 
   minio:
@@ -463,6 +495,31 @@ services:
     tmpfs:
       - /data
 
+  code-interpreter:
+    image: onyxdotapp/code-interpreter:${CODE_INTERPRETER_IMAGE_TAG:-latest}
+    entrypoint: ["/bin/bash", "-c"]
+    command: >
+      "
+      if [ \"$${CODE_INTERPRETER_BETA_ENABLED}\" = \"True\" ] || [ \"$${CODE_INTERPRETER_BETA_ENABLED}\" = \"true\" ]; then
+        exec bash ./entrypoint.sh code-interpreter-api;
+      else
+        echo 'Skipping code interpreter';
+        exec tail -f /dev/null;
+      fi
+      "
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+
+    # Below is needed for the `docker-out-of-docker` execution mode
+    user: root
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    # uncomment below + comment out the above to use the `docker-in-docker` execution mode
+    # privileged: true
+
 volumes:
   db_volume:
   vespa_volume: # Created by the container itself
@@ -470,3 +527,4 @@ volumes:
 
   model_cache_huggingface:
   indexing_huggingface_model_cache:
+  mcp_server_logs:

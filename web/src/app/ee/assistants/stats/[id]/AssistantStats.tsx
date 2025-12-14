@@ -1,4 +1,5 @@
 "use client";
+
 import { ThreeDotsLoader } from "@/components/Loading";
 import { getDatesList } from "@/app/ee/admin/performance/lib";
 import { useEffect, useState, useMemo } from "react";
@@ -6,8 +7,8 @@ import {
   AdminDateRangeSelector,
   DateRange,
 } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
-import AssistantIcon from "@/refresh-components/AgentIcon";
+import { useAgents } from "@/lib/hooks/useAgents";
+import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { AreaChartDisplay } from "@/components/ui/areaChart";
 
@@ -26,7 +27,7 @@ type AssistantStatsResponse = {
 export function AssistantStats({ assistantId }: { assistantId: number }) {
   const [assistantStats, setAssistantStats] =
     useState<AssistantStatsResponse | null>(null);
-  const { agents: assistants } = useAgentsContext();
+  const { agents: assistants } = useAgents();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<DateRange>({
@@ -156,7 +157,7 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center space-x-4">
-                {assistant && <AssistantIcon agent={assistant} />}
+                {assistant && <AgentAvatar agent={assistant} />}
                 <div>
                   <h3 className="text-lg font-normal">{assistant?.name}</h3>
                   <p className="text-sm text-text-500">

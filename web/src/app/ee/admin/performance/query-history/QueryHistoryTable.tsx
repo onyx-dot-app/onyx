@@ -1,4 +1,4 @@
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import {
   Table,
   TableHead,
@@ -10,13 +10,7 @@ import {
 import Text from "@/components/ui/text";
 
 import { FiDownload } from "react-icons/fi";
-import {
-  Select,
-  SelectItem,
-  SelectValue,
-  SelectTrigger,
-  SelectContent,
-} from "@/components/ui/select";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ChatSessionMinimal } from "../usage/types";
 import { timestampToReadableDate } from "@/lib/dateUtils";
@@ -47,9 +41,13 @@ import {
   PREVIOUS_CSV_TASK_BUTTON_NAME,
 } from "./constants";
 import { humanReadableFormatWithTime } from "@/lib/time";
-import { Modal } from "@/components/Modal";
+import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import { Badge } from "@/components/ui/badge";
+import SvgMinusCircle from "@/icons/minus-circle";
+import SvgThumbsDown from "@/icons/thumbs-down";
+import SvgThumbsUp from "@/icons/thumbs-up";
+import SvgFileText from "@/icons/file-text";
 
 function QueryHistoryTableRow({
   chatSessionMinimal,
@@ -103,40 +101,27 @@ function SelectFeedbackType({
     <div>
       <Text className="my-auto mr-2 font-medium mb-1">Feedback Type</Text>
       <div className="max-w-sm space-y-6">
-        <Select
+        <InputSelect
           value={value}
           onValueChange={onValueChange as (value: string) => void}
         >
-          <SelectTrigger>
-            <SelectValue placeholder="Select feedback type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">
-              <div className="flex items-center gap-2">
-                <FiMinus className="h-4 w-4" />
-                <span>Any</span>
-              </div>
-            </SelectItem>
-            <SelectItem value="like">
-              <div className="flex items-center gap-2">
-                <FiSmile className="h-4 w-4" />
-                <span>Like</span>
-              </div>
-            </SelectItem>
-            <SelectItem value="dislike">
-              <div className="flex items-center gap-2">
-                <FiFrown className="h-4 w-4" />
-                <span>Dislike</span>
-              </div>
-            </SelectItem>
-            <SelectItem value="mixed">
-              <div className="flex items-center gap-2">
-                <FiMeh className="h-4 w-4" />
-                <span>Mixed</span>
-              </div>
-            </SelectItem>
-          </SelectContent>
-        </Select>
+          <InputSelect.Trigger />
+
+          <InputSelect.Content>
+            <InputSelect.Item value="all" icon={SvgMinusCircle}>
+              Any
+            </InputSelect.Item>
+            <InputSelect.Item value="like" icon={SvgThumbsUp}>
+              Like
+            </InputSelect.Item>
+            <InputSelect.Item value="dislike" icon={SvgThumbsDown}>
+              Dislike
+            </InputSelect.Item>
+            <InputSelect.Item value="mixed" icon={FiMeh}>
+              Mixed
+            </InputSelect.Item>
+          </InputSelect.Content>
+        </InputSelect>
       </div>
     </div>
   );
@@ -187,65 +172,70 @@ function PreviousQueryHistoryExportsModal({
   );
 
   return (
-    <Modal
-      title="Previous Query History Exports"
-      onOutsideClick={() => setShowModal(false)}
-      className="overflow-y-scroll h-1/2"
-    >
-      <div className="flex flex-col h-full w-full py-4">
-        <div className="flex flex-1">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Generated At</TableHead>
-                <TableHead>Start Range</TableHead>
-                <TableHead>End Range</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Download</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginatedTasks.map((task, index) => (
-                <TableRow key={index}>
-                  <TableCell>
-                    {humanReadableFormatWithTime(task.startTime)}
-                  </TableCell>
-                  <TableCell>{task.start.toDateString()}</TableCell>
-                  <TableCell>{task.end.toDateString()}</TableCell>
-                  <TableCell>
-                    <ExportBadge status={task.status} />
-                  </TableCell>
-                  <TableCell>
-                    {task.status === "SUCCESS" ? (
-                      <Link
-                        className="flex justify-center"
-                        href={withRequestId(
-                          DOWNLOAD_QUERY_HISTORY_URL,
-                          task.taskId
+    <Modal open onOpenChange={() => setShowModal(false)}>
+      <Modal.Content large>
+        <Modal.Header
+          icon={SvgFileText}
+          title="Previous Query History Exports"
+          onClose={() => setShowModal(false)}
+        />
+        <Modal.Body>
+          <div className="flex flex-col w-full">
+            <div className="flex flex-1">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Generated At</TableHead>
+                    <TableHead>Start Range</TableHead>
+                    <TableHead>End Range</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Download</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedTasks.map((task, index) => (
+                    <TableRow key={index}>
+                      <TableCell>
+                        {humanReadableFormatWithTime(task.startTime)}
+                      </TableCell>
+                      <TableCell>{task.start.toDateString()}</TableCell>
+                      <TableCell>{task.end.toDateString()}</TableCell>
+                      <TableCell>
+                        <ExportBadge status={task.status} />
+                      </TableCell>
+                      <TableCell>
+                        {task.status === "SUCCESS" ? (
+                          <Link
+                            className="flex justify-center"
+                            href={withRequestId(
+                              DOWNLOAD_QUERY_HISTORY_URL,
+                              task.taskId
+                            )}
+                          >
+                            <FiDownload color="primary" />
+                          </Link>
+                        ) : (
+                          <FiDownload color="primary" className="opacity-20" />
                         )}
-                      >
-                        <FiDownload color="primary" />
-                      </Link>
-                    ) : (
-                      <FiDownload color="primary" className="opacity-20" />
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
 
-        <div className="flex mt-3">
-          <div className="mx-auto">
-            <PageSelector
-              currentPage={taskPage}
-              totalPages={totalTaskPages}
-              onPageChange={setTaskPage}
-            />
+            <div className="flex mt-3">
+              <div className="mx-auto">
+                <PageSelector
+                  currentPage={taskPage}
+                  totalPages={totalTaskPages}
+                  onPageChange={setTaskPage}
+                />
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </Modal.Body>
+      </Modal.Content>
     </Modal>
   );
 }

@@ -47,12 +47,11 @@ class PrebuiltPersona(BaseModel):
     )
 
     # UI configuration
-    icon_shape: int = Field(default=0, description="Icon shape ID for UI")
-    icon_color: str = Field(default="#6FB1FF", description="Icon color hex code")
     display_priority: int = Field(default=0, description="Display order priority")
     is_visible: bool = Field(
         default=True, description="Whether persona is visible in UI"
     )
+    icon_name: Optional[str] = Field(default=None, description="A user-friendly icon")
 
     # Special flags
     is_default_persona: bool = Field(
@@ -111,10 +110,9 @@ PREBUILT_PERSONAS = [
         llm_relevance_filter=False,
         llm_filter_extraction=True,
         recency_bias=RecencyBiasSetting.AUTO,
-        icon_shape=23013,
-        icon_color="#6FB1FF",
         display_priority=0,
         is_visible=True,
+        icon_name="search",
         is_default_persona=True,
         starter_messages=[
             StarterMessage(
@@ -160,8 +158,6 @@ PREBUILT_PERSONAS = [
         llm_relevance_filter=True,
         llm_filter_extraction=True,
         recency_bias=RecencyBiasSetting.AUTO,
-        icon_shape=50910,
-        icon_color="#FF6F6F",
         display_priority=1,
         is_visible=True,
         is_default_persona=True,
@@ -213,8 +209,6 @@ PREBUILT_PERSONAS = [
         llm_relevance_filter=True,
         llm_filter_extraction=True,
         recency_bias=RecencyBiasSetting.AUTO,
-        icon_shape=45519,
-        icon_color="#6FFF8D",
         display_priority=2,
         is_visible=False,
         is_default_persona=True,
@@ -270,11 +264,10 @@ PREBUILT_PERSONAS = [
         llm_relevance_filter=False,
         llm_filter_extraction=False,
         recency_bias=RecencyBiasSetting.NO_DECAY,
-        icon_shape=234124,
-        icon_color="#9B59B6",
         image_generation=True,
         display_priority=3,
         is_visible=True,
+        icon_name="art",
         is_default_persona=True,
         starter_messages=[
             StarterMessage(

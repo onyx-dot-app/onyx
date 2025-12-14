@@ -28,7 +28,7 @@ import {
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import { SourceIcon } from "@/components/SourceIcon";
 import Link from "next/link";
-import AgentIcon from "@/refresh-components/AgentIcon";
+import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Badge } from "@/components/ui/badge";
 import {
   Accordion,
@@ -36,9 +36,9 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 
-import { CheckFormField } from "@/components/ui/CheckField";
+import { CheckboxField as CheckFormField } from "@/refresh-components/formik-fields/CheckboxField";
 
 export interface SlackChannelConfigFormFieldsProps {
   isUpdate: boolean;
@@ -260,7 +260,7 @@ export function SlackChannelConfigFormFields({
                             (viewUnselectableSets) => !viewUnselectableSets
                           )
                         }
-                        className="text-sm text-link"
+                        className="text-sm text-action-link-05"
                       >
                         {viewUnselectableSets
                           ? "Hide un-selectable "
@@ -354,7 +354,7 @@ export function SlackChannelConfigFormFields({
                               !viewSyncEnabledAssistants
                           )
                         }
-                        className="text-sm text-link"
+                        className="text-sm text-action-link-05"
                       >
                         {viewSyncEnabledAssistants
                           ? "Hide un-selectable "
@@ -390,7 +390,7 @@ export function SlackChannelConfigFormFields({
                         key={persona.id}
                         className="p-2 bg-background-100 cursor-pointer rounded-md flex items-center gap-2"
                       >
-                        <AgentIcon agent={persona} size={16} />
+                        <AgentAvatar agent={persona} size={16} />
                         {persona.name}
                       </button>
                     )
@@ -421,7 +421,7 @@ export function SlackChannelConfigFormFields({
                               !viewSyncEnabledAssistants
                           )
                         }
-                        className="text-sm text-link"
+                        className="text-sm text-action-link-05"
                       >
                         {viewSyncEnabledAssistants
                           ? "Hide un-selectable "
@@ -452,7 +452,7 @@ export function SlackChannelConfigFormFields({
               Search Configuration
             </AccordionTrigger>
             <AccordionContent>
-              <div className="space-y-4">
+              <div className="space-y-4 pb-3">
                 <div className="w-64">
                   <SelectorFormField
                     name="response_type"
@@ -464,12 +464,6 @@ export function SlackChannelConfigFormFields({
                     ]}
                   />
                 </div>
-                <CheckFormField
-                  name="enable_auto_filters"
-                  label="Enable LLM Autofiltering"
-                  tooltip="If set, the LLM will generate source and time filters based on the user's query"
-                />
-
                 <CheckFormField
                   name="answer_validity_check_enabled"
                   label="Only respond if citations found"
@@ -595,25 +589,23 @@ export function SlackChannelConfigFormFields({
                     Relevant Connectors:
                   </h4>
                   <div className="max-h-40 overflow-y-auto border-t border-text-subtle flex-col gap-y-2">
-                    {memoizedPrivateConnectors.map(
-                      (ccpairinfo: CCPairDescriptor<any, any>) => (
-                        <Link
-                          key={ccpairinfo.id}
-                          href={`/admin/connector/${ccpairinfo.id}`}
-                          className="flex items-center p-2 rounded-md hover:bg-background-100 transition-colors"
-                        >
-                          <div className="mr-2">
-                            <SourceIcon
-                              iconSize={16}
-                              sourceType={ccpairinfo.connector.source}
-                            />
-                          </div>
-                          <span className="text-sm text-text-darker font-medium">
-                            {ccpairinfo.name}
-                          </span>
-                        </Link>
-                      )
-                    )}
+                    {memoizedPrivateConnectors.map((ccpairinfo: any) => (
+                      <Link
+                        key={ccpairinfo.id}
+                        href={`/admin/connector/${ccpairinfo.id}`}
+                        className="flex items-center p-2 rounded-md hover:bg-background-100 transition-colors"
+                      >
+                        <div className="mr-2">
+                          <SourceIcon
+                            iconSize={16}
+                            sourceType={ccpairinfo.source}
+                          />
+                        </div>
+                        <span className="text-sm text-text-darker font-medium">
+                          {ccpairinfo.name}
+                        </span>
+                      </Link>
+                    ))}
                   </div>
                 </div>
               </TooltipContent>
@@ -621,7 +613,7 @@ export function SlackChannelConfigFormFields({
           </TooltipProvider>
         )}
         <Button type="submit">{isUpdate ? "Update" : "Create"}</Button>
-        <Button type="button" secondary onClick={() => router.back()}>
+        <Button secondary onClick={() => router.back()}>
           Cancel
         </Button>
       </div>

@@ -14,17 +14,11 @@ import { ProjectFile } from "../projects/projectsService";
 interface MessagesDisplayProps {
   messageHistory: Message[];
   completeMessageTree: Map<number, Message> | null | undefined;
-  liveAssistant: MinimalPersonaSnapshot;
+  liveAssistant: MinimalPersonaSnapshot | undefined;
   llmManager: LlmManager;
   deepResearchEnabled: boolean;
   currentMessageFiles: ProjectFile[];
   setPresentingDocument: (doc: MinimalOnyxDocument | null) => void;
-  handleFeedbackChange: (
-    messageId: number,
-    newFeedback: FeedbackType | null,
-    feedbackText?: string,
-    predefinedFeedback?: string
-  ) => Promise<void>;
   onSubmit: (args: {
     message: string;
     messageIdToResend?: number;
@@ -64,7 +58,6 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
   deepResearchEnabled,
   currentMessageFiles,
   setPresentingDocument,
-  handleFeedbackChange,
   onSubmit,
   onMessageSelection,
   stopGenerating,
@@ -115,6 +108,11 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
     },
     [onSubmit, deepResearchEnabled]
   );
+
+  // require assistant to be present before rendering
+  if (!liveAssistant) {
+    return null;
+  }
 
   return (
     <div
@@ -187,7 +185,6 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
             >
               <MemoizedAIMessage
                 rawPackets={message.packets}
-                handleFeedbackChange={handleFeedbackChange}
                 assistant={liveAssistant}
                 docs={message.documents ?? emptyDocs}
                 citations={message.citations}

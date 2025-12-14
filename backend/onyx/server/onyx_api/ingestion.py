@@ -6,7 +6,7 @@ from fastapi import Depends
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import api_key_dep
+from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.constants import DEFAULT_CC_PAIR_ID
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
@@ -43,7 +43,7 @@ router = APIRouter(prefix="/onyx-api")
 @router.get("/connector-docs/{cc_pair_id}")
 def get_docs_by_connector_credential_pair(
     cc_pair_id: int,
-    _: User | None = Depends(api_key_dep),
+    _: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[DocMinimalInfo]:
     db_docs = get_documents_by_cc_pair(cc_pair_id=cc_pair_id, db_session=db_session)
@@ -59,7 +59,7 @@ def get_docs_by_connector_credential_pair(
 
 @router.get("/ingestion")
 def get_ingestion_docs(
-    _: User | None = Depends(api_key_dep),
+    _: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[DocMinimalInfo]:
     db_docs = get_ingestion_documents(db_session)
@@ -76,7 +76,7 @@ def get_ingestion_docs(
 @router.post("/ingestion")
 def upsert_ingestion_doc(
     doc_info: IngestionDocument,
-    _: User | None = Depends(api_key_dep),
+    _: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> IngestionResult:
     tenant_id = get_current_tenant_id()

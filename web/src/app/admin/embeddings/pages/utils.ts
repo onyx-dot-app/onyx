@@ -6,6 +6,7 @@ import {
 import {
   AdvancedSearchConfiguration,
   SavedSearchSettings,
+  SwitchoverType,
 } from "../interfaces";
 
 import { EmbeddingProvider } from "@/components/embedding/interfaces";
@@ -64,13 +65,13 @@ export const combineSearchSettings = (
   advancedEmbeddingDetails: AdvancedSearchConfiguration,
   rerankingDetails: RerankingDetails,
   provider_type: EmbeddingProvider | null,
-  background_reindex_enabled: boolean
+  switchover_type?: SwitchoverType
 ): SavedSearchSettings => {
   return {
     ...selectedProvider,
     ...advancedEmbeddingDetails,
     ...rerankingDetails,
     provider_type: provider_type,
-    background_reindex_enabled,
+    switchover_type,
   };
 };

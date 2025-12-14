@@ -8,19 +8,29 @@ import {
   OnboardingStep,
 } from "./types";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
-import { updateUserPersonalization } from "@/lib/users/UserSettings";
+import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/components/user/UserProvider";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 
-export function useOnboardingState(): {
+export function useOnboardingState(liveAssistant?: MinimalPersonaSnapshot): {
   state: OnboardingState;
   llmDescriptors: WellKnownLLMProviderDescriptor[];
   actions: OnboardingActions;
+  isLoading: boolean;
 } {
   const [state, dispatch] = useReducer(onboardingReducer, initialState);
   const { user, refreshUser } = useUser();
-  const { llmProviders, refreshLlmProviders } = useChatContext();
-  const hasLlmProviders = llmProviders?.length > 0;
+  // Use the SWR hook for LLM providers - no persona ID for the general providers list
+  const {
+    llmProviders,
+    isLoading: isLoadingProviders,
+    refetch: refreshLlmProviders,
+  } = useLLMProviders();
+  const { refetch: refreshPersonaProviders } = useLLMProviders(
+    liveAssistant?.id
+  );
+  const hasLlmProviders = (llmProviders?.length ?? 0) > 0;
   const userName = user?.personalization?.name;
   const [llmDescriptors, setLlmDescriptors] = useState<
     WellKnownLLMProviderDescriptor[]
@@ -49,11 +59,23 @@ export function useOnboardingState(): {
   }, []);
 
   // If there are any configured LLM providers already present, skip to the final step
+  // Wait until providers have loaded before making this decision
   useEffect(() => {
+    // Don't run logic until data has loaded
+    if (isLoadingProviders) {
+      return;
+    }
+
     if (hasLlmProviders) {
+      if (userName) {
+        dispatch({
+          type: OnboardingActionType.UPDATE_DATA,
+          payload: { userName },
+        });
+      }
       dispatch({
         type: OnboardingActionType.UPDATE_DATA,
-        payload: { llmProviders: llmProviders.map((p) => p.provider) },
+        payload: { llmProviders: (llmProviders ?? []).map((p) => p.provider) },
       });
       dispatch({
         type: OnboardingActionType.GO_TO_STEP,
@@ -82,7 +104,7 @@ export function useOnboardingState(): {
         step: OnboardingStep.LlmSetup,
       });
     }
-  }, [llmProviders]);
+  }, [llmProviders, isLoadingProviders]);
 
   const nextStep = useCallback(() => {
     dispatch({
@@ -91,7 +113,8 @@ export function useOnboardingState(): {
     });
 
     if (state.currentStep === OnboardingStep.Name) {
-      if (hasLlmProviders) {
+      const hasProviders = state.data.llmProviders?.length || 0 > 0;
+      if (hasProviders) {
         dispatch({
           type: OnboardingActionType.SET_BUTTON_ACTIVE,
           isButtonActive: true,
@@ -106,9 +129,12 @@ export function useOnboardingState(): {
 
     if (state.currentStep === OnboardingStep.LlmSetup) {
       refreshLlmProviders();
+      if (liveAssistant) {
+        refreshPersonaProviders();
+      }
     }
     dispatch({ type: OnboardingActionType.NEXT_STEP });
-  }, [state, refreshLlmProviders, llmProviders]);
+  }, [state, refreshLlmProviders, llmProviders, refreshPersonaProviders]);
 
   const prevStep = useCallback(() => {
     dispatch({ type: OnboardingActionType.PREV_STEP });
@@ -116,7 +142,8 @@ export function useOnboardingState(): {
 
   const goToStep = useCallback(
     (step: OnboardingStep) => {
-      if (step === OnboardingStep.LlmSetup && hasLlmProviders) {
+      const hasProviders = state.data.llmProviders?.length || 0 > 0;
+      if (step === OnboardingStep.LlmSetup && hasProviders) {
         dispatch({
           type: OnboardingActionType.SET_BUTTON_ACTIVE,
           isButtonActive: true,
@@ -218,5 +245,6 @@ export function useOnboardingState(): {
       setError,
       reset,
     },
+    isLoading: isLoadingProviders || !!liveAssistant,
   };
 }

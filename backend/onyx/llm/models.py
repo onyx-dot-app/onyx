@@ -1,105 +1,104 @@
-from typing import TYPE_CHECKING
+from enum import Enum
+from typing import Literal
 
-from langchain.schema.messages import AIMessage
-from langchain.schema.messages import BaseMessage
-from langchain.schema.messages import HumanMessage
-from langchain.schema.messages import SystemMessage
 from pydantic import BaseModel
 
-from onyx.agents.agent_search.dr.enums import ResearchAnswerPurpose
-from onyx.configs.constants import MessageType
-from onyx.file_store.models import InMemoryChatFile
-from onyx.llm.utils import build_content_with_imgs
-from onyx.llm.utils import message_to_string
-from onyx.tools.models import ToolCallFinalResult
 
-if TYPE_CHECKING:
-    from onyx.db.models import ChatMessage
+class ToolChoiceOptions(str, Enum):
+    REQUIRED = "required"
+    AUTO = "auto"
+    NONE = "none"
 
 
-class PreviousMessage(BaseModel):
-    """Simplified version of `ChatMessage`"""
+class ReasoningEffort(str, Enum):
+    """Reasoning effort levels for models that support extended thinking.
 
-    message: str
-    token_count: int
-    message_type: MessageType
-    files: list[InMemoryChatFile]
-    tool_call: ToolCallFinalResult | None
-    refined_answer_improvement: bool | None
-    research_answer_purpose: ResearchAnswerPurpose | None
+    Different providers map these values differently:
+    - OpenAI: Uses "low", "medium", "high" directly for reasoning_effort. Recently added "none" for 5 series
+              which is like "minimal"
+    - Claude: Uses budget_tokens with different values for each level
+    - Gemini: Uses "none", "low", "medium", "high" for thinking_budget (via litellm mapping)
+    """
 
-    @classmethod
-    def from_chat_message(
-        cls, chat_message: "ChatMessage", available_files: list[InMemoryChatFile]
-    ) -> "PreviousMessage":
-        message_file_ids = (
-            [file["id"] for file in chat_message.files] if chat_message.files else []
-        )
-        return cls(
-            message=chat_message.message,
-            token_count=chat_message.token_count,
-            message_type=chat_message.message_type,
-            files=[
-                file
-                for file in available_files
-                if str(file.file_id) in message_file_ids
-            ],
-            tool_call=(
-                ToolCallFinalResult(
-                    tool_name=chat_message.tool_call.tool_name,
-                    tool_args=chat_message.tool_call.tool_arguments,
-                    tool_result=chat_message.tool_call.tool_result,
-                )
-                if chat_message.tool_call
-                else None
-            ),
-            refined_answer_improvement=chat_message.refined_answer_improvement,
-            research_answer_purpose=chat_message.research_answer_purpose,
-        )
+    OFF = "off"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
 
-    def to_agent_sdk_msg(self) -> dict:
-        message_type_to_agent_sdk_role = {
-            MessageType.USER: "user",
-            MessageType.SYSTEM: "system",
-            MessageType.ASSISTANT: "assistant",
-        }
-        # TODO: Use native format for files and images
-        content = build_content_with_imgs(self.message, self.files)
-        if self.message_type in message_type_to_agent_sdk_role:
-            role = message_type_to_agent_sdk_role[self.message_type]
-            return {
-                "role": role,
-                "content": content,
-            }
-        raise ValueError(f"Unknown message type: {self.message_type}")
 
-    def to_langchain_msg(self) -> BaseMessage:
-        content = build_content_with_imgs(self.message, self.files)
-        if self.message_type == MessageType.USER:
-            return HumanMessage(content=content)
-        elif self.message_type == MessageType.ASSISTANT:
-            return AIMessage(content=content)
-        else:
-            return SystemMessage(content=content)
+# Budget tokens for Claude extended thinking at each reasoning effort level
+CLAUDE_REASONING_BUDGET_TOKENS: dict[ReasoningEffort, int] = {
+    ReasoningEffort.OFF: 0,
+    ReasoningEffort.LOW: 1000,
+    ReasoningEffort.MEDIUM: 5000,
+    ReasoningEffort.HIGH: 10000,
+}
 
-    # TODO: deprecate langchain
-    @classmethod
-    def from_langchain_msg(
-        cls, msg: BaseMessage, token_count: int
-    ) -> "PreviousMessage":
-        message_type = MessageType.SYSTEM
-        if isinstance(msg, HumanMessage):
-            message_type = MessageType.USER
-        elif isinstance(msg, AIMessage):
-            message_type = MessageType.ASSISTANT
+# OpenAI reasoning effort mapping (direct string values)
+OPENAI_REASONING_EFFORT: dict[ReasoningEffort, str] = {
+    ReasoningEffort.OFF: "none",  # this only works for the 5 series though
+    ReasoningEffort.LOW: "low",
+    ReasoningEffort.MEDIUM: "medium",
+    ReasoningEffort.HIGH: "high",
+}
 
-        message = message_to_string(msg)
-        return cls(
-            message=message,
-            token_count=token_count,
-            message_type=message_type,
-            files=[],
-            tool_call=None,
-            refined_answer_improvement=None,
-            research_answer_purpose=None,
-        )
+
+# Content part structures for multimodal messages
+# The classes in this mirror the OpenAI Chat Completions message types and work well with routers like LiteLLM
+class TextContentPart(BaseModel):
+    type: Literal["text"] = "text"
+    text: str
+
+
+class ImageUrlDetail(BaseModel):
+    url: str
+    detail: Literal["auto", "low", "high"] | None = None
+
+
+class ImageContentPart(BaseModel):
+    type: Literal["image_url"] = "image_url"
+    image_url: ImageUrlDetail
+
+
+ContentPart = TextContentPart | ImageContentPart
+
+
+# Tool call structures
+class FunctionCall(BaseModel):
+    name: str
+    arguments: str
+
+
+class ToolCall(BaseModel):
+    type: Literal["function"] = "function"
+    id: str
+    function: FunctionCall
+
+
+# Message types
+class SystemMessage(BaseModel):
+    role: Literal["system"] = "system"
+    content: str
+
+
+class UserMessage(BaseModel):
+    role: Literal["user"] = "user"
+    content: str | list[ContentPart]
+
+
+class AssistantMessage(BaseModel):
+    role: Literal["assistant"] = "assistant"
+    content: str | None = None
+    tool_calls: list[ToolCall] | None = None
+
+
+class ToolMessage(BaseModel):
+    role: Literal["tool"] = "tool"
+    content: str
+    tool_call_id: str
+
+
+# Union type for all OpenAI Chat Completions messages
+ChatCompletionMessage = SystemMessage | UserMessage | AssistantMessage | ToolMessage
+# Allows for passing in a string directly. This is provided for convenience and is wrapped as a UserMessage.
+LanguageModelInput = list[ChatCompletionMessage] | str

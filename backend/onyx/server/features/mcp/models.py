@@ -12,6 +12,7 @@ from pydantic import model_validator
 
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
+from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import MCPTransport
 
 
@@ -133,9 +134,29 @@ class MCPToolCreateRequest(BaseModel):
 
 class MCPToolUpdateRequest(BaseModel):
     server_id: int = Field(..., description="ID of the MCP server")
+    name: Optional[str] = Field(None, description="Updated name of the MCP server")
+    description: Optional[str] = Field(
+        None, description="Updated description of the MCP server"
+    )
     selected_tools: Optional[List[str]] = Field(
         None, description="List of selected tool names to create"
     )
+
+
+class MCPServerSimpleCreateRequest(BaseModel):
+    name: str = Field(..., description="Name of the MCP server")
+    description: Optional[str] = Field(
+        None, description="Description of the MCP server"
+    )
+    server_url: str = Field(..., description="URL of the MCP server")
+
+
+class MCPServerSimpleUpdateRequest(BaseModel):
+    name: Optional[str] = Field(None, description="Name of the MCP server")
+    description: Optional[str] = Field(
+        None, description="Description of the MCP server"
+    )
+    server_url: Optional[str] = Field(None, description="URL of the MCP server")
 
 
 class MCPToolResponse(BaseModel):
@@ -270,11 +291,15 @@ class MCPServer(BaseModel):
     description: Optional[str] = None
     server_url: str
     owner: str
-    transport: MCPTransport
-    auth_type: MCPAuthenticationType
-    auth_performer: MCPAuthenticationPerformer
+    transport: Optional[MCPTransport] = None
+    auth_type: Optional[MCPAuthenticationType] = None
+    auth_performer: Optional[MCPAuthenticationPerformer] = None
     is_authenticated: bool
     user_authenticated: Optional[bool] = None
+    status: MCPServerStatus
+    tool_count: int = Field(
+        default=0, description="Number of tools associated with this server"
+    )
     auth_template: Optional[MCPAuthTemplate] = Field(
         None, description="Authentication template for per-user auth"
     )
@@ -307,6 +332,7 @@ class MCPServerUpdateResponse(BaseModel):
     """Response for updating multiple MCP tools"""
 
     server_id: int
+    server_name: str
     updated_tools: int
 
 

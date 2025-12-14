@@ -10,17 +10,21 @@ on:
         description: "The version (ie v0.0.1) to tag as latest"
         required: true
 
+permissions:
+  contents: read
+
 jobs:
   tag:
     # See https://runs-on.com/runners/linux/
     # use a lower powered instance since this just does i/o to docker hub
-    runs-on: [runs-on, runner=2cpu-linux-x64, "run-id=${{ github.run_id }}"]
+    runs-on: [runs-on, runner=2cpu-linux-x64, "run-id=${{ github.run_id }}-tag"]
+    timeout-minutes: 45
     steps:
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f211e3e9ded2d9377c8cadc4489a4e38014bc4c9 # ratchet:docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
 
       - name: Login to Docker Hub
-        uses: docker/login-action@dd4fa0671be5250ee6f50aedf4cb05514abda2c7 # ratchet:docker/login-action@v1
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
@@ -29,13 +33,19 @@ jobs:
         run: echo "DOCKER_CLI_EXPERIMENTAL=enabled" >> $GITHUB_ENV
 
       - name: Pull, Tag and Push Web Server Image
+        env:
+          VERSION: ${{ github.event.inputs.version }}
         run: |
-          docker buildx imagetools create -t onyxdotapp/onyx-web-server:latest onyxdotapp/onyx-web-server:${{ github.event.inputs.version }}
+          docker buildx imagetools create -t onyxdotapp/onyx-web-server:latest onyxdotapp/onyx-web-server:${VERSION}
 
       - name: Pull, Tag and Push API Server Image
+        env:
+          VERSION: ${{ github.event.inputs.version }}
         run: |
-          docker buildx imagetools create -t onyxdotapp/onyx-backend:latest onyxdotapp/onyx-backend:${{ github.event.inputs.version }}
+          docker buildx imagetools create -t onyxdotapp/onyx-backend:latest onyxdotapp/onyx-backend:${VERSION}
 
       - name: Pull, Tag and Push Model Server Image
+        env:
+          VERSION: ${{ github.event.inputs.version }}
         run: |
-          docker buildx imagetools create -t onyxdotapp/onyx-model-server:latest onyxdotapp/onyx-model-server:${{ github.event.inputs.version }}
+          docker buildx imagetools create -t onyxdotapp/onyx-model-server:latest onyxdotapp/onyx-model-server:${VERSION}

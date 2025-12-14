@@ -23,7 +23,7 @@ from ee.onyx.server.query_and_chat.chat_backend import (
     router as chat_router,
 )
 from ee.onyx.server.query_and_chat.query_backend import (
-    basic_router as query_router,
+    basic_router as ee_query_router,
 )
 from ee.onyx.server.query_history.api import router as query_history_router
 from ee.onyx.server.reporting.usage_export_api import router as usage_export_router
@@ -48,6 +48,9 @@ from onyx.main import include_auth_router_with_prefix
 from onyx.main import include_router_with_global_prefix_prepended
 from onyx.main import lifespan as lifespan_base
 from onyx.main import use_route_function_names_as_operation_ids
+from onyx.server.query_and_chat.query_backend import (
+    basic_router as query_router,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
@@ -119,6 +122,7 @@ def get_application() -> FastAPI:
     include_router_with_global_prefix_prepended(application, query_history_router)
     # EE only backend APIs
     include_router_with_global_prefix_prepended(application, query_router)
+    include_router_with_global_prefix_prepended(application, ee_query_router)
     include_router_with_global_prefix_prepended(application, chat_router)
     include_router_with_global_prefix_prepended(application, standard_answer_router)
     include_router_with_global_prefix_prepended(application, ee_oauth_router)

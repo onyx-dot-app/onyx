@@ -2,7 +2,7 @@
 
 import React, { useMemo } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import AgentIcon from "@/refresh-components/AgentIcon";
+import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import SvgBubbleText from "@/icons/bubble-text";
@@ -11,10 +11,10 @@ import { useAppRouter } from "@/hooks/appNavigation";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgPin from "@/icons/pin";
 import Truncated from "@/refresh-components/texts/Truncated";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 import SvgUser from "@/icons/user";
 import SvgActions from "@/icons/actions";
-import { useAgentsContext } from "./contexts/AgentsContext";
+import { usePinnedAgentsWithDetails } from "@/lib/hooks/useAgents";
 import { cn, noProp } from "@/lib/utils";
 import SvgEdit from "@/icons/edit";
 import { useRouter } from "next/navigation";
@@ -25,7 +25,7 @@ import SvgBarChart from "@/icons/bar-chart";
 import SvgPinned from "@/icons/pinned";
 
 interface IconLabelProps {
-  icon: React.FunctionComponent<SvgProps>;
+  icon: React.FunctionComponent<IconProps>;
   children: string;
 }
 
@@ -47,7 +47,7 @@ export interface AgentCardProps {
 export default function AgentCard({ agent }: AgentCardProps) {
   const route = useAppRouter();
   const router = useRouter();
-  const { pinnedAgents, togglePinnedAgent } = useAgentsContext();
+  const { pinnedAgents, togglePinnedAgent } = usePinnedAgentsWithDetails();
   const pinned = useMemo(
     () => pinnedAgents.some((pinnedAgent) => pinnedAgent.id === agent.id),
     [agent.id, pinnedAgents]
@@ -72,7 +72,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
           <div className="flex flex-row items-center w-full gap-1">
             <div className="flex flex-row items-center w-full p-1.5 gap-1.5">
               <div className="px-0.5">
-                <AgentIcon agent={agent} size={18} />
+                <AgentAvatar agent={agent} size={18} />
               </div>
               <Truncated mainContentBody className="flex-1">
                 {agent.name}

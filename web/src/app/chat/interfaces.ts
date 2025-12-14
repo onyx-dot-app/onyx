@@ -46,8 +46,8 @@ export interface RetrievalDetails {
   enable_auto_detect_filters?: boolean | null;
 }
 
-// Document ID -> Citation number
-export type CitationMap = { [key: string]: number };
+// Citation number -> Document ID (allows O(1) lookup when rendering citations)
+export type CitationMap = { [citation_num: number]: string };
 
 export enum ChatFileType {
   IMAGE = "image",
@@ -150,8 +150,6 @@ export interface BackendChatSession {
   description: string;
   persona_id: number;
   persona_name: string;
-  persona_icon_color: string | null;
-  persona_icon_shape: number | null;
   messages: BackendMessage[];
   time_created: string;
   time_updated: string;
@@ -162,6 +160,20 @@ export interface BackendChatSession {
   packets: Packet[][];
 }
 
+export function toChatSession(backend: BackendChatSession): ChatSession {
+  return {
+    id: backend.chat_session_id,
+    name: backend.description,
+    persona_id: backend.persona_id,
+    time_created: backend.time_created,
+    time_updated: backend.time_updated,
+    shared_status: backend.shared_status,
+    project_id: null,
+    current_alternate_model: backend.current_alternate_model ?? "",
+    current_temperature_override: backend.current_temperature_override,
+  };
+}
+
 export interface BackendMessage {
   message_id: number;
   message_type: string;
@@ -170,7 +182,8 @@ export interface BackendMessage {
   latest_child_message: number | null;
   message: string;
   rephrased_query: string | null;
-  context_docs: { top_documents: OnyxDocument[] } | null;
+  // Backend sends context_docs as a flat array of documents
+  context_docs: OnyxDocument[] | null;
   time_sent: string;
   overridden_model: string;
   alternate_assistant_id: number | null;

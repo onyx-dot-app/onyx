@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 import { cn } from "@/lib/utils";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
@@ -239,6 +239,9 @@ export interface IconButtonProps
   tertiary?: boolean;
   internal?: boolean;
 
+  // Button size
+  large?: boolean;
+
   // Button states
   transient?: boolean;
   disabled?: boolean;
@@ -246,7 +249,7 @@ export interface IconButtonProps
   // Button properties
   onHover?: (isHovering: boolean) => void;
   onClick?: React.MouseEventHandler<HTMLButtonElement>;
-  icon: React.FunctionComponent<SvgProps>;
+  icon: React.FunctionComponent<IconProps>;
   tooltip?: string;
 }
 

@@ -2,10 +2,9 @@
 
 import { AuthTypeMetadata } from "@/lib/userSS";
 import LoginText from "@/app/auth/login/LoginText";
-import Link from "next/link";
 import SignInButton from "@/app/auth/login/SignInButton";
 import EmailPasswordForm from "./EmailPasswordForm";
-import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
+import { AuthType, NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 import { useSendAuthRequiredMessage } from "@/lib/extension/utils";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
@@ -29,9 +28,9 @@ export default function LoginPage({
     <div className="flex flex-col w-full justify-center">
       {authUrl &&
         authTypeMetadata &&
-        authTypeMetadata.authType !== "cloud" &&
+        authTypeMetadata.authType !== AuthType.CLOUD &&
         // basic auth is handled below w/ the EmailPasswordForm
-        authTypeMetadata.authType !== "basic" && (
+        authTypeMetadata.authType !== AuthType.BASIC && (
           <div className="flex flex-col w-full gap-4">
             <LoginText />
             <SignInButton
@@ -41,7 +40,7 @@ export default function LoginPage({
           </div>
         )}
 
-      {authTypeMetadata?.authType === "cloud" && (
+      {authTypeMetadata?.authType === AuthType.CLOUD && (
         <div className="w-full justify-center flex flex-col gap-6">
           <LoginText />
           {authUrl && authTypeMetadata && (
@@ -61,14 +60,12 @@ export default function LoginPage({
           )}
           <EmailPasswordForm shouldVerify={true} nextUrl={nextUrl} />
           {NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && (
-            <Link href="/auth/forgot-password">
-              <Button>Reset Password</Button>
-            </Link>
+            <Button href="/auth/forgot-password">Reset Password</Button>
           )}
         </div>
       )}
 
-      {authTypeMetadata?.authType === "basic" && (
+      {authTypeMetadata?.authType === AuthType.BASIC && (
         <div className="flex flex-col w-full gap-6">
           <LoginText />
 

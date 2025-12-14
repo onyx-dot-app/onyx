@@ -18,6 +18,7 @@ class FederatedConnectorCredentials(BaseModel):
 class FederatedConnectorRequest(BaseModel):
     source: FederatedConnectorSource
     credentials: FederatedConnectorCredentials
+    config: dict[str, Any] = Field(default_factory=dict)
 
 
 class FederatedConnectorResponse(BaseModel):
@@ -60,6 +61,7 @@ class FederatedConnectorDetail(BaseModel):
     source: FederatedConnectorSource
     name: str
     credentials: FederatedConnectorCredentials
+    config: dict[str, Any] = Field(default_factory=dict)
     oauth_token_exists: bool
     oauth_token_expires_at: datetime | None = None
     document_sets: list[dict[str, Any]] = Field(default_factory=list)
@@ -87,12 +89,19 @@ class FederatedConnectorSummary(BaseModel):
 
 class FederatedConnectorUpdateRequest(BaseModel):
     credentials: FederatedConnectorCredentials | None = None
+    config: dict[str, Any] | None = None
 
 
 class EntitySpecResponse(BaseModel):
     """Response for entity specification"""
 
     entities: dict[str, Any]
+
+
+class ConfigurationSchemaResponse(BaseModel):
+    """Response for configuration schema specification"""
+
+    configuration: dict[str, Any]
 
 
 class CredentialSchemaResponse(BaseModel):

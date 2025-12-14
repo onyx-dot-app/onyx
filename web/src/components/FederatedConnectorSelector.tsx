@@ -3,24 +3,14 @@ import {
   FederatedConnectorDetail,
   FederatedConnectorConfig,
   federatedSourceToRegularSource,
-  ValidSources,
 } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
 import SvgX from "@/icons/x";
-import SvgSettings from "@/icons/settings";
 import { Label } from "@/components/ui/label";
 import { ErrorMessage } from "formik";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { Input } from "@/components/ui/input";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import Button from "@/refresh-components/buttons/Button";
 
 interface FederatedConnectorSelectorProps {
   name: string;
@@ -32,198 +22,6 @@ interface FederatedConnectorSelectorProps {
   placeholder?: string;
   showError?: boolean;
 }
-
-interface EntityConfigDialogProps {
-  connectorId: number;
-  connectorName: string;
-  connectorSource: ValidSources | null;
-  currentEntities: Record<string, any>;
-  onSave: (entities: Record<string, any>) => void;
-  onClose: () => void;
-  isOpen: boolean;
-}
-
-const EntityConfigDialog = ({
-  connectorId,
-  connectorName,
-  connectorSource,
-  currentEntities,
-  onSave,
-  onClose,
-  isOpen,
-}: EntityConfigDialogProps) => {
-  const [entities, setEntities] =
-    useState<Record<string, any>>(currentEntities);
-  const [entitySchema, setEntitySchema] = useState<Record<string, any> | null>(
-    null
-  );
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (isOpen && connectorId) {
-      const fetchEntitySchema = async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
-          const response = await fetch(
-            `/api/federated/${connectorId}/entities`
-          );
-          if (!response.ok) {
-            throw new Error(
-              `Failed to fetch entity schema: ${response.statusText}`
-            );
-          }
-          const data = await response.json();
-          setEntitySchema(data.entities);
-        } catch (err) {
-          setError(
-            err instanceof Error ? err.message : "Failed to load entity schema"
-          );
-        } finally {
-          setIsLoading(false);
-        }
-      };
-      fetchEntitySchema();
-    }
-  }, [isOpen, connectorId]);
-
-  const handleSave = () => {
-    onSave(entities);
-    onClose();
-  };
-
-  const handleEntityChange = (key: string, value: any) => {
-    setEntities((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
-  };
-
-  if (!connectorSource) {
-    return null;
-  }
-
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <SourceIcon
-              sourceType={federatedSourceToRegularSource(connectorSource)}
-              iconSize={20}
-            />
-            Configure {connectorName}
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          {isLoading && (
-            <div className="text-center py-4">
-              <div className="animate-spin h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2"></div>
-              <p className="text-sm text-muted-foreground">
-                Loading configuration...
-              </p>
-            </div>
-          )}
-
-          {error && (
-            <div className="text-red-500 text-sm p-3 bg-red-50 rounded-md">
-              {error}
-            </div>
-          )}
-
-          {entitySchema && !isLoading && (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Configure which entities to include from this connector:
-              </p>
-
-              {Object.entries(entitySchema).map(
-                ([key, field]: [string, any]) => (
-                  <div key={key} className="space-y-2">
-                    <Label className="text-sm font-medium">
-                      {field.description || key}
-                      {field.required && (
-                        <span className="text-red-500 ml-1">*</span>
-                      )}
-                    </Label>
-
-                    {field.type === "list" ? (
-                      <div className="space-y-2">
-                        <Input
-                          type="text"
-                          placeholder={
-                            field.example || `Enter ${key} (comma-separated)`
-                          }
-                          value={
-                            Array.isArray(entities[key])
-                              ? entities[key].join(", ")
-                              : ""
-                          }
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            const list = value
-                              ? value
-                                  .split(",")
-                                  .map((item) => item.trim())
-                                  .filter(Boolean)
-                              : [];
-                            handleEntityChange(key, list);
-                          }}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          {field.description && field.description !== key
-                            ? field.description
-                            : `Enter ${key} separated by commas`}
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <Input
-                          type="text"
-                          placeholder={field.example || `Enter ${key}`}
-                          value={entities[key] || ""}
-                          onChange={(e) =>
-                            handleEntityChange(key, e.target.value)
-                          }
-                        />
-                        {field.description && field.description !== key && (
-                          <p className="text-xs text-muted-foreground">
-                            {field.description}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )
-              )}
-            </div>
-          )}
-
-          <div className="flex justify-end gap-2 pt-4">
-            <Button
-              secondary
-              type="button"
-              onClick={onClose}
-              className="!py-1.5 !px-3"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={handleSave}
-              disabled={isLoading}
-              className="!py-1.5 !px-3"
-            >
-              Save Configuration
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-};
 
 export const FederatedConnectorSelector = ({
   name,
@@ -237,19 +35,6 @@ export const FederatedConnectorSelector = ({
 }: FederatedConnectorSelectorProps) => {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [configDialogState, setConfigDialogState] = useState<{
-    isOpen: boolean;
-    connectorId: number | null;
-    connectorName: string;
-    connectorSource: ValidSources | null;
-    currentEntities: Record<string, any>;
-  }>({
-    isOpen: false,
-    connectorId: null,
-    connectorName: "",
-    connectorSource: null,
-    currentEntities: {},
-  });
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -309,36 +94,6 @@ export const FederatedConnectorSelector = ({
         (config) => config.federated_connector_id !== connectorId
       )
     );
-  };
-
-  const openConfigDialog = (connectorId: number) => {
-    const connector = federatedConnectors.find((c) => c.id === connectorId);
-    const config = selectedConfigs.find(
-      (c) => c.federated_connector_id === connectorId
-    );
-
-    if (connector) {
-      setConfigDialogState({
-        isOpen: true,
-        connectorId,
-        connectorName: connector.name,
-        connectorSource: connector.source,
-        currentEntities: config?.entities || {},
-      });
-    }
-  };
-
-  const saveEntityConfig = (entities: Record<string, any>) => {
-    const updatedConfigs = selectedConfigs.map((config) => {
-      if (config.federated_connector_id === configDialogState.connectorId) {
-        return {
-          ...config,
-          entities,
-        };
-      }
-      return config;
-    });
-    onChange(updatedConfigs);
   };
 
   useEffect(() => {
@@ -479,14 +234,6 @@ export const FederatedConnectorSelector = ({
                     <IconButton
                       internal
                       type="button"
-                      tooltip="Configure entities"
-                      aria-label="Configure entities"
-                      onClick={() => openConfigDialog(connector.id)}
-                      icon={SvgSettings}
-                    />
-                    <IconButton
-                      internal
-                      type="button"
                       aria-label="Remove connector"
                       tooltip="Remove connector"
                       onClick={() => removeConnector(connector.id)}
@@ -503,18 +250,6 @@ export const FederatedConnectorSelector = ({
           No federated connectors selected. Search and select connectors above.
         </div>
       )}
-
-      <EntityConfigDialog
-        connectorId={configDialogState.connectorId!}
-        connectorName={configDialogState.connectorName}
-        connectorSource={configDialogState.connectorSource}
-        currentEntities={configDialogState.currentEntities}
-        onSave={saveEntityConfig}
-        onClose={() =>
-          setConfigDialogState((prev) => ({ ...prev, isOpen: false }))
-        }
-        isOpen={configDialogState.isOpen}
-      />
 
       {showError && (
         <ErrorMessage

@@ -1,12 +1,12 @@
 import { JSX } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import { FeedbackType } from "../../interfaces";
 import { Packet } from "../../services/streamingModels";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ProjectFile } from "../../projects/projectsService";
 import { LlmDescriptor } from "@/lib/hooks";
 import { IconType } from "react-icons";
 import { OnyxIconType } from "@/components/icons/icons";
+import { CitationMap } from "../../interfaces";
 
 export enum RenderType {
   HIGHLIGHT = "highlight",
@@ -14,16 +14,11 @@ export enum RenderType {
 }
 
 export interface FullChatState {
-  handleFeedbackChange: (
-    newFeedback: FeedbackType | null,
-    feedbackText?: string,
-    predefinedFeedback?: string
-  ) => Promise<void>;
   assistant: MinimalPersonaSnapshot;
   // Document-related context for citations
   docs?: OnyxDocument[] | null;
   userFiles?: ProjectFile[];
-  citations?: { [key: string]: number };
+  citations?: CitationMap;
   setPresentingDocument?: (document: MinimalOnyxDocument) => void;
   // Regenerate functionality
   regenerate?: (modelOverRide: LlmDescriptor) => Promise<void>;

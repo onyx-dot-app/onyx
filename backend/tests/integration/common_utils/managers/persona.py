@@ -33,7 +33,9 @@ class PersonaManager:
         users: list[str] | None = None,
         groups: list[int] | None = None,
         label_ids: list[int] | None = None,
+        user_file_ids: list[str] | None = None,
         user_performing_action: DATestUser | None = None,
+        display_priority: int | None = None,
     ) -> DATestPersona:
         name = name or f"test-persona-{uuid4()}"
         description = description or f"Description for {name}"
@@ -58,6 +60,8 @@ class PersonaManager:
             users=[UUID(user) for user in (users or [])],
             groups=groups or [],
             label_ids=label_ids or [],
+            user_file_ids=user_file_ids or [],
+            display_priority=display_priority,
         )
 
         response = requests.post(

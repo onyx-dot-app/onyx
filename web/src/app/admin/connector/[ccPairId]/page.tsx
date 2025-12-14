@@ -25,7 +25,6 @@ import {
 } from "./ConfigDisplay";
 import DeletionErrorStatus from "./DeletionErrorStatus";
 import { IndexAttemptsTable } from "./IndexAttemptsTable";
-
 import { buildCCPairInfoUrl, triggerIndexing } from "./lib";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -446,11 +445,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
           {ccPair.is_editable_for_current_user && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button
-                  leftIcon={SvgSettings}
-                  className="flex items-center gap-x-1"
-                  secondary
-                >
+                <Button leftIcon={SvgSettings} secondary>
                   Manage
                 </Button>
               </DropdownMenuTrigger>

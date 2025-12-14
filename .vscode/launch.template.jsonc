@@ -20,6 +20,7 @@
         "Web Server",
         "Model Server",
         "API Server",
+        "MCP Server",
         "Slack Bot",
         "Celery primary",
         "Celery light",
@@ -132,8 +133,6 @@
       },
       "consoleTitle": "API Server Console"
     },
-    // For the listener to access the Slack API,
-    // ONYX_BOT_SLACK_APP_TOKEN & ONYX_BOT_SLACK_BOT_TOKEN need to be set in .env file located in the root of the project
     {
       "name": "Slack Bot",
       "consoleName": "Slack Bot",
@@ -151,6 +150,34 @@
         "group": "2"
       },
       "consoleTitle": "Slack Bot Console"
+    },
+    {
+      "name": "MCP Server",
+      "consoleName": "MCP Server",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "MCP_SERVER_ENABLED": "true",
+        "MCP_SERVER_PORT": "8090",
+        "MCP_SERVER_CORS_ORIGINS": "http://localhost:*",
+        "LOG_LEVEL": "DEBUG",
+        "PYTHONUNBUFFERED": "1"
+      },
+      "args": [
+        "onyx.mcp_server.api:mcp_app",
+        "--reload",
+        "--port",
+        "8090",
+        "--timeout-graceful-shutdown",
+        "0"
+      ],
+      "presentation": {
+        "group": "2"
+      },
+      "consoleTitle": "MCP Server Console"
     },
     {
       "name": "Celery primary",
@@ -527,10 +554,10 @@
       "name": "Install Python Requirements",
       "type": "node",
       "request": "launch",
-      "runtimeExecutable": "bash",
+      "runtimeExecutable": "uv",
       "runtimeArgs": [
-        "-c",
-        "pip install -r backend/requirements/default.txt && pip install -r backend/requirements/dev.txt && pip install -r backend/requirements/ee.txt && pip install -r backend/requirements/model_server.txt"
+        "sync",
+        "--all-extras"
       ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
@@ -543,14 +570,14 @@
       "name": "Onyx OpenAPI Schema Generator",
       "type": "debugpy",
       "request": "launch",
-      "program": "scripts/onyx_openapi_schema.py",
-      "cwd": "${workspaceFolder}/backend",
+      "program": "backend/scripts/onyx_openapi_schema.py",
+      "cwd": "${workspaceFolder}",
       "envFile": "${workspaceFolder}/.env",
       "env": {
         "PYTHONUNBUFFERED": "1",
-        "PYTHONPATH": "."
+        "PYTHONPATH": "backend"
       },
-      "args": ["--filename", "generated/openapi.json"]
+      "args": ["--filename", "backend/generated/openapi.json", "--generate-python-client"]
     },
     {
       // script to debug multi tenant db issues

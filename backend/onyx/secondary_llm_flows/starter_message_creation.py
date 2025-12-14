@@ -1,6 +1,5 @@
 import json
 from typing import Any
-from typing import cast
 from typing import List
 
 from sqlalchemy.orm import Session
@@ -8,7 +7,6 @@ from sqlalchemy.orm import Session
 from onyx.configs.chat_configs import NUM_PERSONA_PROMPT_GENERATION_CHUNKS
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
-from onyx.context.search.postprocessing.postprocessing import cleanup_chunks
 from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
@@ -18,6 +16,7 @@ from onyx.db.models import User
 from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.llm.factory import get_default_llms
+from onyx.llm.utils import llm_response_to_string
 from onyx.prompts.starter_messages import format_persona_starter_message_prompt
 from onyx.prompts.starter_messages import PERSONA_CATEGORY_GENERATION_PROMPT
 from onyx.utils.logger import setup_logger
@@ -45,7 +44,7 @@ def get_random_chunks_from_doc_sets(
     chunks = document_index.random_retrieval(
         filters=filters, num_to_retrieve=NUM_PERSONA_PROMPT_GENERATION_CHUNKS
     )
-    return cleanup_chunks(chunks)
+    return chunks
 
 
 def parse_categories(content: str) -> List[str | None]:
@@ -144,7 +143,8 @@ def generate_starter_messages(
         )
 
         category_response = fast_llm.invoke(category_generation_prompt)
-        categories = parse_categories(cast(str, category_response.content))
+        response_content = llm_response_to_string(category_response)
+        categories = parse_categories(response_content)
 
         if not categories:
             logger.error("No categories were generated.")

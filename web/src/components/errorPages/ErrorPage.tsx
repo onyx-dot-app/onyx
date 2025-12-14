@@ -1,6 +1,7 @@
 import ErrorPageLayout from "@/components/errorPages/ErrorPageLayout";
 import Text from "@/refresh-components/texts/Text";
 import SvgAlertCircle from "@/icons/alert-circle";
+import { DOCS_BASE_URL } from "@/lib/constants";
 
 export default function Error() {
   return (
@@ -19,7 +20,7 @@ export default function Error() {
         If you&apos;re an admin, please review our{" "}
         <a
           className="text-action-link-05"
-          href="https://docs.onyx.app/?utm_source=app&utm_medium=error_page&utm_campaign=config_error"
+          href={`${DOCS_BASE_URL}?utm_source=app&utm_medium=error_page&utm_campaign=config_error`}
           target="_blank"
           rel="noopener noreferrer"
         >

@@ -18,10 +18,6 @@ DOCUMENT_ENCODER_MODEL = (
 )
 # If the below is changed, Vespa deployment must also be changed
 DOC_EMBEDDING_DIM = int(os.environ.get("DOC_EMBEDDING_DIM") or 768)
-# Model should be chosen with 512 context size, ideally don't change this
-# If multipass_indexing is enabled, the max context size would be set to
-# DOC_EMBEDDING_CONTEXT_SIZE * LARGE_CHUNK_RATIO
-DOC_EMBEDDING_CONTEXT_SIZE = 512
 NORMALIZE_EMBEDDINGS = (
     os.environ.get("NORMALIZE_EMBEDDINGS") or "true"
 ).lower() == "true"
@@ -74,10 +70,6 @@ GEN_AI_MODEL_FALLBACK_MAX_TOKENS = int(
     os.environ.get("GEN_AI_MODEL_FALLBACK_MAX_TOKENS") or 4096
 )
 
-# Number of tokens from chat history to include at maximum
-# 3000 should be enough context regardless of use, no need to include as much as possible
-# as this drives up the cost unnecessarily
-GEN_AI_HISTORY_CUTOFF = 3000
 # This is used when computing how much context space is available for documents
 # ahead of time in order to let the user know if they can "select" more documents
 # It represents a maximum "expected" number of input tokens from the latest user

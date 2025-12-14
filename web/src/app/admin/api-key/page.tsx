@@ -2,11 +2,10 @@
 
 import { ThreeDotsLoader } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { KeyIcon } from "@/components/icons/icons";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import useSWR, { mutate } from "swr";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import {
   TableBody,
   TableCell,
@@ -15,68 +14,22 @@ import {
   TableRow,
   Table,
 } from "@/components/ui/table";
-
-import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useState } from "react";
 import { DeleteButton } from "@/components/DeleteButton";
-import { FiCopy, FiEdit2, FiRefreshCw } from "react-icons/fi";
-import { Modal } from "@/components/Modal";
+import Modal from "@/refresh-components/Modal";
 import { Spinner } from "@/components/Spinner";
-import { deleteApiKey, regenerateApiKey } from "./lib";
-import { OnyxApiKeyForm } from "./OnyxApiKeyForm";
-import { APIKey } from "./types";
+import { deleteApiKey, regenerateApiKey } from "@/app/admin/api-key/lib";
+import OnyxApiKeyForm from "@/app/admin/api-key/OnyxApiKeyForm";
+import { APIKey } from "@/app/admin/api-key/types";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import Button from "@/refresh-components/buttons/Button";
 import SvgRefreshCw from "@/icons/refresh-cw";
 import SvgEdit from "@/icons/edit";
-
-const API_KEY_TEXT = `API Keys allow you to access Onyx APIs programmatically. Click the button below to generate a new API Key.`;
-
-function NewApiKeyModal({
-  apiKey,
-  onClose,
-}: {
-  apiKey: string;
-  onClose: () => void;
-}) {
-  const [copyClicked, setCopyClicked] = useState(false);
-
-  return (
-    <Modal title="New API Key" onOutsideClick={onClose}>
-      <div className="px-8 py-8">
-        <div className="h-32">
-          <Text className="mb-4">
-            Make sure you copy your new API key. You won’t be able to see this
-            key again.
-          </Text>
-
-          <div className="flex mt-2">
-            <b className="my-auto break-all">{apiKey}</b>
-            <div
-              className="ml-2 my-auto p-2 hover:bg-accent-background-hovered rounded cursor-pointer"
-              onClick={() => {
-                setCopyClicked(true);
-                navigator.clipboard.writeText(apiKey);
-                setTimeout(() => {
-                  setCopyClicked(false);
-                }, 10000);
-              }}
-            >
-              <FiCopy size="16" className="my-auto" />
-            </div>
-          </div>
-          {copyClicked && (
-            <Text className="text-success text-xs font-medium mt-1">
-              API Key copied!
-            </Text>
-          )}
-        </div>
-      </div>
-    </Modal>
-  );
-}
+import SvgKey from "@/icons/key";
+import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+import Text from "@/refresh-components/texts/Text";
 
 function Main() {
   const { popup, setPopup } = usePopup();
@@ -112,7 +65,10 @@ function Main() {
 
   const introSection = (
     <div className="flex flex-col items-start gap-4">
-      <Text>{API_KEY_TEXT}</Text>
+      <Text>
+        API Keys allow you to access Onyx APIs programmatically. Click the
+        button below to generate a new API Key.
+      </Text>
       <CreateButton
         className="self-start"
         onClick={() => setShowCreateUpdateForm(true)}
@@ -147,15 +103,23 @@ function Main() {
   }
 
   return (
-    <div>
+    <>
       {popup}
 
-      {fullApiKey && (
-        <NewApiKeyModal
-          apiKey={fullApiKey}
-          onClose={() => setFullApiKey(null)}
-        />
-      )}
+      <Modal open={!!fullApiKey}>
+        <Modal.Content small>
+          <Modal.Header
+            title="New API Key"
+            icon={SvgKey}
+            onClose={() => setFullApiKey(null)}
+            description="Make sure you copy your new API key. You won’t be able to see this key again."
+          />
+          <Modal.Body>
+            <Text className="break-all flex-1">{fullApiKey}</Text>
+            <CopyIconButton getCopyText={() => fullApiKey!} />
+          </Modal.Body>
+        </Modal.Content>
+      </Modal>
 
       {keyIsGenerating && <Spinner />}
 
@@ -251,14 +215,14 @@ function Main() {
           apiKey={selectedApiKey}
         />
       )}
-    </div>
+    </>
   );
 }
 
 export default function Page() {
   return (
     <div className="mx-auto container">
-      <AdminPageTitle title="API Keys" icon={<KeyIcon size={32} />} />
+      <AdminPageTitle title="API Keys" icon={SvgKey} />
 
       <Main />
     </div>

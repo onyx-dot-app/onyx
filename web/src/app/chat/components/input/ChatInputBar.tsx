@@ -10,11 +10,12 @@ import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import { InputPrompt } from "@/app/chat/interfaces";
 import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import { useInputPrompts } from "@/lib/hooks/useInputPrompts";
+import { useCCPairs } from "@/lib/hooks/useCCPairs";
 import { DocumentIcon2, FileIcon } from "@/components/icons/icons";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ChatState } from "@/app/chat/interfaces";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
+import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { CalendarIcon, XIcon } from "lucide-react";
 import { getFormattedDateRangeString } from "@/lib/dateUtils";
 import { truncateString, cn, hasNonImageFiles } from "@/lib/utils";
@@ -93,7 +94,7 @@ export interface ChatInputBarProps {
   availableContextTokens: number;
 
   // assistants
-  selectedAssistant: MinimalPersonaSnapshot;
+  selectedAssistant: MinimalPersonaSnapshot | undefined;
 
   toggleDocumentSidebar: () => void;
   handleFileUpload: (files: File[]) => void;
@@ -131,12 +132,18 @@ function ChatInputBarInner({
   disabled,
 }: ChatInputBarProps) {
   const { user } = useUser();
-  const { forcedToolIds, setForcedToolIds } = useAgentsContext();
+  const { forcedToolIds, setForcedToolIds } = useForcedTools();
   const { currentMessageFiles, setCurrentMessageFiles } = useProjectsContext();
 
   const currentIndexingFiles = useMemo(() => {
     return currentMessageFiles.filter(
       (file) => file.status === UserFileStatus.PROCESSING
+    );
+  }, [currentMessageFiles]);
+
+  const hasUploadingFiles = useMemo(() => {
+    return currentMessageFiles.some(
+      (file) => file.status === UserFileStatus.UPLOADING
     );
   }, [currentMessageFiles]);
 
@@ -202,14 +209,23 @@ function ChatInputBarInner({
     [setCurrentMessageFiles]
   );
 
-  const { inputPrompts, ccPairs } = useChatContext();
-  const { data: federatedConnectorsData } = useFederatedConnectors();
+  const { inputPrompts } = useInputPrompts();
+  const { ccPairs, isLoading: ccPairsLoading } = useCCPairs();
+  const { data: federatedConnectorsData, isLoading: federatedLoading } =
+    useFederatedConnectors();
+
+  // Bottom controls are hidden until all data is loaded
+  const controlsLoading =
+    ccPairsLoading ||
+    federatedLoading ||
+    !selectedAssistant ||
+    llmManager.isLoadingProviders;
   const [showPrompts, setShowPrompts] = useState(false);
 
   // Memoize availableSources to prevent unnecessary re-renders
   const memoizedAvailableSources = useMemo(
     () => [
-      ...ccPairs.map((ccPair) => ccPair.source),
+      ...(ccPairs ?? []).map((ccPair) => ccPair.source),
       ...(federatedConnectorsData?.map((connector) => connector.source) || []),
     ],
     [ccPairs, federatedConnectorsData]
@@ -308,10 +324,10 @@ function ChatInputBarInner({
       combinedSettings?.settings?.deep_research_enabled ?? true;
     return (
       deepResearchGloballyEnabled &&
-      hasSearchToolsAvailable(selectedAssistant.tools)
+      hasSearchToolsAvailable(selectedAssistant?.tools || [])
     );
   }, [
-    selectedAssistant.tools,
+    selectedAssistant?.tools,
     combinedSettings?.settings?.deep_research_enabled,
   ]);
 
@@ -425,11 +441,12 @@ function ChatInputBarInner({
           id="onyx-chat-input-textarea"
           className={cn(
             "w-full",
+            "h-[44px]", // Fixed initial height to prevent flash - useEffect will adjust as needed
             "outline-none",
             "bg-transparent",
             "resize-none",
             "placeholder:text-text-03",
-            "whitespace-normal",
+            "whitespace-pre-wrap",
             "break-word",
             "overscroll-contain",
             "overflow-y-auto",
@@ -437,18 +454,11 @@ function ChatInputBarInner({
             "pb-2",
             "pt-3"
           )}
-          autoFocus={!disabled}
+          autoFocus
           style={{ scrollbarWidth: "thin" }}
           role="textarea"
           aria-multiline
-          placeholder={
-            selectedAssistant.id === 0
-              ? `How can ${
-                  combinedSettings?.enterpriseSettings?.application_name ||
-                  "Onyx"
-                } help you today`
-              : `How can ${selectedAssistant.name} help you today`
-          }
+          placeholder="How can I help you today"
           value={message}
           onKeyDown={(event) => {
             if (
@@ -516,8 +526,9 @@ function ChatInputBarInner({
           </div>
         )}
 
-        <div className="flex justify-between items-center w-full p-1">
+        <div className="flex justify-between items-center w-full p-1 min-h-[40px]">
           <div className="flex flex-row items-center">
+            {/* (+) button - always visible */}
             <FilePickerPopover
               onFileClick={handleFileClick}
               onPickRecent={(file: ProjectFile) => {
@@ -549,68 +560,87 @@ function ChatInputBarInner({
               )}
               selectedFileIds={currentMessageFiles.map((f) => f.id)}
             />
-            {selectedAssistant.tools.length > 0 && (
-              <ActionsPopover
-                selectedAssistant={selectedAssistant}
-                filterManager={filterManager}
-                availableSources={memoizedAvailableSources}
-                disabled={disabled}
-              />
-            )}
-            {showDeepResearch && (
-              <SelectButton
-                leftIcon={SvgHourglass}
-                onClick={toggleDeepResearch}
-                engaged={deepResearchEnabled}
-                action
-                folded
-                disabled={disabled}
-                className={disabled ? "bg-transparent" : ""}
-              >
-                Deep Research
-              </SelectButton>
-            )}
 
-            {forcedToolIds.length > 0 &&
-              forcedToolIds.map((toolId) => {
-                const tool = selectedAssistant.tools.find(
-                  (tool) => tool.id === toolId
-                );
-                if (!tool) {
-                  return null;
-                }
-                return (
-                  <SelectButton
-                    key={toolId}
-                    leftIcon={getIconForAction(tool)}
-                    onClick={() => {
-                      setForcedToolIds((prev) =>
-                        prev.filter((id) => id !== toolId)
-                      );
-                    }}
-                    engaged
-                    action
-                    disabled={disabled}
-                    className={disabled ? "bg-transparent" : ""}
-                  >
-                    {tool.display_name}
-                  </SelectButton>
-                );
-              })}
+            {/* Controls that load in when data is ready */}
+            <div
+              className={cn(
+                "flex flex-row items-center",
+                controlsLoading && "invisible"
+              )}
+            >
+              {selectedAssistant && selectedAssistant.tools.length > 0 && (
+                <ActionsPopover
+                  selectedAssistant={selectedAssistant}
+                  filterManager={filterManager}
+                  availableSources={memoizedAvailableSources}
+                  disabled={disabled}
+                />
+              )}
+              {/* Temporarily disabled - to re-enable, change false to showDeepResearch */}
+              {false && showDeepResearch && (
+                <SelectButton
+                  leftIcon={SvgHourglass}
+                  onClick={toggleDeepResearch}
+                  engaged={deepResearchEnabled}
+                  action
+                  folded
+                  disabled={disabled}
+                  className={disabled ? "bg-transparent" : ""}
+                >
+                  Deep Research
+                </SelectButton>
+              )}
+
+              {selectedAssistant &&
+                forcedToolIds.length > 0 &&
+                forcedToolIds.map((toolId) => {
+                  const tool = selectedAssistant.tools.find(
+                    (tool) => tool.id === toolId
+                  );
+                  if (!tool) {
+                    return null;
+                  }
+                  return (
+                    <SelectButton
+                      key={toolId}
+                      leftIcon={getIconForAction(tool)}
+                      onClick={() => {
+                        setForcedToolIds(
+                          forcedToolIds.filter((id) => id !== toolId)
+                        );
+                      }}
+                      engaged
+                      action
+                      disabled={disabled}
+                      className={disabled ? "bg-transparent" : ""}
+                    >
+                      {tool.display_name}
+                    </SelectButton>
+                  );
+                })}
+            </div>
           </div>
 
           <div className="flex flex-row items-center gap-1">
-            <div data-testid="ChatInputBar/llm-popover-trigger">
+            {/* LLM popover - loads when ready */}
+            <div
+              data-testid="ChatInputBar/llm-popover-trigger"
+              className={cn(controlsLoading && "invisible")}
+            >
               <LLMPopover
                 llmManager={llmManager}
                 requiresImageGeneration={false}
                 disabled={disabled}
               />
             </div>
+
+            {/* Submit button - always visible */}
             <IconButton
               id="onyx-chat-input-send-button"
               icon={chatState === "input" ? SvgArrowUp : SvgStop}
-              disabled={chatState === "input" && !message}
+              disabled={
+                (chatState === "input" && !message) || hasUploadingFiles
+              }
               onClick={() => {
                 if (chatState == "streaming") {
                   stopGenerating();

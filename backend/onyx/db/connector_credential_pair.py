@@ -17,8 +17,10 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.app_configs import USER_FILE_INDEXING_LIMIT
+from onyx.configs.constants import AuthType
 from onyx.configs.constants import DocumentSource
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.credentials import fetch_credential_by_id
@@ -442,10 +444,27 @@ def set_cc_pair_repeated_error_state(
     cc_pair_id: int,
     in_repeated_error_state: bool,
 ) -> None:
+    values: dict = {"in_repeated_error_state": in_repeated_error_state}
+
+    # When entering repeated error state, also pause the connector
+    # to prevent continued indexing retry attempts burning through embedding credits.
+    # However, don't pause if there's an active manual indexing trigger,
+    # which indicates the user wants to retry immediately.
+    # NOTE: only for Cloud, since most self-hosted users use self-hosted embedding
+    # models. Also, they are more prone to repeated failures -> eventual success.
+    if in_repeated_error_state and AUTH_TYPE == AuthType.CLOUD:
+        cc_pair = get_connector_credential_pair_from_id(
+            db_session=db_session,
+            cc_pair_id=cc_pair_id,
+        )
+        # Only pause if there's no manual indexing trigger active
+        if cc_pair and cc_pair.indexing_trigger is None:
+            values["status"] = ConnectorCredentialPairStatus.PAUSED
+
     stmt = (
         update(ConnectorCredentialPair)
         .where(ConnectorCredentialPair.id == cc_pair_id)
-        .values(in_repeated_error_state=in_repeated_error_state)
+        .values(**values)
     )
     db_session.execute(stmt)
     db_session.commit()

@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 import litellm
 
+from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.llm.utils import find_model_obj
 from onyx.llm.utils import get_model_map
 
@@ -36,7 +37,7 @@ def test_partial_match_in_model_map() -> None:
         "supports_audio_output": False,
         "supports_function_calling": True,
         "supports_response_schema": True,
-        "supports_system_messages": True,
+        "supports_system_messages": False,
         "supports_tool_choice": True,
         "supports_vision": True,
     }
@@ -45,13 +46,13 @@ def test_partial_match_in_model_map() -> None:
     assert result1 is not None
     for key, value in _EXPECTED_FIELDS.items():
         assert key in result1
-        assert result1[key] == value
+        assert result1[key] == value, "Unexpected value for key: {}".format(key)
 
     result2 = find_model_obj(model_map, "openai", "gemma-3-27b-it")
     assert result2 is not None
     for key, value in _EXPECTED_FIELDS.items():
         assert key in result2
-        assert result2[key] == value
+        assert result2[key] == value, "Unexpected value for key: {}".format(key)
 
     get_model_map.cache_clear()
 
@@ -77,3 +78,20 @@ def test_no_overwrite_in_model_map() -> None:
         assert result["is_correct"] is True
 
     get_model_map.cache_clear()
+
+
+def test_twelvelabs_pegasus_override_present() -> None:
+    get_model_map.cache_clear()
+    try:
+        model_map = get_model_map()
+        model_obj = find_model_obj(
+            model_map,
+            "twelvelabs",
+            "us.twelvelabs.pegasus-1-2-v1:0",
+        )
+        assert model_obj is not None
+        assert model_obj["max_input_tokens"] == GEN_AI_MODEL_FALLBACK_MAX_TOKENS
+        assert model_obj["max_tokens"] == GEN_AI_MODEL_FALLBACK_MAX_TOKENS
+        assert model_obj["supports_reasoning"] is False
+    finally:
+        get_model_map.cache_clear()

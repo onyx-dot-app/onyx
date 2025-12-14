@@ -1,4 +1,7 @@
 name: Check Lazy Imports
+concurrency:
+  group: Check-Lazy-Imports-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
+  cancel-in-progress: true
 
 on:
   merge_group:
@@ -7,16 +10,22 @@ on:
       - main
       - 'release/**'
 
+permissions:
+  contents: read
+
 jobs:
   check-lazy-imports:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+      uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+      with:
+        persist-credentials: false
 
     - name: Set up Python
-      uses: actions/setup-python@7f4fc3e22c37d6ff65e88745f38bd3157c663f7c # ratchet:actions/setup-python@v4
+      uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # ratchet:actions/setup-python@v6
       with:
         python-version: '3.11'
 

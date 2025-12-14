@@ -1,15 +1,15 @@
 import { ActionsTable } from "./ActionTable";
 import { ToolSnapshot, MCPServersResponse } from "@/lib/tools/interfaces";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import Title from "@/components/ui/title";
 import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { ToolIcon } from "@/components/icons/icons";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { FiHelpCircle } from "react-icons/fi";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import SvgActions from "@/icons/actions";
 
 export default async function Page() {
   // Fetch both tools and MCP servers
@@ -52,7 +52,7 @@ export default async function Page() {
   return (
     <div className="mx-auto container">
       <AdminPageTitle
-        icon={<ToolIcon size={32} className="my-auto" />}
+        icon={<SvgActions className="stroke-text-04 h-8 w-8" />}
         title="Actions"
       />
 

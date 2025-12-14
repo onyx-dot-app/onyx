@@ -1,15 +1,19 @@
 import base64
 from io import BytesIO
 
-from langchain_core.messages import BaseMessage
-from langchain_core.messages import HumanMessage
-from langchain_core.messages import SystemMessage
 from PIL import Image
 
 from onyx.configs.app_configs import IMAGE_SUMMARIZATION_SYSTEM_PROMPT
 from onyx.configs.app_configs import IMAGE_SUMMARIZATION_USER_PROMPT
 from onyx.llm.interfaces import LLM
-from onyx.llm.utils import message_to_string
+from onyx.llm.models import ChatCompletionMessage
+from onyx.llm.models import ContentPart
+from onyx.llm.models import ImageContentPart
+from onyx.llm.models import ImageUrlDetail
+from onyx.llm.models import SystemMessage
+from onyx.llm.models import TextContentPart
+from onyx.llm.models import UserMessage
+from onyx.llm.utils import llm_response_to_string
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 
@@ -97,22 +101,24 @@ def _summarize_image(
 ) -> str:
     """Use default LLM (if it is multimodal) to generate a summary of an image."""
 
-    messages: list[BaseMessage] = []
+    messages: list[ChatCompletionMessage] = []
 
     if system_prompt:
         messages.append(SystemMessage(content=system_prompt))
 
+    content: list[ContentPart] = []
+    if query:
+        content.append(TextContentPart(text=query))
+    content.append(ImageContentPart(image_url=ImageUrlDetail(url=encoded_image)))
+
     messages.append(
-        HumanMessage(
-            content=[
-                {"type": "text", "text": query},
-                {"type": "image_url", "image_url": {"url": encoded_image}},
-            ],
+        UserMessage(
+            content=content,
         ),
     )
 
     try:
-        return message_to_string(llm.invoke(messages))
+        return llm_response_to_string(llm.invoke(messages))
 
     except Exception as e:
         error_msg = f"Summarization failed. Messages: {messages}"

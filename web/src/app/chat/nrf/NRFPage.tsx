@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef, useContext } from "react";
 import { useUser } from "@/components/user/UserProvider";
 import { usePopup } from "@/components/admin/connectors/Popup";
+import { AuthType } from "@/lib/constants";
 import {
   Dialog,
   DialogContent,
@@ -12,19 +13,22 @@ import {
 } from "@/components/ui/dialog";
 import { v4 as uuidv4 } from "uuid";
 import Button from "@/refresh-components/buttons/Button";
-import { SimplifiedChatInputBar } from "../components/input/SimplifiedChatInputBar";
+import SimplifiedChatInputBar from "@/app/chat/components/input/SimplifiedChatInputBar";
 import { Menu } from "lucide-react";
 import { Shortcut } from "./interfaces";
 import {
   MaxShortcutsReachedModal,
   NewShortCutModal,
 } from "@/components/extension/Shortcuts";
-import { Modal } from "@/components/Modal";
+import Modal from "@/refresh-components/Modal";
+import SvgUser from "@/icons/user";
 import { useNightTime } from "@/lib/dateUtils";
 import { useFilters } from "@/lib/hooks";
 import { uploadFilesForChat } from "../services/lib";
 import { ChatFileType, FileDescriptor } from "../interfaces";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import { useCCPairs } from "@/lib/hooks/useCCPairs";
+import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
+import { useTags } from "@/lib/hooks/useTags";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 import Dropzone from "react-dropzone";
 import { useSendMessageToParent } from "@/lib/extension/utils";
@@ -35,7 +39,7 @@ import LoginPage from "../../auth/login/LoginPage";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
 import { ReadonlyRequestCookies } from "next/dist/server/web/spec-extension/adapters/request-cookies";
 import { CHROME_MESSAGE } from "@/lib/extension/constants";
-import { ApiKeyModal } from "@/components/llm/ApiKeyModal";
+import ApiKeyModal from "@/components/llm/ApiKeyModal";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 
 export default function NRFPage({
@@ -56,7 +60,9 @@ export default function NRFPage({
   const filterManager = useFilters();
   const { isNight } = useNightTime();
   const { user, authTypeMetadata } = useUser();
-  const { ccPairs, documentSets, tags } = useChatContext();
+  const { ccPairs } = useCCPairs();
+  const { documentSets } = useDocumentSets();
+  const { tags } = useTags();
   const { llmProviders } = useLLMProviders();
   const settings = useContext(SettingsContext);
 
@@ -107,7 +113,7 @@ export default function NRFPage({
     }
   };
 
-  const availableSources = ccPairs.map((ccPair) => ccPair.source);
+  const availableSources = (ccPairs ?? []).map((ccPair) => ccPair.source);
 
   const [currentMessageFiles, setCurrentMessageFiles] = useState<
     FileDescriptor[]
@@ -310,33 +316,42 @@ export default function NRFPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {!user && authTypeMetadata.authType !== "disabled" && showLoginModal ? (
-        <Modal className="max-w-md mx-auto">
-          {authTypeMetadata.authType === "basic" ? (
-            <LoginPage
-              authUrl={null}
-              authTypeMetadata={authTypeMetadata}
-              nextUrl="/nrf"
+      {!user &&
+      authTypeMetadata.authType !== AuthType.DISABLED &&
+      showLoginModal ? (
+        <Modal open onOpenChange={() => setShowLoginModal(false)}>
+          <Modal.Content small>
+            <Modal.Header
+              icon={SvgUser}
+              title="Welcome to Onyx"
+              onClose={() => setShowLoginModal(false)}
             />
-          ) : (
-            <div className="flex flex-col items-center">
-              <h2 className="text-center text-xl text-strong font-bold mb-4">
-                Welcome to Onyx
-              </h2>
-              <Button
-                className="bg-agent w-full hover:bg-accent-hover text-white"
-                onClick={() => {
-                  if (window.top) {
-                    window.top.location.href = "/auth/login";
-                  } else {
-                    window.location.href = "/auth/login";
-                  }
-                }}
-              >
-                Log in
-              </Button>
-            </div>
-          )}
+            <Modal.Body>
+              {authTypeMetadata.authType === AuthType.BASIC ? (
+                <LoginPage
+                  authUrl={null}
+                  authTypeMetadata={authTypeMetadata}
+                  nextUrl="/nrf"
+                />
+              ) : (
+                <div className="flex flex-col items-center">
+                  <Button
+                    className="w-full"
+                    secondary
+                    onClick={() => {
+                      if (window.top) {
+                        window.top.location.href = "/auth/login";
+                      } else {
+                        window.location.href = "/auth/login";
+                      }
+                    }}
+                  >
+                    Log in
+                  </Button>
+                </div>
+              )}
+            </Modal.Body>
+          </Modal.Content>
         </Modal>
       ) : (
         (!llmProviders || llmProviders.length === 0) && (

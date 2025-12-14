@@ -212,6 +212,7 @@ class DocumentSource(str, Enum):
 
     IMAP = "imap"
     BITBUCKET = "bitbucket"
+    TESTRAIL = "testrail"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
@@ -296,6 +297,15 @@ class MessageType(str, Enum):
     SYSTEM = "system"  # SystemMessage
     USER = "user"  # HumanMessage
     ASSISTANT = "assistant"  # AIMessage
+    TOOL_CALL = "tool_call"
+    TOOL_CALL_RESPONSE = "tool_call_response"
+
+
+class ChatMessageSimpleType(str, Enum):
+    USER = "user"
+    ASSISTANT = "assistant"
+    TOOL_CALL = "tool_call"
+    FILE_TEXT = "file_text"
 
 
 class TokenRateLimitScope(str, Enum):
@@ -621,4 +631,5 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.AIRTABLE: "airtable - database",
     DocumentSource.HIGHSPOT: "highspot - CRM data",
     DocumentSource.IMAP: "imap - email data",
+    DocumentSource.TESTRAIL: "testrail - test case management tool for QA processes",
 }

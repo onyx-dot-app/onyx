@@ -1,12 +1,5 @@
 import React, { useMemo, useState, useEffect } from "react";
-import {
-  ModalIds,
-  useChatModal,
-} from "@/refresh-components/contexts/ChatModalContext";
-import {
-  ModelConfiguration,
-  WellKnownLLMProviderDescriptor,
-} from "@/app/admin/configuration/llm/interfaces";
+import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { Form, Formik, FormikProps, useFormikContext } from "formik";
 import { APIFormFieldState } from "@/refresh-components/form/types";
 import { MODAL_CONTENT_MAP, PROVIDER_TAB_CONFIG } from "../constants";
@@ -20,174 +13,39 @@ import {
   testCustomProvider,
 } from "./llmConnectionHelpers";
 import { LLMConnectionFieldsWithTabs } from "./LLMConnectionFieldsWithTabs";
-import { LLMConnectionFieldsBasic } from "./LLMConnectionFieldsBasic";
+import LLMConnectionFieldsBasic from "./LLMConnectionFieldsBasic";
 import { LLMConnectionFieldsCustom } from "./LLMConnectionFieldsCustom";
 import { getValidationSchema } from "./llmValidationSchema";
 import { OnboardingActions, OnboardingState } from "../types";
-import ProviderModal from "./ProviderModal";
+import LLMFormikEffects from "./LLMFormikEffects";
 
-type LLMConnectionModalData = {
+import ProviderModal from "@/components/modals/ProviderModal";
+import { ModalCreationInterface } from "@/refresh-components/contexts/ModalContext";
+
+export interface LLMConnectionModalProps {
   icon: React.ReactNode;
   title: string;
   llmDescriptor?: WellKnownLLMProviderDescriptor;
   isCustomProvider?: boolean;
   onboardingState: OnboardingState;
   onboardingActions: OnboardingActions;
-};
+  modal: ModalCreationInterface;
+}
 
-type LLMFormikEffectsProps = {
-  tabConfig: any;
-  activeTab: string;
-  llmDescriptor?: WellKnownLLMProviderDescriptor;
-  setShowApiMessage: (v: boolean) => void;
-  setErrorMessage: (v: string) => void;
-  setFetchedModelConfigurations: (v: any[]) => void;
-  setModelsErrorMessage: (v: string) => void;
-  setModelsApiStatus: (v: APIFormFieldState) => void;
-  setShowModelsApiErrorMessage: (v: boolean) => void;
-  setApiStatus: (v: APIFormFieldState) => void;
-};
-
-const LLMFormikEffects: React.FC<LLMFormikEffectsProps> = ({
-  tabConfig,
-  activeTab,
+export default function LLMConnectionModal({
+  icon,
+  title,
   llmDescriptor,
-  setShowApiMessage,
-  setErrorMessage,
-  setFetchedModelConfigurations,
-  setModelsErrorMessage,
-  setModelsApiStatus,
-  setShowModelsApiErrorMessage,
-  setApiStatus,
-}) => {
-  const formikProps = useFormikContext<any>();
-
-  useEffect(() => {
-    if (tabConfig && activeTab) {
-      const currentTab = tabConfig.tabs.find((t: any) => t.id === activeTab);
-      setShowApiMessage(false);
-      setErrorMessage("");
-      setFetchedModelConfigurations([]);
-      setModelsErrorMessage("");
-      setModelsApiStatus("loading");
-      setShowModelsApiErrorMessage(false);
-
-      if (currentTab?.hiddenFields) {
-        Object.entries(currentTab.hiddenFields).forEach(([key, value]) => {
-          formikProps.setFieldValue(key, value);
-        });
-      } else {
-        //set default api base when tab changes
-        if (
-          llmDescriptor?.default_api_base &&
-          formikProps.values.api_base !== llmDescriptor.default_api_base
-        ) {
-          formikProps.setFieldValue("api_base", llmDescriptor.default_api_base);
-        }
-      }
-    }
-  }, [activeTab, tabConfig, llmDescriptor]);
-
-  useEffect(() => {
-    if (!llmDescriptor) return;
-
-    const values = formikProps.values as any;
-    const isEmpty = (val: any) =>
-      val == null || (typeof val === "string" && val.trim() === "");
-
-    let shouldReset = false;
-    switch (llmDescriptor.name) {
-      case "openai":
-      case "anthropic":
-        if (isEmpty(values.api_key)) shouldReset = true;
-        break;
-      case "ollama_chat":
-        if (activeTab === "self-hosted") {
-          if (isEmpty(values.api_base)) shouldReset = true;
-        } else if (activeTab === "cloud") {
-          if (isEmpty(values?.custom_config?.OLLAMA_API_KEY))
-            shouldReset = true;
-        }
-        break;
-      case "azure":
-        if (isEmpty(values.api_key) || isEmpty(values.target_uri))
-          shouldReset = true;
-        break;
-      case "openrouter":
-        if (isEmpty(values.api_key) || isEmpty(values.api_base))
-          shouldReset = true;
-        break;
-      case "vertex_ai":
-        if (isEmpty(values?.custom_config?.vertex_credentials))
-          shouldReset = true;
-        break;
-      case "bedrock": {
-        const selectedAuth = values?.custom_config?.BEDROCK_AUTH_METHOD;
-        if (selectedAuth === "access_key") {
-          formikProps.setFieldValue(
-            "custom_config.AWS_BEARER_TOKEN_BEDROCK",
-            ""
-          );
-          shouldReset = true;
-        } else if (selectedAuth === "long_term_api_key") {
-          formikProps.setFieldValue("custom_config.AWS_ACCESS_KEY_ID", "");
-          formikProps.setFieldValue("custom_config.AWS_SECRET_ACCESS_KEY", "");
-          shouldReset = true;
-        } else if (selectedAuth === "iam") {
-          formikProps.setFieldValue(
-            "custom_config.AWS_BEARER_TOKEN_BEDROCK",
-            ""
-          );
-          formikProps.setFieldValue("custom_config.AWS_ACCESS_KEY_ID", "");
-          formikProps.setFieldValue("custom_config.AWS_SECRET_ACCESS_KEY", "");
-          shouldReset = true;
-        }
-
-        if (isEmpty(values?.custom_config?.AWS_REGION_NAME)) {
-          shouldReset = true;
-        }
-        break;
-      }
-      default:
-        break;
-    }
-
-    if (shouldReset) {
-      setShowApiMessage(false);
-      setErrorMessage("");
-      setModelsErrorMessage("");
-      setModelsApiStatus("loading");
-      setShowModelsApiErrorMessage(false);
-      setApiStatus("loading");
-      setFetchedModelConfigurations([]);
-    }
-  }, [
-    llmDescriptor,
-    activeTab,
-    (formikProps.values as any).api_key,
-    (formikProps.values as any).api_base,
-    (formikProps.values as any).target_uri,
-    (formikProps.values as any).custom_config?.BEDROCK_AUTH_METHOD,
-    (formikProps.values as any).custom_config,
-  ]);
-
-  return null;
-};
-
-const LLMConnectionModal = () => {
-  const { getModalData, toggleModal } = useChatModal();
-  const data = getModalData<LLMConnectionModalData>();
-  const icon = data?.icon;
-  const title = data?.title ?? "";
-  const llmDescriptor = data?.llmDescriptor;
-  const isCustomProvider = data?.isCustomProvider ?? false;
+  isCustomProvider,
+  onboardingState,
+  onboardingActions,
+  modal,
+}: LLMConnectionModalProps) {
   const modalContent = isCustomProvider
     ? MODAL_CONTENT_MAP["custom"]
     : llmDescriptor
       ? MODAL_CONTENT_MAP[llmDescriptor.name]
       : undefined;
-  const onboardingActions = data?.onboardingActions;
-  const onboardingState = data?.onboardingState;
 
   const initialValues = useMemo(
     () => buildInitialValues(llmDescriptor, isCustomProvider),
@@ -208,38 +66,7 @@ const LLMConnectionModal = () => {
     any[]
   >([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Set default tab when llmDescriptor changes
-  useEffect(() => {
-    if (llmDescriptor) {
-      const tabConfig = PROVIDER_TAB_CONFIG[llmDescriptor.name];
-      if (tabConfig?.tabs[0]) {
-        setActiveTab(tabConfig.tabs[0].id);
-      }
-      setFetchedModelConfigurations([]);
-      setShowApiMessage(false);
-      setErrorMessage("");
-      setModelsErrorMessage("");
-      setModelsApiStatus("loading");
-      setShowModelsApiErrorMessage(false);
-      setApiStatus("loading");
-      setIsFetchingModels(false);
-    }
-  }, [llmDescriptor]);
-
-  // Also reset when modal opens with new data
-  useEffect(() => {
-    if (data) {
-      setFetchedModelConfigurations([]);
-      setShowApiMessage(false);
-      setErrorMessage("");
-      setModelsErrorMessage("");
-      setModelsApiStatus("loading");
-      setShowModelsApiErrorMessage(false);
-      setApiStatus("loading");
-      setIsFetchingModels(false);
-    }
-  }, [data]);
+  const [formResetKey, setFormResetKey] = useState(0);
 
   const modelOptions = useMemo(
     () => getModelOptions(llmDescriptor, fetchedModelConfigurations as any[]),
@@ -287,28 +114,6 @@ const LLMConnectionModal = () => {
     }
   };
 
-  const testModelChangeWithApiKey = async (
-    modelName: string,
-    formikProps: FormikProps<any>
-  ) => {
-    if (!llmDescriptor) return;
-    setApiStatus("loading");
-    setShowApiMessage(true);
-    const result = await testApiKeyHelper(
-      llmDescriptor,
-      initialValues,
-      formikProps.values,
-      undefined,
-      modelName
-    );
-    if (result.ok) {
-      setApiStatus("success");
-    } else {
-      setErrorMessage(result.errorMessage);
-      setApiStatus("error");
-    }
-  };
-
   const testFileInputChange = async (
     customConfig: Record<string, any>,
     formikProps: FormikProps<any>
@@ -332,14 +137,28 @@ const LLMConnectionModal = () => {
     }
   };
 
-  if (!data) return null;
-
   const tabConfig = llmDescriptor
     ? PROVIDER_TAB_CONFIG[llmDescriptor.name]
     : null;
 
+  // Initialize activeTab to the first tab if tabConfig exists
+  useEffect(() => {
+    const firstTabId = tabConfig?.tabs?.[0]?.id;
+    if (firstTabId && !activeTab) {
+      setActiveTab(firstTabId);
+    }
+  }, [tabConfig, activeTab]);
+
+  // Reset when modal opens to ensure fresh form
+  useEffect(() => {
+    if (modal.isOpen) {
+      setFormResetKey((prev) => prev + 1);
+    }
+  }, [modal.isOpen]);
+
   return (
     <Formik
+      key={formResetKey}
       initialValues={initialValues}
       validationSchema={getValidationSchema(
         isCustomProvider ? "custom" : llmDescriptor?.name,
@@ -392,28 +211,26 @@ const LLMConnectionModal = () => {
           model_configurations: modelConfigsToUse,
         };
 
-        if (apiStatus !== "success") {
-          setApiStatus("loading");
-          setShowApiMessage(true);
-          let result;
+        setApiStatus("loading");
+        setShowApiMessage(true);
+        let result;
 
-          if (llmDescriptor) {
-            result = await testApiKeyHelper(
-              llmDescriptor,
-              initialValues,
-              payload
-            );
-          } else {
-            result = await testCustomProvider(payload);
-          }
-          if (!result.ok) {
-            setErrorMessage(result.errorMessage);
-            setApiStatus("error");
-            setIsSubmitting(false);
-            return;
-          }
-          setApiStatus("success");
+        if (llmDescriptor) {
+          result = await testApiKeyHelper(
+            llmDescriptor,
+            initialValues,
+            payload
+          );
+        } else {
+          result = await testCustomProvider(payload);
         }
+        if (!result.ok) {
+          setErrorMessage(result.errorMessage);
+          setApiStatus("error");
+          setIsSubmitting(false);
+          return;
+        }
+        setApiStatus("success");
 
         const response = await fetch(
           `${LLM_PROVIDERS_ADMIN_URL}${"?is_creation=true"}`,
@@ -457,7 +274,7 @@ const LLMConnectionModal = () => {
         });
         onboardingActions?.setButtonActive(true);
         setIsSubmitting(false);
-        toggleModal(ModalIds.LLMConnectionModal, false);
+        modal.toggle(false);
       }}
     >
       {(formikProps) => {
@@ -474,10 +291,6 @@ const LLMConnectionModal = () => {
                 setFetchedModelConfigurations(value);
               } else if (field === "default_model_name") {
                 formikProps.setFieldValue("default_model_name", value);
-                // Trigger validation of the newly set default model
-                if (value) {
-                  testModelChangeWithApiKey(value, formikProps);
-                }
               } else if (field === "_modelListUpdated") {
                 // Ignore this field as it's just for forcing re-renders
                 return;
@@ -492,11 +305,11 @@ const LLMConnectionModal = () => {
 
         return (
           <ProviderModal
-            id={ModalIds.LLMConnectionModal}
+            open={modal.isOpen}
+            onOpenChange={modal.toggle}
             title={title}
             description={modalContent?.description}
-            startAdornment={icon}
-            xs
+            icon={() => icon}
             onSubmit={formikProps.submitForm}
             submitDisabled={
               isCustomProvider
@@ -531,7 +344,6 @@ const LLMConnectionModal = () => {
                     llmDescriptor={llmDescriptor!}
                     tabConfig={tabConfig}
                     modelOptions={modelOptions}
-                    onApiKeyBlur={(apiKey) => testApiKey(apiKey, formikProps)}
                     showApiMessage={showApiMessage}
                     apiStatus={apiStatus}
                     errorMessage={errorMessage}
@@ -540,9 +352,6 @@ const LLMConnectionModal = () => {
                     canFetchModels={canFetchModels}
                     activeTab={activeTab}
                     setActiveTab={setActiveTab}
-                    testModelChangeWithApiKey={(modelName) =>
-                      testModelChangeWithApiKey(modelName, formikProps)
-                    }
                     modelsApiStatus={modelsApiStatus}
                     modelsErrorMessage={modelsErrorMessage}
                     showModelsApiErrorMessage={showModelsApiErrorMessage}
@@ -557,7 +366,6 @@ const LLMConnectionModal = () => {
                     apiStatus={apiStatus}
                     errorMessage={errorMessage}
                     isFetchingModels={isFetchingModels}
-                    onApiKeyBlur={(apiKey) => testApiKey(apiKey, formikProps)}
                     formikValues={formikProps.values}
                     setDefaultModelName={(value) =>
                       formikProps.setFieldValue("default_model_name", value)
@@ -567,9 +375,6 @@ const LLMConnectionModal = () => {
                     modelsApiStatus={modelsApiStatus}
                     modelsErrorMessage={modelsErrorMessage}
                     showModelsApiErrorMessage={showModelsApiErrorMessage}
-                    testModelChangeWithApiKey={(modelName) =>
-                      testModelChangeWithApiKey(modelName, formikProps)
-                    }
                     testFileInputChange={(customConfig) =>
                       testFileInputChange(customConfig, formikProps)
                     }
@@ -583,6 +388,4 @@ const LLMConnectionModal = () => {
       }}
     </Formik>
   );
-};
-
-export default LLMConnectionModal;
+}

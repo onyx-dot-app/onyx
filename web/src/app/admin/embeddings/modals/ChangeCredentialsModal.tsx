@@ -1,30 +1,25 @@
+"use client";
+
 import React, { useRef, useState } from "react";
-import { Modal } from "@/components/Modal";
+import Modal from "@/refresh-components/Modal";
 import { Callout } from "@/components/ui/callout";
-import Text from "@/components/ui/text";
-import { Separator } from "@/components/ui/separator";
+import Text from "@/refresh-components/texts/Text";
+import Separator from "@/refresh-components/Separator";
 import Button from "@/refresh-components/buttons/Button";
 import { Label } from "@/components/Field";
+import SvgSettings from "@/icons/settings";
 import {
   CloudEmbeddingProvider,
   getFormattedProviderName,
-} from "../../../../components/embedding/interfaces";
+} from "@/components/embedding/interfaces";
 import {
   EMBEDDING_PROVIDERS_ADMIN_URL,
   LLM_PROVIDERS_ADMIN_URL,
-} from "../../configuration/llm/constants";
+} from "@/app/admin/configuration/llm/constants";
 import { mutate } from "swr";
-import { testEmbedding } from "../pages/utils";
+import { testEmbedding } from "@/app/admin/embeddings/pages/utils";
 
-export function ChangeCredentialsModal({
-  provider,
-  onConfirm,
-  onCancel,
-  onDeleted,
-  useFileUpload,
-  isProxy = false,
-  isAzure = false,
-}: {
+export interface ChangeCredentialsModalProps {
   provider: CloudEmbeddingProvider;
   onConfirm: () => void;
   onCancel: () => void;
@@ -32,15 +27,23 @@ export function ChangeCredentialsModal({
   useFileUpload: boolean;
   isProxy?: boolean;
   isAzure?: boolean;
-}) {
+}
+
+export default function ChangeCredentialsModal({
+  provider,
+  onConfirm,
+  onCancel,
+  onDeleted,
+  useFileUpload,
+  isProxy = false,
+  isAzure = false,
+}: ChangeCredentialsModalProps) {
   const [apiKey, setApiKey] = useState("");
   const [apiUrl, setApiUrl] = useState("");
   const [modelName, setModelName] = useState("");
-
   const [testError, setTestError] = useState<string>("");
   const [fileName, setFileName] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [deletionError, setDeletionError] = useState<string>("");
 
   const clearFileInput = () => {
@@ -84,7 +87,6 @@ export function ChangeCredentialsModal({
 
   const handleDelete = async () => {
     setDeletionError("");
-    setIsProcessing(true);
 
     try {
       const response = await fetch(
@@ -106,8 +108,6 @@ export function ChangeCredentialsModal({
       setDeletionError(
         error instanceof Error ? error.message : "An unknown error occurred"
       );
-    } finally {
-      setIsProcessing(false);
     }
   };
 
@@ -167,140 +167,134 @@ export function ChangeCredentialsModal({
     }
   };
   return (
-    <Modal
-      width="max-w-3xl"
-      icon={provider.icon}
-      title={`Modify your ${getFormattedProviderName(provider.provider_type)} ${
-        isProxy ? "Configuration" : "key"
-      }`}
-      onOutsideClick={onCancel}
-    >
-      <>
-        {!isAzure && (
-          <>
-            <p className="mb-4">
-              You can modify your configuration by providing a new API key
-              {isProxy ? " or API URL." : "."}
-            </p>
+    <Modal open onOpenChange={onCancel}>
+      <Modal.Content>
+        <Modal.Header
+          icon={SvgSettings}
+          title={`Modify your ${getFormattedProviderName(
+            provider.provider_type
+          )} ${isProxy ? "Configuration" : "key"}`}
+          onClose={onCancel}
+        />
+        <Modal.Body>
+          {!isAzure && (
+            <>
+              <Text>
+                You can modify your configuration by providing a new API key
+                {isProxy ? " or API URL." : "."}
+              </Text>
 
-            <div className="mb-4 flex flex-col gap-y-2">
-              <Label className="mt-2">API Key</Label>
-              {useFileUpload ? (
-                <>
-                  <Label className="mt-2">Upload JSON File</Label>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".json"
-                    onChange={handleFileUpload}
-                    className="text-lg w-full p-1"
-                  />
-                  {fileName && <p>Uploaded file: {fileName}</p>}
-                </>
-              ) : (
-                <>
-                  <input
-                    className={`
-                        border
-                        border-border
-                        rounded
-                        w-full
-                        py-2
-                        px-3
-                        bg-background-emphasis
-                    `}
-                    value={apiKey}
-                    onChange={(e: any) => setApiKey(e.target.value)}
-                    placeholder="Paste your API key here"
-                  />
-                </>
-              )}
+              <div className="flex flex-col gap-2">
+                <Label className="mt-2">API Key</Label>
+                {useFileUpload ? (
+                  <>
+                    <Label className="mt-2">Upload JSON File</Label>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".json"
+                      onChange={handleFileUpload}
+                      className="text-lg w-full p-1"
+                    />
+                    {fileName && <p>Uploaded file: {fileName}</p>}
+                  </>
+                ) : (
+                  <>
+                    <input
+                      className="border border-border rounded w-full py-2 px-3 bg-background-emphasis"
+                      value={apiKey}
+                      onChange={(e: any) => setApiKey(e.target.value)}
+                      placeholder="Paste your API key here"
+                    />
+                  </>
+                )}
 
-              {isProxy && (
-                <>
-                  <Label className="mt-2">API URL</Label>
+                {isProxy && (
+                  <>
+                    <Label className="mt-2">API URL</Label>
 
-                  <input
-                    className={`
-                        border
-                        border-border
-                        rounded
-                        w-full
-                        py-2
-                        px-3
-                        bg-background-emphasis
-                    `}
-                    value={apiUrl}
-                    onChange={(e: any) => setApiUrl(e.target.value)}
-                    placeholder="Paste your API URL here"
-                  />
+                    <input
+                      className={`
+                          border
+                          border-border
+                          rounded
+                          w-full
+                          py-2
+                          px-3
+                          bg-background-emphasis
+                      `}
+                      value={apiUrl}
+                      onChange={(e: any) => setApiUrl(e.target.value)}
+                      placeholder="Paste your API URL here"
+                    />
 
-                  {deletionError && (
-                    <Callout type="danger" title="Error" className="mt-4">
-                      {deletionError}
-                    </Callout>
-                  )}
+                    {deletionError && (
+                      <Callout type="danger" title="Error">
+                        {deletionError}
+                      </Callout>
+                    )}
 
-                  <div>
-                    <Label className="mt-2">Test Model</Label>
-                    <p>
-                      Since you are using a liteLLM proxy, we&apos;ll need a
-                      model name to test the connection with.
-                    </p>
-                  </div>
-                  <input
-                    className={`
-                     border
-                     border-border
-                     rounded
-                     w-full
-                     py-2
-                     px-3
-                     bg-background-emphasis
-                 `}
-                    value={modelName}
-                    onChange={(e: any) => setModelName(e.target.value)}
-                    placeholder="Paste your model name here"
-                  />
-                </>
-              )}
+                    <div>
+                      <Label className="mt-2">Test Model</Label>
+                      <Text>
+                        Since you are using a liteLLM proxy, we&apos;ll need a
+                        model name to test the connection with.
+                      </Text>
+                    </div>
+                    <input
+                      className={`
+                       border
+                       border-border
+                       rounded
+                       w-full
+                       py-2
+                       px-3
+                       bg-background-emphasis
+                   `}
+                      value={modelName}
+                      onChange={(e: any) => setModelName(e.target.value)}
+                      placeholder="Paste your model name here"
+                    />
+                  </>
+                )}
 
-              {testError && (
-                <Callout type="danger" title="Error" className="my-4">
-                  {testError}
-                </Callout>
-              )}
+                {testError && (
+                  <Callout type="danger" title="Error">
+                    {testError}
+                  </Callout>
+                )}
 
-              <Button
-                className="mr-auto mt-4"
-                onClick={() => handleSubmit()}
-                disabled={!apiKey}
-              >
-                Update Configuration
-              </Button>
+                <Button
+                  className="mr-auto mt-4"
+                  onClick={() => handleSubmit()}
+                  disabled={!apiKey}
+                >
+                  Update Configuration
+                </Button>
 
-              <Separator />
-            </div>
-          </>
-        )}
+                <Separator />
+              </div>
+            </>
+          )}
 
-        <Text className="mt-4 font-bold text-lg mb-2">
-          You can delete your configuration.
-        </Text>
-        <Text className="mb-2">
-          This is only possible if you have already switched to a different
-          embedding type!
-        </Text>
+          <Text className="mt-4 font-bold">
+            You can delete your configuration.
+          </Text>
+          <Text>
+            This is only possible if you have already switched to a different
+            embedding type!
+          </Text>
 
-        <Button className="mr-auto" onClick={handleDelete} danger>
-          Delete Configuration
-        </Button>
-        {deletionError && (
-          <Callout type="danger" title="Error" className="mt-4">
-            {deletionError}
-          </Callout>
-        )}
-      </>
+          <Button className="mr-auto" onClick={handleDelete} danger>
+            Delete Configuration
+          </Button>
+          {deletionError && (
+            <Callout type="danger" title="Error">
+              {deletionError}
+            </Callout>
+          )}
+        </Modal.Body>
+      </Modal.Content>
     </Modal>
   );
 }

@@ -13,6 +13,7 @@ from enum import Enum
 from typing import Any
 from typing import cast
 from urllib.parse import unquote
+from urllib.parse import urlsplit
 
 import msal  # type: ignore[import-untyped]
 import requests
@@ -67,6 +68,13 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 SLIM_BATCH_SIZE = 1000
 
+
+SHARED_DOCUMENTS_MAP = {
+    "Documents": "Shared Documents",
+    "Dokumente": "Freigegebene Dokumente",
+    "Documentos": "Documentos compartidos",
+}
+SHARED_DOCUMENTS_MAP_REVERSE = {v: k for k, v in SHARED_DOCUMENTS_MAP.items()}
 
 ASPX_EXTENSION = ".aspx"
 
@@ -721,45 +729,76 @@ class SharepointConnector(
         return self._graph_client
 
     @staticmethod
+    def _strip_share_link_tokens(path: str) -> list[str]:
+        # Share links often include a token prefix like /:f:/r/ or /:x:/r/.
+        segments = [segment for segment in path.split("/") if segment]
+        if segments and segments[0].startswith(":"):
+            segments = segments[1:]
+            if segments and segments[0] in {"r", "s", "g"}:
+                segments = segments[1:]
+        return segments
+
+    @staticmethod
+    def _normalize_sharepoint_url(url: str) -> tuple[str | None, list[str]]:
+        try:
+            parsed = urlsplit(url)
+        except ValueError:
+            logger.warning(f"Sharepoint URL '{url}' could not be parsed")
+            return None, []
+
+        if not parsed.scheme or not parsed.netloc:
+            logger.warning(
+                f"Sharepoint URL '{url}' is not a valid absolute URL (missing scheme or host)"
+            )
+            return None, []
+
+        path_segments = SharepointConnector._strip_share_link_tokens(parsed.path)
+        return f"{parsed.scheme}://{parsed.netloc}", path_segments
+
+    @staticmethod
     def _extract_site_and_drive_info(site_urls: list[str]) -> list[SiteDescriptor]:
         site_data_list = []
         for url in site_urls:
-            parts = url.strip().split("/")
+            base_url, parts = SharepointConnector._normalize_sharepoint_url(url.strip())
+            if base_url is None:
+                continue
 
+            lower_parts = [part.lower() for part in parts]
             site_type_index = None
-            if "sites" in parts:
-                site_type_index = parts.index("sites")
-            elif "teams" in parts:
-                site_type_index = parts.index("teams")
+            for site_token in ("sites", "teams"):
+                if site_token in lower_parts:
+                    site_type_index = lower_parts.index(site_token)
+                    break
 
-            if site_type_index is not None:
-                # Extract the base site URL (up to and including the site/team name)
-                site_url = "/".join(parts[: site_type_index + 2])
-                remaining_parts = parts[site_type_index + 2 :]
+            if site_type_index is None or len(parts) <= site_type_index + 1:
+                logger.warning(
+                    f"Site URL '{url}' is not a valid Sharepoint URL (must contain /sites/<name> or /teams/<name>)"
+                )
+                continue
 
-                # Extract drive name and folder path
-                if remaining_parts:
-                    drive_name = unquote(remaining_parts[0])
-                    folder_path = (
-                        "/".join(unquote(part) for part in remaining_parts[1:])
-                        if len(remaining_parts) > 1
-                        else None
-                    )
-                else:
-                    drive_name = None
-                    folder_path = None
+            site_path = parts[: site_type_index + 2]
+            remaining_parts = parts[site_type_index + 2 :]
+            site_url = f"{base_url}/" + "/".join(site_path)
 
-                site_data_list.append(
-                    SiteDescriptor(
-                        url=site_url,
-                        drive_name=drive_name,
-                        folder_path=folder_path,
-                    )
+            # Extract drive name and folder path
+            if remaining_parts:
+                drive_name = unquote(remaining_parts[0])
+                folder_path = (
+                    "/".join(unquote(part) for part in remaining_parts[1:])
+                    if len(remaining_parts) > 1
+                    else None
                 )
             else:
-                logger.warning(
-                    f"Site URL '{url}' is not a valid Sharepoint URL (must contain /sites/ or /teams/)"
+                drive_name = None
+                folder_path = None
+
+            site_data_list.append(
+                SiteDescriptor(
+                    url=site_url,
+                    drive_name=drive_name,
+                    folder_path=folder_path,
                 )
+            )
         return site_data_list
 
     def _get_drive_items_for_drive_name(
@@ -778,7 +817,10 @@ class SharepointConnector(
                 drive
                 for drive in drives
                 if (drive.name and drive.name.lower() == drive_name.lower())
-                or (drive.name == "Documents" and drive_name == "Shared Documents")
+                or (
+                    drive.name in SHARED_DOCUMENTS_MAP
+                    and SHARED_DOCUMENTS_MAP[drive.name] == drive_name
+                )
             ]
             drive = drives[0] if len(drives) > 0 else None
             if drive is None:
@@ -885,10 +927,12 @@ class SharepointConnector(
                     for drive in drives
                     if drive.name == site_descriptor.drive_name
                     or (
-                        drive.name == "Documents"
-                        and site_descriptor.drive_name == "Shared Documents"
+                        drive.name in SHARED_DOCUMENTS_MAP
+                        and SHARED_DOCUMENTS_MAP[drive.name]
+                        == site_descriptor.drive_name
                     )
-                ]
+                ]  # NOTE: right now we only support english, german and spanish drive names
+                # add to SHARED_DOCUMENTS_MAP if you want to support more languages
                 if not drives:
                     logger.warning(f"Drive '{site_descriptor.drive_name}' not found")
                     return []
@@ -914,9 +958,11 @@ class SharepointConnector(
                     )
 
                     # Use "Shared Documents" as the library name for the default "Documents" drive
+                    # NOTE: right now we only support english, german and spanish drive names
+                    # add to SHARED_DOCUMENTS_MAP if you want to support more languages
                     drive_name = (
-                        "Shared Documents"
-                        if drive.name == "Documents"
+                        SHARED_DOCUMENTS_MAP[drive.name]
+                        if drive.name in SHARED_DOCUMENTS_MAP
                         else cast(str, drive.name)
                     )
 
@@ -1455,10 +1501,8 @@ class SharepointConnector(
                 # Clear current drive and continue to next
                 checkpoint.current_drive_name = None
                 return checkpoint
-            current_drive_name = (
-                "Shared Documents"
-                if current_drive_name == "Documents"
-                else current_drive_name
+            current_drive_name = SHARED_DOCUMENTS_MAP.get(
+                current_drive_name, current_drive_name
             )
             for driveitem in driveitems:
                 driveitem_extension = get_file_ext(driveitem.name)

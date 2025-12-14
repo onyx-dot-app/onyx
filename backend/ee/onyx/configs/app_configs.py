@@ -41,6 +41,10 @@ CONFLUENCE_ANONYMOUS_ACCESS_IS_PUBLIC = (
 JIRA_PERMISSION_DOC_SYNC_FREQUENCY = int(
     os.environ.get("JIRA_PERMISSION_DOC_SYNC_FREQUENCY") or 30 * 60
 )
+# In seconds, default is 30 minutes
+JIRA_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("JIRA_PERMISSION_GROUP_SYNC_FREQUENCY") or 30 * 60
+)
 
 
 #####
@@ -123,6 +127,8 @@ SUPER_CLOUD_API_KEY = os.environ.get("SUPER_CLOUD_API_KEY", "api_key")
 # when the capture is called. These defaults prevent Posthog issues from breaking the Onyx app
 POSTHOG_API_KEY = os.environ.get("POSTHOG_API_KEY") or "FooBar"
 POSTHOG_HOST = os.environ.get("POSTHOG_HOST") or "https://us.i.posthog.com"
+
+MARKETING_POSTHOG_API_KEY = os.environ.get("MARKETING_POSTHOG_API_KEY")
 
 HUBSPOT_TRACKING_URL = os.environ.get("HUBSPOT_TRACKING_URL")
 

@@ -105,10 +105,7 @@ def _process_file(
     link = onyx_metadata.link
 
     # These metadata items are not settable by the user
-    source_type_str = metadata.get("connector_type")
-    source_type = (
-        DocumentSource(source_type_str) if source_type_str else DocumentSource.FILE
-    )
+    source_type = onyx_metadata.source_type or DocumentSource.FILE
 
     doc_id = f"FILE_CONNECTOR__{file_id}"
     title = metadata.get("title") or file_display_name
@@ -158,7 +155,7 @@ def _process_file(
         content_type=file_type,
     )
 
-    # Each file may have file-specific ONYX_METADATA https://docs.onyx.app/admin/connectors/official/file
+    # Each file may have file-specific ONYX_METADATA https://docs.onyx.app/admins/connectors/official/file
     # If so, we should add it to any metadata processed so far
     if extraction_result.metadata:
         logger.debug(

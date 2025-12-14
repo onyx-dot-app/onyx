@@ -25,3 +25,6 @@ data:
   {{- if .Values.minio.enabled }}
   S3_ENDPOINT_URL: "http://{{ .Release.Name }}-minio:{{ default 9000 .Values.minio.service.port }}"
   {{- end }}
+  {{- if .Values.codeInterpreter.enabled }}
+  CODE_INTERPRETER_BASE_URL: "http://{{ .Release.Name }}-code-interpreter:{{ .Values.codeInterpreter.service.port }}"
+  {{- end }}

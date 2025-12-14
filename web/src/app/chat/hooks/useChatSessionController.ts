@@ -23,7 +23,7 @@ import {
   useCurrentMessageHistory,
 } from "../stores/useChatSessionStore";
 import { getAvailableContextTokens } from "../services/lib";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
+import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile } from "../projects/projectsService";
 import { getSessionProjectTokenCount } from "../projects/projectsService";
 import { getProjectFilesForSession } from "../projects/projectsService";
@@ -98,6 +98,9 @@ export function useChatSessionController({
   const setCurrentSession = useChatSessionStore(
     (state) => state.setCurrentSession
   );
+  const initializeSession = useChatSessionStore(
+    (state) => state.initializeSession
+  );
   const updateHasPerformedInitialScroll = useChatSessionStore(
     (state) => state.updateHasPerformedInitialScroll
   );
@@ -112,7 +115,8 @@ export function useChatSessionController({
       state.sessions.get(state.currentSessionId || "")?.chatState || "input"
   );
   const currentChatHistory = useCurrentMessageHistory();
-  const { setForcedToolIds } = useAgentsContext();
+  const chatSessions = useChatSessionStore((state) => state.sessions);
+  const { setForcedToolIds } = useForcedTools();
 
   // Fetch chat messages for the chat session
   useEffect(() => {
@@ -187,6 +191,9 @@ export function useChatSessionController({
 
       // Ensure the current session is set to the actual session ID from the response
       setCurrentSession(chatSession.chat_session_id);
+
+      // Initialize session data including personaId
+      initializeSession(chatSession.chat_session_id, chatSession);
 
       const newMessageMap = processRawChatHistory(
         chatSession.messages,
@@ -307,7 +314,22 @@ export function useChatSessionController({
       !searchParams?.get(SEARCH_PARAM_NAMES.SKIP_RELOAD) ||
       currentChatHistory.length === 0
     ) {
-      initialSessionFetch();
+      const existingChatSession = existingChatSessionId
+        ? chatSessions.get(existingChatSessionId)
+        : null;
+
+      if (
+        !existingChatSession?.chatState ||
+        existingChatSession.chatState === "input"
+      ) {
+        initialSessionFetch();
+      } else {
+        // no need to fetch if the chat session is currently streaming (it would be )
+        // out of date).
+        // this means that the user kicked off a message, switched to a different
+        // chat, and then switched back.
+        setCurrentSession(existingChatSessionId);
+      }
     } else {
       // Remove SKIP_RELOAD param without triggering a page reload
       const currentSearchParams = new URLSearchParams(searchParams?.toString());

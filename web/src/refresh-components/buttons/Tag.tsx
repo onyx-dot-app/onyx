@@ -10,7 +10,7 @@ const getVariantClasses = (active?: boolean) => [
   "hover:bg-background-tint-02",
 ];
 
-interface TagProps {
+export interface TagProps {
   // Tag states:
   active?: boolean;
 

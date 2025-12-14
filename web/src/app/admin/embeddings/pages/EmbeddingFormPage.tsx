@@ -2,9 +2,9 @@
 
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
-import { EmbeddingModelSelection } from "../EmbeddingModelSelectionForm";
+import EmbeddingModelSelection from "../EmbeddingModelSelectionForm";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
-import Text from "@/components/ui/text";
+import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import { WarningCircle, Warning, CaretDownIcon } from "@phosphor-icons/react";
 import {
@@ -22,12 +22,13 @@ import {
   EmbeddingPrecision,
   RerankingDetails,
   SavedSearchSettings,
+  SwitchoverType,
 } from "../interfaces";
 import RerankingDetailsForm from "../RerankingFormPage";
 import { useEmbeddingFormContext } from "@/components/context/EmbeddingContext";
-import { Modal } from "@/components/Modal";
-import { InstantSwitchConfirmModal } from "../modals/InstantSwitchConfirmModal";
-
+import Modal from "@/refresh-components/Modal";
+import SvgAlertTriangle from "@/icons/alert-triangle";
+import InstantSwitchConfirmModal from "../modals/InstantSwitchConfirmModal";
 import { useRouter } from "next/navigation";
 import CardSection from "@/components/admin/CardSection";
 import { combineSearchSettings } from "./utils";
@@ -40,11 +41,6 @@ import {
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import SvgArrowLeft from "@/icons/arrow-left";
 import SvgArrowRight from "@/icons/arrow-right";
-
-enum ReindexType {
-  REINDEX = "reindex",
-  INSTANT = "instant",
-}
 
 export default function EmbeddingForm() {
   const { formStep, nextFormStep, prevFormStep } = useEmbeddingFormContext();
@@ -73,8 +69,8 @@ export default function EmbeddingForm() {
     rerank_api_url: null,
   });
 
-  const [reindexType, setReindexType] = useState<ReindexType>(
-    ReindexType.REINDEX
+  const [switchoverType, setSwitchoverType] = useState<SwitchoverType>(
+    SwitchoverType.REINDEX
   );
 
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -207,7 +203,7 @@ export default function EmbeddingForm() {
       advancedEmbeddingDetails,
       rerankingDetails,
       selectedProvider.provider_type?.toLowerCase() as EmbeddingProvider | null,
-      reindexType === ReindexType.REINDEX
+      switchoverType
     );
 
     const response = await updateSearchSettings(searchSettings);
@@ -220,7 +216,13 @@ export default function EmbeddingForm() {
       });
       return false;
     }
-  }, [selectedProvider, advancedEmbeddingDetails, rerankingDetails, setPopup]);
+  }, [
+    selectedProvider,
+    advancedEmbeddingDetails,
+    rerankingDetails,
+    switchoverType,
+    setPopup,
+  ]);
 
   const handleValidationChange = useCallback(
     (isValid: boolean, errors: Record<string, string>) => {
@@ -255,7 +257,7 @@ export default function EmbeddingForm() {
           <div className="flex items-center h-fit">
             <Button
               onClick={() => {
-                if (reindexType == ReindexType.INSTANT) {
+                if (switchoverType == SwitchoverType.INSTANT) {
                   setShowInstantSwitchConfirm(true);
                 } else {
                   handleReIndex();
@@ -266,9 +268,11 @@ export default function EmbeddingForm() {
               action
               className="rounded-r-none w-32 h-full"
             >
-              {reindexType == ReindexType.REINDEX
+              {switchoverType == SwitchoverType.REINDEX
                 ? "Re-index"
-                : "Instant Switch"}
+                : switchoverType == SwitchoverType.ACTIVE_ONLY
+                  ? "Active Only"
+                  : "Instant Switch"}
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -283,7 +287,7 @@ export default function EmbeddingForm() {
               <DropdownMenuContent>
                 <DropdownMenuItem
                   onClick={() => {
-                    setReindexType(ReindexType.REINDEX);
+                    setSwitchoverType(SwitchoverType.REINDEX);
                   }}
                 >
                   <SimpleTooltip tooltip="Re-runs all connectors in the background before switching over. Takes longer but ensures no degredation of search during the switch.">
@@ -294,7 +298,18 @@ export default function EmbeddingForm() {
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => {
-                    setReindexType(ReindexType.INSTANT);
+                    setSwitchoverType(SwitchoverType.ACTIVE_ONLY);
+                  }}
+                >
+                  <SimpleTooltip tooltip="Re-runs only active (non-paused) connectors in the background before switching over. Paused connectors won't block the switchover.">
+                    <span className="w-full text-left">
+                      Active Connectors Only
+                    </span>
+                  </SimpleTooltip>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setSwitchoverType(SwitchoverType.INSTANT);
                   }}
                 >
                   <SimpleTooltip tooltip="Immediately switches to new settings without re-indexing. Searches will be degraded until the re-indexing is complete.">
@@ -402,7 +417,7 @@ export default function EmbeddingForm() {
     };
     ReIndexingButtonComponent.displayName = "ReIndexingButton";
     return ReIndexingButtonComponent;
-  }, [needsReIndex, reindexType, isOverallFormValid, combinedFormErrors]);
+  }, [needsReIndex, switchoverType, isOverallFormValid, combinedFormErrors]);
 
   if (!selectedProvider) {
     return <ThreeDotsLoader />;
@@ -437,7 +452,7 @@ export default function EmbeddingForm() {
         selectedProvider.provider_type
           ?.toLowerCase()
           .split(" ")[0] as EmbeddingProvider | null,
-        reindexType === ReindexType.REINDEX
+        switchoverType
       );
     } else {
       // This is a locally hosted model
@@ -446,7 +461,7 @@ export default function EmbeddingForm() {
         advancedEmbeddingDetails,
         rerankingDetails,
         null,
-        reindexType === ReindexType.REINDEX
+        switchoverType
       );
     }
 
@@ -526,20 +541,29 @@ export default function EmbeddingForm() {
           </>
         )}
         {showPoorModel && (
-          <Modal
-            onOutsideClick={() => setShowPoorModel(false)}
-            width="max-w-3xl"
-            title={`Are you sure you want to select ${selectedProvider.model_name}?`}
-          >
-            <>
-              <div className="text-lg">
-                {selectedProvider.model_name} is a lower accuracy model.
-                <br />
-                We recommend the following alternatives.
-                <li>Cohere embed-english-v3.0 for cloud-based</li>
-                <li>Nomic nomic-embed-text-v1 for self-hosted</li>
-              </div>
-              <div className="flex mt-4 justify-between">
+          <Modal open onOpenChange={() => setShowPoorModel(false)}>
+            <Modal.Content medium>
+              <Modal.Header
+                icon={SvgAlertTriangle}
+                title={`Are you sure you want to select ${selectedProvider.model_name}?`}
+                onClose={() => setShowPoorModel(false)}
+              />
+              <Modal.Body>
+                <div className="text-lg">
+                  <Text>
+                    {`${selectedProvider.model_name} is a lower accuracy model. We recommend the following alternatives:`}
+                  </Text>
+                  <ul className="list-disc list-inside mt-2 ml-4">
+                    <li>
+                      <Text>Cohere embed-english-v3.0 for cloud-based</Text>
+                    </li>
+                    <li>
+                      <Text>Nomic nomic-embed-text-v1 for self-hosted</Text>
+                    </li>
+                  </ul>
+                </div>
+              </Modal.Body>
+              <Modal.Footer>
                 <Button secondary onClick={() => setShowPoorModel(false)}>
                   Cancel update
                 </Button>
@@ -549,10 +573,10 @@ export default function EmbeddingForm() {
                     nextFormStep();
                   }}
                 >
-                  Continue with {selectedProvider.model_name}
+                  {`Continue with ${selectedProvider.model_name}`}
                 </Button>
-              </div>
-            </>
+              </Modal.Footer>
+            </Modal.Content>
           </Modal>
         )}
 

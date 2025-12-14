@@ -34,9 +34,6 @@ services:
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
       - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
       - S3_FILE_STORE_BUCKET_NAME=${S3_FILE_STORE_BUCKET_NAME:-}
-      # To enable the LLM for testing, update the value below
-      # NOTE: this is disabled by default since this is a high volume eval that can be costly
-      - DISABLE_GENERATIVE_AI=${DISABLE_GENERATIVE_AI:-true}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     logging:
@@ -116,7 +113,7 @@ services:
       context: ../../backend
       dockerfile: Dockerfile.model_server
     command: >
-      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-false}\" = \"True\" ]; then
+      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER:-}\" = \"true\" ]; then
         echo 'Skipping service...';
         exit 0;
       else
@@ -140,7 +137,7 @@ services:
       context: ../../backend
       dockerfile: Dockerfile.model_server
     command: >
-      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-false}\" = \"True\" ]; then
+      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER:-}\" = \"true\" ]; then
         echo 'Skipping service...';
         exit 0;
       else
@@ -177,7 +174,7 @@ services:
 
   # This container name cannot have an underscore in it due to Vespa expectations of the URL
   index:
-    image: vespaengine/vespa:8.526.15
+    image: vespaengine/vespa:8.609.39
     restart: unless-stopped
     environment:
       - VESPA_SKIP_UPGRADE_CHECK=true
@@ -193,7 +190,7 @@ services:
         max-file: "6"
 
   nginx:
-    image: nginx:1.23.4-alpine
+    image: nginx:1.25.5-alpine
     restart: unless-stopped
     # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
     # if api_server / web_server are not up
@@ -217,7 +214,7 @@ services:
     # NOTE: we have to use dos2unix to remove Carriage Return chars from the file
     # in order to make this work on both Unix-like systems and windows
     command: >
-      /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh 
+      /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh
       && /etc/nginx/conf.d/run-nginx.sh app.conf.template"
 
   minio:

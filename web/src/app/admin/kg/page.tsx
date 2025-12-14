@@ -9,9 +9,9 @@ import {
   TextFormField,
 } from "@/components/Field";
 import { BrainIcon } from "@/components/icons/icons";
-import { Modal } from "@/components/Modal";
+import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
-import { SwitchField } from "@/components/ui/switch";
+import UnlabeledSwitchField from "@/refresh-components/formik-fields/UnlabeledSwitchField";
 import { Form, Formik, FormikState, useFormikContext } from "formik";
 import { useState } from "react";
 import * as Yup from "yup";
@@ -174,12 +174,10 @@ function KGConfiguration({
                 label="Enabled"
                 subtext="Enable or disable Knowledge Graph."
               />
-              <SwitchField
+              <UnlabeledSwitchField
                 name="enabled"
-                className="flex flex-1"
                 onCheckedChange={(state) => {
-                  props.resetForm();
-                  props.setFieldValue("enabled", state);
+                  if (!state) props.resetForm();
                 }}
               />
             </div>
@@ -207,7 +205,9 @@ function KGConfiguration({
                 disabled={!props.values.enabled}
               />
             </div>
-            <Button disabled={!props.dirty}>Submit</Button>
+            <Button type="submit" disabled={!props.dirty}>
+              Submit
+            </Button>
           </div>
         </Form>
       )}
@@ -294,20 +294,25 @@ function Main() {
         </>
       )}
       {configureModalShown && (
-        <Modal
-          title="Configure Knowledge Graph"
-          onOutsideClick={() => setConfigureModalShown(false)}
-          className="overflow-y-scroll"
-        >
-          <KGConfiguration
-            kgConfig={kgConfig}
-            setPopup={setPopup}
-            onSubmitSuccess={async () => {
-              await configMutate();
-              setConfigureModalShown(false);
-            }}
-            entityTypesMutate={entityTypesMutate}
-          />
+        <Modal open onOpenChange={() => setConfigureModalShown(false)}>
+          <Modal.Content medium>
+            <Modal.Header
+              icon={SvgSettings}
+              title="Configure Knowledge Graph"
+              onClose={() => setConfigureModalShown(false)}
+            />
+            <Modal.Body>
+              <KGConfiguration
+                kgConfig={kgConfig}
+                setPopup={setPopup}
+                onSubmitSuccess={async () => {
+                  await configMutate();
+                  setConfigureModalShown(false);
+                }}
+                entityTypesMutate={entityTypesMutate}
+              />
+            </Modal.Body>
+          </Modal.Content>
         </Modal>
       )}
     </div>

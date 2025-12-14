@@ -17,7 +17,8 @@ import Text from "@/components/ui/text";
 import { ImageUpload } from "./ImageUpload";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import Link from "next/link";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
+import { DOCS_ADMINS_PATH } from "@/lib/constants";
 
 export function WhitelabelingForm() {
   const router = useRouter();
@@ -159,7 +160,6 @@ export function WhitelabelingForm() {
 
                   <Button
                     danger
-                    type="button"
                     className="mb-8"
                     onClick={async () => {
                       const valuesWithoutLogo = {
@@ -202,9 +202,7 @@ export function WhitelabelingForm() {
                 <Text>
                   Read{" "}
                   <Link
-                    href={
-                      "https://docs.onyx.app/admin/advanced_configs/white_labeling"
-                    }
+                    href={`${DOCS_ADMINS_PATH}/advanced_configs/white_labeling`}
                     className="text-link cursor-pointer"
                   >
                     the docs
@@ -304,7 +302,6 @@ export function WhitelabelingForm() {
 
                       <Button
                         danger
-                        type="button"
                         className="mb-8"
                         onClick={async () => {
                           const valuesWithoutLogotype = {

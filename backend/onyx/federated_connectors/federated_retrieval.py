@@ -1,16 +1,16 @@
 from collections import defaultdict
 from collections.abc import Callable
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import MAX_FEDERATED_CHUNKS
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FederatedConnectorSource
+from onyx.context.search.models import ChunkIndexRequest
 from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import SearchQuery
 from onyx.db.federated import (
     get_federated_connector_document_set_mappings_by_document_set_names,
 )
@@ -18,6 +18,7 @@ from onyx.db.federated import list_federated_connector_oauth_tokens
 from onyx.db.models import FederatedConnector__DocumentSet
 from onyx.db.slack_bot import fetch_slack_bots
 from onyx.federated_connectors.factory import get_federated_connector
+from onyx.federated_connectors.interfaces import FederatedConnector
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.utils.logger import setup_logger
 
@@ -27,7 +28,7 @@ logger = setup_logger()
 class FederatedRetrievalInfo(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    retrieval_function: Callable[[SearchQuery], list[InferenceChunk]]
+    retrieval_function: Callable[[ChunkIndexRequest], list[InferenceChunk]]
     source: FederatedConnectorSource
 
 
@@ -40,25 +41,64 @@ def get_federated_retrieval_functions(
 ) -> list[FederatedRetrievalInfo]:
     # Check for Slack bot context first (regardless of user_id)
     if slack_context:
-        logger.info("Slack context detected, checking for Slack bot setup...")
+        logger.debug("Slack context detected, checking for Slack bot setup...")
+
+        # Slack federated search requires a Slack federated connector to be linked
+        # via document sets. If no document sets are provided, skip Slack federated search.
+        if not document_set_names:
+            logger.debug(
+                "Skipping Slack federated search: no document sets provided, "
+                "Slack federated connector must be linked via document sets"
+            )
+            return []
+
+        # Check if any Slack federated connector is associated with the document sets
+        # and extract its config (entities) for channel filtering
+        slack_federated_connector_config: dict[str, Any] | None = None
+        slack_federated_mappings = (
+            get_federated_connector_document_set_mappings_by_document_set_names(
+                db_session, document_set_names
+            )
+        )
+        for mapping in slack_federated_mappings:
+            if (
+                mapping.federated_connector is not None
+                and mapping.federated_connector.source
+                == FederatedConnectorSource.FEDERATED_SLACK
+            ):
+                slack_federated_connector_config = (
+                    mapping.federated_connector.config or {}
+                )
+                logger.debug(
+                    f"Found Slack federated connector config: {slack_federated_connector_config}"
+                )
+                break
+
+        if slack_federated_connector_config is None:
+            logger.debug(
+                f"Skipping Slack federated search: document sets {document_set_names} "
+                "are not associated with any Slack federated connector"
+            )
+            # Return empty list - no Slack federated search for this context
+            return []
 
         try:
             slack_bots = fetch_slack_bots(db_session)
-            logger.info(f"Found {len(slack_bots)} Slack bots")
+            logger.debug(f"Found {len(slack_bots)} Slack bots")
 
             # First try to find a bot with user token
             tenant_slack_bot = next(
                 (bot for bot in slack_bots if bot.enabled and bot.user_token), None
             )
             if tenant_slack_bot:
-                logger.info(f"Selected bot with user_token: {tenant_slack_bot.name}")
+                logger.debug(f"Selected bot with user_token: {tenant_slack_bot.name}")
             else:
                 # Fall back to any enabled bot without user token
                 tenant_slack_bot = next(
                     (bot for bot in slack_bots if bot.enabled), None
                 )
                 if tenant_slack_bot:
-                    logger.info(
+                    logger.debug(
                         f"Selected bot without user_token: {tenant_slack_bot.name} (limited functionality)"
                     )
                 else:
@@ -86,20 +126,47 @@ def get_federated_retrieval_functions(
                     credentials,
                 )
 
+                # Capture variables by value to avoid lambda closure issues
+                bot_token = tenant_slack_bot.bot_token
+
+                # Use connector config for channel filtering (guaranteed to exist at this point)
+                connector_entities = slack_federated_connector_config
+                logger.debug(
+                    f"Using Slack federated connector entities for bot context: {connector_entities}"
+                )
+
+                def create_slack_retrieval_function(
+                    conn: FederatedConnector,
+                    token: str,
+                    ctx: SlackContext,
+                    bot_tok: str,
+                    entities: dict[str, Any],
+                ) -> Callable[[ChunkIndexRequest], list[InferenceChunk]]:
+                    def retrieval_fn(query: ChunkIndexRequest) -> list[InferenceChunk]:
+                        return conn.search(
+                            query,
+                            entities,  # Use connector-level entities for channel filtering
+                            access_token=token,
+                            limit=None,  # Let connector use its own max_messages_per_query config
+                            slack_event_context=ctx,
+                            bot_token=bot_tok,
+                        )
+
+                    return retrieval_fn
+
                 federated_retrieval_infos_slack.append(
                     FederatedRetrievalInfo(
-                        retrieval_function=lambda query: connector.search(
-                            query,
-                            {},  # Empty entities for Slack context
-                            access_token=access_token,
-                            limit=MAX_FEDERATED_CHUNKS,
-                            slack_event_context=slack_context,
-                            bot_token=tenant_slack_bot.bot_token,
+                        retrieval_function=create_slack_retrieval_function(
+                            connector,
+                            access_token,
+                            slack_context,
+                            bot_token,
+                            connector_entities,
                         ),
                         source=FederatedConnectorSource.FEDERATED_SLACK,
                     )
                 )
-                logger.info(
+                logger.debug(
                     f"Added Slack federated search for bot, returning {len(federated_retrieval_infos_slack)} retrieval functions"
                 )
                 return federated_retrieval_infos_slack
@@ -137,7 +204,7 @@ def get_federated_retrieval_functions(
 
     # If no source types are specified, don't use any federated connectors
     if source_types is None:
-        logger.info("No source types specified, skipping all federated connectors")
+        logger.debug("No source types specified, skipping all federated connectors")
         return []
 
     federated_retrieval_infos: list[FederatedRetrievalInfo] = []
@@ -158,22 +225,33 @@ def get_federated_retrieval_functions(
         if document_set_names and not document_set_associations:
             continue
 
-        if document_set_associations:
-            entities = document_set_associations[0].entities
-        else:
-            entities = {}
+        # Only use connector-level config (no junction table entities)
+        entities = oauth_token.federated_connector.config or {}
 
         connector = get_federated_connector(
             oauth_token.federated_connector.source,
             oauth_token.federated_connector.credentials,
         )
+
+        # Capture variables by value to avoid lambda closure issues
+        access_token = oauth_token.token
+
+        def create_retrieval_function(
+            conn: FederatedConnector,
+            ent: dict[str, Any],
+            token: str,
+        ) -> Callable[[ChunkIndexRequest], list[InferenceChunk]]:
+            return lambda query: conn.search(
+                query,
+                ent,
+                access_token=token,
+                limit=None,  # Let connector use its own max_messages_per_query config
+            )
+
         federated_retrieval_infos.append(
             FederatedRetrievalInfo(
-                retrieval_function=lambda query: connector.search(
-                    query,
-                    entities,
-                    access_token=oauth_token.token,
-                    limit=MAX_FEDERATED_CHUNKS,
+                retrieval_function=create_retrieval_function(
+                    connector, entities, access_token
                 ),
                 source=oauth_token.federated_connector.source,
             )

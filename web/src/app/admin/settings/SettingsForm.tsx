@@ -9,11 +9,13 @@ import { useRouter } from "next/navigation";
 import React, { useContext, useState, useEffect } from "react";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
-import { Modal } from "@/components/Modal";
+import Modal from "@/refresh-components/Modal";
+import SvgAlertTriangle from "@/icons/alert-triangle";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { AnonymousUserPath } from "./AnonymousUserPath";
-import { LLMSelector } from "@/components/llm/LLMSelector";
+import LLMSelector from "@/components/llm/LLMSelector";
 import { useVisionProviders } from "./hooks/useVisionProviders";
+import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 
 export function Checkbox({
   label,
@@ -242,10 +244,10 @@ export function SettingsForm() {
           Provide a short description of the company for search and chat
           context.
         </SubLabel>
-        <textarea
-          className="mt-1 p-2 border rounded w-full max-w-xl"
+        <InputTextArea
+          className="mt-1 w-full max-w-xl"
           value={companyDescription}
-          onChange={(e) => setCompanyDescription(e.target.value)}
+          onChange={(event) => setCompanyDescription(event.target.value)}
           onBlur={handleCompanyDescriptionBlur}
           placeholder="Enter company description"
           rows={4}
@@ -289,27 +291,42 @@ export function SettingsForm() {
         }
       />
 
+      <Checkbox
+        label="Disable Default Assistant"
+        sublabel="When enabled, the 'New Session' button will start a new chat with the current agent instead of the default assistant. The default assistant will be hidden from all users."
+        checked={settings.disable_default_assistant ?? false}
+        onChange={(e) =>
+          handleToggleSettingsField(
+            "disable_default_assistant",
+            e.target.checked
+          )
+        }
+      />
+
       {NEXT_PUBLIC_CLOUD_ENABLED && settings.anonymous_user_enabled && (
         <AnonymousUserPath setPopup={setPopup} />
       )}
       {showConfirmModal && (
-        <Modal
-          width="max-w-3xl w-full"
-          onOutsideClick={() => setShowConfirmModal(false)}
-        >
-          <div className="flex flex-col gap-4">
-            <h2 className="text-xl font-bold">Enable Anonymous Users</h2>
-            <p>
-              Are you sure you want to enable anonymous users? This will allow
-              anyone to use Onyx without signing in.
-            </p>
-            <div className="flex justify-end gap-2">
+        <Modal open onOpenChange={() => setShowConfirmModal(false)}>
+          <Modal.Content medium>
+            <Modal.Header
+              icon={SvgAlertTriangle}
+              title="Enable Anonymous Users"
+              onClose={() => setShowConfirmModal(false)}
+            />
+            <Modal.Body>
+              <p>
+                Are you sure you want to enable anonymous users? This will allow
+                anyone to use Onyx without signing in.
+              </p>
+            </Modal.Body>
+            <Modal.Footer className="p-4 flex justify-end gap-2">
               <Button secondary onClick={() => setShowConfirmModal(false)}>
                 Cancel
               </Button>
               <Button onClick={handleConfirmAnonymousUsers}>Confirm</Button>
-            </div>
-          </div>
+            </Modal.Footer>
+          </Modal.Content>
         </Modal>
       )}
       {isEnterpriseEnabled && (

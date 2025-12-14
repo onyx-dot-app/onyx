@@ -16,10 +16,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import Button from "@/refresh-components/buttons/Button";
-import { CreditCard } from "@phosphor-icons/react";
 import { SubscriptionSummary } from "./SubscriptionSummary";
 import { BillingAlerts } from "./BillingAlerts";
-import { ClipboardIcon } from "@/components/icons/icons";
+import SvgClipboard from "@/icons/clipboard";
+import SvgWallet from "@/icons/wallet";
 
 export default function BillingInformationPage() {
   const router = useRouter();
@@ -95,7 +95,7 @@ export default function BillingInformationPage() {
       <Card className="shadow-md">
         <CardHeader>
           <CardTitle className="text-2xl font-bold flex items-center">
-            <CreditCard className="mr-4 text-muted-foreground" size={24} />
+            <SvgWallet className="mr-4 text-muted-foreground h-6 w-6" />
             Subscription Details
           </CardTitle>
         </CardHeader>
@@ -117,8 +117,8 @@ export default function BillingInformationPage() {
         <CardContent>
           <Button
             onClick={handleManageSubscription}
-            className="w-full justify-center"
-            leftIcon={ClipboardIcon}
+            className="w-full"
+            leftIcon={SvgClipboard}
           >
             Manage Subscription
           </Button>

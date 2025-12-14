@@ -1,4 +1,7 @@
 name: Python Unit Tests
+concurrency:
+  group: Python-Unit-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
+  cancel-in-progress: true
 
 on:
   merge_group:
@@ -6,11 +9,18 @@ on:
     branches:
       - main
       - 'release/**'
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
 
 jobs:
   backend-check:
     # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}"]
+    runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}-backend-check"]
+    timeout-minutes: 45
 
 
     env:
@@ -19,15 +29,23 @@ jobs:
       SF_USERNAME: ${{ secrets.SF_USERNAME }}
       SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
       SF_SECURITY_TOKEN: ${{ secrets.SF_SECURITY_TOKEN }}
-      
+
     steps:
     - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
     - name: Checkout code
-      uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # ratchet:actions/checkout@v4
+      uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+      with:
+        persist-credentials: false
 
     - name: Setup Python and Install Dependencies
       uses: ./.github/actions/setup-python-and-install-dependencies
+      with:
+        requirements: |
+          backend/requirements/default.txt
+          backend/requirements/dev.txt
+          backend/requirements/model_server.txt
+          backend/requirements/ee.txt
 
     - name: Run Tests
       shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"

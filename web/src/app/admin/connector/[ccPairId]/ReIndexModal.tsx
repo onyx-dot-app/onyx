@@ -3,10 +3,11 @@
 import Button from "@/refresh-components/buttons/Button";
 import { useState } from "react";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
-import { triggerIndexing } from "./lib";
-import { Modal } from "@/components/Modal";
+import { triggerIndexing } from "@/app/admin/connector/[ccPairId]/lib";
+import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
+import SvgRefreshCw from "@/icons/refresh-cw";
 
 // Hook to handle re-indexing functionality
 export function useReIndexModal(
@@ -83,7 +84,7 @@ export function useReIndexModal(
   };
 }
 
-interface ReIndexModalProps {
+export interface ReIndexModalProps {
   setPopup: (popupSpec: PopupSpec | null) => void;
   hide: () => void;
   onRunIndex: (fromBeginning: boolean) => Promise<void>;
@@ -127,41 +128,34 @@ export default function ReIndexModal({
   };
 
   return (
-    <Modal title="Run Indexing" onOutsideClick={hide}>
-      <div>
-        <Button
-          className="ml-auto"
-          onClick={() => handleRunIndex(false)}
-          disabled={isProcessing}
-        >
-          Run Update
-        </Button>
+    <Modal open onOpenChange={hide}>
+      <Modal.Content small>
+        <Modal.Header icon={SvgRefreshCw} title="Run Indexing" onClose={hide} />
+        <Modal.Body>
+          <Text>
+            This will pull in and index all documents that have changed and/or
+            have been added since the last successful indexing run.
+          </Text>
+          <Button onClick={() => handleRunIndex(false)} disabled={isProcessing}>
+            Run Update
+          </Button>
 
-        <Text className="mt-2">
-          This will pull in and index all documents that have changed and/or
-          have been added since the last successful indexing run.
-        </Text>
+          <Separator />
 
-        <Separator />
+          <Text>
+            This will cause a complete re-indexing of all documents from the
+            source.
+          </Text>
+          <Text>
+            <strong>NOTE:</strong> depending on the number of documents stored
+            in the source, this may take a long time.
+          </Text>
 
-        <Button
-          className="ml-auto"
-          onClick={() => handleRunIndex(true)}
-          disabled={isProcessing}
-        >
-          Run Complete Re-Indexing
-        </Button>
-
-        <Text className="mt-2">
-          This will cause a complete re-indexing of all documents from the
-          source.
-        </Text>
-
-        <Text className="mt-2">
-          <b>NOTE:</b> depending on the number of documents stored in the
-          source, this may take a long time.
-        </Text>
-      </div>
+          <Button onClick={() => handleRunIndex(true)} disabled={isProcessing}>
+            Run Complete Re-Indexing
+          </Button>
+        </Modal.Body>
+      </Modal.Content>
     </Modal>
   );
 }

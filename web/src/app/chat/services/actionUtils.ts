@@ -1,8 +1,9 @@
 import { JSX } from "react";
-import { SvgProps } from "@/icons";
+import { IconProps } from "@/icons";
 import SvgCpu from "@/icons/cpu";
 import SvgGlobe from "@/icons/globe";
 import SvgImage from "@/icons/image";
+import SvgLink from "@/icons/link";
 import SvgSearch from "@/icons/search";
 import SvgServer from "@/icons/server";
 import SvgUser from "@/icons/user";
@@ -38,13 +39,22 @@ const isKnowledgeGraphTool = (tool: ToolSnapshot): boolean => {
   );
 };
 
+const isOpenUrlTool = (tool: ToolSnapshot): boolean => {
+  return (
+    tool.in_code_tool_id === "OpenURLTool" ||
+    tool.name === "open_url" ||
+    tool.display_name?.toLowerCase().includes("open url")
+  );
+};
+
 export function getIconForAction(
   action: ToolSnapshot
-): (props: SvgProps) => JSX.Element {
+): (props: IconProps) => JSX.Element {
   if (isSearchTool(action)) return SvgSearch;
   if (isWebSearchTool(action)) return SvgGlobe;
   if (isImageGenerationTool(action)) return SvgImage;
   if (isKnowledgeGraphTool(action)) return SvgServer;
+  if (isOpenUrlTool(action)) return SvgLink;
   return SvgCpu;
 }
 

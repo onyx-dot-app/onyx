@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.session import SessionTransaction
 
-from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.chat.chat_utils import prepare_chat_message_request
 from onyx.chat.process_message import gather_stream
 from onyx.chat.process_message import stream_chat_message_objects
@@ -71,7 +70,6 @@ def _get_answer(
                 if configuration.search_permissions_email
                 else None
             )
-            research_type = ResearchType(eval_input.get("research_type", "THOUGHTFUL"))
             request = prepare_chat_message_request(
                 message_text=eval_input["message"],
                 user=user,
@@ -83,7 +81,7 @@ def _get_answer(
                 db_session=db_session,
                 skip_gen_ai_answer_generation=False,
                 llm_override=full_configuration.llm,
-                use_agentic_search=research_type == ResearchType.DEEP,
+                use_agentic_search=False,
                 allowed_tool_ids=full_configuration.allowed_tool_ids,
             )
             packets = stream_chat_message_objects(
