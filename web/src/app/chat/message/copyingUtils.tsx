@@ -52,10 +52,12 @@ export function convertMarkdownTablesToTsv(content: string): string {
         continue;
       }
       // Convert table row: split by |, trim cells, join with tabs
+      const placeholder = "\x00";
       const cells = trimmed
         .slice(1, -1) // Remove leading and trailing |
+        .replace(/\\\|/g, placeholder) // Preserve escaped pipes
         .split("|")
-        .map((cell) => cell.trim());
+        .map((cell) => cell.trim().replace(new RegExp(placeholder, "g"), "|"));
       result.push(cells.join("\t"));
     } else {
       result.push(line);
