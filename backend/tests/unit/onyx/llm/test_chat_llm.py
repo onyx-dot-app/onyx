@@ -8,6 +8,7 @@ from litellm.types.utils import Function as LiteLLMFunction
 
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.llm.chat_llm import LitellmLLM
+from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.models import AssistantMessage
@@ -402,3 +403,114 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
             mock_response=MOCK_LLM_RESPONSE,
             stream_options={"include_usage": True},
         )
+
+
+def test_user_identity_metadata_enabled(default_multi_llm: LitellmLLM) -> None:
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.chat_llm.SEND_USER_METADATA_TO_LLM_PROVIDER", True),
+    ):
+        mock_response = litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=litellm.Message(
+                        content="Hello",
+                        role="assistant",
+                    ),
+                )
+            ],
+            model="gpt-3.5-turbo",
+        )
+        mock_completion.return_value = mock_response
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        identity = LLMUserIdentity(user_id="user_123", session_id="session_abc")
+
+        default_multi_llm.invoke(messages, user_identity=identity)
+
+        mock_completion.assert_called_once()
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["user"] == "user_123"
+        assert kwargs["metadata"]["session_id"] == "session_abc"
+
+
+def test_user_identity_metadata_disabled_omits_identity(default_multi_llm: LitellmLLM) -> None:
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.chat_llm.SEND_USER_METADATA_TO_LLM_PROVIDER", False),
+    ):
+        mock_response = litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=litellm.Message(
+                        content="Hello",
+                        role="assistant",
+                    ),
+                )
+            ],
+            model="gpt-3.5-turbo",
+        )
+        mock_completion.return_value = mock_response
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        identity = LLMUserIdentity(user_id="user_123", session_id="session_abc")
+
+        default_multi_llm.invoke(messages, user_identity=identity)
+
+        mock_completion.assert_called_once()
+        kwargs = mock_completion.call_args.kwargs
+        assert "user" not in kwargs
+        assert "metadata" not in kwargs
+
+
+def test_existing_metadata_pass_through_when_identity_disabled() -> None:
+    model_provider = "openai"
+    model_name = "gpt-3.5-turbo"
+
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=model_provider,
+        model_name=model_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=model_provider,
+            model_name=model_name,
+        ),
+        model_kwargs={"metadata": {"foo": "bar"}},
+    )
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.chat_llm.SEND_USER_METADATA_TO_LLM_PROVIDER", False),
+    ):
+        mock_response = litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=litellm.Message(
+                        content="Hello",
+                        role="assistant",
+                    ),
+                )
+            ],
+            model="gpt-3.5-turbo",
+        )
+        mock_completion.return_value = mock_response
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        identity = LLMUserIdentity(user_id="user_123", session_id="session_abc")
+
+        llm.invoke(messages, user_identity=identity)
+
+        mock_completion.assert_called_once()
+        kwargs = mock_completion.call_args.kwargs
+        assert "user" not in kwargs
+        assert kwargs["metadata"]["foo"] == "bar"
