@@ -35,8 +35,7 @@ class CodaConnector(LoadConnector, PollConnector, SlimConnector):
     Arguments:
         batch_size (int): Number of objects to index in a batch
         doc_ids (list[str] | None): Specific doc IDs to index. If None, indexes all.
-        max_table_rows (int): Maximum rows to fetch per table
-        include_tables (bool): Whether to index table content
+        page_ids (list[str] | None): Specific page IDs to index. If None, indexes all.
         max_table_rows (int): Maximum rows to fetch per table
         include_tables (bool): Whether to index table content
     """
