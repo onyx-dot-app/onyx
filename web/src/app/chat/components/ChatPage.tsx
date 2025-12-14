@@ -19,10 +19,7 @@ import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
 import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
-import {
-  SettingsContext,
-  useSettingsContext,
-} from "@/components/settings/SettingsProvider";
+import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import Dropzone from "react-dropzone";
 import ChatInputBar from "@/app/chat/components/input/ChatInputBar";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -63,9 +60,7 @@ import {
   useHasSentLocalUserMessage,
 } from "@/app/chat/stores/useChatSessionStore";
 import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
-import MessagesDisplay, {
-  MessagesDisplayHandle,
-} from "@/sections/MessagesDisplay";
+import ChatUI, { ChatUIHandle } from "@/sections/ChatUI";
 import WelcomeMessage from "@/app/chat/components/WelcomeMessage";
 import ProjectContextPanel from "@/app/chat/components/projects/ProjectContextPanel";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
@@ -282,7 +277,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
     settings,
   });
 
-  const messagesDisplayRef = useRef<MessagesDisplayHandle>(null);
+  const chatUiRef = useRef<ChatUIHandle>(null);
   const inputRef = useRef<HTMLDivElement>(null);
 
   const scrollInitialized = useRef(false);
@@ -299,7 +294,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
         const heightDifference = newHeight - previousHeight.current;
         if (previousHeight.current && heightDifference != 0) {
           if (autoScrollEnabled) {
-            messagesDisplayRef.current?.scrollBy(Math.max(heightDifference, 0));
+            chatUiRef.current?.scrollBy(Math.max(heightDifference, 0));
           }
         }
         previousHeight.current = newHeight;
@@ -385,7 +380,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
       waitForScrollRef.current = true;
 
       setTimeout(() => {
-        const didScroll = messagesDisplayRef.current?.scrollToBottom(fast);
+        const didScroll = chatUiRef.current?.scrollToBottom(fast);
 
         if (didScroll && chatSessionIdRef.current) {
           updateHasPerformedInitialScroll(chatSessionIdRef.current, true);
@@ -710,19 +705,17 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
               {...getRootProps()}
             >
               {/* ChatUI */}
-              <div className="flex flex-col flex-1 w-full relative overflow-hidden">
-                <MessagesDisplay
-                  ref={messagesDisplayRef}
-                  liveAssistant={liveAssistant}
-                  llmManager={llmManager}
-                  currentMessageFiles={currentMessageFiles}
-                  setPresentingDocument={setPresentingDocument}
-                  onSubmit={onSubmit}
-                  onMessageSelection={onMessageSelection}
-                  stopGenerating={stopGenerating}
-                  handleResubmitLastMessage={handleResubmitLastMessage}
-                />
-              </div>
+              <ChatUI
+                ref={chatUiRef}
+                liveAssistant={liveAssistant}
+                llmManager={llmManager}
+                currentMessageFiles={currentMessageFiles}
+                setPresentingDocument={setPresentingDocument}
+                onSubmit={onSubmit}
+                onMessageSelection={onMessageSelection}
+                stopGenerating={stopGenerating}
+                handleResubmitLastMessage={handleResubmitLastMessage}
+              />
 
               {/* ChatInputBar container */}
               <div
@@ -803,7 +796,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
               </div>
 
               {/* SearchUI */}
-              <div className={cn(showCenteredHero ? "flex-1" : "h-8")} />
+              <div className={cn(showCenteredHero ? "flex-1" : "h-4")} />
             </div>
           )}
         </Dropzone>
