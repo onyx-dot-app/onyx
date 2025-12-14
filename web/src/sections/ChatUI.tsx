@@ -148,15 +148,16 @@ const ChatUI = React.forwardRef(
         container.scrollHeight - (container.scrollTop + container.clientHeight);
 
       scrollDist.current = distanceFromBottom;
-      const isAboveScrollThreshold = distanceFromBottom > HORIZON_DISTANCE_PX;
-      const hasMessages = messages.length > 0;
-      setAboveHorizon(isAboveScrollThreshold && hasMessages);
-    }, [messages]);
+      setAboveHorizon(distanceFromBottom > HORIZON_DISTANCE_PX);
+    }, []);
 
-    useOnMount(() => {
+    function resetScroll() {
       scrollDist.current = 0;
       setAboveHorizon(false);
-    });
+    }
+
+    useOnMount(resetScroll);
+    useEffect(resetScroll, [currentChatSessionId]);
 
     const scrollToBottom = useCallback((fast?: boolean) => {
       if (!endDivRef.current) return false;

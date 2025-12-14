@@ -34,7 +34,7 @@ export default function useOnMount(f?: React.EffectCallback): boolean {
   useEffect(() => {
     setMounted(true);
     return f?.();
-  }, [f]);
+  }, []);
 
   return mounted;
 }
