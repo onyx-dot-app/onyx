@@ -41,6 +41,7 @@ if TYPE_CHECKING:
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
 LEGACY_MAX_TOKENS_KWARG = "max_tokens"
 STANDARD_MAX_TOKENS_KWARG = "max_completion_tokens"
+MAX_LITELLM_USER_ID_LENGTH = 64
 
 
 class LLMTimeoutError(Exception):
@@ -68,6 +69,17 @@ def _prompt_to_dicts(prompt: LanguageModelInput) -> list[dict[str, Any]]:
 
 def _prompt_as_json(prompt: LanguageModelInput) -> JSON_ro:
     return cast(JSON_ro, _prompt_to_dicts(prompt))
+
+
+def _truncate_litellm_user_id(user_id: str) -> str:
+    if len(user_id) <= MAX_LITELLM_USER_ID_LENGTH:
+        return user_id
+    logger.warning(
+        "LLM user id exceeds %d chars (len=%d); truncating for provider compatibility.",
+        MAX_LITELLM_USER_ID_LENGTH,
+        len(user_id),
+    )
+    return user_id[:MAX_LITELLM_USER_ID_LENGTH]
 
 
 class LitellmLLM(LLM):
@@ -344,7 +356,7 @@ class LitellmLLM(LLM):
                 if user_identity.session_id:
                     metadata["session_id"] = user_identity.session_id
                 if user_identity.user_id:
-                    litellm_args["user"] = user_identity.user_id
+                    litellm_args["user"] = _truncate_litellm_user_id(user_identity.user_id)
 
             if metadata:
                 litellm_args["metadata"] = metadata

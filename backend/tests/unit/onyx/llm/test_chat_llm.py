@@ -437,6 +437,38 @@ def test_user_identity_metadata_enabled(default_multi_llm: LitellmLLM) -> None:
         assert kwargs["metadata"]["session_id"] == "session_abc"
 
 
+def test_user_identity_user_id_truncated_to_64_chars(default_multi_llm: LitellmLLM) -> None:
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.chat_llm.SEND_USER_METADATA_TO_LLM_PROVIDER", True),
+    ):
+        mock_response = litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=litellm.Message(
+                        content="Hello",
+                        role="assistant",
+                    ),
+                )
+            ],
+            model="gpt-3.5-turbo",
+        )
+        mock_completion.return_value = mock_response
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        long_user_id = "u" * 82
+        identity = LLMUserIdentity(user_id=long_user_id, session_id="session_abc")
+
+        default_multi_llm.invoke(messages, user_identity=identity)
+
+        mock_completion.assert_called_once()
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["user"] == long_user_id[:64]
+
+
 def test_user_identity_metadata_disabled_omits_identity(default_multi_llm: LitellmLLM) -> None:
     with (
         patch("litellm.completion") as mock_completion,
