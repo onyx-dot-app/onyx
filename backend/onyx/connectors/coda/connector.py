@@ -621,7 +621,7 @@ class CodaConnector(LoadConnector, PollConnector):
                         try:
                             rows = self._list_rows_and_values(doc.id, table.id)
                             
-                            table_or_rows_updated = table_timestamp > start and table_timestamp <= end
+                            table_or_rows_updated = start < table_timestamp <= end
                             if not table_or_rows_updated:
                                 for row in rows:
                                     row_timestamp = datetime.fromisoformat(row.updated_at).astimezone(timezone.utc).timestamp()
