@@ -57,8 +57,8 @@ class LLM(abc.ABC):
             structured_response_format=structured_response_format,
             timeout_override=timeout_override,
             max_tokens=max_tokens,
-            reasoning_effort=reasoning_effort,
             user_identity=user_identity,
+            reasoning_effort=reasoning_effort,
         )
 
     @abc.abstractmethod
@@ -70,8 +70,8 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM,
         user_identity: LLMUserIdentity | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM,
     ) -> ModelResponse:
         raise NotImplementedError
 
@@ -107,6 +107,6 @@ class LLM(abc.ABC):
             structured_response_format=structured_response_format,
             timeout_override=timeout_override,
             max_tokens=max_tokens,
-            reasoning_effort=reasoning_effort,
             user_identity=user_identity,
+            reasoning_effort=reasoning_effort,
         )
