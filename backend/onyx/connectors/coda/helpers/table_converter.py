@@ -69,9 +69,10 @@ class CodaTableConverter:
             elif value_type == "StructuredValue":
                 name = cell_value.get("name", "MISSING_NAME")
                 url = cell_value.get("url", "MISSING_URL")
-                table_id = cell_value.get("table_id", "MISSING_TABLE_ID")
-                row_id = cell_value.get("row_id", "MISSING_ROW_ID")
-                return f"Type: StructuredValue. Name: {name}. URL: {url}. Table ID: {table_id}. Row ID: {row_id}"
+                table_id = cell_value.get("tableId", "MISSING_TABLE_ID")
+                row_id = cell_value.get("rowId", "MISSING_ROW_ID")
+
+                return f"Type: StructuredValue. Name: {name}. URL: {url}. Table ID: {table_id}. {row_id}"
 
         return str(cell_value)
 
@@ -127,7 +128,12 @@ class CodaTableConverter:
             # Add metadata columns if requested
             if include_metadata:
                 row_data["_row_id"] = row.id or "MISSING_ROW_ID"
-                row_data["_row_index"] = row.index or "MISSING_ROW_INDEX"
+
+                if row.index is not None:
+                    row_data["_row_index"] = row.index
+                else:
+                    row_data["_row_index"] = "MISSING_ROW_INDEX"
+
                 row_data["_created_at"] = row.createdAt or "MISSING_CREATED_AT"
                 row_data["_updated_at"] = row.updatedAt or "MISSING_UPDATED_AT"
                 row_data["_browser_link"] = row.browserLink or "MISSING_BROWSER_LINK"
