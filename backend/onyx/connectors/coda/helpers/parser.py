@@ -6,16 +6,18 @@ from bs4 import NavigableString
 from bs4 import Tag
 from dateutil import parser as date_parser
 
+from onyx.connectors.coda.helpers.table_converter import CodaTableConverter
 from onyx.connectors.coda.models.common import CodaObjectType
 from onyx.connectors.coda.models.doc import CodaDoc
 from onyx.connectors.coda.models.page import CodaPage
-from onyx.connectors.coda.models.table.cell import CodaCellValue
-from onyx.connectors.coda.models.table.column import CodaColumn
 from onyx.connectors.coda.models.table.row import CodaRow
 from onyx.connectors.coda.models.table.table import CodaTableReference
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 class CodaParser:
@@ -27,6 +29,11 @@ class CodaParser:
     - Building page hierarchies and paths
     - Formatting cell values for display
     """
+
+    def __init__(
+        self,
+    ) -> None:
+        self.table_converter = CodaTableConverter()
 
     # ========================================================================
     # Document parsing
@@ -383,106 +390,57 @@ class CodaParser:
     def build_table_metadata(
         doc: CodaDoc,
         table: CodaTableReference,
-        columns: list[CodaColumn],
         rows: list[CodaRow],
-        parent_page_id: str | None = None,
     ) -> dict[str, str | list[str]]:
         """Build metadata dictionary for a table document.
 
         Creates a metadata dict with table information including row/column counts and optional parent page linkage.
         """
-        from onyx.connectors.coda.models.common import CodaObjectType
 
         metadata: dict[str, str | list[str]] = {
-            "type": CodaObjectType.TABLE,
+            "coda_object_type": CodaObjectType.TABLE,
             "doc_name": doc.name,
             "doc_id": doc.id,
+            "workspace_id": doc.workspace.id,
+            "workspace_name": doc.workspace.name,
+            "doc_owner_name": doc.ownerName,
+            "doc_owner_email": doc.owner,
+            "doc_categories": (
+                [cat.name for cat in doc.published.category] if doc.published else None
+            ),
+            "folder_name": doc.folder.name,
+            "workspace_organizationId": doc.workspace.organizationId,
+            "doc_mode": doc.published.mode if doc.published else None,
+            "doc_published": doc.published.discoverable if doc.published else None,
             "table_id": table.id,
+            "folder_id": doc.folder.id,
             "table_name": table.name,
+            "table_type": table.tableType,
             "row_count": str(len(rows)),
-            "column_count": str(len(columns)),
-            "parent_page_id": parent_page_id if parent_page_id else None,
+            "browser_link": table.browserLink,
+            "column_count": str(len(rows[0].values)) if rows else "0",
+            "parent_page_id": table.parent.id if table.parent else None,
+            "parent_page_name": table.parent.name if table.parent else None,
         }
 
         return {k: v for k, v in metadata.items() if v is not None}
 
-    @staticmethod
-    def format_cell_value(cell_value: CodaCellValue, column: CodaColumn) -> str:
-        """Format a cell value for markdown table display.
-
-        Handles Scalar Values:
-        - String
-        - Number
-        - Boolean
-
-        Args:
-            cell_value: The cell value to format
-            column_name: The name of the column
-
-        Returns:
-            str: Formatted value safe for markdown table display
-        """
-        formatted_cell_value = f"{column.id}: "
-
-        if isinstance(cell_value, list):
-            formatted_cell_value += ", ".join(
-                CodaParser.format_cell_value(item) for item in cell_value
-            )
-
-        if column.format.type == "boolean":
-            formatted_cell_value += str(cell_value) + " [boolean]"
-
-        if column.format.type == "number":
-            formatted_cell_value += str(cell_value) + " [number]"
-
-        if column.format.type == "text":
-            formatted_cell_value += (
-                cell_value.replace("|", "\\|").replace("\n", " ") + " [string]"
-            )
-
-        return formatted_cell_value
-
-    @staticmethod
-    def convert_table_to_text(
-        table: CodaTableReference,
-        columns: list[CodaColumn],
+    def parse_table(
+        self,
         rows: list[CodaRow],
-    ) -> str:
+    ) -> TextSection:
         """Convert table data to text format (Key: Value).
 
-        Generates a text representation where each row is a line and cells
-        are formatted as "Column Name: Value", separated by tabs.
-        This matches the Notion connector's approach for better indexing.
+        Generates a JSON representation
 
         Args:
-            table: The table metadata (name, etc.)
-            columns: List of column definitions
             rows: List of row data (may be truncated)
 
         Returns:
-            str: Text formatted table string
+            TextSection: Text formatted table string
         """
-        # Handle empty cases
-        if not columns:
-            return f"{table.name}\n\nEmpty table - no columns defined"
+        formatted_value = self.table_converter.rows_to_formats(rows, ["JSON"])
 
-        if not rows:
-            return f"{table.name}\n\nEmpty table - no data"
+        logger.debug(formatted_value["Data raw"].to_string())
 
-        col_map = {col.id: col for col in columns if col.display}
-
-        text_parts = [f"{table.name}\n"]
-
-        # Data rows
-        for row in rows:
-            row_parts = []
-            for col_id, col_name in col_map.items():
-                value = row.values.get(col_id, "")
-                formatted_value = CodaParser.format_cell_value(value, col_map[col_id])
-                if formatted_value:
-                    row_parts.append(f"{col_name}: {formatted_value}")
-
-            if row_parts:
-                text_parts.append("\t".join(row_parts))
-
-        return "\n".join(text_parts)
+        return TextSection(text=formatted_value["Data raw"].to_string(), link=None)

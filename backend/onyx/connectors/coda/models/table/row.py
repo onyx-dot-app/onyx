@@ -5,7 +5,6 @@ from pydantic import Field
 from onyx.connectors.coda.models.common import CodaObjectBase
 from onyx.connectors.coda.models.common import CodaObjectType
 from onyx.connectors.coda.models.table.cell import CodaCellValue
-from onyx.connectors.coda.models.table.table import CodaTableReference
 
 
 class CodaRow(CodaObjectBase):
@@ -28,7 +27,4 @@ class CodaRow(CodaObjectBase):
     values: dict[str, CodaCellValue] = Field(
         description="Values for a specific row, represented as a hash of column IDs (or names with `useColumnNames`) to values.",
         example={"column1": "value1", "column2": "value2"},
-    )
-    parent: CodaTableReference = Field(
-        description="Parent table of the row", example="t-123456789"
     )

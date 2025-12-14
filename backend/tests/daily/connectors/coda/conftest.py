@@ -175,6 +175,32 @@ def simple_test_doc(
     _delete_doc_with_retry(client, response["id"])
 
 
+@pytest.fixture(scope="session")
+def table_test_doc(
+    api_token: str, coda_folder_id: str
+) -> Generator[dict[str, Any], None, None]:
+    """
+    Creates a table test doc with minimal content (for basic tests).
+    Session-scoped for maximum reuse.
+    """
+    client = CodaAPIClient(api_token)
+
+    response = client.create_doc(
+        title="Table Document",
+        source_doc="ULGew5FSia",
+        folder_id=coda_folder_id,
+    )
+
+    logger.info(f"[SETUP] Created table doc: {response['name']} (ID: {response['id']})")
+
+    _wait_for_doc_availability(client, response["id"], check_pages=True)
+
+    yield response
+
+    # Cleanup
+    _delete_doc_with_retry(client, response["id"])
+
+
 # ============================================================================
 # Connector Fixtures
 # ============================================================================
@@ -206,6 +232,18 @@ def simple_connector(api_token: str, simple_test_doc: dict[str, Any]) -> CodaCon
     return conn
 
 
+@pytest.fixture(scope="module")
+def table_connector(api_token: str, table_test_doc: dict[str, Any]) -> CodaConnector:
+    """Connector configured for table test doc."""
+    conn = CodaConnector(
+        batch_size=5,
+        doc_ids=[table_test_doc["id"]],
+    )
+    conn.load_credentials({"coda_api_token": api_token})
+    conn.validate_connector_settings()
+    return conn
+
+
 # ============================================================================
 # Data Loading Fixtures
 # ============================================================================
@@ -226,6 +264,31 @@ def all_batches(template_connector: CodaConnector) -> list[list[Document]]:
     batches = list(gen)
     logger.info(f"Loaded {len(batches)} batches")
     return batches
+
+
+@pytest.fixture(scope="module")
+def all_table_batches(table_connector: CodaConnector) -> list[list[Document]]:
+    """
+    Loads all batches once and caches them for the module.
+    Significantly reduces API calls by avoiding repeated load_from_state() calls.
+    """
+    assert table_connector.generator is not None
+    table_connector.generator.indexed_pages.clear()
+    table_connector.generator.indexed_tables.clear()
+
+    logger.info("Loading all batches...")
+    gen = table_connector.load_from_state()
+    batches = list(gen)
+    logger.info(f"Loaded {len(batches)} batches")
+    return batches
+
+
+@pytest.fixture(scope="module")
+def all_table_documents(all_table_batches: list[list[Document]]) -> list[Document]:
+    """
+    Flattens all batches into a single list of documents.
+    """
+    return [doc for batch in all_table_batches for doc in batch]
 
 
 @pytest.fixture(scope="module")

@@ -153,7 +153,6 @@ class TestLoadFromStateEndToEnd:
 
             assert "doc_id" in doc.metadata
             assert "page_id" in doc.metadata or "table_id" in doc.metadata
-            assert "path" in doc.metadata or "table_name" in doc.metadata
 
     def test_hidden_pages_excluded(
         self, all_documents: list[Document], reference_data: dict[str, Any]
@@ -239,14 +238,7 @@ class TestLoadFromStateEndToEnd:
         for doc in all_documents:
             metadata = doc.metadata
 
-            # Pages should have path
             if "page_id" in metadata:
-                assert "path" in metadata
-                path = metadata["path"]
-                assert isinstance(path, str), "Path should be a string"
-                assert path
-                assert path == path.strip()  # No leading/trailing spaces
-
                 # If page has a parent, it should be in metadata
                 if "parent_page_id" in metadata:
                     assert metadata["parent_page_id"] is not None

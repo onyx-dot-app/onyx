@@ -1,32 +1,35 @@
-from onyx.connectors.coda.helpers.table_converter import CodaRowsConverter
+from onyx.connectors.coda.helpers.table_converter import CodaTableConverter
 from onyx.connectors.coda.models.table.row import CodaRow
 
 
-class TestCodaRowsConverter:
+class TestCodaTableConverter:
     def test_extract_cell_value_simple(self):
         """Test extraction of simple scalar values."""
-        assert CodaRowsConverter.extract_cell_value(None) is None
-        assert CodaRowsConverter.extract_cell_value("text") == "text"
-        assert CodaRowsConverter.extract_cell_value(123) == 123
-        assert CodaRowsConverter.extract_cell_value(12.34) == 12.34
-        assert CodaRowsConverter.extract_cell_value(True) is True
-        assert CodaRowsConverter.extract_cell_value(False) is False
+        assert CodaTableConverter.extract_cell_value(None) is None
+        assert CodaTableConverter.extract_cell_value("text") == "text"
+        assert CodaTableConverter.extract_cell_value(123) == 123
+        assert CodaTableConverter.extract_cell_value(12.34) == 12.34
+        assert CodaTableConverter.extract_cell_value(True) is True
+        assert CodaTableConverter.extract_cell_value(False) is False
 
     def test_extract_cell_value_list(self):
         """Test extraction of list values."""
         input_list = ["a", 1, True]
-        assert CodaRowsConverter.extract_cell_value(input_list) == ["a", 1, True]
+        assert CodaTableConverter.extract_cell_value(input_list) == ["a", 1, True]
 
         # Nested list with None
         input_list_with_none = ["a", None]
-        assert CodaRowsConverter.extract_cell_value(input_list_with_none) == ["a", None]
+        assert CodaTableConverter.extract_cell_value(input_list_with_none) == [
+            "a",
+            None,
+        ]
 
     def test_extract_cell_value_rich_objects_dict(self):
         """Test extraction from dict-based rich objects (simulating API response structure)."""
         # Currency
         currency = {"@type": "MonetaryAmount", "currency": "USD", "amount": 100.50}
-        assert "Type: MonetaryAmount" in CodaRowsConverter.extract_cell_value(currency)
-        assert "USD" in CodaRowsConverter.extract_cell_value(currency)
+        assert "Type: MonetaryAmount" in CodaTableConverter.extract_cell_value(currency)
+        assert "USD" in CodaTableConverter.extract_cell_value(currency)
 
         # Image
         image = {
@@ -35,19 +38,19 @@ class TestCodaRowsConverter:
             "name": "img.png",
             "status": "live",
         }
-        extracted_image = CodaRowsConverter.extract_cell_value(image)
+        extracted_image = CodaTableConverter.extract_cell_value(image)
         assert "Type: ImageObject" in extracted_image
         assert "http://example.com/img.png" in extracted_image
 
         # Person
         person = {"@type": "Person", "name": "John Doe", "email": "john@example.com"}
-        extracted_person = CodaRowsConverter.extract_cell_value(person)
+        extracted_person = CodaTableConverter.extract_cell_value(person)
         assert "Type: Person" in extracted_person
         assert "John Doe" in extracted_person
 
         # WebPage
         webpage = {"@type": "WebPage", "url": "http://example.com", "name": "Example"}
-        extracted_webpage = CodaRowsConverter.extract_cell_value(webpage)
+        extracted_webpage = CodaTableConverter.extract_cell_value(webpage)
         assert "Type: WebPage" in extracted_webpage
         assert "http://example.com" in extracted_webpage
 
@@ -59,28 +62,28 @@ class TestCodaRowsConverter:
             "table_id": "table-1",
             "row_id": "row-1",
         }
-        extracted_structured = CodaRowsConverter.extract_cell_value(structured)
+        extracted_structured = CodaTableConverter.extract_cell_value(structured)
         assert "Type: StructuredValue" in extracted_structured
         assert "Row Name" in extracted_structured
 
     def test_extract_display_value(self):
         """Test conversion to display strings."""
-        assert CodaRowsConverter.extract_display_value(None) == ""
-        assert CodaRowsConverter.extract_display_value("test") == "test"
-        assert CodaRowsConverter.extract_display_value(123) == "123"
+        assert CodaTableConverter.extract_display_value(None) == ""
+        assert CodaTableConverter.extract_display_value("test") == "test"
+        assert CodaTableConverter.extract_display_value(123) == "123"
 
         # Test list display
-        assert CodaRowsConverter.extract_display_value(["a", "b"]) == "a, b"
+        assert CodaTableConverter.extract_display_value(["a", "b"]) == "a, b"
 
         # Test rich value display
         person = {"@type": "Person", "name": "Bob", "email": "bob@example.com"}
-        display = CodaRowsConverter.extract_display_value(person)
+        display = CodaTableConverter.extract_display_value(person)
         assert "Type: Person" in display
         assert "Bob" in display
 
     def test_rows_to_dataframe_empty(self):
         """Test conversion of empty list."""
-        df = CodaRowsConverter.rows_to_dataframe([])
+        df = CodaTableConverter.rows_to_dataframe([])
         assert df.empty
 
     def test_rows_to_dataframe_basic(self):
@@ -124,7 +127,7 @@ class TestCodaRowsConverter:
             },
         )
 
-        df = CodaRowsConverter.rows_to_dataframe([row1, row2])
+        df = CodaTableConverter.rows_to_dataframe([row1, row2])
 
         assert len(df) == 2
         assert "_row_id" in df.columns
@@ -155,7 +158,7 @@ class TestCodaRowsConverter:
             },
         )
 
-        df = CodaRowsConverter.rows_to_dataframe([row1], include_metadata=False)
+        df = CodaTableConverter.rows_to_dataframe([row1], include_metadata=False)
 
         assert "_row_id" not in df.columns
         assert "col1" in df.columns
@@ -186,7 +189,7 @@ class TestCodaRowsConverter:
 
         # Test specific formats
         formats = ["JSON", "CSV"]
-        eval_df = CodaRowsConverter.rows_to_formats([row1], formats=formats)
+        eval_df = CodaTableConverter.rows_to_formats([row1], formats=formats)
 
         assert len(eval_df) == 2
         assert set(eval_df["Data Format"]) == {"JSON", "CSV"}
@@ -197,5 +200,5 @@ class TestCodaRowsConverter:
         # The implementation loops over requested formats and checks if key in format_converters
 
         # Test all formats (default)
-        eval_df_all = CodaRowsConverter.rows_to_formats([row1])
+        eval_df_all = CodaTableConverter.rows_to_formats([row1])
         assert len(eval_df_all) >= 5  # Should have JSON, CSV, HTML, etc.

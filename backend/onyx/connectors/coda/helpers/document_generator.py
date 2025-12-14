@@ -12,7 +12,6 @@ from onyx.connectors.coda.models.table.table import CodaTableReference
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import Document
 from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -57,6 +56,7 @@ class CodaDocumentGenerator:
         self.indexed_tables: set[str] = set()
         self.skipped_pages: set[str] = set()
         self.skipped_docs: set[str] = set()
+        self.max_table_rows: int | None = None
 
     def generate_page_documents(
         self, doc: CodaDoc, pages: list[CodaPage], page_map: dict[str, CodaPage]
@@ -78,7 +78,7 @@ class CodaDocumentGenerator:
                 self.skipped_pages.add(page.id)
                 continue
 
-            page_key = self.parser.create_page_key(doc, page)
+            page_key = self.parser.create_page_key(doc_id=doc.id, page_id=page.id)
 
             # Skip already indexed pages
             if page_key in self.indexed_pages:
@@ -108,10 +108,10 @@ class CodaDocumentGenerator:
             sections = self.parser.parse_html_content(content)
 
             # Build metadata
-            metadata = self.parser.build_metadata(doc, page, page_map)
+            metadata = self.parser.build_page_metadata(doc, page, page_map)
 
             # Build owners
-            primary_owners, secondary_owners = self.parser.build_owners(page)
+            primary_owners, secondary_owners = self.parser.build_page_owners(page)
 
             if len(sections) == 0:
                 self.skipped_pages.add(page.id)
@@ -150,8 +150,9 @@ class CodaDocumentGenerator:
         Yields:
             Document: Table documents with metadata and markdown content
         """
+
         for table in tables:
-            table_key = self.parser.create_table_key(doc, table)
+            table_key = self.parser.create_table_key(doc_id=doc.id, table_id=table.id)
 
             # Skip already indexed tables
             if table_key in self.indexed_tables:
@@ -161,13 +162,6 @@ class CodaDocumentGenerator:
             logger.info(f"Reading table '{table.name}' in doc '{doc.name}'")
 
             try:
-                # Fetch columns and rows
-                columns = self.client.fetch_table_columns(doc.id, table.id)
-
-                if not columns:
-                    logger.debug(f"Skipping table '{table.name}': no columns")
-                    continue
-
                 rows = self.client.fetch_all_table_rows(
                     doc.id, table.id, max_rows=self.max_table_rows
                 )
@@ -176,20 +170,25 @@ class CodaDocumentGenerator:
                     logger.debug(f"Skipping table '{table.name}': no rows")
                     continue
 
-                content = self.parser.convert_table_to_text(table, columns, rows)
+                logger.debug(f"Parsing table '{table.name}' in doc '{doc.name}'")
+                content = self.parser.parse_table(rows)
+                logger.debug(
+                    f"Successfully parsed table '{table.name}' in doc '{doc.name}'"
+                )
+
                 self.indexed_tables.add(table_key)
 
                 metadata = self.parser.build_table_metadata(
-                    doc, table, columns, rows, parent_page_id=table.parent.id
+                    doc,
+                    table,
+                    rows,
                 )
                 primary_owners = self.parser.build_doc_owners(doc)
 
-                sections = [TextSection(text=content, link=None)]
-
                 yield Document(
                     id=table_key,
-                    sections=sections,
                     source=DocumentSource.CODA,
+                    sections=[content],
                     semantic_identifier=f"{doc.name} - {table.name}",
                     doc_updated_at=datetime.fromtimestamp(
                         self.parser.parse_timestamp(
@@ -387,12 +386,14 @@ class CodaDocumentGenerator:
             filtered_pages = self.filter_by_id(self.page_ids, all_pages)
 
             for page in filtered_pages:
-                page_key = self.parser.create_page_key(doc, page)
+                page_key = self.parser.create_page_key(doc.id, page.id)
                 yield SlimDocument(id=page_key)
 
             # Fetch all tables if enabled
             if self.include_tables:
                 all_tables = self.client.fetch_all_tables(doc.id)
                 for table in all_tables:
-                    table_key = self.parser.create_table_key(doc, table)
+                    table_key = self.parser.create_table_key(
+                        doc_id=doc.id, table_id=table.id
+                    )
                     yield SlimDocument(id=table_key)

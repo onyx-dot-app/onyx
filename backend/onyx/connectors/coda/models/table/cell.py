@@ -44,7 +44,6 @@ class LinkedDataObject(BaseModel):
 class CodaCurrencyValue(LinkedDataObject):
     """Represents a currency value in a Coda table row"""
 
-    context: Literal[CodaLinkedDataType.MONETARY_AMOUNT]
     type: Literal[CodaLinkedDataType.MONETARY_AMOUNT] = Field(
         description="The type of the value.", alias="@type"
     )
@@ -66,19 +65,12 @@ class CodaImageUrlValue(LinkedDataObject):
     type: Literal[CodaLinkedDataType.IMAGE_OBJECT] = Field(
         description="The type of the value.", alias="@type"
     )
-    name: str = Field(description="The name of the image.")
     url: Optional[str] = Field(description="The URL of the image.")
-    height: int = Field(description="The height of the image in pixels.")
-    width: int = Field(description="The width of the image in pixels.")
-    status: Optional[CodaImageStatus] = Field(description="The status of the image.")
 
 
 class CodaPersonValue(LinkedDataObject):
     """Represents a person value in a Coda table row"""
 
-    context: Literal[CodaLinkedDataType.PERSON] = Field(
-        description="The type of the value.", alias="@context"
-    )
     type: Literal[CodaLinkedDataType.PERSON] = Field(
         description="The type of the value.", alias="@type"
     )
@@ -89,22 +81,15 @@ class CodaPersonValue(LinkedDataObject):
 class CodaUrlValue(LinkedDataObject):
     """Represents a URL value in a Coda table row"""
 
-    context: Literal[CodaLinkedDataType.WEB_PAGE] = Field(
-        description="The type of the value.", alias="@context"
-    )
     type: Literal[CodaLinkedDataType.WEB_PAGE] = Field(
         description="The type of the value.", alias="@type"
     )
     url: str = Field(description="The URL.")
-    name: Optional[str] = Field(description="The user-visible text of the hyperlink.")
 
 
 class CodaRowValue(LinkedDataObject):
     """Represents a row value in a Coda table row"""
 
-    context: Literal[CodaLinkedDataType.STRUCTURED_VALUE] = Field(
-        description="The type of the value.", alias="@context"
-    )
     type: Literal[CodaLinkedDataType.STRUCTURED_VALUE] = Field(
         description="The type of the value.", alias="@type"
     )

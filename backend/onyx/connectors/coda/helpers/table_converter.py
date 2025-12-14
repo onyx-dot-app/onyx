@@ -12,7 +12,7 @@ from onyx.connectors.coda.models.table.cell import CodaCellValue
 from onyx.connectors.coda.models.table.row import CodaRow
 
 
-class CodaRowsConverter:
+class CodaTableConverter:
     """Convert Coda table rows to pandas DataFrames."""
 
     @staticmethod
@@ -33,7 +33,7 @@ class CodaRowsConverter:
             return None
 
         if isinstance(cell_value, list):
-            return [CodaRowsConverter.extract_cell_value(item) for item in cell_value]
+            return [CodaTableConverter.extract_cell_value(item) for item in cell_value]
 
         if isinstance(cell_value, (str, int, float, bool)):
             return cell_value
@@ -86,7 +86,7 @@ class CodaRowsConverter:
         Returns:
             Human-readable string representation
         """
-        value = CodaRowsConverter.extract_cell_value(cell_value)
+        value = CodaTableConverter.extract_cell_value(cell_value)
 
         if isinstance(value, list):
             return ", ".join(str(v) for v in value)
@@ -113,7 +113,7 @@ class CodaRowsConverter:
 
         Example:
             >>> rows = [CodaRow(...), CodaRow(...)]
-            >>> df = CodaRowsConverter.rows_to_dataframe(rows)
+            >>> df = CodaTableConverter.rows_to_dataframe(rows)
             >>> print(df.head())
         """
         if not rows:
@@ -135,11 +135,11 @@ class CodaRowsConverter:
             # Extract column values
             for col_name, cell_value in row.values.items():
                 if use_display_values:
-                    row_data[col_name] = CodaRowsConverter.extract_display_value(
+                    row_data[col_name] = CodaTableConverter.extract_display_value(
                         cell_value
                     )
                 else:
-                    row_data[col_name] = CodaRowsConverter.extract_cell_value(
+                    row_data[col_name] = CodaTableConverter.extract_cell_value(
                         cell_value
                     )
 
@@ -166,11 +166,11 @@ class CodaRowsConverter:
 
         Example:
             >>> rows = get_table_rows("table-123")
-            >>> eval_df = CodaRowsConverter.rows_to_formats(rows)
+            >>> eval_df = CodaTableConverter.rows_to_formats(rows)
             >>> print(eval_df)
         """
         # Convert rows to base DataFrame
-        df = CodaRowsConverter.rows_to_dataframe(rows, use_display_values=True)
+        df = CodaTableConverter.rows_to_dataframe(rows, use_display_values=True)
 
         # All available formats
         all_formats = [
