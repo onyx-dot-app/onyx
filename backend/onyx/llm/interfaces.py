@@ -1,5 +1,4 @@
 import abc
-from dataclasses import dataclass
 from collections.abc import Iterator
 
 from braintrust import traced
@@ -14,9 +13,7 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-
-@dataclass
-class LLMUserIdentity:
+class LLMUserIdentity(BaseModel):
     user_id: str | None = None
     session_id: str | None = None
 
