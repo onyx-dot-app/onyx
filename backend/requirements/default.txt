@@ -93,6 +93,8 @@ botocore-stubs==1.40.74
     # via boto3-stubs
 braintrust==0.3.9
     # via onyx
+brotli==1.2.0
+    # via onyx
 bytecode==0.17.0
     # via ddtrace
 cachetools==6.2.2

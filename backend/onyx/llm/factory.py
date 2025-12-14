@@ -3,7 +3,6 @@ from collections.abc import Callable
 from sqlalchemy.orm import Session
 
 from onyx.chat.models import PersonaOverrideConfig
-from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.llm import can_user_access_llm_provider
@@ -16,7 +15,6 @@ from onyx.db.llm import fetch_user_group_ids
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.llm.chat_llm import LitellmLLM
-from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.llm_provider_options import OLLAMA_API_KEY_CONFIG_KEY
@@ -202,8 +200,6 @@ def get_default_llm_with_vision(
 
     Returns None if no providers exist or if no provider supports images.
     """
-    if DISABLE_GENERATIVE_AI:
-        raise GenAIDisabledException()
 
     def create_vision_llm(provider: LLMProviderView, model: str) -> LLM:
         """Helper to create an LLM if the provider supports image input."""
@@ -321,9 +317,6 @@ def get_default_llms(
     additional_headers: dict[str, str] | None = None,
     long_term_logger: LongTermLogger | None = None,
 ) -> tuple[LLM, LLM]:
-    if DISABLE_GENERATIVE_AI:
-        raise GenAIDisabledException()
-
     with get_session_with_current_tenant() as db_session:
         llm_provider = fetch_default_provider(db_session)
 

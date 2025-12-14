@@ -99,7 +99,9 @@ DEFAULT_HEADERS = {
         "image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
     ),
     "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
+    # Brotli decoding has been flaky in brotlicffi/httpx for certain chunked responses;
+    # stick to gzip/deflate to keep connectivity checks stable.
+    "Accept-Encoding": "gzip, deflate",
     "Connection": "keep-alive",
     "Upgrade-Insecure-Requests": "1",
     "Sec-Fetch-Dest": "document",
@@ -349,10 +351,13 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
 
 
 def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
+    # requests should handle brotli compression automatically
+    # as long as the brotli package is available in the venv. Leaving this line here to avoid
+    # a regression as someone says "Ah, looks like this brotli package isn't used anywhere, let's remove it"
+    # import brotli
     try:
         response = requests.get(sitemap_url, headers=DEFAULT_HEADERS)
         response.raise_for_status()
-
         soup = BeautifulSoup(response.content, "html.parser")
         urls = [
             _ensure_absolute_url(sitemap_url, loc_tag.text)

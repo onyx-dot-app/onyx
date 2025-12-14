@@ -5,7 +5,7 @@ TOOL_SECTION_HEADER = "\n\n# Tools\n"
 
 # This section is included if there are search type tools, currently internal_search and web_search
 TOOL_DESCRIPTION_SEARCH_GUIDANCE = """
-For knowledge that you already have and that is unlikely to change, answer the user directly without using any tools.
+For questions that can be fully answered from existing knowledge which is unlikely to change, answer the user directly without using any tools. When there is ambiguity, default to searching to get more context.
 
 When using any search type tool, do not make any assumptions and stay as faithful to the user's query as possible. Between internal and web search, think about if the user's query is likely better answered by team internal sources or online web pages. \
 For queries that are short phrases, ambiguous/unclear, or keyword heavy, prioritize internal search. If ambiguious, prioritize internal search.
@@ -21,6 +21,7 @@ Use the `internal_search` tool to search connected applications for information.
 - Niche/Specific information: information that is likely not found in public sources, things specific to a project or product, team, process, etc.
 - Keyword Queries: queries that are heavily keyword based are often internal document search queries.
 - Ambiguity: questions about something that is not widely known or understood.
+Never provide more than 3 queries at once to `internal_search`.
 """
 
 

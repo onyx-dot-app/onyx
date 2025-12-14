@@ -465,12 +465,6 @@ export function SlackChannelConfigFormFields({
                   />
                 </div>
                 <CheckFormField
-                  name="enable_auto_filters"
-                  label="Enable LLM Autofiltering"
-                  tooltip="If set, the LLM will generate source and time filters based on the user's query"
-                />
-
-                <CheckFormField
                   name="answer_validity_check_enabled"
                   label="Only respond if citations found"
                   tooltip="If set, will only answer questions where the model successfully produces citations"
