@@ -48,6 +48,9 @@ DISABLED_GEN_AI_MSG = (
     "You can still use Onyx as a search engine."
 )
 
+TIER_LIMIT_ERROR_MESSAGE = "Token budget exceeded for your User Tier. Upgrade to Pro for more."
+RATE_LIMIT_ERROR_MESSAGE = "🚫 **Rate Limit Exceeded**\n\nYou have used your daily token allowance. Please upgrade to Pro for more."
+
 #####
 # Version Pattern Configs
 #####

@@ -87,9 +87,13 @@ from onyx.server.query_and_chat.session_loading import (
     translate_assistant_message_to_packets,
 )
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import AgentResponseStart
+from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
+from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
+from onyx.server.utils import get_json_line
 from onyx.utils.telemetry import create_milestone_and_report
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -431,7 +435,7 @@ def handle_new_chat_message(
     chat_message_req: CreateChatMessageRequest,
     request: Request,
     user: User | None = Depends(current_chat_accessible_user),
-    _rate_limit_check: None = Depends(check_token_rate_limits),
+    # _rate_limit_check: None = Depends(check_token_rate_limits),  # Removed for manual handling
 ) -> StreamingResponse:
     """
     This endpoint is both used for all the following purposes:
@@ -451,6 +455,44 @@ def handle_new_chat_message(
     Returns:
         StreamingResponse: Streams the response to the new chat message.
     """
+    # Manual Rate Limit Check to support streaming errors
+    try:
+        check_token_rate_limits(user)
+    except HTTPException as e:
+        if e.status_code == 429:
+            logger.info(f"User {user.id if user else 'anon'} hit rate limit. Streaming error message.")
+            
+            # Capture detail here because 'e' is deleted after except block
+            limit_detail = e.detail
+            
+            def error_stream_generator() -> Generator[str, None, None]:
+                # 1. Start Packet
+                yield get_json_line(Packet(
+                    turn_index=0, 
+                    obj=AgentResponseStart()
+                ).model_dump(mode="json"))
+                
+                # 2. Delta Packet (The Text)
+                # Avoid circular import
+                from onyx.configs.constants import RATE_LIMIT_ERROR_MESSAGE
+                error_msg = RATE_LIMIT_ERROR_MESSAGE
+                if limit_detail:
+                    error_msg = f"🚫 **Rate Limit Exceeded**\n\n{limit_detail}"
+
+                yield get_json_line(Packet(
+                    turn_index=0, 
+                    obj=AgentResponseDelta(content=error_msg)
+                ).model_dump(mode="json"))
+                
+                # 3. Stop Packet
+                yield get_json_line(Packet(
+                    turn_index=0, 
+                    obj=OverallStop()
+                ).model_dump(mode="json"))
+            
+            return StreamingResponse(error_stream_generator(), media_type="text/event-stream")
+        raise e
+
     tenant_id = get_current_tenant_id()
     logger.debug(f"Received new chat message: {chat_message_req.message}")
 

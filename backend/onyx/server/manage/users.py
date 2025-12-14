@@ -40,6 +40,7 @@ from onyx.configs.app_configs import ENABLE_EMAIL_INVITES
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
+from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.api_key import is_api_key_email_address
@@ -97,6 +98,14 @@ from onyx.utils.variable_functionality import (
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
+
+from fastapi.responses import RedirectResponse
+from fastapi_users.authentication import Strategy
+from onyx.auth.users import auth_backend, get_user_manager, UserManager
+from onyx.redis.redis_pool import get_async_redis_connection
+import uuid
+import secrets
+
 logger = setup_logger()
 router = APIRouter()
 
@@ -141,6 +150,64 @@ def set_user_role(
         )(db_session, user_to_update)
 
     update_user_role(user_to_update, requested_role, db_session)
+
+
+class UserById(BaseModel):
+    user_id: str
+
+@router.post("/manage/admin/generate-login-token")
+async def generate_login_token(
+    request: UserById,
+    _: User = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+):
+    stmt = db_session.query(User).filter(User.id == request.user_id)
+    user = stmt.first()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    token = secrets.token_urlsafe(32)
+    redis_client = await get_async_redis_connection()
+    # Expire in 60 seconds
+    await redis_client.setex(f"login_token:{token}", 60, str(user.id))
+    
+    return {"token": token}
+
+@router.get("/manage/auth/login-with-token")
+async def login_with_token(
+    token: str,
+    redirect_uri: str | None = None,
+    db_session: Session = Depends(get_session),
+    strategy: Strategy = Depends(auth_backend.get_strategy),
+    user_manager: UserManager = Depends(get_user_manager),
+):
+    redis_client = await get_async_redis_connection()
+    user_id = await redis_client.get(f"login_token:{token}")
+    
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+        
+    await redis_client.delete(f"login_token:{token}")
+    
+    try:
+        user_uuid = uuid.UUID(user_id.decode())
+        user = await user_manager.get(user_uuid)
+    except Exception:
+         raise HTTPException(status_code=404, detail="User not found")
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    response = await auth_backend.login(strategy, user)
+    # response is a Response object with Set-Cookie headers.
+    
+    # Redirect to Frontend Dashboard
+    target = f"{WEB_DOMAIN}{redirect_uri}" if redirect_uri else f"{WEB_DOMAIN}/"
+    redirect = RedirectResponse(url=target)
+    redirect.headers.update(response.headers)
+    return redirect
+
 
 
 class TestUpsertRequest(BaseModel):

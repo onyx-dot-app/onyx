@@ -59,6 +59,7 @@ PUBLIC_ENDPOINT_SPECS = [
     # anonymous user on cloud
     ("/tenants/anonymous-user", {"POST"}),
     ("/metrics", {"GET"}),  # added by prometheus_fastapi_instrumentator
+    ("/manage/auth/login-with-token", {"GET"}),
 ]
 
 

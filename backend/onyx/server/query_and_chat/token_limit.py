@@ -25,7 +25,7 @@ from onyx.utils.variable_functionality import fetch_versioned_implementation
 logger = setup_logger()
 
 
-TOKEN_BUDGET_UNIT = 1_000
+TOKEN_BUDGET_UNIT = 1 # 1 Token = 1 Token. (Simplified from 1,000)
 
 
 def check_token_rate_limits(
@@ -42,8 +42,10 @@ def check_token_rate_limits(
     return versioned_rate_limit_strategy(user)
 
 
-def _check_token_rate_limits(_: User | None) -> None:
+def _check_token_rate_limits(user: User | None) -> None:
     _user_is_rate_limited_by_global()
+    if user:
+        _user_is_rate_limited_by_user_groups(str(user.id))
 
 
 """
@@ -66,6 +68,50 @@ def _user_is_rate_limited_by_global() -> None:
                     status_code=429,
                     detail="Token budget exceeded for organization. Try again later.",
                 )
+
+
+
+
+def _user_is_rate_limited_by_user_groups(user_id: str) -> None:
+     with get_session_with_current_tenant() as db_session:
+         # Import here to avoid circulars if any
+         from onyx.db.token_limit import fetch_token_rate_limits_for_user_groups
+         from onyx.configs.constants import TIER_LIMIT_ERROR_MESSAGE
+
+         group_limits = fetch_token_rate_limits_for_user_groups(db_session, user_id)
+        
+         if group_limits:
+              cutoff_time = _get_cutoff_time(group_limits)
+              # Reuse global usage fetcher (it groups by minute for ALL chats, which is what we want for total usage)
+              # Wait, _fetch_global_usage fetches ALL messages in the system?
+              # No, strictly speaking we need usage FOR THIS USER.
+              # _fetch_global_usage -> join ChatSession. 
+              # We need to filter by user_id!
+              user_usage = _fetch_user_usage(cutoff_time, user_id, db_session)
+              
+              if _is_rate_limited(group_limits, user_usage):
+                  raise HTTPException(
+                     status_code=429,
+                     detail=TIER_LIMIT_ERROR_MESSAGE,
+                 )
+
+def _fetch_user_usage(
+    cutoff_time: datetime, user_id: str, db_session: Session
+) -> Sequence[tuple[datetime, int]]:
+    result = db_session.execute(
+        select(
+            func.date_trunc("minute", ChatMessage.time_sent),
+            func.sum(ChatMessage.token_count),
+        )
+        .join(ChatSession, ChatMessage.chat_session_id == ChatSession.id)
+        .filter(
+            ChatMessage.time_sent >= cutoff_time,
+            ChatSession.user_id == user_id 
+        )
+        .group_by(func.date_trunc("minute", ChatMessage.time_sent))
+    ).all()
+
+    return [(row[0], row[1]) for row in result]
 
 
 def _fetch_global_usage(
