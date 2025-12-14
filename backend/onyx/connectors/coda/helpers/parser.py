@@ -361,7 +361,7 @@ class CodaParser:
     # Table parsing
     # ========================================================================
     @staticmethod
-    def create_table_key(doc_id: str, table_id: str, separator: str = " / ") -> str:
+    def create_table_key(doc_id: str, table_id: str, separator: str = ":") -> str:
         """
         Create a unique key for a table.
 
