@@ -53,3 +53,6 @@ node_modules
 
 # MCP configs
 .playwright-mcp
+
+# plans
+plans/
