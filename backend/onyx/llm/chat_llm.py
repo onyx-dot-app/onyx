@@ -259,12 +259,6 @@ class LitellmLLM(LLM):
         existing_metadata = self._model_kwargs.get("metadata")
         if isinstance(existing_metadata, dict):
             metadata.update(existing_metadata)
-        if (
-            SEND_USER_METADATA_TO_LLM_PROVIDER
-            and user_identity
-            and user_identity.session_id
-        ):
-            metadata["session_id"] = user_identity.session_id
 
         model_kwargs_without_metadata = {
             k: v for k, v in self._model_kwargs.items() if k != "metadata"
