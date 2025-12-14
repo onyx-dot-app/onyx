@@ -367,17 +367,10 @@ function ChatInputBarInner({
   };
 
   return (
-    <div
-      id="onyx-chat-input"
-      className={cn(
-        "max-w-full w-[50rem]",
-        disabled && "opacity-50 cursor-not-allowed pointer-events-none"
-      )}
-      aria-disabled={disabled}
-    >
-      {showPrompts && user?.preferences?.shortcut_enabled && (
+    <>
+      {user?.preferences?.shortcut_enabled && showPrompts && (
         <div className="text-sm absolute inset-x-0 top-0 w-full transform -translate-y-full">
-          <div className="rounded-lg overflow-y-auto max-h-[200px] py-1.5 bg-background-neutral-01 border border-border-01 shadow-lg mx-2 px-1.5 mt-2 rounded z-10">
+          <div className="overflow-y-auto max-h-[200px] py-1.5 bg-background-neutral-01 border border-border-01 shadow-lg mx-2 px-1.5 mt-2 rounded z-10">
             {filteredPrompts.map(
               (currentPrompt: InputPrompt, index: number) => (
                 <button
@@ -417,7 +410,15 @@ function ChatInputBarInner({
         </div>
       )}
 
-      <div className="w-full h-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16">
+      <div
+        id="onyx-chat-input"
+        className={cn(
+          "max-w-full w-[50rem] flex flex-col shadow-01 bg-background-neutral-00 rounded-16",
+          disabled && "opacity-50 cursor-not-allowed pointer-events-none"
+        )}
+        aria-disabled={disabled}
+      >
+        {/* Attached Files */}
         {currentMessageFiles.length > 0 && (
           <div className="p-1 rounded-t-16 flex flex-wrap gap-2">
             {currentMessageFiles.map((file) => (
@@ -433,6 +434,7 @@ function ChatInputBarInner({
           </div>
         )}
 
+        {/* Input area */}
         <textarea
           onPaste={handlePaste}
           onKeyDownCapture={handleKeyDown}
@@ -477,6 +479,7 @@ function ChatInputBarInner({
           disabled={disabled}
         />
 
+        {/* Input area */}
         {(selectedDocuments.length > 0 ||
           filterManager.timeRange ||
           filterManager.selectedDocumentSets.length > 0) && (
@@ -527,6 +530,7 @@ function ChatInputBarInner({
         )}
 
         <div className="flex justify-between items-center w-full p-1 min-h-[40px]">
+          {/* Bottom left controls */}
           <div className="flex flex-row items-center">
             {/* (+) button - always visible */}
             <FilePickerPopover
@@ -621,6 +625,7 @@ function ChatInputBarInner({
             </div>
           </div>
 
+          {/* Bottom right controls */}
           <div className="flex flex-row items-center gap-1">
             {/* LLM popover - loads when ready */}
             <div
@@ -652,7 +657,7 @@ function ChatInputBarInner({
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 const ChatInputBar = React.memo(ChatInputBarInner);
