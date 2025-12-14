@@ -493,13 +493,13 @@ class CodaAPIClient:
                 json={"outputFormat": output_format},
             )
         except Exception as e:
-            logger.warning(f"Error starting export for page '{page_id}': {e}")
+            logger.error(f"Error starting export for page '{page_id}': {e}")
             return None
 
         request_id = response.get("id")
 
         if not request_id:
-            logger.warning(f"No request ID returned for page '{page_id}'")
+            logger.debug(f"No request ID returned for page '{page_id}'")
             return None
 
         # Wait a moment for the export request to be registered
@@ -516,7 +516,7 @@ class CodaAPIClient:
                     f"/docs/{doc_id}/pages/{page_id}/export/{request_id}",
                 )
             except Exception as e:
-                logger.warning(
+                logger.error(
                     f"Error checking export status for page '{page_id}' (attempt {attempt + 1}/{self.export_max_attempts}): {e}"
                 )
                 # Always retry until max attempts reached
@@ -524,7 +524,7 @@ class CodaAPIClient:
                     sleep(wait_time)
                 continue
 
-            logger.warning(
+            logger.debug(
                 f"Export status for page '{page_id}' (attempt {attempt + 1}/{self.export_max_attempts}): {status_response}"
             )
             status = status_response.get("status")
@@ -532,7 +532,7 @@ class CodaAPIClient:
             if status == "complete":
                 download_link = status_response.get("downloadLink")
                 if not download_link:
-                    logger.warning(f"No download link for page '{page_id}'")
+                    logger.debug(f"No download link for page '{page_id}'")
                     return None
 
                 try:
@@ -544,7 +544,7 @@ class CodaAPIClient:
 
                     # Validate content is not empty
                     if not content.strip():
-                        logger.warning(
+                        logger.debug(
                             f"Page '{page_id}' exported but contains no content"
                         )
                         return None
@@ -554,13 +554,11 @@ class CodaAPIClient:
                     )
                     return content
                 except Exception as e:
-                    logger.warning(
-                        f"Error downloading content for page '{page_id}': {e}"
-                    )
+                    logger.error(f"Error downloading content for page '{page_id}': {e}")
                     return None
 
             elif status == "failed":
-                logger.warning(f"Export failed for page '{page_id}'")
+                logger.debug(f"Export failed for page '{page_id}'")
                 return None
 
             elif status == "inProgress":
@@ -573,10 +571,10 @@ class CodaAPIClient:
                     sleep(wait_time)
 
             else:
-                logger.warning(f"Unknown export status '{status}' for page '{page_id}'")
+                logger.debug(f"Unknown export status '{status}' for page '{page_id}'")
                 return None
 
-        logger.warning(
+        logger.debug(
             f"Export timed out for page '{page_id}' after {self.export_max_attempts} attempts"
         )
         return None
