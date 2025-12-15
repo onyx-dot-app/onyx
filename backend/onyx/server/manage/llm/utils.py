@@ -12,6 +12,12 @@ from typing import TypedDict
 
 from onyx.llm.constants import BEDROCK_MODEL_NAME_MAPPINGS
 from onyx.llm.constants import OLLAMA_MODEL_NAME_MAPPINGS
+from onyx.llm.constants import OLLAMA_MODEL_TO_VENDOR
+from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
+
+
+# Dynamic providers fetch models directly from source APIs (not LiteLLM)
+DYNAMIC_LLM_PROVIDERS = {"openrouter", "bedrock", "ollama_chat"}
 
 
 class ModelMetadata(TypedDict):
@@ -235,3 +241,70 @@ def is_reasoning_model(model_id: str, display_name: str) -> bool:
     """
     combined = f"{model_id} {display_name}".lower()
     return any(pattern in combined for pattern in REASONING_MODEL_PATTERNS)
+
+
+def extract_base_model_name(model: str) -> str | None:
+    """Extract base model name by removing date suffixes.
+
+    Returns None if no date suffix was found.
+    """
+    patterns = [
+        r"-\d{8}$",  # -20250929
+        r"-\d{4}-\d{2}-\d{2}$",  # -2024-08-06
+        r"@\d{8}$",  # @20250219
+    ]
+    for pattern in patterns:
+        if re.search(pattern, model):
+            return re.sub(pattern, "", model)
+    return None
+
+
+def should_filter_as_dated_duplicate(
+    model_name: str, all_model_names: set[str]
+) -> bool:
+    """Check if this model is a dated variant and a non-dated version exists."""
+    base = extract_base_model_name(model_name)
+    if base and base in all_model_names:
+        return True
+    return False
+
+
+def extract_vendor_from_model_name(model_name: str, provider: str) -> str | None:
+    """Extract vendor from model name for aggregator providers.
+
+    Examples:
+        - OpenRouter: "anthropic/claude-3-5-sonnet" → "Anthropic"
+        - Bedrock: "anthropic.claude-3-5-sonnet-..." → "Anthropic"
+        - Bedrock: "us.anthropic.claude-..." → "Anthropic"
+        - Ollama: "llama3:70b" → "Meta"
+        - Ollama: "qwen2.5:7b" → "Alibaba"
+    """
+    if provider == "openrouter":
+        # Format: "vendor/model-name" e.g., "anthropic/claude-3-5-sonnet"
+        if "/" in model_name:
+            vendor_key = model_name.split("/")[0].lower()
+            return PROVIDER_DISPLAY_NAMES.get(vendor_key, vendor_key.title())
+
+    elif provider == "bedrock":
+        # Format: "vendor.model-name" or "region.vendor.model-name"
+        parts = model_name.split(".")
+        if len(parts) >= 2:
+            # Check if first part is a region (us, eu, global, etc.)
+            if parts[0] in ("us", "eu", "global", "ap", "apac"):
+                vendor_key = parts[1].lower() if len(parts) > 2 else parts[0].lower()
+            else:
+                vendor_key = parts[0].lower()
+            return PROVIDER_DISPLAY_NAMES.get(vendor_key, vendor_key.title())
+
+    elif provider == "ollama_chat":
+        # Format: "model-name:tag" e.g., "llama3:70b", "qwen2.5:7b"
+        # Extract base name (before colon)
+        base_name = model_name.split(":")[0].lower()
+        # Match against known model prefixes
+        for prefix, vendor in OLLAMA_MODEL_TO_VENDOR.items():
+            if base_name.startswith(prefix):
+                return vendor
+        # Fallback: capitalize the base name as vendor
+        return base_name.split("-")[0].title()
+
+    return None

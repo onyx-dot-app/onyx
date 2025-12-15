@@ -1,4 +1,3 @@
-import re
 from typing import Any
 from typing import TYPE_CHECKING
 
@@ -9,33 +8,10 @@ from pydantic import field_validator
 from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import litellm_thinks_model_supports_image_input
 from onyx.llm.utils import model_is_reasoning_model
+from onyx.server.manage.llm.utils import DYNAMIC_LLM_PROVIDERS
+from onyx.server.manage.llm.utils import extract_vendor_from_model_name
 from onyx.server.manage.llm.utils import is_reasoning_model
-
-
-def _extract_base_model_name(model: str) -> str | None:
-    """Extract base model name by removing date suffixes.
-
-    Returns None if no date suffix was found.
-    """
-    patterns = [
-        r"-\d{8}$",  # -20250929
-        r"-\d{4}-\d{2}-\d{2}$",  # -2024-08-06
-        r"@\d{8}$",  # @20250219
-    ]
-    for pattern in patterns:
-        if re.search(pattern, model):
-            return re.sub(pattern, "", model)
-    return None
-
-
-def _should_filter_as_dated_duplicate(
-    model_name: str, all_model_names: set[str]
-) -> bool:
-    """Check if this model is a dated variant and a non-dated version exists."""
-    base = _extract_base_model_name(model_name)
-    if base and base in all_model_names:
-        return True
-    return False
+from onyx.server.manage.llm.utils import should_filter_as_dated_duplicate
 
 
 if TYPE_CHECKING:
@@ -105,7 +81,7 @@ class LLMProviderDescriptor(BaseModel):
             if is_obsolete_model(model_configuration.name, provider):
                 continue
             # Skip dated duplicates when non-dated version exists
-            if _should_filter_as_dated_duplicate(
+            if should_filter_as_dated_duplicate(
                 model_configuration.name, all_model_names
             ):
                 continue
@@ -194,7 +170,7 @@ class LLMProviderView(LLMProvider):
             if is_obsolete_model(model_configuration.name, provider):
                 continue
             # Skip dated duplicates when non-dated version exists
-            if _should_filter_as_dated_duplicate(
+            if should_filter_as_dated_duplicate(
                 model_configuration.name, all_model_names
             ):
                 continue
@@ -243,54 +219,6 @@ class ModelConfigurationUpsertRequest(BaseModel):
         )
 
 
-# Dynamic providers fetch models directly from source APIs (not LiteLLM)
-DYNAMIC_LLM_PROVIDERS = {"openrouter", "bedrock", "ollama_chat"}
-
-
-def _extract_vendor_from_model_name(model_name: str, provider: str) -> str | None:
-    """Extract vendor from model name for aggregator providers.
-
-    Examples:
-        - OpenRouter: "anthropic/claude-3-5-sonnet" → "Anthropic"
-        - Bedrock: "anthropic.claude-3-5-sonnet-..." → "Anthropic"
-        - Bedrock: "us.anthropic.claude-..." → "Anthropic"
-        - Ollama: "llama3:70b" → "Meta"
-        - Ollama: "qwen2.5:7b" → "Alibaba"
-    """
-    from onyx.llm.constants import OLLAMA_MODEL_TO_VENDOR
-    from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
-
-    if provider == "openrouter":
-        # Format: "vendor/model-name" e.g., "anthropic/claude-3-5-sonnet"
-        if "/" in model_name:
-            vendor_key = model_name.split("/")[0].lower()
-            return PROVIDER_DISPLAY_NAMES.get(vendor_key, vendor_key.title())
-
-    elif provider == "bedrock":
-        # Format: "vendor.model-name" or "region.vendor.model-name"
-        parts = model_name.split(".")
-        if len(parts) >= 2:
-            # Check if first part is a region (us, eu, global, etc.)
-            if parts[0] in ("us", "eu", "global", "ap", "apac"):
-                vendor_key = parts[1].lower() if len(parts) > 2 else parts[0].lower()
-            else:
-                vendor_key = parts[0].lower()
-            return PROVIDER_DISPLAY_NAMES.get(vendor_key, vendor_key.title())
-
-    elif provider == "ollama_chat":
-        # Format: "model-name:tag" e.g., "llama3:70b", "qwen2.5:7b"
-        # Extract base name (before colon)
-        base_name = model_name.split(":")[0].lower()
-        # Match against known model prefixes
-        for prefix, vendor in OLLAMA_MODEL_TO_VENDOR.items():
-            if base_name.startswith(prefix):
-                return vendor
-        # Fallback: capitalize the base name as vendor
-        return base_name.split("-")[0].title()
-
-    return None
-
-
 class ModelConfigurationView(BaseModel):
     name: str
     is_visible: bool
@@ -316,7 +244,7 @@ class ModelConfigurationView(BaseModel):
             and model_configuration_model.display_name
         ):
             # Extract vendor from model name for grouping (e.g., "Anthropic", "OpenAI")
-            vendor = _extract_vendor_from_model_name(
+            vendor = extract_vendor_from_model_name(
                 model_configuration_model.name, provider_name
             )
 
