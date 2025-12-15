@@ -397,13 +397,11 @@ def stream_chat_message_objects(
         # (which means it can use search)
         # However if in a project and there are more files than can fit in the context,
         # it should use the search tool with the project filter on
+        # If no files are uploaded, search should remain enabled
         disable_internal_search = bool(
             chat_session.project_id
             and persona.id is DEFAULT_PERSONA_ID
-            and (
-                extracted_project_files.project_file_texts
-                or not extracted_project_files.project_as_filter
-            )
+            and extracted_project_files.project_file_texts
         )
 
         emitter = get_default_emitter()
