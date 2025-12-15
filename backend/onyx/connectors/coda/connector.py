@@ -66,13 +66,18 @@ class CodaPage(BaseModel):
     doc_id: str
 
 
+class CodaTableReference(BaseModel):
+    id: str
+    browser_link: str
+    name: str
+
+
 class CodaTable(BaseModel):
     id: str
     name: str
     browser_link: str
     created_at: str
     updated_at: str
-    doc_id: str
 
 
 class CodaRow(BaseModel):
@@ -384,11 +389,11 @@ class CodaConnector(LoadConnector, PollConnector):
         return "\n\n".join(content_parts)
 
     @retry(tries=3, delay=1, backoff=2)
-    def _list_tables(self, doc_id: str) -> List[CodaTable]:
+    def _list_tables(self, doc_id: str) -> List[CodaTableReference]:
         """List all tables in a Coda document."""
         logger.debug(f"Listing tables in Coda doc with ID: {doc_id}")
 
-        tables: List[CodaTable] = []
+        tables: List[CodaTableReference] = []
         endpoint = f"docs/{doc_id}/tables"
         params: Dict[str, str] = {}
         next_page_token: str | None = None
@@ -410,12 +415,10 @@ class CodaConnector(LoadConnector, PollConnector):
             items = response.get("items", [])
             for item in items:
                 tables.append(
-                    CodaTable(
+                    CodaTableReference(
                         id=item["id"],
                         browser_link=item["browserLink"],
                         name=item["name"],
-                        created_at=item["createdAt"],
-                        updated_at=item["updatedAt"],
                         doc_id=doc_id,
                     )
                 )
@@ -502,9 +505,13 @@ class CodaConnector(LoadConnector, PollConnector):
         )
 
     def _convert_table_with_rows_to_document(
-        self, table: CodaTable, rows: List[CodaRow]
+        self,
+        tableReference: CodaTableReference,
+        rows: List[CodaRow],
+        doc_id: str,
     ) -> Document:
         """Convert a table and its rows into a single Document with multiple sections (one per row)."""
+        table = self._get_table(doc_id, tableReference.id)
         table_updated = datetime.fromisoformat(table.updated_at).astimezone(
             timezone.utc
         )
@@ -524,25 +531,30 @@ class CodaConnector(LoadConnector, PollConnector):
         # If no rows, create a single section for the table itself
         if not sections:
             sections = [
-                TextSection(link=table.browser_link, text=f"Table: {table.name}")
+                TextSection(
+                    link=tableReference.browser_link,
+                    text=f"Table: {tableReference.name}",
+                )
             ]
 
         return Document(
-            id=f"coda-table-{table.doc_id}-{table.id}",
+            id=f"coda-table-{doc_id}-{tableReference.id}",
             sections=cast(list[TextSection | ImageSection], sections),
             source=DocumentSource.CODA,
-            semantic_identifier=table.name or f"Table {table.id}",
+            semantic_identifier=tableReference.name or f"Table {tableReference.id}",
             doc_updated_at=table_updated,
             metadata={
-                "browser_link": table.browser_link,
-                "doc_id": table.doc_id,
+                "browser_link": tableReference.browser_link,
+                "doc_id": doc_id,
                 "row_count": str(len(rows)),
             },
         )
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Load and validate Coda credentials."""
-        self._coda_client = CodaApiClient(bearer_token=credentials["coda_bearer_token"])
+        self._coda_client = CodaApiClient(
+            bearer_token="de790189-1ca1-4917-b36d-32d7cf0d032c"
+        )
 
         try:
             self._coda_client.get("docs", params={"limit": "1"})
@@ -579,16 +591,20 @@ class CodaConnector(LoadConnector, PollConnector):
                     logger.warning(f"Failed to list pages for doc {doc.id}: {e}")
 
                 try:
-                    tables = self._list_tables(doc.id)
-                    for table in tables:
+                    tableReferences = self._list_tables(doc.id)
+                    for tableReference in tableReferences:
                         try:
-                            rows = self._list_rows_and_values(doc.id, table.id)
-                            yield self._convert_table_with_rows_to_document(table, rows)
+                            rows = self._list_rows_and_values(doc.id, tableReference.id)
+                            yield self._convert_table_with_rows_to_document(
+                                tableReference, rows, doc.id
+                            )
                         except ConnectorValidationError as e:
                             logger.warning(
-                                f"Failed to list rows for table {table.id}: {e}"
+                                f"Failed to list rows for table {tableReference.id}: {e}"
                             )
-                            yield self._convert_table_with_rows_to_document(table, [])
+                            yield self._convert_table_with_rows_to_document(
+                                tableReference, [], doc.id
+                            )
                 except ConnectorValidationError as e:
                     logger.warning(f"Failed to list tables for doc {doc.id}: {e}")
 
@@ -656,7 +672,7 @@ class CodaConnector(LoadConnector, PollConnector):
 
                             if table_or_rows_updated:
                                 yield self._convert_table_with_rows_to_document(
-                                    table, rows
+                                    table, rows, doc.id
                                 )
 
                         except ConnectorValidationError as e:
@@ -665,7 +681,7 @@ class CodaConnector(LoadConnector, PollConnector):
                             )
                             if table_timestamp > start and table_timestamp <= end:
                                 yield self._convert_table_with_rows_to_document(
-                                    table, []
+                                    table, [], doc.id
                                 )
 
                 except ConnectorValidationError as e:
