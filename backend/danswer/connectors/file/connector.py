@@ -9,6 +9,7 @@ from typing import IO
 from sqlalchemy.orm import Session
 
 from danswer.configs.app_configs import INDEX_BATCH_SIZE
+from danswer.configs.app_configs import WEB_DOMAIN
 from danswer.configs.constants import DocumentSource
 from danswer.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from danswer.connectors.interfaces import GenerateDocumentsOutput
@@ -130,12 +131,18 @@ def _process_file(
         else None
     )
 
+    # Generate a link for file uploads if not already provided
+    # Files uploaded via the connector are stored as uuid/filename
+    file_link = all_metadata.get("link")
+    if not file_link and "/" in file_name:
+        # The file_name format is "uuid/filename"
+        # The endpoint expects /file/{uuid}/{filename}
+        file_link = f"{WEB_DOMAIN}/api/chat/file/{file_name}"
+
     return [
         Document(
             id=f"FILE_CONNECTOR__{file_name}",  # add a prefix to avoid conflicts with other connectors
-            sections=[
-                Section(link=all_metadata.get("link"), text=file_content_raw.strip())
-            ],
+            sections=[Section(link=file_link, text=file_content_raw.strip())],
             source=DocumentSource.FILE,
             semantic_identifier=file_display_name,
             title=title,

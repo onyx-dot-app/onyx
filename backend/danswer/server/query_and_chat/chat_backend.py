@@ -573,14 +573,37 @@ def upload_files_for_chat(
     }
 
 
-@router.get("/file/{file_id}")
+@router.get("/file/{file_id:path}")
 def fetch_chat_file(
     file_id: str,
     db_session: Session = Depends(get_session),
     _: User | None = Depends(current_user),
 ) -> Response:
     file_store = get_default_file_store(db_session)
-    file_io = file_store.read_file(file_id, mode="b")
-    # NOTE: specifying "image/jpeg" here, but it still works for pngs
-    # TODO: do this properly
-    return Response(content=file_io.read(), media_type="image/jpeg")
+
+    try:
+        file_io = file_store.read_file(file_id, mode="b")
+
+        # Determine content type based on file extension if it's a path
+        content_type = "application/octet-stream"
+        if "/" in file_id:
+            # It's a path like uuid/filename, extract filename
+            filename = file_id.split("/")[-1].lower()
+            if filename.endswith(".pdf"):
+                content_type = "application/pdf"
+            elif filename.endswith((".jpg", ".jpeg")):
+                content_type = "image/jpeg"
+            elif filename.endswith(".png"):
+                content_type = "image/png"
+            elif filename.endswith(".txt"):
+                content_type = "text/plain"
+            elif filename.endswith((".doc", ".docx")):
+                content_type = "application/msword"
+        else:
+            # For simple IDs (chat uploads)
+            content_type = "image/jpeg"
+
+        return Response(content=file_io.read(), media_type=content_type)
+    except Exception as e:
+        logger.error(f"Error fetching file {file_id}: {str(e)}")
+        raise HTTPException(status_code=404, detail="File not found")
