@@ -11,7 +11,7 @@ interface PaginationProps {
   onPageChange: (page: number) => void;
 }
 
-export function Pagination({
+export default function Pagination({
   currentPage,
   totalPages,
   onPageChange,
@@ -113,7 +113,6 @@ export function Pagination({
       <IconButton
         onClick={() => onPageChange(currentPage + 1)}
         disabled={currentPage === totalPages}
-        main
         tertiary
         icon={SvgChevronRight}
       />

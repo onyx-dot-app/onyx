@@ -13,7 +13,7 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import SvgOnyxOctagon from "@/icons/onyx-octagon";
 import { useState, useEffect } from "react";
-import { Pagination } from "@/refresh-components/Pagination";
+import Pagination from "@/refresh-components/Pagination";
 
 const PAGE_SIZE = 20;
 
