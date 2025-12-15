@@ -1,3 +1,5 @@
+"use client";
+
 import { useMemo } from "react";
 import { OnyxIcon, OnyxLogoTypeIcon } from "@/components/icons/icons";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";

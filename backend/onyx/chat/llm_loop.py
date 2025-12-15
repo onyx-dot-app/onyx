@@ -103,15 +103,23 @@ def construct_message_history(
     custom_agent_prompt: ChatMessageSimple | None,
     simple_chat_history: list[ChatMessageSimple],
     reminder_message: ChatMessageSimple | None,
-    project_files: ExtractedProjectFiles,
+    project_files: ExtractedProjectFiles | None,
     available_tokens: int,
+    last_n_user_messages: int | None = None,
 ) -> list[ChatMessageSimple]:
+    if last_n_user_messages is not None:
+        if last_n_user_messages <= 0:
+            raise ValueError(
+                "filtering chat history by last N user messages must be a value greater than 0"
+            )
+
     history_token_budget = available_tokens
     history_token_budget -= system_prompt.token_count
     history_token_budget -= (
         custom_agent_prompt.token_count if custom_agent_prompt else 0
     )
-    history_token_budget -= project_files.total_token_count
+    if project_files:
+        history_token_budget -= project_files.total_token_count
     history_token_budget -= reminder_message.token_count if reminder_message else 0
 
     if history_token_budget < 0:
@@ -122,7 +130,7 @@ def construct_message_history(
         result = [system_prompt]
         if custom_agent_prompt:
             result.append(custom_agent_prompt)
-        if project_files.project_file_texts:
+        if project_files and project_files.project_file_texts:
             project_message = _create_project_files_message(
                 project_files, token_counter=None
             )
@@ -130,6 +138,26 @@ def construct_message_history(
         if reminder_message:
             result.append(reminder_message)
         return result
+
+    # If last_n_user_messages is set, filter history to only include the last n user messages
+    if last_n_user_messages is not None:
+        # Find all user message indices
+        user_msg_indices = [
+            i
+            for i, msg in enumerate(simple_chat_history)
+            if msg.message_type == MessageType.USER
+        ]
+
+        if not user_msg_indices:
+            raise ValueError("No user message found in simple_chat_history")
+
+        # If we have more than n user messages, keep only the last n
+        if len(user_msg_indices) > last_n_user_messages:
+            # Find the index of the n-th user message from the end
+            # For example, if last_n_user_messages=2, we want the 2nd-to-last user message
+            nth_user_msg_index = user_msg_indices[-(last_n_user_messages)]
+            # Keep everything from that user message onwards
+            simple_chat_history = simple_chat_history[nth_user_msg_index:]
 
     # Find the last USER message in the history
     # The history may contain tool calls and responses after the last user message
@@ -178,7 +206,7 @@ def construct_message_history(
             break
 
     # Attach project images to the last user message
-    if project_files.project_image_files:
+    if project_files and project_files.project_image_files:
         existing_images = last_user_message.image_files or []
         last_user_message = ChatMessageSimple(
             message=last_user_message.message,
@@ -200,7 +228,7 @@ def construct_message_history(
         result.append(custom_agent_prompt)
 
     # 3. Add project files message (inserted before last user message)
-    if project_files.project_file_texts:
+    if project_files and project_files.project_file_texts:
         project_message = _create_project_files_message(
             project_files, token_counter=None
         )
@@ -310,6 +338,7 @@ def run_llm_loop(
         should_cite_documents: bool = False
         ran_image_gen: bool = False
         just_ran_web_search: bool = False
+        has_called_search_tool: bool = False
         citation_mapping: dict[int, str] = {}  # Maps citation_num -> document_id/URL
 
         current_tool_call_index = (
@@ -460,7 +489,12 @@ def run_llm_loop(
                     user_info=None,  # TODO, this is part of memories right now, might want to separate it out
                     citation_mapping=citation_mapping,
                     citation_processor=citation_processor,
+                    skip_search_query_expansion=has_called_search_tool,
                 )
+
+                # Track if search tool was called (for skipping query expansion on subsequent calls)
+                if tool_call.tool_name == SearchTool.NAME:
+                    has_called_search_tool = True
 
                 # Build a mapping of tool names to tool objects for getting tool_id
                 tools_by_name = {tool.name: tool for tool in final_tools}

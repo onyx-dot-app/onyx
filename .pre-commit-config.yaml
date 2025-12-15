@@ -71,7 +71,7 @@ repos:
         args: [ '--remove-all-unused-imports', '--remove-unused-variables', '--in-place' , '--recursive']
 
   - repo: https://github.com/golangci/golangci-lint
-    rev: e6ebea0145f385056bce15041d3244c0e5e15848  # frozen: v2.7.0
+    rev: 9f61b0f53f80672872fced07b6874397c3ed197b  # frozen: v2.7.2
     hooks:
       - id: golangci-lint
         entry: bash -c "find tools/ -name go.mod -print0 | xargs -0 -I{} bash -c 'cd \"$(dirname {})\" && golangci-lint run ./...'"

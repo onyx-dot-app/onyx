@@ -106,10 +106,15 @@ class SearchToolOverrideKwargs(BaseModel):
     # To know what citation number to start at for constructing the string to the LLM
     starting_citation_num: int
     # This is needed because the LLM won't be able to do a really detailed semantic query well
+    # without help and a specific custom prompt for this
     original_query: str | None = None
     message_history: list[ChatMinimalTextMessage] | None = None
     memories: list[str] | None = None
     user_info: str | None = None
+
+    # Used for tool calls after the first one but in the same chat turn. The reason for this is that if the initial pass through
+    # the custom flow did not yield good results, we don't want to go through it again. In that case, we defer entirely to the LLM
+    skip_query_expansion: bool = False
 
     # Number of results to return in the richer object format so that it can be rendered in the UI
     num_hits: int | None = NUM_RETURNED_HITS
