@@ -24,7 +24,7 @@ jobs:
     # fetch-depth 0 is required for helm/chart-testing-action
     steps:
     - name: Checkout code
-      uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+      uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
       with:
         fetch-depth: 0
         persist-credentials: false
