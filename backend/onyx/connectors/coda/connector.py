@@ -217,7 +217,6 @@ class CodaConnector(LoadConnector, PollConnector):
             browser_link=response["browserLink"],
             created_at=response["createdAt"],
             updated_at=response["updatedAt"],
-            doc_id=doc_id,
         )
 
     @retry(tries=3, delay=1, backoff=2)
@@ -419,7 +418,6 @@ class CodaConnector(LoadConnector, PollConnector):
                         id=item["id"],
                         browser_link=item["browserLink"],
                         name=item["name"],
-                        doc_id=doc_id,
                     )
                 )
 
@@ -645,8 +643,10 @@ class CodaConnector(LoadConnector, PollConnector):
                     logger.warning(f"Failed to list pages for doc {doc.id}: {e}")
 
                 try:
-                    tables = self._list_tables(doc.id)
-                    for table in tables:
+                    tableReferences = self._list_tables(doc.id)
+                    for tableReference in tableReferences:
+                        table = self._get_table(doc.id, tableReference.id)
+
                         table_timestamp = (
                             datetime.fromisoformat(table.updated_at)
                             .astimezone(timezone.utc)
