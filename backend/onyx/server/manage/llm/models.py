@@ -12,10 +12,11 @@ from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.manage.llm.utils import is_reasoning_model
 
 
-def _is_obsolete_model(model_name: str, provider: str) -> bool:
+def is_obsolete_model(model_name: str, provider: str) -> bool:
     """Check if a model is obsolete and should be filtered out.
 
     Filters models that are 2+ major versions behind or deprecated.
+    This is the single source of truth for obsolete model detection.
     """
     model_lower = model_name.lower()
 
@@ -25,19 +26,18 @@ def _is_obsolete_model(model_name: str, provider: str) -> bool:
         if "gpt-3" in model_lower and "gpt-3.5" not in model_lower:
             return True
         # Legacy models
-        if any(
-            m in model_lower
-            for m in [
-                "text-davinci",
-                "text-curie",
-                "text-babbage",
-                "text-ada",
-                "davinci",
-                "curie",
-                "babbage",
-                "ada",
-            ]
-        ):
+        deprecated = {
+            "text-davinci-003",
+            "text-davinci-002",
+            "text-curie-001",
+            "text-babbage-001",
+            "text-ada-001",
+            "davinci",
+            "curie",
+            "babbage",
+            "ada",
+        }
+        if model_lower in deprecated:
             return True
 
     # Anthropic obsolete models
@@ -144,7 +144,7 @@ class LLMProviderDescriptor(BaseModel):
         filtered_configs = []
         for model_configuration in llm_provider_model.model_configurations:
             # Skip obsolete models
-            if _is_obsolete_model(model_configuration.name, provider):
+            if is_obsolete_model(model_configuration.name, provider):
                 continue
             # Skip dated duplicates when non-dated version exists
             if _should_filter_as_dated_duplicate(
@@ -231,7 +231,7 @@ class LLMProviderView(LLMProvider):
         filtered_configs = []
         for model_configuration in llm_provider_model.model_configurations:
             # Skip obsolete models
-            if _is_obsolete_model(model_configuration.name, provider):
+            if is_obsolete_model(model_configuration.name, provider):
                 continue
             # Skip dated duplicates when non-dated version exists
             if _should_filter_as_dated_duplicate(
