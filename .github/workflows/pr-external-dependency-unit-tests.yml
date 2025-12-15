@@ -80,6 +80,7 @@ jobs:
     env:
       PYTHONPATH: ./backend
       MODEL_SERVER_HOST: "disabled"
+      DISABLE_TELEMETRY: "true"
 
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
@@ -113,6 +114,7 @@ jobs:
         run: |
           cat <<EOF > deployment/docker_compose/.env
           CODE_INTERPRETER_BETA_ENABLED=true
+          DISABLE_TELEMETRY=true
           EOF
 
       - name: Set up Standard Dependencies
