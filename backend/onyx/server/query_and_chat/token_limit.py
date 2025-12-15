@@ -1,3 +1,4 @@
+import uuid
 from collections.abc import Sequence
 from datetime import datetime
 from datetime import timedelta
@@ -45,7 +46,7 @@ def check_token_rate_limits(
 def _check_token_rate_limits(user: User | None) -> None:
     _user_is_rate_limited_by_global()
     if user:
-        _user_is_rate_limited_by_user_groups(str(user.id))
+        _user_is_rate_limited_by_user_groups(user.id)
 
 
 """
@@ -72,7 +73,7 @@ def _user_is_rate_limited_by_global() -> None:
 
 
 
-def _user_is_rate_limited_by_user_groups(user_id: str) -> None:
+def _user_is_rate_limited_by_user_groups(user_id: uuid.UUID) -> None:
      with get_session_with_current_tenant() as db_session:
          # Import here to avoid circulars if any
          from onyx.db.token_limit import fetch_token_rate_limits_for_user_groups
@@ -82,11 +83,6 @@ def _user_is_rate_limited_by_user_groups(user_id: str) -> None:
         
          if group_limits:
               cutoff_time = _get_cutoff_time(group_limits)
-              # Reuse global usage fetcher (it groups by minute for ALL chats, which is what we want for total usage)
-              # Wait, _fetch_global_usage fetches ALL messages in the system?
-              # No, strictly speaking we need usage FOR THIS USER.
-              # _fetch_global_usage -> join ChatSession. 
-              # We need to filter by user_id!
               user_usage = _fetch_user_usage(cutoff_time, user_id, db_session)
               
               if _is_rate_limited(group_limits, user_usage):
@@ -96,7 +92,7 @@ def _user_is_rate_limited_by_user_groups(user_id: str) -> None:
                  )
 
 def _fetch_user_usage(
-    cutoff_time: datetime, user_id: str, db_session: Session
+    cutoff_time: datetime, user_id: uuid.UUID, db_session: Session
 ) -> Sequence[tuple[datetime, int]]:
     result = db_session.execute(
         select(

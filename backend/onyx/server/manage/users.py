@@ -15,8 +15,9 @@ from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
-from fastapi.responses import StreamingResponse
+from fastapi import StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.email_utils import send_user_email_invite
@@ -161,8 +162,8 @@ async def generate_login_token(
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ):
-    stmt = db_session.query(User).filter(User.id == request.user_id)
-    user = stmt.first()
+    stmt = select(User).where(User.id == request.user_id)
+    user = db_session.scalars(stmt).first()
     
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -192,9 +193,10 @@ async def login_with_token(
     
     try:
         user_uuid = uuid.UUID(user_id.decode())
-        user = await user_manager.get(user_uuid)
-    except Exception:
-         raise HTTPException(status_code=404, detail="User not found")
+    except ValueError:
+         raise HTTPException(status_code=400, detail="Invalid user ID format in token")
+
+    user = await user_manager.get(user_uuid)
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -203,7 +205,19 @@ async def login_with_token(
     # response is a Response object with Set-Cookie headers.
     
     # Redirect to Frontend Dashboard
-    target = f"{WEB_DOMAIN}{redirect_uri}" if redirect_uri else f"{WEB_DOMAIN}/"
+    safe_redirect_uri = "/"
+    if redirect_uri:
+        # Prevent Open Redirect Vulnerability
+        # Ensure it starts with / and doesn't contain // (protocol relative) or : (scheme)
+        if (
+            redirect_uri.startswith("/") 
+            and not redirect_uri.startswith("//") 
+            and ":" not in redirect_uri 
+            and "@" not in redirect_uri
+        ):
+            safe_redirect_uri = redirect_uri
+            
+    target = f"{WEB_DOMAIN}{safe_redirect_uri}"
     redirect = RedirectResponse(url=target)
     redirect.headers.update(response.headers)
     return redirect

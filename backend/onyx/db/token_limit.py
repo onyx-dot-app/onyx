@@ -1,3 +1,4 @@
+import uuid
 from collections.abc import Sequence
 
 from sqlalchemy import select
@@ -48,7 +49,7 @@ def fetch_all_global_token_rate_limits(
 
 def fetch_token_rate_limits_for_user_groups(
     db_session: Session,
-    user_id: str,
+    user_id: uuid.UUID,
     enabled_only: bool = True,
 ) -> Sequence[TokenRateLimit]:
     from onyx.db.models import User__UserGroup

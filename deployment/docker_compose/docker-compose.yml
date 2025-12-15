@@ -60,8 +60,8 @@ services:
     # DEV: To expose ports, either:
     # 1. Use docker-compose.dev.yml: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
     # 2. Uncomment the ports below
-    ports:
-      - "8080:8080"
+    # ports:
+    #   - "8080:8080"
     environment:
       # Auth Settings
       - AUTH_TYPE=${AUTH_TYPE:-basic}
@@ -82,10 +82,8 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
-    # Optional, only for debugging purposes
-    # Optional, only for debugging purposes
     volumes:
-      - ../../backend:/app
+    #   - ../../backend:/app
       - api_server_logs:/var/log/onyx
 
   background:
@@ -296,8 +294,8 @@ services:
     # DEV: To expose ports, either:
     # 1. Use docker-compose.dev.yml: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
     # 2. Uncomment the ports below
-    ports:
-      - "5435:5432"
+    # ports:
+    #   - "5435:5432"
     volumes:
       - db_volume:/var/lib/postgresql/data
 
