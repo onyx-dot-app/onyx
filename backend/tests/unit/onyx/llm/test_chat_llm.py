@@ -204,7 +204,6 @@ def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
             },
         ]
 
-        # Call the invoke method
         result = default_multi_llm.invoke(messages, tools)
 
         # Assert that the result is a ModelResponse
@@ -437,7 +436,9 @@ def test_user_identity_metadata_enabled(default_multi_llm: LitellmLLM) -> None:
         assert kwargs["metadata"]["session_id"] == "session_abc"
 
 
-def test_user_identity_user_id_truncated_to_64_chars(default_multi_llm: LitellmLLM) -> None:
+def test_user_identity_user_id_truncated_to_64_chars(
+    default_multi_llm: LitellmLLM,
+) -> None:
     with (
         patch("litellm.completion") as mock_completion,
         patch("onyx.llm.chat_llm.SEND_USER_METADATA_TO_LLM_PROVIDER", True),
@@ -469,7 +470,9 @@ def test_user_identity_user_id_truncated_to_64_chars(default_multi_llm: LitellmL
         assert kwargs["user"] == long_user_id[:64]
 
 
-def test_user_identity_metadata_disabled_omits_identity(default_multi_llm: LitellmLLM) -> None:
+def test_user_identity_metadata_disabled_omits_identity(
+    default_multi_llm: LitellmLLM,
+) -> None:
     with (
         patch("litellm.completion") as mock_completion,
         patch("onyx.llm.chat_llm.SEND_USER_METADATA_TO_LLM_PROVIDER", False),
