@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import InvitedUserTable from "@/components/admin/users/InvitedUserTable";
 import SignedUpUserTable from "@/components/admin/users/SignedUpUserTable";
 
-import { Modal } from "@/components/Modal";
+import Modal from "@/refresh-components/Modal";
+import SvgUserPlus from "@/icons/user-plus";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { usePopup, PopupSpec } from "@/components/admin/connectors/Popup";
@@ -351,18 +352,24 @@ const AddUserButton = ({
       )}
 
       {bulkAddUsersModal && (
-        <Modal
-          title="Bulk Add Users"
-          onOutsideClick={() => setBulkAddUsersModal(false)}
-        >
-          <div className="flex flex-col gap-2">
-            <Text>
-              Add the email addresses to import, separated by whitespaces.
-              Invited users will be able to login to this domain with their
-              email address.
-            </Text>
-            <BulkAdd onSuccess={onSuccess} onFailure={onFailure} />
-          </div>
+        <Modal open onOpenChange={() => setBulkAddUsersModal(false)}>
+          <Modal.Content medium>
+            <Modal.Header
+              icon={SvgUserPlus}
+              title="Bulk Add Users"
+              onClose={() => setBulkAddUsersModal(false)}
+            />
+            <Modal.Body>
+              <div className="flex flex-col gap-2">
+                <Text>
+                  Add the email addresses to import, separated by whitespaces.
+                  Invited users will be able to login to this domain with their
+                  email address.
+                </Text>
+                <BulkAdd onSuccess={onSuccess} onFailure={onFailure} />
+              </div>
+            </Modal.Body>
+          </Modal.Content>
         </Modal>
       )}
     </>

@@ -1,3 +1,4 @@
+import os
 import re
 import traceback
 from collections.abc import Callable
@@ -44,6 +45,7 @@ from onyx.db.models import User
 from onyx.db.projects import get_project_token_count
 from onyx.db.projects import get_user_files_from_project
 from onyx.db.tools import get_tools
+from onyx.deep_research.dr_loop import run_deep_research_llm_loop
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.utils import load_in_memory_chat_files
@@ -488,24 +490,43 @@ def stream_chat_message_objects(
         # for stop signals. run_llm_loop itself doesn't know about stopping.
         # Note: DB session is not thread safe but nothing else uses it and the
         # reference is passed directly so it's ok.
-        yield from run_chat_llm_with_state_containers(
-            run_llm_loop,
-            emitter=emitter,
-            state_container=state_container,
-            is_connected=check_is_connected,  # Not passed through to run_llm_loop
-            simple_chat_history=simple_chat_history,
-            tools=tools,
-            custom_agent_prompt=custom_agent_prompt,
-            project_files=extracted_project_files,
-            persona=persona,
-            memories=memories,
-            llm=llm,
-            token_counter=token_counter,
-            db_session=db_session,
-            forced_tool_id=(
-                new_msg_req.forced_tool_ids[0] if new_msg_req.forced_tool_ids else None
-            ),
-        )
+        if os.environ.get("ENABLE_DEEP_RESEARCH_LOOP"):  # Dev only feature flag for now
+            if chat_session.project_id:
+                raise RuntimeError("Deep research is not supported for projects")
+
+            yield from run_chat_llm_with_state_containers(
+                run_deep_research_llm_loop,
+                is_connected=check_is_connected,
+                emitter=emitter,
+                state_container=state_container,
+                simple_chat_history=simple_chat_history,
+                tools=tools,
+                custom_agent_prompt=custom_agent_prompt,
+                llm=llm,
+                token_counter=token_counter,
+                db_session=db_session,
+            )
+        else:
+            yield from run_chat_llm_with_state_containers(
+                run_llm_loop,
+                is_connected=check_is_connected,  # Not passed through to run_llm_loop
+                emitter=emitter,
+                state_container=state_container,
+                simple_chat_history=simple_chat_history,
+                tools=tools,
+                custom_agent_prompt=custom_agent_prompt,
+                project_files=extracted_project_files,
+                persona=persona,
+                memories=memories,
+                llm=llm,
+                token_counter=token_counter,
+                db_session=db_session,
+                forced_tool_id=(
+                    new_msg_req.forced_tool_ids[0]
+                    if new_msg_req.forced_tool_ids
+                    else None
+                ),
+            )
 
         # Determine if stopped by user
         completed_normally = check_is_connected()

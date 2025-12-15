@@ -465,7 +465,7 @@ export default function LLMPopover({
                                         onClick={() =>
                                           handleSelectModel(option)
                                         }
-                                        className="pl-7"
+                                        icon={() => null}
                                         rightChildren={
                                           isSelected ? (
                                             <SvgCheck className="h-4 w-4 stroke-action-link-05 shrink-0" />

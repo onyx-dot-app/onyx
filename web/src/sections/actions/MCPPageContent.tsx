@@ -1,0 +1,600 @@
+"use client";
+
+import React, { useState, useCallback, useMemo, useEffect } from "react";
+import useSWR, { KeyedMutator } from "swr";
+import MCPActionCard from "@/sections/actions/MCPActionCard";
+import Actionbar from "@/sections/actions/Actionbar";
+import { getMCPServerIcon } from "@/lib/tools/mcpUtils";
+import {
+  ActionStatus,
+  MCPServerStatus,
+  MCPServerWithStatus,
+} from "@/lib/tools/types";
+import { MCPServersResponse, ToolSnapshot } from "@/lib/tools/interfaces";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { usePopup } from "@/components/admin/connectors/Popup";
+import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import MCPAuthenticationModal from "@/sections/actions/modals/MCPAuthenticationModal";
+import AddMCPServerModal from "@/sections/actions/modals/AddMCPServerModal";
+import DisconnectEntityModal from "./modals/DisconnectEntityModal";
+import {
+  deleteMCPServer,
+  refreshMCPServerTools,
+  updateToolStatus,
+  disableAllServerTools,
+  updateMCPServerStatus,
+  updateMCPServer,
+} from "@/lib/tools/mcpService";
+import { useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
+
+export default function MCPPageContent() {
+  // Data fetching
+  const {
+    data: mcpData,
+    isLoading: isMcpLoading,
+    mutate: mutateMcpServers,
+  } = useSWR<MCPServersResponse>(
+    "/api/admin/mcp/servers",
+    errorHandlingFetcher,
+    { refreshInterval: 10000 }
+  );
+
+  // Modal management
+  const authModal = useCreateModal();
+  const disconnectModal = useCreateModal();
+  const manageServerModal = useCreateModal();
+  const { popup, setPopup } = usePopup();
+
+  // Local state
+  const [selectedServer, setSelectedServer] =
+    useState<MCPServerWithStatus | null>(null);
+  const [serverToDisconnect, setServerToDisconnect] =
+    useState<MCPServerWithStatus | null>(null);
+  const [serverToManage, setServerToManage] =
+    useState<MCPServerWithStatus | null>(null);
+  const [serverToExpand, setServerToExpand] = useState<number | null>(null);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [showSharedOverlay, setShowSharedOverlay] = useState(false);
+  const [fetchingToolsServerIds, setFetchingToolsServerIds] = useState<
+    number[]
+  >([]);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const mcpServers = useMemo(
+    () => (mcpData?.mcp_servers || []) as MCPServerWithStatus[],
+    [mcpData?.mcp_servers]
+  );
+  const isLoading = isMcpLoading;
+
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  useEffect(() => {
+    const serverId = searchParams.get("server_id");
+    const triggerFetch = searchParams.get("trigger_fetch");
+
+    // Only process if we have a server_id and trigger_fetch flag
+    if (
+      serverId &&
+      triggerFetch === "true" &&
+      !fetchingToolsServerIds.includes(parseInt(serverId))
+    ) {
+      const serverIdInt = parseInt(serverId);
+
+      const handleFetchingTools = async () => {
+        try {
+          await updateMCPServerStatus(
+            serverIdInt,
+            MCPServerStatus.FETCHING_TOOLS
+          );
+
+          await mutateMcpServers();
+
+          router.replace("/admin/actions/mcp");
+
+          // Automatically expand the tools for this server
+          setServerToExpand(serverIdInt);
+
+          await refreshMCPServerTools(serverIdInt);
+
+          setPopup({
+            message: "Successfully connected and fetched tools",
+            type: "success",
+          });
+
+          await mutateMcpServers();
+        } catch (error) {
+          console.error("Failed to fetch tools:", error);
+          setPopup({
+            message: `Failed to fetch tools: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
+            type: "error",
+          });
+          await mutateMcpServers();
+        }
+      };
+
+      handleFetchingTools();
+    }
+  }, [
+    searchParams,
+    router,
+    fetchingToolsServerIds,
+    mutateMcpServers,
+    setPopup,
+    setServerToExpand,
+  ]);
+
+  // Track fetching tools server IDs
+  useEffect(() => {
+    if (mcpServers) {
+      const fetchingIds = mcpServers
+        .filter((server) => server.status === MCPServerStatus.FETCHING_TOOLS)
+        .map((server) => server.id);
+      setFetchingToolsServerIds(fetchingIds);
+    }
+  }, [mcpServers]);
+
+  // Track if any modal is open to manage the shared overlay
+  useEffect(() => {
+    const anyModalOpen =
+      authModal.isOpen || disconnectModal.isOpen || manageServerModal.isOpen;
+    setShowSharedOverlay(anyModalOpen);
+  }, [authModal.isOpen, disconnectModal.isOpen, manageServerModal.isOpen]);
+
+  // Determine action status based on server status field
+  const getActionStatusForServer = useCallback(
+    (server: MCPServerWithStatus): ActionStatus => {
+      if (server.status === MCPServerStatus.CONNECTED) {
+        return ActionStatus.CONNECTED;
+      } else if (
+        server.status === MCPServerStatus.AWAITING_AUTH ||
+        server.status === MCPServerStatus.CREATED
+      ) {
+        return ActionStatus.PENDING;
+      } else if (server.status === MCPServerStatus.FETCHING_TOOLS) {
+        return ActionStatus.FETCHING;
+      }
+      return ActionStatus.DISCONNECTED;
+    },
+    []
+  );
+
+  // Handler callbacks
+  const handleDisconnect = useCallback(
+    (serverId: number) => {
+      const server = mcpServers.find((s) => s.id === serverId);
+      if (server) {
+        setServerToDisconnect(server);
+        disconnectModal.toggle(true);
+      }
+    },
+    [mcpServers, disconnectModal]
+  );
+
+  const handleConfirmDisconnect = useCallback(async () => {
+    if (!serverToDisconnect) return;
+
+    setIsDisconnecting(true);
+    try {
+      await updateMCPServerStatus(
+        serverToDisconnect.id,
+        MCPServerStatus.DISCONNECTED
+      );
+
+      setPopup({
+        message: "MCP Server disconnected successfully",
+        type: "success",
+      });
+
+      await mutateMcpServers();
+      disconnectModal.toggle(false);
+      setServerToDisconnect(null);
+    } catch (error) {
+      console.error("Error disconnecting server:", error);
+      setPopup({
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to disconnect MCP Server",
+        type: "error",
+      });
+    } finally {
+      setIsDisconnecting(false);
+    }
+  }, [serverToDisconnect, setPopup, mutateMcpServers, disconnectModal]);
+
+  const handleConfirmDisconnectAndDelete = useCallback(async () => {
+    if (!serverToDisconnect) return;
+
+    setIsDisconnecting(true);
+    try {
+      await deleteMCPServer(serverToDisconnect.id);
+
+      setPopup({
+        message: "MCP Server deleted successfully",
+        type: "success",
+      });
+
+      await mutateMcpServers();
+      disconnectModal.toggle(false);
+      setServerToDisconnect(null);
+    } catch (error) {
+      console.error("Error deleting server:", error);
+      setPopup({
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to delete MCP Server",
+        type: "error",
+      });
+    } finally {
+      setIsDisconnecting(false);
+    }
+  }, [serverToDisconnect, setPopup, mutateMcpServers, disconnectModal]);
+
+  const openManageServerModal = useCallback(
+    (serverId: number) => {
+      const server = mcpServers.find((s) => s.id === serverId);
+      if (server) {
+        setServerToManage(server);
+        manageServerModal.toggle(true);
+      }
+    },
+    [mcpServers, manageServerModal]
+  );
+
+  const handleManage = useCallback(
+    (serverId: number) => {
+      openManageServerModal(serverId);
+    },
+    [openManageServerModal]
+  );
+
+  const handleEdit = useCallback(
+    (serverId: number) => {
+      openManageServerModal(serverId);
+    },
+    [openManageServerModal]
+  );
+
+  const handleDelete = useCallback(
+    async (serverId: number) => {
+      try {
+        await deleteMCPServer(serverId);
+
+        setPopup({
+          message: "MCP Server deleted successfully",
+          type: "success",
+        });
+
+        await mutateMcpServers();
+      } catch (error) {
+        console.error("Error deleting server:", error);
+        setPopup({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to delete MCP Server",
+          type: "error",
+        });
+      }
+    },
+    [setPopup, mutateMcpServers]
+  );
+
+  const handleAuthenticate = useCallback(
+    (serverId: number) => {
+      const server = mcpServers.find((s) => s.id === serverId);
+      if (server) {
+        setSelectedServer(server);
+        authModal.toggle(true);
+      }
+    },
+    [mcpServers, authModal]
+  );
+
+  const handleReconnect = useCallback(
+    async (serverId: number) => {
+      try {
+        await updateMCPServerStatus(serverId, MCPServerStatus.CONNECTED);
+
+        setPopup({
+          message: "MCP Server reconnected successfully",
+          type: "success",
+        });
+
+        await mutateMcpServers();
+      } catch (error) {
+        console.error("Error reconnecting server:", error);
+        setPopup({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to reconnect MCP Server",
+          type: "error",
+        });
+      }
+    },
+    [setPopup, mutateMcpServers]
+  );
+
+  const handleToolToggle = useCallback(
+    async (
+      serverId: number,
+      toolId: string,
+      enabled: boolean,
+      mutateServerTools: KeyedMutator<ToolSnapshot[]>
+    ) => {
+      try {
+        // Optimistically update the UI
+        await mutateServerTools(
+          async (currentTools) => {
+            if (!currentTools) return currentTools;
+            return currentTools.map((tool) =>
+              tool.id.toString() === toolId ? { ...tool, enabled } : tool
+            );
+          },
+          { revalidate: false }
+        );
+
+        await updateToolStatus(parseInt(toolId), enabled);
+
+        // Revalidate to get fresh data from server
+        await mutateServerTools();
+
+        setPopup({
+          message: `Tool ${enabled ? "enabled" : "disabled"} successfully`,
+          type: "success",
+        });
+      } catch (error) {
+        console.error("Error toggling tool:", error);
+
+        // Revert on error by revalidating
+        await mutateServerTools();
+
+        setPopup({
+          message:
+            error instanceof Error ? error.message : "Failed to update tool",
+          type: "error",
+        });
+      }
+    },
+    [setPopup]
+  );
+
+  const handleRefreshTools = useCallback(
+    async (
+      serverId: number,
+      mutateServerTools: KeyedMutator<ToolSnapshot[]>
+    ) => {
+      try {
+        // Refresh tools for this specific server (discovers from MCP and syncs to DB)
+        await refreshMCPServerTools(serverId);
+
+        // Update the local cache with fresh data
+        await mutateServerTools();
+
+        // Also refresh the servers list to update tool counts
+        await mutateMcpServers();
+
+        setPopup({
+          message: "Tools refreshed successfully",
+          type: "success",
+        });
+      } catch (error) {
+        console.error("Error refreshing tools:", error);
+        setPopup({
+          message:
+            error instanceof Error ? error.message : "Failed to refresh tools",
+          type: "error",
+        });
+      }
+    },
+    [mutateMcpServers, setPopup]
+  );
+
+  const handleDisableAllTools = useCallback(
+    async (
+      serverId: number,
+      toolIds: number[],
+      mutateServerTools: KeyedMutator<ToolSnapshot[]>
+    ) => {
+      try {
+        if (toolIds.length === 0) {
+          setPopup({
+            message: "No tools to disable",
+            type: "info",
+          });
+          return;
+        }
+
+        // Optimistically update - disable all tools in the UI
+        await mutateServerTools(
+          async (currentTools) => {
+            if (!currentTools) return currentTools;
+            return currentTools.map((tool) =>
+              toolIds.includes(tool.id) ? { ...tool, enabled: false } : tool
+            );
+          },
+          { revalidate: false }
+        );
+
+        const result = await disableAllServerTools(toolIds);
+
+        // Revalidate to get fresh data from server
+        await mutateServerTools();
+
+        setPopup({
+          message: `${result.updated_count} tool${
+            result.updated_count !== 1 ? "s" : ""
+          } disabled successfully`,
+          type: "success",
+        });
+      } catch (error) {
+        console.error("Error disabling all tools:", error);
+
+        // Revert on error by revalidating
+        await mutateServerTools();
+
+        setPopup({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to disable all tools",
+          type: "error",
+        });
+      }
+    },
+    [setPopup]
+  );
+
+  const onServerCreated = useCallback(
+    (server: MCPServerWithStatus) => {
+      setSelectedServer(server);
+      authModal.toggle(true);
+    },
+    [authModal]
+  );
+
+  const handleAddServer = useCallback(() => {
+    setServerToManage(null);
+    manageServerModal.toggle(true);
+  }, [manageServerModal]);
+
+  const handleRenameServer = useCallback(
+    async (serverId: number, newName: string) => {
+      try {
+        await updateMCPServer(serverId, { name: newName });
+        setPopup({
+          message: "MCP Server renamed successfully",
+          type: "success",
+        });
+        await mutateMcpServers();
+      } catch (error) {
+        console.error("Error renaming server:", error);
+        setPopup({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to rename MCP Server",
+          type: "error",
+        });
+        throw error; // Re-throw so ButtonRenaming can handle it
+      }
+    },
+    [setPopup, mutateMcpServers]
+  );
+
+  // Filter servers based on search query
+  const filteredServers = useMemo(() => {
+    if (!searchQuery.trim()) return mcpServers;
+
+    const query = searchQuery.toLowerCase();
+    return mcpServers.filter(
+      (server) =>
+        server.name.toLowerCase().includes(query) ||
+        server.description?.toLowerCase().includes(query) ||
+        server.server_url.toLowerCase().includes(query)
+    );
+  }, [mcpServers, searchQuery]);
+
+  return (
+    <>
+      {popup}
+
+      {/* Shared overlay that persists across modal transitions */}
+      {showSharedOverlay && (
+        <div
+          className="fixed inset-0 z-[2000] bg-mask-03 backdrop-blur-03 pointer-events-none data-[state=open]:animate-in data-[state=open]:fade-in-0"
+          data-state="open"
+          aria-hidden="true"
+        />
+      )}
+
+      <Actionbar
+        hasActions={mcpServers.length > 0}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        onAddAction={handleAddServer}
+        buttonText="Add MCP Server"
+        className="mb-4"
+      />
+
+      <div className="flex flex-col gap-4 w-full">
+        {filteredServers.map((server) => {
+          const status = getActionStatusForServer(server);
+
+          return (
+            <MCPActionCard
+              key={server.id}
+              serverId={server.id}
+              server={server}
+              title={server.name}
+              description={server.description || server.server_url}
+              logo={getMCPServerIcon(server)}
+              status={status}
+              toolCount={server.tool_count}
+              initialExpanded={server.id === serverToExpand}
+              onDisconnect={() => handleDisconnect(server.id)}
+              onManage={() => handleManage(server.id)}
+              onEdit={() => handleEdit(server.id)}
+              onDelete={() => handleDelete(server.id)}
+              onAuthenticate={() => handleAuthenticate(server.id)}
+              onReconnect={() => handleReconnect(server.id)}
+              onRename={handleRenameServer}
+              onToolToggle={handleToolToggle}
+              onRefreshTools={handleRefreshTools}
+              onDisableAllTools={handleDisableAllTools}
+            />
+          );
+        })}
+
+        <authModal.Provider>
+          <MCPAuthenticationModal
+            mcpServer={selectedServer}
+            skipOverlay
+            setPopup={setPopup}
+            mutateMcpServers={async () => {
+              await mutateMcpServers();
+            }}
+            onSuccess={async () => {
+              await mutateMcpServers();
+              authModal.toggle(false);
+              setSelectedServer(null);
+            }}
+          />
+        </authModal.Provider>
+
+        <manageServerModal.Provider>
+          <AddMCPServerModal
+            skipOverlay
+            serverToManage={serverToManage}
+            setServerToManage={setServerToManage}
+            setServerToDisconnect={setServerToDisconnect}
+            disconnectModal={disconnectModal}
+            manageServerModal={manageServerModal}
+            onServerCreated={onServerCreated}
+            handleAuthenticate={handleAuthenticate}
+            setPopup={setPopup}
+            mutateMcpServers={async () => {
+              await mutateMcpServers();
+            }}
+          />
+        </manageServerModal.Provider>
+
+        <DisconnectEntityModal
+          isOpen={disconnectModal.isOpen}
+          onClose={() => disconnectModal.toggle(false)}
+          name={serverToDisconnect?.name ?? null}
+          onConfirmDisconnect={handleConfirmDisconnect}
+          onConfirmDisconnectAndDelete={handleConfirmDisconnectAndDelete}
+          isDisconnecting={isDisconnecting}
+          skipOverlay
+        />
+      </div>
+    </>
+  );
+}

@@ -55,6 +55,10 @@ export function ToolSelector({
   const pythonTool = tools.find((t) => t.in_code_tool_id === PYTHON_TOOL_ID);
   const openUrlTool = tools.find((t) => t.in_code_tool_id === OPEN_URL_TOOL_ID);
 
+  // Check if Web Search is enabled - if so, OpenURL must be enabled
+  const isWebSearchEnabled = webSearchTool && enabledToolsMap[webSearchTool.id];
+  const isOpenUrlForced = isWebSearchEnabled;
+
   const { mcpTools, customTools, mcpToolsByServer } = useMemo(() => {
     const allCustom = tools.filter(
       (tool) =>
@@ -153,7 +157,7 @@ export function ToolSelector({
             <Info className="h-3.5 w-3.5 text-text-400 cursor-help" />
           }
           popupContent={
-            <div className="text-xs space-y-2 max-w-xs">
+            <div className="text-xs space-y-2 max-w-xs bg-background-neutral-dark-03 text-text-light-05">
               <div>
                 <span className="font-semibold">Internal Search:</span> Requires
                 at least one connector to be configured to search your
@@ -174,8 +178,36 @@ export function ToolSelector({
                 valid base URL.
               </div>
               <div>
-                <span className="font-semibold">Open URL:</span> Open and read
-                the content of URLs provided in the conversation.
+                <div>
+                  <span className="font-semibold">Open URL:</span> Open and read
+                  the content of URLs provided in the conversation.
+                </div>
+                {openUrlTool && setFieldValue && (
+                  <label className="flex items-center gap-2 cursor-pointer mt-1.5 ml-1">
+                    <input
+                      type="checkbox"
+                      checked={enabledToolsMap[openUrlTool.id] || false}
+                      onChange={(e) => {
+                        if (!isOpenUrlForced) {
+                          setFieldValue(
+                            `enabled_tools_map.${openUrlTool.id}`,
+                            e.target.checked
+                          );
+                        }
+                      }}
+                      disabled={isOpenUrlForced}
+                      className="h-3.5 w-3.5 rounded border-border-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    />
+                    <span className="text-xs">
+                      Enable Open URL
+                      {isOpenUrlForced && (
+                        <span className="text-text-500 ml-1">
+                          (required for Web Search)
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                )}
               </div>
             </div>
           }
@@ -197,6 +229,12 @@ export function ToolSelector({
           name={`enabled_tools_map.${webSearchTool.id}`}
           label={webSearchTool.display_name}
           subtext="Access real-time information and search the web for up-to-date results"
+          onChange={(checked) => {
+            // When enabling Web Search, also enable OpenURL
+            if (checked && openUrlTool && setFieldValue) {
+              setFieldValue(`enabled_tools_map.${openUrlTool.id}`, true);
+            }
+          }}
         />
       )}
 
@@ -218,14 +256,6 @@ export function ToolSelector({
             "Execute Python code in a secure, isolated environment to " +
             "analyze data, create visualizations, and perform computations"
           }
-        />
-      )}
-
-      {openUrlTool && (
-        <BooleanFormField
-          name={`enabled_tools_map.${openUrlTool.id}`}
-          label={openUrlTool.display_name}
-          subtext="Open and read the content of one or more URLs"
         />
       )}
 

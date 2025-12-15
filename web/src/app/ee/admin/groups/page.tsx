@@ -1,7 +1,7 @@
 "use client";
 
 import { UserGroupsTable } from "./UserGroupsTable";
-import { UserGroupCreationForm } from "./UserGroupCreationForm";
+import UserGroupCreationForm from "./UserGroupCreationForm";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useState } from "react";
 import { ThreeDotsLoader } from "@/components/Loading";

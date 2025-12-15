@@ -18,7 +18,6 @@ from sqlalchemy.orm import Session
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_chat_accessible_user
-from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.llm import can_user_access_llm_provider
 from onyx.db.llm import fetch_existing_llm_provider
@@ -26,6 +25,7 @@ from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_persona_with_groups
 from onyx.db.llm import fetch_user_group_ids
 from onyx.db.llm import remove_llm_provider
+from onyx.db.llm import sync_model_configurations
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import update_default_vision_provider
 from onyx.db.llm import upsert_llm_provider
@@ -36,12 +36,13 @@ from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llm
 from onyx.llm.factory import get_max_input_tokens_from_llm_provider
 from onyx.llm.llm_provider_options import fetch_available_well_known_llms
-from onyx.llm.llm_provider_options import get_bedrock_model_names
 from onyx.llm.llm_provider_options import WellKnownLLMProviderDescriptor
+from onyx.llm.utils import get_bedrock_token_limit
 from onyx.llm.utils import get_llm_contextual_cost
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.utils import test_llm
+from onyx.server.manage.llm.models import BedrockFinalModelResponse
 from onyx.server.manage.llm.models import BedrockModelsRequest
 from onyx.server.manage.llm.models import LLMCost
 from onyx.server.manage.llm.models import LLMProviderDescriptor
@@ -56,6 +57,12 @@ from onyx.server.manage.llm.models import OpenRouterModelDetails
 from onyx.server.manage.llm.models import OpenRouterModelsRequest
 from onyx.server.manage.llm.models import TestLLMRequest
 from onyx.server.manage.llm.models import VisionProviderResponse
+from onyx.server.manage.llm.utils import generate_bedrock_display_name
+from onyx.server.manage.llm.utils import generate_ollama_display_name
+from onyx.server.manage.llm.utils import infer_vision_support
+from onyx.server.manage.llm.utils import is_valid_bedrock_model
+from onyx.server.manage.llm.utils import ModelMetadata
+from onyx.server.manage.llm.utils import strip_openrouter_vendor_prefix
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
@@ -351,12 +358,19 @@ def get_vision_capable_providers(
 
         # Only include providers with at least one vision-capable model
         if vision_models:
-            provider_dict = LLMProviderView.from_model(provider).model_dump()
-            provider_dict["vision_models"] = vision_models
+            provider_view = LLMProviderView.from_model(provider)
+            _mask_provider_api_key(provider_view)
+
+            vision_providers.append(
+                VisionProviderResponse(
+                    **provider_view.model_dump(),
+                    vision_models=vision_models,
+                )
+            )
+
             logger.info(
                 f"Vision provider: {provider.provider} with models: {vision_models}"
             )
-            vision_providers.append(VisionProviderResponse(**provider_dict))
 
     logger.info(f"Found {len(vision_providers)} vision-capable providers")
     return vision_providers
@@ -549,8 +563,13 @@ def get_provider_contextual_cost(
 def get_bedrock_available_models(
     request: BedrockModelsRequest,
     _: User | None = Depends(current_admin_user),
-) -> list[str]:
-    """Fetch available Bedrock models for a specific region and credentials"""
+    db_session: Session = Depends(get_session),
+) -> list[BedrockFinalModelResponse]:
+    """Fetch available Bedrock models for a specific region and credentials.
+
+    Returns model IDs with display names from AWS. Prefers inference profiles
+    (for cross-region support) over base models when available.
+    """
     try:
         # Precedence: bearer → keys → IAM
         if request.aws_bearer_token_bedrock:
@@ -573,17 +592,27 @@ def get_bedrock_available_models(
                 detail=f"Failed to create Bedrock client: {e}. Check AWS credentials and region.",
             )
 
-        # Available Bedrock models: text-only, streaming supported
+        # Build model info dict from foundation models (modelId -> metadata)
         model_summaries = bedrock.list_foundation_models().get("modelSummaries", [])
-        available_models = {
-            model.get("modelId", "")
-            for model in model_summaries
-            if model.get("modelId")
-            and "embed" not in model.get("modelId", "").lower()
-            and model.get("responseStreamingSupported", False)
-        }
+        model_info: dict[str, ModelMetadata] = {}
+        available_models: set[str] = set()
 
-        # Available inference profiles. Invoking these allows cross-region inference (preferred over base models).
+        for model in model_summaries:
+            model_id = model.get("modelId", "")
+            # Skip invalid or non-LLM models (embeddings, image gen, non-streaming)
+            if not is_valid_bedrock_model(
+                model_id, model.get("responseStreamingSupported", False)
+            ):
+                continue
+
+            available_models.add(model_id)
+            input_modalities = model.get("inputModalities", [])
+            model_info[model_id] = {
+                "display_name": model.get("modelName", model_id),
+                "supports_image_input": "IMAGE" in input_modalities,
+            }
+
+        # Get inference profiles (cross-region) - these are preferred over base models
         profile_ids: set[str] = set()
         cross_region_models: set[str] = set()
         try:
@@ -591,30 +620,95 @@ def get_bedrock_available_models(
                 typeEquals="SYSTEM_DEFINED"
             ).get("inferenceProfileSummaries", [])
             for profile in inference_profiles:
-                if profile_id := profile.get("inferenceProfileId"):
-                    profile_ids.add(profile_id)
+                if not (profile_id := profile.get("inferenceProfileId")):
+                    continue
+                # Skip non-LLM inference profiles
+                if not is_valid_bedrock_model(profile_id):
+                    continue
 
-                    # The model id is everything after the first period in the profile id
-                    if "." in profile_id:
-                        model_id = profile_id.split(".", 1)[1]
-                        cross_region_models.add(model_id)
+                profile_ids.add(profile_id)
+
+                # Extract base model ID (everything after first period)
+                # e.g., "us.anthropic.claude-3-5-sonnet-..." -> "anthropic.claude-3-5-sonnet-..."
+                if "." in profile_id:
+                    base_model_id = profile_id.split(".", 1)[1]
+                    cross_region_models.add(base_model_id)
+                    region = profile_id.split(".")[0]
+
+                    # Copy model info from base model to profile, with region suffix
+                    if base_model_id in model_info:
+                        base_info = model_info[base_model_id]
+                        model_info[profile_id] = {
+                            "display_name": f"{base_info['display_name']} ({region})",
+                            "supports_image_input": base_info["supports_image_input"],
+                        }
+                    else:
+                        # Base model not in region - infer metadata from profile
+                        profile_name = profile.get("inferenceProfileName", "")
+                        model_info[profile_id] = {
+                            "display_name": (
+                                f"{profile_name} ({region})"
+                                if profile_name
+                                else generate_bedrock_display_name(profile_id)
+                            ),
+                            # Infer vision support from known vision models
+                            "supports_image_input": infer_vision_support(profile_id),
+                        }
         except Exception as e:
-            # Cross-region inference isn't guaranteed; ignore failures here.
             logger.warning(f"Couldn't fetch inference profiles for Bedrock: {e}")
 
         # Prefer profiles: de-dupe available models, then add profile IDs
         candidates = (available_models - cross_region_models) | profile_ids
 
-        # Keep only models we support (compatibility with litellm)
-        filtered = sorted(
-            [model for model in candidates if model in get_bedrock_model_names()],
-            reverse=True,
-        )
+        # Build response with display names
+        results: list[BedrockFinalModelResponse] = []
+        for model_id in sorted(candidates, reverse=True):
+            info: ModelMetadata | None = model_info.get(model_id)
+            display_name = info["display_name"] if info else None
 
-        # Unset the environment variable, even though it is set again in DefaultMultiLLM init
+            # Fallback: generate display name from model ID if not available
+            if not display_name or display_name == model_id:
+                display_name = generate_bedrock_display_name(model_id)
+
+            results.append(
+                BedrockFinalModelResponse(
+                    name=model_id,
+                    display_name=display_name,
+                    max_input_tokens=get_bedrock_token_limit(model_id),
+                    supports_image_input=(
+                        info["supports_image_input"] if info else False
+                    ),
+                )
+            )
+
+        # Unset the environment variable
         os.environ.pop("AWS_BEARER_TOKEN_BEDROCK", None)
 
-        return filtered
+        # Sync new models to DB if provider_name is specified
+        if request.provider_name:
+            try:
+                models_to_sync = [
+                    {
+                        "name": r.name,
+                        "display_name": r.display_name,
+                        "max_input_tokens": r.max_input_tokens,
+                        "supports_image_input": r.supports_image_input,
+                    }
+                    for r in results
+                ]
+                new_count = sync_model_configurations(
+                    db_session=db_session,
+                    provider_name=request.provider_name,
+                    models=models_to_sync,
+                )
+                if new_count > 0:
+                    logger.info(
+                        f"Added {new_count} new Bedrock models to provider '{request.provider_name}'"
+                    )
+            except ValueError as e:
+                logger.warning(f"Failed to sync Bedrock models to DB: {e}")
+
+        return results
 
     except (ClientError, NoCredentialsError, BotoCoreError) as e:
         raise HTTPException(
@@ -649,6 +743,7 @@ def _get_ollama_available_model_names(api_base: str) -> set[str]:
 def get_ollama_available_models(
     request: OllamaModelsRequest,
     _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
 ) -> list[OllamaFinalModelResponse]:
     """Fetch the list of available models from an Ollama server."""
 
@@ -707,21 +802,40 @@ def get_ollama_available_models(
                 extra={"model": model_name, "error": str(e)},
             )
 
-        # If we fail at any point attempting to extract context limit,
-        # still allow this model to be used with a fallback max context size
-        if not context_limit:
-            context_limit = GEN_AI_MODEL_FALLBACK_MAX_TOKENS
-
-        if not supports_image_input:
-            supports_image_input = False
-
+        # Note: context_limit may be None if Ollama API doesn't provide it.
+        # The runtime will use LiteLLM fallback logic to determine max tokens.
         all_models_with_context_size_and_vision.append(
             OllamaFinalModelResponse(
                 name=model_name,
+                display_name=generate_ollama_display_name(model_name),
                 max_input_tokens=context_limit,
-                supports_image_input=supports_image_input,
+                supports_image_input=supports_image_input or False,
             )
         )
+
+    # Sync new models to DB if provider_name is specified
+    if request.provider_name:
+        try:
+            models_to_sync = [
+                {
+                    "name": r.name,
+                    "display_name": r.display_name,
+                    "max_input_tokens": r.max_input_tokens,
+                    "supports_image_input": r.supports_image_input,
+                }
+                for r in all_models_with_context_size_and_vision
+            ]
+            new_count = sync_model_configurations(
+                db_session=db_session,
+                provider_name=request.provider_name,
+                models=models_to_sync,
+            )
+            if new_count > 0:
+                logger.info(
+                    f"Added {new_count} new Ollama models to provider '{request.provider_name}'"
+                )
+        except ValueError as e:
+            logger.warning(f"Failed to sync Ollama models to DB: {e}")
 
     return all_models_with_context_size_and_vision
 
@@ -751,10 +865,11 @@ def _get_openrouter_models_response(api_base: str, api_key: str) -> dict:
 def get_openrouter_available_models(
     request: OpenRouterModelsRequest,
     _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
 ) -> list[OpenRouterFinalModelResponse]:
     """Fetch available models from OpenRouter `/models` endpoint.
 
-    Parses id, context_length, and architecture.input_modalities to infer vision support.
+    Parses id, name (display), context_length, and architecture.input_modalities.
     """
 
     response_json = _get_openrouter_models_response(
@@ -777,10 +892,19 @@ def get_openrouter_available_models(
             if model_details.is_embedding_model:
                 continue
 
+            # Strip vendor prefix since we group by vendor (e.g., "Microsoft: Phi 4" → "Phi 4")
+            display_name = strip_openrouter_vendor_prefix(
+                model_details.display_name, model_details.id
+            )
+
+            # Treat context_length of 0 as unknown (None)
+            context_length = model_details.context_length or None
+
             results.append(
                 OpenRouterFinalModelResponse(
                     name=model_details.id,
-                    max_input_tokens=model_details.context_length,
+                    display_name=display_name,
+                    max_input_tokens=context_length,
                     supports_image_input=model_details.supports_image_input,
                 )
             )
@@ -795,4 +919,30 @@ def get_openrouter_available_models(
             status_code=400, detail="No compatible models found from OpenRouter"
         )
 
-    return sorted(results, key=lambda m: m.name.lower())
+    sorted_results = sorted(results, key=lambda m: m.name.lower())
+
+    # Sync new models to DB if provider_name is specified
+    if request.provider_name:
+        try:
+            models_to_sync = [
+                {
+                    "name": r.name,
+                    "display_name": r.display_name,
+                    "max_input_tokens": r.max_input_tokens,
+                    "supports_image_input": r.supports_image_input,
+                }
+                for r in sorted_results
+            ]
+            new_count = sync_model_configurations(
+                db_session=db_session,
+                provider_name=request.provider_name,
+                models=models_to_sync,
+            )
+            if new_count > 0:
+                logger.info(
+                    f"Added {new_count} new OpenRouter models to provider '{request.provider_name}'"
+                )
+        except ValueError as e:
+            logger.warning(f"Failed to sync OpenRouter models to DB: {e}")
+
+    return sorted_results

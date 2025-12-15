@@ -9,6 +9,7 @@ import SvgRefreshCw from "@/icons/refresh-cw";
 import SvgFold from "@/icons/fold";
 
 interface ToolsSectionProps {
+  isRefreshing?: boolean;
   onRefresh?: () => void;
   onDisableAll?: () => void;
   onFold?: () => void;
@@ -18,6 +19,7 @@ interface ToolsSectionProps {
 }
 
 const ToolsSection: React.FC<ToolsSectionProps> = ({
+  isRefreshing,
   onRefresh,
   onDisableAll,
   onFold,
@@ -54,6 +56,7 @@ const ToolsSection: React.FC<ToolsSectionProps> = ({
               onClick={onRefresh}
               tertiary
               tooltip="Refresh tools"
+              className={cn(isRefreshing && "animate-spin")}
             />
           )}
 

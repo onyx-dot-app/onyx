@@ -2,6 +2,7 @@ import { SOURCE_METADATA_MAP } from "../sources";
 import SvgServer from "@/icons/server";
 import { MCPServer } from "./interfaces";
 import { DatabaseIcon, FileIcon } from "@/components/icons/icons";
+import { IconProps } from "@/icons";
 
 /**
  * Get an appropriate icon for an MCP server based on its URL and name.
@@ -9,7 +10,7 @@ import { DatabaseIcon, FileIcon } from "@/components/icons/icons";
  */
 export function getMCPServerIcon(
   server: Pick<MCPServer, "server_url" | "name">
-): React.ReactNode {
+): React.FunctionComponent<IconProps> {
   const url = server.server_url.toLowerCase();
   const name = server.name.toLowerCase();
 
@@ -18,7 +19,7 @@ export function getMCPServerIcon(
 
     if (url.includes(keyword) || name.includes(keyword)) {
       const Icon = metadata.icon;
-      return <Icon size={20} />;
+      return Icon;
     }
   }
 
@@ -28,13 +29,13 @@ export function getMCPServerIcon(
     url.includes("mongodb") ||
     url.includes("redis")
   ) {
-    return <DatabaseIcon size={20} />;
+    return DatabaseIcon;
   }
   if (url.includes("filesystem") || name.includes("file system")) {
-    return <FileIcon size={20} />;
+    return FileIcon;
   }
 
-  return <SvgServer className="h-5 w-5 stroke-text-04" />;
+  return SvgServer;
 }
 
 export function getMCPServerDisplayName(server: MCPServer): string {

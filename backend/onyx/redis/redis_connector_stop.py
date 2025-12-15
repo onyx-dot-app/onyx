@@ -7,6 +7,7 @@ class RedisConnectorStop:
 
     PREFIX = "connectorstop"
     FENCE_PREFIX = f"{PREFIX}_fence"
+    FENCE_TTL = 7 * 24 * 60 * 60  # 7 days - defensive TTL to prevent memory leaks
 
     # if this timeout is exceeded, the caller may decide to take more
     # drastic measures
@@ -30,7 +31,7 @@ class RedisConnectorStop:
             self.redis.delete(self.fence_key)
             return
 
-        self.redis.set(self.fence_key, 0)
+        self.redis.set(self.fence_key, 0, ex=self.FENCE_TTL)
 
     @property
     def timed_out(self) -> bool:

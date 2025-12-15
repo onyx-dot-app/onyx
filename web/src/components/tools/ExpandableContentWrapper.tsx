@@ -11,7 +11,7 @@ import {
   OpenIcon,
 } from "@/components/icons/icons";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Modal } from "@/components/Modal";
+import Modal from "@/refresh-components/Modal";
 import { FileDescriptor } from "@/app/chat/interfaces";
 
 export interface ExpandableContentWrapperProps {
@@ -121,12 +121,10 @@ export default function ExpandableContentWrapper({
   return (
     <>
       {expanded && (
-        <Modal
-          hideCloseButton
-          onOutsideClick={() => setExpanded(false)}
-          className="!max-w-5xl overflow-hidden rounded-lg !p-0 !m-0"
-        >
-          {Content}
+        <Modal open onOpenChange={() => setExpanded(false)}>
+          <Modal.Content large className="!p-0">
+            <Modal.Body className="p-0">{Content}</Modal.Body>
+          </Modal.Content>
         </Modal>
       )}
       {!expanded && Content}

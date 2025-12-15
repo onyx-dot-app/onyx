@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import Switch from "@/refresh-components/inputs/Switch";
 import Text from "@/refresh-components/texts/Text";
@@ -10,6 +10,7 @@ import SvgArrowLeftDot from "@/icons/arrow-left-dot";
 import SvgArrowRightDot from "@/icons/arrow-right-dot";
 import SvgCornerRightUpDot from "@/icons/corner-right-up-dot";
 import SvgMinusCircle from "@/icons/minus-circle";
+import { IconProps } from "@/icons";
 
 type ToolItemVariant = "mcp" | "openapi";
 
@@ -58,7 +59,7 @@ export interface ToolItemProps {
   // Tool information
   name: string;
   description: string;
-  icon?: React.ReactNode;
+  icon?: React.FunctionComponent<IconProps>;
 
   // Tool state
   isAvailable?: boolean;
@@ -78,7 +79,7 @@ export interface ToolItemProps {
 const ToolItem: React.FC<ToolItemProps> = ({
   name,
   description,
-  icon,
+  icon: Icon,
   isAvailable = true,
   isEnabled = true,
   variant = "mcp",
@@ -103,6 +104,46 @@ const ToolItem: React.FC<ToolItemProps> = ({
     ? { label: undefined, bg: "", text: "" }
     : getMethodStyles(openApiMetadata?.method);
 
+  const highlightedPathContent = useMemo(() => {
+    if (!openApiMetadata?.path) {
+      return null;
+    }
+
+    // Example: "/repos/{owner}/{repo}" => plain spans for static segments,
+    // colored spans for "{owner}" and "{repo}".
+    const path = openApiMetadata.path;
+    const segments: React.ReactNode[] = [];
+    const paramRegex = /\{[^}]+\}/g;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    const highlightClass = methodText || "text-text-03";
+
+    while ((match = paramRegex.exec(path)) !== null) {
+      // Push plain text before the param, then the colored "{param}" segment.
+      if (match.index > lastIndex) {
+        segments.push(
+          <span key={`text-${match.index}`}>
+            {path.slice(lastIndex, match.index)}
+          </span>
+        );
+      }
+
+      segments.push(
+        <span key={`param-${match.index}`} className={highlightClass}>
+          {match[0]}
+        </span>
+      );
+
+      lastIndex = paramRegex.lastIndex;
+    }
+
+    if (lastIndex < path.length) {
+      segments.push(<span key="text-end">{path.slice(lastIndex)}</span>);
+    }
+
+    return segments;
+  }, [openApiMetadata?.path, methodText]);
+
   return (
     <div
       className={cn(
@@ -114,14 +155,14 @@ const ToolItem: React.FC<ToolItemProps> = ({
       {/* Left Section: Icon and Content */}
       <div className="flex gap-1 items-start flex-1 min-w-0 pr-2">
         {/* Icon Container */}
-        {icon ? (
+        {Icon ? (
           <div
             className={cn(
               "flex items-center justify-center shrink-0",
               textOpacity
             )}
           >
-            {icon}
+            <Icon size={20} className="h-5 w-5 stroke-text-04" />
           </div>
         ) : (
           <div className="flex items-center justify-center h-5 w-5">
@@ -204,7 +245,7 @@ const ToolItem: React.FC<ToolItemProps> = ({
 
           {openApiMetadata?.path && (
             <Truncated secondaryMono text03 className="text-right truncate">
-              {openApiMetadata.path}
+              {highlightedPathContent}
             </Truncated>
           )}
         </div>

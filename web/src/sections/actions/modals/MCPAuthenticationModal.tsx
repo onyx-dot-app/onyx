@@ -31,12 +31,15 @@ import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
 import { createMCPServer } from "@/lib/tools/edit";
 import { MCPServerStatus, MCPServerWithStatus } from "@/lib/tools/types";
 import { updateMCPServerStatus } from "@/lib/tools/mcpService";
-import { useMCPActions } from "@/sections/actions/MCPActionsContext";
 import Message from "@/refresh-components/messages/Message";
+import { PopupSpec } from "@/components/admin/connectors/Popup";
 
 interface MCPAuthenticationModalProps {
   mcpServer: MCPServerWithStatus | null;
   skipOverlay?: boolean;
+  onSuccess?: () => Promise<void>;
+  setPopup?: (spec: PopupSpec) => void;
+  mutateMcpServers?: () => Promise<void>;
 }
 
 interface MCPAuthTemplate {
@@ -99,9 +102,11 @@ const validationSchema = Yup.object().shape({
 export default function MCPAuthenticationModal({
   mcpServer,
   skipOverlay = false,
+  onSuccess,
+  setPopup,
+  mutateMcpServers,
 }: MCPAuthenticationModalProps) {
   const { isOpen, toggle } = useModal();
-  const { setPopup, mutateMcpServers } = useMCPActions();
   const [activeAuthTab, setActiveAuthTab] = useState<"per-user" | "admin">(
     "per-user"
   );
@@ -225,16 +230,17 @@ export default function MCPAuthenticationModal({
         throw new Error(serverError || "Failed to save server configuration");
       }
 
-      setPopup({
+      setPopup?.({
         message: "Authentication configuration saved successfully",
         type: "success",
       });
 
-      await mutateMcpServers();
+      await mutateMcpServers?.();
+      await onSuccess?.();
       toggle(false);
     } catch (error) {
       console.error("Error saving authentication config:", error);
-      setPopup({
+      setPopup?.({
         message:
           error instanceof Error
             ? error.message
@@ -282,7 +288,7 @@ export default function MCPAuthenticationModal({
             server_id: mcpServer.id.toString(),
             oauth_client_id: values.oauth_client_id,
             oauth_client_secret: values.oauth_client_secret,
-            return_path: `/admin/mcp-actions/?server_id=${mcpServer.id}&trigger_fetch=true`,
+            return_path: `/admin/actions/mcp/?server_id=${mcpServer.id}&trigger_fetch=true`,
             include_resource_param: true,
           }),
         });
@@ -296,12 +302,12 @@ export default function MCPAuthenticationModal({
         window.location.href = oauth_url;
       } else {
         // For non-OAuth authentication, redirect to the page with server_id and trigger_fetch
-        window.location.href = `/admin/mcp-actions/?server_id=${mcpServer.id}&trigger_fetch=true`;
+        window.location.href = `/admin/actions/mcp/?server_id=${mcpServer.id}&trigger_fetch=true`;
         toggle(false);
       }
     } catch (error) {
       console.error("Error saving authentication:", error);
-      setPopup({
+      setPopup?.({
         message:
           error instanceof Error
             ? error.message

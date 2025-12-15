@@ -1,5 +1,6 @@
 import { ThreeDotsLoader } from "@/components/Loading";
-import { Modal } from "@/components/Modal";
+import Modal from "@/refresh-components/Modal";
+import SvgX from "@/icons/x";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import {
   ConnectorIndexingStatusLite,
@@ -112,22 +113,26 @@ export default function UpgradingPage({
     <>
       {popup}
       {isCancelling && (
-        <Modal
-          onOutsideClick={() => setIsCancelling(false)}
-          title="Cancel Embedding Model Switch"
-        >
-          <div>
-            <div>
-              Are you sure you want to cancel? Cancelling will revert to the
-              previous model and all progress will be lost.
-            </div>
-            <div className="mt-12 gap-x-2 w-full justify-end flex">
+        <Modal open onOpenChange={() => setIsCancelling(false)}>
+          <Modal.Content small>
+            <Modal.Header
+              icon={SvgX}
+              title="Cancel Embedding Model Switch"
+              onClose={() => setIsCancelling(false)}
+            />
+            <Modal.Body>
+              <div>
+                Are you sure you want to cancel? Cancelling will revert to the
+                previous model and all progress will be lost.
+              </div>
+            </Modal.Body>
+            <Modal.Footer className="p-4 flex gap-x-2 w-full justify-end">
               <Button onClick={onCancel}>Confirm</Button>
               <Button onClick={() => setIsCancelling(false)} secondary>
                 Cancel
               </Button>
-            </div>
-          </div>
+            </Modal.Footer>
+          </Modal.Content>
         </Modal>
       )}
 

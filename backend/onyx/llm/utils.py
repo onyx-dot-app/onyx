@@ -6,10 +6,6 @@ from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
 
-from langchain.schema.messages import AIMessage
-from langchain.schema.messages import BaseMessage
-from langchain.schema.messages import HumanMessage
-from langchain.schema.messages import SystemMessage
 from sqlalchemy import select
 
 from onyx.configs.app_configs import LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS
@@ -23,6 +19,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import LLMProvider
 from onyx.db.models import ModelConfiguration
 from onyx.llm.interfaces import LLM
+from onyx.llm.model_response import ModelResponse
 from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_TOKEN_ESTIMATE
 from onyx.prompts.contextual_retrieval import DOCUMENT_SUMMARY_TOKEN_ESTIMATE
 from onyx.utils.logger import setup_logger
@@ -206,33 +203,11 @@ def litellm_exception_to_error_msg(
     return error_msg
 
 
-def dict_based_prompt_to_langchain_prompt(
-    messages: list[dict[str, str]],
-) -> list[BaseMessage]:
-    prompt: list[BaseMessage] = []
-    for message in messages:
-        role = message.get("role")
-        content = message.get("content")
-        if not role:
-            raise ValueError(f"Message missing `role`: {message}")
-        if not content:
-            raise ValueError(f"Message missing `content`: {message}")
-        elif role == "user":
-            prompt.append(HumanMessage(content=content))
-        elif role == "system":
-            prompt.append(SystemMessage(content=content))
-        elif role == "assistant":
-            prompt.append(AIMessage(content=content))
-        else:
-            raise ValueError(f"Unknown role: {role}")
-    return prompt
-
-
-def message_to_string(message: BaseMessage) -> str:
-    if not isinstance(message.content, str):
+def llm_response_to_string(message: ModelResponse) -> str:
+    if not isinstance(message.choice.message.content, str):
         raise RuntimeError("LLM message not in expected format.")
 
-    return message.content
+    return message.choice.message.content
 
 
 def check_number_of_tokens(
@@ -255,7 +230,7 @@ def test_llm(llm: LLM) -> str | None:
     error_msg = None
     for _ in range(2):
         try:
-            llm.invoke_langchain("Do not respond")
+            llm.invoke("Do not respond")
             return None
         except Exception as e:
             error_msg = str(e)
@@ -432,43 +407,40 @@ def get_llm_contextual_cost(
     return usd_per_prompt + usd_per_completion
 
 
-def get_llm_max_tokens(
+def llm_max_input_tokens(
     model_map: dict,
     model_name: str,
     model_provider: str,
 ) -> int:
-    """Best effort attempt to get the max tokens for the LLM"""
+    """Best effort attempt to get the max input tokens for the LLM."""
     if GEN_AI_MAX_TOKENS:
         # This is an override, so always return this
         logger.info(f"Using override GEN_AI_MAX_TOKENS: {GEN_AI_MAX_TOKENS}")
         return GEN_AI_MAX_TOKENS
 
-    try:
-        model_obj = find_model_obj(
-            model_map,
-            model_provider,
-            model_name,
-        )
-        if not model_obj:
-            raise RuntimeError(
-                f"No litellm entry found for {model_provider}/{model_name}"
-            )
-
-        if "max_input_tokens" in model_obj:
-            max_tokens = model_obj["max_input_tokens"]
-            return max_tokens
-
-        if "max_tokens" in model_obj:
-            max_tokens = model_obj["max_tokens"]
-            return max_tokens
-
-        logger.error(f"No max tokens found for LLM: {model_name}")
-        raise RuntimeError("No max tokens found for LLM")
-    except Exception:
-        logger.exception(
-            f"Failed to get max tokens for LLM with name {model_name}. Defaulting to {GEN_AI_MODEL_FALLBACK_MAX_TOKENS}."
+    model_obj = find_model_obj(
+        model_map,
+        model_provider,
+        model_name,
+    )
+    if not model_obj:
+        logger.warning(
+            f"Model '{model_name}' not found in LiteLLM. "
+            f"Falling back to {GEN_AI_MODEL_FALLBACK_MAX_TOKENS} tokens."
         )
         return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
+
+    if "max_input_tokens" in model_obj:
+        return model_obj["max_input_tokens"]
+
+    if "max_tokens" in model_obj:
+        return model_obj["max_tokens"]
+
+    logger.warning(
+        f"No max tokens found for '{model_name}'. "
+        f"Falling back to {GEN_AI_MODEL_FALLBACK_MAX_TOKENS} tokens."
+    )
+    return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 
 
 def get_llm_max_output_tokens(
@@ -476,32 +448,32 @@ def get_llm_max_output_tokens(
     model_name: str,
     model_provider: str,
 ) -> int:
-    """Best effort attempt to get the max output tokens for the LLM"""
-    try:
-        model_obj = model_map.get(f"{model_provider}/{model_name}")
-        if not model_obj:
-            model_obj = model_map[model_name]
-        else:
-            pass
+    """Best effort attempt to get the max output tokens for the LLM."""
+    default_output_tokens = int(GEN_AI_MODEL_FALLBACK_MAX_TOKENS)
 
-        if "max_output_tokens" in model_obj:
-            max_output_tokens = model_obj["max_output_tokens"]
-            return max_output_tokens
+    model_obj = model_map.get(f"{model_provider}/{model_name}")
+    if not model_obj:
+        model_obj = model_map.get(model_name)
 
-        # Fallback to a fraction of max_tokens if max_output_tokens is not specified
-        if "max_tokens" in model_obj:
-            max_output_tokens = int(model_obj["max_tokens"] * 0.1)
-            return max_output_tokens
-
-        logger.error(f"No max output tokens found for LLM: {model_name}")
-        raise RuntimeError("No max output tokens found for LLM")
-    except Exception:
-        default_output_tokens = int(GEN_AI_MODEL_FALLBACK_MAX_TOKENS)
-        logger.exception(
-            f"Failed to get max output tokens for LLM with name {model_name}. "
-            f"Defaulting to {default_output_tokens} (fallback max tokens)."
+    if not model_obj:
+        logger.warning(
+            f"Model '{model_name}' not found in LiteLLM. "
+            f"Falling back to {default_output_tokens} output tokens."
         )
         return default_output_tokens
+
+    if "max_output_tokens" in model_obj:
+        return model_obj["max_output_tokens"]
+
+    # Fallback to a fraction of max_tokens if max_output_tokens is not specified
+    if "max_tokens" in model_obj:
+        return int(model_obj["max_tokens"] * 0.1)
+
+    logger.warning(
+        f"No max output tokens found for '{model_name}'. "
+        f"Falling back to {default_output_tokens} output tokens."
+    )
+    return default_output_tokens
 
 
 def get_max_input_tokens(
@@ -518,7 +490,7 @@ def get_max_input_tokens(
     litellm_model_map = get_model_map()
 
     input_toks = (
-        get_llm_max_tokens(
+        llm_max_input_tokens(
             model_name=model_name,
             model_provider=model_provider,
             model_map=litellm_model_map,
@@ -536,6 +508,19 @@ def get_max_input_tokens_from_llm_provider(
     llm_provider: "LLMProviderView",
     model_name: str,
 ) -> int:
+    """Get max input tokens for a model, with fallback chain.
+
+    Fallback order:
+    1. Use max_input_tokens from model_configuration (populated from source APIs
+       like OpenRouter, Ollama, or our Bedrock mapping)
+    2. Look up in litellm.model_cost dictionary
+    3. Fall back to GEN_AI_MODEL_FALLBACK_MAX_TOKENS (4096)
+
+    Most dynamic providers (OpenRouter, Ollama) provide context_length via their
+    APIs. Bedrock doesn't expose this, so we parse from model ID suffix (:200k)
+    or use BEDROCK_MODEL_TOKEN_LIMITS mapping. The 4096 fallback is only hit for
+    unknown models not in any of these sources.
+    """
     max_input_tokens = None
     for model_configuration in llm_provider.model_configurations:
         if model_configuration.name == model_name:
@@ -548,6 +533,54 @@ def get_max_input_tokens_from_llm_provider(
             model_name=model_name,
         )
     )
+
+
+def get_bedrock_token_limit(model_id: str) -> int:
+    """Look up token limit for a Bedrock model.
+
+    AWS Bedrock API doesn't expose token limits directly. This function
+    attempts to determine the limit from multiple sources.
+
+    Lookup order:
+    1. Parse from model ID suffix (e.g., ":200k" → 200000)
+    2. Check LiteLLM's model_cost dictionary
+    3. Fall back to our hardcoded BEDROCK_MODEL_TOKEN_LIMITS mapping
+    4. Default to 4096 if not found anywhere
+    """
+    from onyx.llm.constants import BEDROCK_MODEL_TOKEN_LIMITS
+
+    model_id_lower = model_id.lower()
+
+    # 1. Try to parse context length from model ID suffix
+    # Format: "model-name:version:NNNk" where NNN is the context length in thousands
+    # Examples: ":200k", ":128k", ":1000k", ":8k", ":4k"
+    context_match = re.search(r":(\d+)k\b", model_id_lower)
+    if context_match:
+        return int(context_match.group(1)) * 1000
+
+    # 2. Check LiteLLM's model_cost dictionary
+    try:
+        model_map = get_model_map()
+        # Try with bedrock/ prefix first, then without
+        for key in [f"bedrock/{model_id}", model_id]:
+            if key in model_map:
+                model_info = model_map[key]
+                if "max_input_tokens" in model_info:
+                    return model_info["max_input_tokens"]
+                if "max_tokens" in model_info:
+                    return model_info["max_tokens"]
+    except Exception:
+        pass  # Fall through to mapping
+
+    # 3. Try our hardcoded mapping (longest match first)
+    for pattern, limit in sorted(
+        BEDROCK_MODEL_TOKEN_LIMITS.items(), key=lambda x: -len(x[0])
+    ):
+        if pattern in model_id_lower:
+            return limit
+
+    # 4. Default fallback
+    return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 
 
 def model_supports_image_input(model_name: str, model_provider: str) -> bool:
@@ -643,21 +676,31 @@ def is_true_openai_model(model_provider: str, model_name: str) -> bool:
     """
 
     # NOTE: not using the OPENAI_PROVIDER_NAME constant here due to circular import issues
-    if model_provider != "openai":
+    if model_provider != "openai" and model_provider != "litellm_proxy":
         return False
 
+    model_map = get_model_map()
+
+    def _check_if_model_name_is_openai_provider(model_name: str) -> bool:
+        return (
+            model_name in model_map
+            and model_map[model_name].get("litellm_provider") == "openai"
+        )
+
     try:
-        model_map = get_model_map()
+
         # Check if any model exists in litellm's registry with openai prefix
         # If it's registered as "openai/model-name", it's a real OpenAI model
         if f"openai/{model_name}" in model_map:
             return True
 
-        if (
-            model_name in model_map
-            and model_map[model_name].get("litellm_provider") == "openai"
-        ):
+        if _check_if_model_name_is_openai_provider(model_name):
             return True
+
+        if model_name.startswith("azure/"):
+            model_name_with_azure_removed = "/".join(model_name.split("/")[1:])
+            if _check_if_model_name_is_openai_provider(model_name_with_azure_removed):
+                return True
 
         return False
 

@@ -1,8 +1,5 @@
 import json
 from collections.abc import Callable
-from collections.abc import Mapping
-from collections.abc import Sequence
-from typing import Any
 from typing import cast
 
 from sqlalchemy.orm import Session
@@ -10,6 +7,9 @@ from sqlalchemy.orm import Session
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
+from onyx.chat.llm_step import run_llm_step
+from onyx.chat.llm_step import TOOL_CALL_MSG_ARGUMENTS
+from onyx.chat.llm_step import TOOL_CALL_MSG_FUNC_NAME
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import ExtractedProjectFiles
 from onyx.chat.models import LlmStepResult
@@ -19,38 +19,19 @@ from onyx.chat.prompt_utils import build_system_prompt
 from onyx.chat.prompt_utils import (
     get_default_base_system_prompt,
 )
-from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
 from onyx.db.models import Persona
-from onyx.file_store.models import ChatFileType
-from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import ToolChoiceOptions
-from onyx.llm.message_types import AssistantMessage
-from onyx.llm.message_types import ChatCompletionMessage
-from onyx.llm.message_types import ImageContentPart
-from onyx.llm.message_types import SystemMessage
-from onyx.llm.message_types import TextContentPart
-from onyx.llm.message_types import ToolCall
-from onyx.llm.message_types import ToolMessage
-from onyx.llm.message_types import UserMessageWithParts
-from onyx.llm.message_types import UserMessageWithText
 from onyx.llm.utils import model_needs_formatting_reenabled
 from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER
 from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
-from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
-from onyx.server.query_and_chat.streaming_models import AgentResponseStart
-from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import ReasoningDelta
-from onyx.server.query_and_chat.streaming_models import ReasoningDone
-from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.tools.models import ToolCallInfo
-from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
@@ -63,9 +44,7 @@ from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_runner import run_tool_calls
-from onyx.tracing.framework.create import generation_span
 from onyx.tracing.framework.create import trace
-from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -79,9 +58,6 @@ logger = setup_logger()
 # Cycle 5: Maybe call open_url for some additional results or because last set failed
 # Cycle 6: No more tools available, forced to answer
 MAX_LLM_CYCLES = 6
-
-TOOL_CALL_MSG_FUNC_NAME = "function_name"
-TOOL_CALL_MSG_ARGUMENTS = "arguments"
 
 
 def _build_project_file_citation_mapping(
@@ -127,15 +103,23 @@ def construct_message_history(
     custom_agent_prompt: ChatMessageSimple | None,
     simple_chat_history: list[ChatMessageSimple],
     reminder_message: ChatMessageSimple | None,
-    project_files: ExtractedProjectFiles,
+    project_files: ExtractedProjectFiles | None,
     available_tokens: int,
+    last_n_user_messages: int | None = None,
 ) -> list[ChatMessageSimple]:
+    if last_n_user_messages is not None:
+        if last_n_user_messages <= 0:
+            raise ValueError(
+                "filtering chat history by last N user messages must be a value greater than 0"
+            )
+
     history_token_budget = available_tokens
     history_token_budget -= system_prompt.token_count
     history_token_budget -= (
         custom_agent_prompt.token_count if custom_agent_prompt else 0
     )
-    history_token_budget -= project_files.total_token_count
+    if project_files:
+        history_token_budget -= project_files.total_token_count
     history_token_budget -= reminder_message.token_count if reminder_message else 0
 
     if history_token_budget < 0:
@@ -146,7 +130,7 @@ def construct_message_history(
         result = [system_prompt]
         if custom_agent_prompt:
             result.append(custom_agent_prompt)
-        if project_files.project_file_texts:
+        if project_files and project_files.project_file_texts:
             project_message = _create_project_files_message(
                 project_files, token_counter=None
             )
@@ -154,6 +138,26 @@ def construct_message_history(
         if reminder_message:
             result.append(reminder_message)
         return result
+
+    # If last_n_user_messages is set, filter history to only include the last n user messages
+    if last_n_user_messages is not None:
+        # Find all user message indices
+        user_msg_indices = [
+            i
+            for i, msg in enumerate(simple_chat_history)
+            if msg.message_type == MessageType.USER
+        ]
+
+        if not user_msg_indices:
+            raise ValueError("No user message found in simple_chat_history")
+
+        # If we have more than n user messages, keep only the last n
+        if len(user_msg_indices) > last_n_user_messages:
+            # Find the index of the n-th user message from the end
+            # For example, if last_n_user_messages=2, we want the 2nd-to-last user message
+            nth_user_msg_index = user_msg_indices[-(last_n_user_messages)]
+            # Keep everything from that user message onwards
+            simple_chat_history = simple_chat_history[nth_user_msg_index:]
 
     # Find the last USER message in the history
     # The history may contain tool calls and responses after the last user message
@@ -202,7 +206,7 @@ def construct_message_history(
             break
 
     # Attach project images to the last user message
-    if project_files.project_image_files:
+    if project_files and project_files.project_image_files:
         existing_images = last_user_message.image_files or []
         last_user_message = ChatMessageSimple(
             message=last_user_message.message,
@@ -224,7 +228,7 @@ def construct_message_history(
         result.append(custom_agent_prompt)
 
     # 3. Add project files message (inserted before last user message)
-    if project_files.project_file_texts:
+    if project_files and project_files.project_file_texts:
         project_message = _create_project_files_message(
             project_files, token_counter=None
         )
@@ -274,509 +278,6 @@ def _create_project_files_message(
     )
 
 
-def translate_history_to_llm_format(
-    history: list[ChatMessageSimple],
-) -> LanguageModelInput:
-    """Convert a list of ChatMessageSimple to LanguageModelInput format.
-
-    Converts ChatMessageSimple messages to ChatCompletionMessage format,
-    handling different message types and image files for multimodal support.
-    """
-    messages: list[ChatCompletionMessage] = []
-
-    for msg in history:
-        if msg.message_type == MessageType.SYSTEM:
-            system_msg: SystemMessage = {
-                "role": "system",
-                "content": msg.message,
-            }
-            messages.append(system_msg)
-
-        elif msg.message_type == MessageType.USER:
-            # Handle user messages with potential images
-            if msg.image_files:
-                # Build content parts: text + images
-                content_parts: list[TextContentPart | ImageContentPart] = [
-                    {"type": "text", "text": msg.message}
-                ]
-
-                # Add image parts
-                for img_file in msg.image_files:
-                    if img_file.file_type == ChatFileType.IMAGE:
-                        try:
-                            image_type = get_image_type_from_bytes(img_file.content)
-                            base64_data = img_file.to_base64()
-                            image_url = f"data:{image_type};base64,{base64_data}"
-
-                            image_part: ImageContentPart = {
-                                "type": "image_url",
-                                "image_url": {"url": image_url},
-                            }
-                            content_parts.append(image_part)
-                        except Exception as e:
-                            logger.warning(
-                                f"Failed to process image file {img_file.file_id}: {e}. "
-                                "Skipping image."
-                            )
-
-                user_msg_with_parts: UserMessageWithParts = {
-                    "role": "user",
-                    "content": content_parts,
-                }
-                messages.append(user_msg_with_parts)
-            else:
-                # Simple text-only user message
-                user_msg_text: UserMessageWithText = {
-                    "role": "user",
-                    "content": msg.message,
-                }
-                messages.append(user_msg_text)
-
-        elif msg.message_type == MessageType.ASSISTANT:
-            assistant_msg: AssistantMessage = {
-                "role": "assistant",
-                "content": msg.message or None,
-            }
-            messages.append(assistant_msg)
-
-        elif msg.message_type == MessageType.TOOL_CALL:
-            # Tool calls are represented as Assistant Messages with tool_calls field
-            # Try to reconstruct tool call structure if we have tool_call_id
-            tool_calls: list[ToolCall] = []
-            if msg.tool_call_id:
-                try:
-                    # Parse the message content (which should contain function_name and arguments)
-                    tool_call_data = json.loads(msg.message) if msg.message else {}
-
-                    if (
-                        isinstance(tool_call_data, dict)
-                        and TOOL_CALL_MSG_FUNC_NAME in tool_call_data
-                    ):
-                        function_name = tool_call_data.get(
-                            TOOL_CALL_MSG_FUNC_NAME, "unknown"
-                        )
-                        tool_args = tool_call_data.get(TOOL_CALL_MSG_ARGUMENTS, {})
-                    else:
-                        function_name = "unknown"
-                        tool_args = (
-                            tool_call_data if isinstance(tool_call_data, dict) else {}
-                        )
-
-                    # NOTE: if the model is trained on a different tool call format, this may slightly interfere
-                    # with the future tool calls, if it doesn't look like this. Almost certainly not a big deal.
-                    tool_call: ToolCall = {
-                        "id": msg.tool_call_id,
-                        "type": "function",
-                        "function": {
-                            "name": function_name,
-                            "arguments": json.dumps(tool_args) if tool_args else "{}",
-                        },
-                    }
-                    tool_calls.append(tool_call)
-                except (json.JSONDecodeError, ValueError) as e:
-                    logger.warning(
-                        f"Failed to parse tool call data for tool_call_id {msg.tool_call_id}: {e}. "
-                        "Including as content-only message."
-                    )
-
-            assistant_msg_with_tool: AssistantMessage = {
-                "role": "assistant",
-                "content": None,  # The tool call is parsed, doesn't need to be duplicated in the content
-            }
-            if tool_calls:
-                assistant_msg_with_tool["tool_calls"] = tool_calls
-            messages.append(assistant_msg_with_tool)
-
-        elif msg.message_type == MessageType.TOOL_CALL_RESPONSE:
-            if not msg.tool_call_id:
-                raise ValueError(
-                    f"Tool call response message encountered but tool_call_id is not available. Message: {msg}"
-                )
-
-            tool_msg: ToolMessage = {
-                "role": "tool",
-                "content": msg.message,
-                "tool_call_id": msg.tool_call_id,
-            }
-            messages.append(tool_msg)
-
-        else:
-            logger.warning(
-                f"Unknown message type {msg.message_type} in history. Skipping message."
-            )
-
-    return messages
-
-
-def _format_message_history_for_logging(
-    message_history: LanguageModelInput,
-) -> str:
-    """Format message history for logging, with special handling for tool calls.
-
-    Tool calls are formatted as JSON with 4-space indentation for readability.
-    """
-    formatted_lines = []
-
-    separator = "================================================"
-
-    # Handle string input
-    if isinstance(message_history, str):
-        formatted_lines.append("Message [string]:")
-        formatted_lines.append(separator)
-        formatted_lines.append(f"{message_history}")
-        return "\n".join(formatted_lines)
-
-    # Handle sequence of messages
-    for i, msg in enumerate(message_history):
-        # Type guard: ensure msg is a dict-like object (TypedDict)
-        if not isinstance(msg, dict):
-            formatted_lines.append(f"Message {i + 1} [unknown]:")
-            formatted_lines.append(separator)
-            formatted_lines.append(f"{msg}")
-            if i < len(message_history) - 1:
-                formatted_lines.append(separator)
-            continue
-
-        role = msg.get("role", "unknown")
-        formatted_lines.append(f"Message {i + 1} [{role}]:")
-        formatted_lines.append(separator)
-
-        if role == "system":
-            content = msg.get("content", "")
-            if isinstance(content, str):
-                formatted_lines.append(f"{content}")
-
-        elif role == "user":
-            content = msg.get("content", "")
-            if isinstance(content, str):
-                formatted_lines.append(f"{content}")
-            elif isinstance(content, list):
-                # Handle multimodal content (text + images)
-                for part in content:
-                    if isinstance(part, dict):
-                        part_type = part.get("type")
-                        if part_type == "text":
-                            text = part.get("text", "")
-                            if isinstance(text, str):
-                                formatted_lines.append(f"{text}")
-                        elif part_type == "image_url":
-                            image_url_dict = part.get("image_url")
-                            if isinstance(image_url_dict, dict):
-                                url = image_url_dict.get("url", "")
-                                if isinstance(url, str):
-                                    formatted_lines.append(f"[Image: {url[:50]}...]")
-
-        elif role == "assistant":
-            content = msg.get("content")
-            if content and isinstance(content, str):
-                formatted_lines.append(f"{content}")
-
-            tool_calls = msg.get("tool_calls")
-            if tool_calls and isinstance(tool_calls, list):
-                formatted_lines.append("Tool calls:")
-                for tool_call in tool_calls:
-                    if isinstance(tool_call, dict):
-                        tool_call_dict: dict[str, Any] = {}
-                        tool_call_id = tool_call.get("id")
-                        tool_call_type = tool_call.get("type")
-                        function_dict = tool_call.get("function")
-
-                        if tool_call_id:
-                            tool_call_dict["id"] = tool_call_id
-                        if tool_call_type:
-                            tool_call_dict["type"] = tool_call_type
-                        if isinstance(function_dict, dict):
-                            tool_call_dict["function"] = {
-                                "name": function_dict.get("name", ""),
-                                "arguments": function_dict.get("arguments", ""),
-                            }
-
-                        tool_call_json = json.dumps(tool_call_dict, indent=4)
-                        formatted_lines.append(tool_call_json)
-
-        elif role == "tool":
-            content = msg.get("content", "")
-            tool_call_id = msg.get("tool_call_id", "")
-            if isinstance(content, str) and isinstance(tool_call_id, str):
-                formatted_lines.append(f"Tool call ID: {tool_call_id}")
-                formatted_lines.append(f"Response: {content}")
-
-        # Add separator before next message (or at end)
-        if i < len(message_history) - 1:
-            formatted_lines.append(separator)
-
-    return "\n".join(formatted_lines)
-
-
-def run_llm_step(
-    history: list[ChatMessageSimple],
-    tool_definitions: list[dict],
-    tool_choice: ToolChoiceOptions,
-    emitter: Emitter,
-    llm: LLM,
-    turn_index: int,
-    citation_processor: DynamicCitationProcessor,
-    state_container: ChatStateContainer,
-    final_documents: list[SearchDoc] | None = None,
-) -> tuple[LlmStepResult, int]:
-    # The second return value is for the turn index because reasoning counts on the frontend as a turn
-    # TODO this is maybe ok but does not align well with the backend logic too well
-    llm_msg_history = translate_history_to_llm_format(history)
-
-    # Uncomment the line below to log the entire message history to the console
-    if LOG_ONYX_MODEL_INTERACTIONS:
-        logger.info(
-            f"Message history:\n{_format_message_history_for_logging(llm_msg_history)}"
-        )
-
-    id_to_tool_call_map: dict[int, dict[str, Any]] = {}
-    reasoning_start = False
-    answer_start = False
-    accumulated_reasoning = ""
-    accumulated_answer = ""
-
-    with generation_span(
-        model=llm.config.model_name,
-        model_config={
-            "base_url": str(llm.config.api_base or ""),
-            "model_impl": "litellm",
-        },
-    ) as span_generation:
-        span_generation.span_data.input = cast(
-            Sequence[Mapping[str, Any]], llm_msg_history
-        )
-        for packet in llm.stream(
-            prompt=llm_msg_history,
-            tools=tool_definitions,
-            tool_choice=tool_choice,
-            structured_response_format=None,  # TODO
-        ):
-            if packet.usage:
-                usage = packet.usage
-                span_generation.span_data.usage = {
-                    "input_tokens": usage.prompt_tokens,
-                    "output_tokens": usage.completion_tokens,
-                    "cache_read_input_tokens": usage.cache_read_input_tokens,
-                    "cache_creation_input_tokens": usage.cache_creation_input_tokens,
-                }
-            delta = packet.choice.delta
-
-            # Should only happen once, frontend does not expect multiple
-            # ReasoningStart or ReasoningDone packets.
-            if delta.reasoning_content:
-                accumulated_reasoning += delta.reasoning_content
-                # Save reasoning incrementally to state container
-                state_container.set_reasoning_tokens(accumulated_reasoning)
-                if not reasoning_start:
-                    emitter.emit(
-                        Packet(
-                            turn_index=turn_index,
-                            obj=ReasoningStart(),
-                        )
-                    )
-                emitter.emit(
-                    Packet(
-                        turn_index=turn_index,
-                        obj=ReasoningDelta(reasoning=delta.reasoning_content),
-                    )
-                )
-                reasoning_start = True
-
-            if delta.content:
-                if reasoning_start:
-                    emitter.emit(
-                        Packet(
-                            turn_index=turn_index,
-                            obj=ReasoningDone(),
-                        )
-                    )
-                    turn_index += 1
-                    reasoning_start = False
-
-                if not answer_start:
-                    emitter.emit(
-                        Packet(
-                            turn_index=turn_index,
-                            obj=AgentResponseStart(
-                                final_documents=final_documents,
-                            ),
-                        )
-                    )
-                    answer_start = True
-
-                for result in citation_processor.process_token(delta.content):
-                    if isinstance(result, str):
-                        accumulated_answer += result
-                        # Save answer incrementally to state container
-                        state_container.set_answer_tokens(accumulated_answer)
-                        emitter.emit(
-                            Packet(
-                                turn_index=turn_index,
-                                obj=AgentResponseDelta(content=result),
-                            )
-                        )
-                    elif isinstance(result, CitationInfo):
-                        emitter.emit(
-                            Packet(
-                                turn_index=turn_index,
-                                obj=result,
-                            )
-                        )
-
-            if delta.tool_calls:
-                if reasoning_start:
-                    emitter.emit(
-                        Packet(
-                            turn_index=turn_index,
-                            obj=ReasoningDone(),
-                        )
-                    )
-                    turn_index += 1
-                    reasoning_start = False
-
-                for tool_call_delta in delta.tool_calls:
-                    _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
-
-        tool_calls = _extract_tool_call_kickoffs(id_to_tool_call_map)
-        if tool_calls:
-            tool_calls_list: list[ToolCall] = [
-                {
-                    "id": kickoff.tool_call_id,
-                    "type": "function",
-                    "function": {
-                        "name": kickoff.tool_name,
-                        "arguments": json.dumps(kickoff.tool_args),
-                    },
-                }
-                for kickoff in tool_calls
-            ]
-
-            assistant_msg: AssistantMessage = {
-                "role": "assistant",
-                "content": accumulated_answer if accumulated_answer else None,
-                "tool_calls": tool_calls_list,
-            }
-            span_generation.span_data.output = [assistant_msg]
-        elif accumulated_answer:
-            span_generation.span_data.output = [
-                {"role": "assistant", "content": accumulated_answer}
-            ]
-    # Close reasoning block if still open (stream ended with reasoning content)
-    if reasoning_start:
-        emitter.emit(
-            Packet(
-                turn_index=turn_index,
-                obj=ReasoningDone(),
-            )
-        )
-        turn_index += 1
-
-    # Flush any remaining content from citation processor
-    if citation_processor:
-        for result in citation_processor.process_token(None):
-            if isinstance(result, str):
-                accumulated_answer += result
-                # Save answer incrementally to state container
-                state_container.set_answer_tokens(accumulated_answer)
-                emitter.emit(
-                    Packet(
-                        turn_index=turn_index,
-                        obj=AgentResponseDelta(content=result),
-                    )
-                )
-            elif isinstance(result, CitationInfo):
-                emitter.emit(
-                    Packet(
-                        turn_index=turn_index,
-                        obj=result,
-                    )
-                )
-
-    # Note: Content (AgentResponseDelta) doesn't need an explicit end packet - OverallStop handles it
-    # Tool calls are handled by tool execution code and emit their own packets (e.g., SectionEnd)
-    if LOG_ONYX_MODEL_INTERACTIONS:
-        logger.debug(f"Accumulated reasoning: {accumulated_reasoning}")
-        logger.debug(f"Accumulated answer: {accumulated_answer}")
-
-    if tool_calls:
-        tool_calls_str = "\n".join(
-            f"  - {tc.tool_name}: {json.dumps(tc.tool_args, indent=4)}"
-            for tc in tool_calls
-        )
-        logger.debug(f"Tool calls:\n{tool_calls_str}")
-    else:
-        logger.debug("Tool calls: []")
-
-    return (
-        LlmStepResult(
-            reasoning=accumulated_reasoning if accumulated_reasoning else None,
-            answer=accumulated_answer if accumulated_answer else None,
-            tool_calls=tool_calls if tool_calls else None,
-        ),
-        turn_index,
-    )
-
-
-def _update_tool_call_with_delta(
-    tool_calls_in_progress: dict[int, dict[str, Any]],
-    tool_call_delta: Any,
-) -> None:
-    index = tool_call_delta.index
-
-    if index not in tool_calls_in_progress:
-        tool_calls_in_progress[index] = {
-            "id": None,
-            "name": None,
-            "arguments": "",
-        }
-
-    if tool_call_delta.id:
-        tool_calls_in_progress[index]["id"] = tool_call_delta.id
-
-    if tool_call_delta.function:
-        if tool_call_delta.function.name:
-            tool_calls_in_progress[index]["name"] = tool_call_delta.function.name
-
-        if tool_call_delta.function.arguments:
-            tool_calls_in_progress[index][
-                "arguments"
-            ] += tool_call_delta.function.arguments
-
-
-def _extract_tool_call_kickoffs(
-    id_to_tool_call_map: dict[int, dict[str, Any]],
-) -> list[ToolCallKickoff]:
-    """Extract ToolCallKickoff objects from the tool call map.
-
-    Returns a list of ToolCallKickoff objects for valid tool calls (those with both id and name).
-    """
-    tool_calls: list[ToolCallKickoff] = []
-    for tool_call_data in id_to_tool_call_map.values():
-        if tool_call_data.get("id") and tool_call_data.get("name"):
-            try:
-                # Parse arguments JSON string to dict
-                tool_args = (
-                    json.loads(tool_call_data["arguments"])
-                    if tool_call_data["arguments"]
-                    else {}
-                )
-            except json.JSONDecodeError:
-                # If parsing fails, try empty dict, most tools would fail though
-                logger.error(
-                    f"Failed to parse tool call arguments: {tool_call_data['arguments']}"
-                )
-                tool_args = {}
-
-            tool_calls.append(
-                ToolCallKickoff(
-                    tool_call_id=tool_call_data["id"],
-                    tool_name=tool_call_data["name"],
-                    tool_args=tool_args,
-                )
-            )
-    return tool_calls
-
-
 def run_llm_loop(
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -821,7 +322,7 @@ def run_llm_loop(
 
         # Pass the total budget to construct_message_history, which will handle token allocation
         available_tokens = llm.config.max_input_tokens
-        tool_choice: ToolChoiceOptions = "auto"
+        tool_choice: ToolChoiceOptions = ToolChoiceOptions.AUTO
         collected_tool_calls: list[ToolCallInfo] = []
         # Initialize gathered_documents with project files if present
         gathered_documents: list[SearchDoc] | None = (
@@ -837,6 +338,7 @@ def run_llm_loop(
         should_cite_documents: bool = False
         ran_image_gen: bool = False
         just_ran_web_search: bool = False
+        has_called_search_tool: bool = False
         citation_mapping: dict[int, str] = {}  # Maps citation_num -> document_id/URL
 
         current_tool_call_index = (
@@ -850,14 +352,14 @@ def run_llm_loop(
                 final_tools = [tool for tool in tools if tool.id == forced_tool_id]
                 if not final_tools:
                     raise ValueError(f"Tool {forced_tool_id} not found in tools")
-                tool_choice = "required"
+                tool_choice = ToolChoiceOptions.REQUIRED
                 forced_tool_id = None
             elif llm_cycle_count == MAX_LLM_CYCLES - 1 or ran_image_gen:
                 # Last cycle, no tools allowed, just answer!
-                tool_choice = "none"
+                tool_choice = ToolChoiceOptions.NONE
                 final_tools = []
             else:
-                tool_choice = "auto"
+                tool_choice = ToolChoiceOptions.AUTO
                 final_tools = tools
 
             # The section below calculates the available tokens for history a bit more accurately
@@ -939,13 +441,12 @@ def run_llm_loop(
                 available_tokens=available_tokens,
             )
 
-            # This calls the LLM, passes in the emitter which can collect packets like reasoning, answers, etc.
+            # This calls the LLM, yields packets (reasoning, answers, etc.) and returns the result
             # It also pre-processes the tool calls in preparation for running them
-            llm_step_result, current_tool_call_index = run_llm_step(
+            step_generator = run_llm_step(
                 history=truncated_message_history,
                 tool_definitions=[tool.tool_definition() for tool in final_tools],
                 tool_choice=tool_choice,
-                emitter=emitter,
                 llm=llm,
                 turn_index=current_tool_call_index,
                 citation_processor=citation_processor,
@@ -955,6 +456,18 @@ def run_llm_loop(
                 # final set of documents immediately if desired.
                 final_documents=gathered_documents,
             )
+
+            # Consume the generator, emitting packets and capturing the final result
+            while True:
+                try:
+                    packet = next(step_generator)
+                    emitter.emit(packet)
+                except StopIteration as e:
+                    llm_step_result, current_tool_call_index = e.value
+                    break
+
+            # Type narrowing: generator always returns a result, so this can't be None
+            llm_step_result = cast(LlmStepResult, llm_step_result)
 
             # Save citation mapping after each LLM step for incremental state updates
             state_container.set_citation_mapping(citation_processor.citation_to_doc)
@@ -976,7 +489,12 @@ def run_llm_loop(
                     user_info=None,  # TODO, this is part of memories right now, might want to separate it out
                     citation_mapping=citation_mapping,
                     citation_processor=citation_processor,
+                    skip_search_query_expansion=has_called_search_tool,
                 )
+
+                # Track if search tool was called (for skipping query expansion on subsequent calls)
+                if tool_call.tool_name == SearchTool.NAME:
+                    has_called_search_tool = True
 
                 # Build a mapping of tool names to tool objects for getting tool_id
                 tools_by_name = {tool.name: tool for tool in final_tools}
@@ -990,9 +508,6 @@ def run_llm_loop(
                         raise ValueError(
                             f"Tool '{tool_call.tool_name}' not found in tools list"
                         )
-
-                    # Collect tool call info with reasoning tokens from this LLM step
-                    # All tool calls from the same loop iteration share the same reasoning tokens
 
                     # Extract search_docs if this is a search tool response
                     search_docs = None
@@ -1110,10 +625,6 @@ def run_llm_loop(
         if not llm_step_result or not llm_step_result.answer:
             raise RuntimeError("LLM did not return an answer.")
 
-        # Note: All state (answer, reasoning, citations, tool_calls) is saved incrementally
-        # in state_container. The process_message layer will persist to DB.
-
-        # Signal completion
         emitter.emit(
             Packet(turn_index=current_tool_call_index, obj=OverallStop(type="stop"))
         )

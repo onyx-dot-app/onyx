@@ -268,21 +268,26 @@ jobs:
 
       # NOTE: Use pre-ping/null pool to reduce flakiness due to dropped connections
       # NOTE: don't need web server for integration tests
-      - name: Start Docker containers
+      - name: Create .env file for Docker Compose
         env:
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
           RUN_ID: ${{ github.run_id }}
         run: |
+          cat <<EOF > deployment/docker_compose/.env
+          AUTH_TYPE=basic
+          POSTGRES_POOL_PRE_PING=true
+          POSTGRES_USE_NULL_POOL=true
+          REQUIRE_EMAIL_VERIFICATION=false
+          DISABLE_TELEMETRY=true
+          ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID}
+          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID}
+          INTEGRATION_TESTS_MODE=true
+          MCP_SERVER_ENABLED=true
+          EOF
+
+      - name: Start Docker containers
+        run: |
           cd deployment/docker_compose
-          AUTH_TYPE=basic \
-          POSTGRES_POOL_PRE_PING=true \
-          POSTGRES_USE_NULL_POOL=true \
-          REQUIRE_EMAIL_VERIFICATION=false \
-          DISABLE_TELEMETRY=true \
-          ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID} \
-          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID} \
-          INTEGRATION_TESTS_MODE=true \
-          MCP_SERVER_ENABLED=true \
           docker compose -f docker-compose.yml -f docker-compose.dev.yml up \
             relational_db \
             index \

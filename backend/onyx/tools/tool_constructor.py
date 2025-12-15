@@ -134,6 +134,12 @@ def construct_tools(
     Will simply skip tools that are not allowed/available."""
     tool_dict: dict[int, list[Tool]] = {}
 
+    # Log which tools are attached to the persona for debugging
+    persona_tool_names = [t.name for t in persona.tools]
+    logger.debug(
+        f"Constructing tools for persona '{persona.name}' (id={persona.id}): {persona_tool_names}"
+    )
+
     mcp_tool_cache: dict[int, dict[int, MCPTool]] = {}
     # Get user's OAuth token if available
     user_oauth_token = None

@@ -1,7 +1,6 @@
 import {
   Packet,
   PacketType,
-  CitationDelta,
   CitationInfo,
   SearchToolDocumentsDelta,
   StreamingCitation,
@@ -18,8 +17,12 @@ import {
   useChatSessionStore,
   useDocumentSidebarVisible,
   useSelectedNodeForDocDisplay,
+  useCurrentChatState,
 } from "@/app/chat/stores/useChatSessionStore";
-import { handleCopy } from "@/app/chat/message/copyingUtils";
+import {
+  handleCopy,
+  convertMarkdownTablesToTsv,
+} from "@/app/chat/message/copyingUtils";
 import MessageSwitcher from "@/app/chat/message/MessageSwitcher";
 import { BlinkingDot } from "@/app/chat/message/BlinkingDot";
 import {
@@ -71,6 +74,9 @@ export default function AIMessage({
   const markdownRef = useRef<HTMLDivElement>(null);
   const { popup, setPopup } = usePopup();
   const { handleFeedbackChange } = useFeedbackController({ setPopup });
+
+  // Get the global chat state to know if we're currently streaming
+  const globalChatState = useCurrentChatState();
 
   const modal = useCreateModal();
   const [feedbackModalProps, setFeedbackModalProps] =
@@ -272,7 +278,7 @@ export default function AIMessage({
         groupedPacketsMapRef.current.set(packet.turn_index, [packet]);
       }
 
-      // Citations - handle both CITATION_INFO (individual) and CITATION_DELTA (batched)
+      // Citations - handle CITATION_INFO packets
       if (packet.obj.type === PacketType.CITATION_INFO) {
         // Individual citation packet from backend streaming
         const citationInfo = packet.obj as CitationInfo;
@@ -286,20 +292,6 @@ export default function AIMessage({
             citation_num: citationInfo.citation_number,
             document_id: citationInfo.document_id,
           });
-        }
-      } else if (packet.obj.type === PacketType.CITATION_DELTA) {
-        // Batched citation packet (for backwards compatibility)
-        const citationDelta = packet.obj as CitationDelta;
-        if (citationDelta.citations) {
-          for (const citation of citationDelta.citations) {
-            // Add to citation map for rendering
-            citationMapRef.current[citation.citation_num] =
-              citation.document_id;
-            if (!seenCitationDocIdsRef.current.has(citation.document_id)) {
-              seenCitationDocIdsRef.current.add(citation.document_id);
-              citationsRef.current.push(citation);
-            }
-          }
         }
       }
 
@@ -478,6 +470,9 @@ export default function AIMessage({
                                       finalAnswerComingRef.current
                                     }
                                     stopPacketSeen={stopPacketSeen}
+                                    isStreaming={
+                                      globalChatState === "streaming"
+                                    }
                                     onAllToolsDisplayed={() =>
                                       setFinalAnswerComing(true)
                                     }
@@ -550,7 +545,14 @@ export default function AIMessage({
                             )}
 
                             <CopyIconButton
-                              getCopyText={() => getTextContent(rawPackets)}
+                              getCopyText={() =>
+                                convertMarkdownTablesToTsv(
+                                  getTextContent(rawPackets)
+                                )
+                              }
+                              getHtmlContent={() =>
+                                markdownRef.current?.innerHTML || ""
+                              }
                               tertiary
                               data-testid="AIMessage/copy-button"
                             />

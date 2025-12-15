@@ -17,24 +17,6 @@ permissions:
   contents: read
 
 jobs:
-  validate-requirements:
-    runs-on: ubuntu-slim
-    timeout-minutes: 45
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - name: Setup uv
-        uses: astral-sh/setup-uv@1e862dfacbd1d6d858c55d9b792c756523627244 # ratchet:astral-sh/setup-uv@v7.1.4
-        # TODO: Enable caching once there is a uv.lock file checked in.
-        # with:
-        #   enable-cache: true
-
-      - name: Validate requirements lock files
-        run: ./backend/scripts/compile_requirements.py --check
-
   mypy-check:
     # See https://runs-on.com/runners/linux/
     # Note: Mypy seems quite optimized for x64 compared to arm64.
@@ -103,3 +85,9 @@ jobs:
           MYPY_FORCE_COLOR: 1
           TERM: xterm-256color
         run: mypy .
+
+      - name: Run MyPy (tools/)
+        env:
+          MYPY_FORCE_COLOR: 1
+          TERM: xterm-256color
+        run: mypy tools/

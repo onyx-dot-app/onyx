@@ -441,3 +441,73 @@ describe("MultiToolRenderer - Accessibility", () => {
     expect(screen.getByText("3 steps")).toBeInTheDocument();
   });
 });
+
+describe("MultiToolRenderer - Shimmering", () => {
+  test("stops shimmering when isStreaming is false", () => {
+    const { container } = render(
+      <MultiToolRenderer
+        packetGroups={createToolGroups(2)}
+        chatState={createMockChatState()}
+        isComplete={false}
+        isFinalAnswerComing={false}
+        stopPacketSeen={false}
+        isStreaming={false}
+      />
+    );
+
+    // When isStreaming is false, loading-text class should not be applied
+    const loadingElements = container.querySelectorAll(".loading-text");
+    expect(loadingElements.length).toBe(0);
+  });
+
+  test("applies shimmer classes when streaming", () => {
+    const { container } = render(
+      <MultiToolRenderer
+        packetGroups={createToolGroups(2)}
+        chatState={createMockChatState()}
+        isComplete={false}
+        isFinalAnswerComing={false}
+        stopPacketSeen={false}
+        isStreaming={true}
+      />
+    );
+
+    // When isStreaming is true, loading-text class should be applied
+    const loadingElements = container.querySelectorAll(".loading-text");
+    expect(loadingElements.length).toBeGreaterThan(0);
+  });
+
+  test("stops shimmering when stopPacketSeen is true", () => {
+    const { container } = render(
+      <MultiToolRenderer
+        packetGroups={createToolGroups(2)}
+        chatState={createMockChatState()}
+        isComplete={false}
+        isFinalAnswerComing={false}
+        stopPacketSeen={true}
+        isStreaming={true}
+      />
+    );
+
+    // When stopPacketSeen is true, shimmering should stop regardless of isStreaming
+    const loadingElements = container.querySelectorAll(".loading-text");
+    expect(loadingElements.length).toBe(0);
+  });
+
+  test("stops shimmering when isComplete is true", () => {
+    const { container } = render(
+      <MultiToolRenderer
+        packetGroups={createToolGroups(2)}
+        chatState={createMockChatState()}
+        isComplete={true}
+        isFinalAnswerComing={false}
+        stopPacketSeen={false}
+        isStreaming={true}
+      />
+    );
+
+    // When isComplete is true, shimmering should stop
+    const loadingElements = container.querySelectorAll(".loading-text");
+    expect(loadingElements.length).toBe(0);
+  });
+});
