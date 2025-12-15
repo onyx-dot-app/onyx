@@ -348,25 +348,22 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
   );
   const { messageHistory } = useChatPageLayout();
 
-  const clientScrollToBottom = useCallback(
-    (fast?: boolean) => {
-      waitForScrollRef.current = true;
+  const clientScrollToBottom = useCallback(() => {
+    waitForScrollRef.current = true;
 
-      setTimeout(() => {
-        const didScroll = chatUiRef.current?.scrollToBottom(fast);
+    setTimeout(() => {
+      const didScroll = chatUiRef.current?.scrollToBottom();
 
-        if (didScroll && chatSessionIdRef.current) {
-          updateHasPerformedInitialScroll(chatSessionIdRef.current, true);
-        }
-      }, 50);
+      if (didScroll && chatSessionIdRef.current) {
+        updateHasPerformedInitialScroll(chatSessionIdRef.current, true);
+      }
+    }, 50);
 
-      // Reset waitForScrollRef after 1.5 seconds
-      setTimeout(() => {
-        waitForScrollRef.current = false;
-      }, 1500);
-    },
-    [updateHasPerformedInitialScroll]
-  );
+    // Reset waitForScrollRef after 1.5 seconds
+    setTimeout(() => {
+      waitForScrollRef.current = false;
+    }, 1500);
+  }, [updateHasPerformedInitialScroll]);
 
   const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
     useChatController({

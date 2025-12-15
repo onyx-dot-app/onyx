@@ -159,11 +159,11 @@ const ChatUI = React.forwardRef(
     useOnMount(resetScroll);
     useEffect(resetScroll, [currentChatSessionId]);
 
-    const scrollToBottom = useCallback((fast?: boolean) => {
+    const scrollToBottom = useCallback(() => {
       if (!endDivRef.current) return false;
 
       endDivRef.current.scrollIntoView({
-        behavior: fast ? "auto" : "smooth",
+        behavior: "smooth",
       });
       return true;
     }, []);
@@ -202,10 +202,7 @@ const ChatUI = React.forwardRef(
       <>
         {aboveHorizon && (
           <div className="absolute bottom-0 z-[1000000] left-1/2 -translate-x-1/2">
-            <IconButton
-              icon={SvgChevronDown}
-              onClick={() => scrollToBottom()}
-            />
+            <IconButton icon={SvgChevronDown} onClick={scrollToBottom} />
 
             <Spacer />
           </div>

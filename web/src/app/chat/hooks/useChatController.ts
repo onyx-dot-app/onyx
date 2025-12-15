@@ -109,7 +109,7 @@ interface UseChatControllerProps {
   setPopup: (popup: PopupSpec) => void;
 
   // scroll/focus related stuff
-  clientScrollToBottom: (fast?: boolean) => void;
+  clientScrollToBottom: () => void;
 
   resetInputBar: () => void;
   setSelectedAssistantFromId: (assistantId: number | null) => void;
