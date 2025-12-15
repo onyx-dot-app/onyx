@@ -136,10 +136,8 @@ def process_notifications(
                     analysis_results[doc_extraction_context_key][analysis_type].append(
                         f"[{document_id}]({document_link}): {analysis_value}"
                     )
-                if analysis_type == "type" and analysis_value.lower() != "yes":
-                    invalid_doc_extraction_context_keys.append(
-                        doc_extraction_context_key
-                    )
+                if analysis_type == "use" and analysis_value.lower() != "yes":
+                    invalid_doc_extraction_context_keys.append(document_id)
 
     # Build the analysis string from all results
     analysis_string_components = []
@@ -148,9 +146,18 @@ def process_notifications(
         if doc_extraction_context_key in invalid_doc_extraction_context_keys:
             continue
         for analysis_type, analysis_values in analysis_type_dict.items():
-            analysis_string_components.append(f"## Calls - {analysis_type}")
+            if analysis_type != "use":
+                analysis_string_components.append(f"## Calls - {analysis_type}")
             for analysis_value in analysis_values:
-                if analysis_value:
+                # Check if the analysis_value is valid and doesn't contain any invalid document IDs
+                if (
+                    analysis_value
+                    and not any(
+                        invalid_id in analysis_value
+                        for invalid_id in invalid_doc_extraction_context_keys
+                    )
+                    and analysis_type != "use"
+                ):
                     analysis_string_components.append(analysis_value)
     analysis_string = "\n \n \n ".join(analysis_string_components)
 
