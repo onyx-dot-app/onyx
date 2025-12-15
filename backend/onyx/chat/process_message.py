@@ -406,13 +406,11 @@ def stream_chat_message_objects(
         # (which means it can use search)
         # However if in a project and there are more files than can fit in the context,
         # it should use the search tool with the project filter on
+        # If no files are uploaded, search should remain enabled
         disable_internal_search = bool(
             chat_session.project_id
             and persona.id is DEFAULT_PERSONA_ID
-            and (
-                extracted_project_files.project_file_texts
-                or not extracted_project_files.project_as_filter
-            )
+            and extracted_project_files.project_file_texts
         )
 
         emitter = get_default_emitter()
@@ -500,6 +498,9 @@ def stream_chat_message_objects(
         # Note: DB session is not thread safe but nothing else uses it and the
         # reference is passed directly so it's ok.
         if os.environ.get("ENABLE_DEEP_RESEARCH_LOOP"):  # Dev only feature flag for now
+            if chat_session.project_id:
+                raise RuntimeError("Deep research is not supported for projects")
+
             yield from run_chat_llm_with_state_containers(
                 run_deep_research_llm_loop,
                 is_connected=check_is_connected,
