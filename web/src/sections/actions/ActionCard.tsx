@@ -122,7 +122,7 @@ export default function ActionCard({
       >
         <div className="flex flex-col w-full">
           {/* Header Section */}
-          <div className="flex items-start justify-between p-3 w-full">
+          <div className="flex items-start justify-between gap-2 p-3 w-full">
             <ActionCardHeader
               title={title}
               description={description}
@@ -133,7 +133,7 @@ export default function ActionCard({
             />
 
             {/* Action Buttons */}
-            {actions}
+            <div className="shrink-0 flex items-start">{actions}</div>
           </div>
 
           {/* Tools Section (Only when expanded and search is enabled) */}

@@ -52,7 +52,7 @@ function ActionCardHeader({
   };
 
   return (
-    <div className="flex flex-1 gap-2 items-start max-w-[480px]">
+    <div className="flex gap-2 items-start flex-1 min-w-0 mr-2">
       <div
         className={cn(
           "flex items-center px-0 py-0.5 shrink-0",
@@ -62,8 +62,8 @@ function ActionCardHeader({
         <Icon size={20} className="h-5 w-5 stroke-text-04" />
       </div>
 
-      <div className="flex flex-col items-start flex-1 min-w-0">
-        <div className="flex items-center gap-1 min-w-0">
+      <div className="flex flex-col items-start flex-1 min-w-0 overflow-hidden">
+        <div className="flex items-center gap-1 min-w-0 w-full">
           {isRenaming ? (
             <ButtonRenaming
               initialName={title}
@@ -79,7 +79,7 @@ function ActionCardHeader({
               )}
             />
           ) : (
-            <div className="min-w-0 shrink">
+            <div className="min-w-0 flex-1 overflow-hidden">
               <Truncated
                 mainContentEmphasis
                 className={cn(
