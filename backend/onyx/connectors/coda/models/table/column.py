@@ -71,4 +71,4 @@ class CodaColumn(CodaObjectBase):
         example="https://coda.io/apis/v1/docs/AbCDeFGH/tables/grid-pqRst-U/columns/c-tuVwxYz",
     )
     name: str = Field(description="Name of the column.", example="Completed")
-    format: Any
+    format: dict[str, Any] = Field(description="Format of the column.")

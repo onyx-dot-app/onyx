@@ -36,6 +36,7 @@ class CodaDocumentGenerator:
         parser: CodaParser,
         page_ids: Optional[set[str]] = None,
         doc_ids: Optional[set[str]] = None,
+        table_ids: Optional[set[str]] = None,
         include_tables: bool = True,
     ) -> None:
         """Initialize with dependencies.
@@ -51,6 +52,7 @@ class CodaDocumentGenerator:
         self.parser = parser
         self.page_ids: Optional[set[str]] = page_ids
         self.doc_ids: Optional[set[str]] = doc_ids
+        self.table_ids: Optional[set[str]] = table_ids
         self.include_tables: bool = include_tables
         self.indexed_pages: set[str] = set()
         self.indexed_tables: set[str] = set()
@@ -59,7 +61,7 @@ class CodaDocumentGenerator:
         self.max_table_rows: int | None = None
 
     def generate_page_documents(
-        self, doc: CodaDoc, pages: list[CodaPage], page_map: dict[str, CodaPage]
+        self, doc: CodaDoc, pages: list[CodaPage]
     ) -> Generator[Document, None, None]:
         """Generate Document objects from pages.
 
@@ -108,7 +110,7 @@ class CodaDocumentGenerator:
             sections = self.parser.parse_html_content(doc_id=doc.id, content=content)
 
             # Build metadata
-            metadata = self.parser.build_page_metadata(doc, page, page_map)
+            metadata = self.parser.build_page_metadata(doc, page)
 
             # Build owners
             primary_owners, secondary_owners = self.parser.build_page_owners(page)
@@ -139,7 +141,7 @@ class CodaDocumentGenerator:
             )
 
     def generate_table_documents(
-        self, doc: CodaDoc, tables: list[CodaTableReference]
+        self, doc: CodaDoc, table_references: list[CodaTableReference]
     ) -> Generator[Document, None, None]:
         """Generate Document objects from tables.
 
@@ -151,17 +153,24 @@ class CodaDocumentGenerator:
             Document: Table documents with metadata and markdown content
         """
 
-        for table in tables:
-            table_key = self.parser.create_table_key(doc_id=doc.id, table_id=table.id)
+        for tableReference in table_references:
+            table_key = self.parser.create_table_key(
+                doc_id=doc.id, table_id=tableReference.id
+            )
 
             # Skip already indexed tables
             if table_key in self.indexed_tables:
-                logger.debug(f"Already indexed table '{table.name}'. Skipping.")
+                logger.debug(
+                    f"Already indexed table '{tableReference.name}'. Skipping."
+                )
                 continue
 
-            logger.info(f"Reading table '{table.name}' in doc '{doc.name}'")
+            logger.debug(
+                f"Processing table '{tableReference.name}' in doc '{doc.name}'"
+            )
 
             try:
+                table = self.client.fetch_table(doc.id, tableReference.id)
                 rows = self.client.fetch_all_table_rows(
                     doc.id, table.id, max_rows=self.max_table_rows
                 )
@@ -173,7 +182,7 @@ class CodaDocumentGenerator:
                     continue
 
                 logger.debug(f"Parsing table '{table.name}' in doc '{doc.name}'")
-                content = self.parser.parse_table(columns, rows)
+                sections = self.parser.parse_table(columns, rows, table)
                 logger.debug(
                     f"Successfully parsed table '{table.name}' in doc '{doc.name}'"
                 )
@@ -190,7 +199,7 @@ class CodaDocumentGenerator:
                 yield Document(
                     id=table_key,
                     source=DocumentSource.CODA,
-                    sections=[content],
+                    sections=sections,
                     semantic_identifier=f"{doc.name} - {table.name}",
                     doc_updated_at=datetime.fromtimestamp(
                         self.parser.parse_timestamp(
@@ -297,26 +306,31 @@ class CodaDocumentGenerator:
         filtered_docs: list[CodaDoc] = self.filter_by_id(self.doc_ids, all_docs)
 
         for doc in filtered_docs:
-            logger.info(f"Processing doc: {doc.name}")
+            # logger.info(f"Processing doc: {doc.name}")
 
-            # Fetch all pages for this doc to build hierarchy
-            all_pages = self.client.fetch_all_pages(doc.id)
+            # # Fetch all pages for this doc to build hierarchy
+            # all_pages = self.client.fetch_all_pages(doc.id)
 
-            # Filter pages if page_ids specified
-            pages_to_process = self.filter_by_id(self.page_ids, all_pages)
+            # # Filter pages if page_ids specified
+            # pages_to_process = self.filter_by_id(self.page_ids, all_pages)
 
-            # Build map for hierarchy
-            page_map = self.parser.create_page_map(pages_to_process)
-
-            # Generate documents from pages
-            yield from self.generate_page_documents(doc, pages_to_process, page_map)
+            # # Generate documents from pages
+            # yield from self.generate_page_documents(doc, pages_to_process)
 
             # Process tables if enabled
             if self.include_tables:
-                all_tables = self.client.fetch_all_tables(doc.id)
+                all_table_references = self.client.fetch_all_table_references_in_doc(
+                    doc.id
+                )
 
-                if all_tables:
-                    yield from self.generate_table_documents(doc, all_tables)
+                filtered_table_references = self.filter_by_id(
+                    self.table_ids, all_table_references
+                )
+
+                if filtered_table_references:
+                    yield from self.generate_table_documents(
+                        doc, filtered_table_references
+                    )
 
     def generate_updated_documents(
         self,
@@ -362,10 +376,12 @@ class CodaDocumentGenerator:
 
             # Process tables if enabled
             if self.include_tables:
-                all_tables = self.client.fetch_all_tables(doc.id)
+                all_table_references = self.client.fetch_all_table_references_in_doc(
+                    doc.id
+                )
 
-                if all_tables:
-                    yield from self.generate_table_documents(doc, all_tables)
+                if all_table_references:
+                    yield from self.generate_table_documents(doc, all_table_references)
 
     def generate_all_slim_documents(self) -> Generator[SlimDocument, None, None]:
         """Generate slim documents (IDs only) for all accessible Coda content.
@@ -393,9 +409,12 @@ class CodaDocumentGenerator:
 
             # Fetch all tables if enabled
             if self.include_tables:
-                all_tables = self.client.fetch_all_tables(doc.id)
-                for table in all_tables:
+                all_table_references = self.client.fetch_all_table_references_in_doc(
+                    doc.id
+                )
+
+                for table_reference in all_table_references:
                     table_key = self.parser.create_table_key(
-                        doc_id=doc.id, table_id=table.id
+                        doc_id=doc.id, table_id=table_reference.id
                     )
                     yield SlimDocument(id=table_key)

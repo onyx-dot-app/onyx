@@ -12,6 +12,7 @@ from onyx.connectors.coda.models.doc import CodaDoc
 from onyx.connectors.coda.models.page import CodaPage
 from onyx.connectors.coda.models.table.column import CodaColumn
 from onyx.connectors.coda.models.table.row import CodaRow
+from onyx.connectors.coda.models.table.table import CodaTable
 from onyx.connectors.coda.models.table.table import CodaTableReference
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ImageSection
@@ -58,11 +59,6 @@ class CodaParser:
     # ========================================================================
     # Page parsing
     # ========================================================================
-    @staticmethod
-    def create_page_map(pages: list[CodaPage]) -> dict[str, CodaPage]:
-        """Create a mapping of page IDs to page objects."""
-        return {page.id: page for page in pages}
-
     @staticmethod
     def parse_timestamp(timestamp_str: str) -> float:
         """
@@ -230,9 +226,7 @@ class CodaParser:
         )
 
     @staticmethod
-    def build_page_metadata(
-        doc: CodaDoc, page: CodaPage, page_map: dict[str, CodaPage]
-    ) -> dict[str, str | list[str]]:
+    def build_page_metadata(doc: CodaDoc, page: CodaPage) -> dict[str, str | list[str]]:
         """Build metadata dictionary for a page document.
 
         Creates a metadata dict with comprehensive page information including
@@ -302,6 +296,7 @@ class CodaParser:
         soup = BeautifulSoup(content, "html.parser")
         sections: list[TextSection | ImageSection] = []
         current_text = []
+        skip_until = None  # Track when we're inside a table
 
         def flush_text() -> None:
             if current_text:
@@ -313,12 +308,28 @@ class CodaParser:
         body = soup.body if soup.body else soup
 
         for element in body.descendants:
+            # Skip elements inside tables
+            if skip_until is not None:
+                if element == skip_until:
+                    skip_until = None
+                continue
+
             if isinstance(element, NavigableString):
                 text = str(element)
                 if text.strip():
                     current_text.append(text)
             elif isinstance(element, Tag):
-                if element.name == "img":
+                if element.name == "table":
+                    flush_text()
+                    table_key = CodaParser.create_table_key(
+                        doc_id, element.get("data-coda-grid-id")
+                    )
+                    placeholder = f"[[TABLE:{table_key}]]" if table_key else "[[TABLE]]"
+                    sections.append(TextSection(text=placeholder, link=None))
+                    # Mark to skip all descendants until we exit this table
+                    skip_until = element
+                    continue
+                elif element.name == "img":
                     flush_text()
                     src = element.get("src")
                     if src:
@@ -339,21 +350,7 @@ class CodaParser:
                     "h6",
                     "li",
                 ]:
-                    # Add newline for block elements to ensure text separation
                     current_text.append("\n")
-                elif element.name == "table":
-                    table_key = CodaParser.create_table_key(
-                        doc_id, element.get("data-coda-grid-id")
-                    )
-                    # Extract table ID for reference
-                    placeholder = f"[[TABLE:{table_key}]]" if table_key else "[[TABLE]]"
-                    # Flush any accumulated text before inserting placeholder
-                    flush_text()
-                    # Create a dedicated TextSection for the placeholder
-                    sections.append(TextSection(text=placeholder, link=None))
-                    # Remove the table element so its children are not processed
-                    element.extract()
-                    continue
 
         flush_text()
         return sections
@@ -432,10 +429,8 @@ class CodaParser:
         return {k: v for k, v in metadata.items() if v is not None}
 
     def parse_table(
-        self,
-        columns: list[CodaColumn],
-        rows: list[CodaRow],
-    ) -> TextSection:
+        self, columns: list[CodaColumn], rows: list[CodaRow], table: CodaTable
+    ) -> list[TextSection]:
         """Convert table data to text format (Key: Value).
 
         Generates a JSON representation
@@ -446,8 +441,15 @@ class CodaParser:
         Returns:
             TextSection: Text formatted table string
         """
-        formatted_value = self.table_converter.rows_to_formats(rows, columns, ["JSON"])
 
-        logger.debug(formatted_value["Data raw"].to_string())
+        formatted_value = self.table_converter.rows_to_text_sections(
+            rows, columns, table
+        )
 
-        return TextSection(text=formatted_value.iloc[0]["Data raw"], link=None)
+        return formatted_value
+
+        # formatted_value = self.table_converter.rows_to_formats(rows, columns, ["JSON"])
+
+        # logger.debug(formatted_value.iloc[0]["Data raw"])
+
+        # return [TextSection(text=formatted_value.iloc[0]["Data raw"], link=None)]

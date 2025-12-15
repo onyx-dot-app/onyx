@@ -10,6 +10,7 @@ from onyx.connectors.coda.models.doc import CodaDoc
 from onyx.connectors.coda.models.page import CodaPage
 from onyx.connectors.coda.models.table.column import CodaColumn
 from onyx.connectors.coda.models.table.row import CodaRow
+from onyx.connectors.coda.models.table.table import CodaTable
 from onyx.connectors.coda.models.table.table import CodaTableReference
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rl_requests
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -337,7 +338,7 @@ class CodaAPIClient:
 
         return self._make_request("PUT", f"/docs/{doc_id}/pages/{page_id}", json=body)
 
-    def fetch_tables(
+    def fetch_table_references_in_doc(
         self, doc_id: str, page_token: str | None = None
     ) -> dict[str, Any]:
         """Fetch paginated list of tables in a doc."""
@@ -348,13 +349,15 @@ class CodaAPIClient:
 
         return self._make_request("GET", f"/docs/{doc_id}/tables", params=params)
 
-    def fetch_all_tables(self, doc_id: str) -> list[CodaTableReference]:
+    def fetch_all_table_references_in_doc(
+        self, doc_id: str
+    ) -> list[CodaTableReference]:
         """Fetch all tables in a doc, handling pagination automatically."""
         all_tables: list[CodaTableReference] = []
         page_token = None
 
         while True:
-            response = self.fetch_tables(doc_id, page_token)
+            response = self.fetch_table_references_in_doc(doc_id, page_token)
             all_tables.extend(
                 [CodaTableReference(**t) for t in response.get("items", [])]
             )
@@ -364,6 +367,13 @@ class CodaAPIClient:
                 break
 
         return all_tables
+
+    def fetch_table(self, doc_id: str, table_id: str) -> CodaTable:
+        """Fetch a specific table by ID."""
+        logger.debug(f"Fetching table '{table_id}' in doc '{doc_id}'")
+        return CodaTable(
+            **self._make_request("GET", f"/docs/{doc_id}/tables/{table_id}")
+        )
 
     def fetch_table_columns(self, doc_id: str, table_id: str) -> list[CodaColumn]:
         """Fetch all column definitions for a table."""

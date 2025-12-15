@@ -45,6 +45,7 @@ class CodaConnector(LoadConnector, PollConnector, SlimConnector):
         batch_size: int = INDEX_BATCH_SIZE,
         doc_ids: list[str] | None = None,
         page_ids: list[str] | None = None,
+        table_ids: list[str] | None = None,
         max_table_rows: int = 1000,
         include_tables: bool = True,
     ) -> None:
@@ -52,6 +53,7 @@ class CodaConnector(LoadConnector, PollConnector, SlimConnector):
         self.batch_size = batch_size
         self.doc_ids = set(doc_ids) if doc_ids else None
         self.page_ids = set(page_ids) if page_ids else None
+        self.table_ids = set(table_ids) if table_ids else None
         self.max_table_rows = max_table_rows
         self.include_tables = include_tables
 
@@ -72,6 +74,7 @@ class CodaConnector(LoadConnector, PollConnector, SlimConnector):
             parser=self.parser,
             doc_ids=self.doc_ids,
             page_ids=self.page_ids,
+            table_ids=self.table_ids,
             include_tables=self.include_tables,
         )
 

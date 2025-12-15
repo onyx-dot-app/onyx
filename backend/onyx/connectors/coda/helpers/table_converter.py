@@ -12,6 +12,11 @@ from pydantic import BaseModel
 from onyx.connectors.coda.models.table.cell import CodaCellValue
 from onyx.connectors.coda.models.table.column import CodaColumn
 from onyx.connectors.coda.models.table.row import CodaRow
+from onyx.connectors.coda.models.table.table import CodaTable
+from onyx.connectors.models import TextSection
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 class CodaTableConverter:
@@ -97,7 +102,7 @@ class CodaTableConverter:
         return str(value) if value is not None else ""
 
     @staticmethod
-    def _build_column_map(columns: Optional[list[CodaColumn]]) -> dict[str, str]:
+    def _build_column_map(columns: Optional[list[CodaColumn]]) -> dict[str, CodaColumn]:
         """
         Build a mapping from column IDs to human-readable column names.
 
@@ -110,7 +115,7 @@ class CodaTableConverter:
         if not columns:
             return {}
 
-        return {col.id: col.name for col in columns}
+        return {col.id: col for col in columns}
 
     @staticmethod
     def rows_to_dataframe(
@@ -166,7 +171,13 @@ class CodaTableConverter:
             # Extract column values with human-readable names
             for col_id, cell_value in row.values.items():
                 # Use human-readable name if available, otherwise fall back to ID
-                col_name = column_map.get(col_id, col_id)
+                col = column_map.get(col_id, col_id)
+                if isinstance(col, str):
+                    col_name = col
+                else:
+                    col_name = col.name
+
+                logger.debug(f"Column name: {col_name}")
 
                 if use_display_values:
                     row_data[col_name] = CodaTableConverter.extract_display_value(
@@ -208,9 +219,7 @@ class CodaTableConverter:
             >>> print(eval_df)
         """
         # Convert rows to base DataFrame with human-readable column names
-        df = CodaTableConverter.rows_to_dataframe(
-            rows, columns=columns, use_display_values=True
-        )
+        df = CodaTableConverter.rows_to_dataframe(rows, columns)
 
         # All available formats
         all_formats = [
@@ -256,3 +265,104 @@ class CodaTableConverter:
                     eval_df.loc[len(eval_df)] = [format_name, f"Error: {e}"]
 
         return eval_df
+
+    @staticmethod
+    def rows_to_text_sections(
+        rows: list[CodaRow],
+        columns: Optional[list[CodaColumn]] = None,
+        table: Optional[CodaTable] = None,
+    ) -> list[TextSection]:
+        """
+        Convert Coda table rows to an Onyx TextSection.
+
+        Creates a document structure optimized for RAG:
+        - Section 1: Table metadata (schema, description, stats)
+        - Section 2+: One section per row with all column data
+
+        Args:
+            rows: List of CodaRow objects
+            columns: Optional list of CodaColumn objects for metadata
+            table: Optional CodaTable object for additional metadata
+
+        Returns:
+            List of Onyx TextSection objects ready for indexing
+        """
+        sections: list[TextSection] = []
+        column_map = CodaTableConverter._build_column_map(columns)
+
+        # Section 1: Table Metadata
+        metadata_lines = ["TABLE METADATA", "=" * 60]
+
+        if table:
+            metadata_lines.append(f"Table: {table.name}")
+            metadata_lines.append(f"Type: {table.tableType}")
+            metadata_lines.append(f"Layout: {table.layout}")
+            metadata_lines.append(f"Total Rows: {table.rowCount}")
+            metadata_lines.append(f"Link: {table.browserLink}")
+            metadata_lines.append("")
+
+            if table.parent:
+                metadata_lines.append("PARENT PAGE METADATA")
+                metadata_lines.append("=" * 60)
+                metadata_lines.append(f"ID: {table.parent.id}")
+                metadata_lines.append(f"Name: {table.parent.name}")
+                metadata_lines.append(f"Link: {table.parent.browserLink}")
+
+        metadata_lines.append("")
+
+        if columns:
+            metadata_lines.append("COLUMN METADATA")
+            metadata_lines.append("=" * 60)
+            col_info = []
+
+            for col in columns:
+                logger.info(col.format)
+                # Include column type information for context
+                col_type = col.format.get("type", "unknown")
+                col_info.append(f"Column: {col.id} Name: {col.name} Type: {col_type}")
+            columns_text = "\n".join(col_info)
+
+            metadata_lines.append(columns_text)
+
+        metadata_lines.append("")
+
+        sections.append(
+            TextSection(
+                link=table.browserLink if table else None,
+                text="\n".join(metadata_lines),
+            )
+        )
+
+        # Sections 2+: One section per row
+        for idx, row in enumerate(rows, 1):
+            row_lines = []
+
+            row_lines.append(f"--- Row index: {idx} ---")
+            row_lines.append("")
+
+            # Add all column values with context
+            for col_id, cell_value in row.values.items():
+                col_obj = column_map.get(col_id)
+                display_value = CodaTableConverter.extract_display_value(cell_value)
+
+                if display_value:
+                    row_lines.append(f"{col_obj.name}: {display_value}")
+
+            row_lines.append("")
+            row_lines.append("ROW METADATA")
+            row_lines.append("=" * 60)
+            row_lines.append(f"Row Link: {row.browserLink}")
+            row_lines.append(f"Row ID: {row.id}")
+
+            if row.createdAt and row.updatedAt:
+                row_lines.append(f"Created: {row.createdAt}")
+                row_lines.append(f"Updated: {row.updatedAt}")
+
+            sections.append(
+                TextSection(
+                    link=row.browserLink,
+                    text="\n".join(row_lines),
+                )
+            )
+
+        return sections
