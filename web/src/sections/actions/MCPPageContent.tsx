@@ -4,6 +4,7 @@ import React, { useState, useCallback, useMemo, useEffect } from "react";
 import useSWR, { KeyedMutator } from "swr";
 import MCPActionCard from "@/sections/actions/MCPActionCard";
 import Actionbar from "@/sections/actions/Actionbar";
+import ActionCardSkeleton from "@/sections/actions/skeleton/ActionCardSkeleton";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import {
   ActionStatus,
@@ -512,7 +513,7 @@ export default function MCPPageContent() {
 
       <div className="flex-shrink-0 mb-4">
         <Actionbar
-          hasActions={mcpServers.length > 0}
+          hasActions={isLoading || mcpServers.length > 0}
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
           onAddAction={handleAddServer}
@@ -522,33 +523,40 @@ export default function MCPPageContent() {
 
       <div className="flex-1 overflow-y-auto min-h-0">
         <div className="flex flex-col gap-4 w-full pb-4">
-          {filteredServers.map((server) => {
-            const status = getActionStatusForServer(server);
+          {isLoading ? (
+            <>
+              <ActionCardSkeleton />
+              <ActionCardSkeleton />
+            </>
+          ) : (
+            filteredServers.map((server) => {
+              const status = getActionStatusForServer(server);
 
-            return (
-              <MCPActionCard
-                key={server.id}
-                serverId={server.id}
-                server={server}
-                title={server.name}
-                description={server.description || server.server_url}
-                logo={getActionIcon(server.server_url, server.name)}
-                status={status}
-                toolCount={server.tool_count}
-                initialExpanded={server.id === serverToExpand}
-                onDisconnect={() => handleDisconnect(server.id)}
-                onManage={() => handleManage(server.id)}
-                onEdit={() => handleEdit(server.id)}
-                onDelete={() => handleDelete(server.id)}
-                onAuthenticate={() => handleAuthenticate(server.id)}
-                onReconnect={() => handleReconnect(server.id)}
-                onRename={handleRenameServer}
-                onToolToggle={handleToolToggle}
-                onRefreshTools={handleRefreshTools}
-                onDisableAllTools={handleDisableAllTools}
-              />
-            );
-          })}
+              return (
+                <MCPActionCard
+                  key={server.id}
+                  serverId={server.id}
+                  server={server}
+                  title={server.name}
+                  description={server.description || server.server_url}
+                  logo={getActionIcon(server.server_url, server.name)}
+                  status={status}
+                  toolCount={server.tool_count}
+                  initialExpanded={server.id === serverToExpand}
+                  onDisconnect={() => handleDisconnect(server.id)}
+                  onManage={() => handleManage(server.id)}
+                  onEdit={() => handleEdit(server.id)}
+                  onDelete={() => handleDelete(server.id)}
+                  onAuthenticate={() => handleAuthenticate(server.id)}
+                  onReconnect={() => handleReconnect(server.id)}
+                  onRename={handleRenameServer}
+                  onToolToggle={handleToolToggle}
+                  onRefreshTools={handleRefreshTools}
+                  onDisableAllTools={handleDisableAllTools}
+                />
+              );
+            })
+          )}
         </div>
       </div>
 

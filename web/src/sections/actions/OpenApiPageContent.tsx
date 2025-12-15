@@ -16,11 +16,14 @@ import { createOAuthConfig, updateOAuthConfig } from "@/lib/oauth/api";
 import { updateCustomTool, deleteCustomTool } from "@/lib/tools/openApiService";
 import { updateToolStatus } from "@/lib/tools/mcpService";
 import DisconnectEntityModal from "./modals/DisconnectEntityModal";
+import ActionCardSkeleton from "./skeleton/ActionCardSkeleton";
 
 export default function OpenApiPageContent() {
-  const { data: openApiTools, mutate: mutateOpenApiTools } = useSWR<
-    ToolSnapshot[]
-  >("/api/tool/openapi", errorHandlingFetcher, {
+  const {
+    data: openApiTools,
+    mutate: mutateOpenApiTools,
+    isLoading: isOpenApiLoading,
+  } = useSWR<ToolSnapshot[]>("/api/tool/openapi", errorHandlingFetcher, {
     refreshInterval: 10000,
   });
   const addOpenAPIActionModal = useCreateModal();
@@ -374,7 +377,7 @@ export default function OpenApiPageContent() {
 
       <div className="flex-shrink-0 mb-4">
         <Actionbar
-          hasActions={(openApiTools?.length ?? 0) > 0}
+          hasActions={isOpenApiLoading || (openApiTools?.length ?? 0) > 0}
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
           onAddAction={handleAddAction}
@@ -384,19 +387,26 @@ export default function OpenApiPageContent() {
 
       <div className="flex-1 overflow-y-auto min-h-0">
         <div className="flex flex-col gap-4 w-full pb-4">
-          {filteredTools?.map((tool) => (
-            <OpenApiActionCard
-              key={tool.id}
-              tool={tool}
-              onAuthenticate={handleOpenAuthModal}
-              onManage={handleManageTool}
-              onDelete={handleDeleteTool}
-              onRename={handleRenameTool}
-              mutateOpenApiTools={mutateOpenApiTools}
-              setPopup={setPopup}
-              onOpenDisconnectModal={handleOpenDisconnectModal}
-            />
-          ))}
+          {isOpenApiLoading ? (
+            <>
+              <ActionCardSkeleton />
+              <ActionCardSkeleton />
+            </>
+          ) : (
+            filteredTools.map((tool) => (
+              <OpenApiActionCard
+                key={tool.id}
+                tool={tool}
+                onAuthenticate={handleOpenAuthModal}
+                onManage={handleManageTool}
+                onDelete={handleDeleteTool}
+                onRename={handleRenameTool}
+                mutateOpenApiTools={mutateOpenApiTools}
+                setPopup={setPopup}
+                onOpenDisconnectModal={handleOpenDisconnectModal}
+              />
+            ))
+          )}
         </div>
       </div>
 
