@@ -3491,6 +3491,7 @@ dev = [
     { name = "mypy" },
     { name = "mypy-extensions" },
     { name = "onyx-devtools" },
+    { name = "openapi-generator-cli" },
     { name = "pandas-stubs" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -3604,6 +3605,7 @@ requires-dist = [
     { name = "office365-rest-python-client", marker = "extra == 'backend'", specifier = "==2.5.9" },
     { name = "onyx-devtools", marker = "extra == 'dev'", specifier = "==0.1.0" },
     { name = "openai", specifier = "==2.6.1" },
+    { name = "openapi-generator-cli", marker = "extra == 'dev'", specifier = "==7.17.0" },
     { name = "openinference-instrumentation", marker = "extra == 'backend'", specifier = "==0.1.42" },
     { name = "openpyxl", marker = "extra == 'backend'", specifier = "==3.0.10" },
     { name = "opentelemetry-proto", marker = "extra == 'backend'", specifier = "==1.38.0" },
@@ -3733,6 +3735,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c4/44/303deb97be7c1c9b53118b52825cbd1557aeeff510f3a52566b1fa66f6a2/openai-2.6.1.tar.gz", hash = "sha256:27ae704d190615fca0c0fc2b796a38f8b5879645a3a52c9c453b23f97141bb49", size = 593043, upload-time = "2025-10-24T13:29:52.79Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/15/0e/331df43df633e6105ff9cf45e0ce57762bd126a45ac16b25a43f6738d8a2/openai-2.6.1-py3-none-any.whl", hash = "sha256:904e4b5254a8416746a2f05649594fa41b19d799843cd134dac86167e094edef", size = 1005551, upload-time = "2025-10-24T13:29:50.973Z" },
+]
+
+[[package]]
+name = "openapi-generator-cli"
+version = "7.17.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/46/2c/f6f224c077d8783bd6ce37aeb07b727049838366bc93387a0504a1a299c3/openapi_generator_cli-7.17.0.tar.gz", hash = "sha256:00678095abe01d61ddab24d83d5cb34c72ee3ec1e45045200f800c11c183ecba", size = 27726081, upload-time = "2025-10-30T01:41:54.672Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f8/3e/9ef133eaf0c5f703a23f07fbf29b5bba15ffd148a4c007181af45bf61538/openapi_generator_cli-7.17.0-py3-none-any.whl", hash = "sha256:0a6f11e43598ed34c6a20c85dc9f1d4a81fe503a8ebcb58f8661b6f973c24d7b", size = 27739927, upload-time = "2025-10-30T01:41:51.163Z" },
 ]
 
 [[package]]

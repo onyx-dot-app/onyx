@@ -139,7 +139,7 @@ jobs:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
       - name: Checkout code
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -170,7 +170,7 @@ jobs:
             file_processing:
               - 'backend/onyx/file_processing/**'
 
-      - name: Run Tests (excluding HubSpot, Salesforce, and GitHub)
+      - name: Run Tests (excluding HubSpot, Salesforce, GitHub, and Coda)
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
           py.test \
@@ -183,7 +183,8 @@ jobs:
             backend/tests/daily/connectors \
             --ignore backend/tests/daily/connectors/hubspot \
             --ignore backend/tests/daily/connectors/salesforce \
-            --ignore backend/tests/daily/connectors/github
+            --ignore backend/tests/daily/connectors/github \
+            --ignore backend/tests/daily/connectors/coda
 
       - name: Run HubSpot Connector Tests
         if: ${{ github.event_name == 'schedule' || steps.changes.outputs.hubspot == 'true' || steps.changes.outputs.file_processing == 'true' }}

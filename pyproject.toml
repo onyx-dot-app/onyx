@@ -137,6 +137,7 @@ dev = [
     "faker==37.1.0",
     "mypy-extensions==1.0.0",
     "mypy==1.13.0",
+    "openapi-generator-cli==7.17.0",
     "pandas-stubs==2.2.3.241009",
     "pre-commit==3.2.2",
     "pytest-asyncio==1.3.0",
