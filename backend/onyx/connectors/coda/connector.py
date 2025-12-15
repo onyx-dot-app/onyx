@@ -549,9 +549,7 @@ class CodaConnector(LoadConnector, PollConnector):
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Load and validate Coda credentials."""
-        self._coda_client = CodaApiClient(
-            bearer_token="de790189-1ca1-4917-b36d-32d7cf0d032c"
-        )
+        self._coda_client = CodaApiClient(bearer_token=credentials["coda_bearer_token"])
 
         try:
             self._coda_client.get("docs", params={"limit": "1"})
