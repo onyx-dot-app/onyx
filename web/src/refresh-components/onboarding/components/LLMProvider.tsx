@@ -1,7 +1,7 @@
 import React, { memo, useCallback, useState } from "react";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
-import LLMConnectionIcons from "@/refresh-components/onboarding/components/LLMConnectionIcons";
+import ConnectionProviderIcon from "@/refresh-components/ConnectionProviderIcon";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { OnboardingActions, OnboardingState } from "../types";
@@ -60,7 +60,7 @@ function LLMProviderInner({
     );
 
     onClick({
-      icon: <LLMConnectionIcons icon={iconNode} />,
+      icon: <ConnectionProviderIcon icon={iconNode} />,
       title: "Set up " + title,
       llmDescriptor,
       isCustomProvider: !llmDescriptor,
