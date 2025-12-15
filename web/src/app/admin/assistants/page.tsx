@@ -7,7 +7,7 @@ import Separator from "@/refresh-components/Separator";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { SubLabel } from "@/components/Field";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import { useAdminPersonas } from "./hooks";
+import { useAdminPersonas } from "@/hooks/useAdminPersonas";
 import { Persona } from "./interfaces";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
