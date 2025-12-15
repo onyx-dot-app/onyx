@@ -338,6 +338,7 @@ def run_llm_loop(
         should_cite_documents: bool = False
         ran_image_gen: bool = False
         just_ran_web_search: bool = False
+        has_called_search_tool: bool = False
         citation_mapping: dict[int, str] = {}  # Maps citation_num -> document_id/URL
 
         current_tool_call_index = (
@@ -488,7 +489,12 @@ def run_llm_loop(
                     user_info=None,  # TODO, this is part of memories right now, might want to separate it out
                     citation_mapping=citation_mapping,
                     citation_processor=citation_processor,
+                    skip_search_query_expansion=has_called_search_tool,
                 )
+
+                # Track if search tool was called (for skipping query expansion on subsequent calls)
+                if tool_call.tool_name == SearchTool.NAME:
+                    has_called_search_tool = True
 
                 # Build a mapping of tool names to tool objects for getting tool_id
                 tools_by_name = {tool.name: tool for tool in final_tools}
