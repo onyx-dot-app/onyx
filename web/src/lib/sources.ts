@@ -20,6 +20,7 @@ import {
   LinearIcon,
   LoopioIcon,
   NotionIcon,
+  CodaIcon,
   ProductboardIcon,
   R2Icon,
   SalesforceIcon,
@@ -108,6 +109,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Notion",
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/notion`,
+  },
+  coda: {
+    icon: CodaIcon,
+    displayName: "Coda",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.onyx.app/connectors/coda",
   },
   bookstack: {
     icon: BookstackIcon,
