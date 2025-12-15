@@ -18,6 +18,7 @@ jobs:
   determine-builds:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
+    environment: deployment
     timeout-minutes: 90
     outputs:
       build-web: ${{ steps.check.outputs.build-web }}
