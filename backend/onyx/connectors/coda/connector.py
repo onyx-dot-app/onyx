@@ -1,7 +1,7 @@
 import os
+from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
-from collections.abc import Generator
 from typing import Any
 from typing import cast
 from typing import Dict
@@ -13,11 +13,9 @@ from retry import retry
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
     rl_requests,
 )
-
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import UnexpectedValidationError
@@ -36,6 +34,7 @@ _CODA_CALL_TIMEOUT = 30
 _CODA_BASE_URL = "https://coda.io/apis/v1"
 
 logger = setup_logger()
+
 
 class CodaClientRequestFailedError(ConnectionError):
     def __init__(self, message: str, status_code: int):
@@ -90,13 +89,15 @@ class CodaRow(BaseModel):
 
 class CodaApiClient:
     def __init__(
-        self, 
-        bearer_token: str, 
+        self,
+        bearer_token: str,
     ) -> None:
         self.bearer_token = bearer_token
-        self.base_url = os.environ.get("CODA_BASE_URL", _CODA_BASE_URL)  
-    
-    def get(self, endpoint: str, params: Optional[dict[str, str]] = None) -> dict[str, Any]:
+        self.base_url = os.environ.get("CODA_BASE_URL", _CODA_BASE_URL)
+
+    def get(
+        self, endpoint: str, params: Optional[dict[str, str]] = None
+    ) -> dict[str, Any]:
         url = self._build_url(endpoint)
         headers = self._build_headers()
 
@@ -120,14 +121,14 @@ class CodaApiClient:
 
     def _build_headers(self) -> Dict[str, str]:
         return {"Authorization": f"Bearer {self.bearer_token}"}
-    
+
     def _build_url(self, endpoint: str) -> str:
         return self.base_url.rstrip("/") + "/" + endpoint.lstrip("/")
 
 
 class CodaConnector(LoadConnector, PollConnector):
     def __init__(
-        self, 
+        self,
         batch_size: int = INDEX_BATCH_SIZE,
         index_page_content: bool = True,
         workspace_id: str | None = None,
@@ -135,18 +136,20 @@ class CodaConnector(LoadConnector, PollConnector):
         self.batch_size = batch_size
         self.index_page_content = index_page_content
         self.workspace_id = workspace_id
-        self.coda_client: CodaApiClient | None = None
+        self._coda_client: CodaApiClient | None = None
 
-    
+    @property
+    def coda_client(self) -> CodaApiClient:
+        if self._coda_client is None:
+            raise ConnectorMissingCredentialError("Coda")
+        return self._coda_client
 
-    @retry(tries=3, delay=1, backoff=2) 
+    @retry(tries=3, delay=1, backoff=2)
     def _get_doc(self, doc_id: str) -> CodaDoc:
         """Fetch a specific Coda document by its ID."""
         logger.debug(f"Fetching Coda doc with ID: {doc_id}")
         try:
-            response = self.coda_client.get(
-                f"docs/{doc_id}"
-            )
+            response = self.coda_client.get(f"docs/{doc_id}")
         except CodaClientRequestFailedError as e:
             if e.status_code == 404:
                 raise ConnectorValidationError(f"Failed to fetch doc: {doc_id}") from e
@@ -162,17 +165,15 @@ class CodaConnector(LoadConnector, PollConnector):
             workspace_id=response["workspace"]["id"],
             workspace_name=response["workspace"]["name"],
             folder_id=response["folder"]["id"] if response.get("folder") else None,
-            folder_name=response["folder"]["name"] if response.get("folder") else None
+            folder_name=response["folder"]["name"] if response.get("folder") else None,
         )
 
-    @retry(tries=3, delay=1, backoff=2) 
+    @retry(tries=3, delay=1, backoff=2)
     def _get_page(self, doc_id: str, page_id: str) -> CodaPage:
         """Fetch a specific page from a Coda document."""
         logger.debug(f"Fetching Coda page with ID: {page_id}")
         try:
-            response = self.coda_client.get(
-                f"docs/{doc_id}/pages/{page_id}"
-            )
+            response = self.coda_client.get(f"docs/{doc_id}/pages/{page_id}")
         except CodaClientRequestFailedError as e:
             if e.status_code == 404:
                 raise ConnectorValidationError(
@@ -188,17 +189,15 @@ class CodaConnector(LoadConnector, PollConnector):
             name=response["name"],
             content_type=response["contentType"],
             created_at=response["createdAt"],
-            updated_at=response["updatedAt"]
+            updated_at=response["updatedAt"],
         )
 
-    @retry(tries=3, delay=1, backoff=2) 
+    @retry(tries=3, delay=1, backoff=2)
     def _get_table(self, doc_id: str, table_id: str) -> CodaTable:
         """Fetch a specific table from a Coda document."""
         logger.debug(f"Fetching Coda table with ID: {table_id}")
         try:
-            response = self.coda_client.get(
-                f"docs/{doc_id}/tables/{table_id}"
-            )
+            response = self.coda_client.get(f"docs/{doc_id}/tables/{table_id}")
         except CodaClientRequestFailedError as e:
             if e.status_code == 404:
                 raise ConnectorValidationError(
@@ -213,10 +212,10 @@ class CodaConnector(LoadConnector, PollConnector):
             browser_link=response["browserLink"],
             created_at=response["createdAt"],
             updated_at=response["updatedAt"],
-            doc_id=doc_id
+            doc_id=doc_id,
         )
-    
-    @retry(tries=3, delay=1, backoff=2) 
+
+    @retry(tries=3, delay=1, backoff=2)
     def _get_row(self, doc_id: str, table_id: str, row_id: str) -> CodaRow:
         """Fetch a specific row from a Coda table."""
         logger.debug(f"Fetching Coda row with ID: {row_id}")
@@ -245,14 +244,12 @@ class CodaConnector(LoadConnector, PollConnector):
             updated_at=response["updatedAt"],
             values=values,
             table_id=table_id,
-            doc_id=doc_id
+            doc_id=doc_id,
         )
-    
+
     @retry(tries=3, delay=1, backoff=2)
     def _list_all_docs(
-        self,
-        endpoint: str = "docs",
-        params: Optional[Dict[str, str]] = None
+        self, endpoint: str = "docs", params: Optional[Dict[str, str]] = None
     ) -> List[CodaDoc]:
         """List all Coda documents in the workspace."""
         logger.debug("Listing documents in Coda")
@@ -260,7 +257,7 @@ class CodaConnector(LoadConnector, PollConnector):
         all_docs: List[CodaDoc] = []
         next_page_token: str | None = None
         params = params or {}
-        
+
         if self.workspace_id:
             params["workspaceId"] = self.workspace_id
 
@@ -288,7 +285,7 @@ class CodaConnector(LoadConnector, PollConnector):
                     workspace_id=item["workspace"]["id"],
                     workspace_name=item["workspace"]["name"],
                     folder_id=item["folder"]["id"] if item.get("folder") else None,
-                    folder_name=item["folder"]["name"] if item.get("folder") else None
+                    folder_name=item["folder"]["name"] if item.get("folder") else None,
                 )
                 all_docs.append(doc)
 
@@ -298,7 +295,7 @@ class CodaConnector(LoadConnector, PollConnector):
 
         logger.debug(f"Found {len(all_docs)} docs")
         return all_docs
-    
+
     @retry(tries=3, delay=1, backoff=2)
     def _list_pages_in_doc(self, doc_id: str) -> List[CodaPage]:
         """List all pages in a Coda document."""
@@ -325,7 +322,7 @@ class CodaConnector(LoadConnector, PollConnector):
 
             items = response.get("items", [])
             for item in items:
-                #can be removed if we don't care to skip hidden pages
+                # can be removed if we don't care to skip hidden pages
                 if item.get("isHidden", False):
                     continue
 
@@ -356,11 +353,11 @@ class CodaConnector(LoadConnector, PollConnector):
         content_parts = []
         next_page_token: str | None = None
         params: Dict[str, str] = {}
-        
+
         while True:
             if next_page_token:
                 params["pageToken"] = next_page_token
-            
+
             try:
                 response = self.coda_client.get(
                     f"docs/{doc_id}/pages/{page_id}/content", params=params
@@ -370,23 +367,23 @@ class CodaConnector(LoadConnector, PollConnector):
                     logger.debug(f"No content available for page {page_id}")
                     return ""
                 raise
-            
+
             items = response.get("items", [])
-            
+
             for item in items:
                 item_content = item.get("itemContent", {})
-                
+
                 content_text = item_content.get("content", "")
                 if content_text:
                     content_parts.append(content_text)
-            
+
             next_page_token = response.get("nextPageToken")
             if not next_page_token:
                 break
-        
+
         return "\n\n".join(content_parts)
 
-    @retry(tries=3, delay=1, backoff=2) 
+    @retry(tries=3, delay=1, backoff=2)
     def _list_tables(self, doc_id: str) -> List[CodaTable]:
         """List all tables in a Coda document."""
         logger.debug(f"Listing tables in Coda doc with ID: {doc_id}")
@@ -419,7 +416,7 @@ class CodaConnector(LoadConnector, PollConnector):
                         name=item["name"],
                         created_at=item["createdAt"],
                         updated_at=item["updatedAt"],
-                        doc_id=doc_id
+                        doc_id=doc_id,
                     )
                 )
 
@@ -429,8 +426,8 @@ class CodaConnector(LoadConnector, PollConnector):
 
         logger.debug(f"Found {len(tables)} tables in doc {doc_id}")
         return tables
-    
-    @retry(tries=3, delay=1, backoff=2) 
+
+    @retry(tries=3, delay=1, backoff=2)
     def _list_rows_and_values(self, doc_id: str, table_id: str) -> List[CodaRow]:
         """List all rows and their values in a table."""
         logger.debug(f"Listing rows in Coda table: {table_id} in Coda doc: {doc_id}")
@@ -483,22 +480,14 @@ class CodaConnector(LoadConnector, PollConnector):
 
     def _convert_page_to_document(self, page: CodaPage, content: str = "") -> Document:
         """Convert a page into a Document."""
-        page_updated = (
-            datetime.fromisoformat(page.updated_at)
-            .astimezone(timezone.utc)
-        )
-        
+        page_updated = datetime.fromisoformat(page.updated_at).astimezone(timezone.utc)
+
         text_parts = [page.name, page.browser_link]
         if content:
             text_parts.append(content)
-        
-        sections = [
-            TextSection(
-                link=page.browser_link,
-                text="\n\n".join(text_parts)
-            )
-        ]
-        
+
+        sections = [TextSection(link=page.browser_link, text="\n\n".join(text_parts))]
+
         return Document(
             id=f"coda-page-{page.doc_id}-{page.id}",
             sections=cast(list[TextSection | ImageSection], sections),
@@ -516,37 +505,28 @@ class CodaConnector(LoadConnector, PollConnector):
         self, table: CodaTable, rows: List[CodaRow]
     ) -> Document:
         """Convert a table and its rows into a single Document with multiple sections (one per row)."""
-        table_updated = (
-            datetime.fromisoformat(table.updated_at)
-            .astimezone(timezone.utc)
+        table_updated = datetime.fromisoformat(table.updated_at).astimezone(
+            timezone.utc
         )
-        
+
         sections: List[TextSection] = []
         for row in rows:
             content_text = " ".join(
                 str(v) if not isinstance(v, list) else " ".join(map(str, v))
                 for v in row.values.values()
             )
-            
+
             row_name = row.name or f"Row {row.index or row.id}"
             text = f"{row_name}: {content_text}" if content_text else row_name
-            
-            sections.append(
-                TextSection(
-                    link=row.browser_link,
-                    text=text
-                )
-            )
-        
+
+            sections.append(TextSection(link=row.browser_link, text=text))
+
         # If no rows, create a single section for the table itself
         if not sections:
             sections = [
-                TextSection(
-                    link=table.browser_link,
-                    text=f"Table: {table.name}"
-                )
+                TextSection(link=table.browser_link, text=f"Table: {table.name}")
             ]
-        
+
         return Document(
             id=f"coda-table-{table.doc_id}-{table.id}",
             sections=cast(list[TextSection | ImageSection], sections),
@@ -562,12 +542,10 @@ class CodaConnector(LoadConnector, PollConnector):
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Load and validate Coda credentials."""
-        self.coda_client = CodaApiClient(
-            bearer_token=credentials["coda_bearer_token"]
-        )
+        self._coda_client = CodaApiClient(bearer_token=credentials["coda_bearer_token"])
 
         try:
-            self.coda_client.get("docs", params={"limit": "1"})
+            self._coda_client.get("docs", params={"limit": "1"})
         except CodaClientRequestFailedError as e:
             if e.status_code == 401:
                 raise ConnectorMissingCredentialError("Invalid Coda API token")
@@ -577,16 +555,14 @@ class CodaConnector(LoadConnector, PollConnector):
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         """Load all documents from Coda workspace."""
-        if self.coda_client is None:
-            raise ConnectorMissingCredentialError("Coda")
 
         def _iter_documents() -> Generator[Document, None, None]:
             docs = self._list_all_docs()
             logger.info(f"Found {len(docs)} Coda docs to process")
-            
+
             for doc in docs:
                 logger.debug(f"Processing doc: {doc.name} ({doc.id})")
-                
+
                 try:
                     pages = self._list_pages_in_doc(doc.id)
                     for page in pages:
@@ -595,11 +571,13 @@ class CodaConnector(LoadConnector, PollConnector):
                             try:
                                 content = self._fetch_page_content(doc.id, page.id)
                             except Exception as e:
-                                logger.warning(f"Failed to fetch content for page {page.id}: {e}")
+                                logger.warning(
+                                    f"Failed to fetch content for page {page.id}: {e}"
+                                )
                         yield self._convert_page_to_document(page, content)
                 except ConnectorValidationError as e:
                     logger.warning(f"Failed to list pages for doc {doc.id}: {e}")
-                
+
                 try:
                     tables = self._list_tables(doc.id)
                     for table in tables:
@@ -607,7 +585,9 @@ class CodaConnector(LoadConnector, PollConnector):
                             rows = self._list_rows_and_values(doc.id, table.id)
                             yield self._convert_table_with_rows_to_document(table, rows)
                         except ConnectorValidationError as e:
-                            logger.warning(f"Failed to list rows for table {table.id}: {e}")
+                            logger.warning(
+                                f"Failed to list rows for table {table.id}: {e}"
+                            )
                             yield self._convert_table_with_rows_to_document(table, [])
                 except ConnectorValidationError as e:
                     logger.warning(f"Failed to list tables for doc {doc.id}: {e}")
@@ -621,18 +601,18 @@ class CodaConnector(LoadConnector, PollConnector):
         Polls the Coda API for documents updated between start and end timestamps.
         We refer to page and table update times to determine if they need to be re-indexed.
         """
-        if self.coda_client is None:
-            raise ConnectorMissingCredentialError("Coda")
 
         def _iter_documents() -> Generator[Document, None, None]:
             docs = self._list_all_docs()
-            logger.info(f"Polling {len(docs)} Coda docs for updates between {start} and {end}")
-            
+            logger.info(
+                f"Polling {len(docs)} Coda docs for updates between {start} and {end}"
+            )
+
             for doc in docs:
                 try:
                     pages = self._list_pages_in_doc(doc.id)
                     for page in pages:
-                        page_timestamp = ( 
+                        page_timestamp = (
                             datetime.fromisoformat(page.updated_at)
                             .astimezone(timezone.utc)
                             .timestamp()
@@ -649,7 +629,7 @@ class CodaConnector(LoadConnector, PollConnector):
                             yield self._convert_page_to_document(page, content)
                 except ConnectorValidationError as e:
                     logger.warning(f"Failed to list pages for doc {doc.id}: {e}")
-                
+
                 try:
                     tables = self._list_tables(doc.id)
                     for table in tables:
@@ -658,10 +638,10 @@ class CodaConnector(LoadConnector, PollConnector):
                             .astimezone(timezone.utc)
                             .timestamp()
                         )
-                        
+
                         try:
                             rows = self._list_rows_and_values(doc.id, table.id)
-                            
+
                             table_or_rows_updated = start < table_timestamp <= end
                             if not table_or_rows_updated:
                                 for row in rows:
@@ -673,15 +653,21 @@ class CodaConnector(LoadConnector, PollConnector):
                                     if start < row_timestamp <= end:
                                         table_or_rows_updated = True
                                         break
-                            
+
                             if table_or_rows_updated:
-                                yield self._convert_table_with_rows_to_document(table, rows)
-                        
+                                yield self._convert_table_with_rows_to_document(
+                                    table, rows
+                                )
+
                         except ConnectorValidationError as e:
-                            logger.warning(f"Failed to list rows for table {table.id}: {e}")
+                            logger.warning(
+                                f"Failed to list rows for table {table.id}: {e}"
+                            )
                             if table_timestamp > start and table_timestamp <= end:
-                                yield self._convert_table_with_rows_to_document(table, [])
-                
+                                yield self._convert_table_with_rows_to_document(
+                                    table, []
+                                )
+
                 except ConnectorValidationError as e:
                     logger.warning(f"Failed to list tables for doc {doc.id}: {e}")
 
@@ -689,18 +675,17 @@ class CodaConnector(LoadConnector, PollConnector):
 
     def validate_connector_settings(self) -> None:
         """Validates the Coda connector settings calling the 'whoami' endpoint."""
-        if self.coda_client is None:
-            raise ConnectorMissingCredentialError("Coda")
-        
         try:
             response = self.coda_client.get("whoami")
-            logger.info(f"Coda connector validated for user: {response.get('name', 'Unknown')}")
-            
+            logger.info(
+                f"Coda connector validated for user: {response.get('name', 'Unknown')}"
+            )
+
             if self.workspace_id:
                 params = {"workspaceId": self.workspace_id, "limit": "1"}
                 self.coda_client.get("docs", params=params)
                 logger.info(f"Validated access to workspace: {self.workspace_id}")
-                
+
         except CodaClientRequestFailedError as e:
             if e.status_code == 401:
                 raise CredentialExpiredError(
@@ -724,4 +709,3 @@ class CodaConnector(LoadConnector, PollConnector):
             raise UnexpectedValidationError(
                 f"Unexpected error during Coda settings validation: {exc}"
             )
-
