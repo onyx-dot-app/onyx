@@ -298,21 +298,20 @@ export default function LLMPopover({
   }, [open]);
 
   const isSearching = searchQuery.trim().length > 0;
-  const hasOnlyOneGroup = groupedOptions.length === 1;
 
   // Compute final expanded groups
   const effectiveExpandedGroups = useMemo(() => {
-    if (isSearching || hasOnlyOneGroup) {
-      // Force expand all when searching or only one group
+    if (isSearching) {
+      // Force expand all when searching
       return groupedOptions.map((g) => g.key);
     }
     return expandedGroups;
-  }, [isSearching, hasOnlyOneGroup, groupedOptions, expandedGroups]);
+  }, [isSearching, groupedOptions, expandedGroups]);
 
   // Handler for accordion changes
   const handleAccordionChange = (value: string[]) => {
-    // Only update state when not force-expanding
-    if (!isSearching && !hasOnlyOneGroup) {
+    // Only update state when not searching (force-expanding)
+    if (!isSearching) {
       setExpandedGroups(value);
     }
   };
