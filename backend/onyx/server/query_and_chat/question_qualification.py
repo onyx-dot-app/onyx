@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from langchain_core.messages import BaseMessage
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel
 from pydantic import Field
@@ -11,7 +12,14 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import ENABLE_QUESTION_QUALIFICATION
 from onyx.llm.factory import get_default_llms
 from onyx.llm.interfaces import LLM
-from onyx.llm.utils import message_to_string
+
+
+def _message_to_string(message: BaseMessage) -> str:
+    """Extract string content from a LangChain message."""
+    if not isinstance(message.content, str):
+        raise RuntimeError("LLM message not in expected format.")
+    return message.content
+
 
 logger = logging.getLogger(__name__)
 
@@ -240,7 +248,7 @@ class QuestionQualificationService:
 
             # Parse using LangChain output parser
             try:
-                parsed_response = output_parser.parse(message_to_string(response))
+                parsed_response = output_parser.parse(_message_to_string(response))
 
                 block_confidence = parsed_response.block_confidence
                 matched_index = parsed_response.matched_index
@@ -280,7 +288,7 @@ class QuestionQualificationService:
                 )
 
             except Exception as e:
-                response_text = message_to_string(response)
+                response_text = _message_to_string(response)
                 logger.error(
                     f"Error parsing LangChain output: {e}, response: {response_text}"
                 )

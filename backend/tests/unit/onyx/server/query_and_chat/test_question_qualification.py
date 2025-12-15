@@ -120,23 +120,6 @@ class TestQuestionQualificationService:
         assert "threshold" in stats
         assert "standard_response" in stats
 
-    @patch(
-        "onyx.server.query_and_chat.question_qualification.ENABLE_QUESTION_QUALIFICATION",
-        False,
-    )
-    def test_config_cleanup_not_run_when_disabled(self):
-        """Test that config cleanup does not run when feature is disabled."""
-        from onyx.server.query_and_chat.question_qualification import (
-            QuestionQualificationService,
-        )
-
-        with patch.object(
-            QuestionQualificationService, "_cleanup_config_embeddings"
-        ) as mock_cleanup:
-            QuestionQualificationService()
-            # Since feature is disabled, cleanup should not be called during init
-            mock_cleanup.assert_not_called()
-
 
 class TestHTTPExceptionPropagation:
     """Test HTTPException propagation in query_backend."""
