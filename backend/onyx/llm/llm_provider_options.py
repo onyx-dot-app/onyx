@@ -4,7 +4,6 @@ from pydantic import BaseModel
 
 from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
 from onyx.llm.utils import model_supports_image_input
-from onyx.server.manage.llm.models import is_obsolete_model
 from onyx.server.manage.llm.models import ModelConfigurationView
 
 
@@ -156,6 +155,49 @@ VERTEXAI_VISIBLE_MODEL_NAMES = {
     "gemini-2.5-flash-lite",
     "gemini-2.5-pro",
 }
+
+
+def is_obsolete_model(model_name: str, provider: str) -> bool:
+    """Check if a model is obsolete and should be filtered out.
+
+    Filters models that are 2+ major versions behind or deprecated.
+    This is the single source of truth for obsolete model detection.
+    """
+    model_lower = model_name.lower()
+
+    # OpenAI obsolete models
+    if provider == "openai":
+        # GPT-3 models are obsolete
+        if "gpt-3" in model_lower:
+            return True
+        # Legacy models
+        deprecated = {
+            "text-davinci-003",
+            "text-davinci-002",
+            "text-curie-001",
+            "text-babbage-001",
+            "text-ada-001",
+            "davinci",
+            "curie",
+            "babbage",
+            "ada",
+        }
+        if model_lower in deprecated:
+            return True
+
+    # Anthropic obsolete models
+    if provider == "anthropic":
+        if "claude-2" in model_lower or "claude-instant" in model_lower:
+            return True
+
+    # Vertex AI obsolete models
+    if provider == "vertex_ai":
+        if "gemini-1.0" in model_lower:
+            return True
+        if "palm" in model_lower or "bison" in model_lower:
+            return True
+
+    return False
 
 
 def _get_provider_to_models_map() -> dict[str, list[str]]:

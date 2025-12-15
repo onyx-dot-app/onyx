@@ -12,49 +12,6 @@ from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.manage.llm.utils import is_reasoning_model
 
 
-def is_obsolete_model(model_name: str, provider: str) -> bool:
-    """Check if a model is obsolete and should be filtered out.
-
-    Filters models that are 2+ major versions behind or deprecated.
-    This is the single source of truth for obsolete model detection.
-    """
-    model_lower = model_name.lower()
-
-    # OpenAI obsolete models
-    if provider == "openai":
-        # GPT-3 models are obsolete
-        if "gpt-3" in model_lower:
-            return True
-        # Legacy models
-        deprecated = {
-            "text-davinci-003",
-            "text-davinci-002",
-            "text-curie-001",
-            "text-babbage-001",
-            "text-ada-001",
-            "davinci",
-            "curie",
-            "babbage",
-            "ada",
-        }
-        if model_lower in deprecated:
-            return True
-
-    # Anthropic obsolete models
-    if provider == "anthropic":
-        if "claude-2" in model_lower or "claude-instant" in model_lower:
-            return True
-
-    # Vertex AI obsolete models
-    if provider == "vertex_ai":
-        if "gemini-1.0" in model_lower:
-            return True
-        if "palm" in model_lower or "bison" in model_lower:
-            return True
-
-    return False
-
-
 def _extract_base_model_name(model: str) -> str | None:
     """Extract base model name by removing date suffixes.
 
@@ -134,6 +91,7 @@ class LLMProviderDescriptor(BaseModel):
         llm_provider_model: "LLMProviderModel",
     ) -> "LLMProviderDescriptor":
         from onyx.llm.llm_provider_options import get_provider_display_name
+        from onyx.llm.llm_provider_options import is_obsolete_model
 
         provider = llm_provider_model.provider
 
@@ -210,6 +168,8 @@ class LLMProviderView(LLMProvider):
         cls,
         llm_provider_model: "LLMProviderModel",
     ) -> "LLMProviderView":
+        from onyx.llm.llm_provider_options import is_obsolete_model
+
         # Safely get groups - handle detached instance case
         try:
             groups = [group.id for group in llm_provider_model.groups]
