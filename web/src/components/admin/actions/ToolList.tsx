@@ -278,6 +278,8 @@ export function ToolList({
 
     const { data, error } = await attachMCPTools({
       server_id: currentServerId,
+      name: values.name,
+      description: values.description,
       selected_tools: Array.from(selectedTools),
     });
 

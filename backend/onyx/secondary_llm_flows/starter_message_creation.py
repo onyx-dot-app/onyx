@@ -1,6 +1,5 @@
 import json
 from typing import Any
-from typing import cast
 from typing import List
 
 from sqlalchemy.orm import Session
@@ -17,6 +16,7 @@ from onyx.db.models import User
 from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.llm.factory import get_default_llms
+from onyx.llm.utils import llm_response_to_string
 from onyx.prompts.starter_messages import format_persona_starter_message_prompt
 from onyx.prompts.starter_messages import PERSONA_CATEGORY_GENERATION_PROMPT
 from onyx.utils.logger import setup_logger
@@ -142,8 +142,9 @@ def generate_starter_messages(
             num_categories=generation_count,
         )
 
-        category_response = fast_llm.invoke_langchain(category_generation_prompt)
-        categories = parse_categories(cast(str, category_response.content))
+        category_response = fast_llm.invoke(category_generation_prompt)
+        response_content = llm_response_to_string(category_response)
+        categories = parse_categories(response_content)
 
         if not categories:
             logger.error("No categories were generated.")

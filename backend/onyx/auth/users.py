@@ -56,6 +56,7 @@ from httpx_oauth.oauth2 import OAuth2Token
 from pydantic import BaseModel
 from sqlalchemy import nulls_last
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from onyx.auth.api_key import get_hashed_api_key_from_request
@@ -218,7 +219,7 @@ def verify_email_is_invited(email: str) -> None:
         raise PermissionError("Email must be specified")
 
     try:
-        email_info = validate_email(email)
+        email_info = validate_email(email, check_deliverability=False)
     except EmailUndeliverableError:
         raise PermissionError("Email is not valid")
 
@@ -226,7 +227,9 @@ def verify_email_is_invited(email: str) -> None:
         try:
             # normalized emails are now being inserted into the db
             # we can remove this normalization on read after some time has passed
-            email_info_whitelist = validate_email(email_whitelist)
+            email_info_whitelist = validate_email(
+                email_whitelist, check_deliverability=False
+            )
         except EmailNotValidError:
             continue
 
@@ -339,6 +342,39 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         user_create, safe=safe, request=request
                     )  # type: ignore
                     user_created = True
+                except IntegrityError as error:
+                    # Race condition: another request created the same user after the
+                    # pre-insert existence check but before our commit.
+                    await self.user_db.session.rollback()
+                    logger.warning(
+                        "IntegrityError while creating user %s, assuming duplicate: %s",
+                        user_create.email,
+                        str(error),
+                    )
+                    try:
+                        user = await self.get_by_email(user_create.email)
+                    except exceptions.UserNotExists:
+                        # Unexpected integrity error, surface it for handling upstream.
+                        raise error
+
+                    if MULTI_TENANT:
+                        user_by_session = await db_session.get(User, user.id)
+                        if user_by_session:
+                            user = user_by_session
+
+                    if (
+                        user.role.is_web_login()
+                        or not isinstance(user_create, UserCreate)
+                        or not user_create.role.is_web_login()
+                    ):
+                        raise exceptions.UserAlreadyExists()
+
+                    user_update = UserUpdateWithRole(
+                        password=user_create.password,
+                        is_verified=user_create.is_verified,
+                        role=user_create.role,
+                    )
+                    user = await self.update(user_update, user)
                 except exceptions.UserAlreadyExists:
                     user = await self.get_by_email(user_create.email)
 
