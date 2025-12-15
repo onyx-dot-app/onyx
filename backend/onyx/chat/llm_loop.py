@@ -107,6 +107,12 @@ def construct_message_history(
     available_tokens: int,
     last_n_user_messages: int | None = None,
 ) -> list[ChatMessageSimple]:
+    if last_n_user_messages is not None:
+        if last_n_user_messages <= 0:
+            raise ValueError(
+                "filtering chat history by last N user messages must be a value greater than 0"
+            )
+
     history_token_budget = available_tokens
     history_token_budget -= system_prompt.token_count
     history_token_budget -= (

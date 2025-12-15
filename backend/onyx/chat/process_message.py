@@ -491,7 +491,7 @@ def stream_chat_message_objects(
         # Note: DB session is not thread safe but nothing else uses it and the
         # reference is passed directly so it's ok.
         if os.environ.get("ENABLE_DEEP_RESEARCH_LOOP"):  # Dev only feature flag for now
-            if extracted_project_files:
+            if chat_session.project_id:
                 raise RuntimeError("Deep research is not supported for projects")
 
             yield from run_chat_llm_with_state_containers(

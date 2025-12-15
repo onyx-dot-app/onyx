@@ -53,7 +53,9 @@ def run_deep_research_llm_loop(
     llm_step_result: LlmStepResult | None = None
 
     if not skip_clarification:
-        clarification_prompt = CLARIFICATION_PROMPT.format(get_current_llm_day_time())
+        clarification_prompt = CLARIFICATION_PROMPT.format(
+            current_datetime=get_current_llm_day_time()
+        )
         system_prompt = ChatMessageSimple(
             message=clarification_prompt,
             token_count=300,  # Skips the exact token count but has enough leeway
