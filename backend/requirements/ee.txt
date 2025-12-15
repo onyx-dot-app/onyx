@@ -132,14 +132,15 @@ googleapis-common-protos==1.72.0
     #   grpcio-status
 grpc-google-iam-v1==0.14.3
     # via google-cloud-resource-manager
-grpcio==1.76.0
+grpcio==1.67.1
     # via
     #   google-api-core
     #   google-cloud-resource-manager
     #   googleapis-common-protos
     #   grpc-google-iam-v1
     #   grpcio-status
-grpcio-status==1.76.0
+    #   litellm
+grpcio-status==1.67.1
     # via google-api-core
 h11==0.16.0
     # via
@@ -223,7 +224,7 @@ proto-plus==1.26.1
     #   google-api-core
     #   google-cloud-aiplatform
     #   google-cloud-resource-manager
-protobuf==6.33.1
+protobuf==5.29.5
     # via
     #   google-api-core
     #   google-cloud-aiplatform
@@ -328,7 +329,6 @@ typing-extensions==4.15.0
     #   fastapi
     #   google-cloud-aiplatform
     #   google-genai
-    #   grpcio
     #   huggingface-hub
     #   openai
     #   pydantic
