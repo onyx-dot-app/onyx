@@ -289,6 +289,8 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
     }, 100);
   }
 
+  useEffect(handleInputResize, [message]);
+
   const resetInputBar = useCallback(() => {
     setMessage("");
     setCurrentMessageFiles([]);
@@ -296,9 +298,6 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
 
   // handle re-sizing of the text area
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => {
-    handleInputResize();
-  }, [message]);
 
   // Add refs needed by useChatSessionController
   const chatSessionIdRef = useRef<string | null>(currentChatSessionId);
