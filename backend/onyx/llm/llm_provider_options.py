@@ -137,11 +137,9 @@ _IGNORABLE_ANTHROPIC_MODELS = {
 }
 # Curated list of Anthropic models to show by default in the UI
 ANTHROPIC_VISIBLE_MODEL_NAMES = {
-    "claude-opus-4-5-20251101",
-    "claude-sonnet-4-5-20250929",
+    "claude-opus-4-5",
     "claude-sonnet-4-5",
     "claude-haiku-4-5",
-    "claude-3-7-sonnet-latest",
 }
 
 AZURE_PROVIDER_NAME = "azure"
