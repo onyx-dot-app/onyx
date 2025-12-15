@@ -689,7 +689,13 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
               )}
 
               {!currentChatSessionId && !currentProjectId && (
-                <div className="flex-1" />
+                <div className="w-full flex-1 flex flex-col items-center justify-end">
+                  <WelcomeMessage
+                    agent={liveAssistant}
+                    isDefaultAgent={isDefaultAgent}
+                  />
+                  <Spacer rem={1.5} />
+                </div>
               )}
 
               {/* ChatInputBar container */}
@@ -697,13 +703,6 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
                 ref={inputRef}
                 className="max-w-[50rem] w-full pointer-events-auto flex flex-col justify-center items-center"
               >
-                {!currentProjectId && !currentChatSessionId && (
-                  <WelcomeMessage
-                    agent={liveAssistant}
-                    isDefaultAgent={isDefaultAgent}
-                  />
-                )}
-
                 {(showOnboarding ||
                   (user?.role !== UserRole.ADMIN &&
                     !user?.personalization?.name)) &&
@@ -751,20 +750,22 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
                 <Spacer />
 
                 {!!currentProjectId && <ProjectChatSessionList />}
-
-                {liveAssistant?.starter_messages &&
-                  liveAssistant.starter_messages.length > 0 &&
-                  messageHistory.length === 0 &&
-                  !currentProjectId &&
-                  !currentChatSessionId && <Suggestions onSubmit={onSubmit} />}
               </div>
 
               {/* SearchUI */}
-              <div
-                className={cn(
-                  !currentProjectId && !currentChatSessionId ? "flex-1" : "h-4"
-                )}
-              />
+              {!currentChatSessionId && !currentProjectId && (
+                <div className="flex flex-1 flex-col items-center w-full">
+                  {liveAssistant?.starter_messages &&
+                    liveAssistant.starter_messages.length > 0 &&
+                    messageHistory.length === 0 &&
+                    !currentProjectId &&
+                    !currentChatSessionId && (
+                      <div className="max-w-[50rem] w-full">
+                        <Suggestions onSubmit={onSubmit} />
+                      </div>
+                    )}
+                </div>
+              )}
             </div>
           )}
         </Dropzone>

@@ -52,7 +52,7 @@ export default function WelcomeMessage({
   return (
     <div
       data-testid="chat-intro"
-      className="flex flex-col items-center justify-center mb-6"
+      className="flex flex-col items-center justify-center"
     >
       {content}
     </div>
