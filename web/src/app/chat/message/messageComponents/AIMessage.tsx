@@ -19,7 +19,10 @@ import {
   useSelectedNodeForDocDisplay,
   useCurrentChatState,
 } from "@/app/chat/stores/useChatSessionStore";
-import { handleCopy } from "@/app/chat/message/copyingUtils";
+import {
+  handleCopy,
+  convertMarkdownTablesToTsv,
+} from "@/app/chat/message/copyingUtils";
 import MessageSwitcher from "@/app/chat/message/MessageSwitcher";
 import { BlinkingDot } from "@/app/chat/message/BlinkingDot";
 import {
@@ -542,7 +545,14 @@ export default function AIMessage({
                             )}
 
                             <CopyIconButton
-                              getCopyText={() => getTextContent(rawPackets)}
+                              getCopyText={() =>
+                                convertMarkdownTablesToTsv(
+                                  getTextContent(rawPackets)
+                                )
+                              }
+                              getHtmlContent={() =>
+                                markdownRef.current?.innerHTML || ""
+                              }
                               tertiary
                               data-testid="AIMessage/copy-button"
                             />

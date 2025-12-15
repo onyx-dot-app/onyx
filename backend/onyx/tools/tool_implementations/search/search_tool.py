@@ -376,7 +376,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         try:
             llm_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
 
-            # Run semantic and keyword query expansion in parallel
+            # Run semantic and keyword query expansion in parallel (unless skipped)
             # Use message history, memories, and user info from override_kwargs
             message_history = (
                 override_kwargs.message_history
@@ -386,31 +386,41 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             memories = override_kwargs.memories
             user_info = override_kwargs.user_info
 
-            # Start timing for query expansion/rephrase
-            query_expansion_start_time = time.time()
+            # Skip query expansion if this is a repeat search call
+            if override_kwargs.skip_query_expansion:
+                logger.debug(
+                    "Search tool - Skipping query expansion (repeat search call)"
+                )
+                semantic_query = None
+                keyword_queries: list[str] = []
+            else:
+                # Start timing for query expansion/rephrase
+                query_expansion_start_time = time.time()
 
-            functions_with_args: list[tuple[Callable, tuple]] = [
-                (
-                    semantic_query_rephrase,
-                    (message_history, self.llm, user_info, memories),
-                ),
-                (
-                    keyword_query_expansion,
-                    (message_history, self.llm, user_info, memories),
-                ),
-            ]
+                functions_with_args: list[tuple[Callable, tuple]] = [
+                    (
+                        semantic_query_rephrase,
+                        (message_history, self.llm, user_info, memories),
+                    ),
+                    (
+                        keyword_query_expansion,
+                        (message_history, self.llm, user_info, memories),
+                    ),
+                ]
 
-            expansion_results = run_functions_tuples_in_parallel(functions_with_args)
+                expansion_results = run_functions_tuples_in_parallel(
+                    functions_with_args
+                )
 
-            # End timing for query expansion/rephrase
-            query_expansion_elapsed = time.time() - query_expansion_start_time
-            logger.debug(
-                f"Search tool - Query expansion/rephrase took {query_expansion_elapsed:.3f} seconds"
-            )
-            semantic_query = expansion_results[0]  # str
-            keyword_queries = (
-                expansion_results[1] if expansion_results[1] is not None else []
-            )  # list[str]
+                # End timing for query expansion/rephrase
+                query_expansion_elapsed = time.time() - query_expansion_start_time
+                logger.debug(
+                    f"Search tool - Query expansion/rephrase took {query_expansion_elapsed:.3f} seconds"
+                )
+                semantic_query = expansion_results[0]  # str
+                keyword_queries = (
+                    expansion_results[1] if expansion_results[1] is not None else []
+                )  # list[str]
 
             # Prepare queries with their weights and hybrid_alpha settings
             # Group 1: Keyword queries (use hybrid_alpha=0.2)
