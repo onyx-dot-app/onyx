@@ -366,6 +366,7 @@ def run_llm_step(
             tools=tool_definitions,
             tool_choice=tool_choice,
             structured_response_format=None,  # TODO
+            # reasoning_effort=ReasoningEffort.OFF,  # Can set this for dev/testing.
             user_identity=user_identity,
         ):
             if packet.usage:

@@ -6,6 +6,8 @@ from typing import cast
 from typing import TYPE_CHECKING
 from typing import Union
 
+from langchain_core.messages import BaseMessage
+
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.configs.app_configs import SEND_USER_METADATA_TO_LLM_PROVIDER
 from onyx.configs.chat_configs import QA_TIMEOUT
@@ -196,20 +198,17 @@ class LitellmLLM(LLM):
     def _record_result(
         self,
         prompt: LanguageModelInput,
-        response: ModelResponse,
+        model_output: BaseMessage,
     ) -> None:
         if self._long_term_logger:
             prompt_json = _prompt_as_json(prompt)
-            message = response.choice.message
             tool_calls = (
-                [tool_call.model_dump(exclude_none=True) for tool_call in message.tool_calls]
-                if message.tool_calls
-                else []
+                model_output.tool_calls if hasattr(model_output, "tool_calls") else []
             )
             self._long_term_logger.record(
                 {
                     "prompt": prompt_json,
-                    "content": message.content,
+                    "content": model_output.content,
                     "tool_calls": cast(JSON_ro, tool_calls),
                     "model": cast(JSON_ro, self._safe_model_config()),
                 },
@@ -244,12 +243,12 @@ class LitellmLLM(LLM):
         tool_choice: ToolChoiceOptions | None,
         stream: bool,
         parallel_tool_calls: bool,
-        reasoning_effort: ReasoningEffort,
+        reasoning_effort: ReasoningEffort | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
         user_identity: LLMUserIdentity | None = None,
-    ) -> Any:
+    ) -> Union["ModelResponse", "CustomStreamWrapper"]:
         self._record_call(prompt)
         from onyx.llm.litellm_singleton import litellm
         from litellm.exceptions import Timeout, RateLimitError
@@ -267,36 +266,50 @@ class LitellmLLM(LLM):
         else:
             model_provider = self.config.model_provider
 
-        metadata: dict[str, Any] = {}
-        existing_metadata = self._model_kwargs.get("metadata")
-        if isinstance(existing_metadata, dict):
-            metadata.update(existing_metadata)
+        completion_kwargs: dict[str, Any] = self._model_kwargs
+        if SEND_USER_METADATA_TO_LLM_PROVIDER and user_identity:
+            completion_kwargs = dict(self._model_kwargs)
 
-        model_kwargs_without_metadata = {
-            k: v for k, v in self._model_kwargs.items() if k != "metadata"
-        }
+            if user_identity.user_id:
+                completion_kwargs["user"] = _truncate_litellm_user_id(
+                    user_identity.user_id
+                )
+
+            if user_identity.session_id:
+                existing_metadata = completion_kwargs.get("metadata")
+                metadata: dict[str, Any] | None
+                if existing_metadata is None:
+                    metadata = {}
+                elif isinstance(existing_metadata, dict):
+                    metadata = dict(existing_metadata)
+                else:
+                    metadata = None
+
+                if metadata is not None:
+                    metadata["session_id"] = user_identity.session_id
+                    completion_kwargs["metadata"] = metadata
 
         try:
-            litellm_args: dict[str, Any] = {
-                "mock_response": MOCK_LLM_RESPONSE,
+            return litellm.completion(
+                mock_response=MOCK_LLM_RESPONSE,
                 # model choice
                 # model="openai/gpt-4",
-                "model": f"{model_provider}/{self.config.deployment_name or self.config.model_name}",
+                model=f"{model_provider}/{self.config.deployment_name or self.config.model_name}",
                 # NOTE: have to pass in None instead of empty string for these
                 # otherwise litellm can have some issues with bedrock
-                "api_key": self._api_key or None,
-                "base_url": self._api_base or None,
-                "api_version": self._api_version or None,
-                "custom_llm_provider": self._custom_llm_provider or None,
+                api_key=self._api_key or None,
+                base_url=self._api_base or None,
+                api_version=self._api_version or None,
+                custom_llm_provider=self._custom_llm_provider or None,
                 # actual input
-                "messages": _prompt_to_dicts(prompt),
-                "tools": tools,
-                "tool_choice": tool_choice if tools else None,
+                messages=_prompt_to_dicts(prompt),
+                tools=tools,
+                tool_choice=tool_choice if tools else None,
                 # streaming choice
-                "stream": stream,
+                stream=stream,
                 # model params
-                "temperature": (1 if is_reasoning else self._temperature),
-                "timeout": timeout_override or self._timeout,
+                temperature=(1 if is_reasoning else self._temperature),
+                timeout=timeout_override or self._timeout,
                 **({"stream_options": {"include_usage": True}} if stream else {}),
                 # For now, we don't support parallel tool calls
                 # NOTE: we can't pass this in if tools are not specified
@@ -349,18 +362,8 @@ class LitellmLLM(LLM):
                     else {}
                 ),
                 **({self._max_token_param: max_tokens} if max_tokens else {}),
-                **model_kwargs_without_metadata,
-            }
-
-            if SEND_USER_METADATA_TO_LLM_PROVIDER and user_identity:
-                if user_identity.session_id:
-                    metadata["session_id"] = user_identity.session_id
-                if user_identity.user_id:
-                    litellm_args["user"] = _truncate_litellm_user_id(user_identity.user_id)
-
-            if metadata:
-                litellm_args["metadata"] = metadata
-            return litellm.completion(**litellm_args)
+                **completion_kwargs,
+            )
         except Exception as e:
 
             self._record_error(prompt, e)
@@ -393,7 +396,7 @@ class LitellmLLM(LLM):
             max_input_tokens=self._max_input_tokens,
         )
 
-    def _invoke_implementation(
+    def invoke(
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
@@ -401,8 +404,8 @@ class LitellmLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
         user_identity: LLMUserIdentity | None = None,
-        reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM,
     ) -> ModelResponse:
         from litellm import ModelResponse as LiteLLMModelResponse
 
@@ -424,11 +427,9 @@ class LitellmLLM(LLM):
             ),
         )
 
-        parsed = from_litellm_model_response(response)
-        self._record_result(prompt, parsed)
-        return parsed
+        return from_litellm_model_response(response)
 
-    def _stream_implementation(
+    def stream(
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
@@ -436,8 +437,8 @@ class LitellmLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
         user_identity: LLMUserIdentity | None = None,
-        reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM,
     ) -> Iterator[ModelResponseStream]:
         from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
         from onyx.llm.model_response import from_litellm_model_response_stream

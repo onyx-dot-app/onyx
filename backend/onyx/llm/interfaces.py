@@ -13,6 +13,7 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+
 class LLMUserIdentity(BaseModel):
     user_id: str | None = None
     session_id: str | None = None
@@ -47,46 +48,9 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
         user_identity: LLMUserIdentity | None = None,
-        reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM,
-    ) -> ModelResponse:
-        return self._invoke_implementation(
-            prompt=prompt,
-            tools=tools,
-            tool_choice=tool_choice,
-            structured_response_format=structured_response_format,
-            timeout_override=timeout_override,
-            max_tokens=max_tokens,
-            user_identity=user_identity,
-            reasoning_effort=reasoning_effort,
-        )
-
-    @abc.abstractmethod
-    def _invoke_implementation(
-        self,
-        prompt: LanguageModelInput,
-        tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
-        structured_response_format: dict | None = None,
-        timeout_override: int | None = None,
-        max_tokens: int | None = None,
-        user_identity: LLMUserIdentity | None = None,
-        reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM,
-    ) -> ModelResponse:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def _stream_implementation(
-        self,
-        prompt: LanguageModelInput,
-        tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
-        structured_response_format: dict | None = None,
-        timeout_override: int | None = None,
-        max_tokens: int | None = None,
-        user_identity: LLMUserIdentity | None = None,
-        reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM,
-    ) -> Iterator[ModelResponseStream]:
+    ) -> "ModelResponse":
         raise NotImplementedError
 
     def stream(
@@ -97,16 +61,7 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
         user_identity: LLMUserIdentity | None = None,
-        reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM,
     ) -> Iterator[ModelResponseStream]:
-        return self._stream_implementation(
-            prompt=prompt,
-            tools=tools,
-            tool_choice=tool_choice,
-            structured_response_format=structured_response_format,
-            timeout_override=timeout_override,
-            max_tokens=max_tokens,
-            user_identity=user_identity,
-            reasoning_effort=reasoning_effort,
-        )
+        raise NotImplementedError
