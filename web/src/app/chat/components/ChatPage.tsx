@@ -42,15 +42,12 @@ import { useIsDefaultAgent } from "@/app/chat/hooks/useIsDefaultAgent";
 import {
   useChatSessionStore,
   useChatPageLayout,
-  useUncaughtError,
 } from "@/app/chat/stores/useChatSessionStore";
 import {
   useCurrentChatState,
   useIsReady,
-  useCurrentMessageTree,
   useHasPerformedInitialScroll,
   useDocumentSidebarVisible,
-  useHasSentLocalUserMessage,
 } from "@/app/chat/stores/useChatSessionStore";
 import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
 import ChatUI, { ChatUIHandle } from "@/sections/ChatUI";
@@ -100,11 +97,8 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
   const searchParams = useSearchParams();
 
   // Use SWR hooks for data fetching
-  const {
-    refreshChatSessions,
-    currentChatSession: selectedChatSession,
-    currentChatSessionId: existingChatSessionId,
-  } = useChatSessions();
+  const { refreshChatSessions, currentChatSession, currentChatSessionId } =
+    useChatSessions();
   const { ccPairs } = useCCPairs();
   const { tags } = useTags();
   const { documentSets } = useDocumentSets();
@@ -159,7 +153,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
 
   const { selectedAssistant, setSelectedAssistantFromId, liveAssistant } =
     useAssistantController({
-      selectedChatSession,
+      selectedChatSession: currentChatSession,
       onAssistantSelect: () => {
         // Only remove project context if user explicitly selected an assistant
         // (i.e., assistantId is present). Avoid clearing project when assistantId was removed.
@@ -174,7 +168,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
     });
 
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
-    chatSessionId: existingChatSessionId,
+    chatSessionId: currentChatSessionId,
     assistantId: selectedAssistant?.id,
   });
 
@@ -191,7 +185,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
   } = useOnboardingState(liveAssistant);
 
   const llmManager = useLlmManager(
-    selectedChatSession ?? undefined,
+    currentChatSession ?? undefined,
     liveAssistant
   );
 
@@ -265,8 +259,8 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
 
   const isDefaultAgent = useIsDefaultAgent({
     liveAssistant,
-    existingChatSessionId,
-    selectedChatSession: selectedChatSession ?? undefined,
+    existingChatSessionId: currentChatSessionId,
+    selectedChatSession: currentChatSession ?? undefined,
     settings,
   });
 
@@ -307,8 +301,8 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
   }, [message]);
 
   // Add refs needed by useChatSessionController
-  const chatSessionIdRef = useRef<string | null>(existingChatSessionId);
-  const loadedIdSessionRef = useRef<string | null>(existingChatSessionId);
+  const chatSessionIdRef = useRef<string | null>(currentChatSessionId);
+  const loadedIdSessionRef = useRef<string | null>(currentChatSessionId);
   const submitOnLoadPerformed = useRef<boolean>(false);
 
   function loadNewPageLogic(event: MessageEvent) {
@@ -343,7 +337,6 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
 
   // Access chat state directly from the store
   const currentChatState = useCurrentChatState();
-  const chatSessionId = useChatSessionStore((state) => state.currentSessionId);
   const isReady = useIsReady();
   const hasPerformedInitialScroll = useHasPerformedInitialScroll();
   const documentSidebarVisible = useDocumentSidebarVisible();
@@ -353,14 +346,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
   const updateCurrentDocumentSidebarVisible = useChatSessionStore(
     (state) => state.updateCurrentDocumentSidebarVisible
   );
-  const { showCenteredInput: showCenteredInputRaw, messageHistory } =
-    useChatPageLayout();
-
-  // When loading an existing chat session, always show input at bottom
-  // to prevent layout shift from centered → bottom position
-  const showCenteredInput = existingChatSessionId
-    ? false
-    : showCenteredInputRaw;
+  const { messageHistory } = useChatPageLayout();
 
   const clientScrollToBottom = useCallback(
     (fast?: boolean) => {
@@ -388,7 +374,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
       llmManager,
       availableAssistants: agents,
       liveAssistant,
-      existingChatSessionId,
+      existingChatSessionId: currentChatSessionId,
       selectedDocuments,
       searchParams,
       setPopup,
@@ -397,9 +383,9 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
       setSelectedAssistantFromId,
     });
 
-  const { onMessageSelection, currentSessionFileTokenCount, projectFiles } =
+  const { onMessageSelection, currentSessionFileTokenCount } =
     useChatSessionController({
-      existingChatSessionId,
+      existingChatSessionId: currentChatSessionId,
       searchParams,
       filterManager,
       firstMessage,
@@ -438,12 +424,12 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
       (!personaIncludesRetrieval &&
         (!selectedDocuments || selectedDocuments.length === 0) &&
         documentSidebarVisible) ||
-      chatSessionId == undefined
+      !!currentChatSessionId
     ) {
       updateCurrentDocumentSidebarVisible(false);
     }
     clientScrollToBottom();
-  }, [chatSessionId]);
+  }, [currentChatSessionId]);
 
   const [stackTraceModalContent, setStackTraceModalContent] = useState<
     string | null
@@ -521,18 +507,14 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
       </div>
     ) : null;
 
-  // Only show the centered hero layout when there is NO project selected
-  // and there are no messages yet. If a project is selected, prefer a top layout.
-  const showCenteredHero = currentProjectId === null && showCenteredInput;
-
   useEffect(() => {
-    if (currentProjectId !== null && showCenteredInput) {
+    if (!!currentProjectId && !currentChatSessionId) {
       setProjectPanelVisible(true);
     }
-    if (!showCenteredInput) {
+    if (!!currentChatSessionId) {
       setProjectPanelVisible(false);
     }
-  }, [currentProjectId, showCenteredInput]);
+  }, [currentProjectId, currentChatSessionId]);
 
   // When no chat session exists but a project is selected, fetch the
   // total tokens for the project's files so upload UX can compare
@@ -546,7 +528,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
   useEffect(() => {
     let cancelled = false;
     async function run() {
-      if (!existingChatSessionId && currentProjectId !== null) {
+      if (!currentChatSessionId && currentProjectId !== null) {
         try {
           const total = await getProjectTokenCount(currentProjectId);
           if (!cancelled) setProjectContextTokenCount(total || 0);
@@ -561,7 +543,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
     return () => {
       cancelled = true;
     };
-  }, [existingChatSessionId, currentProjectId, currentProjectDetails?.files]);
+  }, [currentChatSessionId, currentProjectId, currentProjectDetails?.files]);
 
   // Available context tokens source of truth:
   // - If a chat session exists, fetch from session API (dynamic per session/model)
@@ -573,10 +555,9 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
     let cancelled = false;
     async function run() {
       try {
-        if (existingChatSessionId) {
-          const available = await getAvailableContextTokens(
-            existingChatSessionId
-          );
+        if (currentChatSessionId) {
+          const available =
+            await getAvailableContextTokens(currentChatSessionId);
           const capped_context_tokens =
             (available ?? DEFAULT_CONTEXT_TOKENS) * 0.5;
           if (!cancelled) setAvailableContextTokens(capped_context_tokens);
@@ -599,7 +580,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
     return () => {
       cancelled = true;
     };
-  }, [existingChatSessionId, selectedAssistant?.id, liveAssistant?.id]);
+  }, [currentChatSessionId, selectedAssistant?.id, liveAssistant?.id]);
 
   // handle error case where no assistants are available
   // Only show this after agents have loaded to prevent flash during initial load
@@ -642,7 +623,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
                 props are wrapped in useCallback. */}
                 <DocumentResults
                   setPresentingDocument={setPresentingDocument}
-                  modal={true}
+                  modal
                   closeSidebar={handleMobileDocumentSidebarClose}
                   selectedDocuments={selectedDocuments}
                 />
@@ -683,36 +664,43 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
               className="h-full w-full flex flex-col items-center"
               {...getRootProps()}
             >
+              {/* ProjectUI */}
+              {!!currentProjectId && projectPanelVisible && (
+                <ProjectContextPanel
+                  projectTokenCount={projectContextTokenCount}
+                  availableContextTokens={availableContextTokens}
+                  setPresentingDocument={setPresentingDocument}
+                />
+              )}
+
               {/* ChatUI */}
-              <ChatUI
-                ref={chatUiRef}
-                liveAssistant={liveAssistant}
-                llmManager={llmManager}
-                currentMessageFiles={currentMessageFiles}
-                setPresentingDocument={setPresentingDocument}
-                onSubmit={onSubmit}
-                onMessageSelection={onMessageSelection}
-                stopGenerating={stopGenerating}
-                handleResubmitLastMessage={handleResubmitLastMessage}
-              />
+              {!!currentChatSessionId && (
+                <ChatUI
+                  ref={chatUiRef}
+                  liveAssistant={liveAssistant}
+                  llmManager={llmManager}
+                  currentMessageFiles={currentMessageFiles}
+                  setPresentingDocument={setPresentingDocument}
+                  onSubmit={onSubmit}
+                  onMessageSelection={onMessageSelection}
+                  stopGenerating={stopGenerating}
+                  handleResubmitLastMessage={handleResubmitLastMessage}
+                />
+              )}
+
+              {!currentChatSessionId && !currentProjectId && (
+                <div className="flex-1" />
+              )}
 
               {/* ChatInputBar container */}
               <div
                 ref={inputRef}
                 className="max-w-[50rem] w-full pointer-events-auto flex flex-col justify-center items-center"
               >
-                {currentProjectId === null && showCenteredInput && (
+                {!currentProjectId && !currentChatSessionId && (
                   <WelcomeMessage
                     agent={liveAssistant}
                     isDefaultAgent={isDefaultAgent}
-                  />
-                )}
-
-                {currentProjectId !== null && projectPanelVisible && (
-                  <ProjectContextPanel
-                    projectTokenCount={projectContextTokenCount}
-                    availableContextTokens={availableContextTokens}
-                    setPresentingDocument={setPresentingDocument}
                   />
                 )}
 
@@ -743,7 +731,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
                   onSubmit={handleChatInputSubmit}
                   chatState={currentChatState}
                   currentSessionFileTokenCount={
-                    existingChatSessionId
+                    currentChatSessionId
                       ? currentSessionFileTokenCount
                       : projectContextTokenCount
                   }
@@ -762,20 +750,21 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
 
                 <Spacer />
 
-                {currentProjectId !== null && (
-                  <div className="transition-all duration-700 ease-out">
-                    <ProjectChatSessionList />
-                  </div>
-                )}
+                {!!currentProjectId && <ProjectChatSessionList />}
 
                 {liveAssistant?.starter_messages &&
                   liveAssistant.starter_messages.length > 0 &&
                   messageHistory.length === 0 &&
-                  showCenteredHero && <Suggestions onSubmit={onSubmit} />}
+                  !currentProjectId &&
+                  !currentChatSessionId && <Suggestions onSubmit={onSubmit} />}
               </div>
 
               {/* SearchUI */}
-              <div className={cn(showCenteredHero ? "flex-1" : "h-4")} />
+              <div
+                className={cn(
+                  !currentProjectId && !currentChatSessionId ? "flex-1" : "h-4"
+                )}
+              />
             </div>
           )}
         </Dropzone>
