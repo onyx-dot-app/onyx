@@ -391,7 +391,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 logger.debug(
                     "Search tool - Skipping query expansion (repeat search call)"
                 )
-                semantic_query = ""
+                semantic_query = None
                 keyword_queries: list[str] = []
             else:
                 # Start timing for query expansion/rephrase
