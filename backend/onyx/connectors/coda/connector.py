@@ -66,7 +66,7 @@ class CodaPage(BaseModel):
     doc_id: str
 
 
-class Codatable_reference(BaseModel):
+class CodaTableReference(BaseModel):
     id: str
     browser_link: str
     name: str
@@ -388,11 +388,11 @@ class CodaConnector(LoadConnector, PollConnector):
         return "\n\n".join(content_parts)
 
     @retry(tries=3, delay=1, backoff=2)
-    def _list_tables(self, doc_id: str) -> List[Codatable_reference]:
+    def _list_tables(self, doc_id: str) -> List[CodaTableReference]:
         """List all tables in a Coda document."""
         logger.debug(f"Listing tables in Coda doc with ID: {doc_id}")
 
-        tables: List[Codatable_reference] = []
+        tables: List[CodaTableReference] = []
         endpoint = f"docs/{doc_id}/tables"
         params: Dict[str, str] = {}
         next_page_token: str | None = None
@@ -414,7 +414,7 @@ class CodaConnector(LoadConnector, PollConnector):
             items = response.get("items", [])
             for item in items:
                 tables.append(
-                    Codatable_reference(
+                    CodaTableReference(
                         id=item["id"],
                         browser_link=item["browserLink"],
                         name=item["name"],
