@@ -65,7 +65,7 @@ export default function DisconnectEntityModal({
           </Text>
         </Modal.Body>
 
-        <Modal.Footer className="p-4 gap-2">
+        <Modal.Footer className="w-full p-4 gap-2">
           <Button main secondary onClick={onClose} disabled={isDisconnecting}>
             Cancel
           </Button>

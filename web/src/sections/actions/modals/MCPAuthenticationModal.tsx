@@ -623,7 +623,7 @@ export default function MCPAuthenticationModal({
                   )}
                 </Modal.Body>
 
-                <Modal.Footer className="p-4 gap-2 bg-background-tint-00">
+                <Modal.Footer className="w-full p-4 gap-2 bg-background-tint-00">
                   <Button
                     main
                     tertiary
