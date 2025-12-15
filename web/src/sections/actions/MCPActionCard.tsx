@@ -109,6 +109,8 @@ export default function MCPActionCard({
 
   // Update expanded state when initialExpanded changes
   const hasInitializedExpansion = useRef(false);
+  const previousStatus = useRef<MCPServerStatus>(server.status);
+  const hasRetriedTools = useRef(false);
 
   // Apply initial expansion only once per component lifetime
   useEffect(() => {
@@ -134,6 +136,24 @@ export default function MCPActionCard({
     server,
     isExpanded: isToolsExpanded,
   });
+
+  // Retry tools fetch when server transitions from FETCHING_TOOLS to CONNECTED
+  useEffect(() => {
+    const statusChanged =
+      previousStatus.current === MCPServerStatus.FETCHING_TOOLS &&
+      server.status === MCPServerStatus.CONNECTED;
+
+    if (statusChanged && tools.length === 0 && !hasRetriedTools.current) {
+      console.log(
+        "Server status changed to CONNECTED with empty tools, retrying fetch"
+      );
+      hasRetriedTools.current = true;
+      mutate();
+    }
+
+    // Update previous status
+    previousStatus.current = server.status;
+  }, [server.status, tools.length, mutate]);
 
   const isNotAuthenticated = status === ActionStatus.PENDING;
 
@@ -274,8 +294,9 @@ export default function MCPActionCard({
         ariaLabel={`${title} MCP server card`}
       >
         <ToolsList
-          isFetching={server.status === MCPServerStatus.FETCHING_TOOLS}
-          onRetry={() => mutate()}
+          isFetching={
+            server.status === MCPServerStatus.FETCHING_TOOLS || isLoading
+          }
           totalCount={tools.length}
           enabledCount={tools.filter((tool) => tool.isEnabled).length}
           showOnlyEnabled={showOnlyEnabled}

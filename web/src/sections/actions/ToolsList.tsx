@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React from "react";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -12,7 +12,6 @@ import { SvgEye, SvgXCircle } from "@opal/icons";
 interface ToolsListProps {
   // Loading state
   isFetching?: boolean;
-  onRetry?: () => void;
 
   // Tool count for footer
   totalCount?: number;
@@ -39,7 +38,6 @@ interface ToolsListProps {
 
 const ToolsList: React.FC<ToolsListProps> = ({
   isFetching = false,
-  onRetry,
   totalCount,
   enabledCount,
   showOnlyEnabled = false,
@@ -53,16 +51,6 @@ const ToolsList: React.FC<ToolsListProps> = ({
   leftAction,
   className,
 }) => {
-  const hasRetried = useRef(false);
-
-  useEffect(() => {
-    // If the server reports tools but none were returned, try one automatic refetch
-    if (!isFetching && isEmpty && !hasRetried.current && onRetry) {
-      hasRetried.current = true;
-      onRetry();
-    }
-  }, [isFetching, isEmpty, onRetry]);
-
   const showFooter =
     totalCount !== undefined && enabledCount !== undefined && totalCount > 0;
 
