@@ -110,10 +110,19 @@ export default function MCPAuthenticationModal({
     "per-user"
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [redirectUri, setRedirectUri] = useState<string>("");
+
   // Check if OAuth is enabled for the Onyx instance
   const authType = useAuthType();
   const isOAuthEnabled =
     authType === AuthType.OIDC || authType === AuthType.GOOGLE_OAUTH;
+
+  // Get the current frontend URL for redirect URI
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setRedirectUri(`${window.location.origin}/mcp/oauth/callback`);
+    }
+  }, []);
 
   const { data: fullServer } = useSWR<MCPServer>(
     mcpServer ? `/api/admin/mcp/servers/${mcpServer.id}` : null,
@@ -134,10 +143,24 @@ export default function MCPAuthenticationModal({
     }
   }, [fullServer]);
 
+  // Helper function to determine transport from URL
+  const getTransportFromUrl = (url: string): MCPTransportType => {
+    const lowerUrl = url.toLowerCase();
+    if (lowerUrl.endsWith("sse")) {
+      return MCPTransportType.SSE;
+    } else if (lowerUrl.endsWith("mcp")) {
+      return MCPTransportType.STREAMABLE_HTTP;
+    }
+    // Default to STREAMABLE_HTTP
+    return MCPTransportType.STREAMABLE_HTTP;
+  };
+
   const initialValues = useMemo<MCPAuthFormValues>(() => {
     if (!fullServer) {
       return {
-        transport: MCPTransportType.STREAMABLE_HTTP,
+        transport: mcpServer?.server_url
+          ? getTransportFromUrl(mcpServer.server_url)
+          : MCPTransportType.STREAMABLE_HTTP,
         auth_type: MCPAuthenticationType.OAUTH,
         auth_performer: MCPAuthenticationPerformer.PER_USER,
         api_token: "",
@@ -152,9 +175,10 @@ export default function MCPAuthenticationModal({
     }
 
     return {
-      transport:
-        (fullServer.transport as MCPTransportType) ||
-        MCPTransportType.STREAMABLE_HTTP,
+      transport: fullServer.server_url
+        ? getTransportFromUrl(fullServer.server_url)
+        : (fullServer.transport as MCPTransportType) ||
+          MCPTransportType.STREAMABLE_HTTP,
       auth_type:
         (fullServer.auth_type as MCPAuthenticationType) ||
         MCPAuthenticationType.OAUTH,
@@ -175,7 +199,7 @@ export default function MCPAuthenticationModal({
       user_credentials:
         (fullServer.user_credentials as Record<string, string>) || {},
     };
-  }, [fullServer]);
+  }, [fullServer, mcpServer?.server_url]);
 
   const constructServerData = (values: MCPAuthFormValues) => {
     if (!mcpServer) return null;
@@ -306,356 +330,321 @@ export default function MCPAuthenticationModal({
             touched,
             isValid,
             dirty,
-          }) => (
-            <Form className="flex flex-col h-full">
-              <Modal.Body className="flex-1 overflow-y-auto max-h-[580px] p-2 bg-background-tint-01 w-full">
-                <div className="flex flex-col gap-4 p-2">
-                  {/* Transport */}
-                  <FormField
-                    name="transport"
-                    state={
-                      errors.transport && touched.transport
-                        ? "error"
-                        : touched.transport
-                          ? "success"
-                          : "idle"
-                    }
-                  >
-                    <FormField.Label>Transport</FormField.Label>
-                    <FormField.Control asChild>
-                      <InputSelect
-                        value={values.transport}
-                        onValueChange={(value) =>
-                          setFieldValue("transport", value)
+          }) => {
+            // Auto-populate transport based on URL
+            useEffect(() => {
+              if (mcpServer?.server_url) {
+                const transport = getTransportFromUrl(mcpServer.server_url);
+                setFieldValue("transport", transport);
+              }
+            }, [mcpServer?.server_url, setFieldValue]);
+
+            return (
+              <Form className="flex flex-col h-full">
+                <Modal.Body className="flex-1 overflow-y-auto max-h-[580px] p-2 bg-background-tint-01 w-full">
+                  <div className="flex flex-col gap-4 p-2">
+                    {/* Authentication Type */}
+                    <FormField
+                      name="auth_type"
+                      state={
+                        errors.auth_type && touched.auth_type
+                          ? "error"
+                          : touched.auth_type
+                            ? "success"
+                            : "idle"
+                      }
+                    >
+                      <FormField.Label>Authentication Method</FormField.Label>
+                      <FormField.Control asChild>
+                        <InputSelect
+                          value={values.auth_type}
+                          onValueChange={(value) => {
+                            setFieldValue("auth_type", value);
+                            // For OAuth + OAuth pass-through, we only support per-user auth
+                            if (
+                              value === MCPAuthenticationType.OAUTH ||
+                              value === MCPAuthenticationType.PT_OAUTH
+                            ) {
+                              setFieldValue(
+                                "auth_performer",
+                                MCPAuthenticationPerformer.PER_USER
+                              );
+                            } else if (value === MCPAuthenticationType.API_TOKEN) {
+                              // Keep auth_performer in sync with the selected API token tab
+                              setFieldValue(
+                                "auth_performer",
+                                activeAuthTab === "admin"
+                                  ? MCPAuthenticationPerformer.ADMIN
+                                  : MCPAuthenticationPerformer.PER_USER
+                              );
+                            }
+                          }}
+                        >
+                          <InputSelect.Trigger
+                            placeholder="Select method"
+                            data-testid="mcp-auth-method-select"
+                          />
+                          <InputSelect.Content>
+                            <InputSelect.Item
+                              value={MCPAuthenticationType.OAUTH}
+                              description="Each user need to authenticate via OAuth with their own credentials."
+                            >
+                              OAuth
+                            </InputSelect.Item>
+                            {isOAuthEnabled && (
+                              <InputSelect.Item
+                                value={MCPAuthenticationType.PT_OAUTH}
+                                description="Forward the user's OAuth access token used to authenticate Onyx."
+                              >
+                                OAuth Pass-through
+                              </InputSelect.Item>
+                            )}
+                            <InputSelect.Item
+                              value={MCPAuthenticationType.API_TOKEN}
+                              description="Use per-user individual API key or organization-wide shared API key."
+                            >
+                              API Key
+                            </InputSelect.Item>
+                            <InputSelect.Item
+                              value={MCPAuthenticationType.NONE}
+                              description="Not Recommended"
+                            >
+                              None
+                            </InputSelect.Item>
+                          </InputSelect.Content>
+                        </InputSelect>
+                      </FormField.Control>
+                      <FormField.Message
+                        messages={{
+                          error: errors.auth_type,
+                        }}
+                      />
+                    </FormField>
+                    <Separator className="py-0" />
+                  </div>
+
+                  {/* OAuth Section */}
+                  {values.auth_type === MCPAuthenticationType.OAUTH && (
+                    <div className="flex flex-col gap-4 px-2 py-2 bg-background-tint-00 rounded-12">
+                      {/* OAuth Client ID */}
+                      <FormField
+                        name="oauth_client_id"
+                        state={
+                          errors.oauth_client_id && touched.oauth_client_id
+                            ? "error"
+                            : touched.oauth_client_id
+                              ? "success"
+                              : "idle"
                         }
                       >
-                        <InputSelect.Trigger placeholder="Select transport" />
-                        <InputSelect.Content>
-                          <InputSelect.Item
-                            value={MCPTransportType.STREAMABLE_HTTP}
-                          >
-                            Streamable HTTP
-                          </InputSelect.Item>
-                          <InputSelect.Item value={MCPTransportType.SSE}>
-                            Server-Sent Events (SSE)
-                          </InputSelect.Item>
-                        </InputSelect.Content>
-                      </InputSelect>
-                    </FormField.Control>
-                    <FormField.Description>
-                      Used for client-server communication and authentication.
-                    </FormField.Description>
-                    <FormField.Message
-                      messages={{
-                        error: errors.transport,
-                      }}
-                    />
-                  </FormField>
-
-                  {/* Authentication Type */}
-                  <FormField
-                    name="auth_type"
-                    state={
-                      errors.auth_type && touched.auth_type
-                        ? "error"
-                        : touched.auth_type
-                          ? "success"
-                          : "idle"
-                    }
-                  >
-                    <FormField.Label>Authentication Method</FormField.Label>
-                    <FormField.Control asChild>
-                      <InputSelect
-                        value={values.auth_type}
-                        onValueChange={(value) => {
-                          setFieldValue("auth_type", value);
-                          // For OAuth + OAuth pass-through, we only support per-user auth
-                          if (
-                            value === MCPAuthenticationType.OAUTH ||
-                            value === MCPAuthenticationType.PT_OAUTH
-                          ) {
-                            setFieldValue(
-                              "auth_performer",
-                              MCPAuthenticationPerformer.PER_USER
-                            );
-                          } else if (
-                            value === MCPAuthenticationType.API_TOKEN
-                          ) {
-                            // Keep auth_performer in sync with the selected API token tab
-                            setFieldValue(
-                              "auth_performer",
-                              activeAuthTab === "admin"
-                                ? MCPAuthenticationPerformer.ADMIN
-                                : MCPAuthenticationPerformer.PER_USER
-                            );
-                          }
-                        }}
+                        <FormField.Label optional>Client ID</FormField.Label>
+                        <FormField.Control asChild>
+                          <InputTypeIn
+                            name="oauth_client_id"
+                            value={values.oauth_client_id}
+                            onChange={handleChange}
+                            placeholder=" "
+                            showClearButton={false}
+                          />
+                        </FormField.Control>
+                        <FormField.Message
+                          messages={{
+                            error: errors.oauth_client_id,
+                          }}
+                        />
+                      </FormField>
+                      {/* OAuth Client Secret */}
+                      <FormField
+                        name="oauth_client_secret"
+                        state={
+                          errors.oauth_client_secret &&
+                          touched.oauth_client_secret
+                            ? "error"
+                            : touched.oauth_client_secret
+                              ? "success"
+                              : "idle"
+                        }
                       >
-                        <InputSelect.Trigger
-                          placeholder="Select method"
-                          data-testid="mcp-auth-method-select"
+                        <FormField.Label optional>
+                          Client Secret
+                        </FormField.Label>
+                        <FormField.Control asChild>
+                          <PasswordInputTypeIn
+                            name="oauth_client_secret"
+                            value={values.oauth_client_secret}
+                            onChange={handleChange}
+                            placeholder=" "
+                            showClearButton={false}
+                          />
+                        </FormField.Control>
+                        <FormField.Message
+                          messages={{
+                            error: errors.oauth_client_secret,
+                          }}
                         />
-                        <InputSelect.Content>
-                          <InputSelect.Item
-                            value={MCPAuthenticationType.OAUTH}
-                            description="Each user need to authenticate via OAuth with their own credentials."
-                          >
-                            OAuth
-                          </InputSelect.Item>
-                          {isOAuthEnabled && (
-                            <InputSelect.Item
-                              value={MCPAuthenticationType.PT_OAUTH}
-                              description="Forward the user's OAuth access token used to authenticate Onyx."
-                            >
-                              OAuth Pass-through
-                            </InputSelect.Item>
-                          )}
-                          <InputSelect.Item
-                            value={MCPAuthenticationType.API_TOKEN}
-                            description="Use per-user individual API key or organization-wide shared API key."
-                          >
-                            API Key
-                          </InputSelect.Item>
-                          <InputSelect.Item
-                            value={MCPAuthenticationType.NONE}
-                            description="Not Recommended"
-                          >
-                            None
-                          </InputSelect.Item>
-                        </InputSelect.Content>
-                      </InputSelect>
-                    </FormField.Control>
-                    <FormField.Message
-                      messages={{
-                        error: errors.auth_type,
-                      }}
-                    />
-                  </FormField>
-                  <Separator className="py-0" />
-                </div>
+                      </FormField>
 
-                {/* OAuth Section */}
-                {values.auth_type === MCPAuthenticationType.OAUTH && (
-                  <div className="flex flex-col gap-4 px-2 py-2 bg-background-tint-00 rounded-12">
-                    {/* OAuth Client ID */}
-                    <FormField
-                      name="oauth_client_id"
-                      state={
-                        errors.oauth_client_id && touched.oauth_client_id
-                          ? "error"
-                          : touched.oauth_client_id
-                            ? "success"
-                            : "idle"
-                      }
-                    >
-                      <FormField.Label optional>Client ID</FormField.Label>
-                      <FormField.Control asChild>
-                        <InputTypeIn
-                          name="oauth_client_id"
-                          value={values.oauth_client_id}
-                          onChange={handleChange}
-                          placeholder=" "
-                          showClearButton={false}
-                        />
-                      </FormField.Control>
-                      <FormField.Message
-                        messages={{
-                          error: errors.oauth_client_id,
-                        }}
-                      />
-                    </FormField>
-
-                    {/* OAuth Client Secret */}
-                    <FormField
-                      name="oauth_client_secret"
-                      state={
-                        errors.oauth_client_secret &&
-                        touched.oauth_client_secret
-                          ? "error"
-                          : touched.oauth_client_secret
-                            ? "success"
-                            : "idle"
-                      }
-                    >
-                      <FormField.Label optional>Client Secret</FormField.Label>
-                      <FormField.Control asChild>
-                        <PasswordInputTypeIn
-                          name="oauth_client_secret"
-                          value={values.oauth_client_secret}
-                          onChange={handleChange}
-                          placeholder=" "
-                          showClearButton={false}
-                        />
-                      </FormField.Control>
-                      <FormField.Message
-                        messages={{
-                          error: errors.oauth_client_secret,
-                        }}
-                      />
-                    </FormField>
-
-                    {/* Info Text */}
-                    <div className="flex flex-col gap-2">
-                      <Text text03 secondaryBody>
-                        Client ID and secret are optional if the server
-                        connection supports Dynamic Client Registration (DCR).
-                      </Text>
-                      <Text text03 secondaryBody>
-                        If your server does not support DCR, you need register
-                        your Onyx instance with the server provider to obtain
-                        these credentials first. Make sure to grant Onyx
-                        necessary scopes/permissions for your actions.
-                      </Text>
-
-                      {/* Redirect URI */}
-                      <div className="flex items-center gap-1 w-full">
-                        <Text
-                          text03
-                          secondaryBody
-                          className="whitespace-nowrap"
-                        >
-                          Use{" "}
-                          <span className="font-secondary-action">
-                            redirect URI
-                          </span>
-                          :
+                      {/* Info Text */}
+                      <div className="flex flex-col gap-2">
+                        <Text text03 secondaryBody>
+                          Client ID and secret are optional if the server
+                          connection supports Dynamic Client Registration (DCR).
                         </Text>
-                        <Text
-                          text04
-                          className="font-mono text-[12px] leading-[16px] truncate"
-                        >
-                          https://cloud.onyx.app/mcp/oauth/callback
+                        <Text text03 secondaryBody>
+                          If your server does not support DCR, you need register
+                          your Onyx instance with the server provider to obtain
+                          these credentials first. Make sure to grant Onyx
+                          necessary scopes/permissions for your actions.
                         </Text>
-                        <CopyIconButton
-                          getCopyText={() =>
-                            "https://cloud.onyx.app/mcp/oauth/callback"
-                          }
-                          tooltip="Copy redirect URI"
-                          internal
-                        />
+
+                        {/* Redirect URI */}
+                        <div className="flex items-center gap-1 w-full">
+                          <Text
+                            text03
+                            secondaryBody
+                            className="whitespace-nowrap"
+                          >
+                            Use{" "}
+                            <span className="font-secondary-action">
+                              redirect URI
+                            </span>
+                            :
+                          </Text>
+                          <Text
+                            text04
+                            className="font-mono text-[12px] leading-[16px] truncate"
+                          >
+                            {redirectUri || "Loading..."}
+                          </Text>
+                          <CopyIconButton
+                            getCopyText={() => redirectUri}
+                            tooltip="Copy redirect URI"
+                            internal
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {/* API Key Section with Tabs */}
-                {values.auth_type === MCPAuthenticationType.API_TOKEN && (
-                  <div className="flex flex-col gap-4 px-2 py-2 bg-background-tint-00 rounded-12">
-                    <Tabs
-                      value={activeAuthTab}
-                      onValueChange={(value) => {
-                        setActiveAuthTab(value as "per-user" | "admin");
-                        // Update auth_performer based on tab selection
-                        setFieldValue(
-                          "auth_performer",
-                          value === "per-user"
-                            ? MCPAuthenticationPerformer.PER_USER
-                            : MCPAuthenticationPerformer.ADMIN
-                        );
-                      }}
-                      className="w-full"
-                    >
-                      <TabsList className="w-full">
-                        <TabsTrigger value="per-user" className="flex-1">
-                          Individual Key (Per User)
-                        </TabsTrigger>
-                        <TabsTrigger value="admin" className="flex-1">
-                          Shared Key (Admin)
-                        </TabsTrigger>
-                      </TabsList>
+                  {/* API Key Section with Tabs */}
+                  {values.auth_type === MCPAuthenticationType.API_TOKEN && (
+                    <div className="flex flex-col gap-4 px-2 py-2 bg-background-tint-00 rounded-12">
+                      <Tabs
+                        value={activeAuthTab}
+                        onValueChange={(value) => {
+                          setActiveAuthTab(value as "per-user" | "admin");
+                          // Update auth_performer based on tab selection
+                          setFieldValue(
+                            "auth_performer",
+                            value === "per-user"
+                              ? MCPAuthenticationPerformer.PER_USER
+                              : MCPAuthenticationPerformer.ADMIN
+                          );
+                        }}
+                        className="w-full"
+                      >
+                        <TabsList className="w-full">
+                          <TabsTrigger value="per-user" className="flex-1">
+                            Individual Key (Per User)
+                          </TabsTrigger>
+                          <TabsTrigger value="admin" className="flex-1">
+                            Shared Key (Admin)
+                          </TabsTrigger>
+                        </TabsList>
 
-                      {/* Per-user Tab Content */}
-                      <TabsContent value="per-user" className="w-full">
-                        <PerUserAuthConfig
-                          values={values}
-                          setFieldValue={setFieldValue}
-                        />
-                      </TabsContent>
+                        {/* Per-user Tab Content */}
+                        <TabsContent value="per-user" className="w-full">
+                          <PerUserAuthConfig
+                            values={values}
+                            setFieldValue={setFieldValue}
+                          />
+                        </TabsContent>
 
-                      {/* Admin Tab Content */}
-                      <TabsContent value="admin" className="w-full">
-                        <div className="flex flex-col gap-4 px-2 py-2 bg-background-tint-00 rounded-12">
-                          <FormField
-                            name="api_token"
-                            state={
-                              errors.api_token && touched.api_token
-                                ? "error"
-                                : touched.api_token
-                                  ? "success"
-                                  : "idle"
-                            }
-                          >
-                            <FormField.Label>API Key</FormField.Label>
-                            <FormField.Control asChild>
-                              <PasswordInputTypeIn
-                                name="api_token"
-                                value={values.api_token}
-                                onChange={handleChange}
-                                placeholder="Shared API key for your organization"
-                                showClearButton={false}
+                        {/* Admin Tab Content */}
+                        <TabsContent value="admin" className="w-full">
+                          <div className="flex flex-col gap-4 px-2 py-2 bg-background-tint-00 rounded-12">
+                            <FormField
+                              name="api_token"
+                              state={
+                                errors.api_token && touched.api_token
+                                  ? "error"
+                                  : touched.api_token
+                                    ? "success"
+                                    : "idle"
+                              }
+                            >
+                              <FormField.Label>API Key</FormField.Label>
+                              <FormField.Control asChild>
+                                <PasswordInputTypeIn
+                                  name="api_token"
+                                  value={values.api_token}
+                                  onChange={handleChange}
+                                  placeholder="Shared API key for your organization"
+                                  showClearButton={false}
+                                />
+                              </FormField.Control>
+                              <FormField.Description>
+                                Do not use your personal API key. Make sure this
+                                key is appropriate to share with everyone in
+                                your organization.
+                              </FormField.Description>
+                              <FormField.Message
+                                messages={{
+                                  error: errors.api_token,
+                                }}
                               />
-                            </FormField.Control>
-                            <FormField.Description>
-                              Do not use your personal API key. Make sure this
-                              key is appropriate to share with everyone in your
-                              organization.
-                            </FormField.Description>
-                            <FormField.Message
-                              messages={{
-                                error: errors.api_token,
-                              }}
-                            />
-                          </FormField>
-                        </div>
-                      </TabsContent>
-                    </Tabs>
-                  </div>
-                )}
-                {values.auth_type === MCPAuthenticationType.NONE && (
-                  <Message
-                    text="No authentication for this MCP server"
-                    description="No authentication will be used for this connection. Make sure you trust this server. You are responsible for actions taken with this connection."
-                    default
-                    medium
-                    static
-                    className="w-full"
-                    close={false}
-                  />
-                )}
-                {values.auth_type === MCPAuthenticationType.PT_OAUTH && (
-                  <Message
-                    text="Use pass-through for services with shared identity provider."
-                    description="Onyx will forward the user's OAuth access token directly to the server as an Authorization header. Make sure the server supports authentication with the same provider."
-                    default
-                    medium
-                    static
-                    className="w-full"
-                    close={false}
-                  />
-                )}
-              </Modal.Body>
+                            </FormField>
+                          </div>
+                        </TabsContent>
+                      </Tabs>
+                    </div>
+                  )}
+                  {values.auth_type === MCPAuthenticationType.NONE && (
+                    <Message
+                      text="No authentication for this MCP server"
+                      description="No authentication will be used for this connection. Make sure you trust this server. You are responsible for actions taken with this connection."
+                      default
+                      medium
+                      static
+                      className="w-full"
+                      close={false}
+                    />
+                  )}
+                  {values.auth_type === MCPAuthenticationType.PT_OAUTH && (
+                    <Message
+                      text="Use pass-through for services with shared identity provider."
+                      description="Onyx will forward the user's OAuth access token directly to the server as an Authorization header. Make sure the server supports authentication with the same provider."
+                      default
+                      medium
+                      static
+                      className="w-full"
+                      close={false}
+                    />
+                  )}
+                </Modal.Body>
 
-              <Modal.Footer className="p-4 gap-2 bg-background-tint-00">
-                <Button
-                  main
-                  tertiary
-                  type="button"
-                  onClick={() => toggle(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  main
-                  primary
-                  type="submit"
-                  disabled={!isValid || isSubmitting}
-                  data-testid="mcp-auth-connect-button"
-                >
-                  {isSubmitting ? "Connecting..." : "Connect"}
-                </Button>
-              </Modal.Footer>
-            </Form>
-          )}
+                <Modal.Footer className="p-4 gap-2 bg-background-tint-00">
+                  <Button
+                    main
+                    tertiary
+                    type="button"
+                    onClick={() => toggle(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    main
+                    primary
+                    type="submit"
+                    disabled={!isValid || isSubmitting}
+                    data-testid="mcp-auth-connect-button"
+                  >
+                    {isSubmitting ? "Connecting..." : "Connect"}
+                  </Button>
+                </Modal.Footer>
+              </Form>
+            );
+          }}
         </Formik>
       </Modal.Content>
     </Modal>

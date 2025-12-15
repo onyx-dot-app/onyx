@@ -79,7 +79,7 @@ function ActionCardHeader({
               )}
             />
           ) : (
-            <div className="min-w-0 flex-1 overflow-hidden">
+            <div className="min-w-0 shrink overflow-hidden">
               <Truncated
                 mainContentEmphasis
                 className={cn(
@@ -96,12 +96,12 @@ function ActionCardHeader({
             </div>
           )}
           {isPending && !isRenaming && (
-            <Text mainUiMuted text03>
+            <Text mainUiMuted text03 className="shrink-0 whitespace-nowrap">
               (Not Authenticated)
             </Text>
           )}
           {isDisconnected && !isRenaming && (
-            <Text mainUiMuted text02>
+            <Text mainUiMuted text02 className="shrink-0 whitespace-nowrap">
               (Disconnected)
             </Text>
           )}
