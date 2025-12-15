@@ -269,6 +269,8 @@ openai==2.8.1
     # via
     #   litellm
     #   onyx
+openapi-generator-cli==7.17.0
+    # via onyx
 packaging==24.2
     # via
     #   black
