@@ -170,7 +170,7 @@ jobs:
             file_processing:
               - 'backend/onyx/file_processing/**'
 
-      - name: Run Tests (excluding HubSpot, Salesforce, and GitHub)
+      - name: Run Tests (excluding HubSpot, Salesforce, GitHub, and Coda)
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
           py.test \
@@ -183,7 +183,8 @@ jobs:
             backend/tests/daily/connectors \
             --ignore backend/tests/daily/connectors/hubspot \
             --ignore backend/tests/daily/connectors/salesforce \
-            --ignore backend/tests/daily/connectors/github
+            --ignore backend/tests/daily/connectors/github \
+            --ignore backend/tests/daily/connectors/coda
 
       - name: Run HubSpot Connector Tests
         if: ${{ github.event_name == 'schedule' || steps.changes.outputs.hubspot == 'true' || steps.changes.outputs.file_processing == 'true' }}
