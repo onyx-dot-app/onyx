@@ -512,6 +512,7 @@ def stream_chat_message_objects(
                 llm=llm,
                 token_counter=token_counter,
                 db_session=db_session,
+                user_identity=user_identity,
             )
         else:
             yield from run_chat_llm_with_state_containers(
