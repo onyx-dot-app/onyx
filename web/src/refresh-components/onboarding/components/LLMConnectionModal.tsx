@@ -96,27 +96,6 @@ export default function LLMConnectionModal({
     }
   };
 
-  const testApiKey = async (apiKey: string, formikProps: FormikProps<any>) => {
-    setApiStatus("loading");
-    setShowApiMessage(true);
-    if (!llmDescriptor) {
-      setApiStatus("error");
-      return;
-    }
-    const result = await testApiKeyHelper(
-      llmDescriptor,
-      initialValues,
-      formikProps.values,
-      apiKey
-    );
-    if (result.ok) {
-      setApiStatus("success");
-    } else {
-      setErrorMessage(result.errorMessage);
-      setApiStatus("error");
-    }
-  };
-
   const testFileInputChange = async (
     customConfig: Record<string, any>,
     formikProps: FormikProps<any>
@@ -352,7 +331,7 @@ export default function LLMConnectionModal({
               setApiStatus={setApiStatus}
             />
             <Form className="flex flex-col gap-0">
-              <div className="flex flex-col p-4 gap-4 bg-background-tint-01 w-full">
+              <div className="flex flex-col w-full pt-2">
                 {isCustomProvider ? (
                   <LLMConnectionFieldsCustom
                     showApiMessage={showApiMessage}

@@ -73,7 +73,7 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
     })) || [];
 
   return (
-    <>
+    <div className="flex flex-col gap-2 w-full">
       <FormikField<string>
         name="provider"
         render={(field, helper, meta, state) => (
@@ -110,7 +110,7 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
         )}
       />
 
-      <Separator className="my-0" />
+      <Separator />
 
       <Text as="p" text03 secondaryBody className="ml-0.5">
         Fill in the following fields as needed. Refer to{" "}
@@ -199,7 +199,7 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
         )}
       />
 
-      <Separator className="my-0" />
+      <Separator />
 
       <div className="w-full">
         <FormField
@@ -229,7 +229,7 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
         </FormField>
       </div>
 
-      <Separator className="my-0" />
+      <Separator />
 
       <div className="w-full">
         <FormField
@@ -267,7 +267,7 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
         </FormField>
       </div>
 
-      <Separator className="my-0" />
+      <Separator />
 
       <FormikField<string>
         name="default_model_name"
@@ -291,6 +291,6 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
           </FormField>
         )}
       />
-    </>
+    </div>
   );
 };

@@ -63,7 +63,7 @@ export default function LLMConnectionFieldsBasic({
     }
   };
   return (
-    <>
+    <div className="flex flex-col gap-2 w-full">
       {llmDescriptor?.name === "azure" ? (
         <FormikField<string>
           name="target_uri"
@@ -212,141 +212,139 @@ export default function LLMConnectionFieldsBasic({
         }
 
         return (
-          <>
-            <FormikField<string>
-              key={customConfigKey.name}
-              name={`custom_config.${customConfigKey.name}`}
-              render={(field, helper, meta, state) => (
-                <FormField
-                  name={`custom_config.${customConfigKey.name}`}
-                  state={state}
-                  className="w-full"
-                >
-                  <FormField.Label>
-                    {customConfigKey.display_name || customConfigKey.name}
-                  </FormField.Label>
-                  <FormField.Control>
-                    {customConfigKey.key_type === "select" ? (
-                      <InputSelect
-                        value={
-                          (field.value as string) ??
-                          (customConfigKey.default_value as string) ??
-                          ""
-                        }
-                        onValueChange={(value) => helper.setValue(value)}
-                        disabled={disabled}
-                      >
-                        <InputSelect.Trigger onBlur={field.onBlur} />
+          <FormikField<string>
+            key={customConfigKey.name}
+            name={`custom_config.${customConfigKey.name}`}
+            render={(field, helper, meta, state) => (
+              <FormField
+                name={`custom_config.${customConfigKey.name}`}
+                state={state}
+                className="w-full"
+              >
+                <FormField.Label>
+                  {customConfigKey.display_name || customConfigKey.name}
+                </FormField.Label>
+                <FormField.Control>
+                  {customConfigKey.key_type === "select" ? (
+                    <InputSelect
+                      value={
+                        (field.value as string) ??
+                        (customConfigKey.default_value as string) ??
+                        ""
+                      }
+                      onValueChange={(value) => helper.setValue(value)}
+                      disabled={disabled}
+                    >
+                      <InputSelect.Trigger onBlur={field.onBlur} />
 
-                        <InputSelect.Content>
-                          {customConfigKey.options?.map((opt) => (
-                            <InputSelect.Item
-                              key={opt.value}
-                              value={opt.value}
-                              description={opt?.description ?? undefined}
-                            >
-                              {opt.label}
-                            </InputSelect.Item>
-                          ))}
-                        </InputSelect.Content>
-                      </InputSelect>
-                    ) : customConfigKey.key_type === "file_input" ? (
-                      <InputFile
-                        placeholder={customConfigKey.default_value || ""}
-                        setValue={(value) => helper.setValue(value)}
-                        onValueSet={(value) =>
-                          testFileInputChange({ [customConfigKey.name]: value })
+                      <InputSelect.Content>
+                        {customConfigKey.options?.map((opt) => (
+                          <InputSelect.Item
+                            key={opt.value}
+                            value={opt.value}
+                            description={opt?.description ?? undefined}
+                          >
+                            {opt.label}
+                          </InputSelect.Item>
+                        ))}
+                      </InputSelect.Content>
+                    </InputSelect>
+                  ) : customConfigKey.key_type === "file_input" ? (
+                    <InputFile
+                      placeholder={customConfigKey.default_value || ""}
+                      setValue={(value) => helper.setValue(value)}
+                      onValueSet={(value) =>
+                        testFileInputChange({ [customConfigKey.name]: value })
+                      }
+                      error={apiStatus === "error"}
+                      onBlur={(e) => {
+                        field.onBlur(e);
+                        if (field.value) {
+                          testFileInputChange({
+                            [customConfigKey.name]: field.value,
+                          });
                         }
-                        error={apiStatus === "error"}
-                        onBlur={(e) => {
-                          field.onBlur(e);
-                          if (field.value) {
-                            testFileInputChange({
-                              [customConfigKey.name]: field.value,
-                            });
-                          }
-                        }}
-                        showClearButton={true}
-                        disabled={disabled}
-                      />
-                    ) : customConfigKey.is_secret ? (
-                      <PasswordInputTypeIn
-                        {...field}
-                        placeholder={customConfigKey.default_value || ""}
-                        showClearButton={false}
-                        disabled={disabled}
-                        error={apiStatus === "error"}
-                      />
-                    ) : (
-                      <InputTypeIn
-                        {...field}
-                        placeholder={customConfigKey.default_value || ""}
-                        showClearButton={false}
-                        disabled={disabled}
-                        error={apiStatus === "error"}
-                      />
-                    )}
-                  </FormField.Control>
-                  {(() => {
-                    const alwaysShowDesc = HIDE_API_MESSAGE_FIELDS[
-                      llmDescriptor?.name as string
-                    ]?.includes(customConfigKey.name);
-                    const hasDesc = !!customConfigKey.description;
-                    return (
-                      hasDesc &&
-                      (alwaysShowDesc || (!alwaysShowDesc && !showApiMessage))
-                    );
-                  })() && (
-                    <FormField.Message
+                      }}
+                      showClearButton={true}
+                      disabled={disabled}
+                    />
+                  ) : customConfigKey.is_secret ? (
+                    <PasswordInputTypeIn
+                      {...field}
+                      placeholder={customConfigKey.default_value || ""}
+                      showClearButton={false}
+                      disabled={disabled}
+                      error={apiStatus === "error"}
+                    />
+                  ) : (
+                    <InputTypeIn
+                      {...field}
+                      placeholder={customConfigKey.default_value || ""}
+                      showClearButton={false}
+                      disabled={disabled}
+                      error={apiStatus === "error"}
+                    />
+                  )}
+                </FormField.Control>
+                {(() => {
+                  const alwaysShowDesc = HIDE_API_MESSAGE_FIELDS[
+                    llmDescriptor?.name as string
+                  ]?.includes(customConfigKey.name);
+                  const hasDesc = !!customConfigKey.description;
+                  return (
+                    hasDesc &&
+                    (alwaysShowDesc || (!alwaysShowDesc && !showApiMessage))
+                  );
+                })() && (
+                  <FormField.Message
+                    messages={{
+                      idle: (
+                        <>
+                          {modalContent?.field_metadata?.[
+                            customConfigKey.name
+                          ] ?? customConfigKey.description}
+                        </>
+                      ),
+                      error: meta.error,
+                    }}
+                  />
+                )}
+                {llmDescriptor?.name === "bedrock" &&
+                  customConfigKey.name === "BEDROCK_AUTH_METHOD" &&
+                  ((field.value as string) ??
+                    (customConfigKey.default_value as string) ??
+                    "") === "iam" && (
+                    <div className="flex gap-1 p-2 border border-border-01 rounded-12 bg-background-tint-01">
+                      <div className="p-1">
+                        <SvgAlertCircle className="h-4 w-4 stroke-text-03" />
+                      </div>
+                      <Text as="p" text04 mainUiBody>
+                        Onyx will use the IAM role attached to the environment
+                        it&apos;s running in to authenticate.
+                      </Text>
+                    </div>
+                  )}
+                {showApiMessage &&
+                  !HIDE_API_MESSAGE_FIELDS[llmDescriptor?.name]?.includes(
+                    customConfigKey.name
+                  ) && (
+                    <FormField.APIMessage
+                      state={apiStatus}
                       messages={{
-                        idle: (
-                          <>
-                            {modalContent?.field_metadata?.[
-                              customConfigKey.name
-                            ] ?? customConfigKey.description}
-                          </>
-                        ),
-                        error: meta.error,
+                        loading: `Checking API key with ${modalContent?.display_name}...`,
+                        success:
+                          "API key valid. Your available models updated.",
+                        error: errorMessage || "Invalid API key",
                       }}
                     />
                   )}
-                  {llmDescriptor?.name === "bedrock" &&
-                    customConfigKey.name === "BEDROCK_AUTH_METHOD" &&
-                    ((field.value as string) ??
-                      (customConfigKey.default_value as string) ??
-                      "") === "iam" && (
-                      <div className="flex gap-1 p-2 border border-border-01 rounded-12 bg-background-tint-01">
-                        <div className="p-1">
-                          <SvgAlertCircle className="h-4 w-4 stroke-text-03" />
-                        </div>
-                        <Text as="p" text04 mainUiBody>
-                          Onyx will use the IAM role attached to the environment
-                          it&apos;s running in to authenticate.
-                        </Text>
-                      </div>
-                    )}
-                  {showApiMessage &&
-                    !HIDE_API_MESSAGE_FIELDS[llmDescriptor?.name]?.includes(
-                      customConfigKey.name
-                    ) && (
-                      <FormField.APIMessage
-                        state={apiStatus}
-                        messages={{
-                          loading: `Checking API key with ${modalContent?.display_name}...`,
-                          success:
-                            "API key valid. Your available models updated.",
-                          error: errorMessage || "Invalid API key",
-                        }}
-                      />
-                    )}
-                </FormField>
-              )}
-            />
-          </>
+              </FormField>
+            )}
+          />
         );
       })}
 
-      <Separator className="my-0" />
+      <Separator />
 
       <FormikField<string>
         name="default_model_name"
@@ -421,6 +419,6 @@ export default function LLMConnectionFieldsBasic({
           </FormField>
         )}
       />
-    </>
+    </div>
   );
 }
