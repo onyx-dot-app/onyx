@@ -52,9 +52,9 @@ jobs:
         shell: bash
         run: |
           uv run openapi-generator-cli generate \
-            -i /local/openapi.json \
+            -i backend/generated/openapi.json \
             -g python \
-            -o /local/onyx_openapi_client \
+            -o backend/generated/onyx_openapi_client \
             --package-name onyx_openapi_client \
             --skip-validate-spec \
             --openapi-normalizer "SIMPLIFY_ONEOF_ANYOF=true,SET_OAS3_NULLABLE=true"
