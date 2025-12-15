@@ -22,8 +22,8 @@ def is_obsolete_model(model_name: str, provider: str) -> bool:
 
     # OpenAI obsolete models
     if provider == "openai":
-        # GPT-3 (not 3.5) is obsolete
-        if "gpt-3" in model_lower and "gpt-3.5" not in model_lower:
+        # GPT-3 models are obsolete
+        if "gpt-3" in model_lower:
             return True
         # Legacy models
         deprecated = {
