@@ -7,7 +7,7 @@ import pytest
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.coda.connector import CodaConnector
 from onyx.connectors.models import Document
-import onyx.connectors.exceptions as ConnectorMissingCredentialError
+from onyx.connectors.exceptions import CredentialInvalidError
 
 
 @pytest.fixture
@@ -106,10 +106,9 @@ class TestCodaConnectorValidation:
         """Test that invalid credentials are rejected."""
         conn = CodaConnector()
         
-        with pytest.raises(ConnectorMissingCredentialError):  
+        with pytest.raises(CredentialInvalidError):  
             conn.load_credentials({
                 "coda_bearer_token": "invalid_token_12345",
-                "coda_base_url": "https://coda.io/apis/v1",
             })
 
 
@@ -148,10 +147,13 @@ class TestLoadFromState:
         
         total_documents = sum(len(batch) for batch in gen)
         expected_count = reference_data["total_documents"]
-        
-        assert (
-            total_documents == expected_count
-        ), f"Expected {expected_count} documents ({reference_data['total_pages']} pages + {reference_data['total_tables']} tables) but got {total_documents}"
+
+        assert total_documents == expected_count, (
+            f"Expected {expected_count} documents "
+            f"({reference_data['total_pages']} pages + "
+            f"{reference_data['total_tables']} tables) "
+            f"but got {total_documents}"
+        )
     
     def test_document_required_fields(self, connector, reference_data):
         """Test that all documents have required fields with valid values."""

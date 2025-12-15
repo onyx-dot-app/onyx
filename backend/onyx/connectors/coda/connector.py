@@ -1,7 +1,12 @@
 import os
-from datetime import datetime, timezone
+from datetime import datetime
+from datetime import timezone
 from collections.abc import Generator
-from typing import Any, Dict, List, Optional, cast
+from typing import Any
+from typing import cast
+from typing import Dict
+from typing import List
+from typing import Optional
 
 from pydantic import BaseModel
 from retry import retry
@@ -12,37 +17,31 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
     rl_requests,
 )
-from onyx.connectors.exceptions import (
-    ConnectorValidationError,
-    CredentialExpiredError,
-    InsufficientPermissionsError,
-    UnexpectedValidationError,
-)
-from onyx.connectors.interfaces import (
-    GenerateDocumentsOutput,
-    LoadConnector,
-    PollConnector,
-    SecondsSinceUnixEpoch,
-)
-from onyx.connectors.models import (
-    ConnectorMissingCredentialError,
-    Document,
-    ImageSection,
-    TextSection,
-)
 
+from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import CredentialExpiredError
+from onyx.connectors.exceptions import UnexpectedValidationError
+from onyx.connectors.interfaces import GenerateDocumentsOutput
+from onyx.connectors.interfaces import LoadConnector
+from onyx.connectors.interfaces import PollConnector
+from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.connectors.models import Document
+from onyx.connectors.models import ImageSection
+from onyx.connectors.models import TextSection
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 
-
 _CODA_CALL_TIMEOUT = 30
-CODA_BASE_URL = "https://coda.io/apis/v1"
+_CODA_BASE_URL = "https://coda.io/apis/v1"
 
 logger = setup_logger()
 
 class CodaClientRequestFailedError(ConnectionError):
     def __init__(self, message: str, status_code: int):
-        super().__init__(f"Coda API request failed with status {status_code}: {message}")
+        super().__init__(
+            f"Coda API request failed with status {status_code}: {message}"
+        )
         self.status_code = status_code
 
 
@@ -95,14 +94,15 @@ class CodaApiClient:
         bearer_token: str, 
     ) -> None:
         self.bearer_token = bearer_token
-        self.base_url = os.environ.get("CODA_BASE_URL", CODA_BASE_URL)  
+        self.base_url = os.environ.get("CODA_BASE_URL", _CODA_BASE_URL)  
     
     def get(self, endpoint: str, params: Optional[dict[str, str]] = None) -> dict[str, Any]:
         url = self._build_url(endpoint)
         headers = self._build_headers()
 
-        #although the Coda API is generous with rate limits, we still want to respect them
-        response = rl_requests.get(url, headers=headers, params=params, timeout=_CODA_CALL_TIMEOUT)
+        response = rl_requests.get(
+            url, headers=headers, params=params, timeout=_CODA_CALL_TIMEOUT
+        )
 
         try:
             json = response.json()
@@ -144,7 +144,9 @@ class CodaConnector(LoadConnector, PollConnector):
         """Fetch a specific Coda document by its ID."""
         logger.debug(f"Fetching Coda doc with ID: {doc_id}")
         try:
-            response = self.coda_client.get(f"docs/{doc_id}")
+            response = self.coda_client.get(
+                f"docs/{doc_id}"
+            )
         except CodaClientRequestFailedError as e:
             if e.status_code == 404:
                 raise ConnectorValidationError(f"Failed to fetch doc: {doc_id}") from e
@@ -168,10 +170,14 @@ class CodaConnector(LoadConnector, PollConnector):
         """Fetch a specific page from a Coda document."""
         logger.debug(f"Fetching Coda page with ID: {page_id}")
         try:
-            response = self.coda_client.get(f"docs/{doc_id}/pages/{page_id}")
+            response = self.coda_client.get(
+                f"docs/{doc_id}/pages/{page_id}"
+            )
         except CodaClientRequestFailedError as e:
             if e.status_code == 404:
-                raise ConnectorValidationError(f"Failed to fetch page: {page_id} from doc: {doc_id}") from e
+                raise ConnectorValidationError(
+                    f"Failed to fetch page: {page_id} from doc: {doc_id}"
+                ) from e
             else:
                 raise
 
@@ -190,10 +196,14 @@ class CodaConnector(LoadConnector, PollConnector):
         """Fetch a specific table from a Coda document."""
         logger.debug(f"Fetching Coda table with ID: {table_id}")
         try:
-            response = self.coda_client.get(f"docs/{doc_id}/tables/{table_id}")
+            response = self.coda_client.get(
+                f"docs/{doc_id}/tables/{table_id}"
+            )
         except CodaClientRequestFailedError as e:
             if e.status_code == 404:
-                raise ConnectorValidationError(f"Failed to fetch table: {table_id} from doc: {doc_id}") from e
+                raise ConnectorValidationError(
+                    f"Failed to fetch table: {table_id} from doc: {doc_id}"
+                ) from e
             else:
                 raise
 
@@ -211,10 +221,14 @@ class CodaConnector(LoadConnector, PollConnector):
         """Fetch a specific row from a Coda table."""
         logger.debug(f"Fetching Coda row with ID: {row_id}")
         try:
-            response = self.coda_client.get(f"docs/{doc_id}/tables/{table_id}/rows/{row_id}")
+            response = self.coda_client.get(
+                f"docs/{doc_id}/tables/{table_id}/rows/{row_id}"
+            )
         except CodaClientRequestFailedError as e:
             if e.status_code == 404:
-                raise ConnectorValidationError(f"Failed to fetch row: {row_id} from table: {table_id} in doc: {doc_id}") from e
+                raise ConnectorValidationError(
+                    f"Failed to fetch row: {row_id} from table: {table_id} in doc: {doc_id}"
+                ) from e
             else:
                 raise
 
@@ -242,11 +256,11 @@ class CodaConnector(LoadConnector, PollConnector):
     ) -> List[CodaDoc]:
         """List all Coda documents in the workspace."""
         logger.debug("Listing documents in Coda")
+
         all_docs: List[CodaDoc] = []
         next_page_token: str | None = None
         params = params or {}
         
-        # Filter by workspace_id if specified
         if self.workspace_id:
             params["workspaceId"] = self.workspace_id
 
@@ -289,6 +303,7 @@ class CodaConnector(LoadConnector, PollConnector):
     def _list_pages_in_doc(self, doc_id: str) -> List[CodaPage]:
         """List all pages in a Coda document."""
         logger.debug(f"Listing pages in Coda doc with ID: {doc_id}")
+
         pages: List[CodaPage] = []
         endpoint = f"docs/{doc_id}/pages"
         params: Dict[str, str] = {}
@@ -302,7 +317,9 @@ class CodaConnector(LoadConnector, PollConnector):
                 response = self.coda_client.get(endpoint, params=params)
             except CodaClientRequestFailedError as e:
                 if e.status_code == 404:
-                    raise ConnectorValidationError(f"Failed to list pages for doc: {doc_id}") from e
+                    raise ConnectorValidationError(
+                        f"Failed to list pages for doc: {doc_id}"
+                    ) from e
                 else:
                     raise
 
@@ -335,6 +352,7 @@ class CodaConnector(LoadConnector, PollConnector):
     def _fetch_page_content(self, doc_id: str, page_id: str) -> str:
         """Fetch the content of a Coda page."""
         logger.debug(f"Fetching content for page {page_id} in doc {doc_id}")
+
         content_parts = []
         next_page_token: str | None = None
         params: Dict[str, str] = {}
@@ -344,7 +362,9 @@ class CodaConnector(LoadConnector, PollConnector):
                 params["pageToken"] = next_page_token
             
             try:
-                response = self.coda_client.get(f"docs/{doc_id}/pages/{page_id}/content", params=params)
+                response = self.coda_client.get(
+                    f"docs/{doc_id}/pages/{page_id}/content", params=params
+                )
             except CodaClientRequestFailedError as e:
                 if e.status_code == 404:
                     logger.debug(f"No content available for page {page_id}")
@@ -370,6 +390,7 @@ class CodaConnector(LoadConnector, PollConnector):
     def _list_tables(self, doc_id: str) -> List[CodaTable]:
         """List all tables in a Coda document."""
         logger.debug(f"Listing tables in Coda doc with ID: {doc_id}")
+
         tables: List[CodaTable] = []
         endpoint = f"docs/{doc_id}/tables"
         params: Dict[str, str] = {}
@@ -383,7 +404,9 @@ class CodaConnector(LoadConnector, PollConnector):
                 response = self.coda_client.get(endpoint, params=params)
             except CodaClientRequestFailedError as e:
                 if e.status_code == 404:
-                    raise ConnectorValidationError(f"Failed to list tables for doc: {doc_id}") from e
+                    raise ConnectorValidationError(
+                        f"Failed to list tables for doc: {doc_id}"
+                    ) from e
                 else:
                     raise
 
@@ -411,6 +434,7 @@ class CodaConnector(LoadConnector, PollConnector):
     def _list_rows_and_values(self, doc_id: str, table_id: str) -> List[CodaRow]:
         """List all rows and their values in a table."""
         logger.debug(f"Listing rows in Coda table: {table_id} in Coda doc: {doc_id}")
+
         rows: List[CodaRow] = []
         endpoint = f"docs/{doc_id}/tables/{table_id}/rows"
         params: Dict[str, str] = {"valueFormat": "rich"}
@@ -424,7 +448,9 @@ class CodaConnector(LoadConnector, PollConnector):
                 response = self.coda_client.get(endpoint, params=params)
             except CodaClientRequestFailedError as e:
                 if e.status_code == 404:
-                    raise ConnectorValidationError(f"Failed to list rows for table: {table_id} in doc: {doc_id}") from e
+                    raise ConnectorValidationError(
+                        f"Failed to list rows for table: {table_id} in doc: {doc_id}"
+                    ) from e
                 else:
                     raise
 
@@ -457,7 +483,10 @@ class CodaConnector(LoadConnector, PollConnector):
 
     def _convert_page_to_document(self, page: CodaPage, content: str = "") -> Document:
         """Convert a page into a Document."""
-        page_updated = datetime.fromisoformat(page.updated_at).astimezone(timezone.utc)
+        page_updated = (
+            datetime.fromisoformat(page.updated_at)
+            .astimezone(timezone.utc)
+        )
         
         text_parts = [page.name, page.browser_link]
         if content:
@@ -487,7 +516,10 @@ class CodaConnector(LoadConnector, PollConnector):
         self, table: CodaTable, rows: List[CodaRow]
     ) -> Document:
         """Convert a table and its rows into a single Document with multiple sections (one per row)."""
-        table_updated = datetime.fromisoformat(table.updated_at).astimezone(timezone.utc)
+        table_updated = (
+            datetime.fromisoformat(table.updated_at)
+            .astimezone(timezone.utc)
+        )
         
         sections: List[TextSection] = []
         for row in rows:
@@ -576,7 +608,6 @@ class CodaConnector(LoadConnector, PollConnector):
                             yield self._convert_table_with_rows_to_document(table, rows)
                         except ConnectorValidationError as e:
                             logger.warning(f"Failed to list rows for table {table.id}: {e}")
-                            # Yield table without rows
                             yield self._convert_table_with_rows_to_document(table, [])
                 except ConnectorValidationError as e:
                     logger.warning(f"Failed to list tables for doc {doc.id}: {e}")
@@ -601,14 +632,20 @@ class CodaConnector(LoadConnector, PollConnector):
                 try:
                     pages = self._list_pages_in_doc(doc.id)
                     for page in pages:
-                        page_timestamp = datetime.fromisoformat(page.updated_at).astimezone(timezone.utc).timestamp()
+                        page_timestamp = ( 
+                            datetime.fromisoformat(page.updated_at)
+                            .astimezone(timezone.utc)
+                            .timestamp()
+                        )
                         if start < page_timestamp <= end:
                             content = ""
                             if self.index_page_content:
                                 try:
                                     content = self._fetch_page_content(doc.id, page.id)
                                 except Exception as e:
-                                    logger.warning(f"Failed to fetch content for page {page.id}: {e}")
+                                    logger.warning(
+                                        f"Failed to fetch content for page {page.id}: {e}"
+                                    )
                             yield self._convert_page_to_document(page, content)
                 except ConnectorValidationError as e:
                     logger.warning(f"Failed to list pages for doc {doc.id}: {e}")
@@ -616,7 +653,11 @@ class CodaConnector(LoadConnector, PollConnector):
                 try:
                     tables = self._list_tables(doc.id)
                     for table in tables:
-                        table_timestamp = datetime.fromisoformat(table.updated_at).astimezone(timezone.utc).timestamp()
+                        table_timestamp = (
+                            datetime.fromisoformat(table.updated_at)
+                            .astimezone(timezone.utc)
+                            .timestamp()
+                        )
                         
                         try:
                             rows = self._list_rows_and_values(doc.id, table.id)
@@ -624,7 +665,11 @@ class CodaConnector(LoadConnector, PollConnector):
                             table_or_rows_updated = start < table_timestamp <= end
                             if not table_or_rows_updated:
                                 for row in rows:
-                                    row_timestamp = datetime.fromisoformat(row.updated_at).astimezone(timezone.utc).timestamp()
+                                    row_timestamp = (
+                                        datetime.fromisoformat(row.updated_at)
+                                        .astimezone(timezone.utc)
+                                        .timestamp()
+                                    )
                                     if start < row_timestamp <= end:
                                         table_or_rows_updated = True
                                         break
@@ -651,7 +696,6 @@ class CodaConnector(LoadConnector, PollConnector):
             response = self.coda_client.get("whoami")
             logger.info(f"Coda connector validated for user: {response.get('name', 'Unknown')}")
             
-            # If workspace_id is specified, validate that it's accessible
             if self.workspace_id:
                 params = {"workspaceId": self.workspace_id, "limit": "1"}
                 self.coda_client.get("docs", params=params)
