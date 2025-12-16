@@ -387,12 +387,14 @@ def _add_user__user_group_relationships__no_commit(
     )
     db_session.execute(insert_stmt)
 
-    return db_session.scalars(
-        select(User__UserGroup).where(
-            User__UserGroup.user_group_id == user_group_id,
-            User__UserGroup.user_id.in_(user_ids),
-        )
-    ).all()
+    return list(
+        db_session.scalars(
+            select(User__UserGroup).where(
+                User__UserGroup.user_group_id == user_group_id,
+                User__UserGroup.user_id.in_(user_ids),
+            )
+        ).all()
+    )
 
 
 def _add_user_group__cc_pair_relationships__no_commit(
