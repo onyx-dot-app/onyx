@@ -102,6 +102,7 @@ export default function SharedChatDisplay({
                       overriddenModel: message.overridden_model,
                     }}
                     nodeId={message.nodeId}
+                    messageId={message.messageId}
                     llmManager={null}
                     otherMessagesCanSwitchTo={undefined}
                     onMessageSelection={undefined}

@@ -249,11 +249,29 @@ def create_chat_message_feedback(
         chat_message_id=chat_message_id, user_id=user_id, db_session=db_session
     )
 
+    # If the message is not an ASSISTANT message, we need to find the related ASSISTANT message
+    # This can happen if the frontend sends a TOOL_CALL or TOOL_CALL_RESPONSE message ID
+    target_message_id = chat_message_id
     if chat_message.message_type != MessageType.ASSISTANT:
-        raise ValueError("Can only provide feedback on LLM Outputs")
+        # Try to find the assistant message in the same conversation
+        # Look for parent assistant messages by traversing up the message tree
+        current_msg = chat_message
+        while current_msg.parent_message_id is not None:
+            parent_msg = get_chat_message(
+                chat_message_id=current_msg.parent_message_id,
+                user_id=user_id,
+                db_session=db_session,
+            )
+            if parent_msg.message_type == MessageType.ASSISTANT:
+                target_message_id = parent_msg.id
+                break
+            current_msg = parent_msg
+        else:
+            # If we couldn't find an assistant message by going up, this is an error
+            raise ValueError("Can only provide feedback on LLM Outputs")
 
     message_feedback = ChatMessageFeedback(
-        chat_message_id=chat_message_id,
+        chat_message_id=target_message_id,
         is_positive=is_positive,
         feedback_text=feedback_text,
         required_followup=required_followup,
@@ -274,12 +292,30 @@ def remove_chat_message_feedback(
         chat_message_id=chat_message_id, user_id=user_id, db_session=db_session
     )
 
+    # If the message is not an ASSISTANT message, find the related ASSISTANT message
+    # This can happen if the frontend sends a TOOL_CALL or TOOL_CALL_RESPONSE message ID
+    target_message_id = chat_message_id
     if chat_message.message_type != MessageType.ASSISTANT:
-        raise ValueError("Can only remove feedback from LLM Outputs")
+        # Try to find the assistant message in the same conversation
+        # Look for parent assistant messages by traversing up the message tree
+        current_msg = chat_message
+        while current_msg.parent_message_id is not None:
+            parent_msg = get_chat_message(
+                chat_message_id=current_msg.parent_message_id,
+                user_id=user_id,
+                db_session=db_session,
+            )
+            if parent_msg.message_type == MessageType.ASSISTANT:
+                target_message_id = parent_msg.id
+                break
+            current_msg = parent_msg
+        else:
+            # If we couldn't find an assistant message by going up, this is an error
+            raise ValueError("Can only remove feedback from LLM Outputs")
 
     # Delete all feedback for this message
     db_session.query(ChatMessageFeedback).filter(
-        ChatMessageFeedback.chat_message_id == chat_message_id
+        ChatMessageFeedback.chat_message_id == target_message_id
     ).delete()
 
     db_session.commit()
