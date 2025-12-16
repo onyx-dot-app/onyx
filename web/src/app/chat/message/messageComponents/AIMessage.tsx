@@ -1,7 +1,6 @@
 import {
   Packet,
   PacketType,
-  CitationDelta,
   CitationInfo,
   SearchToolDocumentsDelta,
   StreamingCitation,
@@ -20,7 +19,10 @@ import {
   useSelectedNodeForDocDisplay,
   useCurrentChatState,
 } from "@/app/chat/stores/useChatSessionStore";
-import { handleCopy } from "@/app/chat/message/copyingUtils";
+import {
+  handleCopy,
+  convertMarkdownTablesToTsv,
+} from "@/app/chat/message/copyingUtils";
 import MessageSwitcher from "@/app/chat/message/MessageSwitcher";
 import { BlinkingDot } from "@/app/chat/message/BlinkingDot";
 import {
@@ -276,7 +278,7 @@ export default function AIMessage({
         groupedPacketsMapRef.current.set(packet.turn_index, [packet]);
       }
 
-      // Citations - handle both CITATION_INFO (individual) and CITATION_DELTA (batched)
+      // Citations - handle CITATION_INFO packets
       if (packet.obj.type === PacketType.CITATION_INFO) {
         // Individual citation packet from backend streaming
         const citationInfo = packet.obj as CitationInfo;
@@ -290,20 +292,6 @@ export default function AIMessage({
             citation_num: citationInfo.citation_number,
             document_id: citationInfo.document_id,
           });
-        }
-      } else if (packet.obj.type === PacketType.CITATION_DELTA) {
-        // Batched citation packet (for backwards compatibility)
-        const citationDelta = packet.obj as CitationDelta;
-        if (citationDelta.citations) {
-          for (const citation of citationDelta.citations) {
-            // Add to citation map for rendering
-            citationMapRef.current[citation.citation_num] =
-              citation.document_id;
-            if (!seenCitationDocIdsRef.current.has(citation.document_id)) {
-              seenCitationDocIdsRef.current.add(citation.document_id);
-              citationsRef.current.push(citation);
-            }
-          }
         }
       }
 
@@ -426,7 +414,7 @@ export default function AIMessage({
       <div
         // for e2e tests
         data-testid={displayComplete ? "onyx-ai-message" : undefined}
-        className="py-5 ml-4 lg:px-5 relative flex"
+        className="py-5 desktop:ml-4 lg:px-5 relative flex"
       >
         <div className="mx-auto w-[90%] max-w-message-max">
           <div className="lg:mr-12 mobile:ml-0 md:ml-8">
@@ -434,7 +422,7 @@ export default function AIMessage({
               <AgentAvatar agent={chatState.assistant} size={24} />
               <div className="w-full">
                 <div className="max-w-message-max break-words">
-                  <div className="w-full desktop:ml-4">
+                  <div className="w-full pl-4">
                     <div className="max-w-message-max break-words">
                       <div
                         ref={markdownRef}
@@ -557,7 +545,14 @@ export default function AIMessage({
                             )}
 
                             <CopyIconButton
-                              getCopyText={() => getTextContent(rawPackets)}
+                              getCopyText={() =>
+                                convertMarkdownTablesToTsv(
+                                  getTextContent(rawPackets)
+                                )
+                              }
+                              getHtmlContent={() =>
+                                markdownRef.current?.innerHTML || ""
+                              }
                               tertiary
                               data-testid="AIMessage/copy-button"
                             />

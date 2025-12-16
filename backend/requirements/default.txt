@@ -344,14 +344,15 @@ greenlet==3.2.4
     #   sqlalchemy
 grpc-google-iam-v1==0.14.3
     # via google-cloud-resource-manager
-grpcio==1.76.0
+grpcio==1.67.1
     # via
     #   google-api-core
     #   google-cloud-resource-manager
     #   googleapis-common-protos
     #   grpc-google-iam-v1
     #   grpcio-status
-grpcio-status==1.76.0
+    #   litellm
+grpcio-status==1.67.1
     # via google-api-core
 h11==0.16.0
     # via
@@ -393,7 +394,7 @@ httpx-sse==0.4.3
     # via
     #   cohere
     #   mcp
-hubspot-api-client==8.1.0
+hubspot-api-client==11.1.0
     # via onyx
 huggingface-hub==0.35.3
     # via
@@ -485,7 +486,7 @@ langsmith==0.3.45
     #   langchain-core
 lazy-imports==1.0.1
     # via onyx
-litellm==1.79.0
+litellm==1.80.10
     # via onyx
 locket==1.0.0
     # via
@@ -593,7 +594,7 @@ office365-rest-python-client==2.5.9
     # via onyx
 onnxruntime==1.20.1
     # via magika
-openai==2.6.1
+openai==2.8.1
     # via
     #   exa-py
     #   langfuse
@@ -700,7 +701,7 @@ proto-plus==1.26.1
     #   google-api-core
     #   google-cloud-aiplatform
     #   google-cloud-resource-manager
-protobuf==6.33.1
+protobuf==5.29.5
     # via
     #   ddtrace
     #   google-api-core
@@ -897,6 +898,7 @@ requests==2.32.5
     #   google-cloud-bigquery
     #   google-cloud-storage
     #   google-genai
+    #   hubspot-api-client
     #   huggingface-hub
     #   jira
     #   jsonschema-path
@@ -1088,7 +1090,6 @@ typing-extensions==4.15.0
     #   fastapi
     #   google-cloud-aiplatform
     #   google-genai
-    #   grpcio
     #   huggingface-hub
     #   jira
     #   langchain-core
@@ -1141,7 +1142,7 @@ unstructured-client==0.25.4
     #   unstructured
 uritemplate==4.2.0
     # via google-api-python-client
-urllib3==2.6.0
+urllib3==2.6.1
     # via
     #   asana
     #   botocore

@@ -18,7 +18,7 @@ import { useEffect, useState } from "react";
  * @example
  * ```tsx
  * function MyComponent() {
- *   const isMounted = useIsMounted(() => {
+ *   const isMounted = useOnMount(() => {
  *     console.log("Component mounted!");
  *   });
  *
@@ -28,13 +28,13 @@ import { useEffect, useState } from "react";
  * }
  * ```
  */
-export default function useIsMounted(f?: React.EffectCallback): boolean {
+export default function useOnMount(f?: React.EffectCallback): boolean {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     return f?.();
-  }, [f]);
+  }, []);
 
   return mounted;
 }

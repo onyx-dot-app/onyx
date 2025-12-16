@@ -38,7 +38,6 @@ from onyx.configs.app_configs import APP_HOST
 from onyx.configs.app_configs import APP_PORT
 from onyx.configs.app_configs import AUTH_RATE_LIMITING_ENABLED
 from onyx.configs.app_configs import AUTH_TYPE
-from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.app_configs import LOG_ENDPOINT_LATENCY
 from onyx.configs.app_configs import OAUTH_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
@@ -270,9 +269,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     if OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET:
         logger.notice("Both OAuth Client ID and Secret are configured.")
-
-    if DISABLE_GENERATIVE_AI:
-        logger.notice("Generative AI Q&A disabled")
 
     # Initialize tracing if credentials are provided
     setup_braintrust_if_creds_available()

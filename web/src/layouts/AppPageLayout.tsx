@@ -15,7 +15,7 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import SvgFolderIn from "@/icons/folder-in";
 import SvgTrash from "@/icons/trash";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import { useChatSessions } from "@/lib/hooks/useChatSessions";
+import useChatSessions from "@/hooks/useChatSessions";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import {
   handleMoveOperation,
@@ -30,7 +30,6 @@ import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationMo
 import { PopoverMenu } from "@/components/ui/popover";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
-import { FOLDED_SIZE } from "@/refresh-components/Logo";
 import SvgSidebar from "@/icons/sidebar";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
 import useScreenSize from "@/hooks/useScreenSize";
@@ -77,7 +76,6 @@ export default function AppPageLayout({
 
   const customHeaderContent =
     settings?.enterpriseSettings?.custom_header_content;
-  const useCustomLogo = settings?.enterpriseSettings?.use_custom_logo;
   const customFooterContent =
     settings?.enterpriseSettings?.custom_lower_disclaimer_content;
 
@@ -293,25 +291,11 @@ export default function AppPageLayout({
 
         <div className={cn("flex-1 overflow-auto", className)} {...rest} />
 
-        {(useCustomLogo || customFooterContent) && (
+        {customFooterContent && (
           <footer className="w-full flex flex-row justify-center items-center gap-2 py-3">
-            {useCustomLogo && (
-              <img
-                src="/api/enterprise-settings/logo"
-                alt="Logo"
-                style={{
-                  objectFit: "contain",
-                  height: FOLDED_SIZE,
-                  width: FOLDED_SIZE,
-                }}
-                className="flex-shrink-0"
-              />
-            )}
-            {customFooterContent && (
-              <Text text03 secondaryBody>
-                {customFooterContent}
-              </Text>
-            )}
+            <Text text03 secondaryBody>
+              {customFooterContent}
+            </Text>
           </footer>
         )}
       </div>

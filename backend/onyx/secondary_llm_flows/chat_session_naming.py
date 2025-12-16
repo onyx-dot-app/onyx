@@ -3,8 +3,7 @@ from onyx.configs.chat_configs import LANGUAGE_CHAT_NAMING_HINT
 from onyx.db.models import ChatMessage
 from onyx.db.search_settings import get_multilingual_expansion
 from onyx.llm.interfaces import LLM
-from onyx.llm.utils import dict_based_prompt_to_langchain_prompt
-from onyx.llm.utils import message_to_string
+from onyx.llm.utils import llm_response_to_string
 from onyx.prompts.chat_prompts import CHAT_NAMING
 from onyx.utils.logger import setup_logger
 
@@ -26,19 +25,13 @@ def get_renamed_conversation_name(
         else ""
     )
 
-    prompt_msgs = [
-        {
-            "role": "user",
-            "content": CHAT_NAMING.format(
-                language_hint_or_empty=language_hint, chat_history=history_str
-            ),
-        },
-    ]
+    prompt = CHAT_NAMING.format(
+        language_hint_or_empty=language_hint, chat_history=history_str
+    )
 
-    filled_llm_prompt = dict_based_prompt_to_langchain_prompt(prompt_msgs)
-    new_name_raw = message_to_string(llm.invoke_langchain(filled_llm_prompt))
+    new_name_raw = llm_response_to_string(llm.invoke(prompt))
 
-    new_name = new_name_raw.strip().strip(' "')
+    new_name = new_name_raw.strip().strip('"')
 
     logger.debug(f"New Session Name: {new_name}")
 

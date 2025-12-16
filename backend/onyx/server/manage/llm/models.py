@@ -8,6 +8,9 @@ from pydantic import field_validator
 from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import litellm_thinks_model_supports_image_input
 from onyx.llm.utils import model_is_reasoning_model
+from onyx.server.manage.llm.utils import DYNAMIC_LLM_PROVIDERS
+from onyx.server.manage.llm.utils import extract_vendor_from_model_name
+from onyx.server.manage.llm.utils import filter_model_configurations
 from onyx.server.manage.llm.utils import is_reasoning_model
 
 
@@ -66,6 +69,7 @@ class LLMProviderDescriptor(BaseModel):
         from onyx.llm.llm_provider_options import get_provider_display_name
 
         provider = llm_provider_model.provider
+
         return cls(
             name=llm_provider_model.name,
             provider=provider,
@@ -75,11 +79,8 @@ class LLMProviderDescriptor(BaseModel):
             is_default_provider=llm_provider_model.is_default_provider,
             is_default_vision_provider=llm_provider_model.is_default_vision_provider,
             default_vision_model=llm_provider_model.default_vision_model,
-            model_configurations=list(
-                ModelConfigurationView.from_model(
-                    model_configuration, llm_provider_model.provider
-                )
-                for model_configuration in llm_provider_model.model_configurations
+            model_configurations=filter_model_configurations(
+                llm_provider_model.model_configurations, provider
             ),
         )
 
@@ -138,10 +139,12 @@ class LLMProviderView(LLMProvider):
         except Exception:
             personas = []
 
+        provider = llm_provider_model.provider
+
         return cls(
             id=llm_provider_model.id,
             name=llm_provider_model.name,
-            provider=llm_provider_model.provider,
+            provider=provider,
             api_key=llm_provider_model.api_key,
             api_base=llm_provider_model.api_base,
             api_version=llm_provider_model.api_version,
@@ -155,11 +158,8 @@ class LLMProviderView(LLMProvider):
             groups=groups,
             personas=personas,
             deployment_name=llm_provider_model.deployment_name,
-            model_configurations=list(
-                ModelConfigurationView.from_model(
-                    model_configuration, llm_provider_model.provider
-                )
-                for model_configuration in llm_provider_model.model_configurations
+            model_configurations=filter_model_configurations(
+                llm_provider_model.model_configurations, provider
             ),
         )
 
@@ -182,54 +182,6 @@ class ModelConfigurationUpsertRequest(BaseModel):
             supports_image_input=model_configuration_model.supports_image_input,
             display_name=model_configuration_model.display_name,
         )
-
-
-# Dynamic providers fetch models directly from source APIs (not LiteLLM)
-DYNAMIC_LLM_PROVIDERS = {"openrouter", "bedrock", "ollama_chat"}
-
-
-def _extract_vendor_from_model_name(model_name: str, provider: str) -> str | None:
-    """Extract vendor from model name for aggregator providers.
-
-    Examples:
-        - OpenRouter: "anthropic/claude-3-5-sonnet" → "Anthropic"
-        - Bedrock: "anthropic.claude-3-5-sonnet-..." → "Anthropic"
-        - Bedrock: "us.anthropic.claude-..." → "Anthropic"
-        - Ollama: "llama3:70b" → "Meta"
-        - Ollama: "qwen2.5:7b" → "Alibaba"
-    """
-    from onyx.llm.constants import OLLAMA_MODEL_TO_VENDOR
-    from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
-
-    if provider == "openrouter":
-        # Format: "vendor/model-name" e.g., "anthropic/claude-3-5-sonnet"
-        if "/" in model_name:
-            vendor_key = model_name.split("/")[0].lower()
-            return PROVIDER_DISPLAY_NAMES.get(vendor_key, vendor_key.title())
-
-    elif provider == "bedrock":
-        # Format: "vendor.model-name" or "region.vendor.model-name"
-        parts = model_name.split(".")
-        if len(parts) >= 2:
-            # Check if first part is a region (us, eu, global, etc.)
-            if parts[0] in ("us", "eu", "global", "ap", "apac"):
-                vendor_key = parts[1].lower() if len(parts) > 2 else parts[0].lower()
-            else:
-                vendor_key = parts[0].lower()
-            return PROVIDER_DISPLAY_NAMES.get(vendor_key, vendor_key.title())
-
-    elif provider == "ollama_chat":
-        # Format: "model-name:tag" e.g., "llama3:70b", "qwen2.5:7b"
-        # Extract base name (before colon)
-        base_name = model_name.split(":")[0].lower()
-        # Match against known model prefixes
-        for prefix, vendor in OLLAMA_MODEL_TO_VENDOR.items():
-            if base_name.startswith(prefix):
-                return vendor
-        # Fallback: capitalize the base name as vendor
-        return base_name.split("-")[0].title()
-
-    return None
 
 
 class ModelConfigurationView(BaseModel):
@@ -257,7 +209,7 @@ class ModelConfigurationView(BaseModel):
             and model_configuration_model.display_name
         ):
             # Extract vendor from model name for grouping (e.g., "Anthropic", "OpenAI")
-            vendor = _extract_vendor_from_model_name(
+            vendor = extract_vendor_from_model_name(
                 model_configuration_model.name, provider_name
             )
 

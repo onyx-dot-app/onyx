@@ -24,19 +24,9 @@ from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
 from onyx.db.models import Persona
-from onyx.file_store.models import ChatFileType
-from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
+from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.interfaces import ToolChoiceOptions
-from onyx.llm.message_types import AssistantMessage
-from onyx.llm.message_types import ChatCompletionMessage
-from onyx.llm.message_types import ImageContentPart
-from onyx.llm.message_types import SystemMessage
-from onyx.llm.message_types import TextContentPart
-from onyx.llm.message_types import ToolCall
-from onyx.llm.message_types import ToolMessage
-from onyx.llm.message_types import UserMessageWithParts
-from onyx.llm.message_types import UserMessageWithText
 from onyx.llm.utils import model_needs_formatting_reenabled
 from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER
 from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
@@ -56,7 +46,6 @@ from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_runner import run_tool_calls
 from onyx.tracing.framework.create import trace
-from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -115,15 +104,23 @@ def construct_message_history(
     custom_agent_prompt: ChatMessageSimple | None,
     simple_chat_history: list[ChatMessageSimple],
     reminder_message: ChatMessageSimple | None,
-    project_files: ExtractedProjectFiles,
+    project_files: ExtractedProjectFiles | None,
     available_tokens: int,
+    last_n_user_messages: int | None = None,
 ) -> list[ChatMessageSimple]:
+    if last_n_user_messages is not None:
+        if last_n_user_messages <= 0:
+            raise ValueError(
+                "filtering chat history by last N user messages must be a value greater than 0"
+            )
+
     history_token_budget = available_tokens
     history_token_budget -= system_prompt.token_count
     history_token_budget -= (
         custom_agent_prompt.token_count if custom_agent_prompt else 0
     )
-    history_token_budget -= project_files.total_token_count
+    if project_files:
+        history_token_budget -= project_files.total_token_count
     history_token_budget -= reminder_message.token_count if reminder_message else 0
 
     if history_token_budget < 0:
@@ -134,7 +131,7 @@ def construct_message_history(
         result = [system_prompt]
         if custom_agent_prompt:
             result.append(custom_agent_prompt)
-        if project_files.project_file_texts:
+        if project_files and project_files.project_file_texts:
             project_message = _create_project_files_message(
                 project_files, token_counter=None
             )
@@ -142,6 +139,26 @@ def construct_message_history(
         if reminder_message:
             result.append(reminder_message)
         return result
+
+    # If last_n_user_messages is set, filter history to only include the last n user messages
+    if last_n_user_messages is not None:
+        # Find all user message indices
+        user_msg_indices = [
+            i
+            for i, msg in enumerate(simple_chat_history)
+            if msg.message_type == MessageType.USER
+        ]
+
+        if not user_msg_indices:
+            raise ValueError("No user message found in simple_chat_history")
+
+        # If we have more than n user messages, keep only the last n
+        if len(user_msg_indices) > last_n_user_messages:
+            # Find the index of the n-th user message from the end
+            # For example, if last_n_user_messages=2, we want the 2nd-to-last user message
+            nth_user_msg_index = user_msg_indices[-(last_n_user_messages)]
+            # Keep everything from that user message onwards
+            simple_chat_history = simple_chat_history[nth_user_msg_index:]
 
     # Find the last USER message in the history
     # The history may contain tool calls and responses after the last user message
@@ -190,7 +207,7 @@ def construct_message_history(
             break
 
     # Attach project images to the last user message
-    if project_files.project_image_files:
+    if project_files and project_files.project_image_files:
         existing_images = last_user_message.image_files or []
         last_user_message = ChatMessageSimple(
             message=last_user_message.message,
@@ -212,7 +229,7 @@ def construct_message_history(
         result.append(custom_agent_prompt)
 
     # 3. Add project files message (inserted before last user message)
-    if project_files.project_file_texts:
+    if project_files and project_files.project_file_texts:
         project_message = _create_project_files_message(
             project_files, token_counter=None
         )
@@ -262,140 +279,6 @@ def _create_project_files_message(
     )
 
 
-def translate_history_to_llm_format(
-    history: list[ChatMessageSimple],
-) -> LanguageModelInput:
-    """Convert a list of ChatMessageSimple to LanguageModelInput format.
-
-    Converts ChatMessageSimple messages to ChatCompletionMessage format,
-    handling different message types and image files for multimodal support.
-    """
-    messages: list[ChatCompletionMessage] = []
-
-    for msg in history:
-        if msg.message_type == MessageType.SYSTEM:
-            system_msg: SystemMessage = {
-                "role": "system",
-                "content": msg.message,
-            }
-            messages.append(system_msg)
-
-        elif msg.message_type == MessageType.USER:
-            # Handle user messages with potential images
-            if msg.image_files:
-                # Build content parts: text + images
-                content_parts: list[TextContentPart | ImageContentPart] = [
-                    {"type": "text", "text": msg.message}
-                ]
-
-                # Add image parts
-                for img_file in msg.image_files:
-                    if img_file.file_type == ChatFileType.IMAGE:
-                        try:
-                            image_type = get_image_type_from_bytes(img_file.content)
-                            base64_data = img_file.to_base64()
-                            image_url = f"data:{image_type};base64,{base64_data}"
-
-                            image_part: ImageContentPart = {
-                                "type": "image_url",
-                                "image_url": {"url": image_url},
-                            }
-                            content_parts.append(image_part)
-                        except Exception as e:
-                            logger.warning(
-                                f"Failed to process image file {img_file.file_id}: {e}. "
-                                "Skipping image."
-                            )
-
-                user_msg_with_parts: UserMessageWithParts = {
-                    "role": "user",
-                    "content": content_parts,
-                }
-                messages.append(user_msg_with_parts)
-            else:
-                # Simple text-only user message
-                user_msg_text: UserMessageWithText = {
-                    "role": "user",
-                    "content": msg.message,
-                }
-                messages.append(user_msg_text)
-
-        elif msg.message_type == MessageType.ASSISTANT:
-            assistant_msg: AssistantMessage = {
-                "role": "assistant",
-                "content": msg.message or None,
-            }
-            messages.append(assistant_msg)
-
-        elif msg.message_type == MessageType.TOOL_CALL:
-            # Tool calls are represented as Assistant Messages with tool_calls field
-            # Try to reconstruct tool call structure if we have tool_call_id
-            tool_calls: list[ToolCall] = []
-            if msg.tool_call_id:
-                try:
-                    # Parse the message content (which should contain function_name and arguments)
-                    tool_call_data = json.loads(msg.message) if msg.message else {}
-
-                    if (
-                        isinstance(tool_call_data, dict)
-                        and TOOL_CALL_MSG_FUNC_NAME in tool_call_data
-                    ):
-                        function_name = tool_call_data.get(
-                            TOOL_CALL_MSG_FUNC_NAME, "unknown"
-                        )
-                        tool_args = tool_call_data.get(TOOL_CALL_MSG_ARGUMENTS, {})
-                    else:
-                        function_name = "unknown"
-                        tool_args = (
-                            tool_call_data if isinstance(tool_call_data, dict) else {}
-                        )
-
-                    # NOTE: if the model is trained on a different tool call format, this may slightly interfere
-                    # with the future tool calls, if it doesn't look like this. Almost certainly not a big deal.
-                    tool_call: ToolCall = {
-                        "id": msg.tool_call_id,
-                        "type": "function",
-                        "function": {
-                            "name": function_name,
-                            "arguments": json.dumps(tool_args) if tool_args else "{}",
-                        },
-                    }
-                    tool_calls.append(tool_call)
-                except (json.JSONDecodeError, ValueError) as e:
-                    logger.warning(
-                        f"Failed to parse tool call data for tool_call_id {msg.tool_call_id}: {e}. "
-                        "Including as content-only message."
-                    )
-
-            assistant_msg_with_tool: AssistantMessage = {
-                "role": "assistant",
-                "content": None,  # The tool call is parsed, doesn't need to be duplicated in the content
-            }
-            if tool_calls:
-                assistant_msg_with_tool["tool_calls"] = tool_calls
-            messages.append(assistant_msg_with_tool)
-
-        elif msg.message_type == MessageType.TOOL_CALL_RESPONSE:
-            if not msg.tool_call_id:
-                raise ValueError(
-                    f"Tool call response message encountered but tool_call_id is not available. Message: {msg}"
-                )
-
-            tool_msg: ToolMessage = {
-                "role": "tool",
-                "content": msg.message,
-                "tool_call_id": msg.tool_call_id,
-            }
-            messages.append(tool_msg)
-
-        else:
-            logger.warning(
-                f"Unknown message type {msg.message_type} in history. Skipping message."
-            )
-
-    return messages
-
-
 def run_llm_loop(
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -409,6 +292,7 @@ def run_llm_loop(
     token_counter: Callable[[str], int],
     db_session: Session,
     forced_tool_id: int | None = None,
+    user_identity: LLMUserIdentity | None = None,
 ) -> None:
     with trace("run_llm_loop", metadata={"tenant_id": get_current_tenant_id()}):
         # Fix some LiteLLM issues,
@@ -440,7 +324,7 @@ def run_llm_loop(
 
         # Pass the total budget to construct_message_history, which will handle token allocation
         available_tokens = llm.config.max_input_tokens
-        tool_choice: ToolChoiceOptions = "auto"
+        tool_choice: ToolChoiceOptions = ToolChoiceOptions.AUTO
         collected_tool_calls: list[ToolCallInfo] = []
         # Initialize gathered_documents with project files if present
         gathered_documents: list[SearchDoc] | None = (
@@ -456,6 +340,7 @@ def run_llm_loop(
         should_cite_documents: bool = False
         ran_image_gen: bool = False
         just_ran_web_search: bool = False
+        has_called_search_tool: bool = False
         citation_mapping: dict[int, str] = {}  # Maps citation_num -> document_id/URL
 
         current_tool_call_index = (
@@ -469,14 +354,14 @@ def run_llm_loop(
                 final_tools = [tool for tool in tools if tool.id == forced_tool_id]
                 if not final_tools:
                     raise ValueError(f"Tool {forced_tool_id} not found in tools")
-                tool_choice = "required"
+                tool_choice = ToolChoiceOptions.REQUIRED
                 forced_tool_id = None
             elif llm_cycle_count == MAX_LLM_CYCLES - 1 or ran_image_gen:
                 # Last cycle, no tools allowed, just answer!
-                tool_choice = "none"
+                tool_choice = ToolChoiceOptions.NONE
                 final_tools = []
             else:
-                tool_choice = "auto"
+                tool_choice = ToolChoiceOptions.AUTO
                 final_tools = tools
 
             # The section below calculates the available tokens for history a bit more accurately
@@ -572,6 +457,7 @@ def run_llm_loop(
                 # immediately yield the full set of found documents. This gives us the option to show the
                 # final set of documents immediately if desired.
                 final_documents=gathered_documents,
+                user_identity=user_identity,
             )
 
             # Consume the generator, emitting packets and capturing the final result
@@ -606,7 +492,12 @@ def run_llm_loop(
                     user_info=None,  # TODO, this is part of memories right now, might want to separate it out
                     citation_mapping=citation_mapping,
                     citation_processor=citation_processor,
+                    skip_search_query_expansion=has_called_search_tool,
                 )
+
+                # Track if search tool was called (for skipping query expansion on subsequent calls)
+                if tool_call.tool_name == SearchTool.NAME:
+                    has_called_search_tool = True
 
                 # Build a mapping of tool names to tool objects for getting tool_id
                 tools_by_name = {tool.name: tool for tool in final_tools}
