@@ -602,13 +602,6 @@ function ChatInputBarInner({
                   if (!tool) {
                     return null;
                   }
-
-                  let displayName =
-                    currentProjectId !== null &&
-                    tool.in_code_tool_id === SEARCH_TOOL_ID
-                      ? "Project Search"
-                      : tool.display_name;
-
                   return (
                     <SelectButton
                       key={toolId}
@@ -623,7 +616,10 @@ function ChatInputBarInner({
                       disabled={disabled}
                       className={disabled ? "bg-transparent" : ""}
                     >
-                      {displayName}
+                      {currentProjectId !== null &&
+                      tool.in_code_tool_id === SEARCH_TOOL_ID
+                        ? "Project Search"
+                        : tool.display_name}
                     </SelectButton>
                   );
                 })}
