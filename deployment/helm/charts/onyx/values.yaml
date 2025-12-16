@@ -792,6 +792,7 @@ celery_worker_docfetching:
 redis:
   enabled: true
   redisStandalone:
+    name: "onyx-redis"
     image: quay.io/opstree/redis
     tag: v7.0.15
     imagePullPolicy: IfNotPresent
