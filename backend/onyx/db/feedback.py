@@ -18,6 +18,7 @@ from onyx.configs.constants import MessageType
 from onyx.configs.constants import SearchFeedbackType
 from onyx.db.chat import get_chat_message
 from onyx.db.enums import AccessType
+from onyx.db.models import ChatMessage
 from onyx.db.models import ChatMessageFeedback
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document as DbDocument
@@ -227,6 +228,40 @@ def delete_document_feedback_for_documents__no_commit(
     db_session.execute(stmt)
 
 
+def _find_assistant_message_id(
+    chat_message: ChatMessage,
+    user_id: UUID | None,
+    db_session: Session,
+) -> int:
+    """
+    Find the ASSISTANT message ID for a given chat message.
+    If the message is already an ASSISTANT, returns its ID.
+    Otherwise, traverses up the parent chain to find the associated ASSISTANT message.
+
+    Raises ValueError if no ASSISTANT message is found.
+    """
+    if chat_message.message_type == MessageType.ASSISTANT:
+        return chat_message.id
+
+    # Traverse up the message tree to find the parent ASSISTANT message
+    current_msg = chat_message
+    max_depth = 100  # Safeguard against infinite loops or extremely deep chains
+    depth = 0
+
+    while current_msg.parent_message_id is not None and depth < max_depth:
+        parent_msg = get_chat_message(
+            chat_message_id=current_msg.parent_message_id,
+            user_id=user_id,
+            db_session=db_session,
+        )
+        if parent_msg.message_type == MessageType.ASSISTANT:
+            return parent_msg.id
+        current_msg = parent_msg
+        depth += 1
+
+    raise ValueError("Can only provide feedback on LLM Outputs")
+
+
 def create_chat_message_feedback(
     is_positive: bool | None,
     feedback_text: str | None,
@@ -249,29 +284,12 @@ def create_chat_message_feedback(
         chat_message_id=chat_message_id, user_id=user_id, db_session=db_session
     )
 
-    # If the message is not an ASSISTANT message, we need to find the related ASSISTANT message
-    # This can happen if the frontend sends a TOOL_CALL or TOOL_CALL_RESPONSE message ID
-    target_message_id = chat_message_id
-    if chat_message.message_type != MessageType.ASSISTANT:
-        # Try to find the assistant message in the same conversation
-        # Look for parent assistant messages by traversing up the message tree
-        current_msg = chat_message
-        max_depth = 100  # Safeguard against infinite loops or extremely deep chains
-        depth = 0
-        while current_msg.parent_message_id is not None and depth < max_depth:
-            parent_msg = get_chat_message(
-                chat_message_id=current_msg.parent_message_id,
-                user_id=user_id,
-                db_session=db_session,
-            )
-            if parent_msg.message_type == MessageType.ASSISTANT:
-                target_message_id = parent_msg.id
-                break
-            current_msg = parent_msg
-            depth += 1
-        else:
-            # If we couldn't find an assistant message by going up, this is an error
-            raise ValueError("Can only provide feedback on LLM Outputs")
+    # Find the ASSISTANT message (handles TOOL_CALL/TOOL_CALL_RESPONSE by traversing up)
+    target_message_id = _find_assistant_message_id(
+        chat_message=chat_message,
+        user_id=user_id,
+        db_session=db_session,
+    )
 
     message_feedback = ChatMessageFeedback(
         chat_message_id=target_message_id,
@@ -295,29 +313,12 @@ def remove_chat_message_feedback(
         chat_message_id=chat_message_id, user_id=user_id, db_session=db_session
     )
 
-    # If the message is not an ASSISTANT message, find the related ASSISTANT message
-    # This can happen if the frontend sends a TOOL_CALL or TOOL_CALL_RESPONSE message ID
-    target_message_id = chat_message_id
-    if chat_message.message_type != MessageType.ASSISTANT:
-        # Try to find the assistant message in the same conversation
-        # Look for parent assistant messages by traversing up the message tree
-        current_msg = chat_message
-        max_depth = 100  # Safeguard against infinite loops or extremely deep chains
-        depth = 0
-        while current_msg.parent_message_id is not None and depth < max_depth:
-            parent_msg = get_chat_message(
-                chat_message_id=current_msg.parent_message_id,
-                user_id=user_id,
-                db_session=db_session,
-            )
-            if parent_msg.message_type == MessageType.ASSISTANT:
-                target_message_id = parent_msg.id
-                break
-            current_msg = parent_msg
-            depth += 1
-        else:
-            # If we couldn't find an assistant message by going up, this is an error
-            raise ValueError("Can only remove feedback from LLM Outputs")
+    # Find the ASSISTANT message (handles TOOL_CALL/TOOL_CALL_RESPONSE by traversing up)
+    target_message_id = _find_assistant_message_id(
+        chat_message=chat_message,
+        user_id=user_id,
+        db_session=db_session,
+    )
 
     # Delete all feedback for this message
     db_session.query(ChatMessageFeedback).filter(
