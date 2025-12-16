@@ -363,7 +363,7 @@ def _check_user_group_is_modifiable(user_group: UserGroup) -> None:
 
 def _add_user__user_group_relationships__no_commit(
     db_session: Session, user_group_id: int, user_ids: list[UUID]
-) -> list[User__UserGroup]:
+) -> None:
     """NOTE: does not commit the transaction.
 
     This function is idempotent - it will skip users who are already in the group
@@ -371,7 +371,7 @@ def _add_user__user_group_relationships__no_commit(
     Uses ON CONFLICT DO NOTHING to keep inserts atomic under concurrency.
     """
     if not user_ids:
-        return []
+        return
 
     insert_stmt = (
         insert(User__UserGroup)
@@ -386,15 +386,6 @@ def _add_user__user_group_relationships__no_commit(
         )
     )
     db_session.execute(insert_stmt)
-
-    return list(
-        db_session.scalars(
-            select(User__UserGroup).where(
-                User__UserGroup.user_group_id == user_group_id,
-                User__UserGroup.user_id.in_(user_ids),
-            )
-        ).all()
-    )
 
 
 def _add_user_group__cc_pair_relationships__no_commit(
