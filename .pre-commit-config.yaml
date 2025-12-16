@@ -119,3 +119,10 @@ repos:
         language: system
         pass_filenames: false
         files: ^web/.*\.(ts|tsx)$
+
+      - id: opal-typescript-check
+        name: Opal TypeScript type check
+        entry: bash -c 'cd web/lib/opal && npm run types:check'
+        language: system
+        pass_filenames: false
+        files: ^web/lib/opal/.*\.(ts|tsx)$
