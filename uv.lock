@@ -2074,17 +2074,18 @@ wheels = [
 
 [[package]]
 name = "hubspot-api-client"
-version = "8.1.0"
+version = "11.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
     { name = "python-dateutil" },
+    { name = "requests" },
     { name = "six" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ad/f7/7318da1458f044ac32ade38af29c897d17f5efe47a84d3b40f43fe67b303/hubspot-api-client-8.1.0.tar.gz", hash = "sha256:e8c25c2a12ab3801a6ab051ad7b25766a2e743928ed6ce9a309672c53b973044", size = 1499140, upload-time = "2023-08-07T12:25:11.342Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/08/52/11b0ecd4fd6e175813a0017ab4bc4697bfde058cac9b98938fa28460028a/hubspot_api_client-11.1.0.tar.gz", hash = "sha256:93ed914f1cd4dad67bacf26b8a1ec8506847483fa801cb2bddd4b2d887d0f825", size = 1732887, upload-time = "2024-12-13T08:20:44.38Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/bc/85/36eed8faa45617eb6bede804ac6e55bd3842a910f38291494678228b4db7/hubspot_api_client-8.1.0-py3-none-any.whl", hash = "sha256:2b255b6330770b263995baa07a831940f8bd6a692e8462a3a83771f65e718736", size = 3379938, upload-time = "2023-08-07T12:25:09.061Z" },
+    { url = "https://files.pythonhosted.org/packages/a1/d3/a2dbdea1f491d5bf362d74d4b7342ece6c043a43c8ee997f8fb8b776239d/hubspot_api_client-11.1.0-py3-none-any.whl", hash = "sha256:0c49e2c2f511a56d249c6890d2dfdd62afd04f66edc69a591e8348e28804634b", size = 3945382, upload-time = "2024-12-13T08:20:42.129Z" },
 ]
 
 [[package]]
@@ -3572,7 +3573,7 @@ requires-dist = [
     { name = "httpcore", marker = "extra == 'backend'", specifier = "==1.0.9" },
     { name = "httpx", extras = ["http2"], marker = "extra == 'backend'", specifier = "==0.28.1" },
     { name = "httpx-oauth", marker = "extra == 'backend'", specifier = "==0.15.1" },
-    { name = "hubspot-api-client", marker = "extra == 'backend'", specifier = "==8.1.0" },
+    { name = "hubspot-api-client", marker = "extra == 'backend'", specifier = "==11.1.0" },
     { name = "huggingface-hub", marker = "extra == 'backend'", specifier = "==0.35.3" },
     { name = "inflection", marker = "extra == 'backend'", specifier = "==0.5.1" },
     { name = "ipykernel", marker = "extra == 'dev'", specifier = "==6.29.5" },

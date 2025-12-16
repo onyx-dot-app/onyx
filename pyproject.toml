@@ -112,7 +112,7 @@ backend = [
     "unstructured==0.15.1",
     "unstructured-client==0.25.4",
     "zulip==0.8.2",
-    "hubspot-api-client==8.1.0",
+    "hubspot-api-client==11.1.0",
     "asana==5.0.8",
     "dropbox==12.0.2",
     "shapely==2.0.6",
