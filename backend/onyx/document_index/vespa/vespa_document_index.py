@@ -51,15 +51,33 @@ def _enrich_basic_chunk_info(
     previous_chunk_count: int | None,
     new_chunk_count: int,
 ) -> EnrichedDocumentIndexingInfo:
-    """Retrieves chunk information for a document.
+    """Determines which chunks need to be deleted during document reindexing.
 
-    - Determines the last indexed chunk.
-    - Identifies if the document uses the old or new chunk ID system.
-    This data is crucial for Vespa document updates without relying on the visit
-    API.
+    When a document is reindexed, it may have fewer chunks than before. This
+    function identifies the range of old chunks that need to be deleted by
+    comparing the new chunk count with the previous chunk count.
+
+    Example:
+        If a document previously had 10 chunks (0-9) and now has 7 chunks (0-6),
+        this function identifies that chunks 7-9 need to be deleted.
+
+    Args:
+        index_name: The Vespa index/schema name.
+        http_client: HTTP client for making requests to Vespa.
+        document_id: The Vespa-sanitized ID of the document being reindexed.
+        previous_chunk_count: The total number of chunks the document had before
+            reindexing. None for documents using the legacy chunk ID system.
+        new_chunk_count: The total number of chunks the document has after
+            reindexing. This becomes the starting index for deletion since
+            chunks are 0-indexed.
+
+    Returns:
+        EnrichedDocumentIndexingInfo with chunk_start_index set to
+        new_chunk_count (where deletion begins) and chunk_end_index set to
+        previous_chunk_count (where deletion ends).
     """
+    # Technically last indexed chunk index +1.
     last_indexed_chunk = previous_chunk_count
-
     # If the document has no `chunk_count` in the database, we know that it
     # has the old chunk ID system and we must check for the final chunk index.
     is_old_version = False
@@ -99,24 +117,24 @@ class VespaDocumentIndex(DocumentIndex):
         large_chunks_enabled: bool,
         httpx_client: httpx.Client | None = None,
     ) -> None:
-        self.index_name = index_name
-        self.tenant_id = tenant_state.tenant_id
-        self.large_chunks_enabled = large_chunks_enabled
+        self._index_name = index_name
+        self._tenant_id = tenant_state.tenant_id
+        self._large_chunks_enabled = large_chunks_enabled
         # NOTE: using `httpx` here since `requests` doesn't support HTTP2. This
         # is beneficial for indexing / updates / deletes since we have to make a
         # large volume of requests.
-        self.httpx_client_context: BaseHTTPXClientContext
+        self._httpx_client_context: BaseHTTPXClientContext
         if httpx_client:
             # Use the provided client. Because this client is presumed global,
             # it does not close after exiting a context manager.
-            self.httpx_client_context = GlobalHTTPXClientContext(httpx_client)
+            self._httpx_client_context = GlobalHTTPXClientContext(httpx_client)
         else:
             # We did not receive a client, so create one what will close after
             # exiting a context manager.
-            self.httpx_client_context = TemporaryHTTPXClientContext(
+            self._httpx_client_context = TemporaryHTTPXClientContext(
                 get_vespa_http_client
             )
-        self.multitenant = tenant_state.multitenant
+        self._multitenant = tenant_state.multitenant
 
     def verify_and_create_index_if_necessary(
         self, embedding_dim: int, embedding_precision: EmbeddingPrecision
@@ -164,7 +182,7 @@ class VespaDocumentIndex(DocumentIndex):
 
         with (
             concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor,
-            self.httpx_client_context as http_client,
+            self._httpx_client_context as http_client,
         ):
             # We require the start and end index for each document in order to
             # know precisely which chunks to delete. This information exists for
@@ -172,7 +190,7 @@ class VespaDocumentIndex(DocumentIndex):
             # `old_version` documents.
             enriched_doc_infos: list[EnrichedDocumentIndexingInfo] = [
                 _enrich_basic_chunk_info(
-                    index_name=self.index_name,
+                    index_name=self._index_name,
                     http_client=http_client,
                     document_id=doc_id,
                     previous_chunk_count=doc_id_to_previous_chunk_cnt[doc_id],
@@ -200,15 +218,15 @@ class VespaDocumentIndex(DocumentIndex):
             # the source of truth.
             chunks_to_delete = get_document_chunk_ids(
                 enriched_document_info_list=enriched_doc_infos,
-                tenant_id=self.tenant_id,  # TODO: Figure out this typing bro wtf.
-                large_chunks_enabled=self.large_chunks_enabled,
+                tenant_id=self._tenant_id,  # TODO: Figure out this typing bro wtf.
+                large_chunks_enabled=self._large_chunks_enabled,
             )
 
             # Delete old Vespa documents.
             for doc_chunk_ids_batch in batch_generator(chunks_to_delete, BATCH_SIZE):
                 delete_vespa_chunks(
                     doc_chunk_ids=doc_chunk_ids_batch,
-                    index_name=self.index_name,
+                    index_name=self._index_name,
                     http_client=http_client,
                     executor=executor,
                 )
@@ -217,9 +235,9 @@ class VespaDocumentIndex(DocumentIndex):
             for chunk_batch in batch_generator(cleaned_chunks, BATCH_SIZE):
                 batch_index_vespa_chunks(
                     chunks=chunk_batch,
-                    index_name=self.index_name,
+                    index_name=self._index_name,
                     http_client=http_client,
-                    multitenant=self.multitenant,
+                    multitenant=self._multitenant,
                     executor=executor,
                 )
 
