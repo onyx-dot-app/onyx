@@ -53,6 +53,7 @@ from onyx.file_store.utils import verify_user_files
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.interfaces import LLM
+from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.redis.redis_pool import get_redis_client
@@ -293,6 +294,11 @@ def stream_chat_message_objects(
 
     try:
         user_id = user.id if user is not None else None
+        llm_user_identifier = (
+            user.email
+            if user is not None and getattr(user, "email", None)
+            else (str(user_id) if user_id else "anonymous_user")
+        )
 
         chat_session = get_chat_session_by_id(
             chat_session_id=new_msg_req.chat_session_id,
@@ -303,6 +309,9 @@ def stream_chat_message_objects(
 
         message_text = new_msg_req.message
         chat_session_id = new_msg_req.chat_session_id
+        user_identity = LLMUserIdentity(
+            user_id=llm_user_identifier, session_id=str(chat_session_id)
+        )
         parent_id = new_msg_req.parent_message_id
         reference_doc_ids = new_msg_req.search_doc_ids
         retrieval_options = new_msg_req.retrieval_options
@@ -401,13 +410,11 @@ def stream_chat_message_objects(
         # (which means it can use search)
         # However if in a project and there are more files than can fit in the context,
         # it should use the search tool with the project filter on
+        # If no files are uploaded, search should remain enabled
         disable_internal_search = bool(
             chat_session.project_id
             and persona.id is DEFAULT_PERSONA_ID
-            and (
-                extracted_project_files.project_file_texts
-                or not extracted_project_files.project_as_filter
-            )
+            and extracted_project_files.project_file_texts
         )
 
         emitter = get_default_emitter()
@@ -495,6 +502,9 @@ def stream_chat_message_objects(
         # Note: DB session is not thread safe but nothing else uses it and the
         # reference is passed directly so it's ok.
         if os.environ.get("ENABLE_DEEP_RESEARCH_LOOP"):  # Dev only feature flag for now
+            if chat_session.project_id:
+                raise RuntimeError("Deep research is not supported for projects")
+
             yield from run_chat_llm_with_state_containers(
                 run_deep_research_llm_loop,
                 is_connected=check_is_connected,
@@ -506,6 +516,7 @@ def stream_chat_message_objects(
                 llm=llm,
                 token_counter=token_counter,
                 db_session=db_session,
+                user_identity=user_identity,
             )
         else:
             yield from run_chat_llm_with_state_containers(
@@ -527,6 +538,7 @@ def stream_chat_message_objects(
                     if new_msg_req.forced_tool_ids
                     else None
                 ),
+                user_identity=user_identity,
             )
 
         # Determine if stopped by user

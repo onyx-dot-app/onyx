@@ -6,10 +6,6 @@ from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
 
-from langchain.schema.messages import AIMessage
-from langchain.schema.messages import BaseMessage
-from langchain.schema.messages import HumanMessage
-from langchain.schema.messages import SystemMessage
 from sqlalchemy import select
 
 from onyx.configs.app_configs import LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS
@@ -23,6 +19,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import LLMProvider
 from onyx.db.models import ModelConfiguration
 from onyx.llm.interfaces import LLM
+from onyx.llm.model_response import ModelResponse
 from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_TOKEN_ESTIMATE
 from onyx.prompts.contextual_retrieval import DOCUMENT_SUMMARY_TOKEN_ESTIMATE
 from onyx.utils.logger import setup_logger
@@ -245,33 +242,11 @@ def litellm_exception_to_error_msg(
     return error_msg, error_code, is_retryable
 
 
-def dict_based_prompt_to_langchain_prompt(
-    messages: list[dict[str, str]],
-) -> list[BaseMessage]:
-    prompt: list[BaseMessage] = []
-    for message in messages:
-        role = message.get("role")
-        content = message.get("content")
-        if not role:
-            raise ValueError(f"Message missing `role`: {message}")
-        if not content:
-            raise ValueError(f"Message missing `content`: {message}")
-        elif role == "user":
-            prompt.append(HumanMessage(content=content))
-        elif role == "system":
-            prompt.append(SystemMessage(content=content))
-        elif role == "assistant":
-            prompt.append(AIMessage(content=content))
-        else:
-            raise ValueError(f"Unknown role: {role}")
-    return prompt
-
-
-def message_to_string(message: BaseMessage) -> str:
-    if not isinstance(message.content, str):
+def llm_response_to_string(message: ModelResponse) -> str:
+    if not isinstance(message.choice.message.content, str):
         raise RuntimeError("LLM message not in expected format.")
 
-    return message.content
+    return message.choice.message.content
 
 
 def check_number_of_tokens(
@@ -294,7 +269,7 @@ def test_llm(llm: LLM) -> str | None:
     error_msg = None
     for _ in range(2):
         try:
-            llm.invoke_langchain("Do not respond")
+            llm.invoke("Do not respond")
             return None
         except Exception as e:
             error_msg = str(e)

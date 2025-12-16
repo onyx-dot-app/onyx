@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling", "hatch-vcs", "go-bin~=1.25.0", "manygo"]
+requires = ["hatchling", "hatch-vcs", "go-bin~=1.24.11", "manygo"]
 build-backend = "hatchling.build"
 
 [project]
@@ -17,13 +17,17 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dynamic = ["version"]
+dependencies = [
+    "fastapi>=0.116.1",
+    "openapi-generator-cli>=7.17.0",
+]
 
 
 [project.urls]
 Repository = "https://github.com/onyx-dot-app/onyx"
 
 [tool.hatch.build]
-include = ["go.mod", "go.sum", "main.go", "**/*.go"]
+include = ["go.mod", "go.sum", "main.go", "**/*.go", "**/*.py"]
 
 [tool.hatch.version]
 source = "vcs"

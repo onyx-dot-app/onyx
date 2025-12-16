@@ -88,6 +88,8 @@ def run_tool_calls(
     user_info: str | None,
     citation_mapping: dict[int, str],
     citation_processor: DynamicCitationProcessor,
+    # Skip query expansion for repeat search tool calls
+    skip_search_query_expansion: bool = False,
 ) -> tuple[
     list[ToolResponse], dict[int, str]
 ]:  # return also the updated citation mapping
@@ -136,6 +138,7 @@ def run_tool_calls(
                 message_history=minimal_history,
                 memories=memories,
                 user_info=user_info,
+                skip_query_expansion=skip_search_query_expansion,
             )
 
         elif isinstance(tool, WebSearchTool):
