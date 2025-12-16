@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -75,7 +76,7 @@ func DefaultLazyImportModules() map[string]LazyImportSettings {
 			"onyx/llm/litellm_singleton/config.py",
 			"onyx/llm/litellm_singleton/monkey_patches.py",
 		),
-		"nltk":                 NewLazyImportSettings(),
+		"nltk":                NewLazyImportSettings(),
 		"trafilatura":         NewLazyImportSettings(),
 		"pypdf":               NewLazyImportSettings(),
 		"unstructured_client": NewLazyImportSettings(),
@@ -348,6 +349,7 @@ func formatModuleList(modules map[string]LazyImportSettings) string {
 	for name := range modules {
 		names = append(names, name)
 	}
+	sort.Strings(names)
 	return strings.Join(names, ", ")
 }
 
@@ -357,6 +359,6 @@ func FormatViolatedModules(modules map[string]struct{}) string {
 	for name := range modules {
 		names = append(names, name)
 	}
+	sort.Strings(names)
 	return strings.Join(names, ", ")
 }
-
