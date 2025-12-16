@@ -30,9 +30,9 @@ import {
 } from "@dnd-kit/modifiers";
 import Settings from "@/sections/sidebar/Settings/Settings";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
-import { useChatSessions } from "@/lib/hooks/useChatSessions";
+import useChatSessions from "@/hooks/useChatSessions";
 import { useProjects } from "@/lib/hooks/useProjects";
-import { useAgents, usePinnedAgentsWithDetails } from "@/lib/hooks/useAgents";
+import { useAgents, usePinnedAgentsWithDetails } from "@/hooks/useAgents";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
 import ProjectFolderButton from "@/sections/sidebar/ProjectFolderButton";
 import CreateProjectModal from "@/components/modals/CreateProjectModal";

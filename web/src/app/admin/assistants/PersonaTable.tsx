@@ -44,9 +44,13 @@ function PersonaTypeDisplay({ persona }: { persona: Persona }) {
 export function PersonasTable({
   personas,
   refreshPersonas,
+  currentPage,
+  pageSize,
 }: {
   personas: Persona[];
   refreshPersonas: () => void;
+  currentPage: number;
+  pageSize: number;
 }) {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
@@ -82,9 +86,13 @@ export function PersonasTable({
 
     setFinalPersonas(reorderedPersonas);
 
+    // Calculate display_priority based on current page.
+    // Page 1 (items 0-9): priorities 0-9
+    // Page 2 (items 10-19): priorities 10-19, etc.
+    const pageStartIndex = (currentPage - 1) * pageSize;
     const displayPriorityMap = new Map<UniqueIdentifier, number>();
     orderedPersonaIds.forEach((personaId, ind) => {
-      displayPriorityMap.set(personaId, ind);
+      displayPriorityMap.set(personaId, pageStartIndex + ind);
     });
 
     const response = await fetch("/api/admin/agents/display-priorities", {

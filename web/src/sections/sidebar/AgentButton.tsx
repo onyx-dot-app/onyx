@@ -2,7 +2,7 @@
 
 import React, { memo } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import { usePinnedAgentsWithDetails } from "@/lib/hooks/useAgents";
+import { usePinnedAgentsWithDetails } from "@/hooks/useAgents";
 import { useAppRouter } from "@/hooks/appNavigation";
 import { cn, noProp } from "@/lib/utils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
@@ -10,7 +10,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import useAppFocus from "@/hooks/useAppFocus";
-import useIsMounted from "@/hooks/useIsMounted";
+import useOnMount from "@/hooks/useOnMount";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { SvgPin, SvgX } from "@opal/icons";
 
@@ -20,7 +20,7 @@ interface SortableItemProps {
 }
 
 function SortableItem({ id, children }: SortableItemProps) {
-  const isMounted = useIsMounted();
+  const isMounted = useOnMount();
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useSortable({ id });
 

@@ -11,7 +11,7 @@ import { useChatPageLayout } from "@/app/chat/stores/useChatSessionStore";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import { useChatSessions } from "@/lib/hooks/useChatSessions";
+import useChatSessions from "@/hooks/useChatSessions";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import {
   handleMoveOperation,

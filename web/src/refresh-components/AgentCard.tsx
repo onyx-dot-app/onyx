@@ -10,7 +10,7 @@ import { useAppRouter } from "@/hooks/appNavigation";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Truncated from "@/refresh-components/texts/Truncated";
 import type { IconProps } from "@opal";
-import { usePinnedAgentsWithDetails } from "@/lib/hooks/useAgents";
+import { usePinnedAgentsWithDetails } from "@/hooks/useAgents";
 import { cn, noProp } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";

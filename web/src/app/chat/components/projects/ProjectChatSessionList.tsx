@@ -6,7 +6,7 @@ import { ChatSessionMorePopup } from "@/components/sidebar/ChatSessionMorePopup"
 import { useProjectsContext } from "../../projects/ProjectsContext";
 import { ChatSession } from "@/app/chat/interfaces";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
-import { useAgents } from "@/lib/hooks/useAgents";
+import { useAgents } from "@/hooks/useAgents";
 import { formatRelativeTime } from "./project_utils";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";

@@ -7,7 +7,6 @@ import { StarterMessage } from "./interfaces";
 import Button from "@/refresh-components/buttons/Button";
 import { TextFormField } from "@/components/Field";
 import { cn } from "@/lib/utils";
-import Text from "@/refresh-components/texts/Text";
 import { MAX_STARTER_MESSAGES } from "@/lib/constants";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgRefreshCw, SvgTrash } from "@opal/icons";

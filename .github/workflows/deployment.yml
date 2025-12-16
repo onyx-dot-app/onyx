@@ -101,7 +101,7 @@ jobs:
 
       - name: Validate tag is versioned correctly
         run: |
-          uv run --no-sync --with release-tag tag --check
+          uv run --no-sync --with release-tag tag --check --debug
 
   notify-slack-on-tag-check-failure:
     needs:
