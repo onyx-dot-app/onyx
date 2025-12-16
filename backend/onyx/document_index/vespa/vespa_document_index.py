@@ -381,7 +381,7 @@ class VespaDocumentIndex(DocumentIndex):
         target_hits = max(10 * num_to_retrieve, RERANK_COUNT)
 
         yql = (
-            YQL_BASE.format(index_name=self.index_name)
+            YQL_BASE.format(index_name=self._index_name)
             + vespa_where_clauses
             + f"(({{targetHits: {target_hits}}}nearestNeighbor(embeddings, query_embedding)) "
             + f"or ({{targetHits: {target_hits}}}nearestNeighbor(title_embedding, query_embedding)) "
