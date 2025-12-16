@@ -3,7 +3,6 @@
 import React, {
   ForwardedRef,
   useCallback,
-  useEffect,
   useImperativeHandle,
   useMemo,
   useRef,
@@ -20,14 +19,12 @@ import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { FileDescriptor } from "@/app/chat/interfaces";
 import AIMessage from "@/app/chat/message/messageComponents/AIMessage";
 import { ProjectFile } from "@/app/chat/projects/projectsService";
-import { cn } from "@/lib/utils";
 import { useScrollonStream } from "@/app/chat/services/lib";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
   useChatPageLayout,
   useCurrentChatState,
   useCurrentMessageTree,
-  useHasPerformedInitialScroll,
   useUncaughtError,
 } from "@/app/chat/stores/useChatSessionStore";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -35,7 +32,6 @@ import { useDeepResearchToggle } from "../app/chat/hooks/useDeepResearchToggle";
 import { useUser } from "@/components/user/UserProvider";
 import { HORIZON_DISTANCE_PX } from "@/lib/constants";
 import Spacer from "@/refresh-components/Spacer";
-import useOnMount from "@/hooks/useOnMount";
 
 export interface ChatUIHandle {
   scrollToBottom: (fast?: boolean) => boolean;
@@ -93,7 +89,6 @@ const ChatUI = React.forwardRef(
       useChatPageLayout();
     const error = useUncaughtError();
     const messageTree = useCurrentMessageTree();
-    const hasScrolled = useHasPerformedInitialScroll();
     const currentChatState = useCurrentChatState();
 
     // Stable fallbacks to avoid changing prop identities on each render
@@ -102,7 +97,6 @@ const ChatUI = React.forwardRef(
 
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const endDivRef = useRef<HTMLDivElement>(null);
-    const lastMessageRef = useRef<HTMLDivElement>(null);
     const scrollDist = useRef<number>(0);
     const [aboveHorizon, setAboveHorizon] = useState(false);
     const debounceNumber = 100;
@@ -151,20 +145,9 @@ const ChatUI = React.forwardRef(
       setAboveHorizon(distanceFromBottom > HORIZON_DISTANCE_PX);
     }, []);
 
-    function resetScroll() {
-      scrollDist.current = 0;
-      setAboveHorizon(false);
-    }
-
-    useOnMount(resetScroll);
-    useEffect(resetScroll, [currentChatSessionId]);
-
     const scrollToBottom = useCallback(() => {
       if (!endDivRef.current) return false;
-
-      endDivRef.current.scrollIntoView({
-        behavior: "smooth",
-      });
+      endDivRef.current.scrollIntoView({ behavior: "smooth" });
       return true;
     }, []);
 
@@ -196,10 +179,10 @@ const ChatUI = React.forwardRef(
       enableAutoScroll: user?.preferences.auto_scroll,
     });
 
-    // if (!liveAssistant) return null;
+    if (!liveAssistant) return null;
 
-    const content = liveAssistant ? (
-      <>
+    return (
+      <div className="flex flex-col flex-1 w-full relative overflow-hidden">
         {aboveHorizon && (
           <div className="absolute bottom-0 z-[1000000] left-1/2 -translate-x-1/2">
             <IconButton icon={SvgChevronDown} onClick={scrollToBottom} />
@@ -211,10 +194,7 @@ const ChatUI = React.forwardRef(
         <div
           key={currentChatSessionId}
           ref={scrollContainerRef}
-          className={cn(
-            "flex-1 min-h-0 overflow-y-auto overflow-x-hidden default-scrollbar",
-            !hasScrolled && "hidden"
-          )}
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden default-scrollbar"
           onScroll={handleScroll}
         >
           {messages.map((message, i) => {
@@ -295,10 +275,8 @@ const ChatUI = React.forwardRef(
               };
               return (
                 <div
-                  className="text-text"
                   id={`message-${message.nodeId}`}
                   key={messageReactComponentKey}
-                  ref={i === messages.length - 1 ? lastMessageRef : null}
                 >
                   <AIMessage
                     rawPackets={message.packets}
@@ -330,12 +308,6 @@ const ChatUI = React.forwardRef(
 
           <div ref={endDivRef} />
         </div>
-      </>
-    ) : null;
-
-    return (
-      <div className="flex flex-col flex-1 w-full relative overflow-hidden">
-        {content}
       </div>
     );
   }

@@ -107,10 +107,6 @@ interface UseChatControllerProps {
   selectedDocuments: OnyxDocument[];
   searchParams: ReadonlyURLSearchParams;
   setPopup: (popup: PopupSpec) => void;
-
-  // scroll/focus related stuff
-  clientScrollToBottom: () => void;
-
   resetInputBar: () => void;
   setSelectedAssistantFromId: (assistantId: number | null) => void;
 }
@@ -122,10 +118,6 @@ export function useChatController({
   liveAssistant,
   existingChatSessionId,
   selectedDocuments,
-
-  // scroll/focus related stuff
-  clientScrollToBottom,
-
   setPopup,
   resetInputBar,
   setSelectedAssistantFromId,
@@ -486,8 +478,6 @@ export function useChatController({
 
         return;
       }
-
-      clientScrollToBottom();
 
       let currChatSessionId: string;
       const isNewSession = existingChatSessionId === null;
@@ -908,7 +898,6 @@ export function useChatController({
       selectedDocuments,
       searchParams,
       setPopup,
-      clientScrollToBottom,
       resetInputBar,
       setSelectedAssistantFromId,
       updateSelectedNodeForDocDisplay,

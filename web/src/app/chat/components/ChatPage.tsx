@@ -46,7 +46,6 @@ import {
 import {
   useCurrentChatState,
   useIsReady,
-  useHasPerformedInitialScroll,
   useDocumentSidebarVisible,
 } from "@/app/chat/stores/useChatSessionStore";
 import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
@@ -267,15 +266,13 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
   const chatUiRef = useRef<ChatUIHandle>(null);
   const inputRef = useRef<HTMLDivElement>(null);
 
-  const scrollInitialized = useRef(false);
-
   const previousHeight = useRef<number>(
     inputRef.current?.getBoundingClientRect().height!
   );
 
   function handleInputResize() {
     setTimeout(() => {
-      if (inputRef.current && !waitForScrollRef.current) {
+      if (inputRef.current) {
         const newHeight: number =
           inputRef.current?.getBoundingClientRect().height!;
         const heightDifference = newHeight - previousHeight.current;
@@ -337,32 +334,11 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
   // Access chat state directly from the store
   const currentChatState = useCurrentChatState();
   const isReady = useIsReady();
-  const hasPerformedInitialScroll = useHasPerformedInitialScroll();
   const documentSidebarVisible = useDocumentSidebarVisible();
-  const updateHasPerformedInitialScroll = useChatSessionStore(
-    (state) => state.updateHasPerformedInitialScroll
-  );
   const updateCurrentDocumentSidebarVisible = useChatSessionStore(
     (state) => state.updateCurrentDocumentSidebarVisible
   );
   const { messageHistory } = useChatPageLayout();
-
-  const clientScrollToBottom = useCallback(() => {
-    waitForScrollRef.current = true;
-
-    setTimeout(() => {
-      const didScroll = chatUiRef.current?.scrollToBottom();
-
-      if (didScroll && chatSessionIdRef.current) {
-        updateHasPerformedInitialScroll(chatSessionIdRef.current, true);
-      }
-    }, 50);
-
-    // Reset waitForScrollRef after 1.5 seconds
-    setTimeout(() => {
-      waitForScrollRef.current = false;
-    }, 1500);
-  }, [updateHasPerformedInitialScroll]);
 
   const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
     useChatController({
@@ -374,7 +350,6 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
       selectedDocuments,
       searchParams,
       setPopup,
-      clientScrollToBottom,
       resetInputBar,
       setSelectedAssistantFromId,
     });
@@ -391,18 +366,13 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
       chatSessionIdRef,
       loadedIdSessionRef,
       textAreaRef,
-      scrollInitialized,
       isInitialLoad,
       submitOnLoadPerformed,
-      hasPerformedInitialScroll,
-      clientScrollToBottom,
       refreshChatSessions,
       onSubmit,
     });
 
   const autoScrollEnabled = user?.preferences?.auto_scroll ?? false;
-
-  const waitForScrollRef = useRef(false);
 
   useSendMessageToParent();
 
@@ -424,7 +394,6 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
     ) {
       updateCurrentDocumentSidebarVisible(false);
     }
-    clientScrollToBottom();
   }, [currentChatSessionId]);
 
   const [stackTraceModalContent, setStackTraceModalContent] = useState<
