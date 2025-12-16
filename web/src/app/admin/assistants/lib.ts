@@ -115,6 +115,7 @@ export async function uploadFile(file: File): Promise<string | null> {
   const response = await fetch("/api/admin/persona/upload-image", {
     method: "POST",
     body: formData,
+    credentials: "include",
   });
 
   if (!response.ok) {
