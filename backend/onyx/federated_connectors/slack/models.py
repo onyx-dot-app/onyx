@@ -25,17 +25,17 @@ class SlackEntities(BaseModel):
 
     # Direct message filtering
     include_dm: bool = Field(
-        default=False,
+        default=True,
         description="Include user direct messages in search results",
     )
     include_group_dm: bool = Field(
-        default=False,
+        default=True,
         description="Include group direct messages (multi-person DMs) in search results",
     )
 
     # Private channel filtering
     include_private_channels: bool = Field(
-        default=False,
+        default=True,
         description="Include private channels in search results (user must have access)",
     )
 

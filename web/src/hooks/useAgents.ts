@@ -2,8 +2,11 @@ import useSWR from "swr";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { pinAgents } from "../assistants/orderAssistants";
+import { pinAgents } from "../lib/assistants/orderAssistants";
 import { useUser } from "@/components/user/UserProvider";
+import { useSearchParams } from "next/navigation";
+import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
+import useChatSessions from "./useChatSessions";
 
 export function useAgents() {
   const { data, error, mutate } = useSWR<MinimalPersonaSnapshot[]>(
@@ -104,4 +107,33 @@ export function usePinnedAgentsWithDetails() {
     updatePinnedAgents, // Use this instead of setPinnedAgents for drag-and-drop
     isLoading: isLoadingAgents,
   };
+}
+
+/**
+ * Hook to determine the currently active agent based on:
+ * 1. URL param `assistantId`
+ * 2. Chat session's `persona_id`
+ * 3. Falls back to null if neither is present
+ */
+export function useCurrentAgent(): MinimalPersonaSnapshot | null {
+  const { agents } = useAgents();
+  const searchParams = useSearchParams();
+
+  const agentIdRaw = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
+  const { currentChatSession } = useChatSessions();
+
+  const currentAgent = useMemo(() => {
+    if (agents.length === 0) return null;
+
+    // Priority: URL param > chat session persona > null
+    const agentId = agentIdRaw
+      ? parseInt(agentIdRaw)
+      : currentChatSession?.persona_id;
+
+    if (!agentId) return null;
+
+    return agents.find((a) => a.id === agentId) ?? null;
+  }, [agents, agentIdRaw, currentChatSession?.persona_id]);
+
+  return currentAgent;
 }

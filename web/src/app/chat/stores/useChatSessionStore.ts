@@ -536,13 +536,6 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
   },
 }));
 
-// Custom hooks for accessing store data
-export const useCurrentSession = () =>
-  useChatSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    return currentSessionId ? sessions.get(currentSessionId) || null : null;
-  });
-
 export const useSession = (sessionId: string) =>
   useChatSessionStore((state) => state.sessions.get(sessionId) || null);
 
@@ -574,24 +567,6 @@ export const useCurrentChatState = () =>
     return currentSession?.chatState || "input";
   });
 
-export const useCurrentRegenerationState = () =>
-  useChatSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    const currentSession = currentSessionId
-      ? sessions.get(currentSessionId)
-      : null;
-    return currentSession?.regenerationState || null;
-  });
-
-export const useCanContinue = () =>
-  useChatSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    const currentSession = currentSessionId
-      ? sessions.get(currentSessionId)
-      : null;
-    return currentSession?.canContinue || false;
-  });
-
 export const useSubmittedMessage = () =>
   useChatSessionStore((state) => {
     const { currentSessionId, sessions } = state;
@@ -600,31 +575,6 @@ export const useSubmittedMessage = () =>
       : null;
     return currentSession?.submittedMessage || "";
   });
-
-export const useRegenerationState = (sessionId: string) =>
-  useChatSessionStore((state) => {
-    const session = state.sessions.get(sessionId);
-    return session?.regenerationState || null;
-  });
-
-export const useAbortController = (sessionId: string) =>
-  useChatSessionStore((state) => {
-    const session = state.sessions.get(sessionId);
-    return session?.abortController || null;
-  });
-
-export const useAbortControllers = () => {
-  const sessions = useChatSessionStore((state) => state.sessions);
-  return useMemo(() => {
-    const controllers = new Map<string, AbortController>();
-    sessions.forEach((session: ChatSessionData) => {
-      if (session.abortController) {
-        controllers.set(session.sessionId, session.abortController);
-      }
-    });
-    return controllers;
-  }, [sessions]);
-};
 
 export interface ChatPageLayout {
   messageHistory: Message[];
@@ -692,15 +642,6 @@ export const useIsReady = () =>
     return currentSession?.isReady ?? true;
   });
 
-export const useMaxTokens = () =>
-  useChatSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    const currentSession = currentSessionId
-      ? sessions.get(currentSessionId)
-      : null;
-    return currentSession?.maxTokens || 128_000;
-  });
-
 export const useHasPerformedInitialScroll = () =>
   useChatSessionStore((state) => {
     const { currentSessionId, sessions } = state;
@@ -726,17 +667,6 @@ export const useSelectedNodeForDocDisplay = () =>
       ? sessions.get(currentSessionId)
       : null;
     return currentSession?.selectedNodeIdForDocDisplay || null;
-  });
-
-export const useChatSessionSharedStatus = () =>
-  useChatSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    const currentSession = currentSessionId
-      ? sessions.get(currentSessionId)
-      : null;
-    return (
-      currentSession?.chatSessionSharedStatus || ChatSessionSharedStatus.Private
-    );
   });
 
 export const useHasSentLocalUserMessage = () =>

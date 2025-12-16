@@ -570,6 +570,22 @@ export function useLlmManager(
     modelName: "",
   });
 
+  // Track the previous assistant ID to detect when it changes
+  const prevAssistantIdRef = useRef<number | undefined>(undefined);
+
+  // Reset manual override when switching to a different assistant
+  useEffect(() => {
+    if (
+      liveAssistant?.id !== undefined &&
+      prevAssistantIdRef.current !== undefined &&
+      liveAssistant.id !== prevAssistantIdRef.current
+    ) {
+      // User switched to a different assistant - reset manual override
+      setUserHasManuallyOverriddenLLM(false);
+    }
+    prevAssistantIdRef.current = liveAssistant?.id;
+  }, [liveAssistant?.id]);
+
   const llmUpdate = () => {
     /* Should be called when the live assistant or current chat session changes */
 

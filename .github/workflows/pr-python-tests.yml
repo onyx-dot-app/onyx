@@ -26,16 +26,13 @@ jobs:
     env:
       PYTHONPATH: ./backend
       REDIS_CLOUD_PYTEST_PASSWORD: ${{ secrets.REDIS_CLOUD_PYTEST_PASSWORD }}
-      SF_USERNAME: ${{ secrets.SF_USERNAME }}
-      SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
-      SF_SECURITY_TOKEN: ${{ secrets.SF_SECURITY_TOKEN }}
       DISABLE_TELEMETRY: "true"
 
     steps:
     - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
     - name: Checkout code
-      uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+      uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
       with:
         persist-credentials: false
 
