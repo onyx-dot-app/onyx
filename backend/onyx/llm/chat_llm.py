@@ -9,12 +9,14 @@ from typing import Union
 from langchain_core.messages import BaseMessage
 
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
+from onyx.configs.app_configs import SEND_USER_METADATA_TO_LLM_PROVIDER
 from onyx.configs.chat_configs import QA_TIMEOUT
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
 from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
+from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.interfaces import ReasoningEffort
 from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.llm_provider_options import AZURE_PROVIDER_NAME
@@ -41,6 +43,7 @@ if TYPE_CHECKING:
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
 LEGACY_MAX_TOKENS_KWARG = "max_tokens"
 STANDARD_MAX_TOKENS_KWARG = "max_completion_tokens"
+MAX_LITELLM_USER_ID_LENGTH = 64
 
 
 class LLMTimeoutError(Exception):
@@ -68,6 +71,17 @@ def _prompt_to_dicts(prompt: LanguageModelInput) -> list[dict[str, Any]]:
 
 def _prompt_as_json(prompt: LanguageModelInput) -> JSON_ro:
     return cast(JSON_ro, _prompt_to_dicts(prompt))
+
+
+def _truncate_litellm_user_id(user_id: str) -> str:
+    if len(user_id) <= MAX_LITELLM_USER_ID_LENGTH:
+        return user_id
+    logger.warning(
+        "LLM user id exceeds %d chars (len=%d); truncating for provider compatibility.",
+        MAX_LITELLM_USER_ID_LENGTH,
+        len(user_id),
+    )
+    return user_id[:MAX_LITELLM_USER_ID_LENGTH]
 
 
 class LitellmLLM(LLM):
@@ -233,6 +247,7 @@ class LitellmLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
+        user_identity: LLMUserIdentity | None = None,
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
         self._record_call(prompt)
         from onyx.llm.litellm_singleton import litellm
@@ -250,6 +265,29 @@ class LitellmLLM(LLM):
             model_provider = f"{self.config.model_provider}/responses"
         else:
             model_provider = self.config.model_provider
+
+        completion_kwargs: dict[str, Any] = self._model_kwargs
+        if SEND_USER_METADATA_TO_LLM_PROVIDER and user_identity:
+            completion_kwargs = dict(self._model_kwargs)
+
+            if user_identity.user_id:
+                completion_kwargs["user"] = _truncate_litellm_user_id(
+                    user_identity.user_id
+                )
+
+            if user_identity.session_id:
+                existing_metadata = completion_kwargs.get("metadata")
+                metadata: dict[str, Any] | None
+                if existing_metadata is None:
+                    metadata = {}
+                elif isinstance(existing_metadata, dict):
+                    metadata = dict(existing_metadata)
+                else:
+                    metadata = None
+
+                if metadata is not None:
+                    metadata["session_id"] = user_identity.session_id
+                    completion_kwargs["metadata"] = metadata
 
         try:
             return litellm.completion(
@@ -324,7 +362,7 @@ class LitellmLLM(LLM):
                     else {}
                 ),
                 **({self._max_token_param: max_tokens} if max_tokens else {}),
-                **self._model_kwargs,
+                **completion_kwargs,
             )
         except Exception as e:
 
@@ -367,6 +405,7 @@ class LitellmLLM(LLM):
         timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort | None = None,
+        user_identity: LLMUserIdentity | None = None,
     ) -> ModelResponse:
         from litellm import ModelResponse as LiteLLMModelResponse
 
@@ -384,6 +423,7 @@ class LitellmLLM(LLM):
                 max_tokens=max_tokens,
                 parallel_tool_calls=True,
                 reasoning_effort=reasoning_effort,
+                user_identity=user_identity,
             ),
         )
 
@@ -398,6 +438,7 @@ class LitellmLLM(LLM):
         timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort | None = None,
+        user_identity: LLMUserIdentity | None = None,
     ) -> Iterator[ModelResponseStream]:
         from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
         from onyx.llm.model_response import from_litellm_model_response_stream
@@ -414,6 +455,7 @@ class LitellmLLM(LLM):
                 max_tokens=max_tokens,
                 parallel_tool_calls=True,
                 reasoning_effort=reasoning_effort,
+                user_identity=user_identity,
             ),
         )
 
