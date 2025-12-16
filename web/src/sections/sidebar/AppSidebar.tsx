@@ -64,6 +64,7 @@ import useAppFocus from "@/hooks/useAppFocus";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
+import AvatarSection from "@/sections/sidebar/AvatarSection";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -511,6 +512,9 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
                   {moreAgentsButton}
                 </SidebarSection>
               </DndContext>
+
+              {/* Avatars */}
+              <AvatarSection folded={folded} />
 
               {/* Wrap Projects and Recents in a shared DndContext for chat-to-project drag */}
               <DndContext

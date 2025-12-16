@@ -90,6 +90,11 @@ export interface OnSubmitProps {
   modelOverride?: LlmDescriptor;
   regenerationRequest?: RegenerationRequest | null;
   overrideFileDescriptors?: FileDescriptor[];
+
+  // Avatar query parameters
+  avatarId?: number;
+  avatarIds?: number[]; // For broadcast mode
+  avatarQueryMode?: string;
 }
 
 interface RegenerationRequest {
@@ -391,6 +396,9 @@ export function useChatController({
       modelOverride,
       regenerationRequest,
       overrideFileDescriptors,
+      avatarId,
+      avatarIds,
+      avatarQueryMode,
     }: OnSubmitProps) => {
       const projectId = params(SEARCH_PARAM_NAMES.PROJECT_ID);
       {
@@ -710,6 +718,9 @@ export function useChatController({
                   .map((tool) => tool.id)
               : undefined,
           forcedToolIds: forcedToolIds,
+          avatarId,
+          avatarIds,
+          avatarQueryMode,
         });
 
         const delay = (ms: number) => {

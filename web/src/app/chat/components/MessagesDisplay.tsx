@@ -10,6 +10,7 @@ import { EnterpriseSettings } from "@/app/admin/settings/interfaces";
 import { FileDescriptor } from "@/app/chat/interfaces";
 import { MemoizedAIMessage } from "../message/messageComponents/MemoizedAIMessage";
 import { ProjectFile } from "../projects/projectsService";
+import { ChatSessionAvatarRequests } from "./avatar/ChatSessionAvatarRequests";
 
 interface MessagesDisplayProps {
   messageHistory: Message[];
@@ -217,6 +218,9 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
             />
           </div>
         ))}
+
+      {/* Avatar permission requests for this chat session */}
+      <ChatSessionAvatarRequests chatSessionId={chatSessionId} />
 
       {messageHistory.length > 0 && (
         <div
