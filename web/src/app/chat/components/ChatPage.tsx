@@ -626,7 +626,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
         >
           {({ getRootProps }) => (
             <div
-              className="h-full w-full p-4 flex flex-col items-center outline-none"
+              className="h-full w-full flex flex-col items-center outline-none"
               {...getRootProps({ tabIndex: -1 })}
             >
               {/* ProjectUI */}
@@ -666,7 +666,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
               {/* ChatInputBar container */}
               <div
                 ref={inputRef}
-                className="max-w-[50rem] w-full pointer-events-auto flex flex-col justify-center items-center"
+                className="max-w-[50rem] w-full pointer-events-auto flex flex-col px-4 justify-center items-center"
               >
                 {(showOnboarding ||
                   (user?.role !== UserRole.ADMIN &&
