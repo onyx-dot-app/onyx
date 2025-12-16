@@ -3,10 +3,11 @@
 from collections.abc import Sequence
 
 from onyx.llm.interfaces import LanguageModelInput
-from onyx.llm.message_types import ChatCompletionMessage
+from onyx.llm.models import ChatCompletionMessage
 from onyx.llm.prompt_cache.interfaces import CacheMetadata
 from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
 from onyx.llm.prompt_cache.utils import prepare_messages_with_cacheable_transform
+from onyx.llm.prompt_cache.utils import revalidate_message_from_original
 
 
 def _add_anthropic_cache_control(
@@ -26,7 +27,9 @@ def _add_anthropic_cache_control(
         # Add cache_control parameter
         # Anthropic supports up to 4 cache breakpoints
         msg_dict["cache_control"] = {"type": "ephemeral"}
-        cacheable_messages.append(msg_dict)  # type: ignore
+        cacheable_messages.append(
+            revalidate_message_from_original(original=msg, mutated=msg_dict)
+        )
     return cacheable_messages
 
 

@@ -12,15 +12,14 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from litellm import completion as litellm_completion
 from litellm import completion_cost
 from sqlalchemy.orm import Session
 
 from onyx.llm.chat_llm import LitellmLLM
-from onyx.llm.message_types import AssistantMessage
-from onyx.llm.message_types import ChatCompletionMessage
-from onyx.llm.message_types import SystemMessage
-from onyx.llm.message_types import UserMessageWithText
+from onyx.llm.models import AssistantMessage
+from onyx.llm.models import ChatCompletionMessage
+from onyx.llm.models import SystemMessage
+from onyx.llm.models import UserMessage
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 
 
@@ -94,6 +93,15 @@ def _extract_cache_read_tokens(usage: Any) -> int:
                 return int(cached_tokens)
 
     return 0
+
+
+def _get_usage_value(usage: Any, key: str) -> int:
+    """Retrieve a numeric field from usage objects or dictionaries."""
+    if isinstance(usage, dict):
+        value = usage.get(key)
+    else:
+        value = getattr(usage, key, None)
+    return int(value or 0)
 
 
 def _resolve_vertex_credentials() -> tuple[Path, bool]:
@@ -216,19 +224,17 @@ def test_openai_prompt_caching_reduces_costs(
 
         # Split into cacheable prefix (the long context) and suffix (the question)
         cacheable_prefix: list[ChatCompletionMessage] = [
-            UserMessageWithText(role="user", content=long_context)
+            UserMessage(role="user", content=long_context)
         ]
 
         # First call - creates cache
         print("\n=== First call (cache creation) ===")
         question1: list[ChatCompletionMessage] = [
-            UserMessageWithText(
-                role="user", content="What are the main topics discussed?"
-            )
+            UserMessage(role="user", content="What are the main topics discussed?")
         ]
 
         # Apply prompt caching (for OpenAI, this is mostly a no-op but should still work)
-        processed_messages1, metadata1 = process_with_prompt_cache(
+        processed_messages1, _ = process_with_prompt_cache(
             llm=llm,
             cacheable_prefix=cacheable_prefix,
             suffix=question1,
@@ -239,20 +245,13 @@ def test_openai_prompt_caching_reduces_costs(
         # print(f"Cache key 1: {metadata1.cache_key if metadata1 else None}")
 
         # Call litellm directly so we can get the raw response
-        kwargs1: dict[str, Any] = {}
-        if metadata1:
-            kwargs1["prompt_cache_key"] = metadata1.cache_key
-
-        response1 = litellm_completion(
+        response1 = llm.invoke(prompt=processed_messages1)
+        cost1 = completion_cost(
+            completion_response=response1.model_dump(),
             model=f"{llm._model_provider}/{llm._model_version}",
-            messages=processed_messages1,
-            api_key=llm._api_key,
-            timeout=llm._timeout,
-            **kwargs1,
         )
-        cost1 = completion_cost(completion_response=response1)
 
-        usage1 = response1.get("usage", {})
+        usage1 = response1.usage or {}
         cached_tokens_1 = _extract_cached_tokens(usage1)
         prompt_tokens_1 = _extract_prompt_tokens(usage1)
         # print(f"Response 1 usage: {usage1}")
@@ -264,38 +263,24 @@ def test_openai_prompt_caching_reduces_costs(
         # Second call with same context - should use cache
         print("\n=== Second call (cache read) ===")
         question2: list[ChatCompletionMessage] = [
-            UserMessageWithText(
-                role="user", content="Can you elaborate on neural networks?"
-            )
+            UserMessage(role="user", content="Can you elaborate on neural networks?")
         ]
 
         # Apply prompt caching (same cacheable prefix)
-        processed_messages2, metadata2 = process_with_prompt_cache(
+        processed_messages2, _ = process_with_prompt_cache(
             llm=llm,
             cacheable_prefix=cacheable_prefix,
             suffix=question2,
             continuation=False,
         )
         # print(f"Processed messages 2: {processed_messages2}")
-        kwargs2: dict[str, Any] = {}
-        cache_key_for_second = (
-            metadata2.cache_key
-            if metadata2
-            else (metadata1.cache_key if metadata1 else None)
-        )
-        if cache_key_for_second:
-            kwargs2["prompt_cache_key"] = cache_key_for_second
-
-        response2 = litellm_completion(
+        response2 = llm.invoke(prompt=processed_messages2)
+        cost2 = completion_cost(
+            completion_response=response2.model_dump(),
             model=f"{llm._model_provider}/{llm._model_version}",
-            messages=processed_messages2,
-            api_key=llm._api_key,
-            timeout=llm._timeout,
-            **kwargs2,
         )
-        cost2 = completion_cost(completion_response=response2)
 
-        usage2 = response2.get("usage", {})
+        usage2 = response2.usage or {}
         cached_tokens_2 = _extract_cached_tokens(usage2)
         prompt_tokens_2 = _extract_prompt_tokens(usage2)
         # print(f"Response 2 usage: {usage2}")
@@ -354,13 +339,13 @@ def test_anthropic_prompt_caching_reduces_costs(
     )
 
     base_messages: list[ChatCompletionMessage] = [
-        UserMessageWithText(role="user", content=long_context)
+        UserMessage(role="user", content=long_context)
     ]
 
     # First call - creates cache
     print("\n=== First call (cache creation) ===")
     question1: list[ChatCompletionMessage] = [
-        UserMessageWithText(role="user", content="What are the main topics discussed?")
+        UserMessage(role="user", content="What are the main topics discussed?")
     ]
 
     # Apply prompt caching
@@ -371,15 +356,13 @@ def test_anthropic_prompt_caching_reduces_costs(
         continuation=False,
     )
 
-    response1 = litellm_completion(
+    response1 = llm.invoke(prompt=processed_messages1)
+    cost1 = completion_cost(
+        completion_response=response1.model_dump(),
         model=f"{llm._model_provider}/{llm._model_version}",
-        messages=processed_messages1,
-        api_key=llm._api_key,
-        timeout=llm._timeout,
     )
-    cost1 = completion_cost(completion_response=response1)
 
-    usage1 = response1.get("usage", {})
+    usage1 = response1.usage or {}
     print(f"Response 1 usage: {usage1}")
     print(f"Cost 1: ${cost1:.10f}")
 
@@ -389,9 +372,7 @@ def test_anthropic_prompt_caching_reduces_costs(
     # Second call with same context - should use cache
     print("\n=== Second call (cache read) ===")
     question2: list[ChatCompletionMessage] = [
-        UserMessageWithText(
-            role="user", content="Can you elaborate on neural networks?"
-        )
+        UserMessage(role="user", content="Can you elaborate on neural networks?")
     ]
 
     # Apply prompt caching (same cacheable prefix)
@@ -402,21 +383,19 @@ def test_anthropic_prompt_caching_reduces_costs(
         continuation=False,
     )
 
-    response2 = litellm_completion(
+    response2 = llm.invoke(prompt=processed_messages2)
+    cost2 = completion_cost(
+        completion_response=response2.model_dump(),
         model=f"{llm._model_provider}/{llm._model_version}",
-        messages=processed_messages2,
-        api_key=llm._api_key,
-        timeout=llm._timeout,
     )
-    cost2 = completion_cost(completion_response=response2)
 
-    usage2 = response2.get("usage", {})
+    usage2 = response2.usage or {}
     print(f"Response 2 usage: {usage2}")
     print(f"Cost 2: ${cost2:.10f}")
 
     # Verify caching occurred
-    cache_creation_tokens = usage1.get("cache_creation_input_tokens", 0)
-    cache_read_tokens = usage2.get("cache_read_input_tokens", 0)
+    cache_creation_tokens = _get_usage_value(usage1, "cache_creation_input_tokens")
+    cache_read_tokens = _get_usage_value(usage2, "cache_read_input_tokens")
 
     print(f"\nCache creation tokens (call 1): {cache_creation_tokens}")
     print(f"Cache read tokens (call 2): {cache_read_tokens}")
@@ -511,12 +490,10 @@ def test_google_genai_prompt_caching_reduces_costs(
 
             print(f"\n=== Vertex attempt {attempt + 1} (cache creation) ===")
             question1: list[ChatCompletionMessage] = [
-                UserMessageWithText(
-                    role="user", content="What are the main topics discussed?"
-                )
+                UserMessage(role="user", content="What are the main topics discussed?")
             ]
 
-            processed_messages1, metadata1 = process_with_prompt_cache(
+            processed_messages1, _ = process_with_prompt_cache(
                 llm=llm,
                 cacheable_prefix=cacheable_prefix,
                 suffix=question1,
@@ -527,26 +504,14 @@ def test_google_genai_prompt_caching_reduces_costs(
                 f"Processed messages structure (first msg): {processed_messages1[0] if processed_messages1 else 'empty'}"
             )
 
-            kwargs1: dict[str, Any] = {
-                "vertex_location": vertex_location,
-                "vertex_credentials": str(credentials_path),
-            }
-            if metadata1:
-                kwargs1["prompt_cache_key"] = metadata1.cache_key
-
-            response1 = litellm_completion(
+            response1 = llm.invoke(prompt=processed_messages1)
+            cost1 = completion_cost(
+                completion_response=response1.model_dump(),
                 model=f"{llm._model_provider}/{llm._model_version}",
-                messages=processed_messages1,
-                api_key=llm._api_key,
-                timeout=llm._timeout,
-                **kwargs1,
             )
-            cost1 = completion_cost(completion_response=response1)
-            usage1 = response1.get("usage", {})
-            cache_creation_tokens = int(
-                usage1.get("cache_creation_input_tokens", 0)
-                if isinstance(usage1, dict)
-                else getattr(usage1, "cache_creation_input_tokens", 0)
+            usage1 = response1.usage or {}
+            cache_creation_tokens = _get_usage_value(
+                usage1, "cache_creation_input_tokens"
             )
             cached_tokens_1 = _extract_cached_tokens(usage1)
             cache_read_tokens_1 = _extract_cache_read_tokens(usage1)
@@ -558,39 +523,24 @@ def test_google_genai_prompt_caching_reduces_costs(
 
             print(f"\n=== Vertex attempt {attempt + 1} (cache read) ===")
             question2: list[ChatCompletionMessage] = [
-                UserMessageWithText(
+                UserMessage(
                     role="user", content="Can you elaborate on neural networks?"
                 )
             ]
 
-            processed_messages2, metadata2 = process_with_prompt_cache(
+            processed_messages2, _ = process_with_prompt_cache(
                 llm=llm,
                 cacheable_prefix=cacheable_prefix,
                 suffix=question2,
                 continuation=False,
             )
 
-            kwargs2: dict[str, Any] = {
-                "vertex_location": vertex_location,
-                "vertex_credentials": str(credentials_path),
-            }
-            cache_key_for_second = (
-                metadata2.cache_key
-                if metadata2
-                else (metadata1.cache_key if metadata1 else None)
-            )
-            if cache_key_for_second:
-                kwargs2["prompt_cache_key"] = cache_key_for_second
-
-            response2 = litellm_completion(
+            response2 = llm.invoke(prompt=processed_messages2)
+            cost2 = completion_cost(
+                completion_response=response2.model_dump(),
                 model=f"{llm._model_provider}/{llm._model_version}",
-                messages=processed_messages2,
-                api_key=llm._api_key,
-                timeout=llm._timeout,
-                **kwargs2,
             )
-            cost2 = completion_cost(completion_response=response2)
-            usage2 = response2.get("usage", {})
+            usage2 = response2.usage or {}
             cache_read_tokens_2 = _extract_cache_read_tokens(usage2)
             cached_tokens_2 = _extract_cached_tokens(usage2)
 
@@ -683,20 +633,16 @@ def test_prompt_caching_with_conversation_history(
     print("\n=== Turn 1 ===")
     messages_turn1: list[ChatCompletionMessage] = [
         system_message,
-        UserMessageWithText(
-            role="user", content=long_context + "\n\nWhat is this about?"
-        ),
+        UserMessage(role="user", content=long_context + "\n\nWhat is this about?"),
     ]
 
-    response1 = litellm_completion(
+    response1 = llm.invoke(prompt=messages_turn1)
+    cost1 = completion_cost(
+        completion_response=response1.model_dump(),
         model=f"{llm._model_provider}/{llm._model_version}",
-        messages=messages_turn1,
-        api_key=llm._api_key,
-        timeout=llm._timeout,
     )
-    cost1 = completion_cost(completion_response=response1)
 
-    usage1 = response1.get("usage", {})
+    usage1 = response1.usage or {}
     print(f"Turn 1 usage: {usage1}")
     print(f"Turn 1 cost: ${cost1:.10f}")
 
@@ -709,18 +655,16 @@ def test_prompt_caching_with_conversation_history(
         AssistantMessage(
             role="assistant", content="This document discusses various topics."
         ),
-        UserMessageWithText(role="user", content="Tell me about the first topic."),
+        UserMessage(role="user", content="Tell me about the first topic."),
     ]
 
-    response2 = litellm_completion(
+    response2 = llm.invoke(prompt=messages_turn2)
+    cost2 = completion_cost(
+        completion_response=response2.model_dump(),
         model=f"{llm._model_provider}/{llm._model_version}",
-        messages=messages_turn2,
-        api_key=llm._api_key,
-        timeout=llm._timeout,
     )
-    cost2 = completion_cost(completion_response=response2)
 
-    usage2 = response2.get("usage", {})
+    usage2 = response2.usage or {}
     print(f"Turn 2 usage: {usage2}")
     print(f"Turn 2 cost: ${cost2:.10f}")
 
@@ -728,28 +672,26 @@ def test_prompt_caching_with_conversation_history(
     print("\n=== Turn 3 (with even more cached history) ===")
     messages_turn3: list[ChatCompletionMessage] = messages_turn2 + [
         AssistantMessage(role="assistant", content="The first topic covers..."),
-        UserMessageWithText(role="user", content="What about the second topic?"),
+        UserMessage(role="user", content="What about the second topic?"),
     ]
 
-    response3 = litellm_completion(
+    response3 = llm.invoke(prompt=messages_turn3)
+    cost3 = completion_cost(
+        completion_response=response3.model_dump(),
         model=f"{llm._model_provider}/{llm._model_version}",
-        messages=messages_turn3,
-        api_key=llm._api_key,
-        timeout=llm._timeout,
     )
-    cost3 = completion_cost(completion_response=response3)
 
-    usage3 = response3.get("usage", {})
+    usage3 = response3.usage or {}
     print(f"Turn 3 usage: {usage3}")
     print(f"Turn 3 cost: ${cost3:.10f}")
 
     # Verify caching in subsequent turns
-    cache_tokens_2 = usage2.get("cache_read_input_tokens", 0)
-    cache_tokens_3 = usage3.get("cache_read_input_tokens", 0)
+    cache_tokens_2 = _get_usage_value(usage2, "cache_read_input_tokens")
+    cache_tokens_3 = _get_usage_value(usage3, "cache_read_input_tokens")
 
-    prompt_tokens_1 = usage1.get("prompt_tokens", 0)
-    prompt_tokens_2 = usage2.get("prompt_tokens", 0)
-    prompt_tokens_3 = usage3.get("prompt_tokens", 0)
+    prompt_tokens_1 = _get_usage_value(usage1, "prompt_tokens")
+    prompt_tokens_2 = _get_usage_value(usage2, "prompt_tokens")
+    prompt_tokens_3 = _get_usage_value(usage3, "prompt_tokens")
 
     print(f"\nCache tokens - Turn 2: {cache_tokens_2}, Turn 3: {cache_tokens_3}")
     print(
@@ -792,18 +734,16 @@ def test_no_caching_without_process_with_prompt_cache(
     # First call - no explicit caching
     print("\n=== First call (no explicit caching) ===")
     messages1: list[ChatCompletionMessage] = [
-        UserMessageWithText(role="user", content=long_context + "\n\nSummarize this.")
+        UserMessage(role="user", content=long_context + "\n\nSummarize this.")
     ]
 
-    response1 = litellm_completion(
+    response1 = llm.invoke(prompt=messages1)
+    cost1 = completion_cost(
+        completion_response=response1.model_dump(),
         model=f"{llm._model_provider}/{llm._model_version}",
-        messages=messages1,
-        api_key=llm._api_key,
-        timeout=llm._timeout,
     )
-    cost1 = completion_cost(completion_response=response1)
 
-    usage1 = response1.get("usage", {})
+    usage1 = response1.usage or {}
     print(f"Response 1 usage: {usage1}")
     print(f"Cost 1: ${cost1:.10f}")
 

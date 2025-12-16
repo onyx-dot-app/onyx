@@ -1,13 +1,15 @@
 # pyright: reportMissingTypeStubs=false
 """Utility functions for prompt caching."""
 
+import json
 from collections.abc import Callable
 from collections.abc import Sequence
+from typing import Any
 from typing import cast
 
 from onyx.llm.interfaces import LanguageModelInput
-from onyx.llm.message_types import ChatCompletionMessage
-from onyx.llm.message_types import UserMessageWithText
+from onyx.llm.models import ChatCompletionMessage
+from onyx.llm.models import UserMessage
 from onyx.utils.logger import setup_logger
 
 
@@ -27,7 +29,7 @@ def normalize_language_model_input(
     """
     if isinstance(input, str):
         # Convert string to user message
-        return [UserMessageWithText(role="user", content=input)]
+        return [UserMessage(role="user", content=input)]
     return input
 
 
@@ -82,6 +84,23 @@ def combine_messages_with_continuation(
 
     # Simple concatenation (or prefix was a string, so keep separate)
     return list(prefix_msgs) + list(suffix_msgs)
+
+
+def revalidate_message_from_original(
+    original: ChatCompletionMessage,
+    mutated: dict[str, Any],
+) -> ChatCompletionMessage:
+    """Rebuild a mutated message using the original BaseModel type.
+
+    Some providers need to add cache metadata to messages. Re-run validation against
+    the original message's Pydantic class so union discrimination (by role) stays
+    intact.
+    """
+    cls = original.__class__
+    try:
+        return cls.model_validate_json(json.dumps(mutated))
+    except Exception:
+        return cls.model_validate(mutated)
 
 
 def prepare_messages_with_cacheable_transform(
