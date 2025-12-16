@@ -243,17 +243,26 @@ def _find_assistant_message_id(
     if chat_message.message_type == MessageType.ASSISTANT:
         return chat_message.id
 
+    # Fetch all messages in the session at once to avoid N+1 queries
+    stmt = (
+        select(ChatMessage)
+        .where(ChatMessage.chat_session_id == chat_message.chat_session_id)
+        .order_by(ChatMessage.id)
+    )
+    all_messages = db_session.execute(stmt).scalars().all()
+
+    # Build a lookup map for efficient parent traversal
+    message_map = {msg.id: msg for msg in all_messages}
+
     # Traverse up the message tree to find the parent ASSISTANT message
     current_msg = chat_message
     max_depth = 100  # Safeguard against infinite loops or extremely deep chains
     depth = 0
 
     while current_msg.parent_message_id is not None and depth < max_depth:
-        parent_msg = get_chat_message(
-            chat_message_id=current_msg.parent_message_id,
-            user_id=user_id,
-            db_session=db_session,
-        )
+        parent_msg = message_map.get(current_msg.parent_message_id)
+        if not parent_msg:
+            break
         if parent_msg.message_type == MessageType.ASSISTANT:
             return parent_msg.id
         current_msg = parent_msg
@@ -284,7 +293,11 @@ def create_chat_message_feedback(
         chat_message_id=chat_message_id, user_id=user_id, db_session=db_session
     )
 
-    # Find the ASSISTANT message (handles TOOL_CALL/TOOL_CALL_RESPONSE by traversing up)
+    # When tool calls are involved, the message tree includes separate ChatMessage records
+    # for TOOL_CALL and TOOL_CALL_RESPONSE (e.g., search results, API calls).
+    # If the frontend sends a tool call message ID instead of the main ASSISTANT message ID,
+    # we need to traverse up the parent chain to find the actual ASSISTANT message.
+    # This ensures feedback is always attached to the main LLM response, not intermediate tool calls.
     target_message_id = _find_assistant_message_id(
         chat_message=chat_message,
         user_id=user_id,
@@ -313,7 +326,11 @@ def remove_chat_message_feedback(
         chat_message_id=chat_message_id, user_id=user_id, db_session=db_session
     )
 
-    # Find the ASSISTANT message (handles TOOL_CALL/TOOL_CALL_RESPONSE by traversing up)
+    # When tool calls are involved, the message tree includes separate ChatMessage records
+    # for TOOL_CALL and TOOL_CALL_RESPONSE (e.g., search results, API calls).
+    # If the frontend sends a tool call message ID instead of the main ASSISTANT message ID,
+    # we need to traverse up the parent chain to find the actual ASSISTANT message.
+    # This ensures we remove feedback from the correct message.
     target_message_id = _find_assistant_message_id(
         chat_message=chat_message,
         user_id=user_id,
