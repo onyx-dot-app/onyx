@@ -56,6 +56,8 @@ class WellKnownLLMProviderDescriptor(BaseModel):
 
 OPENAI_PROVIDER_NAME = "openai"
 OPEN_AI_MODEL_NAMES = [
+    "gpt-5.2",
+    "gpt-5.1",
     "gpt-5",
     "gpt-5-mini",
     "gpt-5-nano",
@@ -86,6 +88,8 @@ OPEN_AI_MODEL_NAMES = [
     "gpt-3.5-turbo-0301",
 ]
 OPEN_AI_VISIBLE_MODEL_NAMES = [
+    "gpt-5.2",
+    "gpt-5.1",
     "gpt-5",
     "gpt-5-mini",
     "o1",
