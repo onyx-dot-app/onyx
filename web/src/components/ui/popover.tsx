@@ -118,12 +118,11 @@ export function PopoverMenu({
 
   return (
     <div className="flex flex-col gap-1 max-h-[20rem]">
-      {/* Scrollable area with shadows */}
-      <div className="relative flex-1 min-h-0">
+      <div className="relative">
         <div
           ref={containerRef}
           className={cn(
-            "flex flex-col gap-1 h-full overflow-y-scroll",
+            "flex flex-col gap-1 overflow-y-auto h-[20rem]",
             sizeClasses[size],
             className
           )}
