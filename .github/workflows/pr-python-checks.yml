@@ -40,24 +40,10 @@ jobs:
             backend/requirements/model_server.txt
             backend/requirements/ee.txt
 
-      - name: Generate OpenAPI schema
-        shell: bash
-        working-directory: backend
-        env:
-          PYTHONPATH: "."
-        run: |
-          python scripts/onyx_openapi_schema.py --filename generated/openapi.json
-
-      - name: Generate OpenAPI Python client
+      - name: Generate OpenAPI schema and Python client
         shell: bash
         run: |
-          uv run openapi-generator-cli generate \
-            -i backend/generated/openapi.json \
-            -g python \
-            -o backend/generated/onyx_openapi_client \
-            --package-name onyx_openapi_client \
-            --skip-validate-spec \
-            --openapi-normalizer "SIMPLIFY_ONEOF_ANYOF=true,SET_OAS3_NULLABLE=true"
+          ods openapi all
 
       - name: Cache mypy cache
         if: ${{ vars.DISABLE_MYPY_CACHE != 'true' }}
