@@ -122,7 +122,11 @@ export default function ActionLineItem({
                       isSearchToolWithNoConnectors &&
                         "invisible group-hover/LineItem:visible"
                     )}
-                    tooltip={isSearchToolWithNoConnectors ? "Settings" : "More"}
+                    tooltip={
+                      isSearchToolWithNoConnectors
+                        ? "Setup Connectors"
+                        : "Configure Connectors"
+                    }
                   />
                 )}
             </div>
