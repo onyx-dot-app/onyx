@@ -269,6 +269,40 @@ def should_filter_as_dated_duplicate(
     return False
 
 
+def filter_model_configurations(
+    model_configurations: list,
+    provider: str,
+) -> list:
+    """Filter out obsolete and dated duplicate models from configurations.
+
+    Args:
+        model_configurations: List of ModelConfiguration DB models
+        provider: The provider name (e.g., "openai", "anthropic")
+
+    Returns:
+        List of ModelConfigurationView objects with obsolete/duplicate models removed
+    """
+    # Import here to avoid circular imports
+    from onyx.llm.llm_provider_options import is_obsolete_model
+    from onyx.server.manage.llm.models import ModelConfigurationView
+
+    all_model_names = {mc.name for mc in model_configurations}
+
+    filtered_configs = []
+    for model_configuration in model_configurations:
+        # Skip obsolete models
+        if is_obsolete_model(model_configuration.name, provider):
+            continue
+        # Skip dated duplicates when non-dated version exists
+        if should_filter_as_dated_duplicate(model_configuration.name, all_model_names):
+            continue
+        filtered_configs.append(
+            ModelConfigurationView.from_model(model_configuration, provider)
+        )
+
+    return filtered_configs
+
+
 def extract_vendor_from_model_name(model_name: str, provider: str) -> str | None:
     """Extract vendor from model name for aggregator providers.
 

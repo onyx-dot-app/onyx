@@ -10,8 +10,8 @@ from onyx.llm.utils import litellm_thinks_model_supports_image_input
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.manage.llm.utils import DYNAMIC_LLM_PROVIDERS
 from onyx.server.manage.llm.utils import extract_vendor_from_model_name
+from onyx.server.manage.llm.utils import filter_model_configurations
 from onyx.server.manage.llm.utils import is_reasoning_model
-from onyx.server.manage.llm.utils import should_filter_as_dated_duplicate
 
 
 if TYPE_CHECKING:
@@ -67,27 +67,8 @@ class LLMProviderDescriptor(BaseModel):
         llm_provider_model: "LLMProviderModel",
     ) -> "LLMProviderDescriptor":
         from onyx.llm.llm_provider_options import get_provider_display_name
-        from onyx.llm.llm_provider_options import is_obsolete_model
 
         provider = llm_provider_model.provider
-
-        # Get all model names for deduplication check
-        all_model_names = {mc.name for mc in llm_provider_model.model_configurations}
-
-        # Filter out obsolete and duplicate models
-        filtered_configs = []
-        for model_configuration in llm_provider_model.model_configurations:
-            # Skip obsolete models
-            if is_obsolete_model(model_configuration.name, provider):
-                continue
-            # Skip dated duplicates when non-dated version exists
-            if should_filter_as_dated_duplicate(
-                model_configuration.name, all_model_names
-            ):
-                continue
-            filtered_configs.append(
-                ModelConfigurationView.from_model(model_configuration, provider)
-            )
 
         return cls(
             name=llm_provider_model.name,
@@ -98,7 +79,9 @@ class LLMProviderDescriptor(BaseModel):
             is_default_provider=llm_provider_model.is_default_provider,
             is_default_vision_provider=llm_provider_model.is_default_vision_provider,
             default_vision_model=llm_provider_model.default_vision_model,
-            model_configurations=filtered_configs,
+            model_configurations=filter_model_configurations(
+                llm_provider_model.model_configurations, provider
+            ),
         )
 
 
@@ -144,8 +127,6 @@ class LLMProviderView(LLMProvider):
         cls,
         llm_provider_model: "LLMProviderModel",
     ) -> "LLMProviderView":
-        from onyx.llm.llm_provider_options import is_obsolete_model
-
         # Safely get groups - handle detached instance case
         try:
             groups = [group.id for group in llm_provider_model.groups]
@@ -159,24 +140,6 @@ class LLMProviderView(LLMProvider):
             personas = []
 
         provider = llm_provider_model.provider
-
-        # Get all model names for deduplication check
-        all_model_names = {mc.name for mc in llm_provider_model.model_configurations}
-
-        # Filter out obsolete and duplicate models
-        filtered_configs = []
-        for model_configuration in llm_provider_model.model_configurations:
-            # Skip obsolete models
-            if is_obsolete_model(model_configuration.name, provider):
-                continue
-            # Skip dated duplicates when non-dated version exists
-            if should_filter_as_dated_duplicate(
-                model_configuration.name, all_model_names
-            ):
-                continue
-            filtered_configs.append(
-                ModelConfigurationView.from_model(model_configuration, provider)
-            )
 
         return cls(
             id=llm_provider_model.id,
@@ -195,7 +158,9 @@ class LLMProviderView(LLMProvider):
             groups=groups,
             personas=personas,
             deployment_name=llm_provider_model.deployment_name,
-            model_configurations=filtered_configs,
+            model_configurations=filter_model_configurations(
+                llm_provider_model.model_configurations, provider
+            ),
         )
 
 
