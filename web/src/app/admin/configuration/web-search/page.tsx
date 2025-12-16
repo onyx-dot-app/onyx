@@ -13,7 +13,6 @@ import { AdminPageTitle } from "@/components/admin/Title";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { GlobeIcon, InfoIcon } from "@/components/icons/icons";
 import Text from "@/refresh-components/texts/Text";
-import { cn } from "@/lib/utils";
 import Separator from "@/refresh-components/Separator";
 import useSWR from "swr";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
@@ -23,17 +22,19 @@ import Button from "@/refresh-components/buttons/Button";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import { FormField } from "@/refresh-components/form/FormField";
-import RawModal from "@/refresh-components/RawModal";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import {
-  SvgArrowExchange,
-  SvgArrowRightCircle,
-  SvgCheckSquare,
-  SvgGlobe,
-  SvgKey,
-  SvgOnyxLogo,
-  SvgX,
+  SVGArrowExchange,
+  SVGArrowRightCircle,
+  SVGCheckSquare,
+  SVGGlobe,
+  SVGKey,
+  SVGOnyxLogo,
+  SVGX,
 } from "@opal/icons";
+
+import Modal from "@/refresh-components/Modal";
+import type { IconProps } from "@opal/types";
+
 type WebSearchProviderType = "google_pse" | "serper" | "exa" | "searxng";
 type WebContentProviderType = "firecrawl" | "onyx_web_crawler" | (string & {});
 
@@ -172,53 +173,44 @@ const ProviderSetupModal = memo(
     apiKeyAutoFocus = true,
     hideApiKey = false,
   }: ProviderSetupModalProps) => {
-    if (!isOpen) return null;
-
-    return (
-      <RawModal
-        onClose={onClose}
-        className="w-[32rem] h-fit flex flex-col focus:outline-none"
-      >
-        <div className="bg-background-tint-00 relative flex flex-col gap-1 p-4 rounded-tl-16 rounded-tr-16">
-          <div className="absolute right-2 top-2">
-            <IconButton icon={SvgX} internal onClick={onClose} />
+    // Create a custom icon component that renders the provider logo arrangement
+    const LogoArrangement = useMemo(() => {
+      const Component: React.FunctionComponent<IconProps> = () => (
+        <div className="flex items-center gap-1">
+          {providerLogo}
+          <div className="flex items-center justify-center size-4 p-0.5 shrink-0">
+            <SVGArrowExchange className="size-3 text-text-04" />
           </div>
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-1">
-              {providerLogo}
-              <div className="flex items-center justify-center size-4 p-0.5 shrink-0">
-                <SvgArrowExchange className="size-3 text-text-04" />
-              </div>
-              <div className="flex items-center justify-center size-7 p-0.5 shrink-0 overflow-clip">
-                <SvgOnyxLogo
-                  width={24}
-                  height={24}
-                  className="text-text-04 shrink-0"
-                />
-              </div>
-            </div>
-            <div className="flex flex-col gap-1">
-              <Text headingH3>{`Set up ${providerLabel}`}</Text>
-              <Text secondaryBody text03>
-                {description}
-              </Text>
-            </div>
+          <div className="flex items-center justify-center size-7 p-0.5 shrink-0 overflow-clip">
+            <SVGOnyxLogo
+              width={24}
+              height={24}
+              className="text-text-04 shrink-0"
+            />
           </div>
         </div>
-        <div className="bg-background-tint-01 flex flex-col gap-4 p-4 overflow-y-auto max-h-[512px]">
-          <div className="flex w-full flex-col gap-4">
+      );
+      return Component;
+    }, [providerLogo]);
+
+    return (
+      <Modal open={isOpen} onOpenChange={(open) => !open && onClose()}>
+        <Modal.Content mini preventAccidentalClose={true}>
+          <Modal.Header
+            icon={LogoArrangement}
+            title={`Set up ${providerLabel}`}
+            description={description}
+            onClose={onClose}
+          />
+          <Modal.Body className="bg-background-tint-01 overflow-y-auto max-h-[512px]">
             {optionalField?.showFirst && (
               <FormField
                 name={optionalField.label.toLowerCase().replace(/\s+/g, "_")}
                 state="idle"
                 className="w-full"
               >
-                <FormField.Label>
-                  <Text mainUiAction text04>
-                    {optionalField.label}
-                  </Text>
-                </FormField.Label>
-                <FormField.Control>
+                <FormField.Label>{optionalField.label}</FormField.Label>
+                <FormField.Control asChild>
                   <InputTypeIn
                     placeholder={optionalField.placeholder}
                     value={optionalField.value}
@@ -228,91 +220,77 @@ const ProviderSetupModal = memo(
                   />
                 </FormField.Control>
                 {optionalField.description && (
-                  <Text secondaryBody text03 className="ml-0.5">
+                  <FormField.Description>
                     {optionalField.description}
-                  </Text>
+                  </FormField.Description>
                 )}
               </FormField>
             )}
 
-            {!hideApiKey && (
-              <FormField
-                name="api_key"
-                state={
-                  helperClass.includes("status-error") ||
-                  helperClass.includes("error")
-                    ? "error"
-                    : helperClass.includes("green")
-                      ? "success"
-                      : "idle"
-                }
-                className="w-full"
-              >
-                <FormField.Label>
-                  <Text mainUiAction text04>
-                    API Key
-                  </Text>
-                </FormField.Label>
-                <FormField.Control>
-                  <PasswordInputTypeIn
-                    placeholder="Enter API key"
-                    value={apiKeyValue}
-                    autoFocus={apiKeyAutoFocus}
-                    onFocus={(e) => {
-                      // Select all text if it's the masked placeholder when focused
-                      if (apiKeyValue === "••••••••••••••••") {
-                        e.target.select();
-                      }
-                    }}
-                    onChange={(event) => {
-                      onApiKeyChange(event.target.value);
-                    }}
-                    showClearButton={false}
-                  />
-                </FormField.Control>
-                {isProcessing ? (
-                  <FormField.APIMessage
-                    state="loading"
-                    messages={{
-                      loading:
-                        typeof helperMessage === "string"
-                          ? helperMessage
-                          : "Validating API key...",
-                    }}
-                  />
-                ) : typeof helperMessage === "string" ? (
-                  <FormField.Message
-                    messages={{
-                      idle:
-                        helperClass.includes("status-error") ||
-                        helperClass.includes("error")
+            <FormField
+              name="api_key"
+              state={
+                helperClass.includes("status-error") ||
+                helperClass.includes("error")
+                  ? "error"
+                  : helperClass.includes("green")
+                    ? "success"
+                    : "idle"
+              }
+              className="w-full"
+            >
+              <FormField.Label>API Key</FormField.Label>
+              <FormField.Control asChild>
+                <PasswordInputTypeIn
+                  placeholder="Enter API key"
+                  value={apiKeyValue}
+                  autoFocus={apiKeyAutoFocus}
+                  onFocus={(e) => {
+                    // Select all text if it's the masked placeholder when focused
+                    if (apiKeyValue === "••••••••••••••••") {
+                      e.target.select();
+                    }
+                  }}
+                  onChange={(event) => {
+                    onApiKeyChange(event.target.value);
+                  }}
+                  showClearButton={false}
+                />
+              </FormField.Control>
+              {isProcessing ? (
+                <FormField.APIMessage
+                  state="loading"
+                  messages={{
+                    loading:
+                      typeof helperMessage === "string"
+                        ? helperMessage
+                        : "Validating API key...",
+                  }}
+                />
+              ) : typeof helperMessage === "string" ? (
+                <FormField.Message
+                  messages={{
+                    idle:
+                      helperClass.includes("status-error") ||
+                      helperClass.includes("error")
+                        ? ""
+                        : helperClass.includes("green")
                           ? ""
-                          : helperClass.includes("green")
-                            ? ""
-                            : helperMessage,
-                      error:
-                        helperClass.includes("status-error") ||
-                        helperClass.includes("error")
-                          ? helperMessage
-                          : "",
-                      success: helperClass.includes("green")
+                          : helperMessage,
+                    error:
+                      helperClass.includes("status-error") ||
+                      helperClass.includes("error")
                         ? helperMessage
                         : "",
-                    }}
-                  />
-                ) : (
-                  <div className="flex flex-row items-center gap-x-0.5">
-                    <Text
-                      text03
-                      secondaryBody
-                      className={cn(helperClass, "ml-0.5")}
-                    >
-                      {helperMessage}
-                    </Text>
-                  </div>
-                )}
-              </FormField>
-            )}
+                    success: helperClass.includes("green") ? helperMessage : "",
+                  }}
+                />
+              ) : (
+                <FormField.Description className={helperClass}>
+                  {helperMessage}
+                </FormField.Description>
+              )}
+            </FormField>
 
             {optionalField && !optionalField.showFirst && (
               <FormField
@@ -326,12 +304,8 @@ const ProviderSetupModal = memo(
                 }
                 className="w-full"
               >
-                <FormField.Label>
-                  <Text mainUiAction text04>
-                    {optionalField.label}
-                  </Text>
-                </FormField.Label>
-                <FormField.Control>
+                <FormField.Label>{optionalField.label}</FormField.Label>
+                <FormField.Control asChild>
                   <InputTypeIn
                     placeholder={optionalField.placeholder}
                     value={optionalField.value}
@@ -341,9 +315,44 @@ const ProviderSetupModal = memo(
                   />
                 </FormField.Control>
                 {optionalField.description && (
-                  <Text secondaryBody text03 className="ml-0.5">
+                  <FormField.Description>
                     {optionalField.description}
-                  </Text>
+                  </FormField.Description>
+                )}
+                {hideApiKey && (
+                  <>
+                    {isProcessing ? (
+                      <FormField.APIMessage
+                        state="loading"
+                        messages={{
+                          loading:
+                            typeof helperMessage === "string"
+                              ? helperMessage
+                              : "Testing connection...",
+                        }}
+                      />
+                    ) : typeof helperMessage === "string" ? (
+                      <FormField.Message
+                        messages={{
+                          idle:
+                            helperClass.includes("status-error") ||
+                            helperClass.includes("error")
+                              ? ""
+                              : helperClass.includes("green")
+                                ? ""
+                                : "",
+                          error:
+                            helperClass.includes("status-error") ||
+                            helperClass.includes("error")
+                              ? helperMessage
+                              : "",
+                          success: helperClass.includes("green")
+                            ? helperMessage
+                            : "",
+                        }}
+                      />
+                    ) : null}
+                  </>
                 )}
                 {hideApiKey && (
                   <>
@@ -382,23 +391,23 @@ const ProviderSetupModal = memo(
                 )}
               </FormField>
             )}
-          </div>
-        </div>
-        <div className="bg-background-tint-00 flex flex-row items-center justify-end gap-2 p-4 rounded-bl-16 rounded-br-16">
-          <Button type="button" main secondary onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            main
-            primary
-            disabled={!canConnect || isProcessing}
-            onClick={onConnect}
-          >
-            {isProcessing ? "Connecting..." : "Connect"}
-          </Button>
-        </div>
-      </RawModal>
+          </Modal.Body>
+          <Modal.Footer className="gap-2">
+            <Button type="button" main secondary onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              main
+              primary
+              disabled={!canConnect || isProcessing}
+              onClick={onConnect}
+            >
+              {isProcessing ? "Connecting..." : "Connect"}
+            </Button>
+          </Modal.Footer>
+        </Modal.Content>
+      </Modal>
     );
   }
 );
@@ -422,9 +431,9 @@ const HoverIconButton = ({
       React.SVGProps<SVGSVGElement>
     > = ({ className, ...props }) => {
       if (isHovered) {
-        return <SvgX className={className} {...props} />;
+        return <SVGX className={className} {...props} />;
       }
-      return <SvgCheckSquare className={className} {...props} />;
+      return <SVGCheckSquare className={className} {...props} />;
     };
     return IconComponent;
   }, [isHovered]);
@@ -720,7 +729,7 @@ export default function Page() {
   ) => {
     const logoContent =
       providerType === "onyx_web_crawler" ? (
-        <SvgOnyxLogo
+        <SVGOnyxLogo
           width={size}
           height={size}
           className="text-[#111111] dark:text-[#f5f5f5]"
@@ -756,7 +765,7 @@ export default function Page() {
       : "";
 
     const content = (
-      <SvgKey width={16} height={16} className="h-4 w-4 shrink-0" />
+      <SVGKey width={16} height={16} className="h-4 w-4 shrink-0" />
     );
 
     if (onClick) {
@@ -872,7 +881,7 @@ export default function Page() {
       <div className="container mx-auto">
         <AdminPageTitle
           title="Web Search"
-          icon={SvgGlobe}
+          icon={SVGGlobe}
           includeDivider={false}
         />
         <Callout type="danger" title="Failed to load web search settings">
@@ -892,7 +901,7 @@ export default function Page() {
       <div className="container mx-auto">
         <AdminPageTitle
           title="Web Search"
-          icon={SvgGlobe}
+          icon={SVGGlobe}
           includeDivider={false}
         />
         <div className="mt-8">
@@ -1603,9 +1612,9 @@ export default function Page() {
                             }}
                             rightIcon={
                               buttonState.icon === "arrow"
-                                ? SvgArrowExchange
+                                ? SVGArrowExchange
                                 : buttonState.icon === "arrow-circle"
-                                  ? SvgArrowRightCircle
+                                  ? SVGArrowRightCircle
                                   : undefined
                             }
                           >
@@ -1792,9 +1801,9 @@ export default function Page() {
                           }}
                           rightIcon={
                             buttonState.icon === "arrow"
-                              ? SvgArrowExchange
+                              ? SVGArrowExchange
                               : buttonState.icon === "arrow-circle"
-                                ? SvgArrowRightCircle
+                                ? SVGArrowRightCircle
                                 : undefined
                           }
                         >
