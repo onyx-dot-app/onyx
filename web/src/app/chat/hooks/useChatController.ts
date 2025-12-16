@@ -642,6 +642,9 @@ export function useChatController({
       let aiMessageImages: FileDescriptor[] | null = null;
       let error: string | null = null;
       let stackTrace: string | null = null;
+      let errorCode: string | null = null;
+      let isRetryable: boolean = true;
+      let errorDetails: Record<string, any> | null = null;
 
       let finalMessage: BackendMessage | null = null;
       let toolCall: ToolCallMetadata | null = null;
@@ -773,14 +776,18 @@ export function useChatController({
               Object.hasOwn(packet, "error") &&
               (packet as any).error != null
             ) {
-              setUncaughtError(
-                frozenSessionId,
-                (packet as StreamingError).error
-              );
+              const streamingError = packet as StreamingError;
+              error = streamingError.error;
+              stackTrace = streamingError.stack_trace || null;
+              errorCode = streamingError.error_code || null;
+              isRetryable = streamingError.is_retryable ?? true;
+              errorDetails = streamingError.details || null;
+
+              setUncaughtError(frozenSessionId, streamingError.error);
               updateChatStateAction(frozenSessionId, "input");
               updateSubmittedMessage(getCurrentSessionId(), "");
 
-              throw new Error((packet as StreamingError).error);
+              throw new Error(streamingError.error);
             } else if (Object.hasOwn(packet, "message_id")) {
               finalMessage = packet as BackendMessage;
             } else if (Object.hasOwn(packet, "stop_reason")) {
@@ -897,6 +904,10 @@ export function useChatController({
               toolCall: null,
               parentNodeId: initialUserNode.nodeId,
               packets: [],
+              stackTrace: stackTrace,
+              errorCode: errorCode,
+              isRetryable: isRetryable,
+              errorDetails: errorDetails,
             },
           ],
           completeMessageTreeOverride: currentMessageTreeLocal,

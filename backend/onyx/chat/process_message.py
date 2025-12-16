@@ -79,6 +79,10 @@ ERROR_TYPE_CANCELLED = "cancelled"
 class ToolCallException(Exception):
     """Exception raised for errors during tool calls."""
 
+    def __init__(self, message: str, tool_name: str | None = None):
+        super().__init__(message)
+        self.tool_name = tool_name
+
 
 def _extract_project_file_texts_and_images(
     project_id: int | None,
@@ -573,7 +577,11 @@ def stream_chat_message_objects(
         logger.exception("Failed to process chat message.")
 
         error_msg = str(e)
-        yield StreamingError(error=error_msg)
+        yield StreamingError(
+            error=error_msg,
+            error_code="VALIDATION_ERROR",
+            is_retryable=True,
+        )
         db_session.rollback()
         return
 
@@ -583,9 +591,17 @@ def stream_chat_message_objects(
         stack_trace = traceback.format_exc()
 
         if isinstance(e, ToolCallException):
-            yield StreamingError(error=error_msg, stack_trace=stack_trace)
+            yield StreamingError(
+                error=error_msg,
+                stack_trace=stack_trace,
+                error_code="TOOL_CALL_FAILED",
+                is_retryable=True,
+                details={"tool_name": e.tool_name} if e.tool_name else None,
+            )
         elif llm:
-            client_error_msg = litellm_exception_to_error_msg(e, llm)
+            client_error_msg, error_code, is_retryable = litellm_exception_to_error_msg(
+                e, llm
+            )
             if llm.config.api_key and len(llm.config.api_key) > 2:
                 client_error_msg = client_error_msg.replace(
                     llm.config.api_key, "[REDACTED_API_KEY]"
@@ -594,7 +610,24 @@ def stream_chat_message_objects(
                     llm.config.api_key, "[REDACTED_API_KEY]"
                 )
 
-            yield StreamingError(error=client_error_msg, stack_trace=stack_trace)
+            yield StreamingError(
+                error=client_error_msg,
+                stack_trace=stack_trace,
+                error_code=error_code,
+                is_retryable=is_retryable,
+                details={
+                    "model": llm.config.model_name,
+                    "provider": llm.config.model_provider,
+                },
+            )
+        else:
+            # LLM was never initialized - early failure
+            yield StreamingError(
+                error="Failed to initialize the chat. Please check your configuration and try again.",
+                stack_trace=stack_trace,
+                error_code="INIT_FAILED",
+                is_retryable=True,
+            )
 
         db_session.rollback()
         return

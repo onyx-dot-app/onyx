@@ -131,6 +131,9 @@ export interface Message {
   latestChildNodeId?: number | null;
   alternateAssistantID?: number | null;
   stackTrace?: string | null;
+  errorCode?: string | null;
+  isRetryable?: boolean;
+  errorDetails?: Record<string, any> | null;
   overridden_model?: string;
   stopReason?: StreamStopReason | null;
 
@@ -223,6 +226,9 @@ export interface FileChatDisplay {
 export interface StreamingError {
   error: string;
   stack_trace: string;
+  error_code?: string;
+  is_retryable?: boolean;
+  details?: Record<string, any>;
 }
 
 export interface InputPrompt {

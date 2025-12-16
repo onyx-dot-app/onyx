@@ -88,7 +88,15 @@ def litellm_exception_to_error_msg(
     custom_error_msg_mappings: (
         dict[str, str] | None
     ) = LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS,
-) -> str:
+) -> tuple[str, str, bool]:
+    """Convert a LiteLLM exception to a user-friendly error message with classification.
+
+    Returns:
+        tuple: (error_message, error_code, is_retryable)
+            - error_message: User-friendly error description
+            - error_code: Categorized error code for frontend display
+            - is_retryable: Whether the user should try again
+    """
     from litellm.exceptions import BadRequestError
     from litellm.exceptions import AuthenticationError
     from litellm.exceptions import PermissionDeniedError
@@ -105,25 +113,37 @@ def litellm_exception_to_error_msg(
 
     core_exception = _unwrap_nested_exception(e)
     error_msg = str(core_exception)
+    error_code = "UNKNOWN_ERROR"
+    is_retryable = True
 
     if custom_error_msg_mappings:
         for error_msg_pattern, custom_error_msg in custom_error_msg_mappings.items():
             if error_msg_pattern in error_msg:
-                return custom_error_msg
+                return custom_error_msg, "CUSTOM_ERROR", True
 
     if isinstance(core_exception, BadRequestError):
         error_msg = "Bad request: The server couldn't process your request. Please check your input."
+        error_code = "BAD_REQUEST"
+        is_retryable = True
     elif isinstance(core_exception, AuthenticationError):
         error_msg = "Authentication failed: Please check your API key and credentials."
+        error_code = "AUTH_ERROR"
+        is_retryable = False
     elif isinstance(core_exception, PermissionDeniedError):
         error_msg = (
-            "Permission denied: You don't have the necessary permissions for this operation."
+            "Permission denied: You don't have the necessary permissions for this operation. "
             "Ensure you have access to this model."
         )
+        error_code = "PERMISSION_DENIED"
+        is_retryable = False
     elif isinstance(core_exception, NotFoundError):
         error_msg = "Resource not found: The requested resource doesn't exist."
+        error_code = "NOT_FOUND"
+        is_retryable = False
     elif isinstance(core_exception, UnprocessableEntityError):
         error_msg = "Unprocessable entity: The server couldn't process your request due to semantic errors."
+        error_code = "UNPROCESSABLE_ENTITY"
+        is_retryable = True
     elif isinstance(core_exception, RateLimitError):
         provider_name = (
             llm.config.model_provider
@@ -154,6 +174,8 @@ def litellm_exception_to_error_msg(
             if upstream_detail
             else f"{provider_name} rate limit exceeded: Please slow down your requests and try again later."
         )
+        error_code = "RATE_LIMIT"
+        is_retryable = True
     elif isinstance(core_exception, ServiceUnavailableError):
         provider_name = (
             llm.config.model_provider
@@ -171,6 +193,8 @@ def litellm_exception_to_error_msg(
         else:
             # Generic 503 Service Unavailable
             error_msg = f"{provider_name} service error: {str(core_exception)}"
+        error_code = "SERVICE_UNAVAILABLE"
+        is_retryable = True
     elif isinstance(core_exception, ContextWindowExceededError):
         error_msg = (
             "Context window exceeded: Your input is too long for the model to process."
@@ -181,29 +205,44 @@ def litellm_exception_to_error_msg(
                     model_name=llm.config.model_name,
                     model_provider=llm.config.model_provider,
                 )
-                error_msg += f"Your invoked model ({llm.config.model_name}) has a maximum context size of {max_context}"
+                error_msg += f" Your invoked model ({llm.config.model_name}) has a maximum context size of {max_context}."
             except Exception:
                 logger.warning(
-                    "Unable to get maximum input token for LiteLLM excpetion handling"
+                    "Unable to get maximum input token for LiteLLM exception handling"
                 )
+        error_code = "CONTEXT_TOO_LONG"
+        is_retryable = False
     elif isinstance(core_exception, ContentPolicyViolationError):
         error_msg = "Content policy violation: Your request violates the content policy. Please revise your input."
+        error_code = "CONTENT_POLICY"
+        is_retryable = False
     elif isinstance(core_exception, APIConnectionError):
         error_msg = "API connection error: Failed to connect to the API. Please check your internet connection."
+        error_code = "CONNECTION_ERROR"
+        is_retryable = True
     elif isinstance(core_exception, BudgetExceededError):
         error_msg = (
             "Budget exceeded: You've exceeded your allocated budget for API usage."
         )
+        error_code = "BUDGET_EXCEEDED"
+        is_retryable = False
     elif isinstance(core_exception, Timeout):
         error_msg = "Request timed out: The operation took too long to complete. Please try again."
+        error_code = "CONNECTION_ERROR"
+        is_retryable = True
     elif isinstance(core_exception, APIError):
         error_msg = (
             "API error: An error occurred while communicating with the API. "
             f"Details: {str(core_exception)}"
         )
+        error_code = "API_ERROR"
+        is_retryable = True
     elif not fallback_to_error_msg:
         error_msg = "An unexpected error occurred while processing your request. Please try again later."
-    return error_msg
+        error_code = "UNKNOWN_ERROR"
+        is_retryable = True
+
+    return error_msg, error_code, is_retryable
 
 
 def dict_based_prompt_to_langchain_prompt(

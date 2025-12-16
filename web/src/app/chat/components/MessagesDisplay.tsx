@@ -167,6 +167,18 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
                 <ErrorBanner
                   resubmit={handleResubmitLastMessage}
                   error={uncaughtError || loadingError || ""}
+                  errorCode={
+                    (messageHistory[i] as Message)?.errorCode || undefined
+                  }
+                  isRetryable={
+                    (messageHistory[i] as Message)?.isRetryable ?? true
+                  }
+                  details={
+                    (messageHistory[i] as Message)?.errorDetails || undefined
+                  }
+                  stackTrace={
+                    (messageHistory[i] as Message)?.stackTrace || undefined
+                  }
                 />
               </div>
             );
@@ -213,7 +225,27 @@ export const MessagesDisplay: React.FC<MessagesDisplayProps> = ({
           <div className="max-w-message-max mx-auto">
             <ErrorBanner
               resubmit={handleResubmitLastMessage}
-              error={uncaughtError || loadingError || ""}
+              error={
+                messageHistory[messageHistory.length - 1]?.message ||
+                uncaughtError ||
+                loadingError ||
+                ""
+              }
+              errorCode={
+                messageHistory[messageHistory.length - 1]?.errorCode ||
+                undefined
+              }
+              isRetryable={
+                messageHistory[messageHistory.length - 1]?.isRetryable ?? true
+              }
+              details={
+                messageHistory[messageHistory.length - 1]?.errorDetails ||
+                undefined
+              }
+              stackTrace={
+                messageHistory[messageHistory.length - 1]?.stackTrace ||
+                undefined
+              }
             />
           </div>
         ))}
