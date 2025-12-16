@@ -233,6 +233,8 @@ class VespaDocumentIndex(DocumentIndex):
                 get_vespa_http_client
             )
         self._multitenant = tenant_state.multitenant
+        if self._multitenant:
+            assert self._tenant_id, "Must supply a tenant id if in multitenant mode."
 
     def verify_and_create_index_if_necessary(
         self, embedding_dim: int, embedding_precision: EmbeddingPrecision

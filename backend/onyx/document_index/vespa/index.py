@@ -22,12 +22,12 @@ from pydantic import BaseModel
 from retry import retry
 
 from onyx.configs.app_configs import BLURB_SIZE
-from onyx.configs.chat_configs import DOC_TIME_DECAY
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
 from onyx.configs.chat_configs import VESPA_SEARCHER_THREADS
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.configs.constants import RETURN_SEPARATOR
+from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceChunkUncleaned
@@ -87,7 +87,6 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.model_server_models import Embedding
-
 
 logger = setup_logger()
 
@@ -958,48 +957,34 @@ class VespaIndex(DocumentIndex):
         offset: int = 0,
         title_content_ratio: float | None = TITLE_CONTENT_RATIO,
     ) -> list[InferenceChunk]:
-        vespa_where_clauses = build_vespa_filters(filters)
-        # Needs to be at least as much as the value set in Vespa schema config
-        target_hits = max(10 * num_to_retrieve, 1000)
-
-        yql = (
-            YQL_BASE.format(index_name=self.index_name)
-            + vespa_where_clauses
-            + f"(({{targetHits: {target_hits}}}nearestNeighbor(embeddings, query_embedding)) "
-            + f"or ({{targetHits: {target_hits}}}nearestNeighbor(title_embedding, query_embedding)) "
-            + 'or ({grammar: "weakAnd"}userInput(@query)) '
-            + f'or ({{defaultIndex: "{CONTENT_SUMMARY}"}}userInput(@query)))'
-        )
-
-        final_query = " ".join(final_keywords) if final_keywords else query
-
-        if ranking_profile_type == QueryExpansionType.KEYWORD:
-            ranking_profile = f"hybrid_search_keyword_base_{len(query_embedding)}"
-        else:
-            ranking_profile = f"hybrid_search_semantic_base_{len(query_embedding)}"
-
-        logger.info(f"Selected ranking profile: {ranking_profile}")
-
-        logger.debug(f"Query YQL: {yql}")
-
-        params: dict[str, str | int | float] = {
-            "yql": yql,
-            "query": final_query,
-            "input.query(query_embedding)": str(query_embedding),
-            "input.query(decay_factor)": str(DOC_TIME_DECAY * time_decay_multiplier),
-            "input.query(alpha)": hybrid_alpha,
-            "input.query(title_content_ratio)": (
-                title_content_ratio
-                if title_content_ratio is not None
-                else TITLE_CONTENT_RATIO
+        tenant_id = filters.tenant_id if filters.tenant_id is not None else ""
+        vespa_document_index = VespaDocumentIndex(
+            index_name=self.index_name,
+            tenant_state=TenantState(
+                tenant_id=tenant_id,
+                multitenant=self.multitenant,
             ),
-            "hits": num_to_retrieve,
-            "offset": offset,
-            "ranking.profile": ranking_profile,
-            "timeout": VESPA_TIMEOUT,
-        }
-
-        return cleanup_chunks(query_vespa(params))
+            large_chunks_enabled=self.large_chunks_enabled,
+            httpx_client=self.httpx_client,
+        )
+        assert (
+            ranking_profile_type == QueryExpansionType.KEYWORD
+            or ranking_profile_type == QueryExpansionType.SEMANTIC
+        )
+        query_type = (
+            QueryType.KEYWORD
+            if ranking_profile_type == QueryExpansionType.KEYWORD
+            else QueryType.SEMANTIC
+        )
+        return vespa_document_index.hybrid_retrieval(
+            query,
+            query_embedding,
+            final_keywords,
+            query_type,
+            filters,
+            num_to_retrieve,
+            offset,
+        )
 
     def admin_retrieval(
         self,
