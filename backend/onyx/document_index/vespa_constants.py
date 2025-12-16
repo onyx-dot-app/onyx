@@ -41,6 +41,15 @@ VESPA_TIMEOUT = "10s"
 # The batch will likely be sent to a threadpool of size NUM_THREADS.
 BATCH_SIZE = 128
 
+# Should match the rerank-count value set in
+# backend/onyx/document_index/vespa/app_config/schemas/danswer_chunk.sd.jinja.
+RERANK_COUNT = 1000
+
+# The intent was to have this be configurable per query, but I don't think any
+# codepath was actually configuring this, so for the migrated Vespa interface
+# we'll just use the default value.
+RECENCY_BIAS_MULTIPLIER = 1.0
+
 TENANT_ID = "tenant_id"
 DOCUMENT_ID = "document_id"
 CHUNK_ID = "chunk_id"

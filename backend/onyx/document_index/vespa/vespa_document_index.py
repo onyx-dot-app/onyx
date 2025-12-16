@@ -1,11 +1,18 @@
 import concurrent.futures
+import logging
 
 import httpx
 from pydantic import BaseModel
 
+from onyx.configs.app_configs import BLURB_SIZE
+from onyx.configs.chat_configs import DOC_TIME_DECAY
+from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
+from onyx.configs.constants import RETURN_SEPARATOR
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
+from onyx.context.search.models import InferenceChunkUncleaned
+from onyx.context.search.preprocessing.preprocessing import HYBRID_ALPHA
 from onyx.db.enums import EmbeddingPrecision
 from onyx.document_index.document_index_utils import get_document_chunk_ids
 from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
@@ -15,6 +22,7 @@ from onyx.document_index.interfaces_new import DocumentInsertionRecord
 from onyx.document_index.interfaces_new import DocumentSectionRequest
 from onyx.document_index.interfaces_new import IndexingMetadata
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
+from onyx.document_index.vespa.chunk_retrieval import query_vespa
 from onyx.document_index.vespa.deletion import delete_vespa_chunks
 from onyx.document_index.vespa.indexing_utils import BaseHTTPXClientContext
 from onyx.document_index.vespa.indexing_utils import batch_index_vespa_chunks
@@ -23,11 +31,28 @@ from onyx.document_index.vespa.indexing_utils import clean_chunk_id_copy
 from onyx.document_index.vespa.indexing_utils import GlobalHTTPXClientContext
 from onyx.document_index.vespa.indexing_utils import TemporaryHTTPXClientContext
 from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
+from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
+    build_vespa_filters,
+)
 from onyx.document_index.vespa_constants import BATCH_SIZE
+from onyx.document_index.vespa_constants import CONTENT_SUMMARY
 from onyx.document_index.vespa_constants import NUM_THREADS
+from onyx.document_index.vespa_constants import RECENCY_BIAS_MULTIPLIER
+from onyx.document_index.vespa_constants import RERANK_COUNT
+from onyx.document_index.vespa_constants import VESPA_TIMEOUT
+from onyx.document_index.vespa_constants import YQL_BASE
 from onyx.indexing.models import DocMetadataAwareIndexChunk
+from onyx.tools.tool_implementations.search.constants import KEYWORD_QUERY_HYBRID_ALPHA
 from onyx.utils.batching import batch_generator
+from onyx.utils.logger import setup_logger
 from shared_configs.model_server_models import Embedding
+
+
+LOGGER = setup_logger()
+# Set the logging level to WARNING to ignore INFO and DEBUG logs from httpx. By
+# default it emits INFO-level logs for every request.
+HTTPX_LOGGER = logging.getLogger("httpx")
+HTTPX_LOGGER.setLevel(logging.WARNING)
 
 
 class TenantState(BaseModel):
@@ -100,6 +125,79 @@ def _enrich_basic_chunk_info(
         old_version=is_old_version,
     )
     return enriched_doc_info
+
+
+def _cleanup_chunks(chunks: list[InferenceChunkUncleaned]) -> list[InferenceChunk]:
+    """Removes indexing-time content additions from chunks retrieved from Vespa.
+
+    During indexing, chunks are augmented with additional text to improve search
+    quality:
+    - Title prepended to content (for better keyword/semantic matching)
+    - Metadata suffix appended to content
+    - Contextual RAG: doc_summary (beginning) and chunk_context (end)
+
+    This function strips these additions before returning chunks to users,
+    restoring the original document content. Cleaning is applied in sequence:
+    1. Title removal:
+        - Full match: Strips exact title from beginning
+        - Partial match: If content starts with title[:BLURB_SIZE], splits on
+          RETURN_SEPARATOR to remove title section
+    2. Metadata suffix removal:
+        - Strips metadata_suffix from end, plus trailing RETURN_SEPARATOR
+    3. Contextual RAG removal:
+        - Strips doc_summary from beginning (if present)
+        - Strips chunk_context from end (if present)
+
+    Args:
+        chunks: Chunks as retrieved from Vespa with indexing augmentations
+            intact.
+
+    Returns:
+        Clean InferenceChunk objects with augmentations removed, containing only
+            the original document content that should be shown to users.
+    """
+
+    def _remove_title(chunk: InferenceChunkUncleaned) -> str:
+        if not chunk.title or not chunk.content:
+            return chunk.content
+
+        if chunk.content.startswith(chunk.title):
+            return chunk.content[len(chunk.title) :].lstrip()
+
+        # BLURB SIZE is by token instead of char but each token is at least 1 char
+        # If this prefix matches the content, it's assumed the title was prepended
+        if chunk.content.startswith(chunk.title[:BLURB_SIZE]):
+            return (
+                chunk.content.split(RETURN_SEPARATOR, 1)[-1]
+                if RETURN_SEPARATOR in chunk.content
+                else chunk.content
+            )
+        return chunk.content
+
+    def _remove_metadata_suffix(chunk: InferenceChunkUncleaned) -> str:
+        if not chunk.metadata_suffix:
+            return chunk.content
+        return chunk.content.removesuffix(chunk.metadata_suffix).rstrip(
+            RETURN_SEPARATOR
+        )
+
+    def _remove_contextual_rag(chunk: InferenceChunkUncleaned) -> str:
+        # remove document summary
+        if chunk.content.startswith(chunk.doc_summary):
+            chunk.content = chunk.content[len(chunk.doc_summary) :].lstrip()
+        # remove chunk context
+        if chunk.content.endswith(chunk.chunk_context):
+            chunk.content = chunk.content[
+                : len(chunk.content) - len(chunk.chunk_context)
+            ].rstrip()
+        return chunk.content
+
+    for chunk in chunks:
+        chunk.content = _remove_title(chunk)
+        chunk.content = _remove_metadata_suffix(chunk)
+        chunk.content = _remove_contextual_rag(chunk)
+
+    return [chunk.to_inference_chunk() for chunk in chunks]
 
 
 class VespaDocumentIndex(DocumentIndex):
@@ -276,7 +374,59 @@ class VespaDocumentIndex(DocumentIndex):
         num_to_retrieve: int,
         offset: int = 0,
     ) -> list[InferenceChunk]:
-        raise NotImplementedError
+        vespa_where_clauses = build_vespa_filters(filters)
+        # Needs to be at least as much as the rerank-count value set in the
+        # Vespa schema config. Otherwise we would be getting fewer results than
+        # expected for reranking.
+        target_hits = max(10 * num_to_retrieve, RERANK_COUNT)
+
+        yql = (
+            YQL_BASE.format(index_name=self.index_name)
+            + vespa_where_clauses
+            + f"(({{targetHits: {target_hits}}}nearestNeighbor(embeddings, query_embedding)) "
+            + f"or ({{targetHits: {target_hits}}}nearestNeighbor(title_embedding, query_embedding)) "
+            + 'or ({grammar: "weakAnd"}userInput(@query)) '
+            + f'or ({{defaultIndex: "{CONTENT_SUMMARY}"}}userInput(@query)))'
+        )
+
+        final_query = " ".join(final_keywords) if final_keywords else query
+
+        if query_type == QueryType.KEYWORD:
+            ranking_profile = f"hybrid_search_keyword_base_{len(query_embedding)}"
+        elif query_type == QueryType.SEMANTIC:
+            ranking_profile = f"hybrid_search_semantic_base_{len(query_embedding)}"
+        else:
+            raise ValueError(f"Received unexpected query type: {query_type}")
+
+        LOGGER.info(f"Selected ranking profile: {ranking_profile}")
+
+        LOGGER.debug(f"Query YQL: {yql}")
+
+        # In this interface we do not pass in hybrid alpha. Tracing the codepath
+        # of the legacy Vespa interface, it so happens that KEYWORD always
+        # corresponds to an alpha of 0.2 (from KEYWORD_QUERY_HYBRID_ALPHA), and
+        # SEMANTIC to 0.5 (from HYBRID_ALPHA). HYBRID_ALPHA_KEYWORD was only
+        # used in dead code so we do not use it here.
+        hybrid_alpha = (
+            KEYWORD_QUERY_HYBRID_ALPHA
+            if query_type == QueryType.KEYWORD
+            else HYBRID_ALPHA
+        )
+
+        params: dict[str, str | int | float] = {
+            "yql": yql,
+            "query": final_query,
+            "input.query(query_embedding)": str(query_embedding),
+            "input.query(decay_factor)": str(DOC_TIME_DECAY * RECENCY_BIAS_MULTIPLIER),
+            "input.query(alpha)": hybrid_alpha,
+            "input.query(title_content_ratio)": TITLE_CONTENT_RATIO,
+            "hits": num_to_retrieve,
+            "offset": offset,
+            "ranking.profile": ranking_profile,
+            "timeout": VESPA_TIMEOUT,
+        }
+
+        return _cleanup_chunks(query_vespa(params))
 
     def random_retrieval(
         self,
