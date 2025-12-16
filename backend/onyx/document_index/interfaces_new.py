@@ -3,6 +3,7 @@ import abc
 from pydantic import BaseModel
 
 from onyx.access.models import DocumentAccess
+from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
@@ -108,6 +109,26 @@ class MetadataUpdateRequest(BaseModel):
     project_ids: set[int] | None = None
 
 
+class IndexRetrievalFilters(BaseModel):
+    """
+    Filters for retrieving chunks from the index.
+
+    Used to filter on permissions and other Onyx-specific metadata rather than
+    chunk content. Should be passed in for every retrieval method.
+
+    TODO(andrei): Currently unused, use this when making retrieval methods more
+    strict.
+    """
+
+    model_config = {"frozen": True}
+
+    # frozenset gets around the issue of python's mutable defaults.
+    # WARNING: Falls back to only public docs as default for security. If
+    # callers want no access filtering they must explicitly supply an empty set.
+    # Doing so should be done sparingly.
+    access_control_list: frozenset[str] = frozenset({PUBLIC_DOC_PAT})
+
+
 class SchemaVerifiable(abc.ABC):
     """
     Class must implement document index schema verification. For example, verify that all of the
@@ -185,6 +206,7 @@ class Deletable(abc.ABC):
         # takes in a list of IDs.
         document_id: str,
         chunk_count: int | None = None,
+        # TODO(andrei): Shouldn't this also have some acl filtering at minimum?
     ) -> int:
         """
         Hard deletes all of the chunks for the corresponding document in the
@@ -245,7 +267,7 @@ class Updatable(abc.ABC):
 class IdRetrievalCapable(abc.ABC):
     """
     Class must implement the ability to retrieve either:
-    - All of the chunks of a document IN ORDER given a document id. Caller assumes it to be in order.
+    - All of the chunks of a document IN ORDER given a document ID.
     - A specific section (continuous set of chunks) for some document.
     """
 
@@ -253,24 +275,26 @@ class IdRetrievalCapable(abc.ABC):
     def id_based_retrieval(
         self,
         chunk_requests: list[DocumentSectionRequest],
+        # TODO(andrei): Make this more strict w.r.t. acl, temporary for now.
+        filters: IndexFilters,
+        # TODO(andrei): This is temporary, we will not expose this in the long
+        # run.
+        batch_retrieval: bool = False,
     ) -> list[InferenceChunk]:
-        """
-        Fetch chunk(s) based on document id
+        """Fetches chunk(s) based on document ID.
 
-        NOTE: This is used to reconstruct a full document or an extended (multi-chunk) section
-        of a document. Downstream currently assumes that the chunking does not introduce overlaps
-        between the chunks. If there are overlaps for the chunks, then the reconstructed document
-        or extended section will have duplicate segments.
+        NOTE: This is used to reconstruct a full document or an extended
+        (multi-chunk) section of a document. Downstream currently assumes that
+        the chunking does not introduce overlaps between the chunks. If there
+        are overlaps for the chunks, then the reconstructed document or extended
+        section will have duplicate segments.
 
-        NOTE: This should be used after a search call to get more context around returned chunks.
-        There is no filters here since the calling code should not be calling this on arbitrary
-        documents.
-
-        Parameters:
-        - chunk_requests: requests containing the document id and the chunk range to retrieve
+        Args:
+            chunk_requests: Requests containing the document ID and the chunk
+                range to retrieve.
 
         Returns:
-            list of sections from the documents specified
+            List of sections from the documents specified.
         """
         raise NotImplementedError
 
@@ -287,6 +311,7 @@ class HybridCapable(abc.ABC):
         query_embedding: Embedding,
         final_keywords: list[str] | None,
         query_type: QueryType,
+        # TODO(andrei): Make this more strict w.r.t. acl, temporary for now.
         filters: IndexFilters,
         num_to_retrieve: int,
         offset: int = 0,
@@ -315,17 +340,35 @@ class HybridCapable(abc.ABC):
 
 
 class RandomCapable(abc.ABC):
-    """Class must implement random document retrieval capability.
-    This currently is just used for porting the documents to a secondary index."""
+    """
+    Class must implement random document retrieval.
+
+    This currently is just used for porting the documents to a secondary index.
+    """
 
     @abc.abstractmethod
     def random_retrieval(
         self,
-        filters: IndexFilters | None = None,
+        # TODO(andrei): Make this more strict w.r.t. acl, temporary for now.
+        filters: IndexFilters,
         num_to_retrieve: int = 100,
         dirty: bool | None = None,
     ) -> list[InferenceChunk]:
-        """Retrieve random chunks matching the filters"""
+        """Retrieves random chunks matching the filters.
+
+        Args:
+            filters: Filters for things like permissions, source type, time,
+                etc.
+            num_to_retrieve: Number of chunks to retrieve. Defaults to 100.
+            dirty: If set, retrieve chunks whose "dirty" flag matches this
+                argument. If None, there is no restriction on retrieved chunks
+                with respect to that flag. A chunk is considered dirty if there
+                is a secondary index but the chunk's state has not been ported
+                over to it yet. Defaults to None.
+
+        Returns:
+            List of chunks matching the filters.
+        """
         raise NotImplementedError
 
 
