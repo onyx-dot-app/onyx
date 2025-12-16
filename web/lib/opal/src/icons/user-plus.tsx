@@ -1,4 +1,4 @@
-import type { IconProps } from "@/index";
+import type { IconProps } from "@/types/icons";
 const SvgUserPlus = ({ size, ...props }: IconProps) => (
   <svg
     viewBox="0 0 16 16"

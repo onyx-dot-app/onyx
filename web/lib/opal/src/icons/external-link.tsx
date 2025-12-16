@@ -1,4 +1,4 @@
-import type { IconProps } from "@/index";
+import type { IconProps } from "@/types/icons";
 
 const SvgExternalLink = ({ size, ...props }: IconProps) => (
   <svg

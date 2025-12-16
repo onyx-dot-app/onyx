@@ -1,4 +1,4 @@
-import type { IconProps } from "@/index";
+import type { IconProps } from "@/types/icons";
 
 const SvgRefreshCw = ({ size, ...props }: IconProps) => (
   <svg

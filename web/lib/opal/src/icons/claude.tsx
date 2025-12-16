@@ -1,5 +1,5 @@
 import React from "react";
-import type { IconProps } from "@/index";
+import type { IconProps } from "@/types/icons";
 
 const SvgClaude = (props: IconProps) => {
   const clipId = React.useId();

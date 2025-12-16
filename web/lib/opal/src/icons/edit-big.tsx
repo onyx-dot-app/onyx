@@ -1,4 +1,4 @@
-import type { IconProps } from "@/index";
+import type { IconProps } from "@/types/icons";
 
 const SvgEditBig = ({ size, ...props }: IconProps) => (
   <svg
