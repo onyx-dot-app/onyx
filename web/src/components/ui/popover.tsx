@@ -117,12 +117,12 @@ export function PopoverMenu({
   const size = small ? "small" : medium ? "medium" : "small";
 
   return (
-    <div className="flex flex-col gap-1 max-h-[20rem]">
+    <div className="flex flex-col gap-1">
       <div className="relative">
         <div
           ref={containerRef}
           className={cn(
-            "flex flex-col gap-1 overflow-y-auto h-[20rem]",
+            "flex flex-col gap-1 overflow-y-auto max-h-[20rem]",
             sizeClasses[size],
             className
           )}
