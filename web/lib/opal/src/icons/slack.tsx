@@ -1,4 +1,4 @@
-import type { IconProps } from "@opal";
+import type { IconProps } from "@/index";
 
 const SvgSlack = ({ size, ...props }: IconProps) => (
   <svg

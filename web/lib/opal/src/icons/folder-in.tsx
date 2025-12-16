@@ -1,4 +1,4 @@
-import type { IconProps } from "@opal";
+import type { IconProps } from "@/index";
 
 const SvgFolderIn = ({ size, ...props }: IconProps) => (
   <svg

@@ -1,4 +1,4 @@
-import type { IconProps } from "@opal";
+import type { IconProps } from "@/index";
 
 const SvgArrowRight = ({ size, ...props }: IconProps) => (
   <svg
