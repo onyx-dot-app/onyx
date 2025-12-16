@@ -256,7 +256,9 @@ def create_chat_message_feedback(
         # Try to find the assistant message in the same conversation
         # Look for parent assistant messages by traversing up the message tree
         current_msg = chat_message
-        while current_msg.parent_message_id is not None:
+        max_depth = 100  # Safeguard against infinite loops or extremely deep chains
+        depth = 0
+        while current_msg.parent_message_id is not None and depth < max_depth:
             parent_msg = get_chat_message(
                 chat_message_id=current_msg.parent_message_id,
                 user_id=user_id,
@@ -266,6 +268,7 @@ def create_chat_message_feedback(
                 target_message_id = parent_msg.id
                 break
             current_msg = parent_msg
+            depth += 1
         else:
             # If we couldn't find an assistant message by going up, this is an error
             raise ValueError("Can only provide feedback on LLM Outputs")
@@ -299,7 +302,9 @@ def remove_chat_message_feedback(
         # Try to find the assistant message in the same conversation
         # Look for parent assistant messages by traversing up the message tree
         current_msg = chat_message
-        while current_msg.parent_message_id is not None:
+        max_depth = 100  # Safeguard against infinite loops or extremely deep chains
+        depth = 0
+        while current_msg.parent_message_id is not None and depth < max_depth:
             parent_msg = get_chat_message(
                 chat_message_id=current_msg.parent_message_id,
                 user_id=user_id,
@@ -309,6 +314,7 @@ def remove_chat_message_feedback(
                 target_message_id = parent_msg.id
                 break
             current_msg = parent_msg
+            depth += 1
         else:
             # If we couldn't find an assistant message by going up, this is an error
             raise ValueError("Can only remove feedback from LLM Outputs")
