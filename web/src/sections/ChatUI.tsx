@@ -35,7 +35,7 @@ import { HORIZON_DISTANCE_PX } from "@/lib/constants";
 import Spacer from "@/refresh-components/Spacer";
 
 export interface ChatUIHandle {
-  scrollToBottom: (fast?: boolean) => boolean;
+  scrollToBottom: () => boolean;
   scrollBy: (delta: number) => void;
 }
 

@@ -42,7 +42,7 @@ export default async function Page() {
       <div className="absolute top-10x w-full">
         <HealthCheckBanner />
       </div>
-      <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <div className="min-h-screen flex flex-col items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
         <Logo folded size={64} className="mx-auto w-fit" />
         <div className="flex">
           <Text className="text-center font-medium text-lg mt-6 w-108">

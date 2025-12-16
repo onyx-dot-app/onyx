@@ -1,6 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
 import { OnyxIcon, OnyxLogoTypeIcon } from "@/components/icons/icons";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import {
@@ -22,32 +21,26 @@ export default function Logo({ folded, size, className }: LogoProps) {
   const unfoldedSize = size ?? LOGO_UNFOLDED_SIZE_PX;
   const settings = useSettingsContext();
 
-  const logo = useMemo(
-    () =>
-      settings.enterpriseSettings?.use_custom_logo ? (
-        <img
-          src="/api/enterprise-settings/logo"
-          alt="Logo"
-          style={{
-            objectFit: "contain",
-            height: foldedSize,
-            width: foldedSize,
-          }}
-          className={cn("flex-shrink-0", className)}
-        />
-      ) : (
-        <OnyxIcon
-          size={foldedSize}
-          className={cn("flex-shrink-0", className)}
-        />
-      ),
-    [className, settings.enterpriseSettings?.use_custom_logo]
-  );
-
   return settings.enterpriseSettings?.application_name ? (
     <div className="flex flex-col">
       <div className="flex flex-row items-center gap-2">
-        {logo}
+        {settings.enterpriseSettings?.use_custom_logo ? (
+          <img
+            src="/api/enterprise-settings/logo"
+            alt="Logo"
+            style={{
+              objectFit: "contain",
+              height: foldedSize,
+              width: foldedSize,
+            }}
+            className={cn("flex-shrink-0", className)}
+          />
+        ) : (
+          <OnyxIcon
+            size={foldedSize}
+            className={cn("flex-shrink-0", className)}
+          />
+        )}
         <Text
           headingH3
           className={cn("line-clamp-1 truncate", folded && "invisible")}

@@ -8,7 +8,7 @@ import { getLatestMessageChain } from "@/app/chat/services/messageTree";
 import HumanMessage from "@/app/chat/message/HumanMessage";
 import AIMessage from "@/app/chat/message/messageComponents/AIMessage";
 import { Callout } from "@/components/ui/callout";
-import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
+import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import TextView from "@/components/chat/TextView";

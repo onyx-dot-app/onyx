@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
-import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
+import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import Dropzone from "react-dropzone";
@@ -390,7 +390,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
       (!personaIncludesRetrieval &&
         (!selectedDocuments || selectedDocuments.length === 0) &&
         documentSidebarVisible) ||
-      !!currentChatSessionId
+      !currentChatSessionId
     ) {
       updateCurrentDocumentSidebarVisible(false);
     }

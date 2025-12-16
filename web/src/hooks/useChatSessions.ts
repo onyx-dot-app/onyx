@@ -1,3 +1,5 @@
+"use client";
+
 import useSWR, { KeyedMutator } from "swr";
 import { ChatSession } from "@/app/chat/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
