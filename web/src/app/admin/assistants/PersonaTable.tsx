@@ -17,10 +17,9 @@ import {
 import { FiEdit2 } from "react-icons/fi";
 import { useUser } from "@/components/user/UserProvider";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgTrash from "@/icons/trash";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import SvgAlertCircle from "@/icons/alert-circle";
 import Button from "@/refresh-components/buttons/Button";
+import { SvgAlertCircle, SvgTrash } from "@opal/icons";
 
 function PersonaTypeDisplay({ persona }: { persona: Persona }) {
   if (persona.builtin_persona) {

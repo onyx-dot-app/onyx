@@ -4,7 +4,7 @@ import React, { useMemo } from "react";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal";
 
 const variantClasses = (transient?: boolean) =>
   ({

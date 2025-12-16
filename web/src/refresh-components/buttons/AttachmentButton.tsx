@@ -4,11 +4,10 @@ import React from "react";
 import { cn, noProp } from "@/lib/utils";
 import Truncated from "@/refresh-components/texts/Truncated";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgTrash from "@/icons/trash";
 import Text from "@/refresh-components/texts/Text";
-import SvgExternalLink from "@/icons/external-link";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
+import { SvgExternalLink, SvgTrash } from "@opal/icons";
 
 const bgClassNames = {
   defaulted: ["bg-background-tint-00 "],

@@ -6,16 +6,18 @@ import {
   MCPAuthenticationPerformer,
   ToolSnapshot,
 } from "@/lib/tools/interfaces";
-import SvgKey from "@/icons/key";
-import SvgLock from "@/icons/lock";
-import SvgCheck from "@/icons/check";
-import SvgServer from "@/icons/server";
-import SvgChevronRight from "@/icons/chevron-right";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { cn, noProp } from "@/lib/utils";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal";
+import {
+  SvgCheck,
+  SvgChevronRight,
+  SvgKey,
+  SvgLock,
+  SvgServer,
+} from "@opal/icons";
 
 export interface MCPServer {
   id: number;

@@ -5,25 +5,26 @@ import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
-import SvgBubbleText from "@/icons/bubble-text";
 import { Card } from "@/components/ui/card";
 import { useAppRouter } from "@/hooks/appNavigation";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgPin from "@/icons/pin";
 import Truncated from "@/refresh-components/texts/Truncated";
-import { IconProps } from "@/icons";
-import SvgUser from "@/icons/user";
-import SvgActions from "@/icons/actions";
+import type { IconProps } from "@opal";
 import { usePinnedAgentsWithDetails } from "@/lib/hooks/useAgents";
 import { cn, noProp } from "@/lib/utils";
-import SvgEdit from "@/icons/edit";
 import { useRouter } from "next/navigation";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { checkUserOwnsAssistant } from "@/lib/assistants/utils";
 import { useUser } from "@/components/user/UserProvider";
-import SvgBarChart from "@/icons/bar-chart";
-import SvgPinned from "@/icons/pinned";
-
+import {
+  SvgActions,
+  SvgBarChart,
+  SvgBubbleText,
+  SvgEdit,
+  SvgPin,
+  SvgPinned,
+  SvgUser,
+} from "@opal/icons";
 interface IconLabelProps {
   icon: React.FunctionComponent<IconProps>;
   children: string;

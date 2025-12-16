@@ -7,8 +7,7 @@ import { triggerIndexing } from "@/app/admin/connector/[ccPairId]/lib";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
 import Separator from "@/refresh-components/Separator";
-import SvgRefreshCw from "@/icons/refresh-cw";
-
+import { SvgRefreshCw } from "@opal/icons";
 // Hook to handle re-indexing functionality
 export function useReIndexModal(
   connectorId: number | null,

@@ -7,7 +7,6 @@ import React, {
   useRef,
   useCallback,
 } from "react";
-import SvgServer from "@/icons/server";
 import ActionCard from "@/sections/actions/ActionCard";
 import Actions from "@/sections/actions/Actions";
 import ToolItem from "@/sections/actions/ToolItem";
@@ -19,7 +18,8 @@ import { useServerTools } from "@/sections/actions/useServerTools";
 import { MCPServerStatus, MCPServerWithStatus } from "@/lib/tools/types";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { KeyedMutator } from "swr";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal";
+import { SvgServer } from "@opal/icons";
 
 export interface MCPActionCardProps {
   // Server identification

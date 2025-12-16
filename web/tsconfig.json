@@ -21,15 +21,11 @@
       }
     ],
     "paths": {
-      "@/*": [
-        "./src/*"
-      ],
-      "@tests/*": [
-        "./tests/*"
-      ],
-      "@public/*": [
-        "./public/*"
-      ]
+      "@/*": ["./src/*"],
+      "@tests/*": ["./tests/*"],
+      "@public/*": ["./public/*"],
+      "@opal": ["./lib/opal/src/index.ts"],
+      "@opal/*": ["./lib/opal/src/*"]
     }
   },
   "include": [
@@ -39,5 +35,5 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "lib/opal"]
 }

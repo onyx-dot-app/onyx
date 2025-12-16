@@ -9,7 +9,6 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import Text from "@/refresh-components/texts/Text";
 import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import OnyxLogo from "@/icons/onyx-logo";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useAgents } from "@/lib/hooks/useAgents";
 import Separator from "@/refresh-components/Separator";
@@ -23,6 +22,7 @@ import { ToolSelector } from "@/components/admin/assistants/ToolSelector";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import { HoverPopup } from "@/components/HoverPopup";
 import { Info } from "lucide-react";
+import { SvgOnyxLogo } from "@opal/icons";
 
 interface DefaultAssistantConfiguration {
   tool_ids: number[];
@@ -252,7 +252,11 @@ export default function Page() {
       <AdminPageTitle
         title="Default Assistant"
         icon={
-          <OnyxLogo width={32} height={32} className="my-auto stroke-text-04" />
+          <SvgOnyxLogo
+            width={32}
+            height={32}
+            className="my-auto stroke-text-04"
+          />
         }
       />
       <DefaultAssistantConfig />

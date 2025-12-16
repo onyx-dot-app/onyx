@@ -1,4 +1,4 @@
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal";
 
 export enum OnboardingStep {
   Welcome = "welcome",

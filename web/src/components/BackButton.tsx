@@ -1,8 +1,8 @@
 "use client";
 
-import SvgArrowLeft from "@/icons/arrow-left";
 import Button from "@/refresh-components/buttons/Button";
 import { useRouter } from "next/navigation";
+import { SvgArrowLeft } from "@opal/icons";
 
 export interface BackButtonProps {
   behaviorOverride?: () => void;

@@ -3,11 +3,10 @@ import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import { User } from "@/lib/types";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
-import SvgRefreshCw from "@/icons/refresh-cw";
-import SvgKey from "@/icons/key";
 import Text from "@/refresh-components/texts/Text";
 import { LoadingAnimation } from "@/components/Loading";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+import { SvgKey, SvgRefreshCw } from "@opal/icons";
 
 export interface ResetPasswordModalProps {
   user: User;

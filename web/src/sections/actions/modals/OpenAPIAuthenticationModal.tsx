@@ -12,12 +12,12 @@ import { FormField } from "@/refresh-components/form/FormField";
 import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
-import SvgArrowExchange from "@/icons/arrow-exchange";
 import KeyValueInput, {
   KeyValue,
 } from "@/refresh-components/inputs/InputKeyValue";
 import { OAuthConfig } from "@/lib/tools/interfaces";
 import { getOAuthConfig } from "@/lib/oauth/api";
+import { SvgArrowExchange } from "@opal/icons";
 
 export type AuthMethod = "oauth" | "custom-header";
 

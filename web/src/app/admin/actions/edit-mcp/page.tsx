@@ -33,10 +33,7 @@ import {
 } from "@/components/admin/actions/interfaces";
 import { ToolList } from "@/components/admin/actions/ToolList";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import SvgCheck from "@/icons/check";
-import SvgLink from "@/icons/link";
-import SvgActions from "@/icons/actions";
-
+import { SvgActions, SvgCheck, SvgLink } from "@opal/icons";
 const validationSchema = Yup.object().shape({
   name: Yup.string().required("Name is required"),
   description: Yup.string(),

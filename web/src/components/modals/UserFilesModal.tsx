@@ -5,11 +5,7 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { ProjectFile } from "@/app/chat/projects/ProjectsContext";
 import { formatRelativeTime } from "@/app/chat/components/projects/project_utils";
 import Text from "@/refresh-components/texts/Text";
-import { IconProps } from "@/icons";
-import SvgFileText from "@/icons/file-text";
-import SvgImage from "@/icons/image";
-import SvgEye from "@/icons/eye";
-import SvgXCircle from "@/icons/x-circle";
+import type { IconProps } from "@opal";
 import { getFileExtension, isImageExtension } from "@/lib/utils";
 import { UserFileStatus } from "@/app/chat/projects/projectsService";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
@@ -21,6 +17,7 @@ import Modal from "@/refresh-components/Modal";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import CounterSeparator from "@/refresh-components/CounterSeparator";
+import { SvgEye, SvgFileText, SvgImage, SvgXCircle } from "@opal/icons";
 
 function getIcon(
   file: ProjectFile,

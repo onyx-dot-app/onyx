@@ -1,11 +1,11 @@
 import React from "react";
 import Text from "@/refresh-components/texts/Text";
-import SvgX from "@/icons/x";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn } from "@/lib/utils";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
 import RawModal from "@/refresh-components/RawModal";
+import { SvgX } from "@opal/icons";
 
 const sizeClassNames = {
   main: ["w-[80dvw]", "h-[80dvh]"],

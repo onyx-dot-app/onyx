@@ -2,10 +2,10 @@
 
 import { ApiKeyForm } from "./ApiKeyForm";
 import Modal from "@/refresh-components/Modal";
-import SvgKey from "@/icons/key";
 import { useRouter } from "next/navigation";
 import { useProviderStatus } from "../chat/ProviderContext";
 import { PopupSpec } from "../admin/connectors/Popup";
+import { SvgKey } from "@opal/icons";
 
 export interface ApiKeyModalProps {
   hide?: () => void;

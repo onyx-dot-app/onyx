@@ -15,9 +15,6 @@ import {
   OllamaIcon,
   ZAIIcon,
 } from "@/components/icons/icons";
-import SvgAws from "@/icons/aws";
-import SvgOpenrouter from "@/icons/openrouter";
-
 import {
   WellKnownLLMProviderDescriptor,
   LLMProviderView,
@@ -28,6 +25,7 @@ import {
   ModelConfiguration,
 } from "./interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { SvgAws, SvgOpenrouter } from "@opal/icons";
 
 // Aggregator providers that host models from multiple vendors
 export const AGGREGATOR_PROVIDERS = new Set([

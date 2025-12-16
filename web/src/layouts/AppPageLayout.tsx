@@ -4,16 +4,12 @@ import { ChatSession } from "@/app/chat/interfaces";
 import { cn, noProp } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
-import SvgShare from "@/icons/share";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import { useMemo, useState, useEffect } from "react";
 import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";
 import { useChatPageLayout } from "@/app/chat/stores/useChatSessionStore";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgMoreHorizontal from "@/icons/more-horizontal";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import SvgFolderIn from "@/icons/folder-in";
-import SvgTrash from "@/icons/trash";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import { useChatSessions } from "@/lib/hooks/useChatSessions";
 import { usePopup } from "@/components/admin/connectors/Popup";
@@ -30,9 +26,15 @@ import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationMo
 import { PopoverMenu } from "@/components/ui/popover";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
-import SvgSidebar from "@/icons/sidebar";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
 import useScreenSize from "@/hooks/useScreenSize";
+import {
+  SvgFolderIn,
+  SvgMoreHorizontal,
+  SvgShare,
+  SvgSidebar,
+  SvgTrash,
+} from "@opal/icons";
 
 export interface AppPageLayoutProps
   extends React.HtmlHTMLAttributes<HTMLDivElement> {

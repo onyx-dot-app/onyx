@@ -1,8 +1,6 @@
 import { memo, useState } from "react";
-import SvgCpu from "@/icons/cpu";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
-import SvgExternalLink from "@/icons/external-link";
 import Separator from "@/refresh-components/Separator";
 import LLMProvider from "../components/LLMProvider";
 import { OnboardingActions, OnboardingState, OnboardingStep } from "../types";
@@ -11,9 +9,9 @@ import LLMConnectionModal, {
   LLMConnectionModalProps,
 } from "@/refresh-components/onboarding/components/LLMConnectionModal";
 import { cn } from "@/lib/utils";
-import SvgCheckCircle from "@/icons/check-circle";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
+import { SvgCheckCircle, SvgCpu, SvgExternalLink } from "@opal/icons";
 
 type LLMStepProps = {
   state: OnboardingState;

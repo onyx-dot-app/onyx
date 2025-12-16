@@ -16,10 +16,9 @@ import { useCurrentAgent } from "@/lib/hooks/useCurrentAgent";
 import { useSearchParams } from "next/navigation";
 import { useChatSessionStore } from "@/app/chat/stores/useChatSessionStore";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import SvgShare from "@/icons/share";
-import SvgCopy from "@/icons/copy";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { copyAll } from "@/app/chat/message/copyingUtils";
+import { SvgCopy, SvgShare } from "@opal/icons";
 
 function buildShareLink(chatSessionId: string) {
   const baseUrl = `${window.location.protocol}//${window.location.host}`;

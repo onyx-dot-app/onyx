@@ -11,9 +11,9 @@ import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
-import SvgEdit from "@/icons/edit";
 import Button from "@/refresh-components/buttons/Button";
 import ExpandableContentWrapper from "@/components/tools/ExpandableContentWrapper";
+import { SvgEdit } from "@opal/icons";
 
 interface FileDisplayProps {
   files: FileDescriptor[];

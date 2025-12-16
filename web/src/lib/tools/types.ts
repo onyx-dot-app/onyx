@@ -1,6 +1,6 @@
 import type React from "react";
 import { MCPServer } from "@/lib/tools/interfaces";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal";
 
 // Generic action status for UI components
 export enum ActionStatus {

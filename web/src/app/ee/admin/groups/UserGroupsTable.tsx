@@ -18,8 +18,7 @@ import Link from "next/link";
 import { DeleteButton } from "@/components/DeleteButton";
 import { TableHeader } from "@/components/ui/table";
 import Button from "@/refresh-components/buttons/Button";
-import SvgEdit from "@/icons/edit";
-
+import { SvgEdit } from "@opal/icons";
 const MAX_USERS_TO_DISPLAY = 6;
 
 const SimpleUserDisplay = ({ user }: { user: User }) => {

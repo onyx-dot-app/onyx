@@ -1,13 +1,15 @@
 import { JSX } from "react";
-import { IconProps } from "@/icons";
-import SvgCpu from "@/icons/cpu";
-import SvgGlobe from "@/icons/globe";
-import SvgImage from "@/icons/image";
-import SvgLink from "@/icons/link";
-import SvgSearch from "@/icons/search";
-import SvgServer from "@/icons/server";
-import SvgUser from "@/icons/user";
+import type { IconProps } from "@opal";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
+import {
+  SvgCpu,
+  SvgGlobe,
+  SvgImage,
+  SvgLink,
+  SvgSearch,
+  SvgServer,
+  SvgUser,
+} from "@opal/icons";
 
 // Helper functions to identify specific tools
 const isSearchTool = (tool: ToolSnapshot): boolean => {

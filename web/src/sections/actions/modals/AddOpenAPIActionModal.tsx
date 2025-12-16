@@ -5,10 +5,6 @@ import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Text from "@/refresh-components/texts/Text";
-import SvgActions from "@/icons/actions";
-import SvgCheckCircle from "@/icons/check-circle";
-import SvgBracketCurly from "@/icons/bracket-curly";
-import SvgUnplug from "@/icons/unplug";
 import { FormField } from "@/refresh-components/form/FormField";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Separator from "@/refresh-components/Separator";
@@ -28,6 +24,12 @@ import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
+import {
+  SvgActions,
+  SvgBracketCurly,
+  SvgCheckCircle,
+  SvgUnplug,
+} from "@opal/icons";
 
 interface AddOpenAPIActionModalProps {
   skipOverlay?: boolean;

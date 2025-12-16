@@ -1,8 +1,8 @@
 import { SOURCE_METADATA_MAP } from "../sources";
-import SvgServer from "@/icons/server";
 import { MCPServer } from "./interfaces";
 import { DatabaseIcon, FileIcon } from "@/components/icons/icons";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal";
+import { SvgServer } from "@opal/icons";
 
 /**
  * Get an appropriate icon for an MCP server based on its URL and name.

@@ -3,8 +3,7 @@ import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import { SearchMultiSelectDropdown } from "@/components/Dropdown";
 import { cn } from "@/lib/utils";
-import SvgX from "@/icons/x";
-
+import { SvgX } from "@opal/icons";
 export type GenericMultiSelectFormType<T extends string> = {
   [K in T]: number[];
 };

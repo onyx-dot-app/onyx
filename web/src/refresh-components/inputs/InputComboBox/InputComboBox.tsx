@@ -79,8 +79,6 @@ import React, { useCallback, useContext, useMemo, useRef, useId } from "react";
 import { cn, noProp } from "@/lib/utils";
 import InputTypeIn from "../InputTypeIn";
 import { FieldContext } from "../../form/FieldContext";
-import SvgChevronDown from "@/icons/chevron-down";
-import SvgChevronUp from "@/icons/chevron-up";
 import Text from "../../texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { FieldMessage } from "../../messages/FieldMessage";
@@ -101,6 +99,7 @@ import { ComboBoxDropdown } from "./components/ComboBoxDropdown";
 
 // Types
 import { InputComboBoxProps, ComboBoxOption } from "./types";
+import { SvgChevronDown, SvgChevronUp } from "@opal/icons";
 
 const InputComboBox = ({
   value,

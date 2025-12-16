@@ -2,14 +2,10 @@
 
 import React, { useState, memo, useMemo, useEffect } from "react";
 import { useDraggable } from "@dnd-kit/core";
-import SvgMoreHorizontal from "@/icons/more-horizontal";
 import { useChatSessions } from "@/lib/hooks/useChatSessions";
 import { deleteChatSession, renameChatSession } from "@/app/chat/services/lib";
 import { ChatSession } from "@/app/chat/interfaces";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import SvgTrash from "@/icons/trash";
-import SvgShare from "@/icons/share";
-import SvgEdit from "@/icons/edit";
 import Button from "@/refresh-components/buttons/Button";
 import { cn, noProp } from "@/lib/utils";
 import {
@@ -25,10 +21,6 @@ import {
   createProject as createProjectService,
 } from "@/app/chat/projects/projectsService";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import SvgFolderIn from "@/icons/folder-in";
-import SvgFolder from "@/icons/folder";
-import SvgChevronLeft from "@/icons/chevron-left";
-import SvgFolderPlus from "@/icons/folder-plus";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";
@@ -48,6 +40,16 @@ import Truncated from "@/refresh-components/texts/Truncated";
 import Text from "@/refresh-components/texts/Text";
 import useAppFocus from "@/hooks/useAppFocus";
 import LineItem from "@/refresh-components/buttons/LineItem";
+import {
+  SvgChevronLeft,
+  SvgEdit,
+  SvgFolder,
+  SvgFolderIn,
+  SvgFolderPlus,
+  SvgMoreHorizontal,
+  SvgShare,
+  SvgTrash,
+} from "@opal/icons";
 
 // (no local constants; use shared constants/imports)
 

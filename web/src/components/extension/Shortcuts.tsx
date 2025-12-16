@@ -15,9 +15,9 @@ import { PencilIcon, PlusIcon } from "lucide-react";
 import Image from "next/image";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import Modal from "@/refresh-components/Modal";
-import SvgAlertCircle from "@/icons/alert-circle";
 import { QuestionMarkIcon } from "../icons/icons";
 import Text from "@/refresh-components/texts/Text";
+import { SvgAlertCircle } from "@opal/icons";
 
 export const validateUrl = (input: string) => {
   try {

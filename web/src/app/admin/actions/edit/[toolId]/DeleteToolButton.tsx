@@ -3,8 +3,7 @@
 import Button from "@/refresh-components/buttons/Button";
 import { deleteCustomTool } from "@/lib/tools/edit";
 import { useRouter } from "next/navigation";
-import SvgTrash from "@/icons/trash";
-
+import { SvgTrash } from "@opal/icons";
 export function DeleteToolButton({ toolId }: { toolId: number }) {
   const router = useRouter();
 

@@ -1,7 +1,7 @@
 import ErrorPageLayout from "@/components/errorPages/ErrorPageLayout";
 import Text from "@/refresh-components/texts/Text";
-import SvgAlertCircle from "@/icons/alert-circle";
 import { DOCS_BASE_URL } from "@/lib/constants";
+import { SvgAlertCircle } from "@opal/icons";
 
 export default function Error() {
   return (

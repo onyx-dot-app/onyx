@@ -1,6 +1,5 @@
 import { ThreeDotsLoader } from "@/components/Loading";
 import Modal from "@/refresh-components/Modal";
-import SvgX from "@/icons/x";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import {
   ConnectorIndexingStatusLite,
@@ -23,6 +22,7 @@ import { Connector } from "@/lib/connectors/connectors";
 import { FailedReIndexAttempts } from "@/components/embedding/FailedReIndexAttempts";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
+import { SvgX } from "@opal/icons";
 
 export default function UpgradingPage({
   futureEmbeddingModel,

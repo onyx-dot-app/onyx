@@ -11,8 +11,7 @@ import { Label } from "@/components/ui/label";
 import { useEffect, useState } from "react";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgX from "@/icons/x";
-
+import { SvgX } from "@opal/icons";
 function ModelConfigurationRow({
   name,
   index,

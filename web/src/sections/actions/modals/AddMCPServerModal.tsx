@@ -8,8 +8,6 @@ import { FormField } from "@/refresh-components/form/FormField";
 import Button from "@/refresh-components/buttons/Button";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-import SvgServer from "@/icons/server";
-import SvgCheckCircle from "@/icons/check-circle";
 import { createMCPServer, updateMCPServer } from "@/lib/tools/mcpService";
 import {
   MCPServerCreateRequest,
@@ -19,9 +17,9 @@ import {
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Separator from "@/refresh-components/Separator";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgUnplug from "@/icons/unplug";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { ModalCreationInterface } from "@/refresh-components/contexts/ModalContext";
+import { SvgCheckCircle, SvgServer, SvgUnplug } from "@opal/icons";
 
 interface AddMCPServerModalProps {
   skipOverlay?: boolean;

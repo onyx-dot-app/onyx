@@ -7,7 +7,6 @@ import InvitedUserTable from "@/components/admin/users/InvitedUserTable";
 import SignedUpUserTable from "@/components/admin/users/SignedUpUserTable";
 
 import Modal from "@/refresh-components/Modal";
-import SvgUserPlus from "@/icons/user-plus";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { usePopup, PopupSpec } from "@/components/admin/connectors/Popup";
@@ -24,10 +23,8 @@ import CreateButton from "@/refresh-components/buttons/CreateButton";
 import Button from "@/refresh-components/buttons/Button";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Spinner } from "@/components/Spinner";
-import SvgDownloadCloud from "@/icons/download-cloud";
 import { useAuthType } from "@/lib/hooks";
-import SvgUser from "@/icons/user";
-
+import { SvgDownloadCloud, SvgUser, SvgUserPlus } from "@opal/icons";
 interface CountDisplayProps {
   label: string;
   value: number | null;

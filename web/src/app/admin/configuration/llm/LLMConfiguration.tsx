@@ -1,7 +1,6 @@
 "use client";
 
 import Modal from "@/refresh-components/Modal";
-import SvgSettings from "@/icons/settings";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useState } from "react";
 import useSWR from "swr";
@@ -16,6 +15,7 @@ import { LLMProviderUpdateForm } from "./LLMProviderUpdateForm";
 import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import { CustomLLMProviderUpdateForm } from "./CustomLLMProviderUpdateForm";
 import { ConfiguredLLMProviderDisplay } from "./ConfiguredLLMProviderDisplay";
+import { SvgSettings } from "@opal/icons";
 
 function LLMProviderUpdateModal({
   llmProviderDescriptor,

@@ -5,8 +5,7 @@ import { cn } from "@/lib/utils";
 import Button from "@/refresh-components/buttons/Button";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Text from "@/refresh-components/texts/Text";
-import SvgPlusCircle from "@/icons/plus-circle";
-
+import { SvgPlusCircle } from "@opal/icons";
 interface ActionbarProps {
   hasActions: boolean;
   searchQuery?: string;

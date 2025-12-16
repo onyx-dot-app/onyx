@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal";
 import { cn } from "@/lib/utils";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Link from "next/link";

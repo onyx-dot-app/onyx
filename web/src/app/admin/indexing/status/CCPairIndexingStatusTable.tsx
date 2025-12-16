@@ -33,8 +33,7 @@ import { ConnectorCredentialPairStatus } from "../../connector/[ccPairId]/types"
 import { PageSelector } from "@/components/PageSelector";
 import { ConnectorStaggeredSkeleton } from "./ConnectorRowSkeleton";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgSettings from "@/icons/settings";
-
+import { SvgSettings } from "@opal/icons";
 function isFederatedConnectorStatus(
   status: ConnectorIndexingStatusLite | FederatedConnectorStatus
 ) {

@@ -11,8 +11,7 @@ import { useAdminPersonas } from "./hooks";
 import { Persona } from "./interfaces";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import SvgOnyxOctagon from "@/icons/onyx-octagon";
-
+import { SvgOnyxOctagon } from "@opal/icons";
 function MainContent({
   personas,
   refreshPersonas,

@@ -17,11 +17,9 @@ import { useState } from "react";
 import { deleteSlackChannelConfig, isPersonaASlackBotPersona } from "./lib";
 import { Card } from "@/components/ui/card";
 import Button from "@/refresh-components/buttons/Button";
-import SvgSettings from "@/icons/settings";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgTrash from "@/icons/trash";
-
+import { SvgSettings, SvgTrash } from "@opal/icons";
 const numToDisplay = 50;
 
 export interface SlackChannelConfigsTableProps {

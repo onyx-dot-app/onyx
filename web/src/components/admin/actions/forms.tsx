@@ -3,8 +3,7 @@ import { Label } from "@/components/ui/label";
 import Button from "@/refresh-components/buttons/Button";
 import { Input } from "@/components/ui/input";
 import { useEffect } from "react";
-import SvgPlus from "@/icons/plus";
-
+import { SvgPlus } from "@opal/icons";
 interface PerUserAuthTemplateConfigProps {
   values: any;
   setFieldValue: (field: string, value: any) => void;

@@ -38,8 +38,6 @@ import { RendererComponent } from "@/app/chat/message/messageComponents/renderMe
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
-import SvgThumbsUp from "@/icons/thumbs-up";
-import SvgThumbsDown from "@/icons/thumbs-down";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import { parseLlmDescriptor } from "@/lib/llm/utils";
 import { LlmManager } from "@/lib/hooks";
@@ -49,6 +47,7 @@ import FeedbackModal, {
 } from "../../components/modal/FeedbackModal";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useFeedbackController } from "../../hooks/useFeedbackController";
+import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
 
 export interface AIMessageProps {
   rawPackets: Packet[];

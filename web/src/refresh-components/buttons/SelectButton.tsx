@@ -2,10 +2,9 @@
 
 import React, { useRef, useEffect, useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal";
 import Text from "@/refresh-components/texts/Text";
-import SvgChevronDownSmall from "@/icons/chevron-down-small";
-
+import { SvgChevronDownSmall } from "@opal/icons";
 const MARGIN = 5;
 
 const baseClassNames = (engaged?: boolean, transient?: boolean) =>

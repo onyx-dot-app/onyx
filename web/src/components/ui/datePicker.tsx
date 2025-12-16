@@ -10,8 +10,7 @@ import {
   SelectValue,
 } from "./select";
 import { useState } from "react";
-import SvgCalendar from "@/icons/calendar";
-
+import { SvgCalendar } from "@opal/icons";
 export interface DatePickerProps {
   selectedDate: Date | null;
   setSelectedDate: (date: Date | null) => void;

@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 

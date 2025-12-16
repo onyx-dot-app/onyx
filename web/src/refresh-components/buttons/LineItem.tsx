@@ -3,7 +3,7 @@
 import React from "react";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal";
 import Truncated from "@/refresh-components/texts/Truncated";
 import Link from "next/link";
 

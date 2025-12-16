@@ -9,8 +9,7 @@ import { SelectorFormField, TextFormField } from "@/components/Field";
 import { UserGroup } from "@/lib/types";
 import { Scope } from "./types";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
-import SvgSettings from "@/icons/settings";
-
+import { SvgSettings } from "@opal/icons";
 interface CreateRateLimitModalProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;

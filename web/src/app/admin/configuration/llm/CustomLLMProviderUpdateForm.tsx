@@ -23,11 +23,9 @@ import isEqual from "lodash/isEqual";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { ModelConfigurationField } from "./ModelConfigurationField";
-import SvgTrash from "@/icons/trash";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgX from "@/icons/x";
-
+import { SvgTrash, SvgX } from "@opal/icons";
 function customConfigProcessing(customConfigsList: [string, string][]) {
   const customConfig: { [key: string]: string } = {};
   customConfigsList.forEach(([key, value]) => {

@@ -1,7 +1,7 @@
 import { HoverPopup } from "@/components/HoverPopup";
-import SvgPlusCircle from "@/icons/plus-circle";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { useState } from "react";
+import { SvgPlusCircle } from "@opal/icons";
 
 export interface DocumentSelectorProps {
   isSelected: boolean;

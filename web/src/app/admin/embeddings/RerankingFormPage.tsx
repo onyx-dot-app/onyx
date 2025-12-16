@@ -21,11 +21,10 @@ import {
   MixedBreadIcon,
 } from "@/components/icons/icons";
 import Modal from "@/refresh-components/Modal";
-import SvgAlertTriangle from "@/icons/alert-triangle";
-import SvgKey from "@/icons/key";
 import Button from "@/refresh-components/buttons/Button";
 import { TextFormField } from "@/components/Field";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { SvgAlertTriangle, SvgKey } from "@opal/icons";
 
 interface RerankingDetailsFormProps {
   setRerankingDetails: Dispatch<SetStateAction<RerankingDetails>>;

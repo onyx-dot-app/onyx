@@ -29,8 +29,7 @@ import Text from "@/components/ui/text";
 import { TableHeader } from "@/components/ui/table";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgTrash from "@/icons/trash";
-
+import { SvgTrash } from "@opal/icons";
 const NUM_RESULTS_PER_PAGE = 10;
 
 type Displayable = JSX.Element | string;

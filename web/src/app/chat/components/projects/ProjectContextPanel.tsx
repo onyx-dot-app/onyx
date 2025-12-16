@@ -14,10 +14,6 @@ import AddInstructionModal from "@/components/modals/AddInstructionModal";
 import UserFilesModal from "@/components/modals/UserFilesModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import Text from "@/refresh-components/texts/Text";
-import SvgFolderOpen from "@/icons/folder-open";
-import SvgAddLines from "@/icons/add-lines";
-import SvgFiles from "@/icons/files";
-import SvgEdit from "@/icons/edit";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { FileCard } from "../input/FileCard";
 import { hasNonImageFiles } from "@/lib/utils";
@@ -25,6 +21,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import { FileCardSkeleton } from "@/app/chat/components/input/FileCard";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import { UserFileStatus } from "../../projects/projectsService";
+import { SvgAddLines, SvgEdit, SvgFiles, SvgFolderOpen } from "@opal/icons";
 export interface ProjectContextPanelProps {
   projectTokenCount?: number;
   availableContextTokens?: number;

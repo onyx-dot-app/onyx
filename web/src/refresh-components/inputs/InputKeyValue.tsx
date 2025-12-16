@@ -78,13 +78,12 @@ import React, {
 } from "react";
 import { cn } from "@/lib/utils";
 import InputTypeIn from "./InputTypeIn";
-import SvgMinusCircle from "@/icons/minus-circle";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Button from "@/refresh-components/buttons/Button";
-import SvgPlusCircle from "@/icons/plus-circle";
 import Text from "@/refresh-components/texts/Text";
 import { FieldContext } from "../form/FieldContext";
 import { FieldMessage } from "../messages/FieldMessage";
+import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 
 export type KeyValue = { key: string; value: string };
 

@@ -3,10 +3,9 @@
 import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
 import { cn, noProp } from "@/lib/utils";
-import SvgChevronDownSmall from "@/icons/chevron-down-small";
 import LineItem, { LineItemProps } from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal";
 import {
   iconClasses,
   textClasses,
@@ -14,6 +13,7 @@ import {
   wrapperClasses,
 } from "@/refresh-components/inputs/styles";
 import Truncated from "@/refresh-components/texts/Truncated";
+import { SvgChevronDownSmall } from "@opal/icons";
 
 // ============================================================================
 // Context

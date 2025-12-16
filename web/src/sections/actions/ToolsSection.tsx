@@ -5,9 +5,7 @@ import { cn } from "@/lib/utils";
 import Button from "@/refresh-components/buttons/Button";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgRefreshCw from "@/icons/refresh-cw";
-import SvgFold from "@/icons/fold";
-
+import { SvgFold, SvgRefreshCw } from "@opal/icons";
 interface ToolsSectionProps {
   isRefreshing?: boolean;
   onRefresh?: () => void;

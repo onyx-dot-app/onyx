@@ -1,9 +1,5 @@
-import SvgSearch from "@/icons/search";
-import SvgGlobe from "@/icons/globe";
-import SvgImage from "@/icons/image";
-import SvgCode from "@/icons/code";
-import SvgLink from "@/icons/link";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal";
+import { SvgCode, SvgGlobe, SvgImage, SvgLink, SvgSearch } from "@opal/icons";
 
 // Tool names as referenced by tool results / tool calls
 export const SEARCH_TOOL_NAME = "run_search";

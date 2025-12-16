@@ -5,8 +5,8 @@ import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import FadeDiv from "@/components/FadeDiv";
-import SvgEye from "@/icons/eye";
 import ToolItemSkeleton from "@/sections/actions/skeleton/ToolItemSkeleton";
+import { SvgEye } from "@opal/icons";
 
 interface ToolsListProps {
   // Loading state
