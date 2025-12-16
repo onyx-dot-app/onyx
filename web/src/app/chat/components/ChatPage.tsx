@@ -626,7 +626,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
         >
           {({ getRootProps }) => (
             <div
-              className="h-full w-full flex flex-col items-center outline-none"
+              className="h-full w-full p-4 flex flex-col items-center outline-none"
               {...getRootProps({ tabIndex: -1 })}
             >
               {/* ProjectUI */}
