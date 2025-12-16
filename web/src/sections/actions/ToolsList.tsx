@@ -59,7 +59,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
     <>
       <div
         className={cn(
-          "flex flex-col gap-1 items-start max-h-[480px] overflow-y-auto w-full",
+          "flex flex-col gap-1 items-start max-h-[30vh] overflow-y-auto w-full",
           className
         )}
       >
