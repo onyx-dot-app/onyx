@@ -3,6 +3,7 @@
 import React, {
   ForwardedRef,
   useCallback,
+  useEffect,
   useImperativeHandle,
   useMemo,
   useRef,
@@ -179,7 +180,17 @@ const ChatUI = React.forwardRef(
       enableAutoScroll: user?.preferences.auto_scroll,
     });
 
-    if (!liveAssistant) return null;
+    useEffect(() => {
+      // Wait for messages to render before scrolling
+      requestAnimationFrame(() => {
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop =
+            scrollContainerRef.current.scrollHeight;
+        }
+      });
+    }, [currentChatSessionId]);
+
+    if (!liveAssistant) return <div className="flex-1" />;
 
     return (
       <div className="flex flex-col flex-1 w-full relative overflow-hidden">
