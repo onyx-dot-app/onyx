@@ -1209,7 +1209,7 @@ def _upsert_db_tools(
             db_session=db,
             passthrough_auth=False,
             mcp_server_id=mcp_server_id,
-            enabled=False,
+            enabled=True,
         )
         new_tool.display_name = display_name
         new_tool.mcp_input_schema = input_schema
