@@ -30,7 +30,7 @@ class GooglePSEClient(WebSearchProvider):
     ) -> None:
         self._api_key = api_key
         self._search_engine_id = search_engine_id
-        self._num_results = num_results
+        self._num_results = min(num_results, 10)  # Google API max is 10
         self._timeout_seconds = timeout_seconds
 
     @retry_builder(tries=3, delay=1, backoff=2)
