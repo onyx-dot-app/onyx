@@ -37,6 +37,28 @@ var ignoreDirectories = map[string]struct{}{
 	"__pycache__": {},
 }
 
+// modulePatterns holds pre-compiled regex patterns for a module.
+type modulePatterns struct {
+	moduleName string
+	// Pattern 1: import module
+	importPattern *regexp.Regexp
+	// Pattern 2: from module import ...
+	fromPattern *regexp.Regexp
+	// Pattern 3: from ... import module
+	fromImportPattern *regexp.Regexp
+}
+
+// compileModulePatterns pre-compiles regex patterns for a module.
+func compileModulePatterns(module string) modulePatterns {
+	escaped := regexp.QuoteMeta(module)
+	return modulePatterns{
+		moduleName:        module,
+		importPattern:     regexp.MustCompile(`^import\s+` + escaped + `(\s|$|\.)`),
+		fromPattern:       regexp.MustCompile(`^from\s+` + escaped + `(\s|\.|$)`),
+		fromImportPattern: regexp.MustCompile(`^from\s+[\w.]+\s+import\s+.*\b` + escaped + `\b`),
+	}
+}
+
 // DefaultLazyImportModules returns the default map of modules that should be lazily imported.
 func DefaultLazyImportModules() map[string]LazyImportSettings {
 	return map[string]LazyImportSettings{
@@ -80,7 +102,7 @@ type FileViolation struct {
 }
 
 // findEagerImports finds eager imports of protected modules in a given file.
-func findEagerImports(filePath string, protectedModules map[string]struct{}) EagerImportResult {
+func findEagerImports(filePath string, patterns []modulePatterns) EagerImportResult {
 	result := EagerImportResult{
 		ViolationLines:  []ViolationLine{},
 		ViolatedModules: make(map[string]struct{}),
@@ -91,7 +113,11 @@ func findEagerImports(filePath string, protectedModules map[string]struct{}) Eag
 		log.Errorf("Error reading %s: %v", filePath, err)
 		return result
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Debugf("Error closing %s: %v", filePath, err)
+		}
+	}()
 
 	scanner := bufio.NewScanner(file)
 	lineNum := 0
@@ -112,40 +138,21 @@ func findEagerImports(filePath string, protectedModules map[string]struct{}) Eag
 			continue
 		}
 
-		// Check for eager imports of protected modules
-		for module := range protectedModules {
-			escapedModule := regexp.QuoteMeta(module)
+		// Quick check: skip lines that don't start with import or from
+		if !strings.HasPrefix(stripped, "import ") && !strings.HasPrefix(stripped, "from ") {
+			continue
+		}
 
-			// Pattern 1: import module
-			pattern1 := regexp.MustCompile(`^import\s+` + escapedModule + `(\s|$|\.)`)
-			if pattern1.MatchString(stripped) {
+		// Check for eager imports of protected modules using pre-compiled patterns
+		for _, mp := range patterns {
+			if mp.importPattern.MatchString(stripped) ||
+				mp.fromPattern.MatchString(stripped) ||
+				mp.fromImportPattern.MatchString(stripped) {
 				result.ViolationLines = append(result.ViolationLines, ViolationLine{
 					LineNum: lineNum,
 					Content: line,
 				})
-				result.ViolatedModules[module] = struct{}{}
-				continue
-			}
-
-			// Pattern 2: from module import ...
-			pattern2 := regexp.MustCompile(`^from\s+` + escapedModule + `(\s|\.|$)`)
-			if pattern2.MatchString(stripped) {
-				result.ViolationLines = append(result.ViolationLines, ViolationLine{
-					LineNum: lineNum,
-					Content: line,
-				})
-				result.ViolatedModules[module] = struct{}{}
-				continue
-			}
-
-			// Pattern 3: from ... import module (less common but possible)
-			pattern3 := regexp.MustCompile(`^from\s+[\w.]+\s+import\s+.*\b` + escapedModule + `\b`)
-			if pattern3.MatchString(stripped) {
-				result.ViolationLines = append(result.ViolationLines, ViolationLine{
-					LineNum: lineNum,
-					Content: line,
-				})
-				result.ViolatedModules[module] = struct{}{}
+				result.ViolatedModules[mp.moduleName] = struct{}{}
 			}
 		}
 	}
@@ -271,6 +278,12 @@ func CheckLazyImports(modulesToLazyImport map[string]LazyImportSettings, provide
 
 	log.Infof("Checking for direct imports of lazy modules: %s", formatModuleList(modulesToLazyImport))
 
+	// Pre-compile all regex patterns once
+	allPatterns := make(map[string]modulePatterns, len(modulesToLazyImport))
+	for moduleName := range modulesToLazyImport {
+		allPatterns[moduleName] = compileModulePatterns(moduleName)
+	}
+
 	// Determine Python files to check
 	var targetFiles []string
 	if len(providedPaths) > 0 {
@@ -295,18 +308,18 @@ func CheckLazyImports(modulesToLazyImport map[string]LazyImportSettings, provide
 	// Check each Python file for each module with its specific ignore settings
 	for _, filePath := range targetFiles {
 		// Determine which modules should be checked for this file
-		modulesToCheck := make(map[string]struct{})
+		var patternsToCheck []modulePatterns
 		for moduleName, settings := range modulesToLazyImport {
 			if shouldCheckFileForModule(filePath, backendDir, settings) {
-				modulesToCheck[moduleName] = struct{}{}
+				patternsToCheck = append(patternsToCheck, allPatterns[moduleName])
 			}
 		}
 
-		if len(modulesToCheck) == 0 {
+		if len(patternsToCheck) == 0 {
 			continue
 		}
 
-		result := findEagerImports(filePath, modulesToCheck)
+		result := findEagerImports(filePath, patternsToCheck)
 
 		if len(result.ViolationLines) > 0 {
 			relPath, err := filepath.Rel(backendDir, filePath)
