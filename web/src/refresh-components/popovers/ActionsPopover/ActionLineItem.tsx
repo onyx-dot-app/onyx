@@ -53,9 +53,7 @@ export default function ActionLineItem({
   }
 
   const isSearchToolWithNoConnectors =
-    !isProjectContext &&
-    tool?.in_code_tool_id === SEARCH_TOOL_ID &&
-    hasNoConnectors;
+    tool?.in_code_tool_id === SEARCH_TOOL_ID && hasNoConnectors;
 
   return (
     <SimpleTooltip tooltip={tool?.description} className="max-w-[30rem]">
@@ -104,28 +102,24 @@ export default function ActionLineItem({
                 />
               )}
 
-              {tool &&
-                tool.in_code_tool_id === SEARCH_TOOL_ID &&
-                !isProjectContext && (
-                  <IconButton
-                    icon={
-                      isSearchToolWithNoConnectors
-                        ? SvgSettings
-                        : SvgChevronRight
-                    }
-                    onClick={noProp(() => {
-                      if (isSearchToolWithNoConnectors)
-                        window.location.href = "/admin/add-connector";
-                      else onSourceManagementOpen?.();
-                    })}
-                    internal
-                    className={cn(
-                      isSearchToolWithNoConnectors &&
-                        "invisible grouop-hover/LineItem:visible"
-                    )}
-                    tooltip={isSearchToolWithNoConnectors ? "Settings" : "More"}
-                  />
-                )}
+              {tool && tool.in_code_tool_id === SEARCH_TOOL_ID && (
+                <IconButton
+                  icon={
+                    isSearchToolWithNoConnectors ? SvgSettings : SvgChevronRight
+                  }
+                  onClick={noProp(() => {
+                    if (isSearchToolWithNoConnectors)
+                      window.location.href = "/admin/add-connector";
+                    else onSourceManagementOpen?.();
+                  })}
+                  internal
+                  className={cn(
+                    isSearchToolWithNoConnectors &&
+                      "invisible group-hover/LineItem:visible"
+                  )}
+                  tooltip={isSearchToolWithNoConnectors ? "Settings" : "More"}
+                />
+              )}
             </div>
           }
         >
