@@ -387,10 +387,44 @@ class ConfluenceConnector(
         attachment_docs: list[Document] = []
         page_url = ""
 
-        for attachment in self.confluence_client.paginated_cql_retrieval(
-            cql=attachment_query,
-            expand=",".join(_ATTACHMENT_EXPANSION_FIELDS),
-        ):
+        try:
+            attachment_iterator = self.confluence_client.paginated_cql_retrieval(
+                cql=attachment_query,
+                expand=",".join(_ATTACHMENT_EXPANSION_FIELDS),
+            )
+        except HTTPError as e:
+            # If we get a 403 after all retries, the user likely doesn't have permission
+            # to access attachments on this page. Log and skip rather than failing the whole job.
+            if e.response and e.response.status_code == 403:
+                page_title = page.get("title", "unknown")
+                page_id = page.get("id", "unknown")
+                logger.warning(
+                    f"Permission denied (403) when fetching attachments for page '{page_title}' "
+                    f"(ID: {page_id}). The user may not have permission to query attachments on this page. "
+                    "Skipping attachments for this page."
+                )
+                # Build the page URL for the failure record
+                try:
+                    page_url = build_confluence_document_id(
+                        self.wiki_base, page["_links"]["webui"], self.is_cloud
+                    )
+                except Exception:
+                    page_url = f"page_id:{page_id}"
+
+                return [], [
+                    ConnectorFailure(
+                        failed_document=DocumentFailure(
+                            document_id=page_id,
+                            document_link=page_url,
+                        ),
+                        failure_message=f"Permission denied (403) when fetching attachments for page '{page_title}'",
+                        exception=e,
+                    )
+                ]
+            else:
+                raise
+
+        for attachment in attachment_iterator:
             media_type: str = attachment.get("metadata", {}).get("mediaType", "")
 
             # TODO(rkuo): this check is partially redundant with validate_attachment_filetype
