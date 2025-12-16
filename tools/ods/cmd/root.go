@@ -43,6 +43,7 @@ func NewRootCommand() *cobra.Command {
 	// Add subcommands
 	cmd.AddCommand(NewCherryPickCommand())
 	cmd.AddCommand(NewDBCommand())
+	cmd.AddCommand(NewCheckLazyImportsCommand())
 
 	return cmd
 }

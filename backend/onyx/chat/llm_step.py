@@ -15,6 +15,7 @@ from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import ChatFileType
 from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
+from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.models import AssistantMessage
 from onyx.llm.models import ChatCompletionMessage
@@ -332,6 +333,7 @@ def run_llm_step(
     citation_processor: DynamicCitationProcessor,
     state_container: ChatStateContainer,
     final_documents: list[SearchDoc] | None = None,
+    user_identity: LLMUserIdentity | None = None,
 ) -> Generator[Packet, None, tuple[LlmStepResult, int]]:
     # The second return value is for the turn index because reasoning counts on the frontend as a turn
     # TODO this is maybe ok but does not align well with the backend logic too well
@@ -365,6 +367,7 @@ def run_llm_step(
             tool_choice=tool_choice,
             structured_response_format=None,  # TODO
             # reasoning_effort=ReasoningEffort.OFF,  # Can set this for dev/testing.
+            user_identity=user_identity,
         ):
             if packet.usage:
                 usage = packet.usage

@@ -175,14 +175,15 @@ googleapis-common-protos==1.72.0
     #   grpcio-status
 grpc-google-iam-v1==0.14.3
     # via google-cloud-resource-manager
-grpcio==1.76.0
+grpcio==1.67.1
     # via
     #   google-api-core
     #   google-cloud-resource-manager
     #   googleapis-common-protos
     #   grpc-google-iam-v1
     #   grpcio-status
-grpcio-status==1.76.0
+    #   litellm
+grpcio-status==1.67.1
     # via google-api-core
 h11==0.16.0
     # via
@@ -237,7 +238,7 @@ jsonschema-specifications==2025.9.1
     # via jsonschema
 kombu==5.5.4
     # via celery
-litellm==1.79.0
+litellm==1.80.10
     # via onyx
 markupsafe==3.0.3
     # via jinja2
@@ -301,7 +302,7 @@ nvidia-nvjitlink-cu12==12.4.127 ; platform_machine == 'x86_64' and sys_platform 
     #   torch
 nvidia-nvtx-cu12==12.4.127 ; platform_machine == 'x86_64' and sys_platform == 'linux'
     # via torch
-openai==2.6.1
+openai==2.8.1
     # via
     #   litellm
     #   onyx
@@ -341,7 +342,7 @@ proto-plus==1.26.1
     #   google-api-core
     #   google-cloud-aiplatform
     #   google-cloud-resource-manager
-protobuf==6.33.1
+protobuf==5.29.5
     # via
     #   google-api-core
     #   google-cloud-aiplatform
@@ -504,7 +505,6 @@ typing-extensions==4.15.0
     #   fastapi
     #   google-cloud-aiplatform
     #   google-genai
-    #   grpcio
     #   huggingface-hub
     #   openai
     #   pydantic

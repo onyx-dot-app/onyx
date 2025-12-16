@@ -14,6 +14,11 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+class LLMUserIdentity(BaseModel):
+    user_id: str | None = None
+    session_id: str | None = None
+
+
 class LLMConfig(BaseModel):
     model_provider: str
     model_name: str
@@ -44,6 +49,7 @@ class LLM(abc.ABC):
         timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort | None = None,
+        user_identity: LLMUserIdentity | None = None,
     ) -> "ModelResponse":
         raise NotImplementedError
 
@@ -56,5 +62,6 @@ class LLM(abc.ABC):
         timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort | None = None,
+        user_identity: LLMUserIdentity | None = None,
     ) -> Iterator[ModelResponseStream]:
         raise NotImplementedError

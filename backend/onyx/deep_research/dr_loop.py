@@ -13,6 +13,7 @@ from onyx.chat.models import LlmStepResult
 from onyx.configs.constants import MessageType
 from onyx.deep_research.dr_mock_tools import get_clarification_tool_definitions
 from onyx.llm.interfaces import LLM
+from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.models import ToolChoiceOptions
 from onyx.prompts.deep_research.orchestration_layer import CLARIFICATION_PROMPT
 from onyx.prompts.prompt_utils import get_current_llm_day_time
@@ -36,6 +37,7 @@ def run_deep_research_llm_loop(
     token_counter: Callable[[str], int],
     db_session: Session,
     skip_clarification: bool = False,
+    user_identity: LLMUserIdentity | None = None,
 ) -> None:
     # Here for lazy load LiteLLM
     from onyx.llm.litellm_singleton.config import initialize_litellm
@@ -83,6 +85,7 @@ def run_deep_research_llm_loop(
             citation_processor=DynamicCitationProcessor(),
             state_container=state_container,
             final_documents=None,
+            user_identity=user_identity,
         )
 
         # Consume the generator, emitting packets and capturing the final result
