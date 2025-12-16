@@ -144,7 +144,6 @@ const LineItem = React.forwardRef<HTMLButtonElement, LineItemProps>(
           )}
           <Truncated
             mainUiMuted
-            text04
             className={cn("text-left w-full", textClassNames[variant])}
           >
             {children}

@@ -444,7 +444,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
             supports_image_input=None,
         ),
         ModelConfigurationUpsertRequest(
-            name="gpt-3.5-turbo",
+            name="gpt-4-turbo",
             is_visible=False,
             max_input_tokens=None,
             supports_image_input=None,
@@ -495,7 +495,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
             supports_image_input=None,
         ),
         ModelConfigurationUpsertRequest(
-            name="gpt-3.5-turbo",
+            name="gpt-4-turbo",
             is_visible=True,  # Now visible
             max_input_tokens=None,
             supports_image_input=None,
@@ -544,7 +544,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
             supports_image_input=None,
         ),
         ModelConfigurationUpsertRequest(
-            name="gpt-3.5-turbo",
+            name="gpt-4-turbo",
             is_visible=False,
             max_input_tokens=None,
             supports_image_input=None,

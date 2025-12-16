@@ -10,13 +10,13 @@ This document outlines the coding standards and best practices for the `web` dir
 
 ```typescript
 // ✅ Good
-import { Button } from '@/components/ui/button'
-import { useAuth } from '@/hooks/useAuth'
-import { Text } from '@/refresh-components/texts/Text'
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/useAuth";
+import { Text } from "@/refresh-components/texts/Text";
 
 // ❌ Bad
-import { Button } from '../../../components/ui/button'
-import { useAuth } from './hooks/useAuth'
+import { Button } from "../../../components/ui/button";
+import { useAuth } from "./hooks/useAuth";
 ```
 
 ## 2. React Component Functions
@@ -56,14 +56,14 @@ function UserCard({ user, showActions = false, onEdit }: UserCardProps) {
 }
 
 // ❌ Bad
-function UserCard({ 
-  user, 
-  showActions = false, 
-  onEdit 
-}: { 
+function UserCard({
+  user,
+  showActions = false,
+  onEdit
+}: {
   user: User
   showActions?: boolean
-  onEdit?: (userId: string) => void 
+  onEdit?: (userId: string) => void
 }) {
   return <div>User Card</div>
 }
@@ -166,12 +166,12 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
 
 ```typescript
 // ✅ Good
-import SvgX from '@/icons/x'
-import SvgMoreHorizontal from '@/icons/more-horizontal'
+import SvgX from "@/icons/x";
+import SvgMoreHorizontal from "@/icons/more-horizontal";
 
 // ❌ Bad
-import { User } from 'lucide-react'
-import { FiSearch } from 'react-icons/fi'
+import { User } from "lucide-react";
+import { FiSearch } from "react-icons/fi";
 ```
 
 **Missing Icons**: If an icon is needed but doesn't exist in the `web/src/icons` directory, import it from Figma using the Figma MCP tool and add it to the icons directory.

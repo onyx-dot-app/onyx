@@ -1,18 +1,17 @@
 "use client";
 
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
-import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import SvgServer from "@/icons/server";
-import ActionCardHeader from "@/sections/actions/ActionCardHeader";
+import ActionCard from "@/sections/actions/ActionCard";
 import Actions from "@/sections/actions/Actions";
-import ToolsSection from "@/sections/actions/ToolsSection";
+import ToolsList from "@/sections/actions/ToolsList";
+import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
-import { deleteCustomTool } from "@/lib/tools/openApiService";
-import { MCPActionStatus, MethodSpec } from "@/lib/tools/types";
-import { cn } from "@/lib/utils";
+import { deleteCustomTool, updateCustomTool } from "@/lib/tools/openApiService";
+import { ActionStatus, MethodSpec } from "@/lib/tools/types";
 import ToolItem from "@/sections/actions/ToolItem";
-import Text from "@/refresh-components/texts/Text";
 import { extractMethodSpecsFromDefinition } from "@/lib/tools/openApiService";
 import { updateToolStatus } from "@/lib/tools/mcpService";
 
@@ -20,6 +19,8 @@ export interface OpenApiActionCardProps {
   tool: ToolSnapshot;
   onAuthenticate: (tool: ToolSnapshot) => void;
   onManage?: (tool: ToolSnapshot) => void;
+  onDelete?: (tool: ToolSnapshot) => Promise<void> | void;
+  onRename?: (toolId: number, newName: string) => Promise<void>;
   mutateOpenApiTools: () => Promise<unknown> | void;
   setPopup: (popup: PopupSpec | null) => void;
   onOpenDisconnectModal?: (tool: ToolSnapshot) => void;
@@ -29,6 +30,8 @@ export default function OpenApiActionCard({
   tool,
   onAuthenticate,
   onManage,
+  onDelete,
+  onRename,
   mutateOpenApiTools,
   setPopup,
   onOpenDisconnectModal,
@@ -36,6 +39,7 @@ export default function OpenApiActionCard({
   const [isToolsExpanded, setIsToolsExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const deleteModal = useCreateModal();
 
   const methodSpecs = useMemo<MethodSpec[]>(() => {
     try {
@@ -64,18 +68,13 @@ export default function OpenApiActionCard({
     Boolean(tool.passthrough_auth) ||
     hasCustomHeaders;
   const isDisconnected = !tool.enabled;
-  const status = isDisconnected
-    ? MCPActionStatus.DISCONNECTED
-    : hasAuthConfigured
-      ? MCPActionStatus.CONNECTED
-      : MCPActionStatus.PENDING;
 
-  const backgroundColor =
-    status === MCPActionStatus.CONNECTED
-      ? "bg-background-tint-00"
-      : status === MCPActionStatus.DISCONNECTED
-        ? "bg-background-neutral-02"
-        : "";
+  // Compute generic ActionStatus for the OpenAPI tool
+  const status = isDisconnected
+    ? ActionStatus.DISCONNECTED
+    : hasAuthConfigured
+      ? ActionStatus.CONNECTED
+      : ActionStatus.PENDING;
 
   const handleConnectionUpdate = useCallback(
     async (shouldEnable: boolean) => {
@@ -96,89 +95,116 @@ export default function OpenApiActionCard({
     [updatingStatus, mutateOpenApiTools, tool.enabled, tool.id]
   );
 
-  const handleToggleTools = () => {
+  const handleToggleTools = useCallback(() => {
     setIsToolsExpanded((prev) => !prev);
     if (isToolsExpanded) {
       setSearchQuery("");
     }
-  };
+  }, [isToolsExpanded]);
+
+  useEffect(() => {
+    if (isDisconnected) {
+      setIsToolsExpanded(false);
+    }
+  }, [isDisconnected]);
 
   const handleFold = () => {
     setIsToolsExpanded(false);
     setSearchQuery("");
   };
 
+  // Build the actions component
+  const actionsComponent = useMemo(
+    () => (
+      <Actions
+        status={status}
+        serverName={tool.name}
+        toolCount={methodSpecs.length}
+        isToolsExpanded={isToolsExpanded}
+        onToggleTools={methodSpecs.length ? handleToggleTools : undefined}
+        onDisconnect={() => onOpenDisconnectModal?.(tool)}
+        onManage={onManage ? () => onManage(tool) : undefined}
+        onAuthenticate={() => {
+          onAuthenticate(tool);
+        }}
+        onReconnect={() => handleConnectionUpdate(true)}
+        onDelete={onDelete ? () => deleteModal.toggle(true) : undefined}
+      />
+    ),
+    [
+      deleteModal,
+      handleConnectionUpdate,
+      handleToggleTools,
+      isToolsExpanded,
+      methodSpecs.length,
+      onAuthenticate,
+      onDelete,
+      onManage,
+      onOpenDisconnectModal,
+      status,
+      tool,
+    ]
+  );
+
+  const handleRename = async (newName: string) => {
+    if (onRename) {
+      await onRename(tool.id, newName);
+    }
+  };
+
   return (
-    <div
-      className={cn(
-        "w-full border border-border-01 rounded-16",
-        backgroundColor
+    <>
+      <ActionCard
+        title={tool.name}
+        description={tool.description}
+        icon={SvgServer}
+        status={status}
+        actions={actionsComponent}
+        onRename={handleRename}
+        isExpanded={isToolsExpanded}
+        onExpandedChange={setIsToolsExpanded}
+        enableSearch={true}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        onFold={handleFold}
+        ariaLabel={`${tool.name} OpenAPI action card`}
+      >
+        <ToolsList
+          isEmpty={filteredTools.length === 0}
+          searchQuery={searchQuery}
+          emptyMessage="No actions defined for this OpenAPI schema"
+          emptySearchMessage="No actions match your search"
+          className="gap-2"
+        >
+          {filteredTools.map((method) => (
+            <ToolItem
+              key={`${tool.id}-${method.method}-${method.path}-${method.name}`}
+              name={method.name}
+              description={method.summary || "No summary provided"}
+              variant="openapi"
+              openApiMetadata={{
+                method: method.method,
+                path: method.path,
+              }}
+            />
+          ))}
+        </ToolsList>
+      </ActionCard>
+
+      {deleteModal.isOpen && onDelete && (
+        <ConfirmEntityModal
+          danger
+          actionButtonText="Delete"
+          entityType="OpenAPI action"
+          entityName={tool.name}
+          additionalDetails="This action will permanently delete the OpenAPI action and its configuration."
+          onClose={() => deleteModal.toggle(false)}
+          onSubmit={async () => {
+            await onDelete(tool);
+            deleteModal.toggle(false);
+          }}
+        />
       )}
-    >
-      <div className="flex flex-col w-full">
-        <div className="flex items-start justify-between pb-2 pl-3 pt-3 pr-2 w-full">
-          <ActionCardHeader
-            title={tool.name}
-            description={tool.description}
-            icon={
-              <SvgServer
-                className="h-5 w-5 stroke-text-04"
-                aria-hidden="true"
-              />
-            }
-            status={status}
-          />
-
-          <Actions
-            status={status}
-            serverName={tool.name}
-            toolCount={methodSpecs.length}
-            isToolsExpanded={isToolsExpanded}
-            onToggleTools={methodSpecs.length ? handleToggleTools : undefined}
-            onDisconnect={() => onOpenDisconnectModal?.(tool)}
-            onManage={onManage ? () => onManage(tool) : undefined}
-            onAuthenticate={() => {
-              onAuthenticate(tool);
-            }}
-            onReconnect={() => handleConnectionUpdate(true)}
-          />
-        </div>
-
-        {isToolsExpanded && (
-          <ToolsSection
-            onFold={handleFold}
-            searchQuery={searchQuery}
-            onSearchQueryChange={setSearchQuery}
-          />
-        )}
-      </div>
-
-      {isToolsExpanded && (
-        <div className="animate-in fade-in slide-in-from-top-2 duration-300 p-2 border-t border-border-01 flex flex-col gap-2">
-          {filteredTools.length > 0 ? (
-            filteredTools.map((method) => (
-              <ToolItem
-                key={`${tool.id}-${method.method}-${method.path}-${method.name}`}
-                name={method.name}
-                description={method.summary || "No summary provided"}
-                variant="openapi"
-                openApiMetadata={{
-                  method: method.method,
-                  path: method.path,
-                }}
-              />
-            ))
-          ) : (
-            <div className="flex items-center justify-center w-full py-6">
-              <Text text03 secondaryBody>
-                {searchQuery
-                  ? "No actions match your search"
-                  : "No actions defined for this OpenAPI schema"}
-              </Text>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+    </>
   );
 }

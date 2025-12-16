@@ -31,6 +31,9 @@ func NewRootCommand() *cobra.Command {
 			} else {
 				log.SetLevel(log.InfoLevel)
 			}
+			log.SetFormatter(&log.TextFormatter{
+				DisableTimestamp: true,
+			})
 		},
 		Version: fmt.Sprintf("%s\ncommit %s", Version, Commit),
 	}
@@ -38,7 +41,10 @@ func NewRootCommand() *cobra.Command {
 	cmd.PersistentFlags().BoolVar(&opts.Debug, "debug", false, "run in debug mode")
 
 	// Add subcommands
+	cmd.AddCommand(NewCheckLazyImportsCommand())
 	cmd.AddCommand(NewCherryPickCommand())
+	cmd.AddCommand(NewDBCommand())
+	cmd.AddCommand(NewOpenAPICommand())
 
 	return cmd
 }

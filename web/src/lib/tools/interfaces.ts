@@ -44,6 +44,11 @@ export interface ToolSnapshot {
 
   // Whether the tool is enabled
   enabled: boolean;
+
+  // Visibility settings from backend TOOL_VISIBILITY_CONFIG
+  chat_selectable: boolean;
+  agent_creation_selectable: boolean;
+  default_enabled: boolean;
 }
 
 export interface MCPServer {

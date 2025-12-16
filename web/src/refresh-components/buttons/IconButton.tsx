@@ -238,6 +238,9 @@ export interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonEl
   tertiary?: boolean;
   internal?: boolean;
 
+  // Button size
+  large?: boolean;
+
   // Button states
   transient?: boolean;
   disabled?: boolean;

@@ -284,6 +284,7 @@ export function LLMProviderUpdateForm({
         const {
           selected_model_names: visibleModels,
           model_configurations: modelConfigurations,
+          fetched_model_configurations,
           target_uri,
           _modelListUpdated,
           ...rest
@@ -311,20 +312,33 @@ export function LLMProviderUpdateForm({
         }
 
         // Create the final payload with proper typing
+        // Filter out models that are not default, fast default, or visible
+        const filteredModelConfigurations = getCurrentModelConfigurations(
+          values
+        )
+          .map(
+            (modelConfiguration): ModelConfiguration => ({
+              name: modelConfiguration.name,
+              is_visible: visibleModels.includes(modelConfiguration.name),
+              max_input_tokens: modelConfiguration.max_input_tokens ?? null,
+              supports_image_input: modelConfiguration.supports_image_input,
+              display_name: modelConfiguration.display_name,
+            })
+          )
+          .filter(
+            (modelConfiguration) =>
+              modelConfiguration.name === rest.default_model_name ||
+              modelConfiguration.name === rest.fast_default_model_name ||
+              modelConfiguration.is_visible
+          );
+
         const finalValues = {
           ...rest,
           api_base: finalApiBase,
           api_version: finalApiVersion,
           deployment_name: finalDeploymentName,
           api_key_changed: values.api_key !== initialValues.api_key,
-          model_configurations: getCurrentModelConfigurations(values).map(
-            (modelConfiguration): ModelConfiguration => ({
-              name: modelConfiguration.name,
-              is_visible: visibleModels.includes(modelConfiguration.name),
-              max_input_tokens: modelConfiguration.max_input_tokens ?? null,
-              supports_image_input: modelConfiguration.supports_image_input,
-            })
-          ),
+          model_configurations: filteredModelConfigurations,
         };
 
         // test the configuration

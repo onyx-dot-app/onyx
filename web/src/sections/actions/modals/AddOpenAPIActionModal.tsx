@@ -204,7 +204,7 @@ export default function AddOpenAPIActionModal({
   }, [existingTool, hasOAuthConfig, hasCustomHeaders, hasPassthroughAuth]);
 
   const showAuthenticationStatus = Boolean(
-    isEditMode && existingTool && hasAuthenticationConfigured
+    isEditMode && existingTool?.enabled && hasAuthenticationConfigured
   );
 
   const handleEditAuthenticationClick = useCallback(() => {

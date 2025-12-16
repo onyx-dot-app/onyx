@@ -24,14 +24,14 @@ export default function OverflowDiv({
         <div className={cn("flex-1 flex flex-col", className)} {...rest} />
         <div style={{ minHeight }} />
       </div>
-      <div
-        className="absolute bottom-0 left-0 right-0 h-[3rem] z-[20] pointer-events-none"
-        style={{
-          background: disableMask
-            ? undefined
-            : `linear-gradient(to bottom, transparent, ${backgroundColor})`,
-        }}
-      />
+      {!disableMask && (
+        <div
+          className="absolute bottom-0 left-0 right-0 h-[1rem] z-[20] pointer-events-none"
+          style={{
+            background: `linear-gradient(to bottom, transparent, ${backgroundColor})`,
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -45,15 +45,10 @@ interface UseChatSessionControllerProps {
   chatSessionIdRef: React.RefObject<string | null>;
   loadedIdSessionRef: React.RefObject<string | null>;
   textAreaRef: React.RefObject<HTMLTextAreaElement | null>;
-  scrollInitialized: React.RefObject<boolean>;
   isInitialLoad: React.RefObject<boolean>;
   submitOnLoadPerformed: React.RefObject<boolean>;
 
-  // State
-  hasPerformedInitialScroll: boolean;
-
   // Actions
-  clientScrollToBottom: (fast?: boolean) => void;
   refreshChatSessions: () => void;
   onSubmit: (params: {
     message: string;
@@ -74,11 +69,8 @@ export function useChatSessionController({
   chatSessionIdRef,
   loadedIdSessionRef,
   textAreaRef,
-  scrollInitialized,
   isInitialLoad,
   submitOnLoadPerformed,
-  hasPerformedInitialScroll,
-  clientScrollToBottom,
   refreshChatSessions,
   onSubmit,
 }: UseChatSessionControllerProps) {
@@ -100,9 +92,6 @@ export function useChatSessionController({
   );
   const initializeSession = useChatSessionStore(
     (state) => state.initializeSession
-  );
-  const updateHasPerformedInitialScroll = useChatSessionStore(
-    (state) => state.updateHasPerformedInitialScroll
   );
   const updateCurrentChatSessionSharedStatus = useChatSessionStore(
     (state) => state.updateCurrentChatSessionSharedStatus
@@ -144,9 +133,6 @@ export function useChatSessionController({
       // If we're creating a brand new chat, then don't need to scroll
       if (priorChatSessionId !== null) {
         setSelectedDocuments([]);
-        if (existingChatSessionId) {
-          updateHasPerformedInitialScroll(existingChatSessionId, false);
-        }
 
         // Clear forced tool ids if and only if we're switching to a new chat session
         setForcedToolIds([]);
@@ -220,31 +206,6 @@ export function useChatSessionController({
 
         updateSessionAndMessageTree(chatSession.chat_session_id, newMessageMap);
         chatSessionIdRef.current = chatSession.chat_session_id;
-      }
-
-      // Go to bottom. If initial load, then do a scroll,
-      // otherwise just appear at the bottom
-      scrollInitialized.current = false;
-
-      if (!hasPerformedInitialScroll) {
-        if (isInitialLoad.current) {
-          if (chatSession.chat_session_id) {
-            updateHasPerformedInitialScroll(chatSession.chat_session_id, true);
-          }
-          isInitialLoad.current = false;
-        }
-        clientScrollToBottom();
-
-        setTimeout(() => {
-          if (chatSession.chat_session_id) {
-            updateHasPerformedInitialScroll(chatSession.chat_session_id, true);
-          }
-        }, 100);
-      } else if (isChatSessionSwitch) {
-        if (chatSession.chat_session_id) {
-          updateHasPerformedInitialScroll(chatSession.chat_session_id, true);
-        }
-        clientScrollToBottom(true);
       }
 
       setIsFetchingChatMessages(chatSession.chat_session_id, false);

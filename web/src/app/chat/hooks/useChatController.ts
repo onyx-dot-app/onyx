@@ -58,19 +58,14 @@ import {
   useRouter,
   useSearchParams,
 } from "next/navigation";
-import { useChatSessions } from "@/lib/hooks/useChatSessions";
+import useChatSessions from "@/hooks/useChatSessions";
 import {
   useChatSessionStore,
   useCurrentMessageTree,
   useCurrentChatState,
   useCurrentMessageHistory,
 } from "../stores/useChatSessionStore";
-import {
-  Packet,
-  CitationDelta,
-  MessageStart,
-  PacketType,
-} from "../services/streamingModels";
+import { Packet, MessageStart, PacketType } from "../services/streamingModels";
 import { useAssistantPreferences } from "@/app/chat/hooks/useAssistantPreferences";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile, useProjectsContext } from "../projects/ProjectsContext";
@@ -112,10 +107,6 @@ interface UseChatControllerProps {
   selectedDocuments: OnyxDocument[];
   searchParams: ReadonlyURLSearchParams;
   setPopup: (popup: PopupSpec) => void;
-
-  // scroll/focus related stuff
-  clientScrollToBottom: (fast?: boolean) => void;
-
   resetInputBar: () => void;
   setSelectedAssistantFromId: (assistantId: number | null) => void;
 }
@@ -127,10 +118,6 @@ export function useChatController({
   liveAssistant,
   existingChatSessionId,
   selectedDocuments,
-
-  // scroll/focus related stuff
-  clientScrollToBottom,
-
   setPopup,
   resetInputBar,
   setSelectedAssistantFromId,
@@ -492,8 +479,6 @@ export function useChatController({
         return;
       }
 
-      clientScrollToBottom();
-
       let currChatSessionId: string;
       const isNewSession = existingChatSessionId === null;
 
@@ -807,20 +792,6 @@ export function useChatController({
                   ...(citations || {}),
                   [citationInfo.citation_number]: citationInfo.document_id,
                 };
-              } else if (packetObj.type === "citation_delta") {
-                // Batched citation packet (for backwards compatibility)
-                const citationDelta = packetObj as CitationDelta;
-                if (citationDelta.citations) {
-                  citations = {
-                    ...(citations || {}),
-                    ...Object.fromEntries(
-                      citationDelta.citations.map((c) => [
-                        c.citation_num,
-                        c.document_id,
-                      ])
-                    ),
-                  };
-                }
               } else if (packetObj.type === "message_start") {
                 const messageStart = packetObj as MessageStart;
                 if (messageStart.final_documents) {
@@ -927,7 +898,6 @@ export function useChatController({
       selectedDocuments,
       searchParams,
       setPopup,
-      clientScrollToBottom,
       resetInputBar,
       setSelectedAssistantFromId,
       updateSelectedNodeForDocDisplay,
@@ -1044,6 +1014,8 @@ export function useChatController({
 
   // fetch # of allowed document tokens for the selected Persona
   useEffect(() => {
+    if (!liveAssistant?.id) return; // avoid calling with undefined persona id
+
     async function fetchMaxTokens() {
       const response = await fetch(
         `/api/chat/max-selected-document-tokens?persona_id=${liveAssistant?.id}`

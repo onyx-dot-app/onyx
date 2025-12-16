@@ -17,24 +17,6 @@ permissions:
   contents: read
 
 jobs:
-  validate-requirements:
-    runs-on: ubuntu-slim
-    timeout-minutes: 45
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - name: Setup uv
-        uses: astral-sh/setup-uv@1e862dfacbd1d6d858c55d9b792c756523627244 # ratchet:astral-sh/setup-uv@v7.1.4
-        # TODO: Enable caching once there is a uv.lock file checked in.
-        # with:
-        #   enable-cache: true
-
-      - name: Validate requirements lock files
-        run: ./backend/scripts/compile_requirements.py --check
-
   mypy-check:
     # See https://runs-on.com/runners/linux/
     # Note: Mypy seems quite optimized for x64 compared to arm64.
@@ -45,7 +27,7 @@ jobs:
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -58,35 +40,10 @@ jobs:
             backend/requirements/model_server.txt
             backend/requirements/ee.txt
 
-      - name: Generate OpenAPI schema
-        shell: bash
-        working-directory: backend
-        env:
-          PYTHONPATH: "."
-        run: |
-          python scripts/onyx_openapi_schema.py --filename generated/openapi.json
-
-      # needed for pulling openapitools/openapi-generator-cli
-      # otherwise, we hit the "Unauthenticated users" limit
-      # https://docs.docker.com/docker-hub/usage/
-      - name: Login to Docker Hub
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-
-      - name: Generate OpenAPI Python client
+      - name: Generate OpenAPI schema and Python client
         shell: bash
         run: |
-          docker run --rm \
-            -v "${{ github.workspace }}/backend/generated:/local" \
-            openapitools/openapi-generator-cli generate \
-            -i /local/openapi.json \
-            -g python \
-            -o /local/onyx_openapi_client \
-            --package-name onyx_openapi_client \
-            --skip-validate-spec \
-            --openapi-normalizer "SIMPLIFY_ONEOF_ANYOF=true,SET_OAS3_NULLABLE=true"
+          ods openapi all
 
       - name: Cache mypy cache
         if: ${{ vars.DISABLE_MYPY_CACHE != 'true' }}

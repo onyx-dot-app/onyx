@@ -1,5 +1,4 @@
 import {
-  CitationDelta,
   MessageDelta,
   MessageStart,
   PacketType,
@@ -121,11 +120,22 @@ export function getTextContent(packets: Packet[]) {
 
 export function getCitations(packets: Packet[]): StreamingCitation[] {
   const citations: StreamingCitation[] = [];
+  const seenDocIds = new Set<string>();
 
   packets.forEach((packet) => {
-    if (packet.obj.type === PacketType.CITATION_DELTA) {
-      const citationDelta = packet.obj as CitationDelta;
-      citations.push(...(citationDelta.citations || []));
+    if (packet.obj.type === PacketType.CITATION_INFO) {
+      // Individual citation packet from backend
+      const citationInfo = packet.obj as {
+        citation_number: number;
+        document_id: string;
+      };
+      if (!seenDocIds.has(citationInfo.document_id)) {
+        seenDocIds.add(citationInfo.document_id);
+        citations.push({
+          citation_num: citationInfo.citation_number,
+          document_id: citationInfo.document_id,
+        });
+      }
     }
   });
 
