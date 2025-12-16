@@ -204,8 +204,7 @@ export default function ActionsPopover({
       tool.in_code_tool_id === SEARCH_TOOL_ID &&
       hasNoConnectors &&
       !isAdmin &&
-      !isCurator &&
-      !isProjectContext
+      !isCurator
     ) {
       return false;
     }
