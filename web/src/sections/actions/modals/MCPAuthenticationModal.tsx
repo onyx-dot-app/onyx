@@ -110,20 +110,20 @@ export default function MCPAuthenticationModal({
     "per-user"
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [redirectUri, setRedirectUri] = useState<string>("");
 
   // Check if OAuth is enabled for the Onyx instance
   const authType = useAuthType();
   const isOAuthEnabled =
     authType === AuthType.OIDC || authType === AuthType.GOOGLE_OAUTH;
 
-  // Get the current frontend URL for redirect URI
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      setRedirectUri(`${window.location.origin}/mcp/oauth/callback`);
+  const redirectUri = useMemo(() => {
+    if (typeof window === "undefined") {
+      return "https://{YOUR_DOMAIN}/mcp/oauth/callback";
     }
+    return `${window.location.origin}/mcp/oauth/callback`;
   }, []);
 
+  // Get the current frontend URL for redirect URI
   const { data: fullServer } = useSWR<MCPServer>(
     mcpServer ? `/api/admin/mcp/servers/${mcpServer.id}` : null,
     errorHandlingFetcher
@@ -514,7 +514,7 @@ export default function MCPAuthenticationModal({
                             text04
                             className="font-mono text-[12px] leading-[16px] truncate"
                           >
-                            {redirectUri || "Loading..."}
+                            {redirectUri}
                           </Text>
                           <CopyIconButton
                             getCopyText={() => redirectUri}

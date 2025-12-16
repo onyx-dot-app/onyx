@@ -49,8 +49,6 @@ interface OpenAPIAuthenticationModalProps {
   passthroughOAuthEnabled?: boolean;
 }
 
-const redirectUri = "https://cloud.onyx.app/oauth-config/callback";
-
 const MASKED_CREDENTIAL_VALUE = "********";
 
 const defaultValues: OpenAPIAuthFormValues = {
@@ -99,6 +97,13 @@ export default function OpenAPIAuthenticationModal({
     isLoadingOAuthConfig &&
     !existingOAuthConfig &&
     !oauthConfigError;
+
+  const redirectUri = useMemo(() => {
+    if (typeof window === "undefined") {
+      return "https://{YOUR_DOMAIN}/oauth-config/callback";
+    }
+    return `${window.location.origin}/oauth-config/callback`;
+  }, []);
 
   useEffect(() => {
     let isActive = true;
