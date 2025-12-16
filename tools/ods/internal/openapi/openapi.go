@@ -107,14 +107,20 @@ func RunScript(args []string) error {
 	}
 
 	// Write the script to stdin
-	if _, err := stdin.Write([]byte(embeddedScript)); err != nil {
-		return fmt.Errorf("failed to write script to stdin: %w", err)
-	}
-	if err := stdin.Close(); err != nil {
-		return fmt.Errorf("failed to close stdin: %w", err)
-	}
+	_, writeErr := stdin.Write([]byte(embeddedScript))
+	closeErr := stdin.Close()
 
-	return cmd.Wait()
+	// Always wait for the process to release system resources and avoid zombie processes
+	waitErr := cmd.Wait()
+
+	// Return the first error encountered
+	if writeErr != nil {
+		return fmt.Errorf("failed to write script to stdin: %w", writeErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("failed to close stdin: %w", closeErr)
+	}
+	return waitErr
 }
 
 // GenerateSchema generates the OpenAPI schema to the specified output path.
