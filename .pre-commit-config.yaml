@@ -120,7 +120,7 @@ repos:
 
       - id: web-typescript-check
         name: Web TypeScript type check
-        entry: bash -c 'cd web && npm run types:check'
+        entry: bash -c 'cd web && npm run types:check --project tsconfig.types.json'
         language: system
         pass_filenames: false
         files: ^web/.*\.(ts|tsx)$
