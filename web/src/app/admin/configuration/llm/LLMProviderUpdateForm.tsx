@@ -284,6 +284,7 @@ export function LLMProviderUpdateForm({
         const {
           selected_model_names: visibleModels,
           model_configurations: modelConfigurations,
+          fetched_model_configurations,
           target_uri,
           _modelListUpdated,
           ...rest
