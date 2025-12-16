@@ -11,6 +11,7 @@ repos:
       - id: uv-run
         name: Check lazy imports
         args: ["--with=onyx-devtools", "ods", "check-lazy-imports"]
+        files: ^backend/(?!\.venv/).*\.py$
       - id: uv-sync
         args: ["--locked", "--all-extras"]
       - id: uv-lock

@@ -53,7 +53,6 @@ func containsLineNum(nums []int, target int) bool {
 	return false
 }
 
-
 func TestFindEagerImportsBasicViolations(t *testing.T) {
 	// Test detection of basic eager import violations.
 	testContent := `
