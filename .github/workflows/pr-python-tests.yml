@@ -25,7 +25,6 @@ jobs:
 
     env:
       PYTHONPATH: ./backend
-      REDIS_CLOUD_PYTEST_PASSWORD: ${{ secrets.REDIS_CLOUD_PYTEST_PASSWORD }}
       DISABLE_TELEMETRY: "true"
 
     steps:
