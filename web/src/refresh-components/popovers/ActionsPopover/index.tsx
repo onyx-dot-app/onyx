@@ -40,6 +40,7 @@ import ActionLineItem from "@/refresh-components/popovers/ActionsPopover/ActionL
 import MCPLineItem, {
   MCPServer,
 } from "@/refresh-components/popovers/ActionsPopover/MCPLineItem";
+import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 
 // Get source metadata for configured sources - deduplicated by source type
 function getConfiguredSources(
@@ -145,7 +146,9 @@ export default function ActionsPopover({
 
   const { tools: availableTools } = useAvailableTools();
   const { ccPairs } = useCCPairs();
+  const { currentProjectId } = useProjectsContext();
   const availableToolIds = availableTools.map((tool) => tool.id);
+  const isProjectContext = currentProjectId !== null;
 
   // Check if there are any connectors available
   const hasNoConnectors = !ccPairs || ccPairs.length === 0;
@@ -201,7 +204,8 @@ export default function ActionsPopover({
       tool.in_code_tool_id === SEARCH_TOOL_ID &&
       hasNoConnectors &&
       !isAdmin &&
-      !isCurator
+      !isCurator &&
+      !isProjectContext
     ) {
       return false;
     }
@@ -521,6 +525,7 @@ export default function ActionsPopover({
             hasNoConnectors={hasNoConnectors}
             toolAuthStatus={getToolAuthStatus(tool)}
             onOAuthAuthenticate={() => authenticateTool(tool)}
+            isProjectContext={isProjectContext}
           />
         )),
 

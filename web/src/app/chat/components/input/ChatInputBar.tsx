@@ -35,6 +35,7 @@ import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import ActionsPopover from "@/refresh-components/popovers/ActionsPopover";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
 import SvgPlusCircle from "@/icons/plus-circle";
+import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import {
   getIconForAction,
   hasSearchToolsAvailable,
@@ -133,7 +134,8 @@ function ChatInputBarInner({
 }: ChatInputBarProps) {
   const { user } = useUser();
   const { forcedToolIds, setForcedToolIds } = useForcedTools();
-  const { currentMessageFiles, setCurrentMessageFiles } = useProjectsContext();
+  const { currentMessageFiles, setCurrentMessageFiles, currentProjectId } =
+    useProjectsContext();
 
   const currentIndexingFiles = useMemo(() => {
     return currentMessageFiles.filter(
@@ -600,6 +602,13 @@ function ChatInputBarInner({
                   if (!tool) {
                     return null;
                   }
+
+                  let displayName =
+                    currentProjectId !== null &&
+                    tool.in_code_tool_id === SEARCH_TOOL_ID
+                      ? "Project Search"
+                      : tool.display_name;
+
                   return (
                     <SelectButton
                       key={toolId}
@@ -614,7 +623,7 @@ function ChatInputBarInner({
                       disabled={disabled}
                       className={disabled ? "bg-transparent" : ""}
                     >
-                      {tool.display_name}
+                      {displayName}
                     </SelectButton>
                   );
                 })}
