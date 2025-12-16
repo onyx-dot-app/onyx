@@ -1,13 +1,13 @@
 """Vertex AI provider adapter for prompt caching."""
 
 from collections.abc import Sequence
-from typing import cast
 
 from onyx.llm.interfaces import LanguageModelInput
-from onyx.llm.message_types import ChatCompletionMessage
+from onyx.llm.models import ChatCompletionMessage
 from onyx.llm.prompt_cache.interfaces import CacheMetadata
 from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
 from onyx.llm.prompt_cache.utils import prepare_messages_with_cacheable_transform
+from onyx.llm.prompt_cache.utils import revalidate_message_from_original
 
 
 class VertexAIPromptCacheProvider(PromptCacheProvider):
@@ -117,5 +117,5 @@ def _add_vertex_cache_control(
                     new_content.append(block)
             mutated["content"] = new_content
 
-        updated.append(cast(ChatCompletionMessage, mutated))
+        updated.append(revalidate_message_from_original(message, mutated))
     return updated
