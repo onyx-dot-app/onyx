@@ -252,66 +252,70 @@ export default function TextView({
                 </p>
               </div>
             ) : (
-              <div className="flex items-start justify-center w-full h-full overflow-auto">
-                <div
-                  className="transition-all duration-300 ease-in-out"
-                  style={{
-                    transform: `scale(${zoom / 100})`,
-                    transformOrigin: "top center",
-                    width: isSupportedIframeFormat(fileType) ? "100%" : "auto",
-                  }}
-                >
-                  {isImageFormat(fileType) ? (
-                    <img
-                      src={fileUrl}
-                      alt={fileName}
-                      className="h-auto object-contain object-center"
-                      style={{
-                        width: "100%",
-                        maxWidth: "100%",
-                      }}
-                    />
-                  ) : isDocxFormat(fileType) ? (
-                    // Предпросмотр .docx как HTML
-                    <div
-                      className="p-6 bg-white"
-                      style={{
-                        width: "100%",
-                      }}
-                      dangerouslySetInnerHTML={{ __html: docxHtml }}
-                    />
-                  ) : isSupportedIframeFormat(fileType) ? (
-                    <iframe
-                      src={`${fileUrl}#toolbar=0`}
-                      className="border-none"
-                      style={{
-                        width: "100%",
-                        height: "70vh",
-                      }}
-                      title={t(k.VIEW_FILES)}
-                    />
-                  ) : isMarkdownFormat(fileType) ? (
-                    <div
-                      className="p-6"
-                      style={{
-                        width: "100%",
-                      }}
-                    >
-                      <MinimalMarkdown
-                        content={fileContent}
-                        className="w-full pb-4 h-full text-lg break-words"
-                      />
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center h-full">
-                      <p className="text-lg font-medium text-muted-foreground">
-                        {t(k.THIS_FILE_FORMAT_IS_NOT_SUPPOR)}
-                      </p>
-                      <Button className="mt-4" onClick={handleDownload}>
-                        {t(k.DOWNLOAD_FILE)}
-                      </Button>
-                    </div>
-                  )}
+              <div className="w-full h-full overflow-auto">
+                <div className="flex items-start justify-center w-full min-h-full p-4">
+                  <div
+                    className="transition-all duration-300 ease-in-out"
+                    style={{
+                      transform: `scale(${zoom / 100})`,
+                      transformOrigin: "top center",
+                      display: "inline-block",
+                      width: isSupportedIframeFormat(fileType) ? `${100 * (100 / zoom)}%` : "auto",
+                      minWidth: isSupportedIframeFormat(fileType) ? `${100 * (100 / zoom)}%` : "auto",
+                    }}
+                  >
+                      {isImageFormat(fileType) ? (
+                        <img
+                          src={fileUrl}
+                          alt={fileName}
+                          className="h-auto object-contain object-center"
+                          style={{
+                            width: "100%",
+                            maxWidth: "100%",
+                          }}
+                        />
+                      ) : isDocxFormat(fileType) ? (
+                        // Предпросмотр .docx как HTML
+                        <div
+                          className="p-6 bg-white"
+                          style={{
+                            width: "100%",
+                          }}
+                          dangerouslySetInnerHTML={{ __html: docxHtml }}
+                        />
+                      ) : isSupportedIframeFormat(fileType) ? (
+                        <iframe
+                          src={`${fileUrl}#toolbar=0`}
+                          className="border-none"
+                          style={{
+                            width: "100%",
+                            height: "70vh",
+                          }}
+                          title={t(k.VIEW_FILES)}
+                        />
+                      ) : isMarkdownFormat(fileType) ? (
+                        <div
+                          className="p-6"
+                          style={{
+                            width: "100%",
+                          }}
+                        >
+                          <MinimalMarkdown
+                            content={fileContent}
+                            className="w-full pb-4 h-full text-lg break-words"
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center h-full">
+                          <p className="text-lg font-medium text-muted-foreground">
+                            {t(k.THIS_FILE_FORMAT_IS_NOT_SUPPOR)}
+                          </p>
+                          <Button className="mt-4" onClick={handleDownload}>
+                            {t(k.DOWNLOAD_FILE)}
+                          </Button>
+                        </div>
+                      )}
+                  </div>
                 </div>
               </div>
             )}

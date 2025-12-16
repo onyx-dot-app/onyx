@@ -330,12 +330,12 @@ export function DefaultDropdownElement({
       `}
       onClick={onSelect}
     >
-      <div>
-        <div className="flex">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center min-w-0">
           {includeCheckbox && (
             <input
               type="checkbox"
-              className="mr-2"
+              className="mr-2 flex-shrink-0"
               checked={isSelected}
               onChange={() => null}
             />
@@ -343,11 +343,11 @@ export function DefaultDropdownElement({
           {icon &&
             React.createElement(icon, {
               size: 16,
-              className: "mr-2 h-4 w-4 my-auto",
+              className: "mr-2 h-4 w-4 my-auto flex-shrink-0",
             })}
-          {name}
+          <span className="truncate">{name}</span>
         </div>
-        {description && <div className="text-xs">{description}</div>}
+        {description && <div className="text-xs truncate">{description}</div>}
       </div>
       {isSelected && (
         <div className="ml-auto mr-1 my-auto">

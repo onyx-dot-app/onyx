@@ -250,7 +250,7 @@ const SignedUpUserTable = ({
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-48">
+        <PopoverContent className="w-56">
           <div className="grid gap-2">
             {NEXT_PUBLIC_CLOUD_ENABLED && user.id === currentUser?.id ? (
               <LeaveOrganizationButton
@@ -259,8 +259,8 @@ const SignedUpUserTable = ({
                 mutate={refresh}
                 className={buttonClassName}
               >
-                <LogOut className="mr-2 h-4 w-4" />
-                <span>{t(k.LEAVE_ORGANIZATION)}</span>
+                <LogOut className="mr-2 h-4 w-4 flex-shrink-0" />
+                <span className="truncate">{t(k.LEAVE_ORGANIZATION)}</span>
               </LeaveOrganizationButton>
             ) : (
               <>
@@ -271,8 +271,8 @@ const SignedUpUserTable = ({
                     mutate={refresh}
                     className={buttonClassName}
                   >
-                    <UserMinus className="mr-2 h-4 w-4" />
-                    <span>{t(k.DELETE_USER)}</span>
+                    <UserMinus className="mr-2 h-4 w-4 flex-shrink-0" />
+                    <span className="truncate">{t(k.DELETE_USER)}</span>
                   </DeleteUserButton>
                 )}
                 <DeactivateUserButton
@@ -282,10 +282,9 @@ const SignedUpUserTable = ({
                   mutate={refresh}
                   className={buttonClassName}
                 >
-                  <UserX className="mr-2 h-4 w-4" />
-                  <span>
-                    {user.is_active ? t(k.DEACTIVATE) : t(k.ACTIVATE)}{" "}
-                    {t(k.USER)}
+                  <UserX className="mr-2 h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">
+                    {user.is_active ? t(k.DEACTIVATE_USER) : t(k.ACTIVATE_USER)}
                   </span>
                 </DeactivateUserButton>
               </>
@@ -296,8 +295,8 @@ const SignedUpUserTable = ({
                 className={buttonClassName}
                 onClick={() => handleResetPassword(user)}
               >
-                <KeyRound className="mr-2 h-4 w-4" />
-                <span>{t(k.RESET_PASSWORD)}</span>
+                <KeyRound className="mr-2 h-4 w-4 flex-shrink-0" />
+                <span className="truncate">{t(k.RESET_PASSWORD)}</span>
               </Button>
             )}
           </div>

@@ -1027,9 +1027,9 @@ export function AssistantEditor({
                           <div className="mt-1.5 mb-2.5">
                             <div className="flex gap-2.5">
                               <div
-                                className={`w-[150px] h-[110px] rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-all ${
+                                className={`w-[150px] h-[110px] rounded-lg border-2 flex flex-col items-center justify-center cursor-pointer transition-all box-border ${
                                   values.knowledge_source === "team_knowledge"
-                                    ? "border-2 border-blue-500 bg-blue-50 dark:bg-blue-950/20"
+                                    ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20"
                                     : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
                                 }`}
                                 onClick={() =>
@@ -1039,18 +1039,18 @@ export function AssistantEditor({
                                   )
                                 }
                               >
-                                <div className="text-blue-500 mb-2">
+                                <div className="text-blue-500 mb-2 flex-shrink-0">
                                   <BookIcon size={24} />
                                 </div>
-                                <p className="font-medium text-xs">
+                                <p className="font-medium text-xs text-center whitespace-nowrap px-1">
                                   {t(k.GROUP_KNOWLEDGE_BASE)}
                                 </p>
                               </div>
 
                               <div
-                                className={`w-[150px] h-[110px] rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-all ${
+                                className={`w-[150px] h-[110px] rounded-lg border-2 flex flex-col items-center justify-center cursor-pointer transition-all box-border ${
                                   values.knowledge_source === "user_files"
-                                    ? "border-2 border-blue-500 bg-blue-50 dark:bg-blue-950/20"
+                                    ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20"
                                     : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
                                 }`}
                                 onClick={() =>
@@ -1060,10 +1060,10 @@ export function AssistantEditor({
                                   )
                                 }
                               >
-                                <div className="text-blue-500 mb-2">
+                                <div className="text-blue-500 mb-2 flex-shrink-0">
                                   <FileIcon size={24} />
                                 </div>
-                                <p className="font-medium text-xs">
+                                <p className="font-medium text-xs text-center whitespace-nowrap px-1">
                                   {t(k.USER_KNOWLEDGE_BASE)}
                                 </p>
                               </div>
@@ -2049,6 +2049,15 @@ export function AssistantEditor({
               )}
 
               <div className="mt-12 gap-x-2 w-full justify-end flex">
+                {existingPersona && (
+                  <Button
+                    variant="destructive"
+                    onClick={openDeleteModal}
+                    type="button"
+                  >
+                    {t(k.DELETE_BUTTON)}
+                  </Button>
+                )}
                 <Button
                   type="submit"
                   disabled={isSubmitting || isRequestSuccessful}
@@ -2062,18 +2071,6 @@ export function AssistantEditor({
                 >
                   {t(k.CANCEL_BUTTON)}
                 </Button>
-              </div>
-
-              <div className="flex justify-end">
-                {existingPersona && (
-                  <Button
-                    variant="destructive"
-                    onClick={openDeleteModal}
-                    type="button"
-                  >
-                    {t(k.DELETE_BUTTON)}
-                  </Button>
-                )}
               </div>
             </Form>
           );

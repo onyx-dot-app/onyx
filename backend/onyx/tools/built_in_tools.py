@@ -51,7 +51,7 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
     ),
     InCodeToolInfo(
         cls=LangflowTool,
-        description="Инструмент интеграции с визуальным нодовым редаактором",
+        description="Инструмент интеграции с визуальным нодовым редактором",
         in_code_tool_id=LangflowTool.__name__,
         display_name=LangflowTool._DISPLAY_NAME
     ),

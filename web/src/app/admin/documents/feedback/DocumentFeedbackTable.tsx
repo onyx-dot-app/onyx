@@ -2,7 +2,7 @@
 import { useTranslation } from "@/hooks/useTranslation";
 import k from "./../../../../i18n/keys";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Table,
   TableHead,
@@ -30,46 +30,70 @@ const IsVisibleSection = ({
   onUpdate: (response: Response) => void;
 }) => {
   const { t } = useTranslation();
+  const [optimisticHidden, setOptimisticHidden] = useState<boolean | null>(
+    null
+  );
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  // Сбрасываем оптимистичное состояние при изменении document.hidden (после refresh)
+  useEffect(() => {
+    if (!isUpdating) {
+      setOptimisticHidden(null);
+    }
+  }, [document.hidden, isUpdating]);
+
+  const isHidden =
+    optimisticHidden !== null ? optimisticHidden : document.hidden;
+
+  const handleToggle = async () => {
+    if (isUpdating) return;
+
+    const newHidden = !isHidden;
+    setOptimisticHidden(newHidden);
+    setIsUpdating(true);
+
+    try {
+      const response = await updateHiddenStatus(
+        document.document_id,
+        newHidden
+      );
+      onUpdate(response);
+      if (!response.ok) {
+        // Откатываем оптимистичное обновление при ошибке
+        setOptimisticHidden(null);
+      }
+    } catch (error) {
+      // Откатываем оптимистичное обновление при ошибке
+      setOptimisticHidden(null);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   return (
     <HoverPopup
       mainContent={
-        document.hidden ? (
+        <div
+          onClick={handleToggle}
+          className={`flex items-center gap-2 cursor-pointer hover:bg-accent-background-hovered py-1 px-2 w-fit rounded-full ${
+            isUpdating ? "opacity-50 pointer-events-none" : ""
+          }`}
+        >
           <div
-            onClick={async () => {
-              const response = await updateHiddenStatus(
-                document.document_id,
-                false
-              );
-              onUpdate(response);
-            }}
-            className="flex text-error cursor-pointer hover:bg-accent-background-hovered py-1 px-2 w-fit rounded-full"
+            className={`select-none whitespace-nowrap ${
+              isHidden ? "text-error" : ""
+            }`}
           >
-            <div className="select-none">{t(k.HIDDEN)}</div>
-            <div className="ml-1 my-auto">
-              <CustomCheckbox checked={false} />
-            </div>
+            {isHidden ? t(k.HIDDEN) : t(k.VISIBLE)}
           </div>
-        ) : (
-          <div
-            onClick={async () => {
-              const response = await updateHiddenStatus(
-                document.document_id,
-                true
-              );
-              onUpdate(response);
-            }}
-            className="flex cursor-pointer hover:bg-accent-background-hovered py-1 px-2 w-fit rounded-full"
-          >
-            <div className="my-auto select-none">{t(k.VISIBLE)}</div>
-            <div className="ml-1 my-auto">
-              <CustomCheckbox checked={true} />
-            </div>
+          <div className="flex-shrink-0">
+            <CustomCheckbox checked={!isHidden} />
           </div>
-        )
+        </div>
       }
       popupContent={
         <div className="text-xs">
-          {document.hidden ? (
+          {isHidden ? (
             <div className="flex">
               <FiEye className="my-auto mr-1" /> {t(k.UNHIDE)}
             </div>

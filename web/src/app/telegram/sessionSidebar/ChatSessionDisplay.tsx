@@ -329,7 +329,7 @@ export function ChatSessionDisplay({
                             popover={
                               <div
                                 className={`border border-border text-text-dark rounded-lg bg-background z-50 ${
-                                  isDeleteModalOpen ? "w-64" : "w-32"
+                                  isDeleteModalOpen ? "w-64" : "w-40"
                                 }`}
                               >
                                 {!isDeleteModalOpen ? (

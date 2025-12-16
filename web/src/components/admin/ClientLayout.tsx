@@ -24,7 +24,7 @@ import {
   DocumentIcon2,
 } from "@/components/icons/icons";
 import { UserRole } from "@/lib/types";
-import { FiActivity, FiBarChart2, FiSettings } from "react-icons/fi";
+import { FiActivity, FiBarChart2, FiSettings, FiMenu, FiX } from "react-icons/fi";
 import { UserDropdown } from "../UserDropdown";
 import { User } from "@/lib/types";
 import { usePathname } from "next/navigation";
@@ -61,6 +61,7 @@ export function ClientLayout({
   const { llmProviders } = useChatContext();
   const { popup, setPopup } = usePopup();
   const sidebarRef = useRef<HTMLDivElement | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Сохраняем положение скролла сайдбара между переходами по страницам админки
   useEffect(() => {
@@ -88,6 +89,13 @@ export function ClientLayout({
       sidebarEl.removeEventListener("scroll", handleScroll);
     };
   }, []);
+
+  // Закрываем сайдбар на мобильных при изменении пути
+  useEffect(() => {
+    if (settings?.isMobile) {
+      setSidebarOpen(false);
+    }
+  }, [pathname, settings?.isMobile]);
 
   const isLangflowEditorEnable =
     process.env.NEXT_PUBLIC_ENABLE_LANGFLOW_EDITOR === "true";
@@ -138,9 +146,23 @@ export function ClientLayout({
           </div>
         )}
 
+        {/* Mobile overlay */}
+        {settings?.isMobile && sidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 z-40"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
         <div
           ref={sidebarRef}
-          className="default-scrollbar flex-none text-text-settings-sidebar bg-background-sidebar dark:bg-[#000] w-[250px] overflow-x-hidden z-20 pt-2 pb-8 h-full border-r border-border dark:border-none miniscroll overflow-auto"
+          className={`default-scrollbar flex-none text-text-settings-sidebar bg-background-sidebar dark:bg-[#000] w-[250px] overflow-x-hidden z-50 pt-2 pb-8 h-full border-r border-border dark:border-none miniscroll overflow-auto transition-transform duration-300 ${
+            settings?.isMobile
+              ? `fixed left-0 top-0 ${
+                  sidebarOpen ? "translate-x-0" : "-translate-x-full"
+                }`
+              : ""
+          }`}
         >
           <AdminSidebar
             collections={[
@@ -577,8 +599,23 @@ export function ClientLayout({
           />
         </div>
         <div className="relative h-full overflow-y-hidden w-full">
-          <div className="fixed left-0 gap-x-4 px-4 top-4 h-8 px-0 mb-auto w-full items-start flex justify-end">
-            <UserDropdown toggleUserSettings={toggleUserSettings} />
+          <div className="fixed left-0 gap-x-4 px-4 top-4 h-8 px-0 mb-auto w-full items-start flex justify-between">
+            {settings?.isMobile && (
+              <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="mobile:block desktop:hidden p-2 hover:bg-background-300 rounded"
+                aria-label="Toggle menu"
+              >
+                {sidebarOpen ? (
+                  <FiX size={20} className="text-text-700" />
+                ) : (
+                  <FiMenu size={20} className="text-text-700" />
+                )}
+              </button>
+            )}
+            <div className="ml-auto">
+              <UserDropdown toggleUserSettings={toggleUserSettings} />
+            </div>
           </div>
           <div className="pt-20 flex w-full overflow-y-auto overflow-x-hidden h-full px-4 md:px-12">
             {children}

@@ -26,6 +26,7 @@ import { usePaidEnterpriseFeaturesEnabled } from "./settings/usePaidEnterpriseFe
 import { Notifications } from "./chat/Notifications";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { Persona } from "@/app/admin/assistants/interfaces";
 
 interface DropdownOptionProps {
   href?: string;
@@ -94,17 +95,72 @@ export function UserDropdown({
     mutate: refreshNotifications,
   } = useSWR<Notification[]>("/api/notifications", errorHandlingFetcher);
 
+  const [personas, setPersonas] = useState<Record<number, Persona> | undefined>(
+    undefined
+  );
+
+  // Fetch personas for persona_shared notifications
+  useEffect(() => {
+    const fetchPersonas = async () => {
+      if (!notifications || notifications.length === 0) {
+        setPersonas(undefined);
+        return;
+      }
+
+      const personaNotifications = notifications.filter(
+        (n) =>
+          n.notif_type.toLowerCase() === NotificationType.PERSONA_SHARED &&
+          n.additional_data?.persona_id !== undefined
+      );
+
+      if (personaNotifications.length === 0) {
+        setPersonas({});
+        return;
+      }
+
+      const personaIds = personaNotifications.map(
+        (n) => n.additional_data!.persona_id!
+      );
+
+      const queryParams = personaIds.map((id) => `persona_ids=${id}`).join("&");
+
+      try {
+        const response = await fetch(`/api/persona?${queryParams}`);
+        if (response.ok) {
+          const personasData: Persona[] = await response.json();
+          setPersonas(
+            personasData.reduce((acc, persona) => {
+              acc[persona.id] = persona;
+              return acc;
+            }, {} as Record<number, Persona>)
+          );
+        } else {
+          setPersonas({});
+        }
+      } catch (err) {
+        console.error("Failed to fetch personas:", err);
+        setPersonas({});
+      }
+    };
+
+    fetchPersonas();
+  }, [notifications]);
+
   // Filter notifications to only count those that will be displayed
+  // This matches the logic in Notifications component
   const visibleNotifications = notifications
     ? notifications.filter((notification) => {
         const notifType = notification.notif_type.toLowerCase();
-        // Count persona_shared notifications (they will be filtered further in Notifications component)
+        
+        // For persona_shared notifications, only count if persona exists
         if (
           notifType === NotificationType.PERSONA_SHARED &&
           notification.additional_data?.persona_id !== undefined
         ) {
-          return true;
+          const personaId = notification.additional_data.persona_id;
+          return personas !== undefined && personas[personaId] !== undefined;
         }
+        
         // Count other supported notification types
         if (
           notifType === "reindex" ||
@@ -113,6 +169,7 @@ export function UserDropdown({
         ) {
           return true;
         }
+        
         return false;
       })
     : [];
@@ -298,7 +355,10 @@ export function UserDropdown({
 
                 {toggleUserSettings && (
                   <DropdownOption
-                    onClick={toggleUserSettings}
+                    onClick={() => {
+                      setUserInfoVisible(false);
+                      toggleUserSettings();
+                    }}
                     icon={<UserIcon size={16} className="my-auto" />}
                     label={t(k.USER_SETTINGS_LABEL)}
                   />

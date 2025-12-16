@@ -1990,6 +1990,8 @@ module.exports = {
   [k.DELETE_USER]: `Delete User`,
   [k.DEACTIVATE]: `Deactivate`,
   [k.ACTIVATE]: `Activate`,
+  [k.DEACTIVATE_USER]: `Deactivate User`,
+  [k.ACTIVATE_USER]: `Activate User`,
   [k.NO_USERS_FOUND_MATCHING_YOUR_F]: `No users found matching your filters`,
   [k.W_FULL_JUSTIFY_START]: `w-full justify-start`,
   [k.NEW_ASSISTANT_SHARED]: `New Assistant Shared:`,
