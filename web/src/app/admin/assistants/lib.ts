@@ -145,6 +145,7 @@ export async function createPersona(
     body: JSON.stringify(
       buildPersonaUpsertRequest(personaUpsertParams, fileId, null)
     ),
+    credentials: "include",
   });
 
   return createPersonaResponse;
@@ -170,6 +171,7 @@ export async function updatePersona(
     body: JSON.stringify(
       buildPersonaUpsertRequest(personaUpsertParams, fileId, null)
     ),
+    credentials: "include",
   });
 
   return updatePersonaResponse;
@@ -178,6 +180,7 @@ export async function updatePersona(
 export function deletePersona(personaId: number) {
   return fetch(`/api/persona/${personaId}`, {
     method: "DELETE",
+    credentials: "include",
   });
 }
 
@@ -237,6 +240,7 @@ export async function togglePersonaDefault(
     body: JSON.stringify({
       is_default_persona: !isDefault,
     }),
+    credentials: "include",
   });
   return response;
 }
@@ -253,6 +257,7 @@ export async function togglePersonaVisibility(
     body: JSON.stringify({
       is_visible: !isVisible,
     }),
+    credentials: "include",
   });
   return response;
 }
