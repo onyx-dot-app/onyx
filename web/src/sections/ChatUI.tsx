@@ -155,9 +155,8 @@ const ChatUI = React.forwardRef(
     const scrollBy = useCallback((delta: number) => {
       if (!scrollContainerRef.current) return;
       scrollContainerRef.current.scrollBy({
-        left: 0,
-        top: delta,
         behavior: "smooth",
+        top: delta,
       });
     }, []);
 
@@ -181,14 +180,10 @@ const ChatUI = React.forwardRef(
     });
 
     useEffect(() => {
-      // Wait for messages to render before scrolling
-      requestAnimationFrame(() => {
-        if (scrollContainerRef.current) {
-          scrollContainerRef.current.scrollTop =
-            scrollContainerRef.current.scrollHeight;
-        }
-      });
-    }, [currentChatSessionId]);
+      if (!scrollContainerRef.current) return;
+      scrollContainerRef.current.scrollTop =
+        scrollContainerRef.current.scrollHeight;
+    }, [messages]);
 
     if (!liveAssistant) return <div className="flex-1" />;
 
