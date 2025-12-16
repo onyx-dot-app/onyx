@@ -509,19 +509,56 @@ class JiraConnector(
 
         checkpoint_callback = make_checkpoint_callback(new_checkpoint)
 
+        issue_iterator = _perform_jql_search(
+            jira_client=self.jira_client,
+            jql=jql,
+            start=current_offset,
+            max_results=_JIRA_FULL_PAGE_SIZE,
+            all_issue_ids=new_checkpoint.all_issue_ids,
+            checkpoint_callback=checkpoint_callback,
+            nextPageToken=new_checkpoint.cursor,
+            ids_done=new_checkpoint.ids_done,
+        )
+
         try:
-            issue_iterator = _perform_jql_search(
-                jira_client=self.jira_client,
-                jql=jql,
-                start=current_offset,
-                max_results=_JIRA_FULL_PAGE_SIZE,
-                all_issue_ids=new_checkpoint.all_issue_ids,
-                checkpoint_callback=checkpoint_callback,
-                nextPageToken=new_checkpoint.cursor,
-                ids_done=new_checkpoint.ids_done,
+            for issue in issue_iterator:
+                issue_key = issue.key
+                try:
+                    if document := process_jira_issue(
+                        jira_base_url=self.jira_base,
+                        issue=issue,
+                        comment_email_blacklist=self.comment_email_blacklist,
+                        labels_to_skip=self.labels_to_skip,
+                    ):
+                        # Add permission information to the document if requested
+                        if include_permissions:
+                            project_key = get_jira_project_key_from_issue(issue=issue)
+                            if project_key:
+                                document.external_access = (
+                                    self._get_project_permissions(project_key)
+                                )
+                        yield document
+
+                except Exception as e:
+                    yield ConnectorFailure(
+                        failed_document=DocumentFailure(
+                            document_id=issue_key,
+                            document_link=build_jira_url(self.jira_base, issue_key),
+                        ),
+                        failure_message=f"Failed to process Jira issue: {str(e)}",
+                        exception=e,
+                    )
+
+                current_offset += 1
+
+            # Update checkpoint
+            self.update_checkpoint_for_next_run(
+                new_checkpoint, current_offset, starting_offset, _JIRA_FULL_PAGE_SIZE
             )
+
         except Exception as e:
             # Handle JQL query errors (e.g., invalid project, invalid JQL syntax)
+            # This catches errors that occur during iteration of the generator
             if isinstance(e, JIRAError):
                 error_msg = (
                     f"JQL query failed: {e.text if hasattr(e, 'text') else str(e)}"
@@ -537,41 +574,6 @@ class JiraConnector(
                 yield new_checkpoint
                 return
             raise
-
-        for issue in issue_iterator:
-            issue_key = issue.key
-            try:
-                if document := process_jira_issue(
-                    jira_base_url=self.jira_base,
-                    issue=issue,
-                    comment_email_blacklist=self.comment_email_blacklist,
-                    labels_to_skip=self.labels_to_skip,
-                ):
-                    # Add permission information to the document if requested
-                    if include_permissions:
-                        project_key = get_jira_project_key_from_issue(issue=issue)
-                        if project_key:
-                            document.external_access = self._get_project_permissions(
-                                project_key
-                            )
-                    yield document
-
-            except Exception as e:
-                yield ConnectorFailure(
-                    failed_document=DocumentFailure(
-                        document_id=issue_key,
-                        document_link=build_jira_url(self.jira_base, issue_key),
-                    ),
-                    failure_message=f"Failed to process Jira issue: {str(e)}",
-                    exception=e,
-                )
-
-            current_offset += 1
-
-        # Update checkpoint
-        self.update_checkpoint_for_next_run(
-            new_checkpoint, current_offset, starting_offset, _JIRA_FULL_PAGE_SIZE
-        )
 
         return new_checkpoint
 
