@@ -579,13 +579,20 @@ class OnyxConfluence:
         while url_suffix:
             logger.debug(f"Making confluence call to {url_suffix}")
             try:
+                # Only pass params if they're not already in the URL to avoid duplicate
+                # params accumulating. Confluence's _links.next already includes these.
+                params = (
+                    {
+                        "body-format": "atlas_doc_format",
+                        "expand": "body.atlas_doc_format",
+                    }
+                    if "body-format=" not in url_suffix
+                    else None
+                )
                 raw_response = self.get(
                     path=url_suffix,
                     advanced_mode=True,
-                    params={
-                        "body-format": "atlas_doc_format",
-                        "expand": "body.atlas_doc_format",
-                    },
+                    params=params,
                 )
             except Exception as e:
                 logger.exception(f"Error in confluence call to {url_suffix}")
