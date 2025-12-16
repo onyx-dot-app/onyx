@@ -1,4 +1,4 @@
-import type { IconProps } from "../index";
+import type { IconProps } from "@opal";
 
 const SvgBarChart = ({ size, ...props }: IconProps) => (
   <svg

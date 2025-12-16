@@ -1,4 +1,4 @@
-import type { IconProps } from "../index";
+import type { IconProps } from "@opal";
 
 const SvgKey = ({ size, ...props }: IconProps) => (
   <svg
