@@ -69,9 +69,10 @@ export interface MCPActionCardProps {
     serverId: number,
     mutate: KeyedMutator<ToolSnapshot[]>
   ) => void;
-  onDisableAllTools?: (
+  onUpdateToolsStatus?: (
     serverId: number,
     toolIds: number[],
+    enabled: boolean,
     mutate: KeyedMutator<ToolSnapshot[]>
   ) => void;
 
@@ -98,7 +99,7 @@ export default function MCPActionCard({
   onRename,
   onToolToggle,
   onRefreshTools,
-  onDisableAllTools,
+  onUpdateToolsStatus,
   className,
 }: MCPActionCardProps) {
   const [isToolsExpanded, setIsToolsExpanded] = useState(initialExpanded);
@@ -301,9 +302,9 @@ export default function MCPActionCard({
           enabledCount={tools.filter((tool) => tool.isEnabled).length}
           showOnlyEnabled={showOnlyEnabled}
           onToggleShowOnlyEnabled={handleToggleShowOnlyEnabled}
-          onDisableAllTools={() => {
+          onUpdateToolsStatus={(enabled) => {
             const toolIds = tools.map((tool) => parseInt(tool.id));
-            onDisableAllTools?.(serverId, toolIds, mutate);
+            onUpdateToolsStatus?.(serverId, toolIds, enabled, mutate);
           }}
           isEmpty={filteredTools.length === 0}
           searchQuery={searchQuery}

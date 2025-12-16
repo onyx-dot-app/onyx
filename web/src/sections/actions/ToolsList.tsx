@@ -8,6 +8,7 @@ import FadeDiv from "@/components/FadeDiv";
 import ToolItemSkeleton from "@/sections/actions/skeleton/ToolItemSkeleton";
 import ToolsEnabledCount from "@/sections/actions/ToolsEnabledCount";
 import { SvgEye, SvgXCircle } from "@opal/icons";
+import Button from "@/refresh-components/buttons/Button";
 
 interface ToolsListProps {
   // Loading state
@@ -18,7 +19,7 @@ interface ToolsListProps {
   enabledCount?: number;
   showOnlyEnabled?: boolean;
   onToggleShowOnlyEnabled?: () => void;
-  onDisableAllTools?: () => void;
+  onUpdateToolsStatus?: (enabled: boolean) => void;
 
   // Empty state of filtered tools
   isEmpty?: boolean;
@@ -39,10 +40,10 @@ interface ToolsListProps {
 const ToolsList: React.FC<ToolsListProps> = ({
   isFetching = false,
   totalCount,
-  enabledCount,
+  enabledCount = 0,
   showOnlyEnabled = false,
   onToggleShowOnlyEnabled,
-  onDisableAllTools,
+  onUpdateToolsStatus,
   isEmpty = false,
   searchQuery,
   emptyMessage = "No tools available",
@@ -88,11 +89,12 @@ const ToolsList: React.FC<ToolsListProps> = ({
 
             {/* Right action area */}
             <div className="flex items-center gap-1 ml-auto">
-              <ToolsEnabledCount
+              {enabledCount > 0 &&
+                (<ToolsEnabledCount
                 enabledCount={enabledCount}
                 totalCount={totalCount}
-              />
-              {onToggleShowOnlyEnabled && (
+              />)}
+              {onToggleShowOnlyEnabled && enabledCount > 0 && (
                 <IconButton
                   icon={SvgEye}
                   internal
@@ -108,14 +110,19 @@ const ToolsList: React.FC<ToolsListProps> = ({
                   }
                 />
               )}
-              {onDisableAllTools && (
+              {onUpdateToolsStatus && enabledCount > 0 && (
                 <IconButton
                   icon={SvgXCircle}
                   internal
-                  onClick={onDisableAllTools}
+                  onClick={() => onUpdateToolsStatus(false)}
                   tooltip="Disable all tools"
                   aria-label="Disable all tools"
                 />
+              )}
+              {onUpdateToolsStatus && enabledCount === 0 && (
+                <Button tertiary onClick={() => onUpdateToolsStatus(true)}>
+                  Enable all
+                </Button>
               )}
             </div>
           </div>

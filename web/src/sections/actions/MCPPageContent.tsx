@@ -23,9 +23,9 @@ import {
   deleteMCPServer,
   refreshMCPServerTools,
   updateToolStatus,
-  disableAllServerTools,
   updateMCPServerStatus,
   updateMCPServer,
+  updateToolsStatus,
 } from "@/lib/tools/mcpService";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
@@ -393,10 +393,11 @@ export default function MCPPageContent() {
     [mutateMcpServers, setPopup]
   );
 
-  const handleDisableAllTools = useCallback(
+  const handleUpdateToolsStatus = useCallback(
     async (
       serverId: number,
       toolIds: number[],
+      enabled: boolean,
       mutateServerTools: KeyedMutator<ToolSnapshot[]>
     ) => {
       try {
@@ -413,13 +414,13 @@ export default function MCPPageContent() {
           async (currentTools) => {
             if (!currentTools) return currentTools;
             return currentTools.map((tool) =>
-              toolIds.includes(tool.id) ? { ...tool, enabled: false } : tool
+              toolIds.includes(tool.id) ? { ...tool, enabled } : tool
             );
           },
           { revalidate: false }
         );
 
-        const result = await disableAllServerTools(toolIds);
+        const result = await updateToolsStatus(toolIds, enabled);
 
         // Revalidate to get fresh data from server
         await mutateServerTools();
@@ -427,11 +428,14 @@ export default function MCPPageContent() {
         setPopup({
           message: `${result.updated_count} tool${
             result.updated_count !== 1 ? "s" : ""
-          } disabled successfully`,
+          } ${enabled ? "enabled" : "disabled"} successfully`,
           type: "success",
         });
       } catch (error) {
-        console.error("Error disabling all tools:", error);
+        console.error(
+          `Error ${enabled ? "enabling" : "disabling"} all tools:`,
+          error
+        );
 
         // Revert on error by revalidating
         await mutateServerTools();
@@ -440,7 +444,7 @@ export default function MCPPageContent() {
           message:
             error instanceof Error
               ? error.message
-              : "Failed to disable all tools",
+              : `Failed to ${enabled ? "enable" : "disable"} all tools`,
           type: "error",
         });
       }
@@ -552,7 +556,7 @@ export default function MCPPageContent() {
                   onRename={handleRenameServer}
                   onToolToggle={handleToolToggle}
                   onRefreshTools={handleRefreshTools}
-                  onDisableAllTools={handleDisableAllTools}
+                  onUpdateToolsStatus={handleUpdateToolsStatus}
                 />
               );
             })
