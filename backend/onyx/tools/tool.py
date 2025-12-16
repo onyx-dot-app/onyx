@@ -73,13 +73,14 @@ class Tool(abc.ABC, Generic[TOverride]):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def emit_start(self, turn_index: int) -> None:
+    def emit_start(self, turn_index: int, tab_index: int = 0) -> None:
         """
         Emit the start packet for this tool. Each tool implementation should
         emit its specific start packet type.
 
         Args:
             turn_index: The turn index for this tool execution
+            tab_index: The tab index for parallel tool calls
         """
         raise NotImplementedError
 
@@ -92,6 +93,8 @@ class Tool(abc.ABC, Generic[TOverride]):
         # Specific tool override arguments that are not provided by the LLM
         # For example when calling the internal search tool, the original user query is passed along too (but not by the LLM)
         override_kwargs: TOverride,
+        # Tab index for parallel tool calls (default 0 for single tool calls)
+        tab_index: int = 0,
         **llm_kwargs: Any,
     ) -> ToolResponse:
         raise NotImplementedError

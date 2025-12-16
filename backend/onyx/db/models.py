@@ -2215,6 +2215,8 @@ class ToolCall(Base):
     # The tools with the same turn number (and parent) were called in parallel
     # Ones with different turn numbers (and same parent) were called sequentially
     turn_number: Mapped[int] = mapped_column(Integer)
+    # Index order of tool calls from the LLM for parallel tool calls
+    tab_index: Mapped[int] = mapped_column(Integer, default=0)
 
     # Not a FK because we want to be able to delete the tool without deleting
     # this entry

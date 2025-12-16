@@ -114,7 +114,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
             },
         }
 
-    def emit_start(self, turn_index: int) -> None:
+    def emit_start(self, turn_index: int, tab_index: int = 0) -> None:
         """Emit start packet for this tool. Code will be emitted in run() method."""
         # Note: PythonToolStart requires code, but we don't have it in emit_start
         # The code is available in run() method via llm_kwargs
@@ -123,7 +123,8 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
     def run(
         self,
         turn_index: int,
-        override_kwargs: PythonToolOverrideKwargs,
+        override_kwargs: PythonToolOverrideKwargs | None = None,
+        tab_index: int = 0,
         **llm_kwargs: Any,
     ) -> ToolResponse:
         """
@@ -131,6 +132,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
 
         Args:
             turn_index: The turn index for this tool execution
+            tab_index: The tab index for parallel tool calls
             override_kwargs: Contains chat_files to stage for execution
             **llm_kwargs: Contains 'code' parameter from LLM
 
@@ -144,6 +146,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
         self.emitter.emit(
             Packet(
                 turn_index=turn_index,
+                tab_index=tab_index,
                 obj=PythonToolStart(code=code),
             )
         )
@@ -251,6 +254,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
             self.emitter.emit(
                 Packet(
                     turn_index=turn_index,
+                    tab_index=tab_index,
                     obj=PythonToolDelta(
                         stdout=truncated_stdout,
                         stderr=truncated_stderr,
@@ -286,6 +290,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
             self.emitter.emit(
                 Packet(
                     turn_index=turn_index,
+                    tab_index=tab_index,
                     obj=PythonToolDelta(
                         stdout="",
                         stderr=error_msg,

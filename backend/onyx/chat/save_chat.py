@@ -102,6 +102,7 @@ def _create_and_link_tool_calls(
                 if tool_call_info.generated_images
                 else None
             ),
+            tab_index=tool_call_info.tab_index,
             add_only=True,
         )
 

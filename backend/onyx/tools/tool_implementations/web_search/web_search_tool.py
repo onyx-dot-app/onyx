@@ -110,10 +110,11 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
             },
         }
 
-    def emit_start(self, turn_index: int) -> None:
+    def emit_start(self, turn_index: int, tab_index: int = 0) -> None:
         self.emitter.emit(
             Packet(
                 turn_index=turn_index,
+                tab_index=tab_index,
                 obj=SearchToolStart(is_internet_search=True),
             )
         )
@@ -130,6 +131,7 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         self,
         turn_index: int,
         override_kwargs: WebSearchToolOverrideKwargs,
+        tab_index: int = 0,
         **llm_kwargs: Any,
     ) -> ToolResponse:
         """Execute the web search tool with multiple queries in parallel"""
@@ -139,6 +141,7 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         self.emitter.emit(
             Packet(
                 turn_index=turn_index,
+                tab_index=tab_index,
                 obj=SearchToolQueriesDelta(queries=queries),
             )
         )
@@ -203,6 +206,7 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         self.emitter.emit(
             Packet(
                 turn_index=turn_index,
+                tab_index=tab_index,
                 obj=SearchToolDocumentsDelta(documents=search_docs),
             )
         )

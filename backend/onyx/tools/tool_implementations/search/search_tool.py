@@ -347,10 +347,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             },
         }
 
-    def emit_start(self, turn_index: int) -> None:
+    def emit_start(self, turn_index: int, tab_index: int = 0) -> None:
         self.emitter.emit(
             Packet(
                 turn_index=turn_index,
+                tab_index=tab_index,
                 obj=SearchToolStart(),
             )
         )
@@ -360,6 +361,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self,
         turn_index: int,
         override_kwargs: SearchToolOverrideKwargs,
+        tab_index: int = 0,
         **llm_kwargs: Any,
     ) -> ToolResponse:
         # Start overall timing
@@ -479,6 +481,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             self.emitter.emit(
                 Packet(
                     turn_index=turn_index,
+                    tab_index=tab_index,
                     obj=SearchToolQueriesDelta(
                         queries=all_queries,
                     ),
@@ -587,6 +590,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             self.emitter.emit(
                 Packet(
                     turn_index=turn_index,
+                    tab_index=tab_index,
                     obj=SearchToolDocumentsDelta(
                         documents=final_ui_docs,
                     ),

@@ -68,13 +68,14 @@ class KnowledgeGraphTool(Tool[None]):
             },
         }
 
-    def emit_start(self, turn_index: int) -> None:
+    def emit_start(self, turn_index: int, tab_index: int = 0) -> None:
         raise NotImplementedError("KnowledgeGraphTool.emit_start is not implemented.")
 
     def run(
         self,
         turn_index: int,
-        override_kwargs: None,
+        override_kwargs: None = None,
+        tab_index: int = 0,
         **llm_kwargs: Any,
     ) -> ToolResponse:
         raise NotImplementedError("KnowledgeGraphTool.run is not implemented.")
