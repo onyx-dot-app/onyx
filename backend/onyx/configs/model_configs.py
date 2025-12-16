@@ -65,9 +65,10 @@ GEN_AI_NUM_RESERVED_OUTPUT_TOKENS = int(
     os.environ.get("GEN_AI_NUM_RESERVED_OUTPUT_TOKENS") or 1024
 )
 
-# Typically, GenAI models nowadays are at least 4K tokens
+# Fallback token limit for models where the max context is unknown
+# Set conservatively at 32K to handle most modern models
 GEN_AI_MODEL_FALLBACK_MAX_TOKENS = int(
-    os.environ.get("GEN_AI_MODEL_FALLBACK_MAX_TOKENS") or 4096
+    os.environ.get("GEN_AI_MODEL_FALLBACK_MAX_TOKENS") or 32000
 )
 
 # This is used when computing how much context space is available for documents
