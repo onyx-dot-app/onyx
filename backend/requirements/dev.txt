@@ -526,7 +526,7 @@ typing-inspection==0.4.2
     # via pydantic
 tzdata==2025.2
     # via faker
-urllib3==2.6.0
+urllib3==2.6.1
     # via
     #   botocore
     #   requests

@@ -1142,7 +1142,7 @@ unstructured-client==0.25.4
     #   unstructured
 uritemplate==4.2.0
     # via google-api-python-client
-urllib3==2.6.0
+urllib3==2.6.1
     # via
     #   asana
     #   botocore
