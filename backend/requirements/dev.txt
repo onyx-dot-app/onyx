@@ -101,7 +101,9 @@ executing==2.2.1
 faker==37.1.0
     # via onyx
 fastapi==0.116.1
-    # via onyx
+    # via
+    #   onyx
+    #   onyx-devtools
 fastavro==1.12.1
     # via cohere
 fastuuid==0.14.0
@@ -263,14 +265,16 @@ numpy==1.26.4
     #   pandas-stubs
     #   shapely
     #   voyageai
-onyx-devtools==0.1.0
+onyx-devtools==0.2.0
     # via onyx
 openai==2.8.1
     # via
     #   litellm
     #   onyx
 openapi-generator-cli==7.17.0
-    # via onyx
+    # via
+    #   onyx
+    #   onyx-devtools
 packaging==24.2
     # via
     #   black
@@ -522,7 +526,7 @@ typing-inspection==0.4.2
     # via pydantic
 tzdata==2025.2
     # via faker
-urllib3==2.6.0
+urllib3==2.6.1
     # via
     #   botocore
     #   requests

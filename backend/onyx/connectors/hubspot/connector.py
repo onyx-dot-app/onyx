@@ -26,7 +26,6 @@ from onyx.utils.logger import setup_logger
 HUBSPOT_BASE_URL = "https://app.hubspot.com"
 HUBSPOT_API_URL = "https://api.hubapi.com/integrations/v1/me"
 
-# Available HubSpot object types
 AVAILABLE_OBJECT_TYPES = {"tickets", "companies", "deals", "contacts"}
 
 HUBSPOT_PAGE_SIZE = 100

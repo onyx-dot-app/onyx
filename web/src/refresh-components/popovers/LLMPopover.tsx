@@ -291,7 +291,7 @@ export default function LLMPopover({
       // Small delay to let accordion content render
       const timer = setTimeout(() => {
         selectedItemRef.current?.scrollIntoView({
-          behavior: "smooth",
+          behavior: "instant",
           block: "center",
         });
       }, 50);
@@ -300,21 +300,20 @@ export default function LLMPopover({
   }, [open]);
 
   const isSearching = searchQuery.trim().length > 0;
-  const hasOnlyOneGroup = groupedOptions.length === 1;
 
   // Compute final expanded groups
   const effectiveExpandedGroups = useMemo(() => {
-    if (isSearching || hasOnlyOneGroup) {
-      // Force expand all when searching or only one group
+    if (isSearching) {
+      // Force expand all when searching
       return groupedOptions.map((g) => g.key);
     }
     return expandedGroups;
-  }, [isSearching, hasOnlyOneGroup, groupedOptions, expandedGroups]);
+  }, [isSearching, groupedOptions, expandedGroups]);
 
   // Handler for accordion changes
   const handleAccordionChange = (value: string[]) => {
-    // Only update state when not force-expanding
-    if (!isSearching && !hasOnlyOneGroup) {
+    // Only update state when not searching (force-expanding)
+    if (!isSearching) {
       setExpandedGroups(value);
     }
   };
@@ -353,8 +352,8 @@ export default function LLMPopover({
           </SelectButton>
         </div>
       </PopoverTrigger>
-      <PopoverContent side="top" align="end" className="w-[280px] p-1">
-        <div className="flex flex-col gap-1">
+      <PopoverContent side="top" align="end" className="w-[280px] p-1.5">
+        <div className="flex flex-col gap-2">
           {/* Search Input */}
           <InputTypeIn
             ref={searchInputRef}
@@ -447,11 +446,17 @@ export default function LLMPopover({
                                     option.provider ===
                                       llmManager.currentLlm.provider;
 
-                                  // Build description with version info
+                                  // Build description with model capabilities
+                                  const capabilities: string[] = [];
+                                  if (option.supportsReasoning) {
+                                    capabilities.push("Reasoning");
+                                  }
+                                  if (option.supportsImageInput) {
+                                    capabilities.push("Vision");
+                                  }
                                   const description =
-                                    option.version &&
-                                    option.version !== "latest"
-                                      ? option.version
+                                    capabilities.length > 0
+                                      ? capabilities.join(", ")
                                       : undefined;
 
                                   return (

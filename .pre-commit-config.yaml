@@ -5,8 +5,13 @@ default_install_hook_types:
   - post-rewrite
 repos:
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 569ddf04117761eb74cef7afb5143bbb96fcdfbb  # frozen: 0.9.15
+    # From: https://github.com/astral-sh/uv-pre-commit/pull/53/commits/d30b4298e4fb63ce8609e29acdbcf4c9018a483c
+    rev: d30b4298e4fb63ce8609e29acdbcf4c9018a483c
     hooks:
+      - id: uv-run
+        name: Check lazy imports
+        args: ["--with=onyx-devtools", "ods", "check-lazy-imports"]
+        files: ^backend/(?!\.venv/).*\.py$
       - id: uv-sync
         args: ["--locked", "--all-extras"]
       - id: uv-lock

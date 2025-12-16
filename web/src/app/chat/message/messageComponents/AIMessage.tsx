@@ -413,7 +413,7 @@ export default function AIMessage({
       <div
         // for e2e tests
         data-testid={displayComplete ? "onyx-ai-message" : undefined}
-        className="py-5 ml-4 lg:px-5 relative flex"
+        className="py-5 desktop:ml-4 lg:px-5 relative flex"
       >
         <div className="mx-auto w-[90%] max-w-message-max">
           <div className="lg:mr-12 mobile:ml-0 md:ml-8">
@@ -421,7 +421,7 @@ export default function AIMessage({
               <AgentAvatar agent={chatState.assistant} size={24} />
               <div className="w-full">
                 <div className="max-w-message-max break-words">
-                  <div className="w-full desktop:ml-4">
+                  <div className="w-full pl-4">
                     <div className="max-w-message-max break-words">
                       <div
                         ref={markdownRef}

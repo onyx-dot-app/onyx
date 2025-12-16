@@ -394,7 +394,7 @@ httpx-sse==0.4.3
     # via
     #   cohere
     #   mcp
-hubspot-api-client==8.1.0
+hubspot-api-client==11.1.0
     # via onyx
 huggingface-hub==0.35.3
     # via
@@ -898,6 +898,7 @@ requests==2.32.5
     #   google-cloud-bigquery
     #   google-cloud-storage
     #   google-genai
+    #   hubspot-api-client
     #   huggingface-hub
     #   jira
     #   jsonschema-path
@@ -1141,7 +1142,7 @@ unstructured-client==0.25.4
     #   unstructured
 uritemplate==4.2.0
     # via google-api-python-client
-urllib3==2.6.0
+urllib3==2.6.1
     # via
     #   asana
     #   botocore

@@ -56,6 +56,15 @@ class WellKnownLLMProviderDescriptor(BaseModel):
 
 
 OPENAI_PROVIDER_NAME = "openai"
+# Curated list of OpenAI models to show by default in the UI
+OPENAI_VISIBLE_MODEL_NAMES = {
+    "gpt-5",
+    "gpt-5-mini",
+    "o1",
+    "o3-mini",
+    "gpt-4o",
+    "gpt-4o-mini",
+}
 
 BEDROCK_PROVIDER_NAME = "bedrock"
 BEDROCK_DEFAULT_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0"
@@ -125,6 +134,12 @@ _IGNORABLE_ANTHROPIC_MODELS = {
     "claude-instant-1",
     "anthropic/claude-3-5-sonnet-20241022",
 }
+# Curated list of Anthropic models to show by default in the UI
+ANTHROPIC_VISIBLE_MODEL_NAMES = {
+    "claude-opus-4-5",
+    "claude-sonnet-4-5",
+    "claude-haiku-4-5",
+}
 
 AZURE_PROVIDER_NAME = "azure"
 
@@ -134,6 +149,55 @@ VERTEX_CREDENTIALS_FILE_KWARG = "vertex_credentials"
 VERTEX_LOCATION_KWARG = "vertex_location"
 VERTEXAI_DEFAULT_MODEL = "gemini-2.5-flash"
 VERTEXAI_DEFAULT_FAST_MODEL = "gemini-2.5-flash-lite"
+# Curated list of Vertex AI models to show by default in the UI
+VERTEXAI_VISIBLE_MODEL_NAMES = {
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-pro",
+}
+
+
+def is_obsolete_model(model_name: str, provider: str) -> bool:
+    """Check if a model is obsolete and should be filtered out.
+
+    Filters models that are 2+ major versions behind or deprecated.
+    This is the single source of truth for obsolete model detection.
+    """
+    model_lower = model_name.lower()
+
+    # OpenAI obsolete models
+    if provider == "openai":
+        # GPT-3 models are obsolete
+        if "gpt-3" in model_lower:
+            return True
+        # Legacy models
+        deprecated = {
+            "text-davinci-003",
+            "text-davinci-002",
+            "text-curie-001",
+            "text-babbage-001",
+            "text-ada-001",
+            "davinci",
+            "curie",
+            "babbage",
+            "ada",
+        }
+        if model_lower in deprecated:
+            return True
+
+    # Anthropic obsolete models
+    if provider == "anthropic":
+        if "claude-2" in model_lower or "claude-instant" in model_lower:
+            return True
+
+    # Vertex AI obsolete models
+    if provider == "vertex_ai":
+        if "gemini-1.0" in model_lower:
+            return True
+        if "palm" in model_lower or "bison" in model_lower:
+            return True
+
+    return False
 
 
 def _get_provider_to_models_map() -> dict[str, list[str]]:
@@ -205,6 +269,7 @@ def get_anthropic_model_names() -> list[str]:
             model
             for model in litellm.anthropic_models
             if model not in _IGNORABLE_ANTHROPIC_MODELS
+            and not is_obsolete_model(model, ANTHROPIC_PROVIDER_NAME)
         ],
         reverse=True,
     )
@@ -250,6 +315,7 @@ def get_vertexai_model_names() -> list[str]:
             and "/" not in model  # filter out prefixed models like openai/gpt-oss
             and "search_api" not in model.lower()  # not a model
             and "-maas" not in model.lower()  # marketplace models
+            and not is_obsolete_model(model, VERTEXAI_PROVIDER_NAME)
         ],
         reverse=True,
     )
@@ -489,6 +555,16 @@ def get_provider_display_name(provider_name: str) -> str:
     )
 
 
+def _get_visible_models_for_provider(provider_name: str) -> set[str]:
+    """Get the set of models that should be visible by default for a provider."""
+    _PROVIDER_TO_VISIBLE_MODELS: dict[str, set[str]] = {
+        OPENAI_PROVIDER_NAME: OPENAI_VISIBLE_MODEL_NAMES,
+        ANTHROPIC_PROVIDER_NAME: ANTHROPIC_VISIBLE_MODEL_NAMES,
+        VERTEXAI_PROVIDER_NAME: VERTEXAI_VISIBLE_MODEL_NAMES,
+    }
+    return _PROVIDER_TO_VISIBLE_MODELS.get(provider_name, set())
+
+
 def fetch_model_configurations_for_provider(
     provider_name: str,
 ) -> list[ModelConfigurationView]:
@@ -496,11 +572,13 @@ def fetch_model_configurations_for_provider(
 
     Looks up max_input_tokens from LiteLLM's model_cost. If not found, stores None
     and the runtime will use the fallback (4096).
+
+    Models in the curated visible lists (OPENAI_VISIBLE_MODEL_NAMES, etc.) are
+    marked as is_visible=True by default.
     """
     from onyx.llm.utils import get_max_input_tokens
 
-    # No models are marked visible by default - the default model logic
-    # in the frontend/backend will handle making default models visible.
+    visible_models = _get_visible_models_for_provider(provider_name)
     configs = []
     for model_name in fetch_models_for_provider(provider_name):
         max_input_tokens = get_max_input_tokens(
@@ -511,7 +589,7 @@ def fetch_model_configurations_for_provider(
         configs.append(
             ModelConfigurationView(
                 name=model_name,
-                is_visible=False,
+                is_visible=model_name in visible_models,
                 max_input_tokens=max_input_tokens,
                 supports_image_input=model_supports_image_input(
                     model_name=model_name,
