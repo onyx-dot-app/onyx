@@ -1,6 +1,6 @@
 import React from "react";
 import Button from "@/refresh-components/buttons/Button";
-import type { IconProps } from "@opal";
+import type { IconProps } from "@opal/types";
 import Modal from "@/refresh-components/Modal";
 import { SvgLoader } from "@opal/icons";
 export interface ProviderModalProps {

@@ -1,4 +1,4 @@
-import type { IconProps } from "@opal/types/icons";
+import type { IconProps } from "@opal/types";
 
 const SvgFold = ({ size, ...props }: IconProps) => (
   <svg

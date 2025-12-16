@@ -5,7 +5,7 @@ import { cn, noProp } from "@/lib/utils";
 import Truncated from "@/refresh-components/texts/Truncated";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
-import type { IconProps } from "@opal";
+import type { IconProps } from "@opal/types";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import { SvgExternalLink, SvgTrash } from "@opal/icons";
 

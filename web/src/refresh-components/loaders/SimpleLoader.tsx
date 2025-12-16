@@ -1,4 +1,4 @@
-import type { IconProps } from "@opal";
+import type { IconProps } from "@opal/types";
 import { cn } from "@/lib/utils";
 import { SvgLoader } from "@opal/icons";
 

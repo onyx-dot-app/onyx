@@ -6,7 +6,7 @@ import { ActionStatus } from "@/lib/tools/types";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
-import type { IconProps } from "@opal";
+import type { IconProps } from "@opal/types";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { SvgEdit } from "@opal/icons";
 

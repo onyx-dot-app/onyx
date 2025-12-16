@@ -1,5 +1,5 @@
 import { JSX } from "react";
-import type { IconProps } from "@opal";
+import type { IconProps } from "@opal/types";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import {
   SvgCpu,
@@ -8,7 +8,6 @@ import {
   SvgLink,
   SvgSearch,
   SvgServer,
-  SvgUser,
 } from "@opal/icons";
 
 // Helper functions to identify specific tools

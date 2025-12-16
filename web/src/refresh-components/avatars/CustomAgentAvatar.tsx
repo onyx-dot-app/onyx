@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import type { IconProps } from "@opal";
+import type { IconProps } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import Image from "next/image";
 import { DEFAULT_AGENT_AVATAR_SIZE_PX } from "@/lib/constants";

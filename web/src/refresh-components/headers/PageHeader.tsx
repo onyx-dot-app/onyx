@@ -2,7 +2,7 @@
 
 // This should be used as the header for *all* pages (including admin pages).
 
-import type { IconProps } from "@opal";
+import type { IconProps } from "@opal/types";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import { useEffect, useRef, useState } from "react";

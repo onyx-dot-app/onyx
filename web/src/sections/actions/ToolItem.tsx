@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import Switch from "@/refresh-components/inputs/Switch";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
-import type { IconProps } from "@opal";
+import type { IconProps } from "@opal/types";
 import {
   SvgAlertTriangle,
   SvgArrowLeftDot,

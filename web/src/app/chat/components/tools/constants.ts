@@ -1,4 +1,4 @@
-import type { IconProps } from "@opal";
+import type { IconProps } from "@opal/types";
 import { SvgCode, SvgGlobe, SvgImage, SvgLink, SvgSearch } from "@opal/icons";
 
 // Tool names as referenced by tool results / tool calls

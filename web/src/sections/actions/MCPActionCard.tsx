@@ -18,7 +18,7 @@ import { useServerTools } from "@/sections/actions/useServerTools";
 import { MCPServerStatus, MCPServerWithStatus } from "@/lib/tools/types";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { KeyedMutator } from "swr";
-import type { IconProps } from "@opal";
+import type { IconProps } from "@opal/types";
 import { SvgServer } from "@opal/icons";
 
 export interface MCPActionCardProps {

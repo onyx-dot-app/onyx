@@ -2,7 +2,7 @@ import React from "react";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn } from "@/lib/utils";
-import type { IconProps } from "@opal";
+import type { IconProps } from "@opal/types";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
 import RawModal from "@/refresh-components/RawModal";
 import { SvgX } from "@opal/icons";

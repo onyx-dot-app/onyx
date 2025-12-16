@@ -1,4 +1,4 @@
-import type { IconProps } from "@opal/types/icons";
+import type { IconProps } from "@opal/types";
 const SvgUserPlus = ({ size, ...props }: IconProps) => (
   <svg
     viewBox="0 0 16 16"

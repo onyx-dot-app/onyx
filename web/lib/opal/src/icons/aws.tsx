@@ -1,4 +1,4 @@
-import type { IconProps } from "@opal/types/icons";
+import type { IconProps } from "@opal/types";
 
 const SvgAws = (props: IconProps) => {
   const { className, size = 24, ...rest } = props;

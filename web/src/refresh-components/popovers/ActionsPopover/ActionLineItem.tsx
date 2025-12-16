@@ -9,7 +9,7 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn, noProp } from "@/lib/utils";
-import type { IconProps } from "@opal";
+import type { IconProps } from "@opal/types";
 import { SvgChevronRight, SvgKey, SvgSettings, SvgSlash } from "@opal/icons";
 
 export interface ActionItemProps {

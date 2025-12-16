@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { useAppRouter } from "@/hooks/appNavigation";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Truncated from "@/refresh-components/texts/Truncated";
-import type { IconProps } from "@opal";
+import type { IconProps } from "@opal/types";
 import { usePinnedAgentsWithDetails } from "@/hooks/useAgents";
 import { cn, noProp } from "@/lib/utils";
 import { useRouter } from "next/navigation";

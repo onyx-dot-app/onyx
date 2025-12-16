@@ -1,5 +1,5 @@
 import React from "react";
-import type { IconProps } from "@opal/types/icons";
+import type { IconProps } from "@opal/types";
 
 const SvgOpenAI = (props: IconProps) => {
   const clipId = React.useId();

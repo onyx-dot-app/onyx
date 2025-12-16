@@ -10,7 +10,7 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { cn, noProp } from "@/lib/utils";
-import type { IconProps } from "@opal";
+import type { IconProps } from "@opal/types";
 import {
   SvgCheck,
   SvgChevronRight,

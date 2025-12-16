@@ -24,8 +24,8 @@
       "@/*": ["./src/*"],
       "@tests/*": ["./tests/*"],
       "@public/*": ["./public/*"],
-      "@opal": ["./lib/opal/src/index.ts"],
-      "@opal/*": ["./lib/opal/src/*"]
+      "@opal/*": ["./lib/opal/src/*"],
+      "@opal/types/*": ["./lib/opal/src/types/*"]
     }
   },
   "include": [

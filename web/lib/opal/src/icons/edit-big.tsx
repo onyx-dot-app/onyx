@@ -1,4 +1,4 @@
-import type { IconProps } from "@opal/types/icons";
+import type { IconProps } from "@opal/types";
 
 const SvgEditBig = ({ size, ...props }: IconProps) => (
   <svg

@@ -5,7 +5,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { PopoverMenu } from "@/components/ui/popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import type { IconProps } from "@opal";
+import type { IconProps } from "@opal/types";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Switch from "@/refresh-components/inputs/Switch";
 import { SvgChevronLeft, SvgPlug, SvgUnplug } from "@opal/icons";

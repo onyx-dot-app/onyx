@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Text from "@/refresh-components/texts/Text";
 import { cn, noProp } from "@/lib/utils";
-import type { IconProps } from "@opal";
+import type { IconProps } from "@opal/types";
 import IconButton from "./IconButton";
 import { SvgChevronDownSmall, SvgX } from "@opal/icons";
 const buttonClasses = (transient?: boolean) =>

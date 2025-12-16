@@ -1,4 +1,4 @@
-import type { IconProps } from "@opal/types/icons";
+import type { IconProps } from "@opal/types";
 
 const SvgOpenrouter = (props: IconProps) => {
   const { className, size = 24, ...rest } = props;

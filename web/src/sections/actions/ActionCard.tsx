@@ -5,7 +5,7 @@ import ActionCardHeader from "@/sections/actions/ActionCardHeader";
 import ToolsSection from "@/sections/actions/ToolsSection";
 import { cn } from "@/lib/utils";
 import { ActionStatus } from "@/lib/tools/types";
-import type { IconProps } from "@opal";
+import type { IconProps } from "@opal/types";
 import { SvgServer } from "@opal/icons";
 export interface ActionCardProps {
   // Core content

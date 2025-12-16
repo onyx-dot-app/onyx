@@ -1,6 +1,6 @@
 import React, { memo, useCallback, useState } from "react";
 import Text from "@/refresh-components/texts/Text";
-import type { IconProps } from "@opal";
+import type { IconProps } from "@opal/types";
 import Truncated from "@/refresh-components/texts/Truncated";
 import LLMConnectionIcons from "@/refresh-components/onboarding/components/LLMConnectionIcons";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";

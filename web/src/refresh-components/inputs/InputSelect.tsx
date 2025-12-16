@@ -5,7 +5,7 @@ import * as SelectPrimitive from "@radix-ui/react-select";
 import { cn, noProp } from "@/lib/utils";
 import LineItem, { LineItemProps } from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
-import type { IconProps } from "@opal";
+import type { IconProps } from "@opal/types";
 import {
   iconClasses,
   textClasses,

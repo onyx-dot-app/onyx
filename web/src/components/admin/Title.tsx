@@ -3,7 +3,7 @@
 import { JSX } from "react";
 import { HealthCheckBanner } from "../health/healthcheck";
 import Separator from "@/refresh-components/Separator";
-import type { IconProps } from "@opal";
+import type { IconProps } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 
 export interface AdminPageTitleProps {

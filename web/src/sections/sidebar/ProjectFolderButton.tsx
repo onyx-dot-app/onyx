@@ -23,7 +23,7 @@ import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { PopoverAnchor } from "@radix-ui/react-popover";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
-import type { IconProps } from "@opal";
+import type { IconProps } from "@opal/types";
 import useAppFocus from "@/hooks/useAppFocus";
 import {
   SvgEdit,

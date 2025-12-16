@@ -5,7 +5,7 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { ProjectFile } from "@/app/chat/projects/ProjectsContext";
 import { formatRelativeTime } from "@/app/chat/components/projects/project_utils";
 import Text from "@/refresh-components/texts/Text";
-import type { IconProps } from "@opal";
+import type { IconProps } from "@opal/types";
 import { getFileExtension, isImageExtension } from "@/lib/utils";
 import { UserFileStatus } from "@/app/chat/projects/projectsService";
 import CreateButton from "@/refresh-components/buttons/CreateButton";

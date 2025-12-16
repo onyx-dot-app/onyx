@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect, useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
-import type { IconProps } from "@opal";
+import type { IconProps } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import { SvgChevronDownSmall } from "@opal/icons";
 const MARGIN = 5;
