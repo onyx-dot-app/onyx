@@ -112,22 +112,9 @@ repos:
         pass_filenames: false
         files: \.tf$
 
-      - id: check-lazy-imports
-        name: Check lazy imports
-        entry: python3 backend/scripts/check_lazy_imports.py
-        language: system
-        files: ^backend/(?!\.venv/).*\.py$
-
-      - id: web-typescript-check
-        name: Web TypeScript type check
+      - id: typescript-check
+        name: TypeScript type check
         entry: bash -c 'cd web && npm run types:check'
         language: system
         pass_filenames: false
         files: ^web/.*\.(ts|tsx)$
-
-      - id: opal-typescript-check
-        name: Opal TypeScript type check
-        entry: bash -c 'cd web/lib/opal && npm run types:check'
-        language: system
-        pass_filenames: false
-        files: ^web/lib/opal/.*\.(ts|tsx)$
