@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.11, <3.13"
 resolution-markers = [
     "python_full_version >= '3.12.4' and sys_platform == 'win32'",
@@ -2074,17 +2074,18 @@ wheels = [
 
 [[package]]
 name = "hubspot-api-client"
-version = "8.1.0"
+version = "11.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
     { name = "python-dateutil" },
+    { name = "requests" },
     { name = "six" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ad/f7/7318da1458f044ac32ade38af29c897d17f5efe47a84d3b40f43fe67b303/hubspot-api-client-8.1.0.tar.gz", hash = "sha256:e8c25c2a12ab3801a6ab051ad7b25766a2e743928ed6ce9a309672c53b973044", size = 1499140, upload-time = "2023-08-07T12:25:11.342Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/08/52/11b0ecd4fd6e175813a0017ab4bc4697bfde058cac9b98938fa28460028a/hubspot_api_client-11.1.0.tar.gz", hash = "sha256:93ed914f1cd4dad67bacf26b8a1ec8506847483fa801cb2bddd4b2d887d0f825", size = 1732887, upload-time = "2024-12-13T08:20:44.38Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/bc/85/36eed8faa45617eb6bede804ac6e55bd3842a910f38291494678228b4db7/hubspot_api_client-8.1.0-py3-none-any.whl", hash = "sha256:2b255b6330770b263995baa07a831940f8bd6a692e8462a3a83771f65e718736", size = 3379938, upload-time = "2023-08-07T12:25:09.061Z" },
+    { url = "https://files.pythonhosted.org/packages/a1/d3/a2dbdea1f491d5bf362d74d4b7342ece6c043a43c8ee997f8fb8b776239d/hubspot_api_client-11.1.0-py3-none-any.whl", hash = "sha256:0c49e2c2f511a56d249c6890d2dfdd62afd04f66edc69a591e8348e28804634b", size = 3945382, upload-time = "2024-12-13T08:20:42.129Z" },
 ]
 
 [[package]]
@@ -3572,7 +3573,7 @@ requires-dist = [
     { name = "httpcore", marker = "extra == 'backend'", specifier = "==1.0.9" },
     { name = "httpx", extras = ["http2"], marker = "extra == 'backend'", specifier = "==0.28.1" },
     { name = "httpx-oauth", marker = "extra == 'backend'", specifier = "==0.15.1" },
-    { name = "hubspot-api-client", marker = "extra == 'backend'", specifier = "==8.1.0" },
+    { name = "hubspot-api-client", marker = "extra == 'backend'", specifier = "==11.1.0" },
     { name = "huggingface-hub", marker = "extra == 'backend'", specifier = "==0.35.3" },
     { name = "inflection", marker = "extra == 'backend'", specifier = "==0.5.1" },
     { name = "ipykernel", marker = "extra == 'dev'", specifier = "==6.29.5" },
@@ -3599,7 +3600,7 @@ requires-dist = [
     { name = "numpy", marker = "extra == 'model-server'", specifier = "==1.26.4" },
     { name = "oauthlib", marker = "extra == 'backend'", specifier = "==3.2.2" },
     { name = "office365-rest-python-client", marker = "extra == 'backend'", specifier = "==2.5.9" },
-    { name = "onyx-devtools", marker = "extra == 'dev'", specifier = "==0.1.0" },
+    { name = "onyx-devtools", marker = "extra == 'dev'", specifier = "==0.2.0" },
     { name = "openai", specifier = "==2.8.1" },
     { name = "openapi-generator-cli", marker = "extra == 'dev'", specifier = "==7.17.0" },
     { name = "openinference-instrumentation", marker = "extra == 'backend'", specifier = "==0.1.42" },
@@ -3680,7 +3681,7 @@ requires-dist = [
     { name = "types-setuptools", marker = "extra == 'dev'", specifier = "==68.0.0.3" },
     { name = "unstructured", marker = "extra == 'backend'", specifier = "==0.15.1" },
     { name = "unstructured-client", marker = "extra == 'backend'", specifier = "==0.25.4" },
-    { name = "urllib3", marker = "extra == 'backend'", specifier = "==2.6.0" },
+    { name = "urllib3", marker = "extra == 'backend'", specifier = "==2.6.1" },
     { name = "uvicorn", specifier = "==0.35.0" },
     { name = "voyageai", specifier = "==0.2.3" },
     { name = "xmlsec", marker = "extra == 'backend'", specifier = "==1.3.14" },
@@ -3702,16 +3703,20 @@ requires-dist = [{ name = "onyx", extras = ["backend", "dev", "ee"], editable = 
 
 [[package]]
 name = "onyx-devtools"
-version = "0.1.0"
+version = "0.2.0"
 source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "openapi-generator-cli" },
+]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/94/63/df98c6b494400023f5d0e8ca1c576d9d0267e14c46a73eb82d2d3ce0d9c6/onyx_devtools-0.1.0-py3-none-any.whl", hash = "sha256:49a4943aed5348f1b1b8618361bf086ae7921dbb5e9a34e8cc33912f661b4a28", size = 1203086, upload-time = "2025-12-06T18:37:57.006Z" },
-    { url = "https://files.pythonhosted.org/packages/99/95/ac71a0949ac79c766a27175af3621b72d264a2d424557f0f9235e3847b46/onyx_devtools-0.1.0-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:c79aac9e237c819dae65cc4aa1256d31c2b16ffc49f5b38cf81b789b43d01d53", size = 1193933, upload-time = "2025-12-06T18:37:54.793Z" },
-    { url = "https://files.pythonhosted.org/packages/d0/44/63869fd375700ef3698e645e278985c3ca2232e030641557318031266b76/onyx_devtools-0.1.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:31e0a6fa1b2ac39c47c3c018d26fdf77c8024a970b74d86d087502345201fd76", size = 1124361, upload-time = "2025-12-06T18:37:53.573Z" },
-    { url = "https://files.pythonhosted.org/packages/96/f5/a7512388da2076bcdd54d79b4bc94c9ce3a928536218d39f062852defbd1/onyx_devtools-0.1.0-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:675dbf17be28bc7fc9b07b5d5e276105087aaa2838129941f815ade737c2b67b", size = 1100671, upload-time = "2025-12-06T18:37:55.762Z" },
-    { url = "https://files.pythonhosted.org/packages/cb/60/33ede69d19654d7279b5d3d55592a16a879a78d590d815753e7cf56a58c6/onyx_devtools-0.1.0-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:76a4c3ff6c5377c6d8533405420b5c73ef7e9958ae6d4c94a0aad31f757c3276", size = 1203109, upload-time = "2025-12-06T18:37:56.833Z" },
-    { url = "https://files.pythonhosted.org/packages/41/a7/0b2df59c511c2c9458d176802beefb9769a9ed79112af4eeaf76333e9fd9/onyx_devtools-0.1.0-py3-none-win_amd64.whl", hash = "sha256:d5a6b5b2f60b859674a47f78682eab1992ccddae63e97ee766beb8a9108c56c2", size = 1291560, upload-time = "2025-12-06T18:37:55.719Z" },
-    { url = "https://files.pythonhosted.org/packages/63/dc/6b39630897f9fc6dff8aef1151a3cc36e2bec204d5d6f81335d84e59a049/onyx_devtools-0.1.0-py3-none-win_arm64.whl", hash = "sha256:3f81415fa0d1a03d67af86ff8981abb8c41145f807564ebb8439cbc0099c9cc1", size = 1169522, upload-time = "2025-12-06T18:37:55.555Z" },
+    { url = "https://files.pythonhosted.org/packages/27/ab/ba2a77c9b6663573b28a14fb1928ce882ef820a818fb9a7631cc0deccbcf/onyx_devtools-0.2.0-py3-none-any.whl", hash = "sha256:f68d5e8c5f606d8e178d5ea25b952c1ebcc887fceb44804f1a7792f754367a58", size = 1195396, upload-time = "2025-12-16T03:35:22.989Z" },
+    { url = "https://files.pythonhosted.org/packages/03/54/89aa299a4fd4ef4124ef699183c4d5bfbb7877485475d8affc439476f021/onyx_devtools-0.2.0-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:a97cc7b093c86f691cd94668c09ea9f857e9e551f0003dededf6fbaf598d0b40", size = 1194762, upload-time = "2025-12-16T03:35:19.23Z" },
+    { url = "https://files.pythonhosted.org/packages/a1/63/ffbebcacbaaa81859be894cf628f7e73328d1123d482e7a53393cd681520/onyx_devtools-0.2.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:034908351c27f8df5beffdd47ce2ddd4f524099c18ca23893a484ff69feca9d7", size = 1135431, upload-time = "2025-12-16T03:35:18.215Z" },
+    { url = "https://files.pythonhosted.org/packages/9e/79/ad1dba4f9c90057cfcafc143641b4f706410b95d5b0be884ec5d97901b25/onyx_devtools-0.2.0-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:2b23d21019c8b83905a2fa7c31f781c172e599bbc527bb274a56998981e11661", size = 1103558, upload-time = "2025-12-16T03:35:18.17Z" },
+    { url = "https://files.pythonhosted.org/packages/3c/b0/1da3f0e6e59dedbaeb9775d43976c83dd0068def3b2b71d8545e53f3c932/onyx_devtools-0.2.0-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:31b51b48ec848f2c4f7c766051d9794141e8759f1d7ce32bb5a0224ac103a66c", size = 1195411, upload-time = "2025-12-16T03:35:18.819Z" },
+    { url = "https://files.pythonhosted.org/packages/b7/6c/523d14b43104b12fc41d38a60d9179cb5ed5c8295b4ec97427ae883f315b/onyx_devtools-0.2.0-py3-none-win_amd64.whl", hash = "sha256:2457c1a7d819b1456eac34b400b8a979af1d41ba91ec4d6a4c4c11051ed23997", size = 1291910, upload-time = "2025-12-16T03:35:19.642Z" },
+    { url = "https://files.pythonhosted.org/packages/ec/a9/7b6e632c66d454ba2cac7e797e8dd88ec5cb1bd558df3231931947c0d42d/onyx_devtools-0.2.0-py3-none-win_arm64.whl", hash = "sha256:a9c748e17a1b0925631b9683ad0baef5389f5596e394d86cb55a16f5918487e5", size = 1183025, upload-time = "2025-12-16T03:35:16.586Z" },
 ]
 
 [[package]]
@@ -6324,11 +6329,11 @@ wheels = [
 
 [[package]]
 name = "urllib3"
-version = "2.6.0"
+version = "2.6.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/1c/43/554c2569b62f49350597348fc3ac70f786e3c32e7f19d266e19817812dd3/urllib3-2.6.0.tar.gz", hash = "sha256:cb9bcef5a4b345d5da5d145dc3e30834f58e8018828cbc724d30b4cb7d4d49f1", size = 432585, upload-time = "2025-12-05T15:08:47.885Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5e/1d/0f3a93cca1ac5e8287842ed4eebbd0f7a991315089b1a0b01c7788aa7b63/urllib3-2.6.1.tar.gz", hash = "sha256:5379eb6e1aba4088bae84f8242960017ec8d8e3decf30480b3a1abdaa9671a3f", size = 432678, upload-time = "2025-12-08T15:25:26.773Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/56/1a/9ffe814d317c5224166b23e7c47f606d6e473712a2fad0f704ea9b99f246/urllib3-2.6.0-py3-none-any.whl", hash = "sha256:c90f7a39f716c572c4e3e58509581ebd83f9b59cced005b7db7ad2d22b0db99f", size = 131083, upload-time = "2025-12-05T15:08:45.983Z" },
+    { url = "https://files.pythonhosted.org/packages/bc/56/190ceb8cb10511b730b564fb1e0293fa468363dbad26145c34928a60cb0c/urllib3-2.6.1-py3-none-any.whl", hash = "sha256:e67d06fe947c36a7ca39f4994b08d73922d40e6cca949907be05efa6fd75110b", size = 131138, upload-time = "2025-12-08T15:25:25.51Z" },
 ]
 
 [[package]]

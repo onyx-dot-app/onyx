@@ -7,21 +7,42 @@ import Separator from "@/refresh-components/Separator";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { SubLabel } from "@/components/Field";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import { useAdminPersonas } from "./hooks";
+import { useAdminPersonas } from "@/hooks/useAdminPersonas";
 import { Persona } from "./interfaces";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import SvgOnyxOctagon from "@/icons/onyx-octagon";
+import { useState, useEffect } from "react";
+import Pagination from "@/refresh-components/Pagination";
+
+const PAGE_SIZE = 20;
 
 function MainContent({
   personas,
+  totalItems,
+  currentPage,
+  onPageChange,
   refreshPersonas,
 }: {
   personas: Persona[];
+  totalItems: number;
+  currentPage: number;
+  onPageChange: (page: number) => void;
   refreshPersonas: () => void;
 }) {
-  // Filter out default/unified assistants
+  // Filter out default/unified assistants.
+  // NOTE: The backend should already exclude them if includeDefault = false is
+  // provided. That change was made with the introduction of pagination; we keep
+  // this filter here for now for backwards compatibility.
   const customPersonas = personas.filter((persona) => !persona.builtin_persona);
+  const totalPages = Math.ceil(totalItems / PAGE_SIZE);
+
+  // Clamp currentPage when totalItems shrinks (e.g., deleting the last item on a page)
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      onPageChange(totalPages);
+    }
+  }, [currentPage, totalPages, onPageChange]);
 
   return (
     <div>
@@ -50,7 +71,7 @@ function MainContent({
         <Separator />
 
         <Title>Existing Assistants</Title>
-        {customPersonas.length > 0 ? (
+        {totalItems > 0 ? (
           <>
             <SubLabel>
               Assistants will be displayed as options on the Chat / Search
@@ -61,7 +82,16 @@ function MainContent({
             <PersonasTable
               personas={customPersonas}
               refreshPersonas={refreshPersonas}
+              currentPage={currentPage}
+              pageSize={PAGE_SIZE}
             />
+            {totalPages > 1 && (
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={onPageChange}
+              />
+            )}
           </>
         ) : (
           <div className="mt-6 p-8 border border-border rounded-lg bg-background-weak text-center">
@@ -102,7 +132,11 @@ function MainContent({
 }
 
 export default function Page() {
-  const { personas, isLoading, error, refresh } = useAdminPersonas();
+  const [currentPage, setCurrentPage] = useState(1);
+  const { personas, totalItems, isLoading, error, refresh } = useAdminPersonas({
+    pageNum: currentPage - 1, // Backend uses 0-indexed pages
+    pageSize: PAGE_SIZE,
+  });
 
   return (
     <div className="mx-auto container">
@@ -122,7 +156,13 @@ export default function Page() {
       )}
 
       {!isLoading && !error && (
-        <MainContent personas={personas} refreshPersonas={refresh} />
+        <MainContent
+          personas={personas}
+          totalItems={totalItems}
+          currentPage={currentPage}
+          onPageChange={setCurrentPage}
+          refreshPersonas={refresh}
+        />
       )}
     </div>
   );

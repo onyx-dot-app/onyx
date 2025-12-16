@@ -514,11 +514,11 @@ def get_max_input_tokens_from_llm_provider(
     1. Use max_input_tokens from model_configuration (populated from source APIs
        like OpenRouter, Ollama, or our Bedrock mapping)
     2. Look up in litellm.model_cost dictionary
-    3. Fall back to GEN_AI_MODEL_FALLBACK_MAX_TOKENS (4096)
+    3. Fall back to GEN_AI_MODEL_FALLBACK_MAX_TOKENS (32000)
 
     Most dynamic providers (OpenRouter, Ollama) provide context_length via their
     APIs. Bedrock doesn't expose this, so we parse from model ID suffix (:200k)
-    or use BEDROCK_MODEL_TOKEN_LIMITS mapping. The 4096 fallback is only hit for
+    or use BEDROCK_MODEL_TOKEN_LIMITS mapping. The 32000 fallback is only hit for
     unknown models not in any of these sources.
     """
     max_input_tokens = None
@@ -545,7 +545,7 @@ def get_bedrock_token_limit(model_id: str) -> int:
     1. Parse from model ID suffix (e.g., ":200k" → 200000)
     2. Check LiteLLM's model_cost dictionary
     3. Fall back to our hardcoded BEDROCK_MODEL_TOKEN_LIMITS mapping
-    4. Default to 4096 if not found anywhere
+    4. Default to 32000 if not found anywhere
     """
     from onyx.llm.constants import BEDROCK_MODEL_TOKEN_LIMITS
 

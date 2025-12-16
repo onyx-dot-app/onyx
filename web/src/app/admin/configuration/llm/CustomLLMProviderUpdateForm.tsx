@@ -121,8 +121,9 @@ export function CustomLLMProviderUpdateForm({
 
         // build final payload
         const finalValues = { ...values };
-        finalValues.model_configurations = finalValues.model_configurations.map(
-          (modelConfiguration) => ({
+        // Filter out models that are not default, fast default, or visible
+        finalValues.model_configurations = finalValues.model_configurations
+          .map((modelConfiguration) => ({
             ...modelConfiguration,
             max_input_tokens:
               modelConfiguration.max_input_tokens === null ||
@@ -130,8 +131,13 @@ export function CustomLLMProviderUpdateForm({
                 ? null
                 : modelConfiguration.max_input_tokens,
             supports_image_input: false, // doesn't matter, not used
-          })
-        );
+          }))
+          .filter(
+            (modelConfiguration) =>
+              modelConfiguration.name === values.default_model_name ||
+              modelConfiguration.name === values.fast_default_model_name ||
+              modelConfiguration.is_visible
+          );
         finalValues.api_key_changed = values.api_key !== initialValues.api_key;
 
         if (values.model_configurations.length === 0) {

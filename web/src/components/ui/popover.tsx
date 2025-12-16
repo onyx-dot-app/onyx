@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 
 import { cn } from "@/lib/utils";
@@ -69,6 +69,42 @@ export function PopoverMenu({
   footer,
   scrollContainerRef,
 }: PopoverMenuProps) {
+  const [showTopShadow, setShowTopShadow] = useState(false);
+  const [showBottomShadow, setShowBottomShadow] = useState(false);
+  const internalRef = React.useRef<HTMLDivElement>(null);
+  const containerRef = scrollContainerRef || internalRef;
+
+  const checkScroll = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    // Show top shadow if scrolled down
+    setShowTopShadow(container.scrollTop > 1);
+
+    // Show bottom shadow if there's more content to scroll down
+    const hasMoreBelow =
+      container.scrollHeight - container.scrollTop - container.clientHeight > 1;
+    setShowBottomShadow(hasMoreBelow);
+  }, [containerRef]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    // Check initial state
+    checkScroll();
+
+    container.addEventListener("scroll", checkScroll);
+    // Also check on resize in case content changes
+    const resizeObserver = new ResizeObserver(checkScroll);
+    resizeObserver.observe(container);
+
+    return () => {
+      container.removeEventListener("scroll", checkScroll);
+      resizeObserver.disconnect();
+    };
+  }, [containerRef, checkScroll]);
+
   if (!children) return null;
 
   const definedChildren = children.filter(
@@ -81,27 +117,51 @@ export function PopoverMenu({
   const size = small ? "small" : medium ? "medium" : "small";
 
   return (
-    <div className="flex flex-col gap-1 max-h-[20rem]">
-      <div
-        ref={scrollContainerRef}
-        className={cn(
-          "flex flex-col gap-1 h-full overflow-y-scroll",
-          sizeClasses[size],
-          className
-        )}
-      >
-        {filteredChildren.map((child, index) => (
-          <div key={index}>
-            {child === undefined ? (
-              <></>
-            ) : child === null ? (
-              // Render `null`s as separator lines
-              <SeparatorHelper />
-            ) : (
-              child
-            )}
-          </div>
-        ))}
+    <div className="flex flex-col gap-1">
+      <div className="relative">
+        <div
+          ref={containerRef}
+          className={cn(
+            "flex flex-col gap-1 overflow-y-auto max-h-[20rem]",
+            sizeClasses[size],
+            className
+          )}
+        >
+          {filteredChildren.map((child, index) => (
+            <div key={index}>
+              {child === undefined ? (
+                <></>
+              ) : child === null ? (
+                // Render `null`s as separator lines
+                <SeparatorHelper />
+              ) : (
+                child
+              )}
+            </div>
+          ))}
+        </div>
+        {/* Top scroll shadow indicator */}
+        <div
+          className={cn(
+            "absolute top-0 left-0 right-0 h-6 pointer-events-none transition-opacity duration-200",
+            showTopShadow ? "opacity-100" : "opacity-0"
+          )}
+          style={{
+            background:
+              "linear-gradient(to bottom, var(--background-neutral-00), transparent)",
+          }}
+        />
+        {/* Bottom scroll shadow indicator */}
+        <div
+          className={cn(
+            "absolute bottom-0 left-0 right-0 h-6 pointer-events-none transition-opacity duration-200",
+            showBottomShadow ? "opacity-100" : "opacity-0"
+          )}
+          style={{
+            background:
+              "linear-gradient(to top, var(--background-neutral-00), transparent)",
+          }}
+        />
       </div>
       {footer && (
         <>
