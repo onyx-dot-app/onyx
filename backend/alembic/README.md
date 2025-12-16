@@ -7,8 +7,12 @@ Onyx migrations use a generic single-database configuration with an async dbapi.
 
 ## To generate new migrations:
 
-run from onyx/backend:
-`alembic revision --autogenerate -m <DESCRIPTION_OF_MIGRATION>`
+From onyx/backend, run:
+`alembic revision -m <DESCRIPTION_OF_MIGRATION>`
+
+Note: you cannot use the `--autogenerate` flag as the automatic schema parsing does not work.
+
+Manually populate the upgrade and downgrade in your new migration.
 
 More info can be found here: https://alembic.sqlalchemy.org/en/latest/autogenerate.html
 
