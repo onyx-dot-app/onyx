@@ -97,7 +97,9 @@ class TestCustomTool(unittest.TestCase):
             dynamic_schema_info=self.dynamic_schema_info,
         )
 
-        result = tools[0].run(turn_index=0, override_kwargs=None, assistant_id="123")
+        result = tools[0].run(
+            turn_index=0, tab_index=0, override_kwargs=None, assistant_id="123"
+        )
         expected_url = f"http://localhost:8080/{self.dynamic_schema_info.chat_session_id}/test/{self.dynamic_schema_info.message_id}/assistant/123"
         mock_request.assert_called_once_with("GET", expected_url, json=None, headers={})
 
@@ -131,7 +133,9 @@ class TestCustomTool(unittest.TestCase):
             dynamic_schema_info=self.dynamic_schema_info,
         )
 
-        result = tools[1].run(turn_index=0, override_kwargs=None, assistant_id="456")
+        result = tools[1].run(
+            turn_index=0, tab_index=0, override_kwargs=None, assistant_id="456"
+        )
         expected_url = f"http://localhost:8080/{self.dynamic_schema_info.chat_session_id}/test/{self.dynamic_schema_info.message_id}/assistant/456"
         mock_request.assert_called_once_with(
             "POST", expected_url, json=None, headers={}
@@ -174,7 +178,9 @@ class TestCustomTool(unittest.TestCase):
             dynamic_schema_info=self.dynamic_schema_info,
         )
 
-        tools[0].run(turn_index=0, override_kwargs=None, assistant_id="123")
+        tools[0].run(
+            turn_index=0, tab_index=0, override_kwargs=None, assistant_id="123"
+        )
         expected_url = f"http://localhost:8080/{self.dynamic_schema_info.chat_session_id}/test/{self.dynamic_schema_info.message_id}/assistant/123"
         expected_headers = {
             "Authorization": "Bearer token123",
@@ -206,7 +212,9 @@ class TestCustomTool(unittest.TestCase):
             dynamic_schema_info=self.dynamic_schema_info,
         )
 
-        tools[0].run(turn_index=0, override_kwargs=None, assistant_id="123")
+        tools[0].run(
+            turn_index=0, tab_index=0, override_kwargs=None, assistant_id="123"
+        )
         expected_url = f"http://localhost:8080/{self.dynamic_schema_info.chat_session_id}/test/{self.dynamic_schema_info.message_id}/assistant/123"
         mock_request.assert_called_once_with("GET", expected_url, json=None, headers={})
 

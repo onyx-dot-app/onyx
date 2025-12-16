@@ -133,7 +133,7 @@ class CustomTool(Tool[None]):
 
     """Actual execution of the tool"""
 
-    def emit_start(self, turn_index: int, tab_index: int = 0) -> None:
+    def emit_start(self, turn_index: int, tab_index: int) -> None:
         self.emitter.emit(
             Packet(
                 turn_index=turn_index,
@@ -145,8 +145,8 @@ class CustomTool(Tool[None]):
     def run(
         self,
         turn_index: int,
+        tab_index: int,
         override_kwargs: None = None,
-        tab_index: int = 0,
         **llm_kwargs: Any,
     ) -> ToolResponse:
         request_body = llm_kwargs.get(REQUEST_BODY)

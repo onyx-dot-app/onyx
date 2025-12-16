@@ -114,7 +114,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
             },
         }
 
-    def emit_start(self, turn_index: int, tab_index: int = 0) -> None:
+    def emit_start(self, turn_index: int, tab_index: int) -> None:
         """Emit start packet for this tool. Code will be emitted in run() method."""
         # Note: PythonToolStart requires code, but we don't have it in emit_start
         # The code is available in run() method via llm_kwargs
@@ -123,8 +123,8 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
     def run(
         self,
         turn_index: int,
-        override_kwargs: PythonToolOverrideKwargs | None = None,
-        tab_index: int = 0,
+        tab_index: int,
+        override_kwargs: PythonToolOverrideKwargs,
         **llm_kwargs: Any,
     ) -> ToolResponse:
         """

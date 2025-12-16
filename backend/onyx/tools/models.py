@@ -28,6 +28,15 @@ class CustomToolCallSummary(BaseModel):
     tool_result: Any  # The response data
 
 
+class ToolCallKickoff(BaseModel):
+    tool_call_id: str
+    tool_name: str
+    tool_args: dict[str, Any]
+
+    turn_index: int
+    tab_index: int
+
+
 class ToolResponse(BaseModel):
     # Rich response is for the objects that are returned but not directly used by the LLM
     # these typically need to be saved to the database to load things in the UI (usually both)
@@ -45,16 +54,7 @@ class ToolResponse(BaseModel):
     # This is the final string that needs to be wrapped in a tool call response message and concatenated to the history
     llm_facing_response: str
     # The original tool call that triggered this response - set by tool_runner
-    tool_call: "ToolCallKickoff | None" = None
-
-
-class ToolCallKickoff(BaseModel):
-    tool_call_id: str
-    tool_name: str
-    tool_args: dict[str, Any]
-
-    turn_index: int
-    tab_index: int
+    tool_call: ToolCallKickoff | None = None
 
 
 class ToolRunnerResponse(BaseModel):
@@ -165,7 +165,7 @@ class CustomToolRunContext(BaseModel):
 class ToolCallInfo(BaseModel):
     parent_tool_call_id: str | None  # None if attached to the Chat Message directly
     turn_index: int
-    tab_index: int = 0  # Index order of tool calls from the LLM for parallel tool calls
+    tab_index: int
     tool_name: str
     tool_call_id: str
     tool_id: int

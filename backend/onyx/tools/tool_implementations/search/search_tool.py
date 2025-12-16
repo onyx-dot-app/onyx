@@ -347,7 +347,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             },
         }
 
-    def emit_start(self, turn_index: int, tab_index: int = 0) -> None:
+    def emit_start(self, turn_index: int, tab_index: int) -> None:
         self.emitter.emit(
             Packet(
                 turn_index=turn_index,
@@ -360,8 +360,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
     def run(
         self,
         turn_index: int,
+        tab_index: int,
         override_kwargs: SearchToolOverrideKwargs,
-        tab_index: int = 0,
         **llm_kwargs: Any,
     ) -> ToolResponse:
         # Start overall timing

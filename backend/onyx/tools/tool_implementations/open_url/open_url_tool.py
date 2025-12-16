@@ -178,7 +178,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             },
         }
 
-    def emit_start(self, turn_index: int, tab_index: int = 0) -> None:
+    def emit_start(self, turn_index: int, tab_index: int) -> None:
         """Emit start packet to signal tool has started."""
         self.emitter.emit(
             Packet(
@@ -191,8 +191,8 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
     def run(
         self,
         turn_index: int,
+        tab_index: int,
         override_kwargs: OpenURLToolOverrideKwargs,
-        tab_index: int = 0,
         **llm_kwargs: Any,
     ) -> ToolResponse:
         """Execute the open URL tool to fetch content from the specified URLs.
