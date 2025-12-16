@@ -39,6 +39,9 @@ env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
+  # Redis Cloud
+  REDIS_CLOUD_PYTEST_PASSWORD: ${{ secrets.REDIS_CLOUD_PYTEST_PASSWORD }}
+
   # Code Interpreter
   # TODO: debug why this is failing and enable
   CODE_INTERPRETER_BASE_URL: http://localhost:8000
