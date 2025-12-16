@@ -144,3 +144,7 @@ declare module "@opal/icons" {
   export const SvgZoomIn: IconComponent;
   export const SvgZoomOut: IconComponent;
 }
+
+declare module "@opal/types/icons" {
+  export * from "@opal";
+}

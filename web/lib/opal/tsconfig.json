@@ -18,7 +18,9 @@
     "typeRoots": ["../node_modules/@types"],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@opal": ["./src/index.ts"],
+      "@opal/*": ["./src/*"]
     }
   },
   "include": ["src/**/*"],

@@ -1,4 +1,4 @@
-import type { IconProps } from "@/types/icons";
+import type { IconProps } from "@opal/types/icons";
 
 const SvgPieChart = ({ size, ...props }: IconProps) => (
   <svg
