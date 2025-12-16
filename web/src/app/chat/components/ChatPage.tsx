@@ -18,6 +18,7 @@ import {
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
+import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
@@ -129,6 +130,12 @@ export default function ChatPage({
     lastFailedFiles,
     clearLastFailedFiles,
   } = useProjectsContext();
+
+  // When changing from project chat to main chat (or vice-versa), clear forced tools
+  const { setForcedToolIds } = useForcedTools();
+  useEffect(() => {
+    setForcedToolIds([]);
+  }, [currentProjectId, setForcedToolIds]);
 
   const { height: screenHeight } = useScreenSize();
 
