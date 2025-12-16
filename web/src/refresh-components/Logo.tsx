@@ -43,7 +43,7 @@ export default function Logo({ folded, size, className }: LogoProps) {
         )}
         <Text
           headingH3
-          className={cn("line-clamp-1 truncate", folded && "invisible")}
+          className={cn("line-clamp-1 truncate", folded && "hidden")}
           nowrap
         >
           {settings.enterpriseSettings?.application_name}
@@ -53,10 +53,7 @@ export default function Logo({ folded, size, className }: LogoProps) {
         <Text
           secondaryBody
           text03
-          className={cn(
-            "ml-[33px] line-clamp-1 truncate",
-            folded && "invisible"
-          )}
+          className={cn("ml-[33px] line-clamp-1 truncate", folded && "hidden")}
           nowrap
         >
           Powered by Onyx
