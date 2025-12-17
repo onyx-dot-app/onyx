@@ -59,6 +59,7 @@ To upgrade the stable version, upgrade it as you would any other [requirement](h
 ## Building from source
 
 Generally, `go build .` or `go install .` are sufficient.
+
 `go build .` will output a `tools/ods/ods` binary which you can call normally,
 
 ```shell
