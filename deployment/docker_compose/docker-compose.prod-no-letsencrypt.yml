@@ -304,8 +304,6 @@ services:
   cache:
     image: redis:7.4-alpine
     restart: unless-stopped
-    ports:
-      - "6379:6379"
     # docker silently mounts /data even without an explicit volume mount, which enables
     # persistence. explicitly setting save and appendonly forces ephemeral behavior.
     command: redis-server --save "" --appendonly no
