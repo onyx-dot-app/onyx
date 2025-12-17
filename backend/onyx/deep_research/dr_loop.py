@@ -101,6 +101,9 @@ def run_deep_research_llm_loop(
         llm_step_result = cast(LlmStepResult, llm_step_result)
 
         if not llm_step_result.tool_calls:
+            # Mark this turn as a clarification question
+            state_container.set_is_clarification(True)
+
             emitter.emit(
                 Packet(turn_index=current_tool_call_index, obj=OverallStop(type="stop"))
             )

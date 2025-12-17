@@ -13,6 +13,7 @@ from onyx.chat.chat_state import run_chat_llm_with_state_containers
 from onyx.chat.chat_utils import convert_chat_history
 from onyx.chat.chat_utils import create_chat_history_chain
 from onyx.chat.chat_utils import get_custom_agent_prompt
+from onyx.chat.chat_utils import is_last_assistant_message_clarification
 from onyx.chat.chat_utils import load_all_chat_files
 from onyx.chat.emitter import get_default_emitter
 from onyx.chat.llm_loop import run_llm_loop
@@ -501,6 +502,10 @@ def stream_chat_message_objects(
             if chat_session.project_id:
                 raise RuntimeError("Deep research is not supported for projects")
 
+            # Skip clarification if the last assistant message was a clarification
+            # (user has already responded to a clarification question)
+            skip_clarification = is_last_assistant_message_clarification(chat_history)
+
             yield from run_chat_llm_with_state_containers(
                 run_deep_research_llm_loop,
                 is_connected=check_is_connected,
@@ -512,6 +517,7 @@ def stream_chat_message_objects(
                 llm=llm,
                 token_counter=token_counter,
                 db_session=db_session,
+                skip_clarification=skip_clarification,
                 user_identity=user_identity,
             )
         else:
@@ -579,6 +585,7 @@ def stream_chat_message_objects(
             tool_calls=state_container.tool_calls,
             db_session=db_session,
             assistant_message=assistant_response,
+            is_clarification=state_container.is_clarification,
         )
 
     except ValueError as e:
