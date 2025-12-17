@@ -1,4 +1,5 @@
 import json
+from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Mapping
 from collections.abc import Sequence
@@ -17,6 +18,7 @@ from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.llm.model_response import Delta
 from onyx.llm.models import AssistantMessage
 from onyx.llm.models import ChatCompletionMessage
 from onyx.llm.models import FunctionCall
@@ -334,6 +336,9 @@ def run_llm_step(
     state_container: ChatStateContainer,
     final_documents: list[SearchDoc] | None = None,
     user_identity: LLMUserIdentity | None = None,
+    custom_token_processor: (
+        Callable[[Delta | None, Any], tuple[Delta | None, Any]] | None
+    ) = None,
 ) -> Generator[Packet, None, tuple[LlmStepResult, int]]:
     # The second return value is for the turn index because reasoning counts on the frontend as a turn
     # TODO this is maybe ok but does not align well with the backend logic too well
@@ -350,6 +355,8 @@ def run_llm_step(
     answer_start = False
     accumulated_reasoning = ""
     accumulated_answer = ""
+
+    processor_state: Any = None
 
     with generation_span(
         model=llm.config.model_name,
@@ -378,6 +385,17 @@ def run_llm_step(
                     "cache_creation_input_tokens": usage.cache_creation_input_tokens,
                 }
             delta = packet.choice.delta
+
+            if custom_token_processor:
+                # The custom token processor can modify the deltas for specific custom logic
+                # It can also return a state so that it can handle aggregated delta logic etc.
+                # Loosely typed so the function can be flexible
+                modified_delta, processor_state = custom_token_processor(
+                    delta, processor_state
+                )
+                if modified_delta is None:
+                    continue
+                delta = modified_delta
 
             # Should only happen once, frontend does not expect multiple
             # ReasoningStart or ReasoningDone packets.
@@ -439,6 +457,13 @@ def run_llm_step(
                     reasoning_start = False
 
                 for tool_call_delta in delta.tool_calls:
+                    _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
+
+        # Flush custom token processor to get any final tool calls
+        if custom_token_processor:
+            flush_delta, processor_state = custom_token_processor(None, processor_state)
+            if flush_delta and flush_delta.tool_calls:
+                for tool_call_delta in flush_delta.tool_calls:
                     _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
 
         tool_calls = _extract_tool_call_kickoffs(id_to_tool_call_map)

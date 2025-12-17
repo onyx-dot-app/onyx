@@ -16,6 +16,9 @@ from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import LlmStepResult
 from onyx.configs.constants import MessageType
 from onyx.deep_research.dr_mock_tools import get_clarification_tool_definitions
+from onyx.deep_research.dr_mock_tools import get_orchestrator_tools
+from onyx.deep_research.dr_mock_tools import THINK_TOOL_NAME
+from onyx.deep_research.utils import create_think_tool_token_processor
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.models import ToolChoiceOptions
@@ -215,6 +218,7 @@ def run_deep_research_llm_loop(
     )
     orchestration_tokens = token_counter(token_count_prompt)
 
+    reasoning_cycles = 0
     for cycle in range(MAX_ORCHESTRATOR_CYCLES):
         orchestrator_prompt = orchestrator_prompt_template.format(
             current_datetime=get_current_llm_day_time(full_sentence=False),
@@ -239,16 +243,51 @@ def run_deep_research_llm_loop(
             last_n_user_messages=MAX_USER_MESSAGES_FOR_CONTEXT,
         )
 
-        research_plan_generator = run_llm_step(
+        # Use think tool processor for non-reasoning models to convert
+        # think_tool calls to reasoning content
+        custom_processor = (
+            create_think_tool_token_processor() if not is_reasoning_model else None
+        )
+
+        orchestrator_generator = run_llm_step(
             history=truncated_message_history,
-            tool_definitions=[],
+            tool_definitions=get_orchestrator_tools(
+                include_think_tool=not is_reasoning_model
+            ),
             tool_choice=ToolChoiceOptions.AUTO,
             llm=llm,
-            turn_index=cycle,
+            turn_index=cycle + reasoning_cycles,
             # No citations in this step, it should just pass through all
             # tokens directly so initialized as an empty citation processor
             citation_processor=DynamicCitationProcessor(),
             state_container=state_container,
             final_documents=None,
             user_identity=user_identity,
+            custom_token_processor=custom_processor,
         )
+
+        while True:
+            try:
+                packet = next(orchestrator_generator)
+                emitter.emit(packet)
+            except StopIteration as e:
+                # TODO handle reasoning cycles
+                llm_step_result, _ = e.value
+                break
+        llm_step_result = cast(LlmStepResult, llm_step_result)
+        tool_calls = llm_step_result.tool_calls or []
+
+        if not tool_calls and cycle == 0:
+            raise RuntimeError(
+                "Deep Research failed to generate any research tasks for the agents."
+            )
+
+        # TODO generate report if there are no tool calls and cycle is not 0
+
+        if tool_calls:
+            for tool_call in tool_calls:
+                if tool_call.tool_name == THINK_TOOL_NAME:
+                    pass
+
+        if llm_step_result.answer:
+            state_container.set_answer_tokens(llm_step_result.answer)
