@@ -413,11 +413,24 @@ export default function MCPAuthenticationModal({
                         value={values.auth_type}
                         onValueChange={(value) => {
                           setFieldValue("auth_type", value);
-                          // For OAuth, we only support per-user auth
-                          if (value === MCPAuthenticationType.OAUTH) {
+                          // For OAuth + OAuth pass-through, we only support per-user auth
+                          if (
+                            value === MCPAuthenticationType.OAUTH ||
+                            value === MCPAuthenticationType.PT_OAUTH
+                          ) {
                             setFieldValue(
                               "auth_performer",
                               MCPAuthenticationPerformer.PER_USER
+                            );
+                          } else if (
+                            value === MCPAuthenticationType.API_TOKEN
+                          ) {
+                            // Keep auth_performer in sync with the selected API token tab
+                            setFieldValue(
+                              "auth_performer",
+                              activeAuthTab === "admin"
+                                ? MCPAuthenticationPerformer.ADMIN
+                                : MCPAuthenticationPerformer.PER_USER
                             );
                           }
                         }}

@@ -147,7 +147,7 @@ export default function OpenAPIAuthenticationModal({
     () =>
       Yup.object({
         authMethod: Yup.mixed<AuthMethod>()
-          .oneOf(["oauth", "custom-header"])
+          .oneOf(["oauth", "pt-oauth", "custom-header"])
           .required("Authentication method is required"),
         authorizationUrl: Yup.string()
           .url("Enter a valid URL")
@@ -246,6 +246,7 @@ export default function OpenAPIAuthenticationModal({
     hasInitialHeaders,
     initialHeaders,
     isEditingOAuthConfig,
+    passthroughOAuthEnabled,
   ]);
 
   const handleSubmit = useCallback(
