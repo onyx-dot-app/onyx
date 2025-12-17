@@ -1,7 +1,7 @@
 import { INTERNAL_URL } from "@/lib/constants";
 import { NextRequest, NextResponse } from "next/server";
 
-/* NextJS is annoying and makes use use a separate function for 
+/* NextJS is annoying and makes use use a separate function for
 each request type >:( */
 
 export async function GET(
