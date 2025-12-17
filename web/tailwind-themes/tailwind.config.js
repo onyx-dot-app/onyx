@@ -29,6 +29,14 @@ module.exports = {
           "0%": { opacity: "1", transform: "scale(1)" },
           "100%": { opacity: "0", transform: "scale(0.95)" },
         },
+        "collapsible-down": {
+          from: { height: "0" },
+          to: { height: "var(--radix-collapsible-content-height)" },
+        },
+        "collapsible-up": {
+          from: { height: "var(--radix-collapsible-content-height)" },
+          to: { height: "0" },
+        },
       },
       animation: {
         "fade-in-up": "fadeInUp 0.5s ease-out",
@@ -36,6 +44,8 @@ module.exports = {
         pulse: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
         "fade-in-scale": "fade-in-scale 0.2s ease-out forwards",
         "fade-out-scale": "fade-out-scale 0.2s ease-in forwards",
+        "collapsible-down": "collapsible-down 0.2s ease-out",
+        "collapsible-up": "collapsible-up 0.2s ease-out",
       },
       gradientColorStops: {
         "neutral-10": "var(--neutral-10) 5%",

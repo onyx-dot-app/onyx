@@ -49,7 +49,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
         "Testing user file uploads without connectors";
       const assistantInstructions = "Help users with their documents.";
 
-      await page.goto("http://localhost:3000/assistants/new");
+      await page.goto("http://localhost:3000/chat/agents/create");
 
       // Fill in basic assistant details
       await getNameInput(page).fill(assistantName);
@@ -147,7 +147,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
       const editedNumChunks = "15";
 
       // Navigate to the assistant creation page
-      await page.goto("http://localhost:3000/assistants/new");
+      await page.goto("http://localhost:3000/chat/agents/create");
 
       // --- Fill in Initial Assistant Details ---
       await getNameInput(page).fill(assistantName);
