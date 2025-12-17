@@ -9,19 +9,19 @@ export const CONTENT_PROVIDER_DETAILS: Record<
   string,
   { label: string; subtitle: string; description: string; logoSrc?: string }
 > = {
-  firecrawl: {
-    label: "Firecrawl",
-    subtitle: "Leading open-source crawler.",
-    description:
-      "Connect Firecrawl to fetch and summarize page content from search results.",
-    logoSrc: "/firecrawl.svg",
-  },
   onyx_web_crawler: {
     label: "Onyx Web Crawler",
     subtitle:
       "Built-in web crawler. Works for most pages but less performant in edge cases.",
     description:
       "Onyx's built-in crawler processes URLs returned by your search engine.",
+  },
+  firecrawl: {
+    label: "Firecrawl",
+    subtitle: "Leading open-source crawler.",
+    description:
+      "Connect Firecrawl to fetch and summarize page content from search results.",
+    logoSrc: "/firecrawl.svg",
   },
 };
 
@@ -43,13 +43,16 @@ export type ContentProviderLike =
   | null
   | undefined;
 
-type ContentProviderCaps = {
+type ContentProviderCapabilities = {
   requiresApiKey: boolean;
   requiredConfigKeys: string[];
   storedConfigAliases?: Record<string, string[]>;
 };
 
-export const CONTENT_PROVIDER_CAPS: Record<string, ContentProviderCaps> = {
+const CONTENT_PROVIDER_CAPABILITIES: Record<
+  string,
+  ContentProviderCapabilities
+> = {
   onyx_web_crawler: {
     requiresApiKey: false,
     requiredConfigKeys: [],
@@ -63,27 +66,26 @@ export const CONTENT_PROVIDER_CAPS: Record<string, ContentProviderCaps> = {
   },
 };
 
-function getCaps(providerType: WebContentProviderType): ContentProviderCaps {
+const DEFAULT_CONTENT_PROVIDER_CAPABILITIES: ContentProviderCapabilities = {
+  requiresApiKey: true,
+  requiredConfigKeys: [],
+};
+
+function getCapabilities(
+  providerType: WebContentProviderType
+): ContentProviderCapabilities {
   return (
-    CONTENT_PROVIDER_CAPS[providerType as string] ?? {
-      requiresApiKey: true,
-      requiredConfigKeys: [],
-    }
+    CONTENT_PROVIDER_CAPABILITIES[providerType as string] ??
+    DEFAULT_CONTENT_PROVIDER_CAPABILITIES
   );
 }
 
-export function contentProviderRequiresApiKey(
-  providerType: WebContentProviderType
-): boolean {
-  return getCaps(providerType).requiresApiKey;
-}
-
-export function getStoredContentConfigValue(
+function getStoredContentConfigValue(
   providerType: WebContentProviderType,
   canonicalKey: string,
   config: ContentProviderConfig
 ): string {
-  const caps = getCaps(providerType);
+  const caps = getCapabilities(providerType);
   const aliases = caps.storedConfigAliases?.[canonicalKey] ?? [canonicalKey];
 
   const safeConfig = config ?? {};
@@ -100,7 +102,7 @@ export function isContentProviderConfigured(
   providerType: WebContentProviderType,
   provider: ContentProviderLike
 ): boolean {
-  const caps = getCaps(providerType);
+  const caps = getCapabilities(providerType);
 
   if (caps.requiresApiKey && !(provider?.has_api_key ?? false)) {
     return false;
@@ -138,7 +140,7 @@ export function buildContentProviderConfig(
   providerType: WebContentProviderType,
   baseUrl: string
 ): Record<string, string> {
-  const caps = getCaps(providerType);
+  const caps = getCapabilities(providerType);
   const trimmed = baseUrl.trim();
   const config: Record<string, string> = {};
 
@@ -160,7 +162,7 @@ export function canConnectContentProvider(
   apiKey: string,
   baseUrl: string
 ): boolean {
-  const caps = getCaps(providerType);
+  const caps = getCapabilities(providerType);
 
   if (caps.requiresApiKey && apiKey.trim().length === 0) {
     return false;
@@ -178,7 +180,7 @@ export function getSingleContentConfigFieldValueForForm(
   provider: ContentProviderLike,
   defaultValue = ""
 ): string {
-  const caps = getCaps(providerType);
+  const caps = getCapabilities(providerType);
   if (caps.requiredConfigKeys.length === 0) {
     return defaultValue;
   }

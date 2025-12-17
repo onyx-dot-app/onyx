@@ -32,6 +32,7 @@ import {
   buildSearchProviderConfig,
   canConnectSearchProvider,
   getSingleConfigFieldValueForForm,
+  isBuiltInSearchProviderType,
   isSearchProviderConfigured,
   searchProviderRequiresApiKey,
   type WebSearchProviderType,
@@ -822,13 +823,14 @@ export default function Page() {
               {combinedSearchProviders.map(
                 ({ key, providerType, label, subtitle, logoSrc, provider }) => {
                   const isConfigured = isSearchProviderConfigured(
-                    providerType as WebSearchProviderType,
+                    providerType,
                     provider
                   );
                   const isActive = provider?.is_active ?? false;
                   const isHighlighted = isActive;
                   const providerId = provider?.id;
-                  const canOpenModal = typeof providerType === "string";
+                  const canOpenModal =
+                    isBuiltInSearchProviderType(providerType);
 
                   const buttonState = (() => {
                     if (!provider || !isConfigured) {
@@ -838,10 +840,7 @@ export default function Page() {
                         icon: "arrow" as const,
                         onClick: canOpenModal
                           ? () => {
-                              openSearchModal(
-                                providerType as WebSearchProviderType,
-                                provider
-                              );
+                              openSearchModal(providerType, provider);
                               setActivationError(null);
                             }
                           : undefined,

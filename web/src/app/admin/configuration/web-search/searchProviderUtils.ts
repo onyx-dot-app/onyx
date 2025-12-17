@@ -70,7 +70,7 @@ export type SearchProviderLike =
   | null
   | undefined;
 
-type SearchProviderCaps = {
+type SearchProviderCapabilities = {
   requiresApiKey: boolean;
   /** Keys required in `config` to consider the provider configured / connectable. */
   requiredConfigKeys: string[];
@@ -81,9 +81,9 @@ type SearchProviderCaps = {
   storedConfigAliases?: Record<string, string[]>;
 };
 
-export const SEARCH_PROVIDER_CAPS: Record<
+const SEARCH_PROVIDER_CAPABILITIES: Record<
   WebSearchProviderType,
-  SearchProviderCaps
+  SearchProviderCapabilities
 > = {
   exa: {
     requiresApiKey: true,
@@ -109,18 +109,38 @@ export const SEARCH_PROVIDER_CAPS: Record<
   },
 };
 
-export function searchProviderRequiresApiKey(
-  providerType: WebSearchProviderType
-): boolean {
-  return SEARCH_PROVIDER_CAPS[providerType].requiresApiKey;
+const DEFAULT_SEARCH_PROVIDER_CAPABILITIES: SearchProviderCapabilities = {
+  requiresApiKey: true,
+  requiredConfigKeys: [],
+};
+
+function getCapabilities(providerType: string): SearchProviderCapabilities {
+  return (
+    (
+      SEARCH_PROVIDER_CAPABILITIES as Record<string, SearchProviderCapabilities>
+    )[providerType] ?? DEFAULT_SEARCH_PROVIDER_CAPABILITIES
+  );
 }
 
-export function getStoredConfigValue(
-  providerType: WebSearchProviderType,
+export function isBuiltInSearchProviderType(
+  providerType: string
+): providerType is WebSearchProviderType {
+  return Object.prototype.hasOwnProperty.call(
+    SEARCH_PROVIDER_DETAILS,
+    providerType
+  );
+}
+
+export function searchProviderRequiresApiKey(providerType: string): boolean {
+  return getCapabilities(providerType).requiresApiKey;
+}
+
+function getStoredConfigValue(
+  providerType: string,
   canonicalKey: string,
   config: SearchProviderConfig
 ): string {
-  const caps = SEARCH_PROVIDER_CAPS[providerType];
+  const caps = getCapabilities(providerType);
   const aliases = caps.storedConfigAliases?.[canonicalKey] ?? [canonicalKey];
 
   const safeConfig = config ?? {};
@@ -135,10 +155,10 @@ export function getStoredConfigValue(
 
 /** True when the provider has all required credentials/config to be usable. */
 export function isSearchProviderConfigured(
-  providerType: WebSearchProviderType,
+  providerType: string,
   provider: SearchProviderLike
 ): boolean {
-  const caps = SEARCH_PROVIDER_CAPS[providerType];
+  const caps = getCapabilities(providerType);
 
   if (caps.requiresApiKey && !(provider?.has_api_key ?? false)) {
     return false;
@@ -159,11 +179,11 @@ export function isSearchProviderConfigured(
 }
 
 export function canConnectSearchProvider(
-  providerType: WebSearchProviderType,
+  providerType: string,
   apiKey: string,
   searchEngineIdOrBaseUrl: string
 ): boolean {
-  const caps = SEARCH_PROVIDER_CAPS[providerType];
+  const caps = getCapabilities(providerType);
 
   if (caps.requiresApiKey && apiKey.trim().length === 0) {
     return false;
@@ -182,10 +202,10 @@ export function canConnectSearchProvider(
 
 /** Build the `config` payload to send to the backend for a provider. */
 export function buildSearchProviderConfig(
-  providerType: WebSearchProviderType,
+  providerType: string,
   searchEngineIdOrBaseUrl: string
 ): Record<string, string> {
-  const caps = SEARCH_PROVIDER_CAPS[providerType];
+  const caps = getCapabilities(providerType);
   const value = searchEngineIdOrBaseUrl.trim();
 
   const config: Record<string, string> = {};
@@ -206,10 +226,10 @@ export function buildSearchProviderConfig(
  * For providers that have a single required config field, return that stored value for form prefilling.
  */
 export function getSingleConfigFieldValueForForm(
-  providerType: WebSearchProviderType,
+  providerType: string,
   provider: SearchProviderLike
 ): string {
-  const caps = SEARCH_PROVIDER_CAPS[providerType];
+  const caps = getCapabilities(providerType);
   if (caps.requiredConfigKeys.length === 0) {
     return "";
   }
