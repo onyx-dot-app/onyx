@@ -60,13 +60,38 @@ export async function OPTIONS(
   return handleRequest(request, params.path);
 }
 
+/**
+ * Rewrite Set-Cookie headers for local development.
+ * When proxying to a remote backend, cookies may have Domain attributes
+ * that don't match localhost, causing the browser to reject them.
+ * This function strips Domain and adjusts Secure for localhost.
+ */
+function rewriteCookiesForLocalhost(headers: Headers): Headers {
+  const newHeaders = new Headers();
+
+  headers.forEach((value, key) => {
+    if (key.toLowerCase() === "set-cookie") {
+      // Strip Domain attribute and adjust Secure for localhost
+      const rewritten = value
+        // Remove Domain=... attribute (case-insensitive)
+        .replace(/;\s*Domain=[^;]*/gi, "")
+        // For localhost, we can't use Secure (unless using HTTPS)
+        .replace(/;\s*Secure/gi, "")
+        // SameSite=None requires Secure, so change to Lax for localhost
+        .replace(/;\s*SameSite=None/gi, "; SameSite=Lax");
+      newHeaders.append(key, rewritten);
+    } else {
+      newHeaders.append(key, value);
+    }
+  });
+
+  return newHeaders;
+}
+
 async function handleRequest(request: NextRequest, path: string[]) {
-  if (
-    process.env.NODE_ENV !== "development" &&
-    // NOTE: Set this environment variable to 'true' for preview environments
-    // Where you want finer-grained control over API access
-    process.env.OVERRIDE_API_PRODUCTION !== "true"
-  ) {
+  const isDevelopment = process.env.NODE_ENV === "development";
+
+  if (!isDevelopment && process.env.OVERRIDE_API_PRODUCTION !== "true") {
     return NextResponse.json(
       {
         message:
@@ -87,21 +112,7 @@ async function handleRequest(request: NextRequest, path: string[]) {
       backendUrl.searchParams.append(key, value);
     });
 
-    // Build headers, optionally injecting debug auth cookie
     const headers = new Headers(request.headers);
-    if (
-      process.env.DEBUG_AUTH_COOKIE &&
-      process.env.NODE_ENV === "development"
-    ) {
-      // Inject the debug auth cookie for local development against remote backend
-      // Get from cloud site: DevTools → Application → Cookies → fastapiusersauth
-      const existingCookies = headers.get("cookie") || "";
-      const debugCookie = `fastapiusersauth=${process.env.DEBUG_AUTH_COOKIE}`;
-      headers.set(
-        "cookie",
-        existingCookies ? `${existingCookies}; ${debugCookie}` : debugCookie
-      );
-    }
 
     const response = await fetch(backendUrl, {
       method: request.method,
@@ -111,6 +122,16 @@ async function handleRequest(request: NextRequest, path: string[]) {
       // @ts-ignore
       duplex: "half",
     });
+
+    // In development, rewrite Set-Cookie headers so they work for localhost
+    // This allows logging in through the local frontend against a remote backend
+    const isRemoteBackend =
+      !INTERNAL_URL.includes("localhost") &&
+      !INTERNAL_URL.includes("127.0.0.1");
+    const responseHeaders =
+      isDevelopment && isRemoteBackend
+        ? rewriteCookiesForLocalhost(response.headers)
+        : response.headers;
 
     // Check if the response is a stream
     if (
@@ -123,12 +144,12 @@ async function handleRequest(request: NextRequest, path: string[]) {
 
       return new NextResponse(readable, {
         status: response.status,
-        headers: response.headers,
+        headers: responseHeaders,
       });
     } else {
       return new NextResponse(response.body, {
         status: response.status,
-        headers: response.headers,
+        headers: responseHeaders,
       });
     }
   } catch (error: unknown) {
