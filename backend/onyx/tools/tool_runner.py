@@ -74,6 +74,7 @@ def _merge_tool_calls(tool_calls: list[ToolCallKickoff]) -> list[ToolCallKickoff
                 tool_name=tool_name,
                 tool_args=merged_args,
                 turn_index=calls[0].turn_index,
+                # Use first call's tab_index since merged calls become a single call
                 tab_index=calls[0].tab_index,
             )
             merged_calls.append(merged_call)

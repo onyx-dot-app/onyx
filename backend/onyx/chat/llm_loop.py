@@ -536,6 +536,8 @@ def run_llm_loop(
 
                 tool_call_info = ToolCallInfo(
                     parent_tool_call_id=None,  # Top-level tool calls are attached to the chat message
+                    # Use llm_cycle_count (not llm_cycle_count + reasoning_cycles) because reasoning
+                    # cycles don't represent tool call turns - they're tracked separately for frontend display
                     turn_index=llm_cycle_count,
                     tab_index=tab_index,
                     tool_name=tool_call.tool_name,
