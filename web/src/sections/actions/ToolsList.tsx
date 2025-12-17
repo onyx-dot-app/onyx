@@ -89,11 +89,12 @@ const ToolsList: React.FC<ToolsListProps> = ({
 
             {/* Right action area */}
             <div className="flex items-center gap-1 ml-auto">
-              {enabledCount > 0 &&
-                (<ToolsEnabledCount
-                enabledCount={enabledCount}
-                totalCount={totalCount}
-              />)}
+              {enabledCount > 0 && (
+                <ToolsEnabledCount
+                  enabledCount={enabledCount}
+                  totalCount={totalCount}
+                />
+              )}
               {onToggleShowOnlyEnabled && enabledCount > 0 && (
                 <IconButton
                   icon={SvgEye}
