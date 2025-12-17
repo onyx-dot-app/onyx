@@ -55,6 +55,9 @@ export default function ActionLineItem({
     tool?.in_code_tool_id === SEARCH_TOOL_ID &&
     hasNoConnectors;
 
+  const isSearchToolAndNotInProject =
+    tool?.in_code_tool_id === SEARCH_TOOL_ID && !currentProjectId;
+
   return (
     <SimpleTooltip tooltip={tool?.description} className="max-w-[30rem]">
       <div data-testid={`tool-option-${toolName}`}>
@@ -63,6 +66,8 @@ export default function ActionLineItem({
             if (isSearchToolWithNoConnectors) return;
             if (disabled) onToggle();
             onForceToggle();
+            if (isSearchToolAndNotInProject && !isForced)
+              onSourceManagementOpen?.();
           }}
           selected={isForced}
           strikethrough={disabled || isSearchToolWithNoConnectors}
@@ -101,32 +106,28 @@ export default function ActionLineItem({
                   tooltip={disabled ? "Enable" : "Disable"}
                 />
               )}
-              {tool &&
-                tool.in_code_tool_id === SEARCH_TOOL_ID &&
-                !currentProjectId && (
-                  <IconButton
-                    icon={
-                      isSearchToolWithNoConnectors
-                        ? SvgSettings
-                        : SvgChevronRight
-                    }
-                    onClick={noProp(() => {
-                      if (isSearchToolWithNoConnectors)
-                        window.location.href = "/admin/add-connector";
-                      else onSourceManagementOpen?.();
-                    })}
-                    internal
-                    className={cn(
-                      isSearchToolWithNoConnectors &&
-                        "invisible group-hover/LineItem:visible"
-                    )}
-                    tooltip={
-                      isSearchToolWithNoConnectors
-                        ? "Setup Connectors"
-                        : "Configure Connectors"
-                    }
-                  />
-                )}
+              {isSearchToolAndNotInProject && (
+                <IconButton
+                  icon={
+                    isSearchToolWithNoConnectors ? SvgSettings : SvgChevronRight
+                  }
+                  onClick={noProp(() => {
+                    if (isSearchToolWithNoConnectors)
+                      window.location.href = "/admin/add-connector";
+                    else onSourceManagementOpen?.();
+                  })}
+                  internal
+                  className={cn(
+                    isSearchToolWithNoConnectors &&
+                      "invisible group-hover/LineItem:visible"
+                  )}
+                  tooltip={
+                    isSearchToolWithNoConnectors
+                      ? "Setup Connectors"
+                      : "Configure Connectors"
+                  }
+                />
+              )}
             </div>
           }
         >

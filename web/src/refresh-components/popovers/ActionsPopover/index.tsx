@@ -522,11 +522,7 @@ export default function ActionsPopover({
             disabled={disabledToolIds.includes(tool.id)}
             isForced={forcedToolIds.includes(tool.id)}
             onToggle={() => toggleToolForCurrentAssistant(tool.id)}
-            onForceToggle={() => {
-              toggleForcedTool(tool.id);
-              if (!forcedToolIds.includes(tool.id))
-                setSecondaryView({ type: "sources" });
-            }}
+            onForceToggle={() => toggleForcedTool(tool.id)}
             onSourceManagementOpen={() => setSecondaryView({ type: "sources" })}
             hasNoConnectors={hasNoConnectors}
             toolAuthStatus={getToolAuthStatus(tool)}
