@@ -3,8 +3,7 @@
 import { AdminPageTitle } from "@/components/admin/Title";
 import { SettingsForm } from "@/app/admin/settings/SettingsForm";
 import Text from "@/components/ui/text";
-import SvgSettings from "@/icons/settings";
-
+import { SvgSettings } from "@opal/icons";
 export default function Page() {
   return (
     <div className="mx-auto container">

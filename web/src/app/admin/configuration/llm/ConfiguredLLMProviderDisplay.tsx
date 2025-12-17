@@ -9,9 +9,8 @@ import { mutate } from "swr";
 import { Badge } from "@/components/ui/badge";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
+import { SvgSettings } from "@opal/icons";
 import { cn } from "@/lib/utils";
-import SvgSettings from "@/icons/settings";
-
 function LLMProviderUpdateModal({
   llmProviderDescriptor,
   onClose,

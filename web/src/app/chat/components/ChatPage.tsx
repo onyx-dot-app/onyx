@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
+import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
@@ -27,13 +28,12 @@ import { useUser } from "@/components/user/UserProvider";
 import NoAssistantModal from "@/components/modals/NoAssistantModal";
 import TextView from "@/components/chat/TextView";
 import Modal from "@/refresh-components/Modal";
-import SvgFileText from "@/icons/file-text";
 import { useSendMessageToParent } from "@/lib/extension/utils";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import { getSourceMetadata } from "@/lib/sources";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { FederatedConnectorDetail, UserRole, ValidSources } from "@/lib/types";
-import { DocumentResults } from "@/app/chat/components/documentSidebar/DocumentResults";
+import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import { useChatController } from "@/app/chat/hooks/useChatController";
 import { useAssistantController } from "@/app/chat/hooks/useAssistantController";
 import { useChatSessionController } from "@/app/chat/hooks/useChatSessionController";
@@ -65,11 +65,11 @@ import { useOnboardingState } from "@/refresh-components/onboarding/useOnboardin
 import { OnboardingStep } from "@/refresh-components/onboarding/types";
 import AppPageLayout from "@/layouts/AppPageLayout";
 import { HeaderData } from "@/lib/headers/fetchHeaderDataSS";
+import { SvgFileText } from "@opal/icons";
 import Spacer from "@/refresh-components/Spacer";
+import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 
-const DEFAULT_CONTEXT_TOKENS = 120_000;
-
-interface ChatPageProps {
+export interface ChatPageProps {
   firstMessage?: string;
   headerData: HeaderData;
 }
@@ -109,6 +109,12 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
     lastFailedFiles,
     clearLastFailedFiles,
   } = useProjectsContext();
+
+  // When changing from project chat to main chat (or vice-versa), clear forced tools
+  const { setForcedToolIds } = useForcedTools();
+  useEffect(() => {
+    setForcedToolIds([]);
+  }, [currentProjectId, setForcedToolIds]);
 
   // handle redirect if chat page is disabled
   // NOTE: this must be done here, in a client component since
@@ -444,7 +450,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
     setShowOnboarding(false);
   }, [message, onSubmit, currentMessageFiles, deepResearchEnabled]);
 
-  // Memoized callbacks for DocumentResults
+  // Memoized callbacks for DocumentsSidebar
   const handleMobileDocumentSidebarClose = useCallback(() => {
     updateCurrentDocumentSidebarVisible(false);
   }, [updateCurrentDocumentSidebarVisible]);
@@ -462,7 +468,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
         )}
       >
         <div className="h-full w-[25rem]">
-          <DocumentResults
+          <DocumentsSidebar
             setPresentingDocument={setPresentingDocument}
             modal={false}
             closeSidebar={handleDesktopDocumentSidebarClose}
@@ -586,7 +592,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
                 {/* IMPORTANT: this is a memoized component, and it's very important
                 for performance reasons that this stays true. MAKE SURE that all function
                 props are wrapped in useCallback. */}
-                <DocumentResults
+                <DocumentsSidebar
                   setPresentingDocument={setPresentingDocument}
                   modal
                   closeSidebar={handleMobileDocumentSidebarClose}
@@ -666,7 +672,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
               {/* ChatInputBar container */}
               <div
                 ref={inputRef}
-                className="max-w-[50rem] w-full pointer-events-auto flex flex-col px-4 justify-center items-center"
+                className="max-w-[50rem] w-full pointer-events-auto flex flex-col justify-center items-center"
               >
                 {(showOnboarding ||
                   (user?.role !== UserRole.ADMIN &&

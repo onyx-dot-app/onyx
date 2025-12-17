@@ -4,16 +4,13 @@ import React from "react";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { getIconForAction } from "@/app/chat/services/actionUtils";
-import SvgChevronRight from "@/icons/chevron-right";
-import SvgKey from "@/icons/key";
-import SvgSettings from "@/icons/settings";
-import SvgSlash from "@/icons/slash";
 import { ToolAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn, noProp } from "@/lib/utils";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal/types";
+import { SvgChevronRight, SvgKey, SvgSettings, SvgSlash } from "@opal/icons";
 
 export interface ActionItemProps {
   tool?: ToolSnapshot;
@@ -27,6 +24,7 @@ export interface ActionItemProps {
   hasNoConnectors?: boolean;
   toolAuthStatus?: ToolAuthStatus;
   onOAuthAuthenticate?: () => void;
+  isProjectContext?: boolean;
 }
 
 export default function ActionLineItem({
@@ -41,13 +39,20 @@ export default function ActionLineItem({
   hasNoConnectors = false,
   toolAuthStatus,
   onOAuthAuthenticate,
+  isProjectContext = false,
 }: ActionItemProps) {
   const Icon = tool ? getIconForAction(tool) : ProvidedIcon!;
-  const label = tool ? tool.display_name || tool.name : providedLabel!;
   const toolName = tool?.name || providedLabel || "";
 
+  let label = tool ? tool.display_name || tool.name : providedLabel!;
+  if (isProjectContext && tool?.in_code_tool_id === SEARCH_TOOL_ID) {
+    label = "Project Search";
+  }
+
   const isSearchToolWithNoConnectors =
-    tool?.in_code_tool_id === SEARCH_TOOL_ID && hasNoConnectors;
+    !isProjectContext &&
+    tool?.in_code_tool_id === SEARCH_TOOL_ID &&
+    hasNoConnectors;
 
   return (
     <SimpleTooltip tooltip={tool?.description} className="max-w-[30rem]">
@@ -59,7 +64,7 @@ export default function ActionLineItem({
             onForceToggle();
           }}
           selected={isForced}
-          strikethrough={disabled}
+          strikethrough={disabled || isSearchToolWithNoConnectors}
           icon={Icon}
           rightChildren={
             <div className="flex flex-row items-center gap-1">
@@ -95,25 +100,32 @@ export default function ActionLineItem({
                   tooltip={disabled ? "Enable" : "Disable"}
                 />
               )}
-
-              {tool && tool.in_code_tool_id === SEARCH_TOOL_ID && (
-                <IconButton
-                  icon={
-                    isSearchToolWithNoConnectors ? SvgSettings : SvgChevronRight
-                  }
-                  onClick={noProp(() => {
-                    if (isSearchToolWithNoConnectors)
-                      window.location.href = "/admin/add-connector";
-                    else onSourceManagementOpen?.();
-                  })}
-                  internal
-                  className={cn(
-                    isSearchToolWithNoConnectors &&
-                      "invisible grouop-hover/LineItem:visible"
-                  )}
-                  tooltip={isSearchToolWithNoConnectors ? "Settings" : "More"}
-                />
-              )}
+              {tool &&
+                tool.in_code_tool_id === SEARCH_TOOL_ID &&
+                !isProjectContext && (
+                  <IconButton
+                    icon={
+                      isSearchToolWithNoConnectors
+                        ? SvgSettings
+                        : SvgChevronRight
+                    }
+                    onClick={noProp(() => {
+                      if (isSearchToolWithNoConnectors)
+                        window.location.href = "/admin/add-connector";
+                      else onSourceManagementOpen?.();
+                    })}
+                    internal
+                    className={cn(
+                      isSearchToolWithNoConnectors &&
+                        "invisible group-hover/LineItem:visible"
+                    )}
+                    tooltip={
+                      isSearchToolWithNoConnectors
+                        ? "Setup Connectors"
+                        : "Configure Connectors"
+                    }
+                  />
+                )}
             </div>
           }
         >

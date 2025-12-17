@@ -15,20 +15,21 @@ import {
   UserFileStatus,
 } from "@/app/chat/projects/projectsService";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import SvgPaperclip from "@/icons/paperclip";
-import SvgFiles from "@/icons/files";
-import MoreHorizontal from "@/icons/more-horizontal";
-import SvgFileText from "@/icons/file-text";
-import SvgExternalLink from "@/icons/external-link";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import Text from "@/refresh-components/texts/Text";
 import { MAX_FILES_TO_SHOW } from "@/lib/constants";
-import SvgLoader from "@/icons/loader";
 import { isImageFile } from "@/lib/utils";
-import SvgImage from "@/icons/image";
-
+import {
+  SvgExternalLink,
+  SvgFileText,
+  SvgFiles,
+  SvgImage,
+  SvgLoader,
+  SvgMoreHorizontal,
+  SvgPaperclip,
+} from "@opal/icons";
 const getFileExtension = (fileName: string): string => {
   const idx = fileName.lastIndexOf(".");
   if (idx === -1) return "";
@@ -159,7 +160,7 @@ function FilePickerPopoverContents({
 
         // Rest of the files
         shouldShowMoreFilesButton && (
-          <LineItem icon={MoreHorizontal} onClick={openRecentFilesModal}>
+          <LineItem icon={SvgMoreHorizontal} onClick={openRecentFilesModal}>
             All Recent Files
           </LineItem>
         ),

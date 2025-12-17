@@ -2,8 +2,8 @@ import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
 import { Callout } from "@/components/ui/callout";
 import Button from "@/refresh-components/buttons/Button";
-import SvgServer from "@/icons/server";
 import { HostedEmbeddingModel } from "@/components/embedding/interfaces";
+import { SvgServer } from "@opal/icons";
 
 export interface ModelSelectionConfirmationModalProps {
   selectedModel: HostedEmbeddingModel;

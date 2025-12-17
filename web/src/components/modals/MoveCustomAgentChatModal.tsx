@@ -5,8 +5,7 @@ import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationMo
 import Button from "@/refresh-components/buttons/Button";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import Text from "@/refresh-components/texts/Text";
-import SvgAlertCircle from "@/icons/alert-circle";
-
+import { SvgAlertCircle } from "@opal/icons";
 interface MoveCustomAgentChatModalProps {
   onCancel: () => void;
   onConfirm: (doNotShowAgain: boolean) => void;

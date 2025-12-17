@@ -1,4 +1,3 @@
-import SvgUser from "@/icons/user";
 import React, { useRef, useState, useEffect } from "react";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -6,11 +5,9 @@ import Button from "@/refresh-components/buttons/Button";
 import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/components/user/UserProvider";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgX from "@/icons/x";
-import SvgCheckCircle from "@/icons/check-circle";
-import SvgEdit from "@/icons/edit";
 import { Avatar } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
+import { SvgCheckCircle, SvgEdit, SvgUser, SvgX } from "@opal/icons";
 
 export default function NonAdminStep() {
   const inputRef = useRef<HTMLInputElement>(null);

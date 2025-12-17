@@ -1,8 +1,7 @@
 import { useState, KeyboardEvent } from "react";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Button from "@/refresh-components/buttons/Button";
-import SvgX from "@/icons/x";
-
+import { SvgX } from "@opal/icons";
 interface ListFieldInputProps {
   values: string[];
   onChange: (values: string[]) => void;

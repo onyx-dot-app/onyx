@@ -1,5 +1,4 @@
 import { useEffect, useMemo } from "react";
-import SvgCode from "@/icons/code";
 import {
   PacketType,
   PythonToolPacket,
@@ -14,6 +13,7 @@ import {
 import { CodeBlock } from "@/app/chat/message/CodeBlock";
 import hljs from "highlight.js/lib/core";
 import python from "highlight.js/lib/languages/python";
+import { SvgCode } from "@opal/icons";
 
 // Register Python language for highlighting
 hljs.registerLanguage("python", python);

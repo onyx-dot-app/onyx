@@ -5,10 +5,10 @@ import { cn } from "@/lib/utils";
 import { ActionStatus } from "@/lib/tools/types";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgEdit from "@/icons/edit";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal/types";
 import Truncated from "@/refresh-components/texts/Truncated";
+import { SvgEdit } from "@opal/icons";
 
 interface ActionCardHeaderProps {
   title: string;

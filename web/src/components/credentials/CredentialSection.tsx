@@ -22,8 +22,6 @@ import {
   buildSimilarCredentialInfoURL,
 } from "@/app/admin/connector/[ccPairId]/lib";
 import Modal from "@/refresh-components/Modal";
-import SvgEdit from "@/icons/edit";
-import SvgKey from "@/icons/key";
 import EditCredential from "./actions/EditCredential";
 import { getSourceDisplayName } from "@/lib/sources";
 import {
@@ -38,6 +36,7 @@ import { Spinner } from "@/components/Spinner";
 import { CreateStdOAuthCredential } from "@/components/credentials/actions/CreateStdOAuthCredential";
 import { Card } from "../ui/card";
 import { isTypedFileField, TypedFile } from "@/lib/connectors/fileTypes";
+import { SvgEdit, SvgKey } from "@opal/icons";
 
 export interface CredentialSectionProps {
   ccPair: CCPairFullInfo;

@@ -4,8 +4,7 @@ import { useRef } from "react";
 import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
-import SvgUnplug from "@/icons/unplug";
-
+import { SvgUnplug } from "@opal/icons";
 interface DisconnectEntityModalProps {
   isOpen: boolean;
   onClose: () => void;

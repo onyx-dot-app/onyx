@@ -44,11 +44,12 @@ import { humanReadableFormatWithTime } from "@/lib/time";
 import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import { Badge } from "@/components/ui/badge";
-import SvgMinusCircle from "@/icons/minus-circle";
-import SvgThumbsDown from "@/icons/thumbs-down";
-import SvgThumbsUp from "@/icons/thumbs-up";
-import SvgFileText from "@/icons/file-text";
-
+import {
+  SvgFileText,
+  SvgMinusCircle,
+  SvgThumbsDown,
+  SvgThumbsUp,
+} from "@opal/icons";
 function QueryHistoryTableRow({
   chatSessionMinimal,
 }: {

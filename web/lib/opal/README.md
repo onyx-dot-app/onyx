@@ -5,7 +5,7 @@ A Typescript component library for Onyx.
 ## Usage
 
 ```tsx
-import { Button } from "@onyx/opal";
+import { Button } from "@opal/components";
 
 function MyComponent() {
   return <Button onClick={() => console.log("Clicked!")}>Click me</Button>;

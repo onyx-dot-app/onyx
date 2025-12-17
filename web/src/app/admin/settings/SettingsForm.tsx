@@ -10,12 +10,12 @@ import React, { useContext, useState, useEffect } from "react";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import Modal from "@/refresh-components/Modal";
-import SvgAlertTriangle from "@/icons/alert-triangle";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { AnonymousUserPath } from "./AnonymousUserPath";
 import LLMSelector from "@/components/llm/LLMSelector";
 import { useVisionProviders } from "./hooks/useVisionProviders";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
+import { SvgAlertTriangle } from "@opal/icons";
 
 export function Checkbox({
   label,

@@ -1,18 +1,20 @@
 import React, { memo, useCallback, useState } from "react";
 import Text from "@/refresh-components/texts/Text";
-import { IconProps } from "@/icons";
-import SvgArrowExchange from "@/icons/arrow-exchange";
+import type { IconProps } from "@opal/types";
 import Truncated from "@/refresh-components/texts/Truncated";
-import SvgServer from "@/icons/server";
 import LLMConnectionIcons from "@/refresh-components/onboarding/components/LLMConnectionIcons";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
-import SvgSettings from "@/icons/settings";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgCheckCircle from "@/icons/check-circle";
 import { OnboardingActions, OnboardingState } from "../types";
 import { cn, noProp } from "@/lib/utils";
 import { LLMConnectionModalProps } from "./LLMConnectionModal";
 import { ModalCreationInterface } from "@/refresh-components/contexts/ModalContext";
+import {
+  SvgArrowExchange,
+  SvgCheckCircle,
+  SvgServer,
+  SvgSettings,
+} from "@opal/icons";
 
 export interface LLMProviderProps {
   title: string;

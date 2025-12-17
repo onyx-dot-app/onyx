@@ -3,11 +3,10 @@
 import React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { cn } from "@/lib/utils";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgX from "@/icons/x";
-
+import { SvgX } from "@opal/icons";
 /**
  * Modal Root Component
  *

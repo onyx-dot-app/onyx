@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import Button from "@/refresh-components/buttons/Button";
 import DefaultModalLayout from "@/refresh-components/layouts/DefaultModalLayout";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import SvgAddLines from "@/icons/add-lines";
 import InputTextarea from "@/refresh-components/inputs/InputTextArea";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
+import { SvgAddLines } from "@opal/icons";
 
 export default function AddInstructionModal() {
   const modal = useModal();

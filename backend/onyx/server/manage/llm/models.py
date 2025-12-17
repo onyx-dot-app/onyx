@@ -301,7 +301,7 @@ class BedrockModelsRequest(BaseModel):
 class BedrockFinalModelResponse(BaseModel):
     name: str  # Model ID (e.g., "anthropic.claude-3-5-sonnet-20241022-v2:0")
     display_name: str  # Human-readable name from AWS (e.g., "Claude 3.5 Sonnet v2")
-    max_input_tokens: int  # From LiteLLM, our mapping, or default 4096
+    max_input_tokens: int  # From LiteLLM, our mapping, or default 32000
     supports_image_input: bool
 
 

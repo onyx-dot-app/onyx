@@ -1,7 +1,7 @@
 import Modal from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Button from "@/refresh-components/buttons/Button";
-import SvgAlertCircle from "@/icons/alert-circle";
 import Text from "@/refresh-components/texts/Text";
+import { SvgAlertCircle } from "@opal/icons";
 
 export interface ConfirmEntityModalProps {
   danger?: boolean;

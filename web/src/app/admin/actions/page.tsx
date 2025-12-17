@@ -9,8 +9,7 @@ import { AdminPageTitle } from "@/components/admin/Title";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { FiHelpCircle } from "react-icons/fi";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
-import SvgActions from "@/icons/actions";
-
+import { SvgActions } from "@opal/icons";
 export default async function Page() {
   // Fetch both tools and MCP servers
   const [toolResponse, mcpResponse] = await Promise.all([

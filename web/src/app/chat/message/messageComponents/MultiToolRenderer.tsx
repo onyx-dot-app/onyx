@@ -16,13 +16,13 @@ import { isToolPacket, isSearchToolPacket } from "../../services/packetUtils";
 import { useToolDisplayTiming } from "./hooks/useToolDisplayTiming";
 import { STANDARD_TEXT_COLOR } from "./constants";
 import Text from "@/refresh-components/texts/Text";
-import SvgChevronDownSmall from "@/icons/chevron-down-small";
 import { cn } from "@/lib/utils";
 import {
   SearchToolStep1Renderer,
   SearchToolStep2Renderer,
   constructCurrentSearchState,
 } from "./renderers/SearchToolRendererV2";
+import { SvgChevronDownSmall } from "@opal/icons";
 
 // Type for display items - can be regular tool or search step
 type DisplayItem = {

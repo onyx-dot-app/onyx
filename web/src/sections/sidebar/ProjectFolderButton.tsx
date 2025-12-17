@@ -7,15 +7,12 @@ import {
 } from "@/app/chat/projects/ProjectsContext";
 import { useDroppable } from "@dnd-kit/core";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import SvgFolder from "@/icons/folder";
-import SvgEdit from "@/icons/edit";
 import {
   Popover,
   PopoverContent,
   PopoverMenu,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import SvgTrash from "@/icons/trash";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Button from "@/refresh-components/buttons/Button";
 import ChatButton from "@/sections/sidebar/ChatButton";
@@ -24,14 +21,18 @@ import { cn, noProp } from "@/lib/utils";
 import { DRAG_TYPES } from "./constants";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgMoreHorizontal from "@/icons/more-horizontal";
 import { PopoverAnchor } from "@radix-ui/react-popover";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal/types";
 import useAppFocus from "@/hooks/useAppFocus";
-import SvgFolderOpen from "@/icons/folder-open";
-import SvgFolderPartialOpen from "@/icons/folder-partial-open";
-
+import {
+  SvgEdit,
+  SvgFolder,
+  SvgFolderOpen,
+  SvgFolderPartialOpen,
+  SvgMoreHorizontal,
+  SvgTrash,
+} from "@opal/icons";
 interface ProjectFolderProps {
   project: Project;
 }

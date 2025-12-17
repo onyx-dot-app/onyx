@@ -23,16 +23,17 @@ import Button from "@/refresh-components/buttons/Button";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import { FormField } from "@/refresh-components/form/FormField";
-import OnyxLogo from "@/icons/onyx-logo";
-import SvgKey from "@/icons/key";
-import SvgCheckSquare from "@/icons/check-square";
-import SvgArrowExchange from "@/icons/arrow-exchange";
-import SvgArrowRightCircle from "@/icons/arrow-right-circle";
 import RawModal from "@/refresh-components/RawModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgX from "@/icons/x";
-import SvgGlobe from "@/icons/globe";
-
+import {
+  SvgArrowExchange,
+  SvgArrowRightCircle,
+  SvgCheckSquare,
+  SvgGlobe,
+  SvgKey,
+  SvgOnyxLogo,
+  SvgX,
+} from "@opal/icons";
 type WebSearchProviderType = "google_pse" | "serper" | "exa";
 type WebContentProviderType = "firecrawl" | "onyx_web_crawler" | (string & {});
 
@@ -180,7 +181,7 @@ const ProviderSetupModal = memo(
                 <SvgArrowExchange className="size-3 text-text-04" />
               </div>
               <div className="flex items-center justify-center size-7 p-0.5 shrink-0 overflow-clip">
-                <OnyxLogo
+                <SvgOnyxLogo
                   width={24}
                   height={24}
                   className="text-text-04 shrink-0"
@@ -653,7 +654,7 @@ export default function Page() {
   ) => {
     const logoContent =
       providerType === "onyx_web_crawler" ? (
-        <OnyxLogo
+        <SvgOnyxLogo
           width={size}
           height={size}
           className="text-[#111111] dark:text-[#f5f5f5]"

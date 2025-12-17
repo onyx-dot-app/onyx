@@ -1,5 +1,5 @@
-import SvgTrash from "@/icons/trash";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import { SvgTrash } from "@opal/icons";
 
 export interface DeleteButtonProps {
   onClick?: (event: React.MouseEvent<HTMLElement>) => void | Promise<void>;

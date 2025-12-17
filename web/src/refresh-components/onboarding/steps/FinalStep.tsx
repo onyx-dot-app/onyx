@@ -1,10 +1,10 @@
 import { memo } from "react";
 import Link from "next/link";
 import Button from "@/refresh-components/buttons/Button";
-import SvgExternalLink from "@/icons/external-link";
 import Text from "@/refresh-components/texts/Text";
 import { FINAL_SETUP_CONFIG } from "../constants";
 import { FinalStepItemProps } from "../types";
+import { SvgExternalLink } from "@opal/icons";
 
 const FinalStepItemInner = ({
   title,

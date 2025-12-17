@@ -1,8 +1,7 @@
 import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
-import SvgAlertTriangle from "@/icons/alert-triangle";
-
+import { SvgAlertTriangle } from "@opal/icons";
 export interface InstantSwitchConfirmModalProps {
   onClose: () => void;
   onConfirm: () => void;

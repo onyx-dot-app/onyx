@@ -2,10 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import IconButton, { IconButtonProps } from "./IconButton";
-import SvgCopy from "@/icons/copy";
-import SvgCheck from "@/icons/check";
-import SvgAlertTriangle from "@/icons/alert-triangle";
-
+import { SvgAlertTriangle, SvgCheck, SvgCopy } from "@opal/icons";
 type CopyState = "idle" | "copied" | "error";
 
 export interface CopyIconButtonProps

@@ -13,8 +13,7 @@ import {
   validAutoSyncSources,
 } from "@/lib/types";
 import { useUser } from "@/components/user/UserProvider";
-import SvgUsers from "@/icons/users";
-
+import { SvgUsers } from "@opal/icons";
 function isValidAutoSyncSource(
   value: ConfigurableSources
 ): value is ValidAutoSyncSource {

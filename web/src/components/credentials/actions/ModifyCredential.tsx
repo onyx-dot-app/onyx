@@ -11,9 +11,7 @@ import {
 } from "@/lib/connectors/credentials";
 import { Connector } from "@/lib/connectors/connectors";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgTrash from "@/icons/trash";
-import SvgAlertTriangle from "@/icons/alert-triangle";
-
+import { SvgAlertTriangle, SvgTrash } from "@opal/icons";
 interface CredentialSelectionTableProps {
   credentials: Credential<any>[];
   editableCredentials: Credential<any>[];

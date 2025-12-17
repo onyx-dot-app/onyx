@@ -7,8 +7,7 @@ import { fetchToolByIdSS } from "@/lib/tools/fetchTools";
 import { DeleteToolButton } from "./DeleteToolButton";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { BackButton } from "@/components/BackButton";
-import SvgActions from "@/icons/actions";
-
+import { SvgActions } from "@opal/icons";
 export default async function Page(props: {
   params: Promise<{ toolId: string }>;
 }) {

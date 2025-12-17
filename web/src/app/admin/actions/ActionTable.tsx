@@ -10,17 +10,19 @@ import {
 import { ToolSnapshot, MCPServer } from "@/lib/tools/interfaces";
 import { useRouter } from "next/navigation";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import SvgCheckCircle from "@/icons/check-circle";
-import SvgCode from "@/icons/code";
-import SvgEdit from "@/icons/edit";
-import SvgServer from "@/icons/server";
-import SvgTrash from "@/icons/trash";
 import { deleteCustomTool, deleteMCPServer } from "@/lib/tools/edit";
 import { TableHeader } from "@/components/ui/table";
 import { useUser } from "@/components/user/UserProvider";
 import { UserRole } from "@/lib/types";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
+import {
+  SvgCheckCircle,
+  SvgCode,
+  SvgEdit,
+  SvgServer,
+  SvgTrash,
+} from "@opal/icons";
 
 export function ActionsTable({
   tools,

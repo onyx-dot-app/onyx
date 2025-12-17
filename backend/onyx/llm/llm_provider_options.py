@@ -571,7 +571,7 @@ def fetch_model_configurations_for_provider(
     """Fetch model configurations for a static provider (OpenAI, Anthropic, Vertex AI).
 
     Looks up max_input_tokens from LiteLLM's model_cost. If not found, stores None
-    and the runtime will use the fallback (4096).
+    and the runtime will use the fallback (32000).
 
     Models in the curated visible lists (OPENAI_VISIBLE_MODEL_NAMES, etc.) are
     marked as is_visible=True by default.

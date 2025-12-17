@@ -19,8 +19,7 @@ import { SettingsContext } from "@/components/settings/SettingsProvider";
 import CardSection from "@/components/admin/CardSection";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { usePopupFromQuery } from "@/components/popup/PopupFromQuery";
-import SvgSearch from "@/icons/search";
-
+import { SvgSearch } from "@opal/icons";
 export interface EmbeddingDetails {
   api_key: string;
   custom_config: any;

@@ -20,11 +20,7 @@ import { Download, XIcon, ZoomIn, ZoomOut } from "lucide-react";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgX from "@/icons/x";
-import SvgDownloadCloud from "@/icons/download-cloud";
-import SvgZoomIn from "@/icons/zoom-in";
-import SvgZoomOut from "@/icons/zoom-out";
-
+import { SvgDownloadCloud, SvgX, SvgZoomIn, SvgZoomOut } from "@opal/icons";
 export interface TextViewProps {
   presentingDocument: MinimalOnyxDocument;
   onClose: () => void;

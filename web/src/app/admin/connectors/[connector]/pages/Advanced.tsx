@@ -2,8 +2,7 @@ import React from "react";
 import NumberInput from "./ConnectorInput/NumberInput";
 import { TextFormField } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
-import SvgTrash from "@/icons/trash";
-
+import { SvgTrash } from "@opal/icons";
 export default function AdvancedFormPage() {
   return (
     <div className="py-4 flex flex-col gap-y-6 rounded-lg max-w-2xl mx-auto">

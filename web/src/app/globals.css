@@ -5,6 +5,7 @@
 @import "css/inputs.css";
 @import "css/line-item.css";
 @import "css/switch.css";
+@import "css/z-index.css";
 
 @tailwind base;
 @tailwind components;

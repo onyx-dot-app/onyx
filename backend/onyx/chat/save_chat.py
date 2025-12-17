@@ -148,6 +148,7 @@ def save_chat_turn(
     citation_docs_info: list[CitationDocInfo],
     db_session: Session,
     assistant_message: ChatMessage,
+    is_clarification: bool = False,
 ) -> None:
     """
     Save a chat turn by populating the assistant_message and creating related entities.
@@ -175,10 +176,12 @@ def save_chat_turn(
         citation_docs_info: List of citation document information for building citations mapping
         db_session: Database session for persistence
         assistant_message: The ChatMessage object to populate (should already exist in DB)
+        is_clarification: Whether this assistant message is a clarification question (deep research flow)
     """
     # 1. Update ChatMessage with message content, reasoning tokens, and token count
     assistant_message.message = message_text
     assistant_message.reasoning_tokens = reasoning_tokens
+    assistant_message.is_clarification = is_clarification
 
     # Calculate token count using default tokenizer, when storing, this should not use the LLM
     # specific one so we use a system default tokenizer here.

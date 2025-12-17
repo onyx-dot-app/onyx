@@ -1,8 +1,7 @@
 import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
-import SvgCheck from "@/icons/check";
-
+import { SvgCheck } from "@opal/icons";
 export interface GenericConfirmModalProps {
   title: string;
   message: string;

@@ -10,7 +10,6 @@ import React, {
   useState,
 } from "react";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgChevronDown from "@/icons/chevron-down";
 import { Message } from "@/app/chat/interfaces";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import HumanMessage from "@/app/chat/message/HumanMessage";
@@ -33,6 +32,7 @@ import { useDeepResearchToggle } from "../app/chat/hooks/useDeepResearchToggle";
 import { useUser } from "@/components/user/UserProvider";
 import { HORIZON_DISTANCE_PX } from "@/lib/constants";
 import Spacer from "@/refresh-components/Spacer";
+import { SvgChevronDown } from "@opal/icons";
 
 export interface ChatUIHandle {
   scrollToBottom: () => boolean;
@@ -190,7 +190,7 @@ const ChatUI = React.forwardRef(
     return (
       <div className="flex flex-col flex-1 w-full relative overflow-hidden">
         {aboveHorizon && (
-          <div className="absolute bottom-0 z-[1000000] left-1/2 -translate-x-1/2">
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 z-floating-scroll-down-button">
             <IconButton icon={SvgChevronDown} onClick={scrollToBottom} />
 
             <Spacer />
@@ -254,6 +254,10 @@ const ChatUI = React.forwardRef(
                     <ErrorBanner
                       resubmit={handleResubmitLastMessage}
                       error={error || loadError || ""}
+                      errorCode={message.errorCode || undefined}
+                      isRetryable={message.isRetryable ?? true}
+                      details={message.errorDetails || undefined}
+                      stackTrace={message.stackTrace || undefined}
                     />
                   </div>
                 );
@@ -308,6 +312,16 @@ const ChatUI = React.forwardRef(
               <ErrorBanner
                 resubmit={handleResubmitLastMessage}
                 error={error || loadError || ""}
+                errorCode={
+                  messages[messages.length - 1]?.errorCode || undefined
+                }
+                isRetryable={messages[messages.length - 1]?.isRetryable ?? true}
+                details={
+                  messages[messages.length - 1]?.errorDetails || undefined
+                }
+                stackTrace={
+                  messages[messages.length - 1]?.stackTrace || undefined
+                }
               />
             </div>
           )}

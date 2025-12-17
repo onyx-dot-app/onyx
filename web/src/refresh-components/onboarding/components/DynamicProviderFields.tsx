@@ -6,9 +6,9 @@ import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import { MODAL_CONTENT_MAP } from "../constants";
 import { APIFormFieldState } from "@/refresh-components/form/types";
-import SvgRefreshCw from "@/icons/refresh-cw";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn, noProp } from "@/lib/utils";
+import { SvgRefreshCw } from "@opal/icons";
 
 //This component is responsible to render fields dynamically for tabs based llm providers
 interface DynamicProviderFieldsProps {

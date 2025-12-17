@@ -13,8 +13,7 @@ import {
 } from "@/components/embedding/interfaces";
 import { EMBEDDING_PROVIDERS_ADMIN_URL } from "@/app/admin/configuration/llm/constants";
 import Modal from "@/refresh-components/Modal";
-import SvgSettings from "@/icons/settings";
-
+import { SvgSettings } from "@opal/icons";
 export interface ProviderCreationModalProps {
   updateCurrentModel: (
     newModel: string,

@@ -8,8 +8,8 @@ import InputKeyValue, {
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Text from "@/refresh-components/texts/Text";
 import Separator from "@/refresh-components/Separator";
-import SvgUser from "@/icons/user";
 import type { MCPAuthFormValues } from "@/sections/actions/modals/MCPAuthenticationModal";
+import { SvgUser } from "@opal/icons";
 
 interface PerUserAuthConfigProps {
   values: MCPAuthFormValues;

@@ -1,9 +1,6 @@
 import { useState } from "react";
 import Modal from "@/refresh-components/Modal";
-import SvgAlertTriangle from "@/icons/alert-triangle";
-import SvgCopy from "@/icons/copy";
-import SvgCheck from "@/icons/check";
-
+import { SvgAlertTriangle, SvgCheck, SvgCopy } from "@opal/icons";
 export default function ExceptionTraceModal({
   onOutsideClick,
   exceptionTrace,

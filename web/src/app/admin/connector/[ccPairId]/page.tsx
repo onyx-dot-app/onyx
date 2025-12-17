@@ -61,8 +61,7 @@ import { timeAgo } from "@/lib/time";
 import { useStatusChange } from "./useStatusChange";
 import { useReIndexModal } from "./ReIndexModal";
 import Button from "@/refresh-components/buttons/Button";
-import SvgSettings from "@/icons/settings";
-
+import { SvgSettings } from "@opal/icons";
 // synchronize these validations with the SQLAlchemy connector class until we have a
 // centralized schema for both frontend and backend
 const RefreshFrequencySchema = Yup.object().shape({

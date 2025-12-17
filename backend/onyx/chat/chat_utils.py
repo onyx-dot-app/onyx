@@ -708,3 +708,21 @@ def get_custom_agent_prompt(persona: Persona, chat_session: ChatSession) -> str 
         return chat_session.project.instructions
     else:
         return None
+
+
+def is_last_assistant_message_clarification(chat_history: list[ChatMessage]) -> bool:
+    """Check if the last assistant message in chat history was a clarification question.
+
+    This is used in the deep research flow to determine whether to skip the
+    clarification step when the user has already responded to a clarification.
+
+    Args:
+        chat_history: List of ChatMessage objects in chronological order
+
+    Returns:
+        True if the last assistant message has is_clarification=True, False otherwise
+    """
+    for message in reversed(chat_history):
+        if message.message_type == MessageType.ASSISTANT:
+            return message.is_clarification
+    return False
