@@ -1,7 +1,7 @@
 """add license table
 
 Revision ID: a1b2c3d4e5f6
-Revises: 18b5b2524446
+Revises: a01bf2971c5d
 Create Date: 2025-12-04 10:00:00.000000
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "a1b2c3d4e5f6"
-down_revision = "18b5b2524446"
+down_revision = "a01bf2971c5d"
 branch_labels = None
 depends_on = None
 
