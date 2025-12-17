@@ -7,6 +7,8 @@ from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.models import ChatMessageSimple
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
+from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tools.models import OpenURLToolOverrideKwargs
 from onyx.tools.models import SearchToolOverrideKwargs
@@ -120,6 +122,15 @@ def _run_single_tool(
                     },
                 )
             )
+
+    # Emit SectionEnd after tool completes (success or failure)
+    tool.emitter.emit(
+        Packet(
+            turn_index=turn_index,
+            tab_index=tab_index,
+            obj=SectionEnd(),
+        )
+    )
 
     # Set tool_call on the response for downstream processing
     tool_response.tool_call = tool_call

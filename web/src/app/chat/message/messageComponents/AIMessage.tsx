@@ -257,8 +257,6 @@ export default function AIMessage({
       const currentTurnIndex = packet.turn_index;
       const currentTabIndex = packet.tab_index ?? 0;
       const currentGroupKey = `${currentTurnIndex}-${currentTabIndex}`;
-      const isNewGroupKey = !seenGroupKeysRef.current.has(currentGroupKey);
-
       // If we see a new turn_index (not just tab_index), inject SECTION_END for previous groups
       // We only inject SECTION_END when moving to a completely new turn, not for parallel tools
       const previousTurnIndices = new Set(

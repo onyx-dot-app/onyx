@@ -1,11 +1,10 @@
 import { useState, useMemo, useEffect, JSX } from "react";
 import {
   FiCheckCircle,
-  FiChevronDown,
   FiChevronRight,
   FiChevronLeft,
   FiCircle,
-  FiLoader,
+  FiGitBranch,
 } from "react-icons/fi";
 import {
   Packet,
@@ -26,10 +25,17 @@ import {
   constructCurrentSearchState,
 } from "./renderers/SearchToolRendererV2";
 import { SvgChevronDownSmall } from "@opal/icons";
+import { LoadingSpinner } from "../../chat_search/LoadingSpinner";
+
+enum DisplayType {
+  REGULAR = "regular",
+  SEARCH_STEP_1 = "search-step-1",
+  SEARCH_STEP_2 = "search-step-2",
+}
 
 type DisplayItem = {
   key: string;
-  type: "regular" | "search-step-1" | "search-step-2";
+  type: DisplayType;
   turn_index: number;
   tab_index: number;
   packets: Packet[];
@@ -116,8 +122,7 @@ function ParallelToolTabs({
   const [selectedTabIndex, setSelectedTabIndex] = useState(0);
   const [isExpanded, setIsExpanded] = useState(true);
 
-  // Get unique tools (by tab_index) - each tab represents a different parallel tool
-  const toolTabs = useMemo(() => {
+  const toolTabs = (() => {
     const seen = new Set<number>();
     const tabs: {
       tab_index: number;
@@ -143,7 +148,7 @@ function ParallelToolTabs({
       }
     });
     return tabs.sort((a, b) => a.tab_index - b.tab_index);
-  }, [items]);
+  })();
 
   // Get the selected tool's display items (may include search-step-1 and search-step-2)
   const selectedToolItems = useMemo(() => {
@@ -173,24 +178,13 @@ function ParallelToolTabs({
     <div className="flex flex-col pb-2">
       {/* Tab bar */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1 flex-1 min-w-0">
-          {/* Expand/collapse toggle */}
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="p-1 rounded hover:bg-background-subtle-hover transition-colors flex-shrink-0"
-            aria-expanded={isExpanded}
-            aria-label={
-              isExpanded ? "Collapse tool details" : "Expand tool details"
-            }
-          >
-            {isExpanded ? (
-              <FiChevronDown className="w-4 h-4 text-text-500" />
-            ) : (
-              <FiChevronRight className="w-4 h-4 text-text-500" />
-            )}
-          </button>
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          {/* Fork/branch icon to indicate parallel execution */}
+          <div className="flex-shrink-0 flex items-center justify-center w-5 h-5">
+            <FiGitBranch className="w-4 h-4 text-text-400" />
+          </div>
 
-          {/* Tab buttons container with underline */}
+          {/* Tab buttons container */}
           <div className="relative flex flex-col flex-1 min-w-0">
             {/* Tabs row */}
             <div className="flex gap-1" role="tablist" aria-label="Tool tabs">
@@ -245,14 +239,7 @@ function ParallelToolTabs({
                       >
                         {tab.name}
                       </span>
-                      {isLoading && (
-                        <FiLoader
-                          className={cn(
-                            "w-3 h-3 animate-spin",
-                            isActive ? "text-white opacity-70" : "text-text-400"
-                          )}
-                        />
-                      )}
+                      {isLoading && <LoadingSpinner size="small" />}
                       {tab.isComplete && !isLoading && (
                         <FiCheckCircle
                           className={cn(
@@ -312,7 +299,7 @@ function ParallelToolTabs({
       {/* Selected tab content */}
       {isExpanded && selectedToolItems.length > 0 && (
         <div
-          className="mt-3 pl-6"
+          className="mt-3"
           role="tabpanel"
           id={`tool-panel-${toolTabs[selectedTabIndex]?.tab_index}`}
           aria-labelledby={`tool-tab-${toolTabs[selectedTabIndex]?.tab_index}`}
@@ -501,7 +488,7 @@ export default function MultiToolRenderer({
         // Internal search: split into two steps
         items.push({
           key: `${group.turn_index}-${tab_index}-search-1`,
-          type: "search-step-1",
+          type: DisplayType.SEARCH_STEP_1,
           turn_index: group.turn_index,
           tab_index,
           packets: group.packets,
@@ -510,7 +497,7 @@ export default function MultiToolRenderer({
         if (shouldShowSearchStep2(group.packets)) {
           items.push({
             key: `${group.turn_index}-${tab_index}-search-2`,
-            type: "search-step-2",
+            type: DisplayType.SEARCH_STEP_2,
             turn_index: group.turn_index,
             tab_index,
             packets: group.packets,
@@ -520,7 +507,7 @@ export default function MultiToolRenderer({
         // Regular tool (or internet search): single entry
         items.push({
           key: `${group.turn_index}-${tab_index}`,
-          type: "regular",
+          type: DisplayType.REGULAR,
           turn_index: group.turn_index,
           tab_index,
           packets: group.packets,
@@ -549,15 +536,27 @@ export default function MultiToolRenderer({
     }
   }, [isComplete, isStreamingExpanded]);
 
-  // Track completion for internal search tools
-  // We need to call handleToolComplete when a search tool completes
+  // Track completion for all tools
+  // We need to call handleToolComplete when any tool completes (has SECTION_END)
   useEffect(() => {
     displayItems.forEach((item) => {
-      if (item.type === "search-step-1" || item.type === "search-step-2") {
+      if (
+        item.type === DisplayType.SEARCH_STEP_1 ||
+        item.type === DisplayType.SEARCH_STEP_2
+      ) {
+        // Internal search: check via searchState.isComplete
         const searchState = constructCurrentSearchState(
           item.packets as SearchToolPacket[]
         );
         if (searchState.isComplete && item.turn_index !== undefined) {
+          handleToolComplete(item.turn_index, item.tab_index);
+        }
+      } else if (item.type === DisplayType.REGULAR) {
+        // Regular tools (including web search, openUrl, etc.): check for SECTION_END
+        const hasSectionEnd = item.packets.some(
+          (p) => p.obj.type === PacketType.SECTION_END
+        );
+        if (hasSectionEnd && item.turn_index !== undefined) {
           handleToolComplete(item.turn_index, item.tab_index);
         }
       }
@@ -611,24 +610,29 @@ export default function MultiToolRenderer({
     }
   };
 
-  // Group items by turn_index to detect parallel tools
-  const itemsByTurnIndex = useMemo(() => {
+  // Group items by turn_index and sort by turn_index
+  const turnGroups = useMemo(() => {
     const grouped = new Map<number, DisplayItem[]>();
     displayItems.forEach((item) => {
       const existing = grouped.get(item.turn_index) || [];
       existing.push(item);
       grouped.set(item.turn_index, existing);
     });
-    return grouped;
+    // Convert to sorted array of [turnIndex, items] pairs
+    return Array.from(grouped.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([turnIndex, items]) => ({
+        turnIndex,
+        items,
+        hasParallelTools: new Set(items.map((item) => item.tab_index)).size > 1,
+      }));
   }, [displayItems]);
 
-  // Check if any turn has parallel tools (multiple distinct tab_index values)
-  const hasParallelTools = useMemo(() => {
-    return Array.from(itemsByTurnIndex.values()).some((items) => {
-      const uniqueTabIndices = new Set(items.map((item) => item.tab_index));
-      return uniqueTabIndices.size > 1;
-    });
-  }, [itemsByTurnIndex]);
+  // Helper to check if a turn has parallel tools
+  const turnHasParallelTools = (turnItems: DisplayItem[]): boolean => {
+    const uniqueTabIndices = new Set(turnItems.map((item) => item.tab_index));
+    return uniqueTabIndices.size > 1;
+  };
 
   // If still processing, show tools progressively with timing
   if (!isComplete) {
@@ -641,159 +645,80 @@ export default function MultiToolRenderer({
       return null;
     }
 
-    // Check if current visible items have parallel tools
+    // Group visible items by turn_index
+    const visibleTurnGroups: {
+      turnIndex: number;
+      items: DisplayItem[];
+      hasParallelTools: boolean;
+    }[] = [];
     const visibleItemsByTurn = new Map<number, DisplayItem[]>();
     itemsToDisplay.forEach((item) => {
       const existing = visibleItemsByTurn.get(item.turn_index) || [];
       existing.push(item);
       visibleItemsByTurn.set(item.turn_index, existing);
     });
-
-    const currentTurnHasParallelTools = Array.from(
-      visibleItemsByTurn.values()
-    ).some((items) => {
-      const uniqueTabIndices = new Set(items.map((item) => item.tab_index));
-      return uniqueTabIndices.size > 1;
-    });
-
-    // If current turn has parallel tools, render with tabs
-    if (currentTurnHasParallelTools) {
-      return (
-        <div className="mb-4 relative border border-border-medium rounded-lg p-4 shadow">
-          <ParallelToolTabs
-            items={itemsToDisplay}
-            chatState={chatState}
-            stopPacketSeen={stopPacketSeen}
-            shouldStopShimmering={shouldStopShimmering}
-            handleToolComplete={handleToolComplete}
-          />
-        </div>
-      );
-    }
-
-    // Otherwise, render sequentially as before
-    // Show only the latest item visually when collapsed, but render all for completion tracking
-    const shouldShowOnlyLatest =
-      !isStreamingExpanded && itemsToDisplay.length > 1;
-    const latestItemIndex = itemsToDisplay.length - 1;
+    Array.from(visibleItemsByTurn.entries())
+      .sort(([a], [b]) => a - b)
+      .forEach(([turnIndex, items]) => {
+        visibleTurnGroups.push({
+          turnIndex,
+          items,
+          hasParallelTools: turnHasParallelTools(items),
+        });
+      });
 
     return (
       <div className="mb-4 relative border border-border-medium rounded-lg p-4 shadow">
+        {/* Timeline content */}
         <div className="relative">
-          <div>
-            {itemsToDisplay.map((item, index) => {
-              // Hide all but the latest item when shouldShowOnlyLatest is true
-              const isVisible =
-                !shouldShowOnlyLatest || index === latestItemIndex;
-              const isLastItem = index === itemsToDisplay.length - 1;
+          <div className="flex flex-col">
+            {visibleTurnGroups.map((turnGroup, turnGroupIndex) => {
+              const isLastTurnGroup =
+                turnGroupIndex === visibleTurnGroups.length - 1;
 
+              // If this turn has parallel tools, render as tabs
+              if (turnGroup.hasParallelTools) {
+                return (
+                  <div key={`turn-${turnGroup.turnIndex}`}>
+                    <ParallelToolTabs
+                      items={turnGroup.items}
+                      chatState={chatState}
+                      stopPacketSeen={stopPacketSeen}
+                      shouldStopShimmering={shouldStopShimmering}
+                      handleToolComplete={handleToolComplete}
+                    />
+                  </div>
+                );
+              }
+
+              // Single tool in this turn - render as timeline item
+              const turnItems = turnGroup.items;
               return (
-                <div
-                  key={item.key}
-                  style={{ display: isVisible ? "block" : "none" }}
-                >
-                  {renderDisplayItem(
-                    item,
-                    index,
-                    itemsToDisplay.length,
-                    true,
-                    isVisible,
-                    ({ icon, content, status, expandedText }) => {
-                      // When expanded, show full renderer style similar to complete state
-                      if (isStreamingExpanded) {
-                        return (
-                          <ExpandedToolItem
-                            icon={icon}
-                            content={content}
-                            status={status}
-                            isLastItem={isLastItem}
-                            showClickableToggle={
-                              itemsToDisplay.length > 1 && index === 0
-                            }
-                            onToggleClick={() =>
-                              setIsStreamingExpanded(!isStreamingExpanded)
-                            }
-                            expandedText={expandedText}
-                          />
-                        );
-                      }
+                <div key={`turn-${turnGroup.turnIndex}`}>
+                  {turnItems.map((item, index) => {
+                    const isLastItem =
+                      isLastTurnGroup && index === turnItems.length - 1;
 
-                      // Short renderer style (original streaming view)
-                      return (
-                        <div className={cn("relative", STANDARD_TEXT_COLOR)}>
-                          {/* Connector line for non-last items */}
-                          {!isLastItem && isVisible && (
-                            <div
-                              className="absolute w-px z-0"
-                              style={{
-                                left: "10px",
-                                top: "24px",
-                                bottom: "-12px",
-                              }}
+                    return (
+                      <div key={item.key}>
+                        {renderDisplayItem(
+                          item,
+                          index,
+                          turnItems.length,
+                          true,
+                          true,
+                          ({ icon, content, status }) => (
+                            <ToolItemRow
+                              icon={icon}
+                              content={content}
+                              status={status}
+                              isLastItem={isLastItem}
                             />
-                          )}
-
-                          <div
-                            className={cn(
-                              "text-base flex items-center gap-1 mb-2",
-                              itemsToDisplay.length > 1 &&
-                                isLastItem &&
-                                "cursor-pointer hover:text-text-900 transition-colors"
-                            )}
-                            onClick={
-                              itemsToDisplay.length > 1 && isLastItem
-                                ? () =>
-                                    setIsStreamingExpanded(!isStreamingExpanded)
-                                : undefined
-                            }
-                          >
-                            {icon ? (
-                              <span
-                                className={cn(
-                                  // Only shimmer icon if generation NOT stopped
-                                  !shouldStopShimmering && "text-shimmer-base"
-                                )}
-                              >
-                                {icon({ size: 14 })}
-                              </span>
-                            ) : null}
-                            <span
-                              className={cn(
-                                // Only shimmer if generation NOT stopped
-                                !shouldStopShimmering && "loading-text"
-                              )}
-                            >
-                              {status}
-                            </span>
-                            {itemsToDisplay.length > 1 && isLastItem && (
-                              <span
-                                className={cn(
-                                  "ml-1",
-                                  // Only shimmer chevron if generation NOT stopped
-                                  !shouldStopShimmering && "text-shimmer-base"
-                                )}
-                              >
-                                {isStreamingExpanded ? (
-                                  <FiChevronDown size={14} />
-                                ) : (
-                                  <FiChevronRight size={14} />
-                                )}
-                              </span>
-                            )}
-                          </div>
-
-                          <div
-                            className={cn(
-                              "relative z-10 text-sm text-text-600",
-                              !isLastItem && "mb-3"
-                            )}
-                          >
-                            {content}
-                          </div>
-                        </div>
-                      );
-                    }
-                  )}
+                          )
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })}
@@ -803,22 +728,7 @@ export default function MultiToolRenderer({
     );
   }
 
-  // If complete and has parallel tools, show tabbed interface
-  if (hasParallelTools) {
-    return (
-      <div className="pb-1">
-        <ParallelToolTabs
-          items={displayItems}
-          chatState={chatState}
-          stopPacketSeen={stopPacketSeen}
-          shouldStopShimmering={true}
-          handleToolComplete={handleToolComplete}
-        />
-      </div>
-    );
-  }
-
-  // If complete with sequential tools only, show summary with toggle
+  // If complete, show summary with toggle and render each turn group independently
   return (
     <div className="pb-1">
       {/* Summary header - clickable */}
@@ -852,30 +762,63 @@ export default function MultiToolRenderer({
             isExpanded ? "transform translate-y-0" : "transform"
           )}
         >
-          <div>
-            {displayItems.map((item, index) => {
-              // Don't mark as last item if we're going to show the Done node
-              const isLastItem = false; // Always draw connector line since Done node follows
+          <div className="flex flex-col">
+            {turnGroups.map((turnGroup, turnGroupIndex) => {
+              const isLastTurnGroup = turnGroupIndex === turnGroups.length - 1;
 
-              return (
-                <div key={item.key}>
-                  {renderDisplayItem(
-                    item,
-                    index,
-                    displayItems.length,
-                    false,
-                    true,
-                    ({ icon, content, status, expandedText }) => (
-                      <ExpandedToolItem
-                        icon={icon}
-                        content={content}
-                        status={status}
-                        isLastItem={isLastItem}
-                        defaultIconColor="text-text-03"
-                        expandedText={expandedText}
+              // If this turn has parallel tools, render as tabs
+              if (turnGroup.hasParallelTools) {
+                return (
+                  <div key={`turn-${turnGroup.turnIndex}`}>
+                    <ParallelToolTabs
+                      items={turnGroup.items}
+                      chatState={chatState}
+                      stopPacketSeen={stopPacketSeen}
+                      shouldStopShimmering={true}
+                      handleToolComplete={handleToolComplete}
+                    />
+                    {/* Connector line to next turn group or Done node */}
+                    {!isLastTurnGroup && (
+                      <div
+                        className="w-px bg-background-tint-04 ml-[10px] h-4"
+                        aria-hidden="true"
                       />
-                    )
-                  )}
+                    )}
+                  </div>
+                );
+              }
+
+              // Single tool in this turn - render sequentially
+              const turnItems = turnGroup.items;
+              return (
+                <div key={`turn-${turnGroup.turnIndex}`}>
+                  {turnItems.map((item, index) => {
+                    // Don't mark as last item if there are more turns or Done node follows
+                    const isLastItemInTurn = index === turnItems.length - 1;
+                    const isLastItem = isLastTurnGroup && isLastItemInTurn;
+
+                    return (
+                      <div key={item.key}>
+                        {renderDisplayItem(
+                          item,
+                          index,
+                          turnItems.length,
+                          false,
+                          true,
+                          ({ icon, content, status, expandedText }) => (
+                            <ExpandedToolItem
+                              icon={icon}
+                              content={content}
+                              status={status}
+                              isLastItem={false} // Always draw connector line since Done node follows
+                              defaultIconColor="text-text-03"
+                              expandedText={expandedText}
+                            />
+                          )
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })}
