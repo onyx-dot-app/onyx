@@ -191,7 +191,7 @@ def update_license_cache(
         issued_at=payload.issued_at,
         expires_at=payload.expires_at,
         grace_period_end=grace_period_end,
-        status=status.value,
+        status=status,
         source=source,
         stripe_subscription_id=payload.stripe_subscription_id,
     )
