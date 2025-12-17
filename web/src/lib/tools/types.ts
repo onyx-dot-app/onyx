@@ -110,18 +110,6 @@ export interface ToolSnapshot {
   default_enabled: boolean;
 }
 
-export enum MCPAuthenticationType {
-  NONE = "NONE",
-  API_TOKEN = "API_TOKEN",
-  OAUTH = "OAUTH",
-  PT_OAUTH = "PT_OAUTH", // Pass-Through OAuth
-}
-
-export enum MCPAuthenticationPerformer {
-  ADMIN = "ADMIN",
-  PER_USER = "PER_USER",
-}
-
 export interface ApiResponse<T> {
   data: T | null;
   error: string | null;

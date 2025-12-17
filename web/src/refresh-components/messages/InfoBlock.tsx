@@ -1,9 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { memo } from "react";
 import { cn } from "@/lib/utils";
-import Text from "@/refresh-components/texts/Text";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal/types";
 import Truncated from "../texts/Truncated";
 
 export interface InfoBlockProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -13,46 +12,38 @@ export interface InfoBlockProps extends React.HTMLAttributes<HTMLDivElement> {
   iconClassName?: string;
 }
 
-function InfoBlockInner(
-  {
-    icon: Icon,
-    title,
-    description,
-    iconClassName,
-    className,
-    ...props
-  }: InfoBlockProps,
-  ref: React.ForwardedRef<HTMLDivElement>
-) {
-  return (
-    <div
-      ref={ref}
-      className={cn("flex flex-row items-start gap-1", className)}
-      {...props}
-    >
-      {/* Icon Container */}
-      <div className="flex items-center justify-center p-0.5 size-5 shrink-0">
-        <Icon className={cn("size-4 stroke-text-02", iconClassName)} />
-      </div>
+const InfoBlockInner = React.forwardRef<HTMLDivElement, InfoBlockProps>(
+  (
+    { icon: Icon, title, description, iconClassName, className, ...props },
+    ref
+  ) => {
+    return (
+      <div
+        ref={ref}
+        className={cn("flex flex-row items-start gap-1", className)}
+        {...props}
+      >
+        {/* Icon Container */}
+        <div className="flex items-center justify-center p-0.5 size-5 shrink-0">
+          <Icon className={cn("size-4 stroke-text-02", iconClassName)} />
+        </div>
 
-      {/* Text Content */}
-      <div className="flex flex-col flex-1 items-start min-w-0">
-        <Truncated mainUiAction text04>
-          {title}
-        </Truncated>
-        {description && (
-          <Truncated secondaryBody text03>
-            {description}
+        {/* Text Content */}
+        <div className="flex flex-col flex-1 items-start min-w-0">
+          <Truncated mainUiAction text04>
+            {title}
           </Truncated>
-        )}
+          {description && (
+            <Truncated secondaryBody text03>
+              {description}
+            </Truncated>
+          )}
+        </div>
       </div>
-    </div>
-  );
-}
-
-const InfoBlock = React.forwardRef<HTMLDivElement, InfoBlockProps>(
-  InfoBlockInner
+    );
+  }
 );
+const InfoBlock = memo(InfoBlockInner);
 InfoBlock.displayName = "InfoBlock";
 
 export default InfoBlock;

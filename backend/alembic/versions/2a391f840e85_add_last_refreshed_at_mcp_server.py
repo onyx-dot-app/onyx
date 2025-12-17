@@ -1,7 +1,7 @@
 """add last refreshed at mcp server
 
 Revision ID: 2a391f840e85
-Revises: e8f0d2a38171
+Revises: 18b5b2524446
 Create Date: 2025-12-06 15:19:59.766066
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "2a391f840e85"
-down_revision = "e8f0d2a38171"
+down_revision = "18b5b2524446"
 branch_labels = None
 depends_on = None
 
