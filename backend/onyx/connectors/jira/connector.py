@@ -9,6 +9,7 @@ from datetime import timezone
 from typing import Any
 
 from jira import JIRA
+from jira.exceptions import JIRAError
 from jira.resources import Issue
 from more_itertools import chunked
 from typing_extensions import override
@@ -149,8 +150,46 @@ def enhanced_search_ids(
         "nextPageToken": nextPageToken,
         "fields": "id",
     }
-    response = jira_client._session.get(enhanced_search_path, params=params).json()
-    return [str(issue["id"]) for issue in response["issues"]], response.get(
+    try:
+        response = jira_client._session.get(enhanced_search_path, params=params)
+        response.raise_for_status()
+        response_json = response.json()
+    except Exception as e:
+        # Try to extract error information
+        error_text = ""
+        status_code = None
+        if hasattr(e, "response") and e.response is not None:
+            status_code = e.response.status_code
+            try:
+                error_json = e.response.json()
+                error_text = error_json.get("errorMessages", [])
+                if isinstance(error_text, list):
+                    error_text = "; ".join(error_text)
+            except Exception:
+                error_text = str(e)
+
+        # Handle common errors
+        if status_code == 400:
+            if "does not exist for the field 'project'" in error_text:
+                raise ConnectorValidationError(
+                    f"The specified Jira project does not exist or you don't have access to it. "
+                    f"JQL query: {jql}. Error: {error_text}"
+                )
+            raise ConnectorValidationError(
+                f"Invalid JQL query. JQL: {jql}. Error: {error_text}"
+            )
+        elif status_code == 401:
+            raise CredentialExpiredError(
+                "Jira credentials are expired or invalid (HTTP 401)."
+            )
+        elif status_code == 403:
+            raise InsufficientPermissionsError(
+                f"Insufficient permissions to execute JQL query. JQL: {jql}"
+            )
+        # Re-raise for other errors
+        raise
+
+    return [str(issue["id"]) for issue in response_json["issues"]], response_json.get(
         "nextPageToken"
     )
 
@@ -232,12 +271,35 @@ def _perform_jql_search_v2(
         f"Fetching Jira issues with JQL: {jql}, "
         f"starting at {start}, max results: {max_results}"
     )
-    issues = jira_client.search_issues(
-        jql_str=jql,
-        startAt=start,
-        maxResults=max_results,
-        fields=fields,
-    )
+    try:
+        issues = jira_client.search_issues(
+            jql_str=jql,
+            startAt=start,
+            maxResults=max_results,
+            fields=fields,
+        )
+    except JIRAError as e:
+        # Handle common JQL errors with better error messages
+        if e.status_code == 400:
+            error_text = getattr(e, "text", str(e))
+            if "does not exist for the field 'project'" in error_text:
+                raise ConnectorValidationError(
+                    f"The specified Jira project does not exist or you don't have access to it. "
+                    f"JQL query: {jql}. Error: {error_text}"
+                )
+            raise ConnectorValidationError(
+                f"Invalid JQL query. JQL: {jql}. Error: {error_text}"
+            )
+        elif e.status_code == 401:
+            raise CredentialExpiredError(
+                "Jira credentials are expired or invalid (HTTP 401)."
+            )
+        elif e.status_code == 403:
+            raise InsufficientPermissionsError(
+                f"Insufficient permissions to execute JQL query. JQL: {jql}"
+            )
+        # Re-raise for other status codes
+        raise
 
     for issue in issues:
         if isinstance(issue, Issue):
