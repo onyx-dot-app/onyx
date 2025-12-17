@@ -120,6 +120,16 @@ async def fetch_license(
         # Verify signature before persisting
         payload = verify_license_signature(license_data)
 
+        # Verify the fetched license is for this tenant
+        if payload.tenant_id != tenant_id:
+            logger.error(
+                f"License tenant mismatch: expected {tenant_id}, got {payload.tenant_id}"
+            )
+            raise HTTPException(
+                status_code=400,
+                detail="License tenant ID mismatch - control plane returned wrong license",
+            )
+
         # Persist to DB and update cache atomically
         upsert_license(db_session, license_data)
         try:
