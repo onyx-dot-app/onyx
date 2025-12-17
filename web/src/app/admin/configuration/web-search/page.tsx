@@ -195,14 +195,14 @@ const ProviderSetupModal = memo(
 
     return (
       <Modal open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <Modal.Content mini preventAccidentalClose={true}>
+        <Modal.Content mini preventAccidentalClose>
           <Modal.Header
             icon={LogoArrangement}
             title={`Set up ${providerLabel}`}
             description={description}
             onClose={onClose}
           />
-          <Modal.Body className="bg-background-tint-01 overflow-y-auto max-h-[512px]">
+          <Modal.Body>
             {optionalField?.showFirst && (
               <FormField
                 name={optionalField.label.toLowerCase().replace(/\s+/g, "_")}
