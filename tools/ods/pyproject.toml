@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling", "hatch-vcs", "go-bin~=1.24.11", "manygo"]
+requires = ["hatchling", "go-bin~=1.24.11", "manygo"]
 build-backend = "hatchling.build"
 
 [project]
@@ -30,7 +30,8 @@ Repository = "https://github.com/onyx-dot-app/onyx"
 include = ["go.mod", "go.sum", "main.go", "**/*.go", "**/*.py"]
 
 [tool.hatch.version]
-source = "vcs"
+source = "code"
+path = "internal/_version.py"
 
 [tool.hatch.version.raw-options]
 root = "../.."
