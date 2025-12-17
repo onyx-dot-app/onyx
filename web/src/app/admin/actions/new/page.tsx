@@ -1,7 +1,7 @@
 "use client";
 
 import { ActionEditor } from "@/app/admin/actions/ActionEditor";
-import { BackButton } from "@/components/BackButton";
+import BackButton from "@/refresh-components/buttons/BackButton";
 import { AdminPageTitle } from "@/components/admin/Title";
 import CardSection from "@/components/admin/CardSection";
 import { SvgActions } from "@opal/icons";

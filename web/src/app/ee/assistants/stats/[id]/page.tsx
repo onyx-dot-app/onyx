@@ -3,7 +3,7 @@ import { unstable_noStore as noStore } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAuth } from "@/lib/auth/requireAuth";
 import { AssistantStats } from "./AssistantStats";
-import { BackButton } from "@/components/BackButton";
+import BackButton from "@/refresh-components/buttons/BackButton";
 
 export default async function GalleryPage(props: {
   params: Promise<{ id: string }>;

@@ -9,7 +9,7 @@ export interface BackButtonProps {
   routerOverride?: string;
 }
 
-export function BackButton({
+export default function BackButton({
   behaviorOverride,
   routerOverride,
 }: BackButtonProps) {
