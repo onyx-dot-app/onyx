@@ -168,11 +168,7 @@ def _handle_jira_search_error(e: Exception, jql: str) -> None:
                 else str(error_messages)
             )
         except Exception:
-            error_text = (
-                e.response.text
-                if hasattr(e, "response") and hasattr(e.response, "text")
-                else str(e)
-            )
+            error_text = getattr(e.response, "text", str(e))
 
     # Handle specific status codes
     if status_code == 400:
