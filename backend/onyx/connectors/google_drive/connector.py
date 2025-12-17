@@ -63,7 +63,6 @@ from onyx.connectors.google_utils.shared_constants import USER_FIELDS
 from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import ResolveCheckpointConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import ConnectorFailure
@@ -156,7 +155,6 @@ class DriveIdStatus(Enum):
 class GoogleDriveConnector(
     SlimConnectorWithPermSync,
     CheckpointedConnectorWithPermSync[GoogleDriveCheckpoint],
-    ResolveCheckpointConnector,
 ):
     def __init__(
         self,
