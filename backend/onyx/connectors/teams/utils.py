@@ -118,14 +118,22 @@ def fetch_messages(
     team_id: str,
     channel_id: str,
     start: SecondsSinceUnixEpoch,
+    end: SecondsSinceUnixEpoch | None = None,
 ) -> Generator[Message]:
     startfmt = datetime.fromtimestamp(start, tz=timezone.utc).strftime(
         "%Y-%m-%dT%H:%M:%SZ"
     )
 
+    filter_clause = f"lastModifiedDateTime gt {startfmt}"
+    if end is not None:
+        endfmt = datetime.fromtimestamp(end, tz=timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        filter_clause += f" and lastModifiedDateTime lt {endfmt}"
+
     initial_request_url = (
         f"teams/{team_id}/channels/{channel_id}/messages/delta"
-        f"?$filter=lastModifiedDateTime gt {startfmt}"
+        f"?$filter={filter_clause}"
     )
 
     request_url: str | None = initial_request_url
