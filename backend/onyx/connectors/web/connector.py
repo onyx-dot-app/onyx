@@ -585,7 +585,14 @@ class WebConnector(LoadConnector):
                 while scroll_attempts < WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS:
                     page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                     # wait for the content to load if we scrolled
-                    page.wait_for_load_state("networkidle", timeout=30000)
+                    try:
+                        page.wait_for_load_state("networkidle", timeout=30000)
+                    except Exception:
+                        # Some pages never reach networkidle due to continuous network activity
+                        # Continue scraping with the content that's already loaded
+                        logger.debug(
+                            f"{index}: Networkidle timeout on scroll attempt {scroll_attempts}, continuing"
+                        )
                     time.sleep(0.5)  # let javascript run
 
                     new_height = page.evaluate("document.body.scrollHeight")
