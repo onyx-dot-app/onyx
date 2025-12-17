@@ -2141,6 +2141,8 @@ class ChatMessage(Base):
     time_sent: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # True if this assistant message is a clarification question (deep research flow)
+    is_clarification: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Relationships
     chat_session: Mapped[ChatSession] = relationship("ChatSession")

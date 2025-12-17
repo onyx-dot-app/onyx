@@ -3,6 +3,8 @@ from enum import Enum
 
 from pydantic import BaseModel
 
+from onyx.server.settings.models import ApplicationStatus
+
 
 class PlanType(str, Enum):
     MONTHLY = "monthly"
@@ -48,7 +50,7 @@ class LicenseMetadata(BaseModel):
     issued_at: datetime
     expires_at: datetime
     grace_period_end: datetime | None = None
-    status: str
+    status: ApplicationStatus
     source: LicenseSource | None = None
     stripe_subscription_id: str | None = None
 
@@ -63,7 +65,7 @@ class LicenseStatusResponse(BaseModel):
     issued_at: datetime | None = None
     expires_at: datetime | None = None
     grace_period_end: datetime | None = None
-    status: str | None = None
+    status: ApplicationStatus | None = None
     source: LicenseSource | None = None
 
 
