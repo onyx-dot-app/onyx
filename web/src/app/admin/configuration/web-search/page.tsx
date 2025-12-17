@@ -317,7 +317,13 @@ const ProviderSetupModal = memo(
             {optionalField && !optionalField.showFirst && (
               <FormField
                 name={optionalField.label.toLowerCase().replace(/\s+/g, "_")}
-                state="idle"
+                state={
+                  hideApiKey &&
+                  (helperClass.includes("status-error") ||
+                    helperClass.includes("error"))
+                    ? "error"
+                    : "idle"
+                }
                 className="w-full"
               >
                 <FormField.Label>
@@ -338,6 +344,41 @@ const ProviderSetupModal = memo(
                   <Text secondaryBody text03 className="ml-0.5">
                     {optionalField.description}
                   </Text>
+                )}
+                {hideApiKey && (
+                  <>
+                    {isProcessing ? (
+                      <FormField.APIMessage
+                        state="loading"
+                        messages={{
+                          loading:
+                            typeof helperMessage === "string"
+                              ? helperMessage
+                              : "Testing connection...",
+                        }}
+                      />
+                    ) : typeof helperMessage === "string" ? (
+                      <FormField.Message
+                        messages={{
+                          idle:
+                            helperClass.includes("status-error") ||
+                            helperClass.includes("error")
+                              ? ""
+                              : helperClass.includes("green")
+                                ? ""
+                                : "",
+                          error:
+                            helperClass.includes("status-error") ||
+                            helperClass.includes("error")
+                              ? helperMessage
+                              : "",
+                          success: helperClass.includes("green")
+                            ? helperMessage
+                            : "",
+                        }}
+                      />
+                    ) : null}
+                  </>
                 )}
               </FormField>
             )}
@@ -869,7 +910,9 @@ export default function Page() {
       return searchStatusMessage;
     }
     if (isProcessingSearch) {
-      return "Validating API key...";
+      return selectedProviderType === "searxng"
+        ? "Checking connection..."
+        : "Validating API key...";
     }
 
     const providerDetails = selectedProviderType
@@ -932,7 +975,11 @@ export default function Page() {
 
     setIsProcessingSearch(true);
     setSearchErrorMessage(null);
-    setSearchStatusMessage("Validating API key...");
+    setSearchStatusMessage(
+      selectedProviderType === "searxng"
+        ? "Checking connection..."
+        : "Validating API key..."
+    );
     setActivationError(null);
 
     try {
@@ -960,7 +1007,11 @@ export default function Page() {
         );
       }
 
-      setSearchStatusMessage("API key validated. Activating provider...");
+      setSearchStatusMessage(
+        selectedProviderType === "searxng"
+          ? "Connection successful. Activating provider..."
+          : "API key validated. Activating provider..."
+      );
 
       const payload = {
         id: existingProvider?.id ?? null,

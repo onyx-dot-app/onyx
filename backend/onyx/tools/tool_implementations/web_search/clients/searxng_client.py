@@ -96,5 +96,42 @@ class SearXNGClient(WebSearchProvider):
                 detail="This does not appear to be a SearXNG instance. Please check the URL and try again.",
             )
 
+        # Test that JSON mode is enabled by performing a simple search
+        self._test_json_mode()
+
         logger.info("Web search provider test succeeded for SearXNG.")
         return {"status": "ok"}
+
+    def _test_json_mode(self) -> None:
+        """Test that JSON format is enabled in SearXNG settings.
+
+        SearXNG requires JSON format to be explicitly enabled in settings.yml.
+        If it's not enabled, the search endpoint returns a 403.
+        """
+        try:
+            payload = {
+                "q": "test",
+                "format": "json",
+            }
+            response = requests.post(
+                f"{self._searxng_base_url}/search",
+                data=payload,
+                timeout=5,
+            )
+            response.raise_for_status()
+        except requests.HTTPError as e:
+            status_code = e.response.status_code if e.response is not None else None
+            if status_code == 403:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Got a 403 response when trying to reach SearXNG. This likely means that "
+                        "JSON format is not enabled on this SearXNG instance. "
+                        "Please enable JSON format in your SearXNG settings.yml file by adding "
+                        "'json' to the 'search.formats' list."
+                    ),
+                ) from e
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to test search on SearXNG instance (status {status_code}): {str(e)}",
+            ) from e
