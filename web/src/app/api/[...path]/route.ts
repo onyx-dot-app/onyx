@@ -89,7 +89,10 @@ async function handleRequest(request: NextRequest, path: string[]) {
 
     // Build headers, optionally injecting debug auth cookie
     const headers = new Headers(request.headers);
-    if (process.env.DEBUG_AUTH_COOKIE) {
+    if (
+      process.env.DEBUG_AUTH_COOKIE &&
+      process.env.NODE_ENV === "development"
+    ) {
       // Inject the debug auth cookie for local development against remote backend
       // Get from cloud site: DevTools → Application → Cookies → fastapiusersauth
       const existingCookies = headers.get("cookie") || "";
