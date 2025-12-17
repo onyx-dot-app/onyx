@@ -328,6 +328,43 @@ export default function LLMPopover({
     setOpen(false);
   };
 
+  const renderModelItem = (option: LLMOption) => {
+    const isSelected =
+      option.modelName === llmManager.currentLlm.modelName &&
+      option.provider === llmManager.currentLlm.provider;
+
+    const capabilities: string[] = [];
+    if (option.supportsReasoning) {
+      capabilities.push("Reasoning");
+    }
+    if (option.supportsImageInput) {
+      capabilities.push("Vision");
+    }
+    const description =
+      capabilities.length > 0 ? capabilities.join(", ") : undefined;
+
+    return (
+      <div
+        key={`${option.name}-${option.modelName}`}
+        ref={isSelected ? selectedItemRef : undefined}
+      >
+        <LineItem
+          selected={isSelected}
+          description={description}
+          onClick={() => handleSelectModel(option)}
+          icon={() => null}
+          rightChildren={
+            isSelected ? (
+              <SvgCheck className="h-4 w-4 stroke-action-link-05 shrink-0" />
+            ) : null
+          }
+        >
+          {option.displayName}
+        </LineItem>
+      </div>
+    );
+  };
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild disabled={disabled}>
@@ -396,45 +433,7 @@ export default function LLMPopover({
                         key="single-provider"
                         className="flex flex-col gap-1"
                       >
-                        {groupedOptions[0]!.options.map((option) => {
-                          const isSelected =
-                            option.modelName ===
-                              llmManager.currentLlm.modelName &&
-                            option.provider === llmManager.currentLlm.provider;
-
-                          const capabilities: string[] = [];
-                          if (option.supportsReasoning) {
-                            capabilities.push("Reasoning");
-                          }
-                          if (option.supportsImageInput) {
-                            capabilities.push("Vision");
-                          }
-                          const description =
-                            capabilities.length > 0
-                              ? capabilities.join(", ")
-                              : undefined;
-
-                          return (
-                            <div
-                              key={`${option.name}-${option.modelName}`}
-                              ref={isSelected ? selectedItemRef : undefined}
-                            >
-                              <LineItem
-                                selected={isSelected}
-                                description={description}
-                                onClick={() => handleSelectModel(option)}
-                                icon={() => null}
-                                rightChildren={
-                                  isSelected ? (
-                                    <SvgCheck className="h-4 w-4 stroke-action-link-05 shrink-0" />
-                                  ) : null
-                                }
-                              >
-                                {option.displayName}
-                              </LineItem>
-                            </div>
-                          );
-                        })}
+                        {groupedOptions[0]!.options.map(renderModelItem)}
                       </div>,
                     ]
                   : // Multiple providers - show accordion with groups
@@ -487,54 +486,7 @@ export default function LLMPopover({
                               {/* Model Items - full width highlight */}
                               <AccordionContent className="pb-0 pt-0">
                                 <div className="flex flex-col gap-1">
-                                  {group.options.map((option) => {
-                                    // Match by both modelName AND provider to handle same model name across providers
-                                    const isSelected =
-                                      option.modelName ===
-                                        llmManager.currentLlm.modelName &&
-                                      option.provider ===
-                                        llmManager.currentLlm.provider;
-
-                                    // Build description with model capabilities
-                                    const capabilities: string[] = [];
-                                    if (option.supportsReasoning) {
-                                      capabilities.push("Reasoning");
-                                    }
-                                    if (option.supportsImageInput) {
-                                      capabilities.push("Vision");
-                                    }
-                                    const description =
-                                      capabilities.length > 0
-                                        ? capabilities.join(", ")
-                                        : undefined;
-
-                                    return (
-                                      <div
-                                        key={`${option.name}-${option.modelName}`}
-                                        ref={
-                                          isSelected
-                                            ? selectedItemRef
-                                            : undefined
-                                        }
-                                      >
-                                        <LineItem
-                                          selected={isSelected}
-                                          description={description}
-                                          onClick={() =>
-                                            handleSelectModel(option)
-                                          }
-                                          icon={() => null}
-                                          rightChildren={
-                                            isSelected ? (
-                                              <SvgCheck className="h-4 w-4 stroke-action-link-05 shrink-0" />
-                                            ) : null
-                                          }
-                                        >
-                                          {option.displayName}
-                                        </LineItem>
-                                      </div>
-                                    );
-                                  })}
+                                  {group.options.map(renderModelItem)}
                                 </div>
                               </AccordionContent>
                             </AccordionItem>
