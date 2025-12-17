@@ -1,9 +1,9 @@
 import json
 from collections import defaultdict
-from dataclasses import dataclass
 from typing import Any
 from typing import cast
 
+from pydantic import BaseModel
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import sessionmaker
@@ -12,6 +12,7 @@ from typing_extensions import override
 from onyx.chat.emitter import Emitter
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceSection
+from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
 from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
@@ -47,14 +48,12 @@ URLS_FIELD = "urls"
 DOCUMENT_IDENTIFIERS_FIELD = "document_identifiers"
 
 
-@dataclass
-class IndexedDocumentRequest:
+class IndexedDocumentRequest(BaseModel):
     document_id: str
     original_url: str | None = None
 
 
-@dataclass
-class IndexedRetrievalResult:
+class IndexedRetrievalResult(BaseModel):
     sections: list[InferenceSection]
     missing_document_ids: list[str]
 
@@ -355,8 +354,8 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
 
         inference_sections: list[InferenceSection] = all_results.sections + web_sections
 
+        failure_descriptions = []
         if not inference_sections:
-            failure_descriptions = []
             if all_results.missing_document_ids:
                 failure_descriptions.append(
                     "documents "
@@ -366,14 +365,13 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             cleaned_failures = sorted({url for url in failed_web_urls if url})
             if cleaned_failures:
                 failure_descriptions.append("URLs " + ", ".join(cleaned_failures))
-            failure_msg = (
-                "Failed to fetch content from " + " and ".join(failure_descriptions)
-                if failure_descriptions
-                else "Failed to fetch content from the requested resources."
+        if failure_descriptions:
+            failure_msg = "Failed to fetch content from " + " and ".join(
+                failure_descriptions
             )
             return ToolResponse(rich_response=None, llm_facing_response=failure_msg)
 
-        search_docs: list = []
+        search_docs: list[SearchDoc] = []
         if all_results.sections:
             search_docs.extend(
                 convert_inference_sections_to_search_docs(
