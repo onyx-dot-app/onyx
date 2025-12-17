@@ -65,11 +65,13 @@ function ToolItemRow({
   content,
   status,
   isLastItem,
+  isLoading,
 }: {
   icon: ((props: { size: number }) => JSX.Element) | null;
   content: JSX.Element | string;
   status: string | null;
   isLastItem: boolean;
+  isLoading?: boolean;
 }) {
   return (
     <div className="relative">
@@ -89,14 +91,19 @@ function ToolItemRow({
         <div className="flex flex-col items-center w-5">
           <div className="flex-shrink-0 flex items-center justify-center w-5 h-5 bg-background rounded-full">
             {icon ? (
-              icon({ size: 14 })
+              <div className={cn(isLoading && "text-shimmer-base")}>
+                {icon({ size: 14 })}
+              </div>
             ) : (
               <FiCircle className="w-2 h-2 fill-current text-text-300" />
             )}
           </div>
         </div>
         <div className={cn("flex-1", !isLastItem && "pb-4")}>
-          <Text text02 className="text-sm mb-1">
+          <Text
+            text02
+            className={cn("text-sm mb-1", isLoading && "loading-text")}
+          >
             {status}
           </Text>
           <div className="text-xs text-text-600">{content}</div>
@@ -699,6 +706,23 @@ export default function MultiToolRenderer({
                     const isLastItem =
                       isLastTurnGroup && index === turnItems.length - 1;
 
+                    // Calculate loading state for this item
+                    let isItemComplete = false;
+                    if (
+                      item.type === DisplayType.SEARCH_STEP_1 ||
+                      item.type === DisplayType.SEARCH_STEP_2
+                    ) {
+                      const searchState = constructCurrentSearchState(
+                        item.packets as SearchToolPacket[]
+                      );
+                      isItemComplete = searchState.isComplete;
+                    } else {
+                      isItemComplete = item.packets.some(
+                        (p) => p.obj.type === PacketType.SECTION_END
+                      );
+                    }
+                    const isLoading = !isItemComplete && !shouldStopShimmering;
+
                     return (
                       <div key={item.key}>
                         {renderDisplayItem(
@@ -713,6 +737,7 @@ export default function MultiToolRenderer({
                               content={content}
                               status={status}
                               isLastItem={isLastItem}
+                              isLoading={isLoading}
                             />
                           )
                         )}
