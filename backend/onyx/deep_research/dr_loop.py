@@ -80,7 +80,7 @@ def run_deep_research_llm_loop(
     #########################################################
     if not skip_clarification:
         clarification_prompt = CLARIFICATION_PROMPT.format(
-            current_datetime=get_current_llm_day_time()
+            current_datetime=get_current_llm_day_time(full_sentence=False)
         )
         system_prompt = ChatMessageSimple(
             message=clarification_prompt,
@@ -138,7 +138,7 @@ def run_deep_research_llm_loop(
     #########################################################
     system_prompt = ChatMessageSimple(
         message=RESEARCH_PLAN_PROMPT.format(
-            current_datetime=get_current_llm_day_time()
+            current_datetime=get_current_llm_day_time(full_sentence=False)
         ),
         token_count=300,
         message_type=MessageType.SYSTEM,
@@ -208,7 +208,7 @@ def run_deep_research_llm_loop(
     )
 
     token_count_prompt = orchestrator_prompt_template.format(
-        current_datetime=get_current_llm_day_time(),
+        current_datetime=get_current_llm_day_time(full_sentence=False),
         current_cycle_count=1,
         max_cycles=MAX_ORCHESTRATOR_CYCLES,
         research_plan=research_plan,
@@ -217,7 +217,7 @@ def run_deep_research_llm_loop(
 
     for cycle in range(MAX_ORCHESTRATOR_CYCLES):
         orchestrator_prompt = orchestrator_prompt_template.format(
-            current_datetime=get_current_llm_day_time(),
+            current_datetime=get_current_llm_day_time(full_sentence=False),
             current_cycle_count=cycle,
             max_cycles=MAX_ORCHESTRATOR_CYCLES,
             research_plan=research_plan,
