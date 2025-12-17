@@ -63,10 +63,12 @@ from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.utils import get_json_line
+from onyx.tools.constants import SEARCH_TOOL_ID
 from onyx.tools.tool import Tool
 from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_constructor import CustomToolConfig
 from onyx.tools.tool_constructor import SearchToolConfig
+from onyx.tools.tool_constructor import SearchToolUsage
 from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
 from onyx.utils.timing import log_function_time
@@ -205,6 +207,46 @@ def _extract_project_file_texts_and_images(
         total_token_count=total_token_count,
         project_file_metadata=project_file_metadata,
     )
+
+
+def _get_project_search_availability(
+    project_id: int | None,
+    persona_id: int | None,
+    has_project_file_texts: bool,
+    forced_tool_ids: list[int] | None,
+    search_tool_id: int | None,
+) -> SearchToolUsage:
+    """Determine search tool availability based on project context.
+
+    Args:
+        project_id: The project ID if the user is in a project
+        persona_id: The persona ID to check if it's the default persona
+        has_project_file_texts: Whether project files are loaded in context
+        forced_tool_ids: List of forced tool IDs (may be mutated to remove search tool)
+        search_tool_id: The search tool ID to check against
+
+    Returns:
+        SearchToolUsage setting indicating how search should be used
+    """
+    # There are cases where the internal search tool should be disabled
+    # If the user is in a project, it should not use other sources / generic search
+    # If they are in a project but using a custom agent, it should use the agent setup
+    # (which means it can use search)
+    # However if in a project and there are more files than can fit in the context,
+    # it should use the search tool with the project filter on
+    # If no files are uploaded, search should remain enabled
+    search_usage_forcing_setting = SearchToolUsage.AUTO
+    if project_id:
+        if bool(persona_id is DEFAULT_PERSONA_ID and has_project_file_texts):
+            search_usage_forcing_setting = SearchToolUsage.DISABLED
+            # Remove search tool from forced_tool_ids if it's present
+            if forced_tool_ids and search_tool_id and search_tool_id in forced_tool_ids:
+                forced_tool_ids[:] = [
+                    tool_id for tool_id in forced_tool_ids if tool_id != search_tool_id
+                ]
+        elif forced_tool_ids and search_tool_id and search_tool_id in forced_tool_ids:
+            search_usage_forcing_setting = SearchToolUsage.ENABLED
+    return search_usage_forcing_setting
 
 
 def _initialize_chat_session(
@@ -400,17 +442,23 @@ def stream_chat_message_objects(
             db_session=db_session,
         )
 
-        # There are cases where the internal search tool should be disabled
-        # If the user is in a project, it should not use other sources / generic search
-        # If they are in a project but using a custom agent, it should use the agent setup
-        # (which means it can use search)
-        # However if in a project and there are more files than can fit in the context,
-        # it should use the search tool with the project filter on
-        # If no files are uploaded, search should remain enabled
-        disable_internal_search = bool(
-            chat_session.project_id
-            and persona.id is DEFAULT_PERSONA_ID
-            and extracted_project_files.project_file_texts
+        # Build a mapping of tool_id to tool_name for history reconstruction
+        all_tools = get_tools(db_session)
+        tool_id_to_name_map = {tool.id: tool.name for tool in all_tools}
+
+        search_tool_id = next(
+            (tool.id for tool in all_tools if tool.in_code_tool_id == SEARCH_TOOL_ID),
+            None,
+        )
+
+        # This may also mutate the new_msg_req.forced_tool_ids
+        # This logic is specifically for projects
+        search_usage_forcing_setting = _get_project_search_availability(
+            project_id=chat_session.project_id,
+            persona_id=persona.id,
+            has_project_file_texts=bool(extracted_project_files.project_file_texts),
+            forced_tool_ids=new_msg_req.forced_tool_ids,
+            search_tool_id=search_tool_id,
         )
 
         emitter = get_default_emitter()
@@ -439,7 +487,7 @@ def stream_chat_message_objects(
                 additional_headers=custom_tool_additional_headers,
             ),
             allowed_tool_ids=new_msg_req.allowed_tool_ids,
-            disable_internal_search=disable_internal_search,
+            search_usage_forcing_setting=search_usage_forcing_setting,
         )
         tools: list[Tool] = []
         for tool_list in tool_dict.values():
@@ -463,10 +511,6 @@ def stream_chat_message_objects(
             user_message_id=user_message.id,
             reserved_assistant_message_id=assistant_response.id,
         )
-
-        # Build a mapping of tool_id to tool_name for history reconstruction
-        all_tools = get_tools(db_session)
-        tool_id_to_name_map = {tool.id: tool.name for tool in all_tools}
 
         # Convert the chat history into a simple format that is free of any DB objects
         # and is easy to parse for the agent loop
