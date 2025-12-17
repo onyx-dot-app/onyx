@@ -3919,6 +3919,10 @@ class License(Base):
     """Stores the signed license blob (singleton pattern - only one row)."""
 
     __tablename__ = "license"
+    __table_args__ = (
+        # Singleton pattern - unique index on constant ensures only one row
+        Index("idx_license_singleton", text("(true)"), unique=True),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     license_data: Mapped[str] = mapped_column(Text, nullable=False)
