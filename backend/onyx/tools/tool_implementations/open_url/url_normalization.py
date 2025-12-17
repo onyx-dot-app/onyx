@@ -288,7 +288,13 @@ def _register_slack_normalizer() -> None:
                 if archives_idx + 2 < len(path_parts):
                     thread_part = path_parts[archives_idx + 2]
                     if thread_part.startswith("p"):
-                        thread_ts = thread_part[1:]  # Remove 'p' prefix
+                        # Convert p1234567890123456 to 1234567890.123456 format
+                        timestamp_str = thread_part[1:]  # Remove 'p' prefix
+                        if len(timestamp_str) == 16:
+                            # Insert dot at position 10 to match canonical format
+                            thread_ts = f"{timestamp_str[:10]}.{timestamp_str[10:]}"
+                        else:
+                            thread_ts = timestamp_str
                         return f"{channel_id}__{thread_ts}"
         except (ValueError, IndexError):
             pass

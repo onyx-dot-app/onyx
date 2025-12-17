@@ -73,11 +73,11 @@ def test_notion_normalization(url: str, expected: str | None) -> None:
     [
         (
             "https://workspace.slack.com/archives/C1234567890/p1234567890123456",
-            "C1234567890__1234567890123456",
+            "C1234567890__1234567890.123456",
         ),
         (
             "https://workspace.slack.com/archives/C1234567890/p1234567890123456?thread_ts=1234567890.123456",
-            "C1234567890__1234567890123456",
+            "C1234567890__1234567890.123456",
         ),
     ],
 )
