@@ -426,21 +426,9 @@ const HoverIconButton = ({
   onMouseLeave: () => void;
   children: React.ReactNode;
 } & React.ComponentProps<typeof Button>) => {
-  const HoverIcon = useMemo(() => {
-    const IconComponent: React.FunctionComponent<
-      React.SVGProps<SVGSVGElement>
-    > = ({ className, ...props }) => {
-      if (isHovered) {
-        return <SvgX className={className} {...props} />;
-      }
-      return <SvgCheckSquare className={className} {...props} />;
-    };
-    return IconComponent;
-  }, [isHovered]);
-
   return (
     <div onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
-      <Button {...buttonProps} rightIcon={HoverIcon}>
+      <Button {...buttonProps} rightIcon={isHovered ? SvgX : SvgCheckSquare}>
         {children}
       </Button>
     </div>
