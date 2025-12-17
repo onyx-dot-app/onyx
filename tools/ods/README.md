@@ -54,11 +54,7 @@ _Note: bash completion requires the [bash-completion](https://github.com/scop/ba
 
 ## Upgrading
 
-To upgrade the stable version in the `pyproject.toml`,
-
-```shell
-uv add --dev onyx-devtools --upgrade-package onyx-devtools
-```
+To upgrade the stable version, upgrade it as you would any other [requirement](https://github.com/onyx-dot-app/onyx/tree/main/backend/requirements#readme).
 
 ## Building from source
 
