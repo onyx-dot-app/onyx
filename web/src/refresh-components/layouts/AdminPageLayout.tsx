@@ -1,6 +1,5 @@
-import { IconProps } from "@/icons";
-import PageHeader from "../headers/PageHeader";
-import Separator from "../Separator";
+import type { IconProps } from "@opal/types";
+import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 
 export interface AdminPageLayoutProps {

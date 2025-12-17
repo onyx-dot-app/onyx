@@ -369,7 +369,9 @@ export default function MCPAuthenticationModal({
                                 "auth_performer",
                                 MCPAuthenticationPerformer.PER_USER
                               );
-                            } else if (value === MCPAuthenticationType.API_TOKEN) {
+                            } else if (
+                              value === MCPAuthenticationType.API_TOKEN
+                            ) {
                               // Keep auth_performer in sync with the selected API token tab
                               setFieldValue(
                                 "auth_performer",
@@ -623,7 +625,7 @@ export default function MCPAuthenticationModal({
                   )}
                 </Modal.Body>
 
-                <Modal.Footer className="w-full p-4 gap-2 bg-background-tint-00">
+                <Modal.Footer className="gap-2">
                   <Button
                     main
                     tertiary

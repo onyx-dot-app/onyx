@@ -463,7 +463,7 @@ const ModalFooter = React.forwardRef<HTMLDivElement, ModalFooterProps>(
       <div
         ref={ref}
         className={cn(
-          "flex flex-row items-center justify-end gap-1 p-4",
+          "flex flex-row items-center justify-end gap-1 p-4 w-full",
           className
         )}
         {...props}

@@ -304,7 +304,7 @@ export default function AddMCPServerModal({
                   )}
               </Modal.Body>
 
-              <Modal.Footer className="w-fullp-4 gap-2">
+              <Modal.Footer className="gap-2">
                 <Button
                   secondary
                   type="button"

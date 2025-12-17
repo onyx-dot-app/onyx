@@ -1,5 +1,5 @@
 import type React from "react";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal/types";
 
 // Generic action status for UI components
 export enum ActionStatus {

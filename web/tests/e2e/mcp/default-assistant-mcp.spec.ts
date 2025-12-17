@@ -199,7 +199,7 @@ test.describe("Default Assistant MCP Integration", () => {
     let enabledToolsCount = 0;
 
     for (const toolId of toolIds) {
-      const toolToggle = page.getByTestId(`tool-toggle-${toolId}`).first();
+      const toolToggle = page.getByLabel(`tool-toggle-${toolId}`).first();
 
       // Check if the tool exists
       const isVisible = await toolToggle

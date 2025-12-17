@@ -1,5 +1,5 @@
 "use client";
-import SvgActions from "@/icons/actions";
+import { SvgActions } from "@opal/icons";
 import { AdminPageLayout } from "@/refresh-components/layouts/AdminPageLayout";
 import OpenApiPageContent from "@/sections/actions/OpenApiPageContent";
 export default function Main() {

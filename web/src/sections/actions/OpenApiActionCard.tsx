@@ -14,6 +14,7 @@ import { SvgServer, SvgTrash } from "@opal/icons";
 import Modal from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
+import { cn } from "@/lib/utils";
 
 export interface OpenApiActionCardProps {
   tool: ToolSnapshot;
@@ -193,8 +194,8 @@ export default function OpenApiActionCard({
 
       {deleteModal.isOpen && onDelete && (
         <Modal
-          icon={() => (
-            <SvgTrash className="w-[1.5rem] h-[1.5rem] stroke-action-danger-05" />
+          icon={({ className }) => (
+            <SvgTrash className={cn(className, "stroke-action-danger-05")} />
           )}
           title="Delete OpenAPI action"
           onClose={() => deleteModal.toggle(false)}

@@ -537,7 +537,7 @@ export default function AddOpenAPIActionModal({
                     )}
                   </Modal.Body>
 
-                  <Modal.Footer className="w-full p-4 gap-2 bg-background-tint-00">
+                  <Modal.Footer className="gap-2">
                     <Button
                       main
                       secondary

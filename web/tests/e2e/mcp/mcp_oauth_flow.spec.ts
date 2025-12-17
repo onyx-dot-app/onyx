@@ -1297,9 +1297,7 @@ test.describe("MCP OAuth flows", () => {
     logStep("Verified server card is visible");
 
     // Tools list automatically expands after fetch - wait for tool toggle to appear
-    const adminToolToggles = page.getByTestId(
-      `tool-toggle-${TOOL_NAMES.admin}`
-    );
+    const adminToolToggles = page.getByLabel(`tool-toggle-${TOOL_NAMES.admin}`);
     await expect(adminToolToggles.first()).toBeVisible({ timeout: 10000 });
 
     // Enable all matching tools (in case there are multiple on the page)
@@ -1588,7 +1586,7 @@ test.describe("MCP OAuth flows", () => {
       logStep("Verified server card is visible");
 
       // Tools list automatically expands after fetch - wait for tool toggle to appear
-      const curatorToolToggles = page.getByTestId(
+      const curatorToolToggles = page.getByLabel(
         `tool-toggle-${TOOL_NAMES.curator}`
       );
       await expect(curatorToolToggles.first()).toBeVisible({ timeout: 10000 });

@@ -21,13 +21,12 @@ import {
 import { useServerTools } from "@/sections/actions/useServerTools";
 import { KeyedMutator } from "swr";
 import type { IconProps } from "@opal/types";
-import { SvgRefreshCw, SvgServer } from "@opal/icons";
+import { SvgRefreshCw, SvgServer, SvgTrash } from "@opal/icons";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
-import SvgTrash from "@/icons/trash";
 import Modal from "@/refresh-components/layouts/ConfirmationModalLayout";
 
 export interface MCPActionCardProps {
@@ -53,7 +52,7 @@ export interface MCPActionCardProps {
   onDisconnect?: () => void;
   onManage?: () => void;
   onEdit?: () => void;
-  onDelete?: () => void;
+  onDelete?: () => Promise<void> | void;
   onAuthenticate?: () => void; // For pending state
   onReconnect?: () => void; // For disconnected state
   onRename?: (serverId: number, newName: string) => Promise<void>; // For renaming
@@ -331,8 +330,8 @@ export default function MCPActionCard({
 
       {deleteModal.isOpen && (
         <Modal
-          icon={() => (
-            <SvgTrash className="w-[1.5rem] h-[1.5rem] stroke-action-danger-05" />
+          icon={({ className }) => (
+            <SvgTrash className={cn(className, "stroke-action-danger-05")} />
           )}
           title="Delete MCP server"
           onClose={() => deleteModal.toggle(false)}
@@ -341,8 +340,13 @@ export default function MCPActionCard({
               danger
               onClick={async () => {
                 if (!onDelete) return;
-                onDelete();
-                deleteModal.toggle(false);
+                try {
+                  await onDelete();
+                  deleteModal.toggle(false);
+                } catch (error) {
+                  // Keep modal open if deletion fails; caller should surface error feedback.
+                  console.error("Failed to delete MCP server", error);
+                }
               }}
             >
               Delete
