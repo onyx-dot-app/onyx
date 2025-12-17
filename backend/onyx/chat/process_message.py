@@ -290,7 +290,7 @@ def stream_chat_message_objects(
     tenant_id = get_current_tenant_id()
     use_existing_user_message = new_msg_req.use_existing_user_message
 
-    llm: LLM
+    llm: LLM | None = None
 
     try:
         user_id = user.id if user is not None else None
