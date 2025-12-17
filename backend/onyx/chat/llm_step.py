@@ -340,10 +340,12 @@ def run_llm_step(
     state_container: ChatStateContainer,
     final_documents: list[SearchDoc] | None = None,
     user_identity: LLMUserIdentity | None = None,
-) -> Generator[Packet, None, tuple[LlmStepResult, int]]:
-    # The second return value is for the turn index because reasoning counts on the frontend as a turn
-    # TODO this is maybe ok but does not align well with the backend logic too well
+) -> Generator[Packet, None, tuple[LlmStepResult, bool]]:
+    # The second return value is for if it has done reasoning, this is needed to track the turn counts
+    # this is because reasoning counts as a turn on the frontend
     llm_msg_history = translate_history_to_llm_format(history)
+
+    has_reasoned = False
 
     # Uncomment the line below to log the entire message history to the console
     if LOG_ONYX_MODEL_INTERACTIONS:
@@ -408,7 +410,7 @@ def run_llm_step(
                         turn_index=turn_index,
                         obj=ReasoningDone(),
                     )
-                    turn_index += 1
+                    has_reasoned = True
                     reasoning_start = False
 
                 if not answer_start:
@@ -441,7 +443,7 @@ def run_llm_step(
                         turn_index=turn_index,
                         obj=ReasoningDone(),
                     )
-                    turn_index += 1
+                    has_reasoned = True
                     reasoning_start = False
 
                 for tool_call_delta in delta.tool_calls:
@@ -480,7 +482,7 @@ def run_llm_step(
             turn_index=turn_index,
             obj=ReasoningDone(),
         )
-        turn_index += 1
+        has_reasoned = True
 
     # Flush any remaining content from citation processor
     if citation_processor:
@@ -520,5 +522,5 @@ def run_llm_step(
             answer=accumulated_answer if accumulated_answer else None,
             tool_calls=tool_calls if tool_calls else None,
         ),
-        turn_index,
+        has_reasoned,
     )

@@ -341,7 +341,7 @@ def run_llm_loop(
         just_ran_web_search: bool = False
         has_called_search_tool: bool = False
         citation_mapping: dict[int, str] = {}  # Maps citation_num -> document_id/URL
-
+        reasoning_cycles = 0
         for llm_cycle_count in range(MAX_LLM_CYCLES):
             if forced_tool_id:
                 # Needs to be just the single one because the "required" currently doesn't have a specified tool, just a binary
@@ -444,7 +444,7 @@ def run_llm_loop(
                 tool_definitions=[tool.tool_definition() for tool in final_tools],
                 tool_choice=tool_choice,
                 llm=llm,
-                turn_index=llm_cycle_count,
+                turn_index=llm_cycle_count + reasoning_cycles,
                 citation_processor=citation_processor,
                 state_container=state_container,
                 # The rich docs representation is passed in so that when yielding the answer, it can also
@@ -460,7 +460,9 @@ def run_llm_loop(
                     packet = next(step_generator)
                     emitter.emit(packet)
                 except StopIteration as e:
-                    llm_step_result, _ = e.value
+                    llm_step_result, has_reasoned = e.value
+                    if has_reasoned:
+                        reasoning_cycles += 1
                     break
 
             # Type narrowing: generator always returns a result, so this can't be None
@@ -473,38 +475,6 @@ def run_llm_loop(
             # each tool might have custom logic here
             # Note: turn_index and tab_index are already set on tool calls by _extract_tool_call_kickoffs
             tool_calls = llm_step_result.tool_calls or []
-
-            # HARDCODED: Force parallel execution of internal search and web search
-            # This is for testing purposes only as requested.
-            # from onyx.tools.models import ToolCallKickoff
-            # import uuid
-
-            # last_user_query = "test"
-            # for msg in reversed(simple_chat_history):
-            #     if msg.message_type == MessageType.USER:
-            #         last_user_query = msg.message
-            #         break
-
-            # search_tool_enabled = any(t.name == SearchTool.NAME for t in final_tools)
-            # web_search_tool_enabled = any(t.name == WebSearchTool.NAME for t in final_tools)
-
-            # if search_tool_enabled and web_search_tool_enabled and llm_cycle_count == 0:
-            #     tool_calls = [
-            #         ToolCallKickoff(
-            #             tool_call_id=f"call_{uuid.uuid4()}",
-            #             tool_name=SearchTool.NAME,
-            #             tool_args={"queries": [last_user_query]},
-            #             turn_index=llm_cycle_count,
-            #             tab_index=0,
-            #         ),
-            #         ToolCallKickoff(
-            #             tool_call_id=f"call_{uuid.uuid4()}",
-            #             tool_name=WebSearchTool.NAME,
-            #             tool_args={"queries": [last_user_query]},
-            #             turn_index=llm_cycle_count,
-            #             tab_index=1,
-            #         )
-            #     ]
 
             just_ran_web_search = False
 
