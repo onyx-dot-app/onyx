@@ -155,7 +155,7 @@ def _handle_jira_search_error(e: Exception, jql: str) -> None:
     # Try to get status code and error text from JIRAError or requests response
     if hasattr(e, "status_code"):
         status_code = e.status_code
-        error_text = e.text
+        error_text = getattr(e, "text", "")
     elif hasattr(e, "response") and e.response is not None:
         status_code = e.response.status_code
         # Try JSON first, fall back to text
@@ -214,6 +214,7 @@ def enhanced_search_ids(
         response_json = response.json()
     except Exception as e:
         _handle_jira_search_error(e, jql)
+        raise  # Explicitly re-raise for type checker, should never reach here
 
     return [str(issue["id"]) for issue in response_json["issues"]], response_json.get(
         "nextPageToken"
@@ -306,6 +307,7 @@ def _perform_jql_search_v2(
         )
     except JIRAError as e:
         _handle_jira_search_error(e, jql)
+        raise  # Explicitly re-raise for type checker, should never reach here
 
     for issue in issues:
         if isinstance(issue, Issue):
