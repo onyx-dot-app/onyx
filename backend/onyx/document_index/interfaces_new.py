@@ -90,6 +90,8 @@ class MetadataUpdateRequest(BaseModel):
     the contents of the document.
     """
 
+    model_config = {"frozen": True}
+
     document_ids: list[str]
     # Passed in to help with potential optimizations of the implementation. The
     # keys should be redundant with document_ids.
