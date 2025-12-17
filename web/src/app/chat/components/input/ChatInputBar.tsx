@@ -5,10 +5,9 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { FiPlus } from "react-icons/fi";
+import { useRouter } from "next/navigation";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
-import { InputPrompt } from "@/app/chat/interfaces";
 import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
 import { useInputPrompts } from "@/lib/hooks/useInputPrompts";
 import { useCCPairs } from "@/lib/hooks/useCCPairs";
@@ -39,6 +38,11 @@ import {
   getIconForAction,
   hasSearchToolsAvailable,
 } from "@/app/chat/services/actionUtils";
+import { useSlashCommands } from "@/app/chat/hooks/useSlashCommands";
+import SlashCommandMenu from "@/app/chat/components/slash-commands/SlashCommandMenu";
+import { SlashCommand } from "@/app/chat/components/slash-commands/types";
+import { useAssistantPreferences } from "@/app/chat/hooks/useAssistantPreferences";
+import { handleSlashCommandKeyDown } from "@/app/chat/components/input/keyboardHandlers";
 
 const MAX_INPUT_HEIGHT = 200;
 
@@ -132,10 +136,88 @@ const ChatInputBar = React.memo(
     setPresentingDocument,
     disabled,
   }: ChatInputBarProps) => {
+    const router = useRouter();
     const { user } = useUser();
-    const { forcedToolIds, setForcedToolIds } = useForcedTools();
+    const { forcedToolIds, setForcedToolIds, toggleForcedTool } =
+      useForcedTools();
     const { currentMessageFiles, setCurrentMessageFiles } =
       useProjectsContext();
+    const { assistantPreferences } = useAssistantPreferences();
+    const { inputPrompts } = useInputPrompts();
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+    // ============================================================================
+    // Slash Commands
+    // ============================================================================
+    const isAdmin = user?.role === "admin";
+
+    const disabledToolIds = useMemo(() => {
+      if (!selectedAssistant || !assistantPreferences) return [];
+      return (
+        assistantPreferences[selectedAssistant.id]?.disabled_tool_ids || []
+      );
+    }, [selectedAssistant, assistantPreferences]);
+
+    const { executeCommand, getFilteredCommands } = useSlashCommands({
+      isAdmin,
+      tools: selectedAssistant?.tools || [],
+      disabledToolIds,
+      inputPrompts,
+      shortcutsEnabled: user?.preferences?.shortcut_enabled ?? false,
+    });
+
+    const [slashMenuIndex, setSlashMenuIndex] = useState(0);
+
+    const filteredSlashCommands = useMemo(() => {
+      const trimmed = message.trim();
+      // Only show slash commands when input starts with "/"
+      if (!trimmed.startsWith("/")) return [];
+
+      return getFilteredCommands(trimmed);
+    }, [message, getFilteredCommands]);
+
+    // Show unified menu when there are filtered commands
+    const showSlashMenu = filteredSlashCommands.length > 0;
+
+    useEffect(() => {
+      setSlashMenuIndex(0);
+    }, [filteredSlashCommands.length]);
+
+    const commandContext = useMemo(
+      () => ({
+        clearInput: () => setMessage(""),
+        startNewChat: () => router.push("/chat"),
+        navigate: (path: string) => router.push(path),
+        isAdmin: isAdmin ?? false,
+        toggleForcedTool,
+        setMessage, // For prompt commands to set input content
+        triggerFileUpload: () => fileInputRef.current?.click(),
+      }),
+      [setMessage, router, isAdmin, toggleForcedTool]
+    );
+
+    const handleSelectSlashCommand = useCallback(
+      (command: SlashCommand) => {
+        executeCommand(command.command, commandContext);
+        // Don't clear message here - let each command decide
+        // (prompt commands set content, others clear)
+      },
+      [executeCommand, commandContext]
+    );
+
+    const handleSlashCommand = useCallback(
+      (msg: string): boolean => {
+        if (!msg.trim().startsWith("/")) return false;
+        const executed = executeCommand(msg.trim(), commandContext);
+        if (executed) {
+          // Don't clear message here - let each command decide
+          // (prompt commands set content, others clear)
+          return true;
+        }
+        return false;
+      },
+      [executeCommand, commandContext]
+    );
 
     const currentIndexingFiles = useMemo(() => {
       return currentMessageFiles.filter(
@@ -211,7 +293,6 @@ const ChatInputBar = React.memo(
       [setCurrentMessageFiles]
     );
 
-    const { inputPrompts } = useInputPrompts();
     const { ccPairs, isLoading: ccPairsLoading } = useCCPairs();
     const { data: federatedConnectorsData, isLoading: federatedLoading } =
       useFederatedConnectors();
@@ -222,7 +303,6 @@ const ChatInputBar = React.memo(
       federatedLoading ||
       !selectedAssistant ||
       llmManager.isLoadingProviders;
-    const [showPrompts, setShowPrompts] = useState(false);
 
     // Memoize availableSources to prevent unnecessary re-renders
     const memoizedAvailableSources = useMemo(
@@ -234,65 +314,12 @@ const ChatInputBar = React.memo(
       [ccPairs, federatedConnectorsData]
     );
 
-    const hidePrompts = () => {
-      setTimeout(() => {
-        setShowPrompts(false);
-      }, 50);
-      setTabbingIconIndex(0);
-    };
-
-    const updateInputPrompt = (prompt: InputPrompt) => {
-      hidePrompts();
-      setMessage(`${prompt.content}`);
-    };
-
-    const handlePromptInput = useCallback(
-      (text: string) => {
-        if (!text.startsWith("/")) {
-          hidePrompts();
-        } else {
-          const promptMatch = text.match(/(?:\s|^)\/(\w*)$/);
-          if (promptMatch) {
-            setShowPrompts(true);
-          } else {
-            hidePrompts();
-          }
-        }
-      },
-      [hidePrompts]
-    );
-
     const handleInputChange = useCallback(
       (event: React.ChangeEvent<HTMLTextAreaElement>) => {
         const text = event.target.value;
         setMessage(text);
-        handlePromptInput(text);
       },
-      [setMessage, handlePromptInput]
-    );
-
-    const startFilterSlash = useMemo(() => {
-      if (message !== undefined) {
-        const message_segments = message
-          .slice(message.lastIndexOf("/") + 1)
-          .split(/\s/);
-        if (message_segments[0]) {
-          return message_segments[0].toLowerCase();
-        }
-      }
-      return "";
-    }, [message]);
-
-    const [tabbingIconIndex, setTabbingIconIndex] = useState(0);
-
-    const filteredPrompts = useMemo(
-      () =>
-        inputPrompts.filter(
-          (prompt) =>
-            prompt.active &&
-            prompt.prompt.toLowerCase().startsWith(startFilterSlash)
-        ),
-      [inputPrompts, startFilterSlash]
+      [setMessage]
     );
 
     // Determine if we should hide processing state based on context limits
@@ -335,82 +362,41 @@ const ChatInputBar = React.memo(
     ]);
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (showPrompts && (e.key === "Tab" || e.key == "Enter")) {
-        e.preventDefault();
-
-        if (tabbingIconIndex == filteredPrompts.length && showPrompts) {
-          if (showPrompts) {
-            window.open("/chat/input-prompts", "_self");
-          }
-        } else {
-          if (showPrompts) {
-            const selectedPrompt =
-              filteredPrompts[tabbingIconIndex >= 0 ? tabbingIconIndex : 0];
-            if (selectedPrompt) {
-              updateInputPrompt(selectedPrompt);
-            }
-          }
+      // Handle slash command menu navigation
+      if (showSlashMenu) {
+        const handled = handleSlashCommandKeyDown(e, {
+          filteredSlashCommands,
+          slashMenuIndex,
+          setSlashMenuIndex,
+          onSelectCommand: handleSelectSlashCommand,
+          onEscape: () => setMessage(""),
+        });
+        if (handled) {
+          e.stopPropagation(); // Prevent other handlers from running
+          return;
         }
-      }
-
-      if (!showPrompts) {
-        return;
-      }
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setTabbingIconIndex((tabbingIconIndex) =>
-          Math.min(tabbingIconIndex + 1, filteredPrompts.length)
-        );
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setTabbingIconIndex((tabbingIconIndex) =>
-          Math.max(tabbingIconIndex - 1, 0)
-        );
       }
     };
 
     return (
-      <>
-        {user?.preferences?.shortcut_enabled && showPrompts && (
-          <div className="text-sm absolute inset-x-0 top-0 w-full transform -translate-y-full">
-            <div className="overflow-y-auto max-h-[200px] py-1.5 bg-background-neutral-01 border border-border-01 shadow-lg mx-2 px-1.5 mt-2 rounded z-10">
-              {filteredPrompts.map(
-                (currentPrompt: InputPrompt, index: number) => (
-                  <button
-                    key={index}
-                    className={cn(
-                      "px-2 rounded content-start flex gap-x-1 py-1.5 w-full cursor-pointer",
-                      tabbingIconIndex == index && "bg-background-neutral-02",
-                      "hover:bg-background-neutral-02"
-                    )}
-                    onClick={() => {
-                      updateInputPrompt(currentPrompt);
-                    }}
-                  >
-                    <p className="font-bold">{currentPrompt.prompt}:</p>
-                    <p className="text-left flex-grow mr-auto line-clamp-1">
-                      {currentPrompt.content?.trim()}
-                    </p>
-                  </button>
-                )
-              )}
+      <div className="relative w-full flex justify-center">
+        {/* Hidden file input for /upload command */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          multiple
+          onChange={handleUploadChange}
+          accept="*/*"
+        />
 
-              <a
-                key={filteredPrompts.length}
-                target="_self"
-                className={cn(
-                  "px-3 flex gap-x-1 py-2 w-full rounded-lg items-center cursor-pointer",
-                  tabbingIconIndex == filteredPrompts.length &&
-                    "bg-background-neutral-02",
-                  "hover:bg-background-neutral-02"
-                )}
-                href="/chat/input-prompts"
-              >
-                <FiPlus size={17} />
-                <p>Create a new prompt</p>
-              </a>
-            </div>
-          </div>
+        {/* Unified Slash Command Menu - includes prompts, navigation, and tools */}
+        {showSlashMenu && (
+          <SlashCommandMenu
+            commands={filteredSlashCommands}
+            selectedIndex={slashMenuIndex}
+            onSelect={handleSelectSlashCommand}
+          />
         )}
 
         <div
@@ -468,12 +454,16 @@ const ChatInputBar = React.memo(
             onKeyDown={(event) => {
               if (
                 event.key === "Enter" &&
-                !showPrompts &&
+                !showSlashMenu &&
                 !event.shiftKey &&
                 !(event.nativeEvent as any).isComposing
               ) {
                 event.preventDefault();
                 if (message) {
+                  // Check for slash commands first
+                  if (handleSlashCommand(message)) {
+                    return; // Command was handled, don't submit to chat
+                  }
                   onSubmit();
                 }
               }
@@ -653,6 +643,10 @@ const ChatInputBar = React.memo(
                   if (chatState == "streaming") {
                     stopGenerating();
                   } else if (message) {
+                    // Check for slash commands first
+                    if (handleSlashCommand(message)) {
+                      return; // Command was handled, don't submit to chat
+                    }
                     onSubmit();
                   }
                 }}
@@ -660,7 +654,7 @@ const ChatInputBar = React.memo(
             </div>
           </div>
         </div>
-      </>
+      </div>
     );
   }
 );
