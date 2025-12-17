@@ -227,70 +227,74 @@ const ProviderSetupModal = memo(
               </FormField>
             )}
 
-            <FormField
-              name="api_key"
-              state={
-                helperClass.includes("status-error") ||
-                helperClass.includes("error")
-                  ? "error"
-                  : helperClass.includes("green")
-                    ? "success"
-                    : "idle"
-              }
-              className="w-full"
-            >
-              <FormField.Label>API Key</FormField.Label>
-              <FormField.Control asChild>
-                <PasswordInputTypeIn
-                  placeholder="Enter API key"
-                  value={apiKeyValue}
-                  autoFocus={apiKeyAutoFocus}
-                  onFocus={(e) => {
-                    // Select all text if it's the masked placeholder when focused
-                    if (apiKeyValue === "••••••••••••••••") {
-                      e.target.select();
-                    }
-                  }}
-                  onChange={(event) => {
-                    onApiKeyChange(event.target.value);
-                  }}
-                  showClearButton={false}
-                />
-              </FormField.Control>
-              {isProcessing ? (
-                <FormField.APIMessage
-                  state="loading"
-                  messages={{
-                    loading:
-                      typeof helperMessage === "string"
-                        ? helperMessage
-                        : "Validating API key...",
-                  }}
-                />
-              ) : typeof helperMessage === "string" ? (
-                <FormField.Message
-                  messages={{
-                    idle:
-                      helperClass.includes("status-error") ||
-                      helperClass.includes("error")
-                        ? ""
-                        : helperClass.includes("green")
+            {!hideApiKey && (
+              <FormField
+                name="api_key"
+                state={
+                  helperClass.includes("status-error") ||
+                  helperClass.includes("error")
+                    ? "error"
+                    : helperClass.includes("green")
+                      ? "success"
+                      : "idle"
+                }
+                className="w-full"
+              >
+                <FormField.Label>API Key</FormField.Label>
+                <FormField.Control asChild>
+                  <PasswordInputTypeIn
+                    placeholder="Enter API key"
+                    value={apiKeyValue}
+                    autoFocus={apiKeyAutoFocus}
+                    onFocus={(e) => {
+                      // Select all text if it's the masked placeholder when focused
+                      if (apiKeyValue === "••••••••••••••••") {
+                        e.target.select();
+                      }
+                    }}
+                    onChange={(event) => {
+                      onApiKeyChange(event.target.value);
+                    }}
+                    showClearButton={false}
+                  />
+                </FormField.Control>
+                {isProcessing ? (
+                  <FormField.APIMessage
+                    state="loading"
+                    messages={{
+                      loading:
+                        typeof helperMessage === "string"
+                          ? helperMessage
+                          : "Validating API key...",
+                    }}
+                  />
+                ) : typeof helperMessage === "string" ? (
+                  <FormField.Message
+                    messages={{
+                      idle:
+                        helperClass.includes("status-error") ||
+                        helperClass.includes("error")
                           ? ""
-                          : helperMessage,
-                    error:
-                      helperClass.includes("status-error") ||
-                      helperClass.includes("error")
+                          : helperClass.includes("green")
+                            ? ""
+                            : helperMessage,
+                      error:
+                        helperClass.includes("status-error") ||
+                        helperClass.includes("error")
+                          ? helperMessage
+                          : "",
+                      success: helperClass.includes("green")
                         ? helperMessage
                         : "",
-                    success: helperClass.includes("green") ? helperMessage : "",
-                  }}
-                />
-              ) : (
-                <FormField.Description className={helperClass}>
-                  {helperMessage}
-                </FormField.Description>
-              )}
-            </FormField>
+                    }}
+                  />
+                ) : (
+                  <FormField.Description className={helperClass}>
+                    {helperMessage}
+                  </FormField.Description>
+                )}
+              </FormField>
+            )}
 
             {optionalField && !optionalField.showFirst && (
               <FormField
@@ -318,41 +322,6 @@ const ProviderSetupModal = memo(
                   <FormField.Description>
                     {optionalField.description}
                   </FormField.Description>
-                )}
-                {hideApiKey && (
-                  <>
-                    {isProcessing ? (
-                      <FormField.APIMessage
-                        state="loading"
-                        messages={{
-                          loading:
-                            typeof helperMessage === "string"
-                              ? helperMessage
-                              : "Testing connection...",
-                        }}
-                      />
-                    ) : typeof helperMessage === "string" ? (
-                      <FormField.Message
-                        messages={{
-                          idle:
-                            helperClass.includes("status-error") ||
-                            helperClass.includes("error")
-                              ? ""
-                              : helperClass.includes("green")
-                                ? ""
-                                : "",
-                          error:
-                            helperClass.includes("status-error") ||
-                            helperClass.includes("error")
-                              ? helperMessage
-                              : "",
-                          success: helperClass.includes("green")
-                            ? helperMessage
-                            : "",
-                        }}
-                      />
-                    ) : null}
-                  </>
                 )}
                 {hideApiKey && (
                   <>
@@ -592,8 +561,10 @@ export default function Page() {
     (provider) => provider.is_active
   );
 
-  const hasStoredApiKey = searchProviders.some(
-    (provider) => provider.has_api_key
+  const hasStoredApiKey = searchProviders.some((provider) =>
+    provider.provider_type === "searxng"
+      ? Boolean(provider.config?.searxng_base_url)
+      : provider.has_api_key
   );
 
   const searchProvidersByType = useMemo(() => {
@@ -962,9 +933,6 @@ export default function Page() {
     }
 
     const trimmedKey = trimmedApiKey;
-    if (selectedProviderType !== "searxng" && !trimmedKey) {
-      return;
-    }
 
     const config: Record<string, string> = {};
     if (selectedProviderType === "google_pse" && trimmedSearchEngineId) {
@@ -978,24 +946,31 @@ export default function Page() {
       (provider) => provider.provider_type === selectedProviderType
     );
 
+    const providerRequiresApiKey = selectedProviderType !== "searxng";
+    const isNewProvider = !existingProvider;
+    // Only consider "API key changed" for providers that actually use API keys.
+    const apiKeyChangedForProvider = providerRequiresApiKey && apiKeyChanged;
+
     // Check if config changed from stored values
     const storedConfig = existingProvider?.config || {};
     const configChanged =
-      selectedProviderType === "google_pse" &&
-      (storedConfig.search_engine_id || storedConfig.cx || "") !==
-        trimmedSearchEngineId;
+      (selectedProviderType === "google_pse" &&
+        (storedConfig.search_engine_id || storedConfig.cx || "") !==
+          trimmedSearchEngineId) ||
+      (selectedProviderType === "searxng" &&
+        (storedConfig.searxng_base_url || "") !== trimmedSearchEngineId);
 
     // Determine if validation is needed (new provider, API key changed, or config changed)
     const needsValidation =
-      !existingProvider?.has_api_key || apiKeyChanged || configChanged;
+      isNewProvider || apiKeyChangedForProvider || configChanged;
 
     // For new providers, we must have an API key
-    if (!existingProvider?.has_api_key && !trimmedKey) {
+    if (providerRequiresApiKey && isNewProvider && !trimmedKey) {
       return;
     }
 
     // If API key changed, we need the new key
-    if (apiKeyChanged && !trimmedKey) {
+    if (providerRequiresApiKey && apiKeyChangedForProvider && !trimmedKey) {
       return;
     }
 
@@ -1017,8 +992,11 @@ export default function Page() {
             body: JSON.stringify({
               provider_type: selectedProviderType,
               // Send API key if changed, otherwise use stored key
-              api_key: apiKeyChanged ? trimmedKey : null,
-              use_stored_key: !apiKeyChanged && existingProvider?.has_api_key,
+              api_key: apiKeyChangedForProvider ? trimmedKey : null,
+              use_stored_key:
+                providerRequiresApiKey &&
+                !apiKeyChangedForProvider &&
+                existingProvider?.has_api_key,
               config,
             }),
           }
@@ -1047,8 +1025,8 @@ export default function Page() {
           SEARCH_PROVIDER_LABEL[selectedProviderType] ??
           selectedProviderType,
         provider_type: selectedProviderType,
-        api_key: apiKeyChanged ? trimmedKey : null,
-        api_key_changed: apiKeyChanged,
+        api_key: apiKeyChangedForProvider ? trimmedKey : null,
+        api_key_changed: apiKeyChangedForProvider,
         config,
         activate: true,
       };
@@ -1523,7 +1501,10 @@ export default function Page() {
             <div className="flex flex-col gap-2 self-stretch">
               {combinedSearchProviders.map(
                 ({ key, providerType, label, subtitle, logoSrc, provider }) => {
-                  const hasStoredKey = provider?.has_api_key ?? false;
+                  const hasStoredKey =
+                    providerType === "searxng"
+                      ? Boolean(provider?.config?.searxng_base_url)
+                      : provider?.has_api_key ?? false;
                   const isActive = provider?.is_active ?? false;
                   const isHighlighted = isActive;
                   const statusLabel = "";
