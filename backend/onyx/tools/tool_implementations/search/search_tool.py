@@ -603,6 +603,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 top_sections=merged_sections,
                 citation_start=override_kwargs.starting_citation_num,
                 limit=override_kwargs.max_llm_chunks,
+                include_link=True,
+                include_document_id=True,
             )
 
             # TODO: extension - this can include the smaller set of approved docs to be saved/displayed in the UI

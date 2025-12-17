@@ -9,6 +9,7 @@ def convert_inference_sections_to_llm_string(
     limit: int | None = None,
     include_source_type: bool = True,
     include_link: bool = False,
+    include_document_id: bool = False,
 ) -> tuple[str, dict[int, str]]:
     """Convert a list of InferenceSection objects to a JSON string for LLM consumption.
 
@@ -31,6 +32,7 @@ def convert_inference_sections_to_llm_string(
                     "authors": list[str] | None,
                     "source_type": str,  # Only included if include_source_type is True
                     "link": str | None,  # Only included if include_link is True
+                    "document_identifier": str,  # Only included if include_document_id is True
                     "metadata": str,  # JSON string
                     "content": str  # combined_content (full content)
                 }
@@ -96,6 +98,8 @@ def convert_inference_sections_to_llm_string(
                 # source_links is dict[int, str], get the first value
                 link = next(iter(chunk.source_links.values()), None)
             result["url"] = link
+        if include_document_id:
+            result["document_identifier"] = chunk.document_id
         if chunk.metadata:
             result["metadata"] = json.dumps(chunk.metadata)
         result["content"] = section.combined_content
