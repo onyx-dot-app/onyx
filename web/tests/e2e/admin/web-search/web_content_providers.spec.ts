@@ -15,7 +15,7 @@ async function findProviderCard(
   return card;
 }
 
-// Helper to open the provider setup modal - clicks Connect if available, otherwise clicks the key icon
+// Helper to open the provider setup modal - clicks Connect if available, otherwise clicks the Edit icon
 async function openProviderModal(
   page: Page,
   providerLabel: string
@@ -30,12 +30,10 @@ async function openProviderModal(
     return;
   }
 
-  // If no Connect button, click the key icon button to update credentials
-  const updateKeyButton = card.locator(
-    'button[title="Click to update API key"]'
-  );
-  await updateKeyButton.waitFor({ state: "visible", timeout: 5000 });
-  await updateKeyButton.click();
+  // If no Connect button, click the Edit icon button to update credentials
+  const editButton = card.getByRole("button", { name: /^Edit / });
+  await editButton.waitFor({ state: "visible", timeout: 5000 });
+  await editButton.click();
 }
 
 test.describe("Web Content Provider Configuration", () => {

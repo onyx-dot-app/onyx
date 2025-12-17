@@ -17,7 +17,7 @@ async function findProviderCard(
   return card;
 }
 
-// Helper to open the provider setup modal - clicks Connect if available, otherwise clicks the key icon
+// Helper to open the provider setup modal - clicks Connect if available, otherwise clicks the Edit icon
 async function openProviderModal(
   page: Page,
   providerLabel: string
@@ -32,12 +32,10 @@ async function openProviderModal(
     return;
   }
 
-  // If no Connect button, click the key icon button to update credentials
-  const updateKeyButton = card.locator(
-    'button[title="Click to update API key"]'
-  );
-  await updateKeyButton.waitFor({ state: "visible", timeout: 5000 });
-  await updateKeyButton.click();
+  // If no Connect button, click the Edit icon button to update credentials
+  const editButton = card.getByRole("button", { name: /^Edit / });
+  await editButton.waitFor({ state: "visible", timeout: 5000 });
+  await editButton.click();
 }
 
 test.describe("Web Search Provider Configuration", () => {
@@ -217,13 +215,13 @@ test.describe("Web Search Provider Configuration", () => {
         "[web-search-test] Google PSE configured, now testing update key button..."
       );
 
-      // Now click the "Click to update API key" button (key icon)
+      // Now click the Edit icon button
       const updatedGoogleCard = await findProviderCard(page, "Google PSE");
-      const updateKeyButton = updatedGoogleCard.locator(
-        'button[title="Click to update API key"]'
-      );
-      await expect(updateKeyButton).toBeVisible({ timeout: 10000 });
-      await updateKeyButton.click();
+      const editButton = updatedGoogleCard.getByRole("button", {
+        name: /^Edit /,
+      });
+      await expect(editButton).toBeVisible({ timeout: 10000 });
+      await editButton.click();
 
       // Modal should open with masked API key
       const modalDialog = page.getByRole("dialog");
@@ -309,13 +307,13 @@ test.describe("Web Search Provider Configuration", () => {
         "[web-search-test] Google PSE configured, now testing invalid search engine ID change..."
       );
 
-      // Now click the "Click to update API key" button (key icon)
+      // Now click the Edit icon button
       const updatedGoogleCard = await findProviderCard(page, "Google PSE");
-      const updateKeyButton = updatedGoogleCard.locator(
-        'button[title="Click to update API key"]'
-      );
-      await expect(updateKeyButton).toBeVisible({ timeout: 10000 });
-      await updateKeyButton.click();
+      const editButton = updatedGoogleCard.getByRole("button", {
+        name: /^Edit /,
+      });
+      await expect(editButton).toBeVisible({ timeout: 10000 });
+      await editButton.click();
 
       // Modal should open with masked API key
       const modalDialog = page.getByRole("dialog");
