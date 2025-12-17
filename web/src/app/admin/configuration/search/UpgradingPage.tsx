@@ -22,12 +22,8 @@ import { Connector } from "@/lib/connectors/connectors";
 import { FailedReIndexAttempts } from "@/components/embedding/FailedReIndexAttempts";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
-<<<<<<< HEAD
 import { SvgX } from "@opal/icons";
-import { ConnectorCredentialPairStatus } from "../../connector/[ccPairId]/types";
-=======
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
->>>>>>> 817bede39 (addressing comments)
 
 export default function UpgradingPage({
   futureEmbeddingModel,
