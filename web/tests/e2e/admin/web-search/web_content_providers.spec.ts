@@ -99,7 +99,6 @@ test.describe("Web Content Provider Configuration", () => {
       );
 
       await page.waitForLoadState("networkidle");
-      await page.waitForTimeout(1000);
 
       const firecrawlCard = await findProviderCard(page, "Firecrawl");
       await expect(
@@ -144,12 +143,10 @@ test.describe("Web Content Provider Configuration", () => {
           .click();
         await expect(modalDialog).not.toBeVisible({ timeout: 30000 });
         await page.waitForLoadState("networkidle");
-        await page.waitForTimeout(1000);
       } else if (await setDefaultButton.isVisible()) {
         // If already configured but not active, set as default
         await setDefaultButton.click();
         await page.waitForLoadState("networkidle");
-        await page.waitForTimeout(500);
       }
 
       // Verify Firecrawl is now the current crawler

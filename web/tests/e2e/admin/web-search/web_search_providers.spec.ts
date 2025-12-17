@@ -99,7 +99,6 @@ test.describe("Web Search Provider Configuration", () => {
 
       // Wait for page to update
       await page.waitForLoadState("networkidle");
-      await page.waitForTimeout(1000);
 
       // Verify Exa is now the current default - look for "Current Default" button in the Exa card
       const exaCard = await findProviderCard(page, "Exa");
@@ -167,7 +166,6 @@ test.describe("Web Search Provider Configuration", () => {
 
       // Wait for page to update
       await page.waitForLoadState("networkidle");
-      await page.waitForTimeout(1000);
 
       // Verify Google PSE is now the current default
       const googleCard = await findProviderCard(page, "Google PSE");
@@ -213,7 +211,6 @@ test.describe("Web Search Provider Configuration", () => {
           .click();
         await expect(setupDialog).not.toBeVisible({ timeout: 30000 });
         await page.waitForLoadState("networkidle");
-        await page.waitForTimeout(1000);
       }
 
       console.log(
@@ -261,7 +258,6 @@ test.describe("Web Search Provider Configuration", () => {
 
       // Wait for page to update
       await page.waitForLoadState("networkidle");
-      await page.waitForTimeout(1000);
 
       // Verify Google PSE is still the current default
       const finalGoogleCard = await findProviderCard(page, "Google PSE");
@@ -307,7 +303,6 @@ test.describe("Web Search Provider Configuration", () => {
           .click();
         await expect(setupDialog).not.toBeVisible({ timeout: 30000 });
         await page.waitForLoadState("networkidle");
-        await page.waitForTimeout(1000);
       }
 
       console.log(
@@ -400,7 +395,6 @@ test.describe("Web Search Provider Configuration", () => {
           .click();
         await expect(exaDialog).not.toBeVisible({ timeout: 30000 });
         await page.waitForLoadState("networkidle");
-        await page.waitForTimeout(1000);
       }
 
       // Configure Google PSE if needed
@@ -432,7 +426,6 @@ test.describe("Web Search Provider Configuration", () => {
           .click();
         await expect(googleDialog).not.toBeVisible({ timeout: 30000 });
         await page.waitForLoadState("networkidle");
-        await page.waitForTimeout(1000);
       }
 
       // Now test switching - click "Set as Default" on whichever is not current
