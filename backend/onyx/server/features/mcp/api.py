@@ -41,7 +41,7 @@ from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import MCPTransport
 from onyx.db.mcp import create_connection_config
 from onyx.db.mcp import create_mcp_server__no_commit
-from onyx.db.mcp import delete_all_user_connection_configs_for_server
+from onyx.db.mcp import delete_all_user_connection_configs_for_server_no_commit
 from onyx.db.mcp import delete_connection_config
 from onyx.db.mcp import delete_mcp_server
 from onyx.db.mcp import delete_user_connection_configs_for_server
@@ -1394,7 +1394,9 @@ def _upsert_mcp_server(
             and mcp_server.admin_connection_config_id
             and request.auth_type == MCPAuthenticationType.OAUTH
         ):
-            delete_all_user_connection_configs_for_server(mcp_server.id, db_session)
+            delete_all_user_connection_configs_for_server_no_commit(
+                mcp_server.id, db_session
+            )
         elif (
             changing_connection_config
             and mcp_server.admin_connection_config_id

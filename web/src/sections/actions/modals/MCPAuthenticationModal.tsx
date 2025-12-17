@@ -119,10 +119,6 @@ export default function MCPAuthenticationModal({
     errorHandlingFetcher
   );
 
-  const isEditConfigsFlow =
-    mcpServer?.is_authenticated &&
-    mcpServer?.status !== MCPServerStatus.AWAITING_AUTH;
-
   // Set the initial active tab based on the server configuration
   useEffect(() => {
     if (fullServer) {
@@ -648,9 +644,7 @@ export default function MCPAuthenticationModal({
                   main
                   primary
                   type="submit"
-                  disabled={
-                    !isValid || isSubmitting || (isEditConfigsFlow && !dirty)
-                  }
+                  disabled={!isValid || isSubmitting}
                 >
                   {isSubmitting ? "Connecting..." : "Connect"}
                 </Button>

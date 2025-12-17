@@ -6,6 +6,7 @@ import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import FadeDiv from "@/components/FadeDiv";
 import ToolItemSkeleton from "@/sections/actions/skeleton/ToolItemSkeleton";
+import ToolsEnabledCount from "@/sections/actions/ToolsEnabledCount";
 import { SvgEye } from "@opal/icons";
 
 interface ToolsListProps {
@@ -93,18 +94,14 @@ const ToolsList: React.FC<ToolsListProps> = ({
         <FadeDiv>
           <div className="flex items-center justify-between gap-2 w-full">
             {/* Left action area */}
-            {leftAction && (
-              <div className="flex items-center">{leftAction}</div>
-            )}
+            {leftAction}
 
             {/* Right action area */}
             <div className="flex items-center gap-1 ml-auto">
-              <Text mainUiBody className="text-action-link-05">
-                {enabledCount}
-              </Text>
-              <Text text03 mainUiBody>
-                of {totalCount} tool{totalCount !== 1 ? "s" : ""} enabled
-              </Text>
+              <ToolsEnabledCount
+                enabledCount={enabledCount}
+                totalCount={totalCount}
+              />
               {onToggleShowOnlyEnabled && (
                 <IconButton
                   icon={SvgEye}

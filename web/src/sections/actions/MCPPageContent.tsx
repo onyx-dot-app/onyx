@@ -48,10 +48,7 @@ export default function MCPPageContent() {
   const { popup, setPopup } = usePopup();
 
   // Local state
-  const [selectedServer, setSelectedServer] = useState<MCPServer | null>(null);
-  const [serverToDisconnect, setServerToDisconnect] =
-    useState<MCPServer | null>(null);
-  const [serverToManage, setServerToManage] = useState<MCPServer | null>(null);
+  const [activeServer, setActiveServer] = useState<MCPServer | null>(null);
   const [serverToExpand, setServerToExpand] = useState<number | null>(null);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [showSharedOverlay, setShowSharedOverlay] = useState(false);
@@ -166,7 +163,7 @@ export default function MCPPageContent() {
     (serverId: number) => {
       const server = mcpServers.find((s) => s.id === serverId);
       if (server) {
-        setServerToDisconnect(server);
+        setActiveServer(server);
         disconnectModal.toggle(true);
       }
     },
@@ -174,12 +171,12 @@ export default function MCPPageContent() {
   );
 
   const handleConfirmDisconnect = useCallback(async () => {
-    if (!serverToDisconnect) return;
+    if (!activeServer) return;
 
     setIsDisconnecting(true);
     try {
       await updateMCPServerStatus(
-        serverToDisconnect.id,
+        activeServer.id,
         MCPServerStatus.DISCONNECTED
       );
 
@@ -190,7 +187,7 @@ export default function MCPPageContent() {
 
       await mutateMcpServers();
       disconnectModal.toggle(false);
-      setServerToDisconnect(null);
+      setActiveServer(null);
     } catch (error) {
       console.error("Error disconnecting server:", error);
       setPopup({
@@ -203,14 +200,14 @@ export default function MCPPageContent() {
     } finally {
       setIsDisconnecting(false);
     }
-  }, [serverToDisconnect, setPopup, mutateMcpServers, disconnectModal]);
+  }, [activeServer, setPopup, mutateMcpServers, disconnectModal]);
 
   const handleConfirmDisconnectAndDelete = useCallback(async () => {
-    if (!serverToDisconnect) return;
+    if (!activeServer) return;
 
     setIsDisconnecting(true);
     try {
-      await deleteMCPServer(serverToDisconnect.id);
+      await deleteMCPServer(activeServer.id);
 
       setPopup({
         message: "MCP Server deleted successfully",
@@ -219,7 +216,7 @@ export default function MCPPageContent() {
 
       await mutateMcpServers();
       disconnectModal.toggle(false);
-      setServerToDisconnect(null);
+      setActiveServer(null);
     } catch (error) {
       console.error("Error deleting server:", error);
       setPopup({
@@ -232,13 +229,13 @@ export default function MCPPageContent() {
     } finally {
       setIsDisconnecting(false);
     }
-  }, [serverToDisconnect, setPopup, mutateMcpServers, disconnectModal]);
+  }, [activeServer, setPopup, mutateMcpServers, disconnectModal]);
 
   const openManageServerModal = useCallback(
     (serverId: number) => {
       const server = mcpServers.find((s) => s.id === serverId);
       if (server) {
-        setServerToManage(server);
+        setActiveServer(server);
         manageServerModal.toggle(true);
       }
     },
@@ -288,7 +285,7 @@ export default function MCPPageContent() {
     (serverId: number) => {
       const server = mcpServers.find((s) => s.id === serverId);
       if (server) {
-        setSelectedServer(server);
+        setActiveServer(server);
         authModal.toggle(true);
       }
     },
@@ -452,14 +449,14 @@ export default function MCPPageContent() {
 
   const onServerCreated = useCallback(
     (server: MCPServer) => {
-      setSelectedServer(server);
+      setActiveServer(server);
       authModal.toggle(true);
     },
     [authModal]
   );
 
   const handleAddServer = useCallback(() => {
-    setServerToManage(null);
+    setActiveServer(null);
     manageServerModal.toggle(true);
   }, [manageServerModal]);
 
@@ -553,7 +550,7 @@ export default function MCPPageContent() {
 
         <authModal.Provider>
           <MCPAuthenticationModal
-            mcpServer={selectedServer}
+            mcpServer={activeServer}
             skipOverlay
             setPopup={setPopup}
           />
@@ -562,9 +559,8 @@ export default function MCPPageContent() {
         <manageServerModal.Provider>
           <AddMCPServerModal
             skipOverlay
-            serverToManage={serverToManage}
-            setServerToManage={setServerToManage}
-            setServerToDisconnect={setServerToDisconnect}
+            activeServer={activeServer}
+            setActiveServer={setActiveServer}
             disconnectModal={disconnectModal}
             manageServerModal={manageServerModal}
             onServerCreated={onServerCreated}
@@ -579,7 +575,7 @@ export default function MCPPageContent() {
         <DisconnectEntityModal
           isOpen={disconnectModal.isOpen}
           onClose={() => disconnectModal.toggle(false)}
-          name={serverToDisconnect?.name ?? null}
+          name={activeServer?.name ?? null}
           onConfirmDisconnect={handleConfirmDisconnect}
           onConfirmDisconnectAndDelete={handleConfirmDisconnectAndDelete}
           isDisconnecting={isDisconnecting}

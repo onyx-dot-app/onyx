@@ -23,9 +23,8 @@ import { SvgCheckCircle, SvgServer, SvgUnplug } from "@opal/icons";
 
 interface AddMCPServerModalProps {
   skipOverlay?: boolean;
-  serverToManage: MCPServer | null;
-  setServerToManage: (server: MCPServer | null) => void;
-  setServerToDisconnect: (server: MCPServer | null) => void;
+  activeServer: MCPServer | null;
+  setActiveServer: (server: MCPServer | null) => void;
   disconnectModal: ModalCreationInterface;
   manageServerModal: ModalCreationInterface;
   onServerCreated?: (server: MCPServer) => void;
@@ -44,9 +43,8 @@ const validationSchema = Yup.object().shape({
 
 export default function AddMCPServerModal({
   skipOverlay = false,
-  serverToManage,
-  setServerToManage,
-  setServerToDisconnect,
+  activeServer,
+  setActiveServer,
   disconnectModal,
   manageServerModal,
   onServerCreated,
@@ -57,13 +55,13 @@ export default function AddMCPServerModal({
   const { isOpen, toggle } = useModal();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Use serverToManage from props
-  const server = serverToManage;
+  // Use activeServer from props
+  const server = activeServer;
 
   // Handler for disconnect button
   const handleDisconnectClick = () => {
-    if (serverToManage) {
-      setServerToDisconnect(serverToManage);
+    if (activeServer) {
+      // Server stays the same, just toggle modals
       manageServerModal.toggle(false);
       disconnectModal.toggle(true);
     }
@@ -107,7 +105,7 @@ export default function AddMCPServerModal({
       }
       // Close modal and clear server state
       toggle(false);
-      setServerToManage(null);
+      setActiveServer(null);
     } catch (error) {
       console.error(
         `Error ${isEditMode ? "updating" : "creating"} MCP server:`,
@@ -129,7 +127,7 @@ export default function AddMCPServerModal({
   const handleModalClose = (open: boolean) => {
     toggle(open);
     if (!open) {
-      setServerToManage(null);
+      setActiveServer(null);
     }
   };
 
