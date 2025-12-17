@@ -15,10 +15,13 @@
 #   --mode <volume|api>     Backup mode (default: volume)
 #   --output <dir>          Output directory (default: ./onyx_backup)
 #   --project <name>        Docker Compose project name (default: onyx)
+#   --volume-prefix <name>  Volume name prefix (default: same as project name)
+#   --compose-dir <dir>     Docker Compose directory (for service management)
 #   --postgres-only         Only backup PostgreSQL
 #   --vespa-only            Only backup Vespa
 #   --minio-only            Only backup MinIO
 #   --no-minio              Skip MinIO backup
+#   --no-restart            Don't restart services after backup (volume mode)
 #   --help                  Show this help message
 #
 # Examples:
@@ -26,6 +29,7 @@
 #   ./dump_data.sh --mode api                   # API-based backup
 #   ./dump_data.sh --output /tmp/backup         # Custom output directory
 #   ./dump_data.sh --postgres-only --mode api   # Only PostgreSQL via pg_dump
+#   ./dump_data.sh --volume-prefix myprefix     # Use custom volume prefix
 # =============================================================================
 
 set -e
@@ -34,9 +38,12 @@ set -e
 MODE="volume"
 OUTPUT_DIR="./onyx_backup"
 PROJECT_NAME="onyx"
+VOLUME_PREFIX=""  # Will default to PROJECT_NAME if not set
+COMPOSE_DIR=""    # Docker Compose directory for service management
 BACKUP_POSTGRES=true
 BACKUP_VESPA=true
 BACKUP_MINIO=true
+NO_RESTART=false
 
 # PostgreSQL defaults
 POSTGRES_USER="${POSTGRES_USER:-postgres}"
@@ -92,6 +99,18 @@ while [[ $# -gt 0 ]]; do
             PROJECT_NAME="$2"
             shift 2
             ;;
+        --volume-prefix)
+            VOLUME_PREFIX="$2"
+            shift 2
+            ;;
+        --compose-dir)
+            COMPOSE_DIR="$2"
+            shift 2
+            ;;
+        --no-restart)
+            NO_RESTART=true
+            shift
+            ;;
         --postgres-only)
             BACKUP_POSTGRES=true
             BACKUP_VESPA=false
@@ -130,6 +149,11 @@ if [[ "$MODE" != "volume" && "$MODE" != "api" ]]; then
     exit 1
 fi
 
+# Set VOLUME_PREFIX to PROJECT_NAME if not specified
+if [[ -z "$VOLUME_PREFIX" ]]; then
+    VOLUME_PREFIX="$PROJECT_NAME"
+fi
+
 # Create output directory with timestamp
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 BACKUP_DIR="${OUTPUT_DIR}/${TIMESTAMP}"
@@ -139,11 +163,56 @@ log_info "Starting Onyx data backup..."
 log_info "Mode: $MODE"
 log_info "Output directory: $BACKUP_DIR"
 log_info "Project name: $PROJECT_NAME"
+log_info "Volume prefix: $VOLUME_PREFIX"
 
 # Get container names
 POSTGRES_CONTAINER="${PROJECT_NAME}-relational_db-1"
 VESPA_CONTAINER="${PROJECT_NAME}-index-1"
 MINIO_CONTAINER="${PROJECT_NAME}-minio-1"
+
+# Track which services were stopped
+STOPPED_SERVICES=()
+
+# =============================================================================
+# Service management functions
+# =============================================================================
+
+stop_service() {
+    local service=$1
+    local container="${PROJECT_NAME}-${service}-1"
+
+    if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
+        log_info "Stopping ${service}..."
+        if [[ -n "$COMPOSE_DIR" ]]; then
+            docker compose -p "$PROJECT_NAME" -f "${COMPOSE_DIR}/docker-compose.yml" stop "$service" 2>/dev/null || \
+            docker stop "$container"
+        else
+            docker stop "$container"
+        fi
+        STOPPED_SERVICES+=("$service")
+    fi
+}
+
+start_services() {
+    if [[ ${#STOPPED_SERVICES[@]} -eq 0 ]]; then
+        return
+    fi
+
+    log_info "Restarting services: ${STOPPED_SERVICES[*]}"
+
+    if [[ -n "$COMPOSE_DIR" ]]; then
+        docker compose -p "$PROJECT_NAME" -f "${COMPOSE_DIR}/docker-compose.yml" start "${STOPPED_SERVICES[@]}" 2>/dev/null || {
+            # Fallback to starting containers directly
+            for service in "${STOPPED_SERVICES[@]}"; do
+                docker start "${PROJECT_NAME}-${service}-1" 2>/dev/null || true
+            done
+        }
+    else
+        for service in "${STOPPED_SERVICES[@]}"; do
+            docker start "${PROJECT_NAME}-${service}-1" 2>/dev/null || true
+        done
+    fi
+}
 
 # =============================================================================
 # Volume-based backup functions
@@ -152,7 +221,7 @@ MINIO_CONTAINER="${PROJECT_NAME}-minio-1"
 backup_postgres_volume() {
     log_info "Backing up PostgreSQL volume..."
 
-    local volume_name="${PROJECT_NAME}_db_volume"
+    local volume_name="${VOLUME_PREFIX}_db_volume"
 
     # Check if volume exists
     if ! docker volume inspect "$volume_name" &>/dev/null; then
@@ -172,7 +241,7 @@ backup_postgres_volume() {
 backup_vespa_volume() {
     log_info "Backing up Vespa volume..."
 
-    local volume_name="${PROJECT_NAME}_vespa_volume"
+    local volume_name="${VOLUME_PREFIX}_vespa_volume"
 
     # Check if volume exists
     if ! docker volume inspect "$volume_name" &>/dev/null; then
@@ -192,7 +261,7 @@ backup_vespa_volume() {
 backup_minio_volume() {
     log_info "Backing up MinIO volume..."
 
-    local volume_name="${PROJECT_NAME}_minio_data"
+    local volume_name="${VOLUME_PREFIX}_minio_data"
 
     # Check if volume exists
     if ! docker volume inspect "$volume_name" &>/dev/null; then
@@ -332,6 +401,7 @@ cat > "${BACKUP_DIR}/metadata.json" << EOF
     "timestamp": "$TIMESTAMP",
     "mode": "$MODE",
     "project_name": "$PROJECT_NAME",
+    "volume_prefix": "$VOLUME_PREFIX",
     "postgres_db": "$POSTGRES_DB",
     "vespa_index": "$VESPA_INDEX",
     "components": {
@@ -344,8 +414,21 @@ EOF
 
 # Run backups based on mode
 if [[ "$MODE" == "volume" ]]; then
-    log_info "Using volume-based backup (services should be stopped for consistency)"
+    log_info "Using volume-based backup"
 
+    # Stop services for consistent backup
+    log_info "Stopping services for consistent backup..."
+    if $BACKUP_POSTGRES; then
+        stop_service "relational_db"
+    fi
+    if $BACKUP_VESPA; then
+        stop_service "index"
+    fi
+    if $BACKUP_MINIO; then
+        stop_service "minio"
+    fi
+
+    # Perform backups
     if $BACKUP_POSTGRES; then
         backup_postgres_volume || log_warning "PostgreSQL backup failed"
     fi
@@ -356,6 +439,14 @@ if [[ "$MODE" == "volume" ]]; then
 
     if $BACKUP_MINIO; then
         backup_minio_volume || log_warning "MinIO backup failed"
+    fi
+
+    # Restart services unless --no-restart was specified
+    if [[ "$NO_RESTART" != true ]]; then
+        start_services
+    else
+        log_info "Skipping service restart (--no-restart specified)"
+        log_info "Stopped services: ${STOPPED_SERVICES[*]}"
     fi
 else
     log_info "Using API-based backup (services must be running)"

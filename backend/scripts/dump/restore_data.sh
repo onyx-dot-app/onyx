@@ -14,10 +14,13 @@
 # Options:
 #   --input <dir>           Backup directory (required, or use 'latest')
 #   --project <name>        Docker Compose project name (default: onyx)
+#   --volume-prefix <name>  Volume name prefix (default: same as project name)
+#   --compose-dir <dir>     Docker Compose directory (for service management)
 #   --postgres-only         Only restore PostgreSQL
 #   --vespa-only            Only restore Vespa
 #   --minio-only            Only restore MinIO
 #   --no-minio              Skip MinIO restore
+#   --no-restart            Don't restart services after restore (volume mode)
 #   --force                 Skip confirmation prompts
 #   --help                  Show this help message
 #
@@ -25,6 +28,7 @@
 #   ./restore_data.sh --input ./onyx_backup/latest
 #   ./restore_data.sh --input ./onyx_backup/20240115_120000 --force
 #   ./restore_data.sh --input ./onyx_backup/latest --postgres-only
+#   ./restore_data.sh --input ./backup --volume-prefix myprefix
 #
 # WARNING: This will overwrite existing data in the target instance!
 # =============================================================================
@@ -34,10 +38,13 @@ set -e
 # Default configuration
 INPUT_DIR=""
 PROJECT_NAME="onyx"
+VOLUME_PREFIX=""  # Will default to PROJECT_NAME if not set
+COMPOSE_DIR=""    # Docker Compose directory for service management
 RESTORE_POSTGRES=true
 RESTORE_VESPA=true
 RESTORE_MINIO=true
 FORCE=false
+NO_RESTART=false
 
 # PostgreSQL defaults
 POSTGRES_USER="${POSTGRES_USER:-postgres}"
@@ -88,6 +95,18 @@ while [[ $# -gt 0 ]]; do
         --project)
             PROJECT_NAME="$2"
             shift 2
+            ;;
+        --volume-prefix)
+            VOLUME_PREFIX="$2"
+            shift 2
+            ;;
+        --compose-dir)
+            COMPOSE_DIR="$2"
+            shift 2
+            ;;
+        --no-restart)
+            NO_RESTART=true
+            shift
             ;;
         --postgres-only)
             RESTORE_POSTGRES=true
@@ -149,6 +168,57 @@ if [[ -f "$METADATA_FILE" ]]; then
     log_info "  Backup mode: $BACKUP_MODE"
 fi
 
+# Set VOLUME_PREFIX to PROJECT_NAME if not specified
+if [[ -z "$VOLUME_PREFIX" ]]; then
+    VOLUME_PREFIX="$PROJECT_NAME"
+fi
+
+log_info "Volume prefix: $VOLUME_PREFIX"
+
+# Track which services were stopped
+STOPPED_SERVICES=()
+
+# =============================================================================
+# Service management functions
+# =============================================================================
+
+stop_service() {
+    local service=$1
+    local container="${PROJECT_NAME}-${service}-1"
+
+    if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
+        log_info "Stopping ${service}..."
+        if [[ -n "$COMPOSE_DIR" ]]; then
+            docker compose -p "$PROJECT_NAME" -f "${COMPOSE_DIR}/docker-compose.yml" stop "$service" 2>/dev/null || \
+            docker stop "$container"
+        else
+            docker stop "$container"
+        fi
+        STOPPED_SERVICES+=("$service")
+    fi
+}
+
+start_services() {
+    if [[ ${#STOPPED_SERVICES[@]} -eq 0 ]]; then
+        return
+    fi
+
+    log_info "Restarting services: ${STOPPED_SERVICES[*]}"
+
+    if [[ -n "$COMPOSE_DIR" ]]; then
+        docker compose -p "$PROJECT_NAME" -f "${COMPOSE_DIR}/docker-compose.yml" start "${STOPPED_SERVICES[@]}" 2>/dev/null || {
+            # Fallback to starting containers directly
+            for service in "${STOPPED_SERVICES[@]}"; do
+                docker start "${PROJECT_NAME}-${service}-1" 2>/dev/null || true
+            done
+        }
+    else
+        for service in "${STOPPED_SERVICES[@]}"; do
+            docker start "${PROJECT_NAME}-${service}-1" 2>/dev/null || true
+        done
+    fi
+}
+
 # Auto-detect backup mode based on files present
 detect_backup_mode() {
     if [[ -f "${INPUT_DIR}/postgres_volume.tar.gz" ]] || [[ -f "${INPUT_DIR}/vespa_volume.tar.gz" ]]; then
@@ -196,18 +266,12 @@ fi
 restore_postgres_volume() {
     log_info "Restoring PostgreSQL from volume backup..."
 
-    local volume_name="${PROJECT_NAME}_db_volume"
+    local volume_name="${VOLUME_PREFIX}_db_volume"
     local backup_file="${INPUT_DIR}/postgres_volume.tar.gz"
 
     if [[ ! -f "$backup_file" ]]; then
         log_error "PostgreSQL volume backup not found: $backup_file"
         return 1
-    fi
-
-    # Stop PostgreSQL container if running
-    if docker ps --format '{{.Names}}' | grep -q "^${POSTGRES_CONTAINER}$"; then
-        log_info "Stopping PostgreSQL container..."
-        docker stop "$POSTGRES_CONTAINER" || true
     fi
 
     # Remove existing volume and create new one
@@ -227,18 +291,12 @@ restore_postgres_volume() {
 restore_vespa_volume() {
     log_info "Restoring Vespa from volume backup..."
 
-    local volume_name="${PROJECT_NAME}_vespa_volume"
+    local volume_name="${VOLUME_PREFIX}_vespa_volume"
     local backup_file="${INPUT_DIR}/vespa_volume.tar.gz"
 
     if [[ ! -f "$backup_file" ]]; then
         log_error "Vespa volume backup not found: $backup_file"
         return 1
-    fi
-
-    # Stop Vespa container if running
-    if docker ps --format '{{.Names}}' | grep -q "^${VESPA_CONTAINER}$"; then
-        log_info "Stopping Vespa container..."
-        docker stop "$VESPA_CONTAINER" || true
     fi
 
     # Remove existing volume and create new one
@@ -258,18 +316,12 @@ restore_vespa_volume() {
 restore_minio_volume() {
     log_info "Restoring MinIO from volume backup..."
 
-    local volume_name="${PROJECT_NAME}_minio_data"
+    local volume_name="${VOLUME_PREFIX}_minio_data"
     local backup_file="${INPUT_DIR}/minio_volume.tar.gz"
 
     if [[ ! -f "$backup_file" ]]; then
         log_error "MinIO volume backup not found: $backup_file"
         return 1
-    fi
-
-    # Stop MinIO container if running
-    if docker ps --format '{{.Names}}' | grep -q "^${MINIO_CONTAINER}$"; then
-        log_info "Stopping MinIO container..."
-        docker stop "$MINIO_CONTAINER" || true
     fi
 
     # Remove existing volume and create new one
@@ -462,8 +514,20 @@ log_info "Project name: $PROJECT_NAME"
 # Run restores based on detected mode
 if [[ "$DETECTED_MODE" == "volume" ]]; then
     log_info "Using volume-based restore"
-    log_warning "Services will be stopped during restore"
 
+    # Stop services before restore
+    log_info "Stopping services for restore..."
+    if $RESTORE_POSTGRES; then
+        stop_service "relational_db"
+    fi
+    if $RESTORE_VESPA; then
+        stop_service "index"
+    fi
+    if $RESTORE_MINIO; then
+        stop_service "minio"
+    fi
+
+    # Perform restores
     if $RESTORE_POSTGRES; then
         restore_postgres_volume || log_warning "PostgreSQL restore failed"
     fi
@@ -476,9 +540,13 @@ if [[ "$DETECTED_MODE" == "volume" ]]; then
         restore_minio_volume || log_warning "MinIO restore failed"
     fi
 
-    log_info ""
-    log_info "Volume restore complete. Please restart the services:"
-    log_info "  cd deployment/docker_compose && docker compose up -d"
+    # Restart services unless --no-restart was specified
+    if [[ "$NO_RESTART" != true ]]; then
+        start_services
+    else
+        log_info "Skipping service restart (--no-restart specified)"
+        log_info "Stopped services: ${STOPPED_SERVICES[*]}"
+    fi
 
 elif [[ "$DETECTED_MODE" == "api" ]]; then
     log_info "Using API-based restore"
@@ -508,6 +576,5 @@ log_success "==================================="
 # Post-restore recommendations
 echo ""
 log_info "Post-restore steps:"
-log_info "  1. Restart all services if using volume restore"
-log_info "  2. Run database migrations: docker compose exec api_server alembic upgrade head"
-log_info "  3. Verify data integrity in the application"
+log_info "  1. Run database migrations if needed: docker compose -p $PROJECT_NAME exec api_server alembic upgrade head"
+log_info "  2. Verify data integrity in the application"
