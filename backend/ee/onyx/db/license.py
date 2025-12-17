@@ -94,13 +94,19 @@ def delete_license(db_session: Session) -> bool:
 
 
 def get_used_seats(tenant_id: str | None = None) -> int:
-    """Get current seat usage."""
+    """
+    Get current seat usage.
+
+    For multi-tenant: counts users in UserTenantMapping for this tenant.
+    For self-hosted: counts all active users (includes both Onyx UI users
+    and Slack users who have been converted to Onyx users).
+    """
     if MULTI_TENANT:
         from ee.onyx.server.tenants.user_mapping import get_tenant_count
 
         return get_tenant_count(tenant_id or get_current_tenant_id())
     else:
-        # Self-hosted: count all active users
+        # Self-hosted: count all active users (Onyx + converted Slack users)
         from onyx.db.engine.sql_engine import get_session_with_current_tenant
 
         with get_session_with_current_tenant() as db_session:
@@ -145,7 +151,11 @@ def get_cached_license_metadata(tenant_id: str | None = None) -> LicenseMetadata
 
 def invalidate_license_cache(tenant_id: str | None = None) -> None:
     """
-    Invalidate the license cache.
+    Invalidate the license metadata cache (not the license itself).
+
+    This deletes the cached LicenseMetadata from Redis. The actual license
+    in the database is not affected. Redis delete is idempotent - if the
+    key doesn't exist, this is a no-op.
 
     Args:
         tenant_id: Tenant ID (for multi-tenant deployments)
@@ -164,6 +174,11 @@ def update_license_cache(
 ) -> LicenseMetadata:
     """
     Update the Redis cache with license metadata.
+
+    We cache all license statuses (ACTIVE, GRACE_PERIOD, GATED_ACCESS) because:
+    1. Frontend needs status to show appropriate UI/banners
+    2. Caching avoids repeated DB + crypto verification on every request
+    3. Status enforcement happens at the feature level, not here
 
     Args:
         payload: Verified license payload
