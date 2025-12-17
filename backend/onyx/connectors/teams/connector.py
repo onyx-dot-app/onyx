@@ -262,7 +262,7 @@ class TeamsConnector(
     def retrieve_all_slim_docs_perm_sync(
         self,
         start: SecondsSinceUnixEpoch | None = None,
-        end: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         start = start or 0
@@ -299,19 +299,11 @@ class TeamsConnector(
                     team_id=team.id,
                     channel_id=channel.id,
                     start=start,
-                    end=end,
                 )
 
                 slim_doc_buffer = []
 
                 for message in messages:
-                    if callback:
-                        if callback.should_stop():
-                            raise RuntimeError(
-                                "retrieve_all_slim_docs_perm_sync: Stop signal detected"
-                            )
-                        callback.progress("retrieve_all_slim_docs_perm_sync", 1)
-
                     slim_doc_buffer.append(
                         SlimDocument(
                             id=message.id,
@@ -320,6 +312,12 @@ class TeamsConnector(
                     )
 
                     if len(slim_doc_buffer) >= _SLIM_DOC_BATCH_SIZE:
+                        if callback:
+                            if callback.should_stop():
+                                raise RuntimeError(
+                                    "retrieve_all_slim_docs_perm_sync: Stop signal detected"
+                                )
+                            callback.progress("retrieve_all_slim_docs_perm_sync", 1)
                         yield slim_doc_buffer
                         slim_doc_buffer = []
 
