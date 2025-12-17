@@ -15,10 +15,6 @@ import {
 } from "@/app/admin/configuration/llm/utils";
 import { Slider } from "@/components/ui/slider";
 import { useUser } from "@/components/user/UserProvider";
-import SvgRefreshCw from "@/icons/refresh-cw";
-import SvgCheck from "@/icons/check";
-import SvgChevronRight from "@/icons/chevron-right";
-import SvgChevronDown from "@/icons/chevron-down";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -30,6 +26,12 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import {
+  SvgCheck,
+  SvgChevronDown,
+  SvgChevronRight,
+  SvgRefreshCw,
+} from "@opal/icons";
 
 interface LLMOption {
   name: string;

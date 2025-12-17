@@ -5,8 +5,7 @@ import { updateUserGroup } from "./lib";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { ConnectorStatus, UserGroup } from "@/lib/types";
 import { ConnectorMultiSelect } from "@/components/ConnectorMultiSelect";
-import SvgPlus from "@/icons/plus";
-
+import { SvgPlus } from "@opal/icons";
 export interface AddConnectorFormProps {
   ccPairs: ConnectorStatus<any, any>[];
   userGroup: UserGroup;

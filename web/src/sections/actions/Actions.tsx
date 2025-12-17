@@ -2,14 +2,15 @@
 import { ActionStatus } from "@/lib/tools/types";
 import React from "react";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgUnplug from "@/icons/unplug";
-import SvgSettings from "@/icons/settings";
-import SvgTrash from "@/icons/trash";
 import Button from "@/refresh-components/buttons/Button";
-import SvgPlug from "@/icons/plug";
-import SvgArrowExchange from "@/icons/arrow-exchange";
-import SvgChevronDown from "@/icons/chevron-down";
-
+import {
+  SvgArrowExchange,
+  SvgChevronDown,
+  SvgPlug,
+  SvgSettings,
+  SvgTrash,
+  SvgUnplug,
+} from "@opal/icons";
 interface ActionsProps {
   status: ActionStatus;
   serverName: string;

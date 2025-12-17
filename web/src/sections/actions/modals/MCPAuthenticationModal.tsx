@@ -11,7 +11,6 @@ import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn
 import Button from "@/refresh-components/buttons/Button";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Text from "@/refresh-components/texts/Text";
-import SvgArrowExchange from "@/icons/arrow-exchange";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
@@ -33,6 +32,7 @@ import { MCPServerStatus, MCPServerWithStatus } from "@/lib/tools/types";
 import { updateMCPServerStatus } from "@/lib/tools/mcpService";
 import Message from "@/refresh-components/messages/Message";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { SvgArrowExchange } from "@opal/icons";
 
 interface MCPAuthenticationModalProps {
   mcpServer: MCPServerWithStatus | null;

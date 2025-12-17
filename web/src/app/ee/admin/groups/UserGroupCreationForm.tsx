@@ -10,8 +10,7 @@ import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
-import SvgUsers from "@/icons/users";
-
+import { SvgUsers } from "@opal/icons";
 export interface UserGroupCreationFormProps {
   onClose: () => void;
   setPopup: (popupSpec: PopupSpec | null) => void;

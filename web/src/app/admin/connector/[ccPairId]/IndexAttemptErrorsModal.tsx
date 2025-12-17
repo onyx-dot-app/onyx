@@ -13,8 +13,7 @@ import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import { PageSelector } from "@/components/PageSelector";
 import { useEffect, useState, useMemo } from "react";
-import SvgAlertTriangle from "@/icons/alert-triangle";
-
+import { SvgAlertTriangle } from "@opal/icons";
 export interface IndexAttemptErrorsModalProps {
   errors: {
     items: IndexAttemptError[];

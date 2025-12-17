@@ -4,16 +4,13 @@ import React from "react";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { getIconForAction } from "@/app/chat/services/actionUtils";
-import SvgChevronRight from "@/icons/chevron-right";
-import SvgKey from "@/icons/key";
-import SvgSettings from "@/icons/settings";
-import SvgSlash from "@/icons/slash";
 import { ToolAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn, noProp } from "@/lib/utils";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal/types";
+import { SvgChevronRight, SvgKey, SvgSettings, SvgSlash } from "@opal/icons";
 
 export interface ActionItemProps {
   tool?: ToolSnapshot;

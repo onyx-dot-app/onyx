@@ -18,8 +18,7 @@ import { useState } from "react";
 import { FiLink, FiMaximize2, FiTrash } from "react-icons/fi";
 import { mutate } from "swr";
 import { PopupSpec } from "../admin/connectors/Popup";
-import SvgTrash from "@/icons/trash";
-
+import { SvgTrash } from "@opal/icons";
 export function FailedReIndexAttempts({
   failedIndexingStatuses,
   setPopup,

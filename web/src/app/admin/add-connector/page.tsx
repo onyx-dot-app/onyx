@@ -32,8 +32,7 @@ import { SettingsContext } from "@/components/settings/SettingsProvider";
 import SourceTile from "@/components/SourceTile";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Text from "@/refresh-components/texts/Text";
-import SvgUploadCloud from "@/icons/upload-cloud";
-
+import { SvgUploadCloud } from "@opal/icons";
 function SourceTileTooltipWrapper({
   sourceMetadata,
   preSelect,

@@ -8,12 +8,13 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { useUser } from "../user/UserProvider";
 import { useModalContext } from "../context/ModalContext";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import SvgArrowUp from "@/icons/arrow-up";
-import SvgArrowRight from "@/icons/arrow-right";
-import SvgCheckCircle from "@/icons/check-circle";
-import SvgOrganization from "@/icons/organization";
-import SvgPlus from "@/icons/plus";
-
+import {
+  SvgArrowRight,
+  SvgArrowUp,
+  SvgCheckCircle,
+  SvgOrganization,
+  SvgPlus,
+} from "@opal/icons";
 export interface TenantByDomainResponse {
   tenant_id: string;
   number_of_users: number;

@@ -9,9 +9,8 @@ import {
 } from "@/app/chat/stores/useChatSessionStore";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgSearchMenu from "@/icons/search-menu";
-import SvgArrowWallRight from "@/icons/arrow-wall-right";
 import { Separator } from "@radix-ui/react-separator";
+import { SvgArrowWallRight, SvgSearchMenu } from "@opal/icons";
 
 // Build an OnyxDocument from basic file info
 const buildOnyxDocumentFromFile = (

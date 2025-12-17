@@ -28,12 +28,12 @@ import { DropdownMenuItemWithTooltip } from "@/components/ui/dropdown-menu-with-
 import { usePopup } from "@/components/admin/connectors/Popup";
 
 import { Badge } from "@/components/ui/badge";
-import SvgSettings from "@/icons/settings";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { ListFieldInput } from "@/refresh-components/inputs/ListFieldInput";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import Separator from "@/refresh-components/Separator";
+import { SvgSettings } from "@opal/icons";
 
 export interface FederatedConnectorFormProps {
   connector: ConfigurableSources;

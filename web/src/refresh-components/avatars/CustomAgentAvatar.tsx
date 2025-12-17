@@ -1,15 +1,17 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import SvgCheck from "@/icons/check";
-import SvgCode from "@/icons/code";
-import SvgTwoLineSmall from "@/icons/two-line-small";
-import SvgOnyxOctagon from "@/icons/onyx-octagon";
-import SvgSearch from "@/icons/search";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import Image from "next/image";
 import { DEFAULT_AGENT_AVATAR_SIZE_PX } from "@/lib/constants";
+import {
+  SvgCheck,
+  SvgCode,
+  SvgOnyxOctagon,
+  SvgSearch,
+  SvgTwoLineSmall,
+} from "@opal/icons";
 
 interface IconConfig {
   Icon: React.FunctionComponent<IconProps>;

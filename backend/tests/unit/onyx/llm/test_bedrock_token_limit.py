@@ -94,8 +94,8 @@ class TestGetBedrockTokenLimit:
         """Test default fallback for unknown models."""
         with patch("onyx.llm.utils.get_model_map", return_value={}):
             result = get_bedrock_token_limit("unknown.model-v1:0")
-            # Should fall back to GEN_AI_MODEL_FALLBACK_MAX_TOKENS (4096)
-            assert result == 4096
+            # Should fall back to GEN_AI_MODEL_FALLBACK_MAX_TOKENS (32000)
+            assert result == 32000
 
     def test_cross_region_model_id(self) -> None:
         """Test cross-region model ID (us.anthropic.claude-...)."""

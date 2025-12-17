@@ -260,7 +260,7 @@ fastmcp==2.13.3
     # via onyx
 fastuuid==0.14.0
     # via litellm
-filelock==3.15.4
+filelock==3.20.1
     # via
     #   huggingface-hub
     #   onyx

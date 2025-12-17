@@ -28,16 +28,12 @@ import {
   restrictToFirstScrollableAncestor,
   restrictToVerticalAxis,
 } from "@dnd-kit/modifiers";
-import SvgEditBig from "@/icons/edit-big";
-import SvgMoreHorizontal from "@/icons/more-horizontal";
 import Settings from "@/sections/sidebar/Settings/Settings";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useProjects } from "@/lib/hooks/useProjects";
 import { useAgents, usePinnedAgentsWithDetails } from "@/hooks/useAgents";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
-import SvgFolderPlus from "@/icons/folder-plus";
-import SvgOnyxOctagon from "@/icons/onyx-octagon";
 import ProjectFolderButton from "@/sections/sidebar/ProjectFolderButton";
 import CreateProjectModal from "@/components/modals/CreateProjectModal";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
@@ -59,11 +55,17 @@ import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import { ChatSession } from "@/app/chat/interfaces";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
 import { useUser } from "@/components/user/UserProvider";
-import SvgSettings from "@/icons/settings";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
+import {
+  SvgEditBig,
+  SvgFolderPlus,
+  SvgMoreHorizontal,
+  SvgOnyxOctagon,
+  SvgSettings,
+} from "@opal/icons";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)

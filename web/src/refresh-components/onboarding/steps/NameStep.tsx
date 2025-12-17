@@ -1,14 +1,11 @@
 import React, { memo, useRef } from "react";
 import Text from "@/refresh-components/texts/Text";
-import SvgUser from "@/icons/user";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { OnboardingState, OnboardingActions, OnboardingStep } from "../types";
 import { Avatar } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
-import SvgCheckCircle from "@/icons/check-circle";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgEdit from "@/icons/edit";
-
+import { SvgCheckCircle, SvgEdit, SvgUser } from "@opal/icons";
 type NameStepProps = {
   state: OnboardingState;
   actions: OnboardingActions;

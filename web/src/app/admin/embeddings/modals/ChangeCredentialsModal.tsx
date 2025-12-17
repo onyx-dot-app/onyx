@@ -7,7 +7,6 @@ import Text from "@/refresh-components/texts/Text";
 import Separator from "@/refresh-components/Separator";
 import Button from "@/refresh-components/buttons/Button";
 import { Label } from "@/components/Field";
-import SvgSettings from "@/icons/settings";
 import {
   CloudEmbeddingProvider,
   getFormattedProviderName,
@@ -18,6 +17,7 @@ import {
 } from "@/app/admin/configuration/llm/constants";
 import { mutate } from "swr";
 import { testEmbedding } from "@/app/admin/embeddings/pages/utils";
+import { SvgSettings } from "@opal/icons";
 
 export interface ChangeCredentialsModalProps {
   provider: CloudEmbeddingProvider;

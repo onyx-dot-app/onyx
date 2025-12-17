@@ -3,7 +3,7 @@
 import Button from "@/refresh-components/buttons/Button";
 import { AuthType } from "@/lib/constants";
 import { FcGoogle } from "react-icons/fc";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal/types";
 
 interface SignInButtonProps {
   authorizeUrl: string;

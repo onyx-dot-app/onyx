@@ -1,5 +1,5 @@
 import React from "react";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import Modal from "@/refresh-components/Modal";

@@ -28,7 +28,6 @@ import { useUser } from "@/components/user/UserProvider";
 import NoAssistantModal from "@/components/modals/NoAssistantModal";
 import TextView from "@/components/chat/TextView";
 import Modal from "@/refresh-components/Modal";
-import SvgFileText from "@/icons/file-text";
 import { useSendMessageToParent } from "@/lib/extension/utils";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import { getSourceMetadata } from "@/lib/sources";
@@ -66,11 +65,12 @@ import { useOnboardingState } from "@/refresh-components/onboarding/useOnboardin
 import { OnboardingStep } from "@/refresh-components/onboarding/types";
 import AppPageLayout from "@/layouts/AppPageLayout";
 import { HeaderData } from "@/lib/headers/fetchHeaderDataSS";
+import { SvgFileText } from "@opal/icons";
 import Spacer from "@/refresh-components/Spacer";
 
 const DEFAULT_CONTEXT_TOKENS = 120_000;
 
-interface ChatPageProps {
+export interface ChatPageProps {
   firstMessage?: string;
   headerData: HeaderData;
 }

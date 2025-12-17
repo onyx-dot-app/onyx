@@ -1,7 +1,7 @@
 import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
-import SvgCheck from "@/icons/check";
 import { CloudEmbeddingModel } from "../../../../components/embedding/interfaces";
+import { SvgCheck } from "@opal/icons";
 
 export interface AlreadyPickedModalProps {
   model: CloudEmbeddingModel;

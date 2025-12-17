@@ -21,8 +21,6 @@ import { useAssistantPreferences } from "@/app/chat/hooks/useAssistantPreference
 import { useUser } from "@/components/user/UserProvider";
 import { FilterManager, useSourcePreferences } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";
-import SvgChevronRight from "@/icons/chevron-right";
-import SvgKey from "@/icons/key";
 import MCPApiKeyModal from "@/components/chat/MCPApiKeyModal";
 import { ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
@@ -30,17 +28,16 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { useAvailableTools } from "@/lib/hooks/useAvailableTools";
 import { useCCPairs } from "@/lib/hooks/useCCPairs";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgSliders from "@/icons/sliders";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import SvgActions from "@/icons/actions";
 import ActionLineItem from "@/refresh-components/popovers/ActionsPopover/ActionLineItem";
 import MCPLineItem, {
   MCPServer,
 } from "@/refresh-components/popovers/ActionsPopover/MCPLineItem";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
+import { SvgActions, SvgChevronRight, SvgKey, SvgSliders } from "@opal/icons";
 
 // Get source metadata for configured sources - deduplicated by source type
 function getConfiguredSources(

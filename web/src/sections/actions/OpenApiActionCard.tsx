@@ -2,7 +2,6 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
-import SvgServer from "@/icons/server";
 import ActionCard from "@/sections/actions/ActionCard";
 import Actions from "@/sections/actions/Actions";
 import ToolsList from "@/sections/actions/ToolsList";
@@ -14,6 +13,7 @@ import { ActionStatus, MethodSpec } from "@/lib/tools/types";
 import ToolItem from "@/sections/actions/ToolItem";
 import { extractMethodSpecsFromDefinition } from "@/lib/tools/openApiService";
 import { updateToolStatus } from "@/lib/tools/mcpService";
+import { SvgServer } from "@opal/icons";
 
 export interface OpenApiActionCardProps {
   tool: ToolSnapshot;

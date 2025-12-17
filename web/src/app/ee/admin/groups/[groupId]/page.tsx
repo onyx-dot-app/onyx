@@ -8,8 +8,7 @@ import { useConnectorStatus, useUsers } from "@/lib/hooks";
 import { useRouter } from "next/navigation";
 import { BackButton } from "@/components/BackButton";
 import { AdminPageTitle } from "@/components/admin/Title";
-import SvgUsers from "@/icons/users";
-
+import { SvgUsers } from "@opal/icons";
 const Page = (props: { params: Promise<{ groupId: string }> }) => {
   const params = use(props.params);
   const router = useRouter();

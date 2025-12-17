@@ -3,8 +3,7 @@ import { ConnectorStatus } from "@/lib/types";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { Label } from "@/components/ui/label";
 import Text from "@/refresh-components/texts/Text";
-import SvgLock from "@/icons/lock";
-
+import { SvgLock } from "@opal/icons";
 interface NonSelectableConnectorsProps {
   connectors: ConnectorStatus<any, any>[];
   title: string;

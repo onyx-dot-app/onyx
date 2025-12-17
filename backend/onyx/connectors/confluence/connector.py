@@ -387,124 +387,162 @@ class ConfluenceConnector(
         attachment_docs: list[Document] = []
         page_url = ""
 
-        for attachment in self.confluence_client.paginated_cql_retrieval(
-            cql=attachment_query,
-            expand=",".join(_ATTACHMENT_EXPANSION_FIELDS),
-        ):
-            media_type: str = attachment.get("metadata", {}).get("mediaType", "")
-
-            # TODO(rkuo): this check is partially redundant with validate_attachment_filetype
-            # and checks in convert_attachment_to_content/process_attachment
-            # but doing the check here avoids an unnecessary download. Due for refactoring.
-            if not self.allow_images:
-                if media_type.startswith("image/"):
-                    logger.info(
-                        f"Skipping attachment because allow images is False: {attachment['title']}"
-                    )
-                    continue
-
-            if not validate_attachment_filetype(
-                attachment,
+        try:
+            for attachment in self.confluence_client.paginated_cql_retrieval(
+                cql=attachment_query,
+                expand=",".join(_ATTACHMENT_EXPANSION_FIELDS),
             ):
-                logger.info(
-                    f"Skipping attachment because it is not an accepted file type: {attachment['title']}"
-                )
-                continue
+                media_type: str = attachment.get("metadata", {}).get("mediaType", "")
 
-            logger.info(
-                f"Processing attachment: {attachment['title']} attached to page {page['title']}"
-            )
-            # Attachment document id: use the download URL for stable identity
-            try:
-                object_url = build_confluence_document_id(
-                    self.wiki_base, attachment["_links"]["download"], self.is_cloud
-                )
-            except Exception as e:
-                logger.warning(
-                    f"Invalid attachment url for id {attachment['id']}, skipping"
-                )
-                logger.debug(f"Error building attachment url: {e}")
-                continue
-            try:
-                response = convert_attachment_to_content(
-                    confluence_client=self.confluence_client,
-                    attachment=attachment,
-                    page_id=page["id"],
-                    allow_images=self.allow_images,
-                )
-                if response is None:
+                # TODO(rkuo): this check is partially redundant with validate_attachment_filetype
+                # and checks in convert_attachment_to_content/process_attachment
+                # but doing the check here avoids an unnecessary download. Due for refactoring.
+                if not self.allow_images:
+                    if media_type.startswith("image/"):
+                        logger.info(
+                            f"Skipping attachment because allow images is False: {attachment['title']}"
+                        )
+                        continue
+
+                if not validate_attachment_filetype(
+                    attachment,
+                ):
+                    logger.info(
+                        f"Skipping attachment because it is not an accepted file type: {attachment['title']}"
+                    )
                     continue
 
-                content_text, file_storage_name = response
+                logger.info(
+                    f"Processing attachment: {attachment['title']} attached to page {page['title']}"
+                )
+                # Attachment document id: use the download URL for stable identity
+                try:
+                    object_url = build_confluence_document_id(
+                        self.wiki_base, attachment["_links"]["download"], self.is_cloud
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Invalid attachment url for id {attachment['id']}, skipping"
+                    )
+                    logger.debug(f"Error building attachment url: {e}")
+                    continue
+                try:
+                    response = convert_attachment_to_content(
+                        confluence_client=self.confluence_client,
+                        attachment=attachment,
+                        page_id=page["id"],
+                        allow_images=self.allow_images,
+                    )
+                    if response is None:
+                        continue
 
-                sections: list[TextSection | ImageSection] = []
-                if content_text:
-                    sections.append(TextSection(text=content_text, link=object_url))
-                elif file_storage_name:
-                    sections.append(
-                        ImageSection(link=object_url, image_file_id=file_storage_name)
+                    content_text, file_storage_name = response
+
+                    sections: list[TextSection | ImageSection] = []
+                    if content_text:
+                        sections.append(TextSection(text=content_text, link=object_url))
+                    elif file_storage_name:
+                        sections.append(
+                            ImageSection(
+                                link=object_url, image_file_id=file_storage_name
+                            )
+                        )
+
+                    # Build attachment-specific metadata
+                    attachment_metadata: dict[str, str | list[str]] = {}
+                    if "space" in attachment:
+                        attachment_metadata["space"] = attachment["space"].get(
+                            "name", ""
+                        )
+                    labels: list[str] = []
+                    if "metadata" in attachment and "labels" in attachment["metadata"]:
+                        for label in attachment["metadata"]["labels"].get(
+                            "results", []
+                        ):
+                            labels.append(label.get("name", ""))
+                    if labels:
+                        attachment_metadata["labels"] = labels
+                    page_url = page_url or build_confluence_document_id(
+                        self.wiki_base, page["_links"]["webui"], self.is_cloud
+                    )
+                    attachment_metadata["parent_page_id"] = page_url
+                    attachment_id = build_confluence_document_id(
+                        self.wiki_base, attachment["_links"]["webui"], self.is_cloud
                     )
 
-                # Build attachment-specific metadata
-                attachment_metadata: dict[str, str | list[str]] = {}
-                if "space" in attachment:
-                    attachment_metadata["space"] = attachment["space"].get("name", "")
-                labels: list[str] = []
-                if "metadata" in attachment and "labels" in attachment["metadata"]:
-                    for label in attachment["metadata"]["labels"].get("results", []):
-                        labels.append(label.get("name", ""))
-                if labels:
-                    attachment_metadata["labels"] = labels
-                page_url = page_url or build_confluence_document_id(
-                    self.wiki_base, page["_links"]["webui"], self.is_cloud
-                )
-                attachment_metadata["parent_page_id"] = page_url
-                attachment_id = build_confluence_document_id(
-                    self.wiki_base, attachment["_links"]["webui"], self.is_cloud
-                )
+                    primary_owners: list[BasicExpertInfo] | None = None
+                    if "version" in attachment and "by" in attachment["version"]:
+                        author = attachment["version"]["by"]
+                        display_name = author.get("displayName", "Unknown")
+                        email = author.get("email", "unknown@domain.invalid")
+                        primary_owners = [
+                            BasicExpertInfo(display_name=display_name, email=email)
+                        ]
 
-                primary_owners: list[BasicExpertInfo] | None = None
-                if "version" in attachment and "by" in attachment["version"]:
-                    author = attachment["version"]["by"]
-                    display_name = author.get("displayName", "Unknown")
-                    email = author.get("email", "unknown@domain.invalid")
-                    primary_owners = [
-                        BasicExpertInfo(display_name=display_name, email=email)
-                    ]
+                    attachment_doc = Document(
+                        id=attachment_id,
+                        sections=sections,
+                        source=DocumentSource.CONFLUENCE,
+                        semantic_identifier=attachment.get("title", object_url),
+                        metadata=attachment_metadata,
+                        doc_updated_at=(
+                            datetime_from_string(attachment["version"]["when"])
+                            if attachment.get("version")
+                            and attachment["version"].get("when")
+                            else None
+                        ),
+                        primary_owners=primary_owners,
+                    )
+                    attachment_docs.append(attachment_doc)
+                except Exception as e:
+                    logger.error(
+                        f"Failed to extract/summarize attachment {attachment['title']}",
+                        exc_info=e,
+                    )
+                    if is_atlassian_date_error(e):
+                        # propagate error to be caught and retried
+                        raise
+                    attachment_failures.append(
+                        ConnectorFailure(
+                            failed_document=DocumentFailure(
+                                document_id=object_url,
+                                document_link=object_url,
+                            ),
+                            failure_message=f"Failed to extract/summarize attachment {attachment['title']} for doc {object_url}",
+                            exception=e,
+                        )
+                    )
+        except HTTPError as e:
+            # If we get a 403 after all retries, the user likely doesn't have permission
+            # to access attachments on this page. Log and skip rather than failing the whole job.
+            if e.response and e.response.status_code == 403:
+                page_title = page.get("title", "unknown")
+                page_id = page.get("id", "unknown")
+                logger.warning(
+                    f"Permission denied (403) when fetching attachments for page '{page_title}' "
+                    f"(ID: {page_id}). The user may not have permission to query attachments on this page. "
+                    "Skipping attachments for this page."
+                )
+                # Build the page URL for the failure record
+                try:
+                    page_url = build_confluence_document_id(
+                        self.wiki_base, page["_links"]["webui"], self.is_cloud
+                    )
+                except Exception:
+                    page_url = f"page_id:{page_id}"
 
-                attachment_doc = Document(
-                    id=attachment_id,
-                    sections=sections,
-                    source=DocumentSource.CONFLUENCE,
-                    semantic_identifier=attachment.get("title", object_url),
-                    metadata=attachment_metadata,
-                    doc_updated_at=(
-                        datetime_from_string(attachment["version"]["when"])
-                        if attachment.get("version")
-                        and attachment["version"].get("when")
-                        else None
-                    ),
-                    primary_owners=primary_owners,
-                )
-                attachment_docs.append(attachment_doc)
-            except Exception as e:
-                logger.error(
-                    f"Failed to extract/summarize attachment {attachment['title']}",
-                    exc_info=e,
-                )
-                if is_atlassian_date_error(e):
-                    # propagate error to be caught and retried
-                    raise
-                attachment_failures.append(
+                return [], [
                     ConnectorFailure(
                         failed_document=DocumentFailure(
-                            document_id=object_url,
-                            document_link=object_url,
+                            document_id=page_id,
+                            document_link=page_url,
                         ),
-                        failure_message=f"Failed to extract/summarize attachment {attachment['title']} for doc {object_url}",
+                        failure_message=f"Permission denied (403) when fetching attachments for page '{page_title}'",
                         exception=e,
                     )
-                )
+                ]
+            else:
+                raise
 
         return attachment_docs, attachment_failures
 
