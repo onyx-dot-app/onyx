@@ -524,7 +524,8 @@ export default function ActionsPopover({
             onToggle={() => toggleToolForCurrentAssistant(tool.id)}
             onForceToggle={() => {
               toggleForcedTool(tool.id);
-              setSecondaryView({ type: "sources" });
+              if (!forcedToolIds.includes(tool.id))
+                setSecondaryView({ type: "sources" });
             }}
             onSourceManagementOpen={() => setSecondaryView({ type: "sources" })}
             hasNoConnectors={hasNoConnectors}

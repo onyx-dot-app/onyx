@@ -61,7 +61,7 @@ export default function ActionLineItem({
         <LineItem
           onClick={() => {
             if (isSearchToolWithNoConnectors) return;
-            if (onToggle && disabled) onToggle();
+            if (disabled) onToggle();
             onForceToggle();
           }}
           selected={isForced}
