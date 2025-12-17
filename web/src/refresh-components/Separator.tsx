@@ -4,6 +4,11 @@ import React from "react";
 import * as SeparatorPrimitive from "@radix-ui/react-separator";
 import { cn } from "@/lib/utils";
 
+export interface SeparatorProps
+  extends React.ComponentPropsWithoutRef<typeof SeparatorPrimitive.Root> {
+  noPadding?: boolean;
+}
+
 /**
  * Separator Component
  *
@@ -25,35 +30,41 @@ import { cn } from "@/lib/utils";
  * <Separator decorative={false} />
  * ```
  */
-function SeparatorInner(
-  {
-    className,
-    orientation = "horizontal",
-    decorative = true,
-    ...props
-  }: React.ComponentPropsWithoutRef<typeof SeparatorPrimitive.Root>,
-  ref: React.ForwardedRef<React.ComponentRef<typeof SeparatorPrimitive.Root>>
-) {
-  const isHorizontal = orientation === "horizontal";
+const Separator = React.forwardRef(
+  (
+    {
+      noPadding,
 
-  return (
-    <div
-      className={cn(isHorizontal ? "py-4 w-full" : "px-4 h-full", className)}
-    >
-      <SeparatorPrimitive.Root
-        ref={ref}
-        decorative={decorative}
-        orientation={orientation}
+      className,
+      orientation = "horizontal",
+      decorative = true,
+      ...props
+    }: SeparatorProps,
+    ref: React.ForwardedRef<React.ComponentRef<typeof SeparatorPrimitive.Root>>
+  ) => {
+    const isHorizontal = orientation === "horizontal";
+
+    return (
+      <div
         className={cn(
-          "bg-border-01",
-          isHorizontal ? "h-[1px] w-full" : "h-full w-[1px]"
+          !noPadding && (isHorizontal ? "py-4" : "px-4"),
+          className
         )}
-        {...props}
-      />
-    </div>
-  );
-}
-
-const Separator = React.forwardRef(SeparatorInner);
+      >
+        <SeparatorPrimitive.Root
+          ref={ref}
+          decorative={decorative}
+          orientation={orientation}
+          className={cn(
+            "bg-border-01",
+            isHorizontal ? "h-[1px] w-full" : "h-full w-[1px]"
+          )}
+          {...props}
+        />
+      </div>
+    );
+  }
+);
 Separator.displayName = SeparatorPrimitive.Root.displayName;
+
 export default Separator;

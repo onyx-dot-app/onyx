@@ -133,3 +133,5 @@ export const DEFAULT_AGENT_AVATAR_SIZE_PX = 18;
 export const HORIZON_DISTANCE_PX = 800;
 export const LOGO_FOLDED_SIZE_PX = 24;
 export const LOGO_UNFOLDED_SIZE_PX = 88;
+
+export const DEFAULT_CONTEXT_TOKENS = 120_000;

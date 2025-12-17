@@ -298,17 +298,17 @@ def verify_user_files(
 
     for file_descriptor in user_files:
         # Check if this file descriptor has a user_file_id
-        if "user_file_id" in file_descriptor and file_descriptor["user_file_id"]:
+        if file_descriptor.get("user_file_id"):
             try:
                 user_file_ids.append(UUID(file_descriptor["user_file_id"]))
             except (ValueError, TypeError):
                 logger.warning(
-                    f"Invalid user_file_id in file descriptor: {file_descriptor.get('user_file_id')}"
+                    f"Invalid user_file_id in file descriptor: {file_descriptor['user_file_id']}"
                 )
                 continue
         else:
             # This is a project file - use the 'id' field which is the file_id
-            if "id" in file_descriptor and file_descriptor["id"]:
+            if file_descriptor.get("id"):
                 project_file_ids.append(file_descriptor["id"])
 
     # Verify user files (existing logic)

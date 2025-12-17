@@ -89,7 +89,6 @@ export interface OnSubmitProps {
   isSeededChat?: boolean;
   modelOverride?: LlmDescriptor;
   regenerationRequest?: RegenerationRequest | null;
-  overrideFileDescriptors?: FileDescriptor[];
 }
 
 interface RegenerationRequest {
@@ -382,7 +381,6 @@ export function useChatController({
       isSeededChat,
       modelOverride,
       regenerationRequest,
-      overrideFileDescriptors,
     }: OnSubmitProps) => {
       const projectId = params(SEARCH_PARAM_NAMES.PROJECT_ID);
       {
@@ -652,7 +650,7 @@ export function useChatController({
           signal: controller.signal,
           message: currMessage,
           alternateAssistantId: liveAssistant?.id,
-          fileDescriptors: overrideFileDescriptors,
+          fileDescriptors: projectFilesToFileDescriptors(currentMessageFiles),
           parentMessageId: (() => {
             const parentId =
               regenerationRequest?.parentMessage.messageId ||

@@ -477,7 +477,10 @@ def load_chat_file(
 
     # Extract text content if it's a text file type (not an image)
     content_text = None
-    file_type = file_descriptor["type"]
+    # `FileDescriptor` is often JSON-roundtripped (e.g. JSONB / API), so `type`
+    # may arrive as a raw string value instead of a `ChatFileType`.
+    file_type = ChatFileType(file_descriptor["type"])
+
     if file_type.is_text_file():
         try:
             content_text = content.decode("utf-8")

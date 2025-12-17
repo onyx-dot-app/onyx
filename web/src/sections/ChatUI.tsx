@@ -16,7 +16,6 @@ import HumanMessage from "@/app/chat/message/HumanMessage";
 import { ErrorBanner } from "@/app/chat/message/Resubmit";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
-import { FileDescriptor } from "@/app/chat/interfaces";
 import AIMessage from "@/app/chat/message/messageComponents/AIMessage";
 import { ProjectFile } from "@/app/chat/projects/projectsService";
 import { useScrollonStream } from "@/app/chat/services/lib";
@@ -58,7 +57,6 @@ export interface ChatUIProps {
     forceSearch?: boolean;
     queryOverride?: string;
     isSeededChat?: boolean;
-    overrideFileDescriptors?: FileDescriptor[];
   }) => Promise<void>;
   onMessageSelection: (nodeId: number) => void;
   stopGenerating: () => void;

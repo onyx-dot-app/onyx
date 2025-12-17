@@ -63,6 +63,20 @@ uv add --dev onyx-devtools --upgrade-package onyx-devtools
 ## Building from source
 
 Generally, `go build .` or `go install .` are sufficient.
+`go build .` will output a `tools/ods/ods` binary which you can call normally,
+
+```shell
+./ods --version
+```
+
+while `go install .` will output to your [GOPATH](https://go.dev/wiki/SettingGOPATH) (defaults `~/go/bin/ods`),
+
+```shell
+~/go/bin/ods --version
+```
+
+_Typically, `GOPATH` is added to your shell's `PATH`, but this may be confused easily during development
+with the pip version of `ods` installed in the Onyx venv._
 
 To build the wheel,
 

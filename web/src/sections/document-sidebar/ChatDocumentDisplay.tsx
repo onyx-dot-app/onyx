@@ -12,13 +12,6 @@ import { cn } from "@/lib/utils";
 import Truncated from "@/refresh-components/texts/Truncated";
 import Text from "@/refresh-components/texts/Text";
 
-interface DocumentDisplayProps {
-  document: OnyxDocument;
-  modal?: boolean;
-  isSelected: boolean;
-  setPresentingDocument: Dispatch<SetStateAction<MinimalOnyxDocument | null>>;
-}
-
 interface DocumentMetadataBlockProps {
   modal?: boolean;
   document: OnyxDocument;
@@ -59,12 +52,19 @@ function DocumentMetadataBlock({
   );
 }
 
-export function ChatDocumentDisplay({
+export interface ChatDocumentDisplayProps {
+  document: OnyxDocument;
+  modal?: boolean;
+  isSelected: boolean;
+  setPresentingDocument: Dispatch<SetStateAction<MinimalOnyxDocument | null>>;
+}
+
+export default function ChatDocumentDisplay({
   document,
   modal,
   isSelected,
   setPresentingDocument,
-}: DocumentDisplayProps) {
+}: ChatDocumentDisplayProps) {
   const isInternet = document.is_internet;
   const title = useMemo(
     () => document.semantic_identifier || document.document_id,

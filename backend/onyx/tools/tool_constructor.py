@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import cast
 from uuid import UUID
 
@@ -23,6 +24,7 @@ from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.oauth_config import get_oauth_config
 from onyx.db.search_settings import get_current_search_settings
+from onyx.db.tools import get_builtin_tool
 from onyx.document_index.factory import get_default_document_index
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
@@ -63,6 +65,12 @@ class CustomToolConfig(BaseModel):
     chat_session_id: UUID | None = None
     message_id: int | None = None
     additional_headers: dict[str, str] | None = None
+
+
+class SearchToolUsage(str, Enum):
+    DISABLED = "disabled"
+    ENABLED = "enabled"
+    AUTO = "auto"
 
 
 def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
@@ -127,7 +135,7 @@ def construct_tools(
     search_tool_config: SearchToolConfig | None = None,
     custom_tool_config: CustomToolConfig | None = None,
     allowed_tool_ids: list[int] | None = None,
-    disable_internal_search: bool = False,
+    search_usage_forcing_setting: SearchToolUsage = SearchToolUsage.AUTO,
 ) -> dict[int, list[Tool]]:
     """Constructs tools based on persona configuration and available APIs.
 
@@ -146,6 +154,7 @@ def construct_tools(
     if user and user.oauth_accounts:
         user_oauth_token = user.oauth_accounts[0].access_token
 
+    added_search_tool = False
     for db_tool_model in persona.tools:
         # If allowed_tool_ids is specified, skip tools not in the allowed list
         if allowed_tool_ids is not None and db_tool_model.id not in allowed_tool_ids:
@@ -171,7 +180,8 @@ def construct_tools(
 
             # Handle Internal Search Tool
             if tool_cls.__name__ == SearchTool.__name__:
-                if disable_internal_search:
+                added_search_tool = True
+                if search_usage_forcing_setting == SearchToolUsage.DISABLED:
                     continue
 
                 if not search_tool_config:
@@ -180,7 +190,6 @@ def construct_tools(
                 search_settings = get_current_search_settings(db_session)
                 document_index = get_default_document_index(search_settings, None)
 
-                # TODO concerning passing the db_session here.
                 search_tool = SearchTool(
                     tool_id=db_tool_model.id,
                     db_session=db_session,
@@ -370,6 +379,36 @@ def construct_tools(
                 logger.warning(
                     f"Tool '{expected_tool_name}' not found in MCP server '{mcp_server.name}'"
                 )
+
+    if (
+        not added_search_tool
+        and search_usage_forcing_setting == SearchToolUsage.ENABLED
+    ):
+        # Get the database tool model for SearchTool
+        search_tool_db_model = get_builtin_tool(db_session, SearchTool)
+
+        # Use the passed-in config if available, otherwise create a new one
+        if not search_tool_config:
+            search_tool_config = SearchToolConfig()
+
+        search_settings = get_current_search_settings(db_session)
+        document_index = get_default_document_index(search_settings, None)
+        search_tool = SearchTool(
+            tool_id=search_tool_db_model.id,
+            db_session=db_session,
+            emitter=emitter,
+            user=user,
+            persona=persona,
+            llm=llm,
+            fast_llm=fast_llm,
+            document_index=document_index,
+            user_selected_filters=search_tool_config.user_selected_filters,
+            project_id=search_tool_config.project_id,
+            bypass_acl=search_tool_config.bypass_acl,
+            slack_context=search_tool_config.slack_context,
+        )
+
+        tool_dict[search_tool_db_model.id] = [search_tool]
 
     tools: list[Tool] = []
     for tool_list in tool_dict.values():
