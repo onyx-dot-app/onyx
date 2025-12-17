@@ -23,13 +23,13 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import { FormField } from "@/refresh-components/form/FormField";
 import {
-  SVGArrowExchange,
-  SVGArrowRightCircle,
-  SVGCheckSquare,
-  SVGGlobe,
-  SVGKey,
-  SVGOnyxLogo,
-  SVGX,
+  SvgArrowExchange,
+  SvgArrowRightCircle,
+  SvgCheckSquare,
+  SvgGlobe,
+  SvgKey,
+  SvgOnyxLogo,
+  SvgX,
 } from "@opal/icons";
 
 import Modal from "@/refresh-components/Modal";
@@ -179,10 +179,10 @@ const ProviderSetupModal = memo(
         <div className="flex items-center gap-1">
           {providerLogo}
           <div className="flex items-center justify-center size-4 p-0.5 shrink-0">
-            <SVGArrowExchange className="size-3 text-text-04" />
+            <SvgArrowExchange className="size-3 text-text-04" />
           </div>
           <div className="flex items-center justify-center size-7 p-0.5 shrink-0 overflow-clip">
-            <SVGOnyxLogo
+            <SvgOnyxLogo
               width={24}
               height={24}
               className="text-text-04 shrink-0"
@@ -431,9 +431,9 @@ const HoverIconButton = ({
       React.SVGProps<SVGSVGElement>
     > = ({ className, ...props }) => {
       if (isHovered) {
-        return <SVGX className={className} {...props} />;
+        return <SvgX className={className} {...props} />;
       }
-      return <SVGCheckSquare className={className} {...props} />;
+      return <SvgCheckSquare className={className} {...props} />;
     };
     return IconComponent;
   }, [isHovered]);
@@ -718,7 +718,7 @@ export default function Page() {
             height={size}
           />
         ) : (
-          <GlobeIcon
+          <SvgGlobe
             size={size}
             className={
               isHighlighted ? "text-action-text-link-05" : "text-text-02"
@@ -737,7 +737,7 @@ export default function Page() {
   ) => {
     const logoContent =
       providerType === "onyx_web_crawler" ? (
-        <SVGOnyxLogo
+        <SvgOnyxLogo
           width={size}
           height={size}
           className="text-[#111111] dark:text-[#f5f5f5]"
@@ -750,7 +750,7 @@ export default function Page() {
           height={size}
         />
       ) : (
-        <GlobeIcon size={size} className="text-text-02" />
+        <SvgGlobe size={size} className="text-text-02" />
       );
 
     const containerSizeClass =
@@ -773,7 +773,7 @@ export default function Page() {
       : "";
 
     const content = (
-      <SVGKey width={16} height={16} className="h-4 w-4 shrink-0" />
+      <SvgKey width={16} height={16} className="h-4 w-4 shrink-0" />
     );
 
     if (onClick) {
@@ -889,7 +889,7 @@ export default function Page() {
       <div className="container mx-auto">
         <AdminPageTitle
           title="Web Search"
-          icon={SVGGlobe}
+          icon={SvgGlobe}
           includeDivider={false}
         />
         <Callout type="danger" title="Failed to load web search settings">
@@ -909,7 +909,7 @@ export default function Page() {
       <div className="container mx-auto">
         <AdminPageTitle
           title="Web Search"
-          icon={SVGGlobe}
+          icon={SvgGlobe}
           includeDivider={false}
         />
         <div className="mt-8">
@@ -1672,9 +1672,9 @@ export default function Page() {
                             }}
                             rightIcon={
                               buttonState.icon === "arrow"
-                                ? SVGArrowExchange
+                                ? SvgArrowExchange
                                 : buttonState.icon === "arrow-circle"
-                                  ? SVGArrowRightCircle
+                                  ? SvgArrowRightCircle
                                   : undefined
                             }
                           >
@@ -1861,9 +1861,9 @@ export default function Page() {
                           }}
                           rightIcon={
                             buttonState.icon === "arrow"
-                              ? SVGArrowExchange
+                              ? SvgArrowExchange
                               : buttonState.icon === "arrow-circle"
-                                ? SVGArrowRightCircle
+                                ? SvgArrowRightCircle
                                 : undefined
                           }
                         >
