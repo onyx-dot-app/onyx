@@ -1,4 +1,5 @@
 "use client";
+
 import { ActionStatus } from "@/lib/tools/types";
 import React from "react";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -11,7 +12,8 @@ import {
   SvgTrash,
   SvgUnplug,
 } from "@opal/icons";
-interface ActionsProps {
+
+export interface ActionsProps {
   status: ActionStatus;
   serverName: string;
   onDisconnect?: () => void;
@@ -24,7 +26,7 @@ interface ActionsProps {
   onToggleTools?: () => void;
 }
 
-const Actions: React.FC<ActionsProps> = React.memo(
+const Actions = React.memo(
   ({
     status,
     serverName,
@@ -36,7 +38,7 @@ const Actions: React.FC<ActionsProps> = React.memo(
     toolCount,
     isToolsExpanded,
     onToggleTools,
-  }) => {
+  }: ActionsProps) => {
     const showViewToolsButton =
       (status === ActionStatus.CONNECTED ||
         status === ActionStatus.FETCHING ||

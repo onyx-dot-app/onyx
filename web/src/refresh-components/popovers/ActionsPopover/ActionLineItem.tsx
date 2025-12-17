@@ -11,6 +11,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn, noProp } from "@/lib/utils";
 import type { IconProps } from "@opal/types";
 import { SvgChevronRight, SvgKey, SvgSettings, SvgSlash } from "@opal/icons";
+import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 
 export interface ActionItemProps {
   tool?: ToolSnapshot;
@@ -24,7 +25,6 @@ export interface ActionItemProps {
   hasNoConnectors?: boolean;
   toolAuthStatus?: ToolAuthStatus;
   onOAuthAuthenticate?: () => void;
-  isProjectContext?: boolean;
 }
 
 export default function ActionLineItem({
@@ -39,18 +39,19 @@ export default function ActionLineItem({
   hasNoConnectors = false,
   toolAuthStatus,
   onOAuthAuthenticate,
-  isProjectContext = false,
 }: ActionItemProps) {
+  const { currentProjectId } = useProjectsContext();
+
   const Icon = tool ? getIconForAction(tool) : ProvidedIcon!;
   const toolName = tool?.name || providedLabel || "";
 
   let label = tool ? tool.display_name || tool.name : providedLabel!;
-  if (isProjectContext && tool?.in_code_tool_id === SEARCH_TOOL_ID) {
+  if (!!currentProjectId && tool?.in_code_tool_id === SEARCH_TOOL_ID) {
     label = "Project Search";
   }
 
   const isSearchToolWithNoConnectors =
-    !isProjectContext &&
+    !currentProjectId &&
     tool?.in_code_tool_id === SEARCH_TOOL_ID &&
     hasNoConnectors;
 
@@ -102,7 +103,7 @@ export default function ActionLineItem({
               )}
               {tool &&
                 tool.in_code_tool_id === SEARCH_TOOL_ID &&
-                !isProjectContext && (
+                !currentProjectId && (
                   <IconButton
                     icon={
                       isSearchToolWithNoConnectors
