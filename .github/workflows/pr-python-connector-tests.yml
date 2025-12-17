@@ -5,7 +5,8 @@ concurrency:
 
 on:
   merge_group:
-  pull_request:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
     branches: [main]
   push:
     tags:
@@ -129,6 +130,7 @@ jobs:
   connectors-check:
     # See https://runs-on.com/runners/linux/
     runs-on: [runs-on, runner=8cpu-linux-x64, "run-id=${{ github.run_id }}-connectors-check", "extras=s3-cache"]
+    environment: ci-protected
     timeout-minutes: 45
 
     env:
@@ -141,6 +143,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       - name: Setup Python and Install Dependencies
