@@ -611,8 +611,11 @@ export class OnyxApiClient {
     name: string = "Test Provider"
   ): Promise<number> {
     const config: Record<string, string> = {};
-    if (providerType === "google_pse" || providerType === "searxng") {
+    if (providerType === "google_pse") {
       config.search_engine_id = "test-engine-id";
+    }
+    if (providerType === "searxng") {
+      config.searxng_base_url = "https://test-searxng.example.com";
     }
 
     const response = await this.post("/admin/web-search/search-providers", {

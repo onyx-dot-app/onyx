@@ -148,7 +148,6 @@ def test_search_provider(
     request: WebSearchProviderTestRequest,
     _: User | None = Depends(current_admin_user),
 ) -> dict[str, str]:
-    logger.error(f"Testing search provider: {request}")
     try:
         provider = build_search_provider_from_config(
             provider_type=request.provider_type,

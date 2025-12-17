@@ -924,7 +924,6 @@ export default function Page() {
     }
     if (selectedProviderType === "searxng" && trimmedSearchEngineId) {
       config.searxng_base_url = trimmedSearchEngineId;
-      console.log("config", config);
     }
 
     const existingProvider = searchProviders.find(
@@ -951,8 +950,6 @@ export default function Page() {
           }),
         }
       );
-
-      console.log("testResponse", testResponse);
 
       if (!testResponse.ok) {
         const errorBody = await testResponse.json().catch(() => ({}));

@@ -19,7 +19,7 @@ class SearXNGClient(WebSearchProvider):
         searxng_base_url: str,
         num_results: int = 10,
     ) -> None:
-        logger.error(f"Initializing SearXNGClient with base URL: {searxng_base_url}")
+        logger.debug(f"Initializing SearXNGClient with base URL: {searxng_base_url}")
         self._searxng_base_url = searxng_base_url
         self._num_results = num_results
 
@@ -36,6 +36,7 @@ class SearXNGClient(WebSearchProvider):
             f"{self._searxng_base_url}/search",
             data=payload,
         )
+        response.raise_for_status()
 
         results = response.json()
         result_list = results.get("results", [])
@@ -85,7 +86,11 @@ class SearXNGClient(WebSearchProvider):
         # happens to have a /config endpoint containing a "brand" key with a "GIT_URL" key with value
         # "https://github.com/searxng/searxng". I don't think that would happen by coincidence, so I
         # think this is a good enough check for now. I'm open for suggestions on improvements.
-        if response.json()["brand"]["GIT_URL"] != "https://github.com/searxng/searxng":
+        config = response.json()
+        if (
+            config.get("brand", {}).get("GIT_URL")
+            != "https://github.com/searxng/searxng"
+        ):
             raise HTTPException(
                 status_code=400,
                 detail="This does not appear to be a SearXNG instance. Please check the URL and try again.",
