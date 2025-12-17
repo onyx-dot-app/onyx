@@ -83,12 +83,15 @@ def verify_license_signature(license_data: str) -> LicensePayload:
     except InvalidSignature:
         logger.error("License signature verification failed")
         raise ValueError("Invalid license signature")
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to decode license JSON: {e}")
+    except json.JSONDecodeError:
+        logger.error("Failed to decode license JSON")
         raise ValueError("Invalid license format: not valid JSON")
-    except Exception as e:
-        logger.error(f"License verification error: {e}")
-        raise ValueError(f"License verification failed: {str(e)}")
+    except (ValueError, KeyError, TypeError) as e:
+        logger.error(f"License data validation error: {type(e).__name__}")
+        raise ValueError(f"Invalid license format: {type(e).__name__}")
+    except Exception:
+        logger.exception("Unexpected error during license verification")
+        raise ValueError("License verification failed: unexpected error")
 
 
 def get_license_status(
