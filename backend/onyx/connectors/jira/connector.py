@@ -1,4 +1,5 @@
 import copy
+import json
 import os
 from collections.abc import Callable
 from collections.abc import Iterable
@@ -152,21 +153,37 @@ def _handle_jira_search_error(e: Exception, jql: str) -> None:
     error_text = ""
     status_code = None
 
+    def _format_error_text(error_payload: Any) -> str:
+        error_messages = (
+            error_payload.get("errorMessages", [])
+            if isinstance(error_payload, dict)
+            else []
+        )
+        if error_messages:
+            return (
+                "; ".join(error_messages)
+                if isinstance(error_messages, list)
+                else str(error_messages)
+            )
+        return str(error_payload)
+
     # Try to get status code and error text from JIRAError or requests response
     if hasattr(e, "status_code"):
         status_code = e.status_code
-        error_text = getattr(e, "text", "")
+        raw_text = getattr(e, "text", "")
+        if isinstance(raw_text, str):
+            try:
+                error_text = _format_error_text(json.loads(raw_text))
+            except Exception:
+                error_text = raw_text
+        else:
+            error_text = str(raw_text)
     elif hasattr(e, "response") and e.response is not None:
         status_code = e.response.status_code
         # Try JSON first, fall back to text
         try:
             error_json = e.response.json()
-            error_messages = error_json.get("errorMessages", [])
-            error_text = (
-                "; ".join(error_messages)
-                if isinstance(error_messages, list)
-                else str(error_messages)
-            )
+            error_text = _format_error_text(error_json)
         except Exception:
             error_text = e.response.text
 
