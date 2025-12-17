@@ -41,13 +41,20 @@ TOOL_DESCRIPTIONS = {
 
 def upgrade() -> None:
     conn = op.get_bind()
-    for tool_id, description in TOOL_DESCRIPTIONS.items():
-        conn.execute(
-            sa.text(
-                "UPDATE tool SET description = :description WHERE in_code_tool_id = :tool_id"
-            ),
-            {"description": description, "tool_id": tool_id},
-        )
+    conn.execute(sa.text("BEGIN"))
+    
+    try:
+        for tool_id, description in TOOL_DESCRIPTIONS.items():
+            conn.execute(
+                sa.text(
+                    "UPDATE tool SET description = :description WHERE in_code_tool_id = :tool_id"
+                ),
+                {"description": description, "tool_id": tool_id},
+            )
+        conn.execute(sa.text("COMMIT"))
+    except Exception as e:
+        conn.execute(sa.text("ROLLBACK"))
+        raise e
 
 
 def downgrade() -> None:
