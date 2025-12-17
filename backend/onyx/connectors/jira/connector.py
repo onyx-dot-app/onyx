@@ -135,6 +135,64 @@ def _perform_jql_search(
         return _perform_jql_search_v2(jira_client, jql, start, max_results, fields)
 
 
+def _handle_jira_search_error(e: Exception, jql: str) -> None:
+    """Handle common Jira search errors and raise appropriate exceptions.
+
+    Args:
+        e: The exception raised by the Jira API
+        jql: The JQL query that caused the error
+
+    Raises:
+        ConnectorValidationError: For HTTP 400 errors (invalid JQL or project)
+        CredentialExpiredError: For HTTP 401 errors
+        InsufficientPermissionsError: For HTTP 403 errors
+        Exception: Re-raises the original exception for other error types
+    """
+    # Extract error information from the exception
+    error_text = ""
+    status_code = None
+
+    # Try to get status code and error text from JIRAError or requests response
+    if hasattr(e, "status_code"):
+        status_code = e.status_code
+        error_text = getattr(e, "text", str(e))
+    elif hasattr(e, "response") and e.response is not None:
+        status_code = e.response.status_code
+        # Try JSON first, fall back to text, then string representation
+        try:
+            error_json = e.response.json()
+            error_messages = error_json.get("errorMessages", [])
+            error_text = (
+                "; ".join(error_messages)
+                if isinstance(error_messages, list)
+                else str(error_messages)
+            )
+        except Exception:
+            error_text = getattr(e.response, "text", str(e))
+
+    # Handle specific status codes
+    if status_code == 400:
+        if "does not exist for the field 'project'" in error_text:
+            raise ConnectorValidationError(
+                f"The specified Jira project does not exist or you don't have access to it. "
+                f"JQL query: {jql}. Error: {error_text}"
+            )
+        raise ConnectorValidationError(
+            f"Invalid JQL query. JQL: {jql}. Error: {error_text}"
+        )
+    elif status_code == 401:
+        raise CredentialExpiredError(
+            "Jira credentials are expired or invalid (HTTP 401)."
+        )
+    elif status_code == 403:
+        raise InsufficientPermissionsError(
+            f"Insufficient permissions to execute JQL query. JQL: {jql}"
+        )
+
+    # Re-raise for other error types
+    raise
+
+
 def enhanced_search_ids(
     jira_client: JIRA, jql: str, nextPageToken: str | None = None
 ) -> tuple[list[str], str | None]:
@@ -155,39 +213,7 @@ def enhanced_search_ids(
         response.raise_for_status()
         response_json = response.json()
     except Exception as e:
-        # Try to extract error information
-        error_text = ""
-        status_code = None
-        if hasattr(e, "response") and e.response is not None:
-            status_code = e.response.status_code
-            try:
-                error_json = e.response.json()
-                error_text = error_json.get("errorMessages", [])
-                if isinstance(error_text, list):
-                    error_text = "; ".join(error_text)
-            except Exception:
-                error_text = str(e)
-
-        # Handle common errors
-        if status_code == 400:
-            if "does not exist for the field 'project'" in error_text:
-                raise ConnectorValidationError(
-                    f"The specified Jira project does not exist or you don't have access to it. "
-                    f"JQL query: {jql}. Error: {error_text}"
-                )
-            raise ConnectorValidationError(
-                f"Invalid JQL query. JQL: {jql}. Error: {error_text}"
-            )
-        elif status_code == 401:
-            raise CredentialExpiredError(
-                "Jira credentials are expired or invalid (HTTP 401)."
-            )
-        elif status_code == 403:
-            raise InsufficientPermissionsError(
-                f"Insufficient permissions to execute JQL query. JQL: {jql}"
-            )
-        # Re-raise for other errors
-        raise
+        _handle_jira_search_error(e, jql)
 
     return [str(issue["id"]) for issue in response_json["issues"]], response_json.get(
         "nextPageToken"
@@ -279,27 +305,7 @@ def _perform_jql_search_v2(
             fields=fields,
         )
     except JIRAError as e:
-        # Handle common JQL errors with better error messages
-        if e.status_code == 400:
-            error_text = getattr(e, "text", str(e))
-            if "does not exist for the field 'project'" in error_text:
-                raise ConnectorValidationError(
-                    f"The specified Jira project does not exist or you don't have access to it. "
-                    f"JQL query: {jql}. Error: {error_text}"
-                )
-            raise ConnectorValidationError(
-                f"Invalid JQL query. JQL: {jql}. Error: {error_text}"
-            )
-        elif e.status_code == 401:
-            raise CredentialExpiredError(
-                "Jira credentials are expired or invalid (HTTP 401)."
-            )
-        elif e.status_code == 403:
-            raise InsufficientPermissionsError(
-                f"Insufficient permissions to execute JQL query. JQL: {jql}"
-            )
-        # Re-raise for other status codes
-        raise
+        _handle_jira_search_error(e, jql)
 
     for issue in issues:
         if isinstance(issue, Issue):
