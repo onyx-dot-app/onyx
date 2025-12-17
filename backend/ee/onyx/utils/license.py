@@ -69,12 +69,15 @@ def verify_license_signature(license_data: str) -> LicensePayload:
         )
         signature_bytes = base64.b64decode(license_obj.signature)
 
-        # Verify signature
+        # Verify signature using PSS padding (modern standard)
         public_key = _get_public_key()
         public_key.verify(
             signature_bytes,
             payload_json.encode(),
-            padding.PKCS1v15(),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH,
+            ),
             hashes.SHA256(),
         )
 
