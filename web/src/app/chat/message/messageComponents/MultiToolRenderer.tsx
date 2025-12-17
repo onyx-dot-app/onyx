@@ -280,10 +280,10 @@ function ParallelToolTabs({
         <div className="flex items-center gap-0.5 ml-2 flex-shrink-0">
           <button
             onClick={goToPreviousTab}
-            disabled={!canGoPrevious}
+            disabled={!canGoPrevious || !isExpanded}
             className={cn(
               "p-1 rounded hover:bg-background-subtle-hover transition-colors",
-              !canGoPrevious && "opacity-30 cursor-not-allowed"
+              (!canGoPrevious || !isExpanded) && "opacity-30 cursor-not-allowed"
             )}
             aria-label="Previous tab"
           >
@@ -291,10 +291,10 @@ function ParallelToolTabs({
           </button>
           <button
             onClick={goToNextTab}
-            disabled={!canGoNext}
+            disabled={!canGoNext || !isExpanded}
             className={cn(
               "p-1 rounded hover:bg-background-subtle-hover transition-colors",
-              !canGoNext && "opacity-30 cursor-not-allowed"
+              (!canGoNext || !isExpanded) && "opacity-30 cursor-not-allowed"
             )}
             aria-label="Next tab"
           >
