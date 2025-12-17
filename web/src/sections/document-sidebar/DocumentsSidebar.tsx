@@ -11,8 +11,8 @@ import {
 } from "@/app/chat/stores/useChatSessionStore";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { Separator } from "@radix-ui/react-separator";
-import { SvgArrowWallRight, SvgSearchMenu } from "@opal/icons";
+import { SvgSearchMenu, SvgX } from "@opal/icons";
+import Separator from "@/refresh-components/Separator";
 
 // Build an OnyxDocument from basic file info
 const buildOnyxDocumentFromFile = (
@@ -45,8 +45,8 @@ interface HeaderProps {
 
 function Header({ children, onClose }: HeaderProps) {
   return (
-    <>
-      <div className="flex flex-row w-full items-center justify-between gap-2">
+    <div className="sticky top-0 z-sticky bg-background-tint-01">
+      <div className="flex flex-row w-full items-center justify-between gap-2 py-3">
         <div className="flex items-center gap-2 w-full px-3">
           <SvgSearchMenu className="w-[1.3rem] h-[1.3rem] stroke-text-03" />
           <Text headingH3 text03>
@@ -54,14 +54,14 @@ function Header({ children, onClose }: HeaderProps) {
           </Text>
         </div>
         <IconButton
-          icon={SvgArrowWallRight}
+          icon={SvgX}
           tertiary
           onClick={onClose}
           tooltip="Close Sidebar"
         />
       </div>
-      <Separator className="border-b my-3 mx-2" />
-    </>
+      <Separator noPadding />
+    </div>
   );
 }
 
@@ -149,7 +149,7 @@ const DocumentsSidebar = memo(
         id="onyx-chat-sidebar"
         className="bg-background-tint-01 overflow-y-scroll h-full w-full border-l"
       >
-        <div className="flex flex-col p-3 gap-6">
+        <div className="flex flex-col px-3 gap-6">
           {hasCited && (
             <div>
               <Header onClose={closeSidebar}>Cited Sources</Header>
