@@ -16,6 +16,7 @@ down_revision = "87c52ec39f84"
 branch_labels = None
 depends_on = None
 
+# new tool descriptions (12/2025)
 TOOL_DESCRIPTIONS = {
     "SearchTool": "The Search Action allows the agent to search through connected knowledge to help build an answer.",
     "ImageGenerationTool": (
@@ -42,7 +43,7 @@ TOOL_DESCRIPTIONS = {
 def upgrade() -> None:
     conn = op.get_bind()
     conn.execute(sa.text("BEGIN"))
-    
+
     try:
         for tool_id, description in TOOL_DESCRIPTIONS.items():
             conn.execute(
