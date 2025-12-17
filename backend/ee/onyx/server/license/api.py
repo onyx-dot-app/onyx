@@ -92,36 +92,59 @@ async def fetch_license(
 
     try:
         token = generate_data_plane_token()
+    except ValueError as e:
+        logger.error(f"Failed to generate data plane token: {e}")
+        raise HTTPException(
+            status_code=500, detail="Authentication configuration error"
+        )
+
+    try:
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
         }
         url = f"{CONTROL_PLANE_API_BASE_URL}/license/{tenant_id}"
         response = requests.get(url, headers=headers, timeout=10)
-
-        if not response.ok:
-            raise HTTPException(
-                status_code=response.status_code,
-                detail="Failed to fetch license from control plane",
-            )
+        response.raise_for_status()
 
         data = response.json()
-        license_data = data.get("license")
+        if not isinstance(data, dict) or "license" not in data:
+            raise HTTPException(
+                status_code=502, detail="Invalid response from control plane"
+            )
+
+        license_data = data["license"]
         if not license_data:
             raise HTTPException(status_code=404, detail="No license found")
 
+        # Verify signature before persisting
         payload = verify_license_signature(license_data)
+
+        # Persist to DB and update cache atomically
         upsert_license(db_session, license_data)
-        update_license_cache(payload, source=LicenseSource.AUTO_FETCH)
+        try:
+            update_license_cache(payload, source=LicenseSource.AUTO_FETCH)
+        except Exception as cache_error:
+            # Log but don't fail - DB is source of truth, cache will refresh on next read
+            logger.warning(f"Failed to update license cache: {cache_error}")
 
         return LicenseResponse(success=True, license=payload)
 
+    except requests.HTTPError as e:
+        status_code = e.response.status_code if e.response is not None else 502
+        logger.error(f"Control plane returned error: {status_code}")
+        raise HTTPException(
+            status_code=status_code,
+            detail="Failed to fetch license from control plane",
+        )
     except ValueError as e:
-        logger.error(f"License verification failed: {e}")
+        logger.error(f"License verification failed: {type(e).__name__}")
         raise HTTPException(status_code=400, detail=str(e))
-    except requests.RequestException as e:
+    except requests.RequestException:
         logger.exception("Failed to fetch license from control plane")
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(
+            status_code=502, detail="Failed to connect to control plane"
+        )
 
 
 @router.post("/upload")
@@ -137,27 +160,33 @@ async def upload_license(
     try:
         content = await license_file.read()
         license_data = content.decode("utf-8").strip()
-        payload = verify_license_signature(license_data)
-
-        tenant_id = get_current_tenant_id()
-        if payload.tenant_id != tenant_id:
-            raise HTTPException(
-                status_code=400,
-                detail=f"License tenant ID mismatch. Expected {tenant_id}, got {payload.tenant_id}",
-            )
-
-        upsert_license(db_session, license_data)
-        update_license_cache(payload, source=LicenseSource.MANUAL_UPLOAD)
-
-        return LicenseUploadResponse(
-            success=True,
-            message=f"License uploaded successfully. {payload.seats} seats, expires {payload.expires_at.date()}",
-        )
-
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
     except UnicodeDecodeError:
         raise HTTPException(status_code=400, detail="Invalid license file format")
+
+    try:
+        payload = verify_license_signature(license_data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    tenant_id = get_current_tenant_id()
+    if payload.tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=400,
+            detail=f"License tenant ID mismatch. Expected {tenant_id}, got {payload.tenant_id}",
+        )
+
+    # Persist to DB and update cache
+    upsert_license(db_session, license_data)
+    try:
+        update_license_cache(payload, source=LicenseSource.MANUAL_UPLOAD)
+    except Exception as cache_error:
+        # Log but don't fail - DB is source of truth, cache will refresh on next read
+        logger.warning(f"Failed to update license cache: {cache_error}")
+
+    return LicenseUploadResponse(
+        success=True,
+        message=f"License uploaded successfully. {payload.seats} seats, expires {payload.expires_at.date()}",
+    )
 
 
 @router.post("/refresh")
@@ -196,7 +225,12 @@ async def delete_license(
     Delete the current license.
     Admin only - removes license and invalidates cache.
     """
+    # Invalidate cache first - if DB delete fails, stale cache is worse than no cache
+    try:
+        invalidate_license_cache()
+    except Exception as cache_error:
+        logger.warning(f"Failed to invalidate license cache: {cache_error}")
+
     deleted = db_delete_license(db_session)
-    invalidate_license_cache()
 
     return {"deleted": deleted}
