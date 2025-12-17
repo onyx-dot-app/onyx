@@ -55,13 +55,20 @@ else
     docker run --detach --name onyx_minio --publish 9004:9000 --publish 9005:9001 -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin minio/minio server /data --console-address ":9001"
 fi
 
-# Ensure alembic runs in the correct directory
+# Ensure alembic runs in the correct directory (backend/)
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 PARENT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$PARENT_DIR"
 
 # Give Postgres a second to start
 sleep 1
+
+# Alembic should be configured in the virtualenv for this repo
+if [[ -f "../.venv/bin/activate" ]]; then
+    source ../.venv/bin/activate
+else
+    echo "Warning: Python virtual environment not found at .venv/bin/activate; alembic may not work."
+fi
 
 # Run Alembic upgrade
 echo "Running Alembic migration..."

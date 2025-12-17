@@ -13,6 +13,7 @@ from onyx.chat.chat_state import run_chat_llm_with_state_containers
 from onyx.chat.chat_utils import convert_chat_history
 from onyx.chat.chat_utils import create_chat_history_chain
 from onyx.chat.chat_utils import get_custom_agent_prompt
+from onyx.chat.chat_utils import is_last_assistant_message_clarification
 from onyx.chat.chat_utils import load_all_chat_files
 from onyx.chat.emitter import get_default_emitter
 from onyx.chat.llm_loop import run_llm_loop
@@ -81,6 +82,10 @@ ERROR_TYPE_CANCELLED = "cancelled"
 
 class ToolCallException(Exception):
     """Exception raised for errors during tool calls."""
+
+    def __init__(self, message: str, tool_name: str | None = None):
+        super().__init__(message)
+        self.tool_name = tool_name
 
 
 def _extract_project_file_texts_and_images(
@@ -328,7 +333,7 @@ def stream_chat_message_objects(
     tenant_id = get_current_tenant_id()
     use_existing_user_message = new_msg_req.use_existing_user_message
 
-    llm: LLM
+    llm: LLM | None = None
 
     try:
         user_id = user.id if user is not None else None
@@ -545,6 +550,10 @@ def stream_chat_message_objects(
             if chat_session.project_id:
                 raise RuntimeError("Deep research is not supported for projects")
 
+            # Skip clarification if the last assistant message was a clarification
+            # (user has already responded to a clarification question)
+            skip_clarification = is_last_assistant_message_clarification(chat_history)
+
             yield from run_chat_llm_with_state_containers(
                 run_deep_research_llm_loop,
                 is_connected=check_is_connected,
@@ -556,6 +565,7 @@ def stream_chat_message_objects(
                 llm=llm,
                 token_counter=token_counter,
                 db_session=db_session,
+                skip_clarification=skip_clarification,
                 user_identity=user_identity,
             )
         else:
@@ -623,13 +633,18 @@ def stream_chat_message_objects(
             tool_calls=state_container.tool_calls,
             db_session=db_session,
             assistant_message=assistant_response,
+            is_clarification=state_container.is_clarification,
         )
 
     except ValueError as e:
         logger.exception("Failed to process chat message.")
 
         error_msg = str(e)
-        yield StreamingError(error=error_msg)
+        yield StreamingError(
+            error=error_msg,
+            error_code="VALIDATION_ERROR",
+            is_retryable=True,
+        )
         db_session.rollback()
         return
 
@@ -639,9 +654,17 @@ def stream_chat_message_objects(
         stack_trace = traceback.format_exc()
 
         if isinstance(e, ToolCallException):
-            yield StreamingError(error=error_msg, stack_trace=stack_trace)
+            yield StreamingError(
+                error=error_msg,
+                stack_trace=stack_trace,
+                error_code="TOOL_CALL_FAILED",
+                is_retryable=True,
+                details={"tool_name": e.tool_name} if e.tool_name else None,
+            )
         elif llm:
-            client_error_msg = litellm_exception_to_error_msg(e, llm)
+            client_error_msg, error_code, is_retryable = litellm_exception_to_error_msg(
+                e, llm
+            )
             if llm.config.api_key and len(llm.config.api_key) > 2:
                 client_error_msg = client_error_msg.replace(
                     llm.config.api_key, "[REDACTED_API_KEY]"
@@ -650,7 +673,24 @@ def stream_chat_message_objects(
                     llm.config.api_key, "[REDACTED_API_KEY]"
                 )
 
-            yield StreamingError(error=client_error_msg, stack_trace=stack_trace)
+            yield StreamingError(
+                error=client_error_msg,
+                stack_trace=stack_trace,
+                error_code=error_code,
+                is_retryable=is_retryable,
+                details={
+                    "model": llm.config.model_name,
+                    "provider": llm.config.model_provider,
+                },
+            )
+        else:
+            # LLM was never initialized - early failure
+            yield StreamingError(
+                error="Failed to initialize the chat. Please check your configuration and try again.",
+                stack_trace=stack_trace,
+                error_code="INIT_FAILED",
+                is_retryable=True,
+            )
 
         db_session.rollback()
         return

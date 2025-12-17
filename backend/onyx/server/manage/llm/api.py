@@ -149,7 +149,7 @@ def test_llm_configuration(
     )
 
     if error:
-        client_error_msg = litellm_exception_to_error_msg(
+        client_error_msg, _error_code, _is_retryable = litellm_exception_to_error_msg(
             error, llm, fallback_to_error_msg=True
         )
         raise HTTPException(status_code=400, detail=client_error_msg)
