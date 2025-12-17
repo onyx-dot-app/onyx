@@ -474,7 +474,7 @@ def run_llm_step(
                 for tool_call_delta in flush_delta.tool_calls:
                     _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
 
-        tool_calls = _extract_tool_call_kickoffs(id_to_tool_call_map)
+        tool_calls = _extract_tool_call_kickoffs(id_to_tool_call_map, turn_index)
         if tool_calls:
             tool_calls_list: list[ToolCall] = [
                 ToolCall(

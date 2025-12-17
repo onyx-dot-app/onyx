@@ -24,7 +24,7 @@ import {
   SearchToolStep2Renderer,
   constructCurrentSearchState,
 } from "./renderers/SearchToolRendererV2";
-import { SvgChevronDownSmall } from "@opal/icons";
+import { SvgChevronDown, SvgChevronDownSmall } from "@opal/icons";
 import { LoadingSpinner } from "../../chat_search/LoadingSpinner";
 
 enum DisplayType {
@@ -299,6 +299,21 @@ function ParallelToolTabs({
             aria-label="Next tab"
           >
             <FiChevronRight className="w-4 h-4" />
+          </button>
+
+          {/* Collapse/expand button */}
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="flex-shrink-0 p-1 rounded hover:bg-background-subtle-hover transition-colors ml-0.5"
+            aria-label={isExpanded ? "Collapse" : "Expand"}
+            aria-expanded={isExpanded}
+          >
+            <SvgChevronDown
+              className={cn(
+                "w-4 h-4 stroke-text-400 transition-transform duration-150 ease-in-out",
+                isExpanded && "rotate-[-180deg]"
+              )}
+            />
           </button>
         </div>
       </div>
