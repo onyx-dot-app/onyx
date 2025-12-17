@@ -452,11 +452,13 @@ export default function Page() {
     useState<WebSearchProviderType | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [apiKeyValue, setApiKeyValue] = useState("");
+  const [apiKeyChanged, setApiKeyChanged] = useState(false);
   const [searchEngineIdValue, setSearchEngineIdValue] = useState("");
   const [selectedContentProviderType, setSelectedContentProviderType] =
     useState<WebContentProviderType | null>(null);
   const [isContentModalOpen, setIsContentModalOpen] = useState(false);
   const [contentApiKeyValue, setContentApiKeyValue] = useState("");
+  const [contentApiKeyChanged, setContentApiKeyChanged] = useState(false);
   const [contentBaseUrlValue, setContentBaseUrlValue] = useState("");
   const [isProcessingSearch, setIsProcessingSearch] = useState(false);
   const [searchStatusMessage, setSearchStatusMessage] = useState<string | null>(
@@ -514,6 +516,7 @@ export default function Page() {
   useEffect(() => {
     if (!isModalOpen || !selectedProviderType) {
       setApiKeyValue("");
+      setApiKeyChanged(false);
       setSearchEngineIdValue("");
       setSearchStatusMessage(null);
       setSearchErrorMessage(null);
@@ -535,8 +538,10 @@ export default function Page() {
       // If there's a stored key, show a masked placeholder
       if (provider?.has_api_key) {
         setApiKeyValue("••••••••••••••••");
+        setApiKeyChanged(false);
       } else {
         setApiKeyValue("");
+        setApiKeyChanged(true); // New provider, any input is a change
       }
       setSearchStatusMessage(null);
       setSearchErrorMessage(null);
@@ -563,6 +568,7 @@ export default function Page() {
   useEffect(() => {
     if (!isContentModalOpen || !selectedContentProviderType) {
       setContentApiKeyValue("");
+      setContentApiKeyChanged(false);
       setContentBaseUrlValue("");
       setContentStatusMessage(null);
       setContentErrorMessage(null);
@@ -577,8 +583,10 @@ export default function Page() {
     // If there's a stored key, show a masked placeholder
     if (provider?.has_api_key) {
       setContentApiKeyValue("••••••••••••••••");
+      setContentApiKeyChanged(false);
     } else {
       setContentApiKeyValue("");
+      setContentApiKeyChanged(true); // New provider, any input is a change
     }
 
     if (selectedContentProviderType === "firecrawl") {
@@ -982,45 +990,67 @@ export default function Page() {
       (provider) => provider.provider_type === selectedProviderType
     );
 
+    // Check if config changed from stored values
+    const storedConfig = existingProvider?.config || {};
+    const configChanged =
+      selectedProviderType === "google_pse" &&
+      (storedConfig.search_engine_id || storedConfig.cx || "") !==
+        trimmedSearchEngineId;
+
+    // Determine if validation is needed (new provider, API key changed, or config changed)
+    const needsValidation =
+      !existingProvider?.has_api_key || apiKeyChanged || configChanged;
+
+    // For new providers, we must have an API key
+    if (!existingProvider?.has_api_key && !trimmedKey) {
+      return;
+    }
+
+    // If API key changed, we need the new key
+    if (apiKeyChanged && !trimmedKey) {
+      return;
+    }
+
     setIsProcessingSearch(true);
     setSearchErrorMessage(null);
-    setSearchStatusMessage(
-      selectedProviderType === "searxng"
-        ? "Checking connection..."
-        : "Validating API key..."
-    );
     setActivationError(null);
 
     try {
-      const testResponse = await fetch(
-        "/api/admin/web-search/search-providers/test",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            provider_type: selectedProviderType,
-            api_key: trimmedKey,
-            config,
-          }),
-        }
-      );
-
-      if (!testResponse.ok) {
-        const errorBody = await testResponse.json().catch(() => ({}));
-        throw new Error(
-          typeof errorBody?.detail === "string"
-            ? errorBody.detail
-            : "Unknown error validating search provider."
+      // Validate if needed (new provider, API key changed, or config changed)
+      if (needsValidation) {
+        setSearchStatusMessage("Validating configuration...");
+        const testResponse = await fetch(
+          "/api/admin/web-search/search-providers/test",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              provider_type: selectedProviderType,
+              // Send API key if changed, otherwise use stored key
+              api_key: apiKeyChanged ? trimmedKey : null,
+              use_stored_key: !apiKeyChanged && existingProvider?.has_api_key,
+              config,
+            }),
+          }
         );
-      }
 
-      setSearchStatusMessage(
-        selectedProviderType === "searxng"
-          ? "Connection successful. Activating provider..."
-          : "API key validated. Activating provider..."
-      );
+        if (!testResponse.ok) {
+          const errorBody = await testResponse.json().catch(() => ({}));
+          throw new Error(
+            typeof errorBody?.detail === "string"
+              ? errorBody.detail
+              : "Failed to validate configuration."
+          );
+        }
+
+        setSearchStatusMessage(
+          "Configuration validated. Activating provider..."
+        );
+      } else {
+        setSearchStatusMessage("Activating provider...");
+      }
 
       const payload = {
         id: existingProvider?.id ?? null,
@@ -1029,8 +1059,8 @@ export default function Page() {
           SEARCH_PROVIDER_LABEL[selectedProviderType] ??
           selectedProviderType,
         provider_type: selectedProviderType,
-        api_key: trimmedKey,
-        api_key_changed: true,
+        api_key: apiKeyChanged ? trimmedKey : null,
+        api_key_changed: apiKeyChanged,
         config,
         activate: true,
       };
@@ -1311,10 +1341,6 @@ export default function Page() {
     }
 
     const trimmedKey = trimmedContentApiKey;
-    if (!trimmedKey) {
-      return;
-    }
-
     const config: Record<string, string> = {};
     if (selectedContentProviderType === "firecrawl" && trimmedContentBaseUrl) {
       config.base_url = trimmedContentBaseUrl;
@@ -1324,36 +1350,70 @@ export default function Page() {
       (provider) => provider.provider_type === selectedContentProviderType
     );
 
+    // Check if config changed from stored values
+    const storedConfig = existingProvider?.config || {};
+    const storedBaseUrl =
+      storedConfig.base_url ||
+      storedConfig.api_base_url ||
+      "https://api.firecrawl.dev/v1/scrape";
+    const configChanged =
+      selectedContentProviderType === "firecrawl" &&
+      storedBaseUrl !== trimmedContentBaseUrl;
+
+    // Determine if validation is needed (new provider, API key changed, or config changed)
+    const needsValidation =
+      !existingProvider?.has_api_key || contentApiKeyChanged || configChanged;
+
+    // For new providers, we must have an API key
+    if (!existingProvider?.has_api_key && !trimmedKey) {
+      return;
+    }
+
+    // If API key changed, we need the new key
+    if (contentApiKeyChanged && !trimmedKey) {
+      return;
+    }
+
     setIsProcessingContent(true);
     setContentErrorMessage(null);
-    setContentStatusMessage("Validating API key...");
 
     try {
-      const testResponse = await fetch(
-        "/api/admin/web-search/content-providers/test",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            provider_type: selectedContentProviderType,
-            api_key: trimmedKey,
-            config,
-          }),
-        }
-      );
-
-      if (!testResponse.ok) {
-        const errorBody = await testResponse.json().catch(() => ({}));
-        throw new Error(
-          typeof errorBody?.detail === "string"
-            ? errorBody.detail
-            : "Failed to validate API key."
+      // Validate if needed (new provider, API key changed, or config changed)
+      if (needsValidation) {
+        setContentStatusMessage("Validating configuration...");
+        const testResponse = await fetch(
+          "/api/admin/web-search/content-providers/test",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              provider_type: selectedContentProviderType,
+              // Send API key if changed, otherwise use stored key
+              api_key: contentApiKeyChanged ? trimmedKey : null,
+              use_stored_key:
+                !contentApiKeyChanged && existingProvider?.has_api_key,
+              config,
+            }),
+          }
         );
-      }
 
-      setContentStatusMessage("API key validated. Activating crawler...");
+        if (!testResponse.ok) {
+          const errorBody = await testResponse.json().catch(() => ({}));
+          throw new Error(
+            typeof errorBody?.detail === "string"
+              ? errorBody.detail
+              : "Failed to validate configuration."
+          );
+        }
+
+        setContentStatusMessage(
+          "Configuration validated. Activating crawler..."
+        );
+      } else {
+        setContentStatusMessage("Activating crawler...");
+      }
 
       const payload = {
         id: existingProvider?.id ?? null,
@@ -1362,8 +1422,8 @@ export default function Page() {
           CONTENT_PROVIDER_LABEL[selectedContentProviderType] ??
           selectedContentProviderType,
         provider_type: selectedContentProviderType,
-        api_key: trimmedKey,
-        api_key_changed: true,
+        api_key: contentApiKeyChanged ? trimmedKey : null,
+        api_key_changed: contentApiKeyChanged,
         config,
         activate: true,
       };
@@ -1843,7 +1903,13 @@ export default function Page() {
             : ""
         }
         apiKeyValue={apiKeyValue}
-        onApiKeyChange={(value) => setApiKeyValue(value)}
+        onApiKeyChange={(value) => {
+          setApiKeyValue(value);
+          // Mark as changed if user is typing something other than the masked placeholder
+          if (value !== "••••••••••••••••") {
+            setApiKeyChanged(true);
+          }
+        }}
         optionalField={
           selectedProviderType === "google_pse"
             ? {
@@ -1921,7 +1987,13 @@ export default function Page() {
             : ""
         }
         apiKeyValue={contentApiKeyValue}
-        onApiKeyChange={(value) => setContentApiKeyValue(value)}
+        onApiKeyChange={(value) => {
+          setContentApiKeyValue(value);
+          // Mark as changed if user is typing something other than the masked placeholder
+          if (value !== "••••••••••••••••") {
+            setContentApiKeyChanged(true);
+          }
+        }}
         optionalField={
           selectedContentProviderType === "firecrawl"
             ? {

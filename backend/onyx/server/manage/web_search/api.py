@@ -14,8 +14,10 @@ from onyx.db.web_search import deactivate_web_search_provider
 from onyx.db.web_search import delete_web_content_provider
 from onyx.db.web_search import delete_web_search_provider
 from onyx.db.web_search import fetch_web_content_provider_by_name
+from onyx.db.web_search import fetch_web_content_provider_by_type
 from onyx.db.web_search import fetch_web_content_providers
 from onyx.db.web_search import fetch_web_search_provider_by_name
+from onyx.db.web_search import fetch_web_search_provider_by_type
 from onyx.db.web_search import fetch_web_search_providers
 from onyx.db.web_search import set_active_web_content_provider
 from onyx.db.web_search import set_active_web_search_provider
@@ -147,11 +149,31 @@ def deactivate_search_provider(
 def test_search_provider(
     request: WebSearchProviderTestRequest,
     _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
+    # Determine which API key to use
+    api_key = request.api_key
+    if request.use_stored_key:
+        existing_provider = fetch_web_search_provider_by_type(
+            request.provider_type, db_session
+        )
+        if existing_provider is None or not existing_provider.api_key:
+            raise HTTPException(
+                status_code=400,
+                detail="No stored API key found for this provider type.",
+            )
+        api_key = existing_provider.api_key
+
+    if not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="API key is required. Either provide api_key or set use_stored_key to true.",
+        )
+
     try:
         provider = build_search_provider_from_config(
             provider_type=request.provider_type,
-            api_key=request.api_key,
+            api_key=api_key,
             config=request.config or {},
         )
     except ValueError as exc:
@@ -291,11 +313,31 @@ def deactivate_content_provider(
 def test_content_provider(
     request: WebContentProviderTestRequest,
     _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
+    # Determine which API key to use
+    api_key = request.api_key
+    if request.use_stored_key:
+        existing_provider = fetch_web_content_provider_by_type(
+            request.provider_type, db_session
+        )
+        if existing_provider is None or not existing_provider.api_key:
+            raise HTTPException(
+                status_code=400,
+                detail="No stored API key found for this provider type.",
+            )
+        api_key = existing_provider.api_key
+
+    if not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="API key is required. Either provide api_key or set use_stored_key to true.",
+        )
+
     try:
         provider = build_content_provider_from_config(
             provider_type=request.provider_type,
-            api_key=request.api_key,
+            api_key=api_key,
             config=request.config,
         )
     except ValueError as exc:
