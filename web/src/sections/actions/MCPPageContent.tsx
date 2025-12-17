@@ -293,6 +293,41 @@ export default function MCPPageContent() {
     [mcpServers, authModal]
   );
 
+  const triggerFetchToolsInPlace = useCallback(
+    async (serverId: number) => {
+      if (fetchingToolsServerIds.includes(serverId)) {
+        return;
+      }
+
+      try {
+        // Expand tools list immediately so the user sees the skeleton
+        setServerToExpand(serverId);
+
+        await updateMCPServerStatus(serverId, MCPServerStatus.FETCHING_TOOLS);
+        await mutateMcpServers();
+
+        await refreshMCPServerTools(serverId);
+
+        setPopup({
+          message: "Successfully connected and fetched tools",
+          type: "success",
+        });
+
+        await mutateMcpServers();
+      } catch (error) {
+        console.error("Failed to fetch tools:", error);
+        setPopup({
+          message: `Failed to fetch tools: ${
+            error instanceof Error ? error.message : "Unknown error"
+          }`,
+          type: "error",
+        });
+        await mutateMcpServers();
+      }
+    },
+    [fetchingToolsServerIds, mutateMcpServers, setPopup, setServerToExpand]
+  );
+
   const handleReconnect = useCallback(
     async (serverId: number) => {
       try {
@@ -569,6 +604,8 @@ export default function MCPPageContent() {
           mcpServer={activeServer}
           skipOverlay
           setPopup={setPopup}
+          onTriggerFetchTools={triggerFetchToolsInPlace}
+          mutateMcpServers={mutateMcpServers}
         />
       </authModal.Provider>
 

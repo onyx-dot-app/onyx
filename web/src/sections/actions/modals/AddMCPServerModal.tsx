@@ -103,9 +103,10 @@ export default function AddMCPServerModal({
           onServerCreated(createdServer);
         }
       }
-      // Close modal and clear server state
+      // Close modal. Do NOT clear `activeServer` here because this modal
+      // frequently transitions to other modals (authenticate/disconnect), and
+      // clearing would race those flows.
       toggle(false);
-      setActiveServer(null);
     } catch (error) {
       console.error(
         `Error ${isEditMode ? "updating" : "creating"} MCP server:`,
@@ -126,9 +127,6 @@ export default function AddMCPServerModal({
   // Handle modal close to clear server state
   const handleModalClose = (open: boolean) => {
     toggle(open);
-    if (!open) {
-      setActiveServer(null);
-    }
   };
 
   return (

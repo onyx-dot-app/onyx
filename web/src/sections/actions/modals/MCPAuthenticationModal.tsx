@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import useSWR from "swr";
+import useSWR, { KeyedMutator } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Modal from "@/refresh-components/Modal";
 import { FormField } from "@/refresh-components/form/FormField";
@@ -20,6 +20,7 @@ import {
   MCPTransportType,
   MCPServerStatus,
   MCPServer,
+  MCPServersResponse,
 } from "@/lib/tools/interfaces";
 import Separator from "@/refresh-components/Separator";
 import {
@@ -40,6 +41,8 @@ interface MCPAuthenticationModalProps {
   mcpServer: MCPServer | null;
   skipOverlay?: boolean;
   setPopup?: (spec: PopupSpec) => void;
+  onTriggerFetchTools?: (serverId: number) => Promise<void> | void;
+  mutateMcpServers: KeyedMutator<MCPServersResponse>;
 }
 
 interface MCPAuthTemplate {
@@ -104,6 +107,8 @@ export default function MCPAuthenticationModal({
   mcpServer,
   skipOverlay = false,
   setPopup,
+  onTriggerFetchTools,
+  mutateMcpServers,
 }: MCPAuthenticationModalProps) {
   const { isOpen, toggle } = useModal();
   const [activeAuthTab, setActiveAuthTab] = useState<"per-user" | "admin">(
@@ -247,7 +252,6 @@ export default function MCPAuthenticationModal({
 
     try {
       const authType = values.auth_type;
-
       // Step 1: Save the authentication configuration to the MCP server
       const { data: serverResult, error: serverError } =
         await upsertMCPServer(serverData);
@@ -282,18 +286,28 @@ export default function MCPAuthenticationModal({
 
         if (!oauthResponse.ok) {
           const error = await oauthResponse.json();
+          // Refresh server list so latest status is visible after auth failure
+          await mutateMcpServers();
+          toggle(false);
           throw new Error("Failed to initiate OAuth: " + error.detail);
         }
 
         const { oauth_url } = await oauthResponse.json();
         window.location.href = oauth_url;
       } else {
-        // For non-OAuth authentication, redirect to the page with server_id and trigger_fetch
-        window.location.href = `/admin/actions/mcp/?server_id=${mcpServer.id}&trigger_fetch=true`;
+        // For non-OAuth authentication, trigger tools fetch in-place (no hard navigation)
+        if (onTriggerFetchTools) {
+          onTriggerFetchTools(mcpServer.id);
+        } else {
+          // Fallback to previous behavior if parent didn't provide handler
+          window.location.href = `/admin/actions/mcp/?server_id=${mcpServer.id}&trigger_fetch=true`;
+        }
         toggle(false);
       }
     } catch (error) {
       console.error("Error saving authentication:", error);
+      // Ensure UI reflects latest status after any auth/config failure
+      await mutateMcpServers();
       setPopup?.({
         message:
           error instanceof Error
