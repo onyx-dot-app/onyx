@@ -190,7 +190,7 @@ def _handle_jira_search_error(e: Exception, jql: str) -> None:
         )
 
     # Re-raise for other error types
-    raise
+    raise e
 
 
 def enhanced_search_ids(
@@ -213,7 +213,9 @@ def enhanced_search_ids(
         response.raise_for_status()
         response_json = response.json()
     except Exception as e:
+        # _handle_jira_search_error always raises an exception, so this never returns
         _handle_jira_search_error(e, jql)
+        raise  # This line is unreachable but helps type checker
 
     return [str(issue["id"]) for issue in response_json["issues"]], response_json.get(
         "nextPageToken"
@@ -305,7 +307,9 @@ def _perform_jql_search_v2(
             fields=fields,
         )
     except JIRAError as e:
+        # _handle_jira_search_error always raises an exception, so this never returns
         _handle_jira_search_error(e, jql)
+        raise  # This line is unreachable but helps type checker
 
     for issue in issues:
         if isinstance(issue, Issue):
