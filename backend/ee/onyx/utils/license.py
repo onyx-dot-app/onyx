@@ -2,6 +2,7 @@
 
 import base64
 import json
+import os
 from datetime import datetime
 from datetime import timezone
 
@@ -20,27 +21,19 @@ logger = setup_logger()
 
 
 # RSA-4096 Public Key for license verification
-# This key is generated on the control plane and embedded here
-# Replace with actual public key when generated
-PUBLIC_KEY_PEM = """-----BEGIN PUBLIC KEY-----
-MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA0PLACEHOLDER0000000000
-0000000000000000000000000000000000000000000000000000000000000000000
-0000000000000000000000000000000000000000000000000000000000000000000
-0000000000000000000000000000000000000000000000000000000000000000000
-0000000000000000000000000000000000000000000000000000000000000000000
-0000000000000000000000000000000000000000000000000000000000000000000
-0000000000000000000000000000000000000000000000000000000000000000000
-0000000000000000000000000000000000000000000000000000000000000000000
-0000000000000000000000000000000000000000000000000000000000000000000
-0000000000000000000000000000000000000000000000000000000000000000000
-0000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000AQAB
------END PUBLIC KEY-----"""
+# Load from environment variable - key is generated on the control plane
+# In production, inject via Kubernetes secrets or secrets manager
+LICENSE_PUBLIC_KEY_PEM = os.environ.get("LICENSE_PUBLIC_KEY_PEM", "")
 
 
 def _get_public_key() -> RSAPublicKey:
-    """Load the embedded public key."""
-    key = serialization.load_pem_public_key(PUBLIC_KEY_PEM.encode())
+    """Load the public key from environment variable."""
+    if not LICENSE_PUBLIC_KEY_PEM:
+        raise ValueError(
+            "LICENSE_PUBLIC_KEY_PEM environment variable not set. "
+            "License verification requires the control plane public key."
+        )
+    key = serialization.load_pem_public_key(LICENSE_PUBLIC_KEY_PEM.encode())
     if not isinstance(key, RSAPublicKey):
         raise ValueError("Expected RSA public key")
     return key

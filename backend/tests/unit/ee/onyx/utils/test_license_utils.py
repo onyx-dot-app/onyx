@@ -78,7 +78,7 @@ class TestVerifyLicenseSignature:
             format=serialization.PublicFormat.SubjectPublicKeyInfo,
         ).decode()
 
-        with patch("ee.onyx.utils.license.PUBLIC_KEY_PEM", public_key_pem):
+        with patch("ee.onyx.utils.license.LICENSE_PUBLIC_KEY_PEM", public_key_pem):
             result = verify_license_signature(license_data)
 
         assert result.tenant_id == "tenant_123"
@@ -108,7 +108,7 @@ class TestVerifyLicenseSignature:
         ).decode()
 
         with patch(
-            "ee.onyx.utils.license.PUBLIC_KEY_PEM",
+            "ee.onyx.utils.license.LICENSE_PUBLIC_KEY_PEM",
             different_public_key_pem,
         ):
             with pytest.raises(ValueError, match="Invalid license signature"):
@@ -154,7 +154,7 @@ class TestVerifyLicenseSignature:
             format=serialization.PublicFormat.SubjectPublicKeyInfo,
         ).decode()
 
-        with patch("ee.onyx.utils.license.PUBLIC_KEY_PEM", public_key_pem):
+        with patch("ee.onyx.utils.license.LICENSE_PUBLIC_KEY_PEM", public_key_pem):
             with pytest.raises(ValueError, match="Invalid license signature"):
                 verify_license_signature(encoded_license)
 
