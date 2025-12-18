@@ -165,14 +165,27 @@ export const logoutSS = async (
 
 export const getCurrentUserSS = async (): Promise<User | null> => {
   try {
+    let cookieString = (await cookies())
+      .getAll()
+      .map((cookie) => `${cookie.name}=${cookie.value}`)
+      .join("; ");
+
+    // Inject debug auth cookie for local development against remote backend
+    if (
+      process.env.DEBUG_AUTH_COOKIE &&
+      process.env.NODE_ENV === "development"
+    ) {
+      const debugCookie = `fastapiusersauth=${process.env.DEBUG_AUTH_COOKIE}`;
+      cookieString = cookieString
+        ? `${cookieString}; ${debugCookie}`
+        : debugCookie;
+    }
+
     const response = await fetch(buildUrl("/me"), {
       credentials: "include",
       next: { revalidate: 0 },
       headers: {
-        cookie: (await cookies())
-          .getAll()
-          .map((cookie) => `${cookie.name}=${cookie.value}`)
-          .join("; "),
+        cookie: cookieString,
       },
     });
 
@@ -189,8 +202,18 @@ export const getCurrentUserSS = async (): Promise<User | null> => {
 };
 
 export const processCookies = (cookies: ReadonlyRequestCookies): string => {
-  return cookies
+  let cookieString = cookies
     .getAll()
     .map((cookie) => `${cookie.name}=${cookie.value}`)
     .join("; ");
+
+  // Inject debug auth cookie for local development against remote backend
+  if (process.env.DEBUG_AUTH_COOKIE && process.env.NODE_ENV === "development") {
+    const debugCookie = `fastapiusersauth=${process.env.DEBUG_AUTH_COOKIE}`;
+    cookieString = cookieString
+      ? `${cookieString}; ${debugCookie}`
+      : debugCookie;
+  }
+
+  return cookieString;
 };

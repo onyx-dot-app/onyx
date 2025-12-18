@@ -57,15 +57,46 @@ export class UrlBuilder {
 }
 
 export async function fetchSS(url: string, options?: RequestInit) {
+  // Build cookie string from Next.js cookies
+  let cookieString = (await cookies())
+    .getAll()
+    .map((cookie) => `${cookie.name}=${cookie.value}`)
+    .join("; ");
+
+  // Inject debug auth cookie for local development against remote backend
+  if (process.env.DEBUG_AUTH_COOKIE && process.env.NODE_ENV === "development") {
+    const debugCookie = `fastapiusersauth=${process.env.DEBUG_AUTH_COOKIE}`;
+    cookieString = cookieString
+      ? `${cookieString}; ${debugCookie}`
+      : debugCookie;
+  }
+
   const init = options || {
     credentials: "include",
     cache: "no-store",
     headers: {
-      cookie: (await cookies())
-        .getAll()
-        .map((cookie) => `${cookie.name}=${cookie.value}`)
-        .join("; "),
+      cookie: cookieString,
     },
   };
+
+  // If options were provided, ensure the cookie header is set
+  if (options) {
+    const headers = new Headers(options.headers);
+    if (!headers.has("cookie")) {
+      headers.set("cookie", cookieString);
+    } else if (
+      process.env.DEBUG_AUTH_COOKIE &&
+      process.env.NODE_ENV === "development"
+    ) {
+      // Append debug cookie to existing cookies
+      const existingCookies = headers.get("cookie") || "";
+      const debugCookie = `fastapiusersauth=${process.env.DEBUG_AUTH_COOKIE}`;
+      if (!existingCookies.includes("fastapiusersauth=")) {
+        headers.set("cookie", `${existingCookies}; ${debugCookie}`);
+      }
+    }
+    init.headers = headers;
+  }
+
   return fetch(buildUrl(url), init);
 }
