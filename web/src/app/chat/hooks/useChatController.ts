@@ -309,66 +309,59 @@ export function useChatController({
     const currentSession = getCurrentSessionId();
     const lastMessage = currentMessageHistory[currentMessageHistory.length - 1];
 
-    // Check if the current message uses agent search (any non-null research type)
-    const isDeepResearch = lastMessage?.researchType === ResearchType.Deep;
-    const isSimpleAgentFrameworkDisabled =
-      posthog.isFeatureEnabled("disable-simple-agent-framework") ?? false;
-
-    // Always call the backend stop endpoint unless feature flag is enabled to disable it
-    if (!isSimpleAgentFrameworkDisabled) {
-      try {
-        await stopChatSession(currentSession);
-      } catch (error) {
-        console.error("Failed to stop chat session:", error);
-        // Continue with UI cleanup even if backend call fails
-      }
+    // Always call the backend stop endpoint to set the Redis fence
+    // This signals the backend to stop processing as soon as possible
+    try {
+      await stopChatSession(currentSession);
+    } catch (error) {
+      console.error("Failed to stop chat session:", error);
+      // Continue with UI cleanup even if backend call fails
     }
 
-    // Only do the subsequent cleanup if the message was agent search or feature flag is enabled to disable it
-    if (isDeepResearch || isSimpleAgentFrameworkDisabled) {
-      abortSession(currentSession);
+    // Always abort the stream to cancel the fetch request immediately
+    abortSession(currentSession);
 
-      if (
-        lastMessage &&
-        lastMessage.type === "assistant" &&
-        lastMessage.toolCall &&
-        lastMessage.toolCall.tool_result === undefined
-      ) {
+    // Clean up incomplete tool calls
+    if (
+      lastMessage &&
+      lastMessage.type === "assistant" &&
+      lastMessage.toolCall &&
+      lastMessage.toolCall.tool_result === undefined
+    ) {
+      const newMessageTree = new Map(currentMessageTree);
+      const updatedMessage = { ...lastMessage, toolCall: null };
+      newMessageTree.set(lastMessage.nodeId, updatedMessage);
+      updateSessionMessageTree(currentSession, newMessageTree);
+    }
+
+    // Ensure UI reflects a STOP event by appending a STOP packet to the
+    // currently streaming assistant message if one exists and doesn't already
+    // contain a STOP. This makes AIMessage behave as if a STOP packet arrived.
+    if (lastMessage && lastMessage.type === "assistant") {
+      const packets = lastMessage.packets || [];
+      const hasStop = packets.some((p) => p.obj.type === PacketType.STOP);
+      if (!hasStop) {
+        const maxTurnIndex =
+          packets.length > 0
+            ? Math.max(...packets.map((p) => p.turn_index))
+            : 0;
+        const stopPacket: Packet = {
+          turn_index: maxTurnIndex + 1,
+          obj: { type: PacketType.STOP },
+        } as Packet;
+
         const newMessageTree = new Map(currentMessageTree);
-        const updatedMessage = { ...lastMessage, toolCall: null };
+        const updatedMessage = {
+          ...lastMessage,
+          packets: [...packets, stopPacket],
+        } as Message;
         newMessageTree.set(lastMessage.nodeId, updatedMessage);
         updateSessionMessageTree(currentSession, newMessageTree);
-      }
-
-      // Ensure UI reflects a STOP event by appending a STOP packet to the
-      // currently streaming assistant message if one exists and doesn't already
-      // contain a STOP. This makes AIMessage behave as if a STOP packet arrived.
-      if (lastMessage && lastMessage.type === "assistant") {
-        const packets = lastMessage.packets || [];
-        const hasStop = packets.some((p) => p.obj.type === PacketType.STOP);
-        if (!hasStop) {
-          const maxTurnIndex =
-            packets.length > 0
-              ? Math.max(...packets.map((p) => p.turn_index))
-              : 0;
-          const stopPacket: Packet = {
-            turn_index: maxTurnIndex + 1,
-            obj: { type: PacketType.STOP },
-          } as Packet;
-
-          const newMessageTree = new Map(currentMessageTree);
-          const updatedMessage = {
-            ...lastMessage,
-            packets: [...packets, stopPacket],
-          } as Message;
-          newMessageTree.set(lastMessage.nodeId, updatedMessage);
-          updateSessionMessageTree(currentSession, newMessageTree);
-        }
       }
     }
 
     updateChatStateAction(currentSession, "input");
-  }, [currentMessageHistory, currentMessageTree, posthog]);
+  }, [currentMessageHistory, currentMessageTree]);
 
   const onSubmit = useCallback(
     async ({
