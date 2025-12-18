@@ -110,11 +110,7 @@ def test_blob_s3_connector(
         assert isinstance(section, TextSection)
 
         file_extension = get_file_ext(doc.semantic_identifier)
-        if file_extension in OnyxFileExtensions.PLAIN_TEXT_EXTENSIONS:
-            assert len(section.text) > 0
-            continue
-
-        if file_extension in OnyxFileExtensions.DOCUMENT_EXTENSIONS:
+        if file_extension in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS:
             assert len(section.text) > 0
             continue
 
