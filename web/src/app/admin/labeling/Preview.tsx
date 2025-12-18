@@ -71,19 +71,19 @@ function PreviewStart({
         <div className="flex flex-col h-fit w-full justify-start">
           <div
             className={cn(
-              "rounded-08 border border-transparent px-1 py-0.5 transition-colors",
-              highlightTarget === "sidebar" && "border-theme-primary-05"
+              "inline-flex max-w-full items-center justify-start gap-1 rounded-08 p-0.5 overflow-hidden",
+              highlightTarget === "sidebar" && "bg-highlight-match"
             )}
           >
-            <div className="flex flex-row items-center justify-start w-28 gap-1 origin-top-left scale-75">
-              {logoDisplayStyle !== "name_only" && (
-                <PreviewLogo logoSrc={logoSrc} size={18} />
-              )}
-              {(logoDisplayStyle === "logo_and_name" ||
-                logoDisplayStyle === "name_only") && (
-                <Truncated headingH3>{applicationDisplayName}</Truncated>
-              )}
-            </div>
+            {logoDisplayStyle !== "name_only" && (
+              <PreviewLogo logoSrc={logoSrc} size={16} />
+            )}
+            {(logoDisplayStyle === "logo_and_name" ||
+              logoDisplayStyle === "name_only") && (
+              <Truncated mainUiAction text04 nowrap>
+                {applicationDisplayName}
+              </Truncated>
+            )}
           </div>
         </div>
       </div>
@@ -91,30 +91,42 @@ function PreviewStart({
       <div className="flex flex-col flex-1 h-full">
         {/* Chat Body */}
         <div className="flex flex-col flex-1 h-full items-center justify-center px-3">
-          <div
-            className={cn(
-              "flex flex-row items-center justify-center gap-2 mb-2 rounded-08 border border-transparent px-2 py-1 transition-colors",
-              highlightTarget === "greeting" && "border-theme-primary-05"
-            )}
-          >
-            <PreviewLogo logoSrc={logoSrc} size={18} />
-            <Text text04 headingH3>
-              {greeting_message}
-            </Text>
+          <div className="flex w-full max-w-[300px] flex-col items-center justify-center">
+            <div
+              className={cn(
+                "inline-flex max-w-full items-center justify-center gap-1 mb-2 rounded-08 border border-transparent p-0.5 text-center",
+                highlightTarget === "greeting" && "bg-highlight-match"
+              )}
+            >
+              <PreviewLogo logoSrc={logoSrc} size={18} />
+              <Text
+                text04
+                headingH3
+                className="max-w-[260px] whitespace-normal break-words text-center"
+              >
+                {greeting_message}
+              </Text>
+            </div>
+            <InputPreview />
           </div>
-          <InputPreview />
         </div>
         {/* Chat Footer */}
-        <div className="flex flex-col items-center justify-end p-2 w-full">
-          <div
-            className={cn(
-              "flex gap-1 items-start justify-center px-1 py-0.5 rounded-04 border border-transparent transition-colors",
-              highlightTarget === "chat_footer" && "border-theme-primary-05"
-            )}
-          >
-            <Text text03 className="origin-top-left scale-75">
-              {chat_footer_content}
-            </Text>
+        <div className="flex flex-col items-center justify-end w-full">
+          <div className="flex w-full max-w-[300px] justify-center">
+            <div
+              className={cn(
+                "inline-flex max-w-full items-start justify-center rounded-04 border border-transparent p-0.5 text-center",
+                highlightTarget === "chat_footer" && "bg-highlight-match"
+              )}
+            >
+              <Text
+                secondaryBody
+                text03
+                className="max-w-full whitespace-normal break-words text-center"
+              >
+                {chat_footer_content}
+              </Text>
+            </div>
           </div>
         </div>
       </div>
@@ -134,16 +146,22 @@ function PreviewChat({
   return (
     <div className="flex flex-col h-60 relative bg-background-tint-01 rounded-12 shadow-00">
       {/* Header */}
-      <div className="flex justify-center p-2 w-full">
-        <div
-          className={cn(
-            "rounded-08 border border-transparent px-2 py-1 transition-colors",
-            highlightTarget === "chat_header" && "border-theme-primary-05"
-          )}
-        >
-          <Text text03 className="origin-top-left scale-75">
-            {chat_header_content}
-          </Text>
+      <div className="flex justify-center w-full">
+        <div className="flex w-full max-w-[300px] justify-center">
+          <div
+            className={cn(
+              "inline-flex max-w-full items-center justify-center rounded-08 border border-transparent p-0.5 text-center",
+              highlightTarget === "chat_header" && "bg-highlight-match"
+            )}
+          >
+            <Text
+              secondaryBody
+              text03
+              className="max-w-full whitespace-normal break-words text-center"
+            >
+              {chat_header_content}
+            </Text>
+          </div>
         </div>
       </div>
 
@@ -168,16 +186,22 @@ function PreviewChat({
       </div>
 
       {/* Footer */}
-      <div className="flex flex-col items-center justify-end p-2 w-full">
-        <div
-          className={cn(
-            "flex gap-1 items-start justify-center px-1 py-0.5 rounded-04 border border-transparent transition-colors",
-            highlightTarget === "chat_footer" && "border-theme-primary-05"
-          )}
-        >
-          <Text text03 className="origin-top-left scale-75">
-            {chat_footer_content}
-          </Text>
+      <div className="flex flex-col items-center justify-end w-full">
+        <div className="flex w-full max-w-[300px] justify-center">
+          <div
+            className={cn(
+              "inline-flex max-w-full items-start justify-center rounded-04 border border-transparent p-0.5 text-center",
+              highlightTarget === "chat_footer" && "bg-highlight-match"
+            )}
+          >
+            <Text
+              secondaryBody
+              text03
+              className="max-w-full whitespace-normal break-words text-center"
+            >
+              {chat_footer_content}
+            </Text>
+          </div>
         </div>
       </div>
     </div>

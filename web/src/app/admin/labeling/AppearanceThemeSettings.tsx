@@ -10,7 +10,14 @@ import Switch from "@/refresh-components/inputs/Switch";
 import Text from "@/refresh-components/texts/Text";
 import InputImage from "@/refresh-components/inputs/InputImage";
 import { useFormikContext } from "formik";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { PreviewHighlightTarget } from "./Preview";
 
 interface CharacterCountProps {
@@ -40,14 +47,25 @@ interface AppearanceThemeSettingsProps {
   };
 }
 
-export function AppearanceThemeSettings({
-  selectedLogo,
-  setSelectedLogo,
-  charLimits,
-}: AppearanceThemeSettingsProps) {
+export interface AppearanceThemeSettingsRef {
+  focusFirstError: (errors: Record<string, any>) => void;
+}
+
+export const AppearanceThemeSettings = forwardRef<
+  AppearanceThemeSettingsRef,
+  AppearanceThemeSettingsProps
+>(function AppearanceThemeSettings(
+  { selectedLogo, setSelectedLogo, charLimits },
+  ref
+) {
   const { values, errors, setFieldValue } = useFormikContext<any>();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const applicationNameInputRef = useRef<HTMLInputElement>(null);
+  const greetingMessageInputRef = useRef<HTMLInputElement>(null);
+  const headerContentInputRef = useRef<HTMLInputElement>(null);
+  const lowerDisclaimerInputRef = useRef<HTMLTextAreaElement>(null);
   const noticeHeaderInputRef = useRef<HTMLInputElement>(null);
+  const noticeContentInputRef = useRef<HTMLTextAreaElement>(null);
   const prevShowFirstVisitNoticeRef = useRef<boolean>(
     Boolean(values.show_first_visit_notice)
   );
@@ -69,6 +87,36 @@ export function AppearanceThemeSettings({
     onMouseLeave: () =>
       setHoveredPreviewTarget((cur) => (cur === target ? null : cur)),
   });
+
+  // Expose focusFirstError method to parent component
+  useImperativeHandle(ref, () => ({
+    focusFirstError: (errors: Record<string, any>) => {
+      // Focus on the first field with an error, in priority order
+      const fieldRefs = [
+        { name: "application_name", ref: applicationNameInputRef },
+        { name: "custom_greeting_message", ref: greetingMessageInputRef },
+        { name: "custom_header_content", ref: headerContentInputRef },
+        {
+          name: "custom_lower_disclaimer_content",
+          ref: lowerDisclaimerInputRef,
+        },
+        { name: "custom_popup_header", ref: noticeHeaderInputRef },
+        { name: "custom_popup_content", ref: noticeContentInputRef },
+      ];
+
+      for (const field of fieldRefs) {
+        if (errors[field.name] && field.ref.current) {
+          field.ref.current.focus();
+          // Scroll into view if needed
+          field.ref.current.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+          break;
+        }
+      }
+    },
+  }));
 
   useEffect(() => {
     const prev = prevShowFirstVisitNoticeRef.current;
@@ -139,7 +187,9 @@ export function AppearanceThemeSettings({
             </FormField.Label>
             <FormField.Control asChild>
               <InputTypeIn
+                ref={applicationNameInputRef}
                 showClearButton
+                error={!!errors.application_name}
                 value={values.application_name}
                 {...getPreviewHandlers("sidebar")}
                 onChange={(e) =>
@@ -243,7 +293,9 @@ export function AppearanceThemeSettings({
         </FormField.Label>
         <FormField.Control asChild>
           <InputTypeIn
+            ref={greetingMessageInputRef}
             showClearButton
+            error={!!errors.custom_greeting_message}
             value={values.custom_greeting_message}
             {...getPreviewHandlers("greeting")}
             onChange={(e) =>
@@ -272,7 +324,9 @@ export function AppearanceThemeSettings({
         </FormField.Label>
         <FormField.Control asChild>
           <InputTypeIn
+            ref={headerContentInputRef}
             showClearButton
+            error={!!errors.custom_header_content}
             value={values.custom_header_content}
             {...getPreviewHandlers("chat_header")}
             onChange={(e) =>
@@ -300,8 +354,10 @@ export function AppearanceThemeSettings({
         </FormField.Label>
         <FormField.Control asChild>
           <InputTextArea
+            ref={lowerDisclaimerInputRef}
             rows={3}
             placeholder="Add markdown content"
+            error={!!errors.custom_lower_disclaimer_content}
             value={values.custom_lower_disclaimer_content}
             {...getPreviewHandlers("chat_footer")}
             onChange={(e) =>
@@ -354,6 +410,7 @@ export function AppearanceThemeSettings({
                 <InputTypeIn
                   ref={noticeHeaderInputRef}
                   showClearButton
+                  error={!!errors.custom_popup_header}
                   value={values.custom_popup_header}
                   onChange={(e) =>
                     setFieldValue("custom_popup_header", e.target.value)
@@ -378,8 +435,10 @@ export function AppearanceThemeSettings({
               </FormField.Label>
               <FormField.Control asChild>
                 <InputTextArea
+                  ref={noticeContentInputRef}
                   rows={3}
                   placeholder="Add markdown content"
+                  error={!!errors.custom_popup_content}
                   value={values.custom_popup_content}
                   onChange={(e) =>
                     setFieldValue("custom_popup_content", e.target.value)
@@ -413,4 +472,4 @@ export function AppearanceThemeSettings({
       </div>
     </div>
   );
-}
+});

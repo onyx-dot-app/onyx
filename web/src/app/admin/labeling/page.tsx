@@ -3,8 +3,11 @@
 import { AdminPageLayout } from "@/refresh-components/layouts/AdminPageLayout";
 import SvgPaintBrush from "@/icons/paint-brush";
 import Button from "@/refresh-components/buttons/Button";
-import { AppearanceThemeSettings } from "./AppearanceThemeSettings";
-import { useContext, useState } from "react";
+import {
+  AppearanceThemeSettings,
+  AppearanceThemeSettingsRef,
+} from "./AppearanceThemeSettings";
+import { useContext, useRef, useState } from "react";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
@@ -24,6 +27,7 @@ export default function LabelingPage() {
   const router = useRouter();
   const settings = useContext(SettingsContext);
   const [selectedLogo, setSelectedLogo] = useState<File | null>(null);
+  const appearanceSettingsRef = useRef<AppearanceThemeSettingsRef>(null);
 
   if (!settings) {
     return null;
@@ -118,6 +122,22 @@ export default function LabelingPage() {
       validationSchema={validationSchema}
       validateOnChange={true}
       onSubmit={async (values, formikHelpers) => {
+        // Validate form before submission
+        const errors = await formikHelpers.validateForm();
+        if (Object.keys(errors).length > 0) {
+          // Set errors and touched state to show validation errors
+          formikHelpers.setErrors(errors);
+          formikHelpers.setTouched(
+            Object.keys(errors).reduce(
+              (acc, key) => ({ ...acc, [key]: true }),
+              {}
+            )
+          );
+          // Focus on the first field with an error
+          appearanceSettingsRef.current?.focusFirstError(errors);
+          return;
+        }
+
         formikHelpers.setSubmitting(true);
 
         // Handle logo upload if a new logo was selected
@@ -160,26 +180,38 @@ export default function LabelingPage() {
         formikHelpers.setSubmitting(false);
       }}
     >
-      {({ isSubmitting }) => (
-        <Form className="w-full">
-          <AdminPageLayout
-            title="Appearance & Theming"
-            description="Customize how the application appears to users across your organization."
-            icon={SvgPaintBrush}
-            rightChildren={
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Applying..." : "Apply Changes"}
-              </Button>
-            }
-          >
-            <AppearanceThemeSettings
-              selectedLogo={selectedLogo}
-              setSelectedLogo={setSelectedLogo}
-              charLimits={CHAR_LIMITS}
-            />
-          </AdminPageLayout>
-        </Form>
-      )}
+      {({ isSubmitting, dirty, values }) => {
+        // Only count selectedLogo as a change if logo will be displayed
+        const logoWillBeDisplayed =
+          values.logo_display_style === "logo_only" ||
+          values.logo_display_style === "logo_and_name";
+        const hasLogoChange = selectedLogo && logoWillBeDisplayed;
+
+        return (
+          <Form className="w-full">
+            <AdminPageLayout
+              title="Appearance & Theming"
+              description="Customize how the application appears to users across your organization."
+              icon={SvgPaintBrush}
+              rightChildren={
+                <Button
+                  type="submit"
+                  disabled={isSubmitting || (!dirty && !hasLogoChange)}
+                >
+                  {isSubmitting ? "Applying..." : "Apply Changes"}
+                </Button>
+              }
+            >
+              <AppearanceThemeSettings
+                ref={appearanceSettingsRef}
+                selectedLogo={selectedLogo}
+                setSelectedLogo={setSelectedLogo}
+                charLimits={CHAR_LIMITS}
+              />
+            </AdminPageLayout>
+          </Form>
+        );
+      }}
     </Formik>
   );
 }
