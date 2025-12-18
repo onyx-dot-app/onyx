@@ -56,6 +56,7 @@
     "@sentry/tracing": "^7.120.3",
     "@stripe/stripe-js": "^4.6.0",
     "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-virtual": "^3.13.9",
     "autoprefixer": "^10.4.22",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",

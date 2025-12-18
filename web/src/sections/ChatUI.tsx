@@ -5,10 +5,12 @@ import React, {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { Message } from "@/app/chat/interfaces";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
@@ -100,6 +102,14 @@ const ChatUI = React.forwardRef(
     const [aboveHorizon, setAboveHorizon] = useState(false);
     const debounceNumber = 100;
 
+    // Virtualizer for efficient message rendering - only renders visible messages
+    const virtualizer = useVirtualizer({
+      count: messages.length,
+      getScrollElement: () => scrollContainerRef.current,
+      estimateSize: () => 150, // Estimated height per message
+      overscan: 5, // Render 5 extra items above/below viewport for smooth scrolling
+    });
+
     const createRegenerator = useCallback(
       (regenerationRequest: {
         messageId: number;
@@ -177,13 +187,41 @@ const ChatUI = React.forwardRef(
       enableAutoScroll: user?.preferences.auto_scroll,
     });
 
+    // Scroll to bottom when new messages are added
+    const prevMessagesLength = useRef(messages.length);
+    useLayoutEffect(() => {
+      if (messages.length > prevMessagesLength.current) {
+        // New message was added, scroll to bottom
+        virtualizer.scrollToIndex(messages.length - 1, { align: "end" });
+      }
+      prevMessagesLength.current = messages.length;
+    }, [messages.length, virtualizer]);
+
+    // Re-measure items when the last message updates (streaming)
+    const lastMessage = messages[messages.length - 1];
     useEffect(() => {
-      if (!scrollContainerRef.current) return;
-      scrollContainerRef.current.scrollTop =
-        scrollContainerRef.current.scrollHeight;
-    }, [messages]);
+      if (lastMessage?.is_generating) {
+        // During streaming, periodically re-measure the last item
+        const interval = setInterval(() => {
+          virtualizer.measureElement(
+            document.querySelector(
+              `[data-index="${messages.length - 1}"]`
+            ) as HTMLElement | null
+          );
+        }, 100);
+        return () => clearInterval(interval);
+      }
+    }, [lastMessage?.is_generating, messages.length, virtualizer]);
 
     if (!liveAssistant) return <div className="flex-1" />;
+
+    // Check if we need to show error banner after the virtualized list
+    const showTrailingError =
+      ((error !== null || loadError !== null) &&
+        messages[messages.length - 1]?.type === "user") ||
+      messages[messages.length - 1]?.type === "error";
+
+    const virtualItems = virtualizer.getVirtualItems();
 
     return (
       <div className="flex flex-col flex-1 w-full relative overflow-hidden">
@@ -201,111 +239,115 @@ const ChatUI = React.forwardRef(
           className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden default-scrollbar"
           onScroll={handleScroll}
         >
-          {messages.map((message, i) => {
-            const messageReactComponentKey = `message-${message.nodeId}`;
-            const parentMessage = message.parentNodeId
-              ? messageTree?.get(message.parentNodeId)
-              : null;
-
-            if (message.type === "user") {
-              const nextMessage =
-                messages.length > i + 1 ? messages[i + 1] : null;
+          {/* Virtualized message list - only visible messages are in the DOM */}
+          <div
+            style={{
+              height: `${virtualizer.getTotalSize()}px`,
+              width: "100%",
+              position: "relative",
+            }}
+          >
+            {virtualItems.map((virtualItem) => {
+              const i = virtualItem.index;
+              const message = messages[i];
+              if (!message) return null;
+              const messageReactComponentKey = `message-${message.nodeId}`;
+              const parentMessage = message.parentNodeId
+                ? messageTree?.get(message.parentNodeId)
+                : null;
 
               return (
                 <div
-                  id={messageReactComponentKey}
                   key={messageReactComponentKey}
+                  data-index={i}
+                  ref={virtualizer.measureElement}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    transform: `translateY(${virtualItem.start}px)`,
+                  }}
                 >
-                  <HumanMessage
-                    disableSwitchingForStreaming={
-                      (nextMessage && nextMessage.is_generating) || false
-                    }
-                    stopGenerating={stopGenerating}
-                    content={message.message}
-                    files={message.files}
-                    messageId={message.messageId}
-                    onEdit={(editedContent) => {
-                      if (
-                        message.messageId !== undefined &&
-                        message.messageId !== null
-                      ) {
-                        handleEditWithMessageId(
-                          editedContent,
-                          message.messageId
-                        );
-                      }
-                    }}
-                    otherMessagesCanSwitchTo={
-                      parentMessage?.childrenNodeIds ?? emptyChildrenIds
-                    }
-                    onMessageSelection={onMessageSelection}
-                  />
+                  {message.type === "user" ? (
+                    <div id={messageReactComponentKey}>
+                      <HumanMessage
+                        disableSwitchingForStreaming={
+                          messages[i + 1]?.is_generating || false
+                        }
+                        stopGenerating={stopGenerating}
+                        content={message.message}
+                        files={message.files}
+                        messageId={message.messageId}
+                        onEdit={(editedContent) => {
+                          if (
+                            message.messageId !== undefined &&
+                            message.messageId !== null
+                          ) {
+                            handleEditWithMessageId(
+                              editedContent,
+                              message.messageId
+                            );
+                          }
+                        }}
+                        otherMessagesCanSwitchTo={
+                          parentMessage?.childrenNodeIds ?? emptyChildrenIds
+                        }
+                        onMessageSelection={onMessageSelection}
+                      />
+                    </div>
+                  ) : message.type === "assistant" ? (
+                    (error || loadError) && i === messages.length - 1 ? (
+                      <div className="max-w-message-max mx-auto">
+                        <ErrorBanner
+                          resubmit={handleResubmitLastMessage}
+                          error={error || loadError || ""}
+                          errorCode={message.errorCode || undefined}
+                          isRetryable={message.isRetryable ?? true}
+                          details={message.errorDetails || undefined}
+                          stackTrace={message.stackTrace || undefined}
+                        />
+                      </div>
+                    ) : (
+                      <div id={`message-${message.nodeId}`}>
+                        <AIMessage
+                          rawPackets={message.packets}
+                          chatState={{
+                            assistant: liveAssistant,
+                            docs: message.documents ?? emptyDocs,
+                            citations: message.citations,
+                            setPresentingDocument,
+                            regenerate:
+                              message.messageId !== undefined &&
+                              i > 0 &&
+                              messages[i - 1]
+                                ? createRegenerator({
+                                    messageId: message.messageId,
+                                    parentMessage: messages[i - 1]!,
+                                  })
+                                : undefined,
+                            overriddenModel: llmManager.currentLlm?.modelName,
+                            researchType: message.researchType,
+                          }}
+                          nodeId={message.nodeId}
+                          messageId={message.messageId}
+                          currentFeedback={message.currentFeedback}
+                          llmManager={llmManager}
+                          otherMessagesCanSwitchTo={
+                            parentMessage?.childrenNodeIds ?? emptyChildrenIds
+                          }
+                          onMessageSelection={onMessageSelection}
+                        />
+                      </div>
+                    )
+                  ) : null}
                 </div>
               );
-            } else if (message.type === "assistant") {
-              if ((error || loadError) && i === messages.length - 1) {
-                return (
-                  <div
-                    key={`error-${message.nodeId}`}
-                    className="max-w-message-max mx-auto"
-                  >
-                    <ErrorBanner
-                      resubmit={handleResubmitLastMessage}
-                      error={error || loadError || ""}
-                      errorCode={message.errorCode || undefined}
-                      isRetryable={message.isRetryable ?? true}
-                      details={message.errorDetails || undefined}
-                      stackTrace={message.stackTrace || undefined}
-                    />
-                  </div>
-                );
-              }
+            })}
+          </div>
 
-              // NOTE: it's fine to use the previous entry in messageHistory
-              // since this is a "parsed" version of the message tree
-              // so the previous message is guaranteed to be the parent of the current message
-              const previousMessage = i !== 0 ? messages[i - 1] : null;
-              const regenerate =
-                message.messageId !== undefined && previousMessage
-                  ? createRegenerator({
-                      messageId: message.messageId,
-                      parentMessage: previousMessage,
-                    })
-                  : undefined;
-              const chatStateData = {
-                assistant: liveAssistant,
-                docs: message.documents ?? emptyDocs,
-                citations: message.citations,
-                setPresentingDocument,
-                regenerate,
-                overriddenModel: llmManager.currentLlm?.modelName,
-                researchType: message.researchType,
-              };
-              return (
-                <div
-                  id={`message-${message.nodeId}`}
-                  key={messageReactComponentKey}
-                >
-                  <AIMessage
-                    rawPackets={message.packets}
-                    chatState={chatStateData}
-                    nodeId={message.nodeId}
-                    messageId={message.messageId}
-                    currentFeedback={message.currentFeedback}
-                    llmManager={llmManager}
-                    otherMessagesCanSwitchTo={
-                      parentMessage?.childrenNodeIds ?? emptyChildrenIds
-                    }
-                    onMessageSelection={onMessageSelection}
-                  />
-                </div>
-              );
-            }
-          })}
-
-          {(((error !== null || loadError !== null) &&
-            messages[messages.length - 1]?.type === "user") ||
-            messages[messages.length - 1]?.type === "error") && (
+          {/* Error banner for user messages that failed */}
+          {showTrailingError && (
             <div className="max-w-message-max mx-auto">
               <ErrorBanner
                 resubmit={handleResubmitLastMessage}
