@@ -446,7 +446,11 @@ class GithubConnector(CheckpointedConnectorWithPermSync[GithubConnectorCheckpoin
         private_key = credentials.get("github_app_private_key")
 
         # Require all GitHub App fields if using that auth path
-        if app_id and installation_id and private_key:
+        if app_id or installation_id or private_key:
+            if not (app_id and installation_id and private_key):
+                raise ConnectorMissingCredentialError(
+                    "GitHub App authentication requires app_id, installation_id, and private_key."
+                )
             try:
                 app_id_int = int(app_id)
                 installation_id_int = int(installation_id)

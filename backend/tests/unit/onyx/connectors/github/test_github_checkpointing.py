@@ -1098,3 +1098,13 @@ def test_load_credentials_missing_credentials(
     connector = build_github_connector()
     with pytest.raises(ConnectorMissingCredentialError):
         connector.load_credentials({})
+
+
+def test_load_credentials_partial_github_app_credentials(
+    build_github_connector: Callable[..., GithubConnector],
+) -> None:
+    connector = build_github_connector()
+    with pytest.raises(ConnectorMissingCredentialError):
+        connector.load_credentials(
+            {"github_app_id": "123", "github_app_installation_id": "456"}
+        )
