@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useMemo, JSX } from "react";
-import { FiSearch, FiGlobe, FiBookOpen, FiXCircle } from "react-icons/fi";
+import { FiSearch, FiGlobe, FiBookOpen } from "react-icons/fi";
+import { SvgXCircle } from "@opal/icons";
 import {
   PacketType,
   SearchToolPacket,
@@ -151,7 +152,7 @@ export function SearchToolStep1Renderer({
           )}
           {queries.length === 0 &&
             (isCancelled ? (
-              <FiXCircle className="w-3.5 h-3.5 text-text-400" />
+              <SvgXCircle size={14} className="text-text-400" />
             ) : (
               <BlinkingDot />
             ))}
@@ -230,7 +231,7 @@ export function SearchToolStep2Renderer({
           )}
           {results.length === 0 &&
             (isCancelled ? (
-              <FiXCircle className="w-3.5 h-3.5 text-text-400" />
+              <SvgXCircle size={14} className="text-text-400" />
             ) : (
               <BlinkingDot />
             ))}
