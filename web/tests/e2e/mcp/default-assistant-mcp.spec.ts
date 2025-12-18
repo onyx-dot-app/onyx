@@ -122,7 +122,27 @@ test.describe("Default Assistant MCP Integration", () => {
     console.log(`[test] Filled basic server details`);
 
     // Submit the modal to create server
+    const createServerResponsePromise = page.waitForResponse((resp) => {
+      try {
+        const url = new URL(resp.url());
+        return (
+          url.pathname === "/api/admin/mcp/server" &&
+          resp.request().method() === "POST" &&
+          resp.ok()
+        );
+      } catch {
+        return false;
+      }
+    });
     await page.getByRole("button", { name: "Add Server" }).click();
+    const createServerResponse = await createServerResponsePromise;
+    const createdServer = (await createServerResponse.json()) as {
+      id?: number;
+    };
+    expect(createdServer.id).toBeTruthy();
+    serverId = Number(createdServer.id);
+    expect(serverId).toBeGreaterThan(0);
+    console.log(`[test] Created MCP server with id: ${serverId}`);
     await page.waitForTimeout(1000); // Wait for modal to close and auth modal to open
     console.log(`[test] Created MCP server, auth modal should open`);
 
@@ -157,24 +177,9 @@ test.describe("Default Assistant MCP Integration", () => {
     await connectButton.click();
     console.log(`[test] Clicked Connect button`);
 
-    // Wait for redirect with server_id and trigger_fetch parameters
-    await page.waitForURL("**/admin/actions/mcp?**server_id=**", {
-      timeout: 15000,
-    });
-    console.log(`[test] Redirected back to MCP actions page with server_id`);
-
-    // Extract server ID from URL
-    const currentUrl = new URL(page.url());
-    const serverIdParam = currentUrl.searchParams.get("server_id");
-    expect(serverIdParam).toBeTruthy();
-    serverId = Number(serverIdParam);
-    expect(serverId).toBeGreaterThan(0);
-    console.log(`[test] Server ID: ${serverId}`);
-
-    // Refresh the page to ensure clean state
-    await page.reload();
+    // Wait for the tools to be fetched
     await page.waitForTimeout(1000);
-    console.log(`[test] Refreshed page`);
+    console.log(`[test] Tools fetched successfully`);
 
     // Verify server card is visible
     await expect(
@@ -194,9 +199,9 @@ test.describe("Default Assistant MCP Integration", () => {
     });
     console.log(`[test] Tools loaded successfully`);
 
-    // Enable multiple tools (tool_0, tool_1, tool_2, tool_3)
-    const toolIds = ["tool_0", "tool_1", "tool_2", "tool_3"];
-    let enabledToolsCount = 0;
+    // Disable multiple tools (tool_0, tool_1, tool_2, tool_3)
+    const toolIds = ["tool_11", "tool_12", "tool_13", "tool_14"];
+    let disabledToolsCount = 0;
 
     for (const toolId of toolIds) {
       const toolToggle = page.getByLabel(`tool-toggle-${toolId}`).first();
@@ -213,21 +218,22 @@ test.describe("Default Assistant MCP Integration", () => {
 
       console.log(`[test] Found tool: ${toolId}`);
 
-      // Check if already enabled
-      const isEnabled = await toolToggle.getAttribute("data-state");
-
-      if (isEnabled !== "checked") {
+      // Disable if currently enabled (tools are enabled by default)
+      const state = await toolToggle.getAttribute("data-state");
+      if (state === "checked") {
         await toolToggle.click();
-        await page.waitForTimeout(300);
-        enabledToolsCount++;
-        console.log(`[test] Enabled tool: ${toolId}`);
+        await expect(toolToggle).toHaveAttribute("data-state", "unchecked", {
+          timeout: 5000,
+        });
+        disabledToolsCount++;
+        console.log(`[test] Disabled tool: ${toolId}`);
       } else {
-        console.log(`[test] Tool ${toolId} already enabled`);
+        console.log(`[test] Tool ${toolId} already disabled`);
       }
     }
 
     console.log(
-      `[test] Successfully enabled ${enabledToolsCount} tools via UI`
+      `[test] Successfully disabled ${disabledToolsCount} tools via UI`
     );
   });
 

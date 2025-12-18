@@ -140,20 +140,23 @@ test("Tool OAuth Configuration: Creation, Selection, and Assistant Integration",
   await manageButton.click();
 
   // Wait for the edit modal to appear
-  await expect(page.getByText("Edit OpenAPI action")).toBeVisible({
-    timeout: 5000,
-  });
+  const editDialog = page.getByRole("dialog", { name: "Edit OpenAPI action" });
+  await expect(editDialog).toBeVisible({ timeout: 5000 });
 
   // Wait for the definition textarea to be visible (indicates modal is loaded)
-  await expect(getDefinitionTextarea(page)).toBeVisible({ timeout: 10000 });
+  await expect(editDialog.locator('textarea[name="definition"]')).toBeVisible({
+    timeout: 10000,
+  });
 
   // Verify authentication status is shown (indicates OAuth is configured)
-  await expect(page.getByText("Authenticated & Enabled")).toBeVisible({
+  await expect(editDialog.getByText("Authenticated & Enabled")).toBeVisible({
     timeout: 5000,
   });
 
   // Verify the "Edit Configs" button is visible (confirms OAuth config persists)
-  const editConfigsButton = page.getByRole("button", { name: "Edit Configs" });
+  const editConfigsButton = editDialog.getByRole("button", {
+    name: "Edit Configs",
+  });
   await expect(editConfigsButton).toBeVisible({ timeout: 5000 });
 
   // Close the modal
