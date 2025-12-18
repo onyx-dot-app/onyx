@@ -32,7 +32,7 @@ interface ChatSessionContextValue {
   chatSessions: ChatSession[];
   currentChatSessionId: string | null;
   currentChatSession: ChatSession | null;
-  agentForChatSession: MinimalPersonaSnapshot | null;
+  agentForCurrentChatSession: MinimalPersonaSnapshot | null;
   isLoading: boolean;
   error: unknown;
   refreshChatSessions: KeyedMutator<ChatSessionsResponse>;
@@ -62,7 +62,7 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
 
   const { agents } = useAgentsContext();
 
-  const agentForChatSession = useMemo(() => {
+  const agentForCurrentChatSession = useMemo(() => {
     if (!currentChatSession) return null;
     return (
       agents.find((agent) => agent.id === currentChatSession.persona_id) ?? null
@@ -73,7 +73,7 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
     chatSessions,
     currentChatSessionId,
     currentChatSession,
-    agentForChatSession,
+    agentForCurrentChatSession,
     isLoading: !error && !data,
     error,
     refreshChatSessions: mutate,
