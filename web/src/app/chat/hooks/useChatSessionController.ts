@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useState } from "react";
-import { ReadonlyURLSearchParams, useRouter } from "next/navigation";
+import { useEffect, useCallback, useState } from "react";
+import { ReadonlyURLSearchParams } from "next/navigation";
 import {
   nameChatSession,
   processRawChatHistory,
@@ -22,7 +22,6 @@ import {
   useChatSessionStore,
   useCurrentMessageHistory,
 } from "../stores/useChatSessionStore";
-import { getAvailableContextTokens } from "../services/lib";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile } from "../projects/projectsService";
 import { getSessionProjectTokenCount } from "../projects/projectsService";

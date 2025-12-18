@@ -4,15 +4,6 @@
  * ChatSessionContext
  *
  * Provides chat session data plus helpers derived from the URL and assistant list.
- *
- * Interface:
- * - `chatSessions`: ChatSession[] — all sessions from `/api/chat/get-user-chat-sessions`.
- * - `currentChatSessionId`: string | null — `chatId` from the URL (SEARCH_PARAM_NAMES.CHAT_ID).
- * - `currentChatSession`: ChatSession | null — session matching `currentChatSessionId`, or null.
- * - `agentForChatSession`: MinimalPersonaSnapshot | null — agent for `currentChatSession` via `persona_id`; null if none.
- * - `isLoading`: boolean — true while sessions are loading.
- * - `error`: unknown — SWR error value.
- * - `refreshChatSessions()`: KeyedMutator<ChatSessionsResponse> — SWR mutate for sessions.
  */
 
 import { createContext, useContext, useMemo, type ReactNode } from "react";
@@ -29,12 +20,25 @@ interface ChatSessionsResponse {
 }
 
 interface ChatSessionContextValue {
+  /** All sessions from `/api/chat/get-user-chat-sessions`. */
   chatSessions: ChatSession[];
+
+  /** `chatId` from the URL (SEARCH_PARAM_NAMES.CHAT_ID). */
   currentChatSessionId: string | null;
+
+  /** Session matching `currentChatSessionId`, or null. */
   currentChatSession: ChatSession | null;
+
+  /** Agent for `currentChatSession` via `persona_id`; null if none. */
   agentForCurrentChatSession: MinimalPersonaSnapshot | null;
+
+  /** True while sessions are loading. */
   isLoading: boolean;
+
+  /** SWR error value, if any. */
   error: unknown;
+
+  /** SWR mutate for sessions. */
   refreshChatSessions: KeyedMutator<ChatSessionsResponse>;
 }
 
@@ -42,7 +46,11 @@ const ChatSessionContext = createContext<ChatSessionContextValue | undefined>(
   undefined
 );
 
-export function ChatSessionProvider({ children }: { children: ReactNode }) {
+interface ChatSessionProviderProps {
+  children: ReactNode;
+}
+
+export function ChatSessionProvider({ children }: ChatSessionProviderProps) {
   const { data, error, mutate } = useSWR<ChatSessionsResponse>(
     "/api/chat/get-user-chat-sessions",
     errorHandlingFetcher,

@@ -7,18 +7,6 @@
  * mutate assistant ordering without prop-drilling.
  *
  * This context should be provided at the app-level (it transcends chat-sessions, namely).
- *
- * Interface:
- * - `agents`: MinimalPersonaSnapshot[] — all assistants from `/api/persona`; use for lookups and listings.
- * - `pinnedAgents`: MinimalPersonaSnapshot[] — assistants currently pinned, in display order (optimistic).
- * - `pinnedAgentIds`: number[] — ids of `pinnedAgents` for lightweight checks.
- * - `isLoading`: boolean — true while the initial agents list is still loading.
- * - `currentAgent`: MinimalPersonaSnapshot | null — agent resolved from the `assistantId` URL param if present; null when missing or not found.
- * - `currentAgentId`: number | null — parsed `assistantId` from URL when present; `null` otherwise.
- * - `togglePinnedAgent(agentId, shouldPin)`: Promise<void> — pin/unpin an agent with optimistic UI updates; persists via `pinAgents`.
- * - `updatePinnedAgents(agentIds)`: Promise<void> — replace/reorder the entire pinned list (e.g., drag-and-drop); persists and updates local state.
- * - `refreshAgents()`: Promise<MinimalPersonaSnapshot[] | undefined> — SWR mutate for the agents list; call after server-side changes to assistants.
- * - `refreshPinnedAgents()`: Promise<void> — refreshes user data to re-pull pinned ids from `/me` (used after pin/unpin elsewhere).
  */
 
 import {
@@ -39,21 +27,44 @@ import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 
 interface AgentsContextValue {
+  /** All assistants from `/api/persona`; use for lookups and listings. */
   agents: MinimalPersonaSnapshot[];
+
+  /** Assistants currently pinned, in display order (optimistic). */
   pinnedAgents: MinimalPersonaSnapshot[];
+
+  /** Ids of pinned assistants for lightweight checks. */
   pinnedAgentIds: number[];
+
+  /** True while the initial agents list is still loading. */
   isLoading: boolean;
+
+  /** Agent resolved from the `assistantId` URL param if present; null when missing or not found. */
   currentAgent: MinimalPersonaSnapshot | null;
+
+  /** Parsed `assistantId` from URL when present; `null` otherwise. */
   currentAgentId: number | null;
+
+  /** SWR mutate for the agents list; call after server-side changes to assistants. */
   refreshAgents: () => Promise<MinimalPersonaSnapshot[] | undefined>;
+
+  /** Refreshes user data to re-pull pinned ids from `/me` (used after pin/unpin elsewhere). */
   refreshPinnedAgents: () => Promise<void>;
+
+  /** Pin/unpin an agent with optimistic UI updates; persists via `pinAgents`. */
   togglePinnedAgent: (agentId: number, shouldPin: boolean) => Promise<void>;
+
+  /** Replace/reorder the entire pinned list (e.g., drag-and-drop); persists and updates local state. */
   updatePinnedAgents: (agentIds: number[]) => Promise<void>;
 }
 
 const AgentsContext = createContext<AgentsContextValue | undefined>(undefined);
 
-export function AgentsProvider({ children }: { children: ReactNode }) {
+interface AgentsProviderProps {
+  children: ReactNode;
+}
+
+export function AgentsProvider({ children }: AgentsProviderProps) {
   const {
     data: agentsData,
     error,

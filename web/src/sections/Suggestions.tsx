@@ -2,15 +2,15 @@
 
 import { OnSubmitProps } from "@/app/chat/hooks/useChatController";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import { useCurrentAgent } from "@/hooks/useAgents";
 import { cn } from "@/lib/utils";
+import { useAgentsContext } from "@/contexts/AgentsContext";
 
 export interface SuggestionsProps {
   onSubmit: (props: OnSubmitProps) => void;
 }
 
 export default function Suggestions({ onSubmit }: SuggestionsProps) {
-  const currentAgent = useCurrentAgent();
+  const { currentAgent } = useAgentsContext();
 
   if (
     !currentAgent ||
