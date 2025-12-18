@@ -479,9 +479,10 @@ class VespaIndex(DocumentIndex):
         chunks: list[DocMetadataAwareIndexChunk],
         index_batch_params: IndexBatchParams,
     ) -> set[DocumentInsertionRecord]:
-        assert len(index_batch_params.doc_id_to_previous_chunk_cnt) == len(
+        if len(index_batch_params.doc_id_to_previous_chunk_cnt) != len(
             index_batch_params.doc_id_to_new_chunk_cnt
-        )
+        ):
+            raise ValueError("Bug: Length of doc ID to chunk maps does not match.")
         doc_id_to_chunk_cnt_diff = {
             doc_id: IndexingMetadata.ChunkCounts(
                 old_chunk_cnt=index_batch_params.doc_id_to_previous_chunk_cnt[doc_id],
