@@ -13,7 +13,7 @@ import {
   MCPServerCreateRequest,
   MCPServerStatus,
   MCPServer,
-} from "@/lib/tools/types";
+} from "@/lib/tools/interfaces";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Separator from "@/refresh-components/Separator";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -103,9 +103,10 @@ export default function AddMCPServerModal({
           onServerCreated(createdServer);
         }
       }
-      // Close modal and clear server state
+      // Close modal. Do NOT clear `activeServer` here because this modal
+      // frequently transitions to other modals (authenticate/disconnect), and
+      // clearing would race those flows.
       toggle(false);
-      setActiveServer(null);
     } catch (error) {
       console.error(
         `Error ${isEditMode ? "updating" : "creating"} MCP server:`,
@@ -126,9 +127,6 @@ export default function AddMCPServerModal({
   // Handle modal close to clear server state
   const handleModalClose = (open: boolean) => {
     toggle(open);
-    if (!open) {
-      setActiveServer(null);
-    }
   };
 
   return (
@@ -143,7 +141,7 @@ export default function AddMCPServerModal({
           validationSchema={validationSchema}
           onSubmit={handleSubmit}
         >
-          {({ values, errors, touched, handleChange, handleBlur }) => (
+          {({ values, errors, touched, handleChange, handleBlur, dirty }) => (
             <Form className="gap-0">
               <Modal.Header
                 icon={SvgServer}
@@ -219,7 +217,7 @@ export default function AddMCPServerModal({
                   />
                 </FormField>
 
-                <Separator className="-my-2" />
+                <Separator className="py-0" />
 
                 <FormField
                   id="server_url"
@@ -304,7 +302,7 @@ export default function AddMCPServerModal({
                   )}
               </Modal.Body>
 
-              <Modal.Footer className="p-4 gap-2">
+              <Modal.Footer className="gap-2">
                 <Button
                   secondary
                   type="button"
@@ -313,7 +311,7 @@ export default function AddMCPServerModal({
                 >
                   Cancel
                 </Button>
-                <Button primary type="submit" disabled={isSubmitting}>
+                <Button primary type="submit" disabled={isSubmitting || !dirty}>
                   {isSubmitting
                     ? isEditMode
                       ? "Saving..."

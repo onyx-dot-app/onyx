@@ -26,7 +26,9 @@ logger = setup_logger()
 # MCPServer operations
 def get_all_mcp_servers(db_session: Session) -> list[MCPServer]:
     """Get all MCP servers"""
-    return list(db_session.scalars(select(MCPServer)).all())
+    return list(
+        db_session.scalars(select(MCPServer).order_by(MCPServer.created_at)).all()
+    )
 
 
 def get_mcp_server_by_id(server_id: int, db_session: Session) -> MCPServer:

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import ActionCardHeader from "@/sections/actions/ActionCardHeader";
 import ToolsSection from "@/sections/actions/ToolsSection";
 import { cn } from "@/lib/utils";
-import { ActionStatus } from "@/lib/tools/types";
+import { ActionStatus } from "@/lib/tools/interfaces";
 import type { IconProps } from "@opal/types";
 import { SvgServer } from "@opal/icons";
 import {
@@ -41,8 +41,6 @@ export interface ActionCardProps {
   onSearchQueryChange?: (query: string) => void;
 
   // Tools section actions
-  onRefresh?: () => void;
-  onDisableAll?: () => void;
   onFold?: () => void;
 
   // Content
@@ -70,8 +68,6 @@ export default function ActionCard({
   enableSearch = false,
   searchQuery = "",
   onSearchQueryChange,
-  onRefresh,
-  onDisableAll,
   onFold,
   children,
   ariaLabel,
@@ -79,7 +75,7 @@ export default function ActionCard({
 }: ActionCardProps) {
   // Internal state for uncontrolled mode
   const [internalExpanded, setInternalExpanded] = useState(initialExpanded);
-  const [isToolsRefreshing, setIsToolsRefreshing] = useState(false);
+
   const hasInitializedExpansion = useRef(false);
   const [isHovered, setIsHovered] = useState(false);
 
@@ -96,14 +92,6 @@ export default function ActionCard({
       hasInitializedExpansion.current = true;
     }
   }, [initialExpanded, isControlled]);
-
-  const handleRefreshTools = () => {
-    setIsToolsRefreshing(true);
-    onRefresh?.();
-    setTimeout(() => {
-      setIsToolsRefreshing(false);
-    }, 1000);
-  };
 
   const isConnected = status === ActionStatus.CONNECTED;
   const isDisconnected = status === ActionStatus.DISCONNECTED;
@@ -134,7 +122,7 @@ export default function ActionCard({
       >
         <div className="flex flex-col w-full">
           {/* Header Section */}
-          <div className="flex items-start justify-between p-3 w-full">
+          <div className="flex items-start justify-between gap-2 p-3 w-full">
             <ActionCardHeader
               title={title}
               description={description}
@@ -145,15 +133,12 @@ export default function ActionCard({
             />
 
             {/* Action Buttons */}
-            {actions}
+            <div className="shrink-0 flex items-start">{actions}</div>
           </div>
 
           {/* Tools Section (Only when expanded and search is enabled) */}
           {isExpandedActual && enableSearch && (
             <ToolsSection
-              isRefreshing={isToolsRefreshing}
-              onRefresh={onRefresh ? handleRefreshTools : undefined}
-              onDisableAll={onDisableAll}
               onFold={onFold}
               searchQuery={searchQuery}
               onSearchQueryChange={onSearchQueryChange || (() => {})}

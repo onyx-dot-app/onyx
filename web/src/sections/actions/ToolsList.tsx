@@ -1,24 +1,25 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React from "react";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import FadeDiv from "@/components/FadeDiv";
 import ToolItemSkeleton from "@/sections/actions/skeleton/ToolItemSkeleton";
 import ToolsEnabledCount from "@/sections/actions/ToolsEnabledCount";
-import { SvgEye } from "@opal/icons";
+import { SvgEye, SvgXCircle } from "@opal/icons";
+import Button from "@/refresh-components/buttons/Button";
 
 interface ToolsListProps {
   // Loading state
   isFetching?: boolean;
-  onRetry?: () => void;
 
   // Tool count for footer
   totalCount?: number;
   enabledCount?: number;
   showOnlyEnabled?: boolean;
   onToggleShowOnlyEnabled?: () => void;
+  onUpdateToolsStatus?: (enabled: boolean) => void;
 
   // Empty state of filtered tools
   isEmpty?: boolean;
@@ -38,11 +39,11 @@ interface ToolsListProps {
 
 const ToolsList: React.FC<ToolsListProps> = ({
   isFetching = false,
-  onRetry,
   totalCount,
-  enabledCount,
+  enabledCount = 0,
   showOnlyEnabled = false,
   onToggleShowOnlyEnabled,
+  onUpdateToolsStatus,
   isEmpty = false,
   searchQuery,
   emptyMessage = "No tools available",
@@ -51,16 +52,6 @@ const ToolsList: React.FC<ToolsListProps> = ({
   leftAction,
   className,
 }) => {
-  const hasRetried = useRef(false);
-
-  useEffect(() => {
-    // If the server reports tools but none were returned, try one automatic refetch
-    if (!isFetching && isEmpty && !hasRetried.current && onRetry) {
-      hasRetried.current = true;
-      onRetry();
-    }
-  }, [isFetching, isEmpty, onRetry]);
-
   const showFooter =
     totalCount !== undefined && enabledCount !== undefined && totalCount > 0;
 
@@ -68,7 +59,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
     <>
       <div
         className={cn(
-          "flex flex-col gap-1 items-start max-h-[480px] overflow-y-auto w-full",
+          "flex flex-col gap-1 items-start max-h-[30vh] overflow-y-auto w-full",
           className
         )}
       >
@@ -90,7 +81,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
       </div>
 
       {/* Footer showing enabled tool count with filter toggle */}
-      {showFooter && !isEmpty && !isFetching && (
+      {showFooter && !(totalCount === 0) && !isFetching && (
         <FadeDiv>
           <div className="flex items-center justify-between gap-2 w-full">
             {/* Left action area */}
@@ -98,11 +89,13 @@ const ToolsList: React.FC<ToolsListProps> = ({
 
             {/* Right action area */}
             <div className="flex items-center gap-1 ml-auto">
-              <ToolsEnabledCount
-                enabledCount={enabledCount}
-                totalCount={totalCount}
-              />
-              {onToggleShowOnlyEnabled && (
+              {enabledCount > 0 && (
+                <ToolsEnabledCount
+                  enabledCount={enabledCount}
+                  totalCount={totalCount}
+                />
+              )}
+              {onToggleShowOnlyEnabled && enabledCount > 0 && (
                 <IconButton
                   icon={SvgEye}
                   internal
@@ -117,6 +110,20 @@ const ToolsList: React.FC<ToolsListProps> = ({
                       : "Show only enabled tools"
                   }
                 />
+              )}
+              {onUpdateToolsStatus && enabledCount > 0 && (
+                <IconButton
+                  icon={SvgXCircle}
+                  internal
+                  onClick={() => onUpdateToolsStatus(false)}
+                  tooltip="Disable all tools"
+                  aria-label="Disable all tools"
+                />
+              )}
+              {onUpdateToolsStatus && enabledCount === 0 && (
+                <Button tertiary onClick={() => onUpdateToolsStatus(true)}>
+                  Enable all
+                </Button>
               )}
             </div>
           </div>
