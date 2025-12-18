@@ -36,7 +36,9 @@ from onyx.db.enums import EmbeddingPrecision
 from onyx.document_index.document_index_utils import get_document_chunk_ids
 from onyx.document_index.document_index_utils import get_uuid_from_chunk_info
 from onyx.document_index.interfaces import DocumentIndex
-from onyx.document_index.interfaces import DocumentInsertionRecord
+from onyx.document_index.interfaces import (
+    DocumentInsertionRecord as OldDocumentInsertionRecord,
+)
 from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
 from onyx.document_index.interfaces import IndexBatchParams
 from onyx.document_index.interfaces import MinimalDocumentIndexingInfo
@@ -478,7 +480,7 @@ class VespaIndex(DocumentIndex):
         self,
         chunks: list[DocMetadataAwareIndexChunk],
         index_batch_params: IndexBatchParams,
-    ) -> set[DocumentInsertionRecord]:
+    ) -> set[OldDocumentInsertionRecord]:
         if len(index_batch_params.doc_id_to_previous_chunk_cnt) != len(
             index_batch_params.doc_id_to_new_chunk_cnt
         ):
@@ -505,7 +507,18 @@ class VespaIndex(DocumentIndex):
         # This conversion from list to set only to be converted again to a list
         # upstream is suboptimal and only temporary until we refactor the
         # entirety of this class.
-        return set(vespa_document_index.index(chunks, indexing_metadata))
+        document_insertion_records = vespa_document_index.index(
+            chunks, indexing_metadata
+        )
+        return set(
+            [
+                OldDocumentInsertionRecord(
+                    document_id=doc_insertion_record.document_id,
+                    already_existed=doc_insertion_record.already_existed,
+                )
+                for doc_insertion_record in document_insertion_records
+            ]
+        )
 
     @classmethod
     def _apply_updates_batched(
