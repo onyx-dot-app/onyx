@@ -7,7 +7,6 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.chat.chat_milestones import process_multi_assistant_milestone
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_state import run_chat_llm_with_state_containers
 from onyx.chat.chat_utils import convert_chat_history
@@ -32,6 +31,7 @@ from onyx.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import MessageType
+from onyx.configs.constants import MilestoneRecordType
 from onyx.context.search.models import CitationDocInfo
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import create_new_chat_message
@@ -72,6 +72,7 @@ from onyx.tools.tool_constructor import SearchToolConfig
 from onyx.tools.tool_constructor import SearchToolUsage
 from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
+from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
 from onyx.utils.timing import log_generator_function_time
 from shared_configs.contextvars import get_current_tenant_id
@@ -367,11 +368,10 @@ def stream_chat_message_objects(
         )
 
         # Milestone tracking, most devs using the API don't need to understand this
-        process_multi_assistant_milestone(
-            user=user,
-            assistant_id=persona.id,
-            tenant_id=tenant_id,
-            db_session=db_session,
+        mt_cloud_telemetry(
+            distinct_id=tenant_id,
+            event=MilestoneRecordType.MULTIPLE_ASSISTANTS,
+            properties=None,
         )
 
         if reference_doc_ids is None and retrieval_options is None:

@@ -44,7 +44,6 @@ from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat import update_chat_session
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.feedback import create_chat_message_feedback
 from onyx.db.feedback import create_doc_retrieval_feedback
 from onyx.db.feedback import remove_chat_message_feedback
@@ -89,7 +88,7 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import create_milestone_and_report
+from onyx.utils.telemetry import mt_cloud_telemetry
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -451,14 +450,13 @@ def handle_new_chat_message(
     if not chat_message_req.message and not chat_message_req.use_existing_user_message:
         raise HTTPException(status_code=400, detail="Empty chat message is invalid")
 
-    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
-        create_milestone_and_report(
-            user=user,
-            distinct_id=user.email if user else tenant_id or "N/A",
-            event_type=MilestoneRecordType.RAN_QUERY,
-            properties=None,
-            db_session=db_session,
-        )
+    mt_cloud_telemetry(
+        distinct_id=user.email if user else tenant_id or "N/A",
+        event=MilestoneRecordType.RAN_QUERY,
+        properties={
+            "tenant_id": tenant_id,
+        },
+    )
 
     def stream_generator() -> Generator[str, None, None]:
         try:

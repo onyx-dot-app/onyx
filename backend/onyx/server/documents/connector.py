@@ -147,7 +147,7 @@ from onyx.server.federated.models import FederatedConnectorStatus
 from onyx.server.models import StatusResponse
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import create_milestone_and_report
+from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.threadpool_concurrency import CallableProtocol
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -1177,12 +1177,12 @@ def get_connector_indexing_status(
             ].total_docs_indexed += connector_status.docs_indexed
 
     # Track admin page visit for analytics
-    create_milestone_and_report(
-        user=user,
+    mt_cloud_telemetry(
         distinct_id=user.email if user else tenant_id or "N/A",
-        event_type=MilestoneRecordType.VISITED_ADMIN_PAGE,
-        properties=None,
-        db_session=db_session,
+        event=MilestoneRecordType.VISITED_ADMIN_PAGE,
+        properties={
+            "tenant_id": tenant_id,
+        },
     )
 
     # Group statuses by source for pagination
@@ -1394,12 +1394,12 @@ def create_connector_from_model(
             connector_data=connector_base,
         )
 
-        create_milestone_and_report(
-            user=user,
+        mt_cloud_telemetry(
             distinct_id=user.email if user else tenant_id or "N/A",
-            event_type=MilestoneRecordType.CREATED_CONNECTOR,
-            properties=None,
-            db_session=db_session,
+            event=MilestoneRecordType.CREATED_CONNECTOR,
+            properties={
+                "tenant_id": tenant_id,
+            },
         )
 
         return connector_response
@@ -1475,12 +1475,12 @@ def create_connector_with_mock_credential(
             f"cc_pair={response.data}"
         )
 
-        create_milestone_and_report(
-            user=user,
+        mt_cloud_telemetry(
             distinct_id=user.email if user else tenant_id or "N/A",
-            event_type=MilestoneRecordType.CREATED_CONNECTOR,
-            properties=None,
-            db_session=db_session,
+            event=MilestoneRecordType.CREATED_CONNECTOR,
+            properties={
+                "tenant_id": tenant_id,
+            },
         )
         return response
 

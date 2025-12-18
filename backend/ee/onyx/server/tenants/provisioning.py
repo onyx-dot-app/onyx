@@ -45,7 +45,7 @@ from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRe
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.setup import setup_onyx
-from onyx.utils.telemetry import create_milestone_and_report
+from onyx.utils.telemetry import mt_cloud_telemetry
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.configs import TENANT_ID_PREFIX
@@ -560,17 +560,13 @@ async def assign_tenant_to_user(
     try:
         add_users_to_tenant([email], tenant_id)
 
-        # Create milestone record in the same transaction context as the tenant assignment
-        with get_session_with_tenant(tenant_id=tenant_id) as db_session:
-            create_milestone_and_report(
-                user=None,
-                distinct_id=tenant_id,
-                event_type=MilestoneRecordType.TENANT_CREATED,
-                properties={
-                    "email": email,
-                },
-                db_session=db_session,
-            )
+        mt_cloud_telemetry(
+            distinct_id=email,
+            event=MilestoneRecordType.TENANT_CREATED,
+            properties={
+                "tenant_id": tenant_id,
+            },
+        )
     except Exception:
         logger.exception(f"Failed to assign tenant {tenant_id} to user {email}")
         raise Exception("Failed to assign tenant to user")

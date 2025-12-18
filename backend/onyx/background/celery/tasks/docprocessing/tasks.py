@@ -109,7 +109,7 @@ from onyx.redis.redis_utils import is_fence
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.logger import setup_logger
 from onyx.utils.middleware import make_randomized_onyx_request_id
-from onyx.utils.telemetry import create_milestone_and_report
+from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
 from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
@@ -549,12 +549,12 @@ def check_indexing_completion(
                 )
                 db_session.commit()
 
-            create_milestone_and_report(
-                user=None,
+            mt_cloud_telemetry(
                 distinct_id=tenant_id,
-                event_type=MilestoneRecordType.CONNECTOR_SUCCEEDED,
-                properties=None,
-                db_session=db_session,
+                event=MilestoneRecordType.CONNECTOR_SUCCEEDED,
+                properties={
+                    "tenant_id": tenant_id,
+                },
             )
 
             # Clear repeated error state on success

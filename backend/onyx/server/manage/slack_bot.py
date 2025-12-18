@@ -30,7 +30,7 @@ from onyx.server.manage.validate_tokens import validate_app_token
 from onyx.server.manage.validate_tokens import validate_bot_token
 from onyx.server.manage.validate_tokens import validate_user_token
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import create_milestone_and_report
+from onyx.utils.telemetry import mt_cloud_telemetry
 from shared_configs.contextvars import get_current_tenant_id
 
 SLACK_API_CHANNELS_PER_PAGE = 100
@@ -274,12 +274,12 @@ def create_bot(
         is_default=True,
     )
 
-    create_milestone_and_report(
-        user=None,
+    mt_cloud_telemetry(
         distinct_id=tenant_id or "N/A",
-        event_type=MilestoneRecordType.CREATED_ONYX_BOT,
-        properties=None,
-        db_session=db_session,
+        event=MilestoneRecordType.CREATED_ONYX_BOT,
+        properties={
+            "tenant_id": tenant_id,
+        },
     )
 
     return SlackBot.from_model(slack_bot_model)
