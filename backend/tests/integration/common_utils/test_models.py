@@ -118,6 +118,7 @@ class DATestLLMProvider(BaseModel):
     api_key: str
     default_model_name: str
     is_public: bool
+    is_auto_mode: bool = False
     groups: list[int]
     personas: list[int]
     api_base: str | None = None

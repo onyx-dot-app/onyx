@@ -3,36 +3,18 @@
   "updated_at": "2025-12-17T00:00:00Z",
   "providers": {
     "openai": {
-      "default_model": { "name": "gpt-4o" },
+      "default_model": { "name": "gpt-5.2" },
       "additional_visible_models": [
-        { "name": "gpt-4o" },
-        { "name": "gpt-4o-mini" },
-        { "name": "o1" },
-        { "name": "o1-mini" }
+        { "name": "gpt-4.1" }
       ]
     },
     "anthropic": {
-      "default_model": "claude-sonnet-4-20250514",
+      "default_model": "claude-opus-4-5",
       "additional_visible_models": [
         {
-          "name": "claude-opus-4-5-20251101",
-          "display_name": "Claude Opus 4.5"
-        },
-        {
-          "name": "claude-sonnet-4-20250514",
-          "display_name": "Claude Sonnet 4"
-        },
-        {
-          "name": "claude-3-5-haiku-20241022",
-          "display_name": "Claude 3.5 Haiku"
+          "name": "claude-sonnet-4-5",
+          "display_name": "Claude Sonnet 4.5"
         }
-      ]
-    },
-    "azure": {
-      "default_model": { "name": "gpt-4o" },
-      "additional_visible_models": [
-        { "name": "gpt-4o" },
-        { "name": "gpt-4o-mini" }
       ]
     }
   }
