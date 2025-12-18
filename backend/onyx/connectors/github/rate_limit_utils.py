@@ -57,10 +57,16 @@ def raise_if_approaching_rate_limit(
 
     core_rate_limit = github_client.get_rate_limit().core
     remaining = core_rate_limit.remaining
+    try:
+        remaining_int = int(remaining)
+    except Exception:
+        # If the remaining value is missing or non-numeric (e.g., mocked), skip the guard
+        return
+
     reset_at = core_rate_limit.reset.replace(tzinfo=timezone.utc)
 
-    if remaining is not None and remaining <= threshold:
-        raise RateLimitBudgetLow(remaining, threshold, reset_at)
+    if remaining_int <= threshold:
+        raise RateLimitBudgetLow(remaining_int, threshold, reset_at)
 
 
 def sleep_after_rate_limit_exception(github_client: Github) -> None:
