@@ -60,4 +60,8 @@ GENERATE_IMAGE_GUIDANCE = """
 ## generate_image
 NEVER use generate_image unless the user specifically requests an image.
 """
+
+TOOL_CALL_FAILURE_PROMPT = """
+LLM attempted to call a tool but failed. Most likely the tool name was misspelled.
+""".strip()
 # ruff: noqa: E501, W605 end

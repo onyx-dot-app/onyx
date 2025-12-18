@@ -49,8 +49,10 @@ from onyx.llm.override_models import LLMOverride
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.prompts.chat_prompts import ADDITIONAL_CONTEXT_PROMPT
 from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
+from onyx.prompts.tool_prompts import TOOL_CALL_FAILURE_PROMPT
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.tools.models import ToolCallKickoff
 from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
 )
@@ -729,3 +731,38 @@ def is_last_assistant_message_clarification(chat_history: list[ChatMessage]) -> 
         if message.message_type == MessageType.ASSISTANT:
             return message.is_clarification
     return False
+
+
+def create_tool_call_failure_messages(
+    tool_call: ToolCallKickoff, token_counter: Callable[[str], int]
+) -> list[ChatMessageSimple]:
+    """Create ChatMessageSimple objects for a failed tool call.
+
+    Creates two messages:
+    1. The tool call message itself
+    2. A failure response message indicating the tool call failed
+
+    Args:
+        tool_call: The ToolCallKickoff object representing the failed tool call
+        token_counter: Function to count tokens in a message string
+
+    Returns:
+        List containing two ChatMessageSimple objects: tool call message and failure response
+    """
+    tool_call_msg = ChatMessageSimple(
+        message=tool_call.to_msg_str(),
+        token_count=token_counter(tool_call.to_msg_str()),
+        message_type=MessageType.TOOL_CALL,
+        tool_call_id=tool_call.tool_call_id,
+        image_files=None,
+    )
+
+    failure_response_msg = ChatMessageSimple(
+        message=TOOL_CALL_FAILURE_PROMPT,
+        token_count=token_counter(TOOL_CALL_FAILURE_PROMPT),
+        message_type=MessageType.TOOL_CALL_RESPONSE,
+        tool_call_id=tool_call.tool_call_id,
+        image_files=None,
+    )
+
+    return [tool_call_msg, failure_response_msg]
