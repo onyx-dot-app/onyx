@@ -80,7 +80,7 @@ def _enrich_basic_chunk_info(
     http_client: httpx.Client,
     document_id: str,
     previous_chunk_count: int | None,
-    new_chunk_count: int,  # TODO: This makes no sense.
+    new_chunk_count: int,
 ) -> EnrichedDocumentIndexingInfo:
     """Determines which chunks need to be deleted during document reindexing.
 
@@ -123,6 +123,10 @@ def _enrich_basic_chunk_info(
             index_name=index_name,
             http_client=http_client,
         )
+
+    assert (
+        last_indexed_chunk is not None and last_indexed_chunk >= 0
+    ), f"Bug: Last indexed chunk index is None or less than 0 for document: {document_id}."
 
     enriched_doc_info = EnrichedDocumentIndexingInfo(
         doc_id=document_id,
@@ -528,6 +532,10 @@ class VespaDocumentIndex(DocumentIndex):
                             httpx_client,
                             update_request,
                         )
+
+                    LOGGER.info(
+                        f"Updated {len(doc_chunk_ids)} chunks for document {doc_id}."
+                    )
 
     def id_based_retrieval(
         self, chunk_requests: list[DocumentSectionRequest]

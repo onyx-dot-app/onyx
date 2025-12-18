@@ -95,6 +95,9 @@ class MetadataUpdateRequest(BaseModel):
     document_ids: list[str]
     # Passed in to help with potential optimizations of the implementation. The
     # keys should be redundant with document_ids.
+    # NOTE: Generally the chunk count should always be known, however for
+    # documents still using the legacy chunk ID system it may not be. Any chunk
+    # count value < 0 should represent an unknown chunk count.
     doc_id_to_chunk_cnt: dict[str, int]
     # For the ones that are None, there is no update required to that field.
     access: DocumentAccess | None = None

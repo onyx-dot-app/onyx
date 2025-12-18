@@ -55,8 +55,8 @@ class RetryDocumentIndex:
         chunk_count: int | None,
         fields: VespaDocumentFields | None,
         user_fields: VespaDocumentUserFields | None,
-    ) -> int:
-        return self.index.update_single(
+    ) -> None:
+        self.index.update_single(
             doc_id,
             tenant_id=tenant_id,
             chunk_count=chunk_count,

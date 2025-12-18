@@ -65,7 +65,6 @@ from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
 )
 from onyx.document_index.vespa.vespa_document_index import TenantState
 from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
-from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
 from onyx.document_index.vespa_constants import BATCH_SIZE
 from onyx.document_index.vespa_constants import CONTENT_SUMMARY
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
@@ -652,11 +651,20 @@ class VespaIndex(DocumentIndex):
         tenant_id: str,
         fields: VespaDocumentFields | None,
         user_fields: VespaDocumentUserFields | None,
-    ) -> int:
+    ) -> None:
         """Note: if the document id does not exist, the update will be a no-op and the
         function will complete with no errors or exceptions.
         Handle other exceptions if you wish to implement retry behavior
         """
+        if fields is None and user_fields is None:
+            raise ValueError(
+                f"Bug: Tried up update document {doc_id} with no updated fields or user fields."
+            )
+        if fields is not None and fields.document_id is not None:
+            raise ValueError(
+                "The new vector db interface does not support updating the document ID field."
+            )
+
         vespa_document_index = VespaDocumentIndex(
             index_name=self.index_name,
             tenant_state=TenantState(
@@ -666,19 +674,23 @@ class VespaIndex(DocumentIndex):
             large_chunks_enabled=self.large_chunks_enabled,
             httpx_client=self.httpx_client,
         )
-        assert chunk_count is not None
-        assert fields is not None
+
+        project_ids: set[int] | None = None
+        if user_fields is not None and user_fields.user_projects is not None:
+            project_ids = set(user_fields.user_projects)
         update_request = MetadataUpdateRequest(
             document_ids=[doc_id],
-            doc_id_to_chunk_cnt={doc_id: chunk_count},
-            access=fields.access,
-            document_sets=fields.document_sets,
-            boost=fields.boost,
-            hidden=fields.hidden,
+            doc_id_to_chunk_cnt={
+                doc_id: chunk_count if chunk_count is not None else -1
+            },  # NOTE: -1 represents an unknown chunk count.
+            access=fields.access if fields is not None else None,
+            document_sets=fields.document_sets if fields is not None else None,
+            boost=fields.boost if fields is not None else None,
+            hidden=fields.hidden if fields is not None else None,
+            project_ids=project_ids,
         )
-        vespa_document_index.update([update_request])
 
-        return 0
+        vespa_document_index.update([update_request])
 
     def delete_single(
         self,
