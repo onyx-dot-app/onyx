@@ -55,11 +55,19 @@ export function ActionsProvider({ children }: ActionsProviderProps) {
   const { agentForCurrentChatSession } = useChatSessionContext();
   const { agentPreferences, setAgentPreference } = useAgentPreferences();
 
-  const agentId = agentForCurrentChatSession?.id ?? null;
-  const tools = agentForCurrentChatSession?.tools ?? [];
+  const agentId = useMemo(
+    () => agentForCurrentChatSession?.id ?? null,
+    [agentForCurrentChatSession?.id]
+  );
+  const tools = useMemo(
+    () => agentForCurrentChatSession?.tools ?? [],
+    [agentForCurrentChatSession?.tools]
+  );
 
-  const disabledToolIds =
-    (agentId && agentPreferences?.[agentId]?.disabled_tool_ids) || [];
+  const disabledToolIds = useMemo(
+    () => (agentId && agentPreferences?.[agentId]?.disabled_tool_ids) || [],
+    [agentId, agentPreferences]
+  );
 
   // Derive toolMap from tools and disabledToolIds - this is the source of truth from the server
   const baseToolMap = useMemo(() => {
@@ -79,10 +87,16 @@ export function ActionsProvider({ children }: ActionsProviderProps) {
     Record<number, ToolState>
   >({});
 
+  // Track the previous agent ID to detect actual agent switches
+  const [prevAgentId, setPrevAgentId] = useState<number | null>(agentId);
+
   // Reset local overrides when switching agents to prevent state leakage
   useEffect(() => {
-    setLocalOverrides({});
-  }, [agentId]);
+    if (prevAgentId !== agentId) {
+      setLocalOverrides({});
+      setPrevAgentId(agentId);
+    }
+  }, [agentId, prevAgentId]);
 
   // Merge base map with local overrides
   const toolMap = useMemo(() => {
