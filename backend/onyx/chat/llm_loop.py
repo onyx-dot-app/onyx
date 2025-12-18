@@ -474,6 +474,12 @@ def run_llm_loop(
             tool_responses: list[ToolResponse] = []
             tool_calls = llm_step_result.tool_calls or []
 
+            # Quick note for why citation_mapping and citation_processors are both needed:
+            # 1. Tools return lightweight string mappings, not SearchDoc objects
+            # 2. The SearchDoc resolution is deliberately deferred to llm_loop.py
+            # 3. The citation_processor operates on SearchDoc objects and can't provide a complete reverse URL lookup for
+            # in-flight citations
+            # It can be cleaned up but not super trivial or worthwhile right now
             just_ran_web_search = False
             tool_responses, citation_mapping = run_tool_calls(
                 tool_calls=tool_calls,

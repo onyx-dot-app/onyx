@@ -149,9 +149,28 @@ def run_tool_calls(
     citation_processor: DynamicCitationProcessor,
     # Skip query expansion for repeat search tool calls
     skip_search_query_expansion: bool = False,
-) -> tuple[
-    list[ToolResponse], dict[int, str]
-]:  # Returns list of ToolResponse (with tool_call set) and updated citation mapping
+) -> tuple[list[ToolResponse], dict[int, str]]:
+    """Run multiple tool calls in parallel and update citation mappings.
+
+    Merges tool calls for SearchTool and WebSearchTool before execution.
+    All tools are executed in parallel, and citation mappings are updated
+    from search tool responses.
+
+    Args:
+        tool_calls: List of tool calls to execute
+        tools: List of available tools
+        message_history: Chat message history for context
+        memories: User memories, if available
+        user_info: User information string, if available
+        citation_mapping: Current citation number to URL mapping
+        citation_processor: Processor for managing citations
+        skip_search_query_expansion: Whether to skip query expansion for search tools
+
+    Returns:
+        A tuple containing:
+            - List of ToolResponse objects (each with tool_call set)
+            - Updated citation mapping dictionary
+    """
     # Merge tool calls for SearchTool and WebSearchTool
     merged_tool_calls = _merge_tool_calls(tool_calls)
 
@@ -184,6 +203,10 @@ def run_tool_calls(
     tool_run_params: list[tuple[Tool, ToolCallKickoff, Any]] = []
 
     for tool_call in merged_tool_calls:
+        if tool_call.tool_name not in tools_by_name:
+            logger.warning(f"Tool {tool_call.tool_name} not found in tools list")
+            continue
+
         tool = tools_by_name[tool_call.tool_name]
 
         # Emit the tool start packet before running the tool
