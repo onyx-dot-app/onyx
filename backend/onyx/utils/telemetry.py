@@ -15,12 +15,15 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
 )
 from onyx.utils.variable_functionality import noop_fallback
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
+
+logger = setup_logger()
 
 _DANSWER_TELEMETRY_ENDPOINT = "https://telemetry.onyx.app/anonymous_telemetry"
 _CACHED_UUID: str | None = None
@@ -152,9 +155,13 @@ def mt_cloud_telemetry(
         return
 
     # Automatically include tenant_id in properties
-    all_properties = {"tenant_id": tenant_id}
-    if properties:
-        all_properties.update(properties)
+    all_properties = {**properties}
+    if "tenant_id" in properties:
+        logger.warning(
+            f"tenant_id already in properties: {properties}. "
+            f"Overwriting with new value {tenant_id}."
+        )
+    all_properties["tenant_id"] = tenant_id
 
     # MIT version should not need to include any Posthog code
     # This is only for Onyx MT Cloud, this code should also never be hit, no reason for any orgs to
