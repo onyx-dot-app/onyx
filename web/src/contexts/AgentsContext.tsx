@@ -83,7 +83,10 @@ export function AgentsProvider({ children }: AgentsProviderProps) {
   const isLoadingAgents = !error && !agentsData;
   const searchParams = useSearchParams();
 
-  const serverPinnedAgentIds = user?.preferences?.pinned_assistants ?? [];
+  const serverPinnedAgentIds = useMemo(
+    () => user?.preferences?.pinned_assistants ?? [],
+    [user?.preferences?.pinned_assistants]
+  );
 
   const serverPinnedAgents = useMemo(() => {
     if (agents.length === 0) return [];
