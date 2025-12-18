@@ -289,7 +289,7 @@ export default function HumanMessage({
           ) : (
             <>
               {onEdit &&
-              // isHovered &&
+              isHovered &&
               !isEditing &&
               (!files || files.length === 0) ? (
                 <div className="my-auto">
