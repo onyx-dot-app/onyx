@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { HOST_URL, INTERNAL_URL } from "./constants";
+import { processCookies } from "@/lib/userSS";
 
 export function buildClientUrl(path: string) {
   if (path.startsWith("/")) {
@@ -57,15 +58,17 @@ export class UrlBuilder {
 }
 
 export async function fetchSS(url: string, options?: RequestInit) {
-  const init = options || {
+  const cookieString = processCookies(await cookies());
+
+  const init: RequestInit = {
     credentials: "include",
     cache: "no-store",
+    ...options,
     headers: {
-      cookie: (await cookies())
-        .getAll()
-        .map((cookie) => `${cookie.name}=${cookie.value}`)
-        .join("; "),
+      ...options?.headers,
+      cookie: cookieString,
     },
   };
+
   return fetch(buildUrl(url), init);
 }
