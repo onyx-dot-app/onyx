@@ -247,6 +247,10 @@ def _update_single_chunk(
         model_config = {"frozen": True}
         assign: bool
 
+    class _UserProjects(BaseModel):
+        model_config = {"frozen": True}
+        assign: list[int]
+
     class _VespaPutFields(BaseModel):
         model_config = {"frozen": True}
         # The names of these fields are based the Vespa schema. Changes to the
@@ -256,6 +260,7 @@ def _update_single_chunk(
         document_sets: _DocumentSets | None = None
         access_control_list: _AccessControl | None = None
         hidden: _Hidden | None = None
+        user_project: _UserProjects | None = None
 
     class _VespaPutRequest(BaseModel):
         model_config = {"frozen": True}
@@ -285,12 +290,18 @@ def _update_single_chunk(
         if update_request.hidden is not None
         else None
     )
+    user_projects_update: _UserProjects | None = (
+        _UserProjects(assign=list(update_request.project_ids))
+        if update_request.project_ids is not None
+        else None
+    )
 
     vespa_put_fields = _VespaPutFields(
         boost=boost_update,
         document_sets=document_sets_update,
         access_control_list=access_update,
         hidden=hidden_update,
+        user_project=user_projects_update,
     )
 
     vespa_put_request = _VespaPutRequest(
@@ -306,7 +317,9 @@ def _update_single_chunk(
         resp = http_client.put(
             vespa_url,
             headers={"Content-Type": "application/json"},
-            json=vespa_put_request.model_dump(exclude_none=True),
+            json=vespa_put_request.model_dump(
+                exclude_none=True
+            ),  # NOTE: Important to not produce null fields in the json.
         )
         resp.raise_for_status()
     except httpx.HTTPStatusError as e:
@@ -479,13 +492,13 @@ class VespaDocumentIndex(DocumentIndex):
         raise NotImplementedError
 
     def update(self, update_requests: list[MetadataUpdateRequest]) -> None:
-        # Each invocation of this method can contain multiple update requests.
-        for update_request in update_requests:
-            # Each update request can correspond to multiple documents.
-            for doc_id in update_request.document_ids:
-                chunk_count = update_request.doc_id_to_chunk_cnt[doc_id]
-                sanitized_doc_id = replace_invalid_doc_id_characters(doc_id)
-                with self._httpx_client_context as httpx_client:
+        with self._httpx_client_context as httpx_client:
+            # Each invocation of this method can contain multiple update requests.
+            for update_request in update_requests:
+                # Each update request can correspond to multiple documents.
+                for doc_id in update_request.document_ids:
+                    chunk_count = update_request.doc_id_to_chunk_cnt[doc_id]
+                    sanitized_doc_id = replace_invalid_doc_id_characters(doc_id)
                     enriched_doc_infos = _enrich_basic_chunk_info(
                         index_name=self._index_name,
                         http_client=httpx_client,
@@ -508,7 +521,6 @@ class VespaDocumentIndex(DocumentIndex):
                             httpx_client,
                             update_request,
                         )
-        return
 
     def id_based_retrieval(
         self, chunk_requests: list[DocumentSectionRequest]
