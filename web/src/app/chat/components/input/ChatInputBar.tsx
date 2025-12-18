@@ -28,17 +28,14 @@ import {
   UserFileStatus,
 } from "@/app/chat/projects/projectsService";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgHourglass from "@/icons/hourglass";
-import SvgArrowUp from "@/icons/arrow-up";
-import SvgStop from "@/icons/stop";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import ActionsPopover from "@/refresh-components/popovers/ActionsPopover";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
-import SvgPlusCircle from "@/icons/plus-circle";
 import {
   getIconForAction,
   hasSearchToolsAvailable,
 } from "@/app/chat/services/actionUtils";
+import { SvgArrowUp, SvgHourglass, SvgPlusCircle, SvgStop } from "@opal/icons";
 
 const MAX_INPUT_HEIGHT = 200;
 
@@ -416,7 +413,7 @@ const ChatInputBar = React.memo(
         <div
           id="onyx-chat-input"
           className={cn(
-            "max-w-full w-[50rem] flex flex-col shadow-01 bg-background-neutral-00 rounded-16",
+            "max-w-full w-[min(50rem,100%)] flex flex-col shadow-01 bg-background-neutral-00 rounded-16",
             disabled && "opacity-50 cursor-not-allowed pointer-events-none"
           )}
           aria-disabled={disabled}

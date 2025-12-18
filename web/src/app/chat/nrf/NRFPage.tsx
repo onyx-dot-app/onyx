@@ -21,7 +21,6 @@ import {
   NewShortCutModal,
 } from "@/components/extension/Shortcuts";
 import Modal from "@/refresh-components/Modal";
-import SvgUser from "@/icons/user";
 import { useNightTime } from "@/lib/dateUtils";
 import { useFilters } from "@/lib/hooks";
 import { uploadFilesForChat } from "../services/lib";
@@ -41,6 +40,7 @@ import { ReadonlyRequestCookies } from "next/dist/server/web/spec-extension/adap
 import { CHROME_MESSAGE } from "@/lib/extension/constants";
 import ApiKeyModal from "@/components/llm/ApiKeyModal";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { SvgUser } from "@opal/icons";
 
 export default function NRFPage({
   requestCookies,

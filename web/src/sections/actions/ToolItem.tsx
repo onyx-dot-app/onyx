@@ -4,13 +4,15 @@ import React, { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import Switch from "@/refresh-components/inputs/Switch";
 import Text from "@/refresh-components/texts/Text";
-import SvgAlertTriangle from "@/icons/alert-triangle";
 import Truncated from "@/refresh-components/texts/Truncated";
-import SvgArrowLeftDot from "@/icons/arrow-left-dot";
-import SvgArrowRightDot from "@/icons/arrow-right-dot";
-import SvgCornerRightUpDot from "@/icons/corner-right-up-dot";
-import SvgMinusCircle from "@/icons/minus-circle";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal/types";
+import {
+  SvgAlertTriangle,
+  SvgArrowLeftDot,
+  SvgArrowRightDot,
+  SvgCornerRightUpDot,
+  SvgMinusCircle,
+} from "@opal/icons";
 
 type ToolItemVariant = "mcp" | "openapi";
 
@@ -225,6 +227,7 @@ const ToolItem: React.FC<ToolItemProps> = ({
               checked={isEnabled}
               onCheckedChange={onToggle}
               disabled={!isAvailable}
+              aria-label={`tool-toggle-${name}`}
             />
           </div>
         </div>

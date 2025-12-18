@@ -258,6 +258,9 @@ class LitellmLLM(LLM):
         )
 
         # Needed to get reasoning tokens from the model
+        # NOTE: OpenAI Responses API is disabled for parallel tool calls because LiteLLM's transformation layer
+        # doesn't properly pass parallel_tool_calls to the API, causing the model to
+        # always return sequential tool calls. For this reason parallel tool calls won't work with OpenAI models
         if (
             is_true_openai_model(self.config.model_provider, self.config.model_name)
             or self.config.model_provider == AZURE_PROVIDER_NAME
@@ -290,7 +293,7 @@ class LitellmLLM(LLM):
                     completion_kwargs["metadata"] = metadata
 
         try:
-            return litellm.completion(
+            response = litellm.completion(
                 mock_response=MOCK_LLM_RESPONSE,
                 # model choice
                 # model="openai/gpt-4",
@@ -311,24 +314,9 @@ class LitellmLLM(LLM):
                 temperature=(1 if is_reasoning else self._temperature),
                 timeout=timeout_override or self._timeout,
                 **({"stream_options": {"include_usage": True}} if stream else {}),
-                # For now, we don't support parallel tool calls
-                # NOTE: we can't pass this in if tools are not specified
+                # NOTE: we can't pass parallel_tool_calls if tools are not specified
                 # or else OpenAI throws an error
-                **(
-                    {"parallel_tool_calls": parallel_tool_calls}
-                    if tools
-                    and self.config.model_name
-                    not in [
-                        "o3-mini",
-                        "o3-preview",
-                        "o1",
-                        "o1-preview",
-                        "o1-mini",
-                        "o1-mini-2024-09-12",
-                        "o3-mini-2025-01-31",
-                    ]
-                    else {}
-                ),
+                **({"parallel_tool_calls": parallel_tool_calls} if tools else {}),
                 # Anthropic Claude uses `thinking` with budget_tokens for extended thinking
                 # This applies to Claude models on any provider (anthropic, vertex_ai, bedrock)
                 **(
@@ -350,10 +338,7 @@ class LitellmLLM(LLM):
                 # (litellm maps this to thinking_level for Gemini 3 models)
                 **(
                     {"reasoning_effort": OPENAI_REASONING_EFFORT[reasoning_effort]}
-                    if reasoning_effort
-                    and reasoning_effort != ReasoningEffort.OFF
-                    and is_reasoning
-                    and "claude" not in self.config.model_name.lower()
+                    if is_reasoning and "claude" not in self.config.model_name.lower()
                     else {}
                 ),
                 **(
@@ -364,6 +349,7 @@ class LitellmLLM(LLM):
                 **({self._max_token_param: max_tokens} if max_tokens else {}),
                 **completion_kwargs,
             )
+            return response
         except Exception as e:
 
             self._record_error(prompt, e)

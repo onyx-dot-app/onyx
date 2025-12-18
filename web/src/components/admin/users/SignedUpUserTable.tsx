@@ -48,9 +48,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgMoreHorizontal from "@/icons/more-horizontal";
-import SvgKey from "@/icons/key";
-
+import { SvgKey, SvgMoreHorizontal } from "@opal/icons";
 const ITEMS_PER_PAGE = 10;
 const PAGES_PER_BATCH = 2;
 

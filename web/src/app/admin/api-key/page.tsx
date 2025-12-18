@@ -25,11 +25,9 @@ import OnyxApiKeyForm from "@/app/admin/api-key/OnyxApiKeyForm";
 import { APIKey } from "@/app/admin/api-key/types";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import Button from "@/refresh-components/buttons/Button";
-import SvgRefreshCw from "@/icons/refresh-cw";
-import SvgEdit from "@/icons/edit";
-import SvgKey from "@/icons/key";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Text from "@/refresh-components/texts/Text";
+import { SvgEdit, SvgKey, SvgRefreshCw } from "@opal/icons";
 
 function Main() {
   const { popup, setPopup } = usePopup();

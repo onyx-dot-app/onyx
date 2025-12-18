@@ -1,11 +1,9 @@
 import { OnboardingStep } from "./types";
-import SvgGlobe from "@/icons/globe";
-import SvgImage from "@/icons/image";
-import SvgUsers from "@/icons/users";
 import { FinalStepItemProps } from "./types";
 import { LLMProviderName } from "@/app/admin/configuration/llm/interfaces";
 import InlineExternalLink from "../InlineExternalLink";
 import { DOCS_ADMINS_PATH, DOCS_BASE_URL } from "@/lib/constants";
+import { SvgGlobe, SvgImage, SvgUsers } from "@opal/icons";
 
 type StepConfig = {
   index: number;

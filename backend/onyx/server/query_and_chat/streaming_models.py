@@ -34,6 +34,9 @@ class StreamingType(Enum):
     REASONING_DONE = "reasoning_done"
     CITATION_INFO = "citation_info"
 
+    DEEP_RESEARCH_PLAN_START = "deep_research_plan_start"
+    DEEP_RESEARCH_PLAN_DELTA = "deep_research_plan_delta"
+
 
 class BaseObj(BaseModel):
     type: str = ""
@@ -222,6 +225,20 @@ class CustomToolDelta(BaseObj):
     file_ids: list[str] | None = None
 
 
+class DeepResearchPlanStart(BaseObj):
+    type: Literal["deep_research_plan_start"] = (
+        StreamingType.DEEP_RESEARCH_PLAN_START.value
+    )
+
+
+class DeepResearchPlanDelta(BaseObj):
+    type: Literal["deep_research_plan_delta"] = (
+        StreamingType.DEEP_RESEARCH_PLAN_DELTA.value
+    )
+
+    content: str
+
+
 """Packet"""
 
 # Discriminated union of all possible packet object types
@@ -254,15 +271,17 @@ PacketObj = Union[
     ReasoningDone,
     # Citation Packets
     CitationInfo,
+    # Deep Research Packets
+    DeepResearchPlanStart,
+    DeepResearchPlanDelta,
 ]
 
 
 class Packet(BaseModel):
     turn_index: int | None
+    # For parallel tool calls to preserve order of execution
+    tab_index: int = 0
+    # Used for tools/agents that call other tools, this currently doesn't support nested agents but can be added later
+    sub_turn_index: int | None = None
+
     obj: Annotated[PacketObj, Field(discriminator="type")]
-
-
-# This is for replaying it back from the DB to the frontend
-class EndStepPacketList(BaseModel):
-    turn_index: int
-    packet_list: list[Packet]

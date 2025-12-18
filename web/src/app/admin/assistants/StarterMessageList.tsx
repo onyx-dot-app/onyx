@@ -6,11 +6,10 @@ import { useMemo } from "react";
 import { StarterMessage } from "./interfaces";
 import Button from "@/refresh-components/buttons/Button";
 import { TextFormField } from "@/components/Field";
-import SvgTrash from "@/icons/trash";
 import { cn } from "@/lib/utils";
-import SvgRefreshCw from "@/icons/refresh-cw";
 import { MAX_STARTER_MESSAGES } from "@/lib/constants";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import { SvgRefreshCw, SvgTrash } from "@opal/icons";
 
 export interface StarterMessagesListProps {
   values: StarterMessage[];

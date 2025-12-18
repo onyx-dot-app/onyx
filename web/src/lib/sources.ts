@@ -50,10 +50,9 @@ import {
 import { ValidSources } from "./types";
 import { SourceCategory, SourceMetadata } from "./search/interfaces";
 import { Persona } from "@/app/admin/assistants/interfaces";
-import SvgGlobe from "@/icons/globe";
 import React from "react";
-import SvgFileText from "@/icons/file-text";
 import { DOCS_ADMINS_PATH } from "./constants";
+import { SvgFileText, SvgGlobe } from "@opal/icons";
 
 interface PartialSourceMetadata {
   icon: React.FC<{ size?: number; className?: string }>;

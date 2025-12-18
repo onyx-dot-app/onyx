@@ -5,8 +5,8 @@ import InputTypeIn, {
   InputTypeInProps,
 } from "@/refresh-components/inputs/InputTypeIn";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgPaperclip from "@/icons/paperclip";
 import { noProp } from "@/lib/utils";
+import { SvgPaperclip } from "@opal/icons";
 
 export interface InputFileProps extends Omit<
   InputTypeInProps,

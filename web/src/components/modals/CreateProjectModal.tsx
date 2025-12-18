@@ -2,13 +2,13 @@
 
 import { useRef } from "react";
 import Button from "@/refresh-components/buttons/Button";
-import SvgFolderPlus from "@/icons/folder-plus";
 import DefaultModalLayout from "@/refresh-components/layouts/DefaultModalLayout";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import { useKeyPress } from "@/hooks/useKeyPress";
 import FieldInput from "@/refresh-components/inputs/FieldInput";
 import { useAppRouter } from "@/hooks/appNavigation";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
+import { SvgFolderPlus } from "@opal/icons";
 
 export default function CreateProjectModal() {
   const { createProject } = useProjectsContext();

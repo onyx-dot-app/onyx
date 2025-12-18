@@ -26,6 +26,8 @@ class ChatStateContainer:
         self.answer_tokens: str | None = None
         # Store citation mapping for building citation_docs_info during partial saves
         self.citation_to_doc: dict[int, SearchDoc] = {}
+        # True if this turn is a clarification question (deep research flow)
+        self.is_clarification: bool = False
 
     def add_tool_call(self, tool_call: ToolCallInfo) -> None:
         """Add a tool call to the accumulated state."""
@@ -42,6 +44,10 @@ class ChatStateContainer:
     def set_citation_mapping(self, citation_to_doc: dict[int, Any]) -> None:
         """Set the citation mapping from citation processor."""
         self.citation_to_doc = citation_to_doc
+
+    def set_is_clarification(self, is_clarification: bool) -> None:
+        """Set whether this turn is a clarification question."""
+        self.is_clarification = is_clarification
 
 
 def run_chat_llm_with_state_containers(

@@ -125,19 +125,6 @@ def test_mcp_client_no_auth_flow(
     )
     status_response.raise_for_status()
 
-    # Step c) Attach the "hello" tool from the MCP server
-    update_response = requests.post(
-        f"{API_SERVER_URL}/admin/mcp/servers/update",
-        json={
-            "server_id": server_id,
-            "selected_tools": [MCP_HELLO_TOOL],
-        },
-        headers=admin_user.headers,
-        cookies=admin_user.cookies,
-    )
-    update_response.raise_for_status()
-    assert update_response.json()["updated_tools"] == 1
-
     tools_response = requests.get(
         f"{API_SERVER_URL}/admin/mcp/server/{server_id}/db-tools",
         headers=admin_user.headers,

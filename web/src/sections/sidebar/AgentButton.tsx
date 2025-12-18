@@ -4,16 +4,15 @@ import React, { memo } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { usePinnedAgentsWithDetails } from "@/hooks/useAgents";
 import { useAppRouter } from "@/hooks/appNavigation";
-import SvgPin from "@/icons/pin";
 import { cn, noProp } from "@/lib/utils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import SvgX from "@/icons/x";
 import useAppFocus from "@/hooks/useAppFocus";
 import useOnMount from "@/hooks/useOnMount";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
+import { SvgPin, SvgX } from "@opal/icons";
 
 interface SortableItemProps {
   id: number;

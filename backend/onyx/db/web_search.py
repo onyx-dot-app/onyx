@@ -42,6 +42,15 @@ def fetch_web_search_provider_by_name(
     return db_session.scalars(stmt).first()
 
 
+def fetch_web_search_provider_by_type(
+    provider_type: WebSearchProviderType, db_session: Session
+) -> InternetSearchProvider | None:
+    stmt = select(InternetSearchProvider).where(
+        InternetSearchProvider.provider_type == provider_type.value
+    )
+    return db_session.scalars(stmt).first()
+
+
 def _ensure_unique_search_name(
     name: str, provider_id: int | None, db_session: Session
 ) -> None:
@@ -185,6 +194,15 @@ def fetch_web_content_provider_by_name(
 ) -> InternetContentProvider | None:
     stmt = select(InternetContentProvider).where(
         InternetContentProvider.name.ilike(name)
+    )
+    return db_session.scalars(stmt).first()
+
+
+def fetch_web_content_provider_by_type(
+    provider_type: WebContentProviderType, db_session: Session
+) -> InternetContentProvider | None:
+    stmt = select(InternetContentProvider).where(
+        InternetContentProvider.provider_type == provider_type.value
     )
     return db_session.scalars(stmt).first()
 

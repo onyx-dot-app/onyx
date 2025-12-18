@@ -5,12 +5,8 @@ import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import SvgKey from "@/icons/key";
 import Text from "@/refresh-components/texts/Text";
-import SvgEye from "@/icons/eye";
-import SvgEyeClosed from "@/icons/eye-closed";
-import SvgAlertCircle from "@/icons/alert-circle";
-
+import { SvgAlertCircle, SvgEye, SvgEyeClosed, SvgKey } from "@opal/icons";
 interface MCPAuthTemplate {
   headers: Array<{ name: string; value: string }>;
   request_body_params: Array<{ path: string; value: string }>;

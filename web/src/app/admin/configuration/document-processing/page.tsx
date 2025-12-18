@@ -9,8 +9,8 @@ import useSWR from "swr";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
 import Text from "@/refresh-components/texts/Text";
-import SvgLock from "@/icons/lock";
 import { cn } from "@/lib/utils";
+import { SvgLock } from "@opal/icons";
 
 function Main() {
   const {

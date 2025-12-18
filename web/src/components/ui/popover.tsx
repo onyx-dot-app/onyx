@@ -22,7 +22,7 @@ const PopoverContent = React.forwardRef<
       align={align}
       sideOffset={sideOffset}
       className={cn(
-        "bg-background-neutral-00 p-1 z-[30000] rounded-12 overflow-hidden border shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+        "bg-background-neutral-00 p-1 z-popover rounded-12 overflow-hidden border shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
         className
       )}
       {...props}
@@ -117,12 +117,12 @@ export function PopoverMenu({
   const size = small ? "small" : medium ? "medium" : "small";
 
   return (
-    <div className="flex flex-col gap-1 max-h-[20rem]">
+    <div className="flex flex-col gap-1">
       <div className="relative">
         <div
           ref={containerRef}
           className={cn(
-            "flex flex-col gap-1 overflow-y-auto h-[20rem]",
+            "flex flex-col gap-1 overflow-y-auto max-h-[20rem]",
             sizeClasses[size],
             className
           )}

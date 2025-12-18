@@ -40,12 +40,11 @@ import {
 import Text from "@/refresh-components/texts/Text";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 
-import SvgEye from "@/icons/eye";
-import SvgEyeClosed from "@/icons/eye-closed";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import InputTextArea, {
   InputTextAreaProps,
 } from "@/refresh-components/inputs/InputTextArea";
+import { SvgEye, SvgEyeClosed } from "@opal/icons";
 
 export function SectionHeader({
   children,

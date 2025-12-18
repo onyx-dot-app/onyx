@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal/types";
 import { cn } from "@/lib/utils";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 

@@ -11,7 +11,7 @@ export default function PageWrapper(
       {/* WARNING: The id="page-wrapper-scroll-container" above is used by PageHeader.tsx
           to detect scroll position and show/hide the scroll shadow.
           DO NOT REMOVE this ID without updating PageHeader.tsx accordingly. */}
-      <div className="h-full w-[50rem]">
+      <div className="h-full w-[min(50rem,100%)]">
         <div {...props} />
       </div>
     </div>

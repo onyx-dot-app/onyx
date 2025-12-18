@@ -5,12 +5,12 @@ import {
   federatedSourceToRegularSource,
 } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
-import SvgX from "@/icons/x";
 import { Label } from "@/components/ui/label";
 import { ErrorMessage } from "formik";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { SvgX } from "@opal/icons";
 
 interface FederatedConnectorSelectorProps {
   name: string;

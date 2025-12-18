@@ -1,5 +1,4 @@
-import { MethodSpec } from "@/lib/tools/types";
-import { ToolSnapshot } from "./types";
+import { MethodSpec, ApiResponse, ToolSnapshot } from "@/lib/tools/interfaces";
 
 const SUPPORTED_HTTP_METHODS = new Set([
   "get",
@@ -57,11 +56,6 @@ export function extractMethodSpecsFromDefinition(
   }
 
   return methods;
-}
-
-interface ApiResponse<T> {
-  data: T | null;
-  error: string | null;
 }
 
 export async function validateToolDefinition(toolData: {

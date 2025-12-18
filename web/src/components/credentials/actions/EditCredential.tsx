@@ -12,8 +12,7 @@ import {
 import { createEditingValidationSchema, createInitialValues } from "../lib";
 import { dictionaryType, formType } from "../types";
 import { isTypedFileField } from "@/lib/connectors/fileTypes";
-import SvgTrash from "@/icons/trash";
-
+import { SvgTrash } from "@opal/icons";
 export interface EditCredentialProps {
   credential: Credential<dictionaryType>;
   onClose: () => void;

@@ -102,6 +102,11 @@ class MessageResponseIDInfo(BaseModel):
 class StreamingError(BaseModel):
     error: str
     stack_trace: str | None = None
+    error_code: str | None = (
+        None  # e.g., "RATE_LIMIT", "AUTH_ERROR", "TOOL_CALL_FAILED"
+    )
+    is_retryable: bool = True  # Hint to frontend if retry might help
+    details: dict | None = None  # Additional context (tool name, model name, etc.)
 
 
 class OnyxAnswer(BaseModel):

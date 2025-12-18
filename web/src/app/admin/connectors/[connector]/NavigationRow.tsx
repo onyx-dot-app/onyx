@@ -1,8 +1,6 @@
 import { useFormContext } from "@/components/context/FormContext";
-import SvgArrowLeft from "@/icons/arrow-left";
-import SvgArrowRight from "@/icons/arrow-right";
-import SvgPlusCircle from "@/icons/plus-circle";
 import Button from "@/refresh-components/buttons/Button";
+import { SvgArrowLeft, SvgArrowRight, SvgPlusCircle } from "@opal/icons";
 
 const NavigationRow = ({
   noAdvanced,

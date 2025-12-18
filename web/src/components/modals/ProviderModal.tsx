@@ -1,9 +1,8 @@
 import React from "react";
 import Button from "@/refresh-components/buttons/Button";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal/types";
 import Modal from "@/refresh-components/Modal";
-import SvgLoader from "@/icons/loader";
-
+import { SvgLoader } from "@opal/icons";
 export interface ProviderModalProps {
   // Modal configurations
   clickOutsideToClose?: boolean;

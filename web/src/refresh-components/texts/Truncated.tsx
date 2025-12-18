@@ -86,7 +86,11 @@ export default function Truncated({
           </div>
 
           {showTooltip && (
-            <TooltipContent side={side} sideOffset={sideOffset}>
+            <TooltipContent
+              side={side}
+              sideOffset={sideOffset}
+              className="max-w-[400px] break-words whitespace-normal"
+            >
               {typeof children === "string" ? (
                 <Text textLight05>{children}</Text>
               ) : (

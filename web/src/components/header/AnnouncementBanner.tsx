@@ -4,8 +4,7 @@ import { CustomTooltip } from "../tooltip/CustomTooltip";
 import { SettingsContext } from "../settings/SettingsProvider";
 import Link from "next/link";
 import Cookies from "js-cookie";
-import SvgX from "@/icons/x";
-
+import { SvgX } from "@opal/icons";
 const DISMISSED_NOTIFICATION_COOKIE_PREFIX = "dismissed_notification_";
 const COOKIE_EXPIRY_DAYS = 1;
 

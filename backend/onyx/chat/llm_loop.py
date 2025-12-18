@@ -1,15 +1,13 @@
-import json
 from collections.abc import Callable
 from typing import cast
 
 from sqlalchemy.orm import Session
 
 from onyx.chat.chat_state import ChatStateContainer
+from onyx.chat.chat_utils import create_tool_call_failure_messages
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
 from onyx.chat.llm_step import run_llm_step
-from onyx.chat.llm_step import TOOL_CALL_MSG_ARGUMENTS
-from onyx.chat.llm_step import TOOL_CALL_MSG_FUNC_NAME
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import ExtractedProjectFiles
 from onyx.chat.models import LlmStepResult
@@ -325,7 +323,6 @@ def run_llm_loop(
         # Pass the total budget to construct_message_history, which will handle token allocation
         available_tokens = llm.config.max_input_tokens
         tool_choice: ToolChoiceOptions = ToolChoiceOptions.AUTO
-        collected_tool_calls: list[ToolCallInfo] = []
         # Initialize gathered_documents with project files if present
         gathered_documents: list[SearchDoc] | None = (
             list(project_citation_mapping.values())
@@ -343,12 +340,8 @@ def run_llm_loop(
         has_called_search_tool: bool = False
         citation_mapping: dict[int, str] = {}  # Maps citation_num -> document_id/URL
 
-        current_tool_call_index = (
-            0  # TODO: just use the cycle count after parallel tool calls are supported
-        )
-
+        reasoning_cycles = 0
         for llm_cycle_count in range(MAX_LLM_CYCLES):
-
             if forced_tool_id:
                 # Needs to be just the single one because the "required" currently doesn't have a specified tool, just a binary
                 final_tools = [tool for tool in tools if tool.id == forced_tool_id]
@@ -450,7 +443,7 @@ def run_llm_loop(
                 tool_definitions=[tool.tool_definition() for tool in final_tools],
                 tool_choice=tool_choice,
                 llm=llm,
-                turn_index=current_tool_call_index,
+                turn_index=llm_cycle_count + reasoning_cycles,
                 citation_processor=citation_processor,
                 state_container=state_container,
                 # The rich docs representation is passed in so that when yielding the answer, it can also
@@ -466,7 +459,9 @@ def run_llm_loop(
                     packet = next(step_generator)
                     emitter.emit(packet)
                 except StopIteration as e:
-                    llm_step_result, current_tool_call_index = e.value
+                    llm_step_result, has_reasoned = e.value
+                    if has_reasoned:
+                        reasoning_cycles += 1
                     break
 
             # Type narrowing: generator always returns a result, so this can't be None
@@ -480,20 +475,39 @@ def run_llm_loop(
             tool_responses: list[ToolResponse] = []
             tool_calls = llm_step_result.tool_calls or []
 
+            # Quick note for why citation_mapping and citation_processors are both needed:
+            # 1. Tools return lightweight string mappings, not SearchDoc objects
+            # 2. The SearchDoc resolution is deliberately deferred to llm_loop.py
+            # 3. The citation_processor operates on SearchDoc objects and can't provide a complete reverse URL lookup for
+            # in-flight citations
+            # It can be cleaned up but not super trivial or worthwhile right now
             just_ran_web_search = False
-            for tool_call in tool_calls:
-                # TODO replace the [tool_call] with the list of tool calls once parallel tool calls are supported
-                tool_responses, citation_mapping = run_tool_calls(
-                    tool_calls=[tool_call],
-                    tools=final_tools,
-                    turn_index=current_tool_call_index,
-                    message_history=truncated_message_history,
-                    memories=memories,
-                    user_info=None,  # TODO, this is part of memories right now, might want to separate it out
-                    citation_mapping=citation_mapping,
-                    citation_processor=citation_processor,
-                    skip_search_query_expansion=has_called_search_tool,
+            tool_responses, citation_mapping = run_tool_calls(
+                tool_calls=tool_calls,
+                tools=final_tools,
+                message_history=truncated_message_history,
+                memories=memories,
+                user_info=None,  # TODO, this is part of memories right now, might want to separate it out
+                citation_mapping=citation_mapping,
+                citation_processor=citation_processor,
+                skip_search_query_expansion=has_called_search_tool,
+            )
+
+            # Failure case, give something reasonable to the LLM to try again
+            if tool_calls and not tool_responses:
+                failure_messages = create_tool_call_failure_messages(
+                    tool_calls[0], token_counter
                 )
+                simple_chat_history.extend(failure_messages)
+                continue
+
+            for tool_response in tool_responses:
+                # Extract tool_call from the response (set by run_tool_calls)
+                if tool_response.tool_call is None:
+                    raise ValueError("Tool response missing tool_call reference")
+
+                tool_call = tool_response.tool_call
+                tab_index = tool_call.tab_index
 
                 # Track if search tool was called (for skipping query expansion on subsequent calls)
                 if tool_call.tool_name == SearchTool.NAME:
@@ -535,7 +549,8 @@ def run_llm_loop(
 
                     tool_call_info = ToolCallInfo(
                         parent_tool_call_id=None,  # Top-level tool calls are attached to the chat message
-                        turn_index=current_tool_call_index,
+                        turn_index=llm_cycle_count + reasoning_cycles,
+                        tab_index=tab_index,
                         tool_name=tool_call.tool_name,
                         tool_call_id=tool_call.tool_call_id,
                         tool_id=tool.id,
@@ -545,16 +560,11 @@ def run_llm_loop(
                         search_docs=search_docs,
                         generated_images=generated_images,
                     )
-                    collected_tool_calls.append(tool_call_info)
                     # Add to state container for partial save support
                     state_container.add_tool_call(tool_call_info)
 
                     # Store tool call with function name and arguments in separate layers
-                    tool_call_data = {
-                        TOOL_CALL_MSG_FUNC_NAME: tool_call.tool_name,
-                        TOOL_CALL_MSG_ARGUMENTS: tool_call.tool_args,
-                    }
-                    tool_call_message = json.dumps(tool_call_data)
+                    tool_call_message = tool_call.to_msg_str()
                     tool_call_token_count = token_counter(tool_call_message)
 
                     tool_call_msg = ChatMessageSimple(
@@ -605,8 +615,6 @@ def run_llm_loop(
                             # Update the citation processor
                             citation_processor.update_citation_mapping(citation_to_doc)
 
-                current_tool_call_index += 1
-
             # If no tool calls, then it must have answered, wrap up
             if not llm_step_result.tool_calls or len(llm_step_result.tool_calls) == 0:
                 break
@@ -629,5 +637,8 @@ def run_llm_loop(
             raise RuntimeError("LLM did not return an answer.")
 
         emitter.emit(
-            Packet(turn_index=current_tool_call_index, obj=OverallStop(type="stop"))
+            Packet(
+                turn_index=llm_cycle_count + reasoning_cycles,
+                obj=OverallStop(type="stop"),
+            )
         )

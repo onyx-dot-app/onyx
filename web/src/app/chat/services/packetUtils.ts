@@ -82,26 +82,40 @@ export function isFinalAnswerComplete(packets: Packet[]) {
 
 export function groupPacketsByTurnIndex(
   packets: Packet[]
-): { turn_index: number; packets: Packet[] }[] {
+): { turn_index: number; tab_index: number; packets: Packet[] }[] {
   /*
-  Group packets by turn_index. Ordered from lowest turn_index to highest turn_index.
+  Group packets by (turn_index, tab_index). 
+  Ordered from lowest turn_index to highest, then by tab_index within each turn.
+  This supports parallel tool calls where multiple tools share the same turn_index
+  but have different tab_index values.
   */
-  const groups = packets.reduce((acc: Map<number, Packet[]>, packet) => {
-    const turn_index = packet.turn_index;
-    if (!acc.has(turn_index)) {
-      acc.set(turn_index, []);
-    }
-    acc.get(turn_index)!.push(packet);
-    return acc;
-  }, new Map());
+  const groups = packets.reduce(
+    (
+      acc: Map<
+        string,
+        { turn_index: number; tab_index: number; packets: Packet[] }
+      >,
+      packet
+    ) => {
+      const turn_index = packet.turn_index;
+      const tab_index = packet.tab_index ?? 0;
+      const key = `${turn_index}-${tab_index}`;
+      if (!acc.has(key)) {
+        acc.set(key, { turn_index, tab_index, packets: [] });
+      }
+      acc.get(key)!.packets.push(packet);
+      return acc;
+    },
+    new Map()
+  );
 
-  // Convert to array and sort by turn_index (lowest to highest)
-  return Array.from(groups.entries())
-    .map(([turn_index, packets]) => ({
-      turn_index,
-      packets,
-    }))
-    .sort((a, b) => a.turn_index - b.turn_index);
+  // Convert to array and sort by turn_index first, then tab_index
+  return Array.from(groups.values()).sort((a, b) => {
+    if (a.turn_index !== b.turn_index) {
+      return a.turn_index - b.turn_index;
+    }
+    return a.tab_index - b.tab_index;
+  });
 }
 
 export function getTextContent(packets: Packet[]) {
