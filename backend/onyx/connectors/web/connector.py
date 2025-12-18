@@ -18,6 +18,7 @@ from oauthlib.oauth2 import BackendApplicationClient
 from playwright.sync_api import BrowserContext
 from playwright.sync_api import Playwright
 from playwright.sync_api import sync_playwright
+from playwright.sync_api import TimeoutError
 from requests_oauthlib import OAuth2Session  # type:ignore
 from urllib3.exceptions import MaxRetryError
 
@@ -597,7 +598,7 @@ class WebConnector(LoadConnector):
                         page.wait_for_load_state(
                             "networkidle", timeout=BOT_DETECTION_GRACE_PERIOD_MS
                         )
-                    except Exception:
+                    except TimeoutError:
                         # If networkidle times out, just give it a moment for content to render
                         time.sleep(1)
                     time.sleep(0.5)  # let javascript run
