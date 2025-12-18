@@ -134,8 +134,16 @@ export function AgentsProvider({ children }: AgentsProviderProps) {
         ? [...localPinnedAgents, agent]
         : localPinnedAgents.filter((a) => a.id !== agentId);
 
+      const previousPinned = localPinnedAgents;
       setLocalPinnedAgents(nextPinned);
-      await persistPins(nextPinned.map((a) => a.id));
+
+      try {
+        await persistPins(nextPinned.map((a) => a.id));
+      } catch (error) {
+        // Rollback optimistic update on error
+        setLocalPinnedAgents(previousPinned);
+        throw error;
+      }
     },
     [agents, localPinnedAgents, persistPins]
   );
@@ -146,10 +154,18 @@ export function AgentsProvider({ children }: AgentsProviderProps) {
         .map((id) => agents.find((agent) => agent.id === id))
         .filter((agent): agent is MinimalPersonaSnapshot => !!agent);
 
+      const previousPinned = localPinnedAgents;
       setLocalPinnedAgents(nextPinned);
-      await persistPins(nextPinned.map((a) => a.id));
+
+      try {
+        await persistPins(nextPinned.map((a) => a.id));
+      } catch (error) {
+        // Rollback optimistic update on error
+        setLocalPinnedAgents(previousPinned);
+        throw error;
+      }
     },
-    [agents, persistPins]
+    [agents, localPinnedAgents, persistPins]
   );
 
   return (

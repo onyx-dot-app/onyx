@@ -67,10 +67,14 @@ export function ChatSessionProvider({ children }: ChatSessionProviderProps) {
   const chatSessions = data?.sessions ?? [];
   const searchParams = useSearchParams();
   const currentChatSessionId = searchParams.get(SEARCH_PARAM_NAMES.CHAT_ID);
-  const currentChatSession =
-    chatSessions.find(
-      (chatSession) => chatSession.id === currentChatSessionId
-    ) ?? null;
+
+  const currentChatSession = useMemo(
+    () =>
+      chatSessions.find(
+        (chatSession) => chatSession.id === currentChatSessionId
+      ) ?? null,
+    [chatSessions, currentChatSessionId]
+  );
 
   const { agents } = useAgentsContext();
 
