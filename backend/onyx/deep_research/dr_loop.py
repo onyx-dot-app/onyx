@@ -16,13 +16,12 @@ from onyx.chat.llm_step import run_llm_step_pkt_generator
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import LlmStepResult
 from onyx.configs.constants import MessageType
-from onyx.deep_research.dr_mock_tools import GENERATE_REPORT_TOOL_NAME
 from onyx.deep_research.dr_mock_tools import get_clarification_tool_definitions
 from onyx.deep_research.dr_mock_tools import get_orchestrator_tools
 from onyx.deep_research.dr_mock_tools import RESEARCH_AGENT_TOOL_NAME
-from onyx.deep_research.dr_mock_tools import THINK_TOOL_NAME
 from onyx.deep_research.dr_mock_tools import THINK_TOOL_RESPONSE_MESSAGE
 from onyx.deep_research.dr_mock_tools import THINK_TOOL_RESPONSE_TOKEN_COUNT
+from onyx.deep_research.utils import check_special_tool_calls
 from onyx.deep_research.utils import create_think_tool_token_processor
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
@@ -248,8 +247,7 @@ def run_deep_research_llm_loop(
             create_think_tool_token_processor() if not is_reasoning_model else None
         )
 
-        # TODO handle reasoning cycles
-        llm_step_result, _ = run_llm_step(
+        llm_step_result, has_reasoned = run_llm_step(
             emitter=emitter,
             history=truncated_message_history,
             tool_definitions=get_orchestrator_tools(
@@ -266,6 +264,9 @@ def run_deep_research_llm_loop(
             user_identity=user_identity,
             custom_token_processor=custom_processor,
         )
+        if has_reasoned:
+            reasoning_cycles += 1
+
         tool_calls = llm_step_result.tool_calls or []
 
         if not tool_calls and cycle == 0:
@@ -277,28 +278,13 @@ def run_deep_research_llm_loop(
 
         most_recent_reasoning: str | None = None
         if tool_calls:
-            think_tool_call = next(
-                (
-                    tool_call
-                    for tool_call in tool_calls
-                    if tool_call.tool_name == THINK_TOOL_NAME
-                ),
-                None,
-            )
+            special_tool_calls = check_special_tool_calls(tool_calls=tool_calls)
 
-            generate_report_tool_call = next(
-                (
-                    tool_call
-                    for tool_call in tool_calls
-                    if tool_call.tool_name == GENERATE_REPORT_TOOL_NAME
-                ),
-                None,
-            )
-
-            if generate_report_tool_call:
+            if special_tool_calls.generate_report_tool_call:
                 logger.info("Generate report tool call found, not implemented yet.")
                 break
-            elif think_tool_call:
+            elif special_tool_calls.think_tool_call:
+                think_tool_call = special_tool_calls.think_tool_call
                 # Only process the THINK_TOOL and skip all other tool calls
                 # This will not actually get saved to the db as a tool call but we'll attach it to the tool(s) called after
                 # it as if it were just a reasoning model doing it. In the chat history, because it happens in 2 steps,
@@ -346,7 +332,9 @@ def run_deep_research_llm_loop(
                     emitter=emitter,
                     state_container=state_container,
                     llm=llm,
+                    is_reasoning_model=is_reasoning_model,
                     token_counter=token_counter,
+                    user_identity=user_identity,
                 )
 
                 # Need to process citations

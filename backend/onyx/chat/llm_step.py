@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from onyx.chat.emitter import Emitter
 
+from onyx.llm.models import ReasoningEffort
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.models import ChatMessageSimple
@@ -342,6 +343,7 @@ def run_llm_step_pkt_generator(
     turn_index: int,
     citation_processor: DynamicCitationProcessor,
     state_container: ChatStateContainer,
+    reasoning_effort: ReasoningEffort | None = None,
     final_documents: list[SearchDoc] | None = None,
     user_identity: LLMUserIdentity | None = None,
     custom_token_processor: (
@@ -383,7 +385,7 @@ def run_llm_step_pkt_generator(
             tools=tool_definitions,
             tool_choice=tool_choice,
             structured_response_format=None,  # TODO
-            # reasoning_effort=ReasoningEffort.OFF,  # Can set this for dev/testing.
+            reasoning_effort=reasoning_effort,
             user_identity=user_identity,
         ):
             if packet.usage:
@@ -562,6 +564,7 @@ def run_llm_step(
     turn_index: int,
     citation_processor: DynamicCitationProcessor,
     state_container: ChatStateContainer,
+    reasoning_effort: ReasoningEffort | None = None,
     final_documents: list[SearchDoc] | None = None,
     user_identity: LLMUserIdentity | None = None,
     custom_token_processor: (
@@ -581,6 +584,7 @@ def run_llm_step(
         turn_index=turn_index,
         citation_processor=citation_processor,
         state_container=state_container,
+        reasoning_effort=reasoning_effort,
         final_documents=final_documents,
         user_identity=user_identity,
         custom_token_processor=custom_token_processor,
