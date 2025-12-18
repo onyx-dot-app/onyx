@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { HOST_URL, INTERNAL_URL } from "./constants";
-import { processCookies } from "./userSS";
+import { processCookies } from "@/lib/userSS";
 
 export function buildClientUrl(path: string) {
   if (path.startsWith("/")) {
@@ -68,28 +68,12 @@ export async function fetchSS(url: string, options?: RequestInit) {
     },
   };
 
-  // If options were provided, ensure the cookie header is set
-  if (options) {
-    const headers = new Headers(options.headers);
-    if (!headers.has("cookie")) {
-      headers.set("cookie", cookieString);
-    } else if (
-      process.env.DEBUG_AUTH_COOKIE &&
-      process.env.NODE_ENV === "development"
-    ) {
-      // Append debug cookie to existing cookies
-      const existingCookies = headers.get("cookie") || "";
-      const debugCookie = `fastapiusersauth=${process.env.DEBUG_AUTH_COOKIE}`;
-      if (
-        !existingCookies
-          .split("; ")
-          .some((c) => c.startsWith("fastapiusersauth="))
-      ) {
-        headers.set("cookie", `${existingCookies}; ${debugCookie}`);
-      }
-    }
-    init.headers = headers;
+  // Ensure cookie header is set
+  const headers = new Headers(init.headers);
+  if (!headers.has("cookie")) {
+    headers.set("cookie", cookieString);
   }
+  init.headers = headers;
 
   return fetch(buildUrl(url), init);
 }
