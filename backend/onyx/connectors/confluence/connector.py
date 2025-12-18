@@ -526,18 +526,12 @@ class ConfluenceConnector(
             page_id = _get_page_id(page, allow_missing=True)
             page_title = page.get("title", "unknown")
             if e.response and e.response.status_code in [401, 403]:
-                if e.response.status_code == 401:
-                    failure_message = (
-                        f"Invalid credentials (401) when fetching attachments for page '{page_title}' "
-                        f"(ID: {page_id}). The user may not have permission to query attachments on this page. "
-                        "Skipping attachments for this page."
-                    )
-                else:
-                    failure_message = (
-                        f"Permission denied (403) when fetching attachments for page '{page_title}' "
-                        f"(ID: {page_id}). The user may not have permission to query attachments on this page. "
-                        "Skipping attachments for this page."
-                    )
+                failure_message_prefix = "Invalid credentials (401)" if e.response.status_code == 401 else "Permission denied (403)"
+                failure_message = (
+                    f"{failure_message_prefix} when fetching attachments for page '{page_title}' "
+                    f"(ID: {page_id}). The user may not have permission to query attachments on this page. "
+                    "Skipping attachments for this page."
+                )
                 logger.warning(failure_message)
 
                 # Build the page URL for the failure record
