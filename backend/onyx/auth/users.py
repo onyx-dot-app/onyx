@@ -654,11 +654,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             logger.debug(f"Current tenant user count: {user_count}")
 
             mt_cloud_telemetry(
+                tenant_id=tenant_id,
                 distinct_id=user.email,
                 event=MilestoneRecordType.USER_SIGNED_UP,
-                properties={
-                    "tenant_id": tenant_id,
-                },
             )
 
         finally:

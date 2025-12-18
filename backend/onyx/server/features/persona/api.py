@@ -283,11 +283,9 @@ def create_persona(
         db_session=db_session,
     )
     mt_cloud_telemetry(
-        distinct_id=user.email if user else tenant_id or "N/A",
+        tenant_id=tenant_id,
+        distinct_id=user.email if user else tenant_id,
         event=MilestoneRecordType.CREATED_ASSISTANT,
-        properties={
-            "tenant_id": tenant_id,
-        },
     )
 
     return persona_snapshot

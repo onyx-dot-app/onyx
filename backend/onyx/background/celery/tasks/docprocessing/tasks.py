@@ -550,11 +550,9 @@ def check_indexing_completion(
                 db_session.commit()
 
             mt_cloud_telemetry(
+                tenant_id=tenant_id,
                 distinct_id=tenant_id,
                 event=MilestoneRecordType.CONNECTOR_SUCCEEDED,
-                properties={
-                    "tenant_id": tenant_id,
-                },
             )
 
             # Clear repeated error state on success

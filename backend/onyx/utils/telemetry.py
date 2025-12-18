@@ -143,12 +143,18 @@ def optional_telemetry(
 
 
 def mt_cloud_telemetry(
+    tenant_id: str,
     distinct_id: str,
     event: MilestoneRecordType,
     properties: dict | None = None,
 ) -> None:
     if not MULTI_TENANT:
         return
+
+    # Automatically include tenant_id in properties
+    all_properties = {"tenant_id": tenant_id}
+    if properties:
+        all_properties.update(properties)
 
     # MIT version should not need to include any Posthog code
     # This is only for Onyx MT Cloud, this code should also never be hit, no reason for any orgs to
@@ -157,4 +163,4 @@ def mt_cloud_telemetry(
         module="onyx.utils.telemetry",
         attribute="event_telemetry",
         fallback=noop_fallback,
-    )(distinct_id, event, properties)
+    )(distinct_id, event, all_properties)

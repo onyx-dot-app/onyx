@@ -275,11 +275,9 @@ def create_bot(
     )
 
     mt_cloud_telemetry(
-        distinct_id=tenant_id or "N/A",
+        tenant_id=tenant_id,
+        distinct_id=tenant_id,
         event=MilestoneRecordType.CREATED_ONYX_BOT,
-        properties={
-            "tenant_id": tenant_id,
-        },
     )
 
     return SlackBot.from_model(slack_bot_model)

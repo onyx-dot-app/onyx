@@ -451,11 +451,9 @@ def handle_new_chat_message(
         raise HTTPException(status_code=400, detail="Empty chat message is invalid")
 
     mt_cloud_telemetry(
-        distinct_id=user.email if user else tenant_id or "N/A",
+        tenant_id=tenant_id,
+        distinct_id=user.email if user else tenant_id,
         event=MilestoneRecordType.RAN_QUERY,
-        properties={
-            "tenant_id": tenant_id,
-        },
     )
 
     def stream_generator() -> Generator[str, None, None]:

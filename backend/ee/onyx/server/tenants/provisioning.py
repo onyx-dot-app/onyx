@@ -561,11 +561,9 @@ async def assign_tenant_to_user(
         add_users_to_tenant([email], tenant_id)
 
         mt_cloud_telemetry(
+            tenant_id=tenant_id,
             distinct_id=email,
             event=MilestoneRecordType.TENANT_CREATED,
-            properties={
-                "tenant_id": tenant_id,
-            },
         )
     except Exception:
         logger.exception(f"Failed to assign tenant {tenant_id} to user {email}")

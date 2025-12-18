@@ -369,9 +369,9 @@ def stream_chat_message_objects(
 
         # Milestone tracking, most devs using the API don't need to understand this
         mt_cloud_telemetry(
-            distinct_id=tenant_id,
+            tenant_id=tenant_id,
+            distinct_id=user.email if user else tenant_id,
             event=MilestoneRecordType.MULTIPLE_ASSISTANTS,
-            properties=None,
         )
 
         if reference_doc_ids is None and retrieval_options is None:
