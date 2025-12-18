@@ -45,7 +45,11 @@ export interface Credential<T> extends CredentialBase<T> {
   time_updated: string;
 }
 export interface GithubCredentialJson {
-  github_access_token: string;
+  github_access_token?: string;
+  github_app_id?: string;
+  github_app_installation_id?: string;
+  github_app_private_key?: string;
+  authentication_method?: string;
 }
 
 export interface GitbookCredentialJson {
@@ -278,7 +282,28 @@ export interface TestRailCredentialJson {
 }
 
 export const credentialTemplates: Record<ValidSources, any> = {
-  github: { github_access_token: "" } as GithubCredentialJson,
+  github: {
+    authentication_method: "pat",
+    authMethods: [
+      {
+        value: "pat",
+        label: "Personal Access Token",
+        fields: { github_access_token: "" },
+        description: "Use a classic or fine-grained PAT with repo access.",
+      },
+      {
+        value: "app",
+        label: "GitHub App Installation",
+        fields: {
+          github_app_id: "",
+          github_app_installation_id: "",
+          github_app_private_key: "",
+        },
+        description:
+          "Use a GitHub App installation token (higher rate limits per installation). Provide the App ID, installation ID, and PEM private key.",
+      },
+    ],
+  } as CredentialTemplateWithAuth<GithubCredentialJson>,
   gitlab: {
     gitlab_url: "",
     gitlab_access_token: "",
@@ -485,6 +510,9 @@ export const credentialTemplates: Record<ValidSources, any> = {
 export const credentialDisplayNames: Record<string, string> = {
   // Github
   github_access_token: "GitHub Access Token",
+  github_app_id: "GitHub App ID",
+  github_app_installation_id: "GitHub App Installation ID",
+  github_app_private_key: "GitHub App Private Key (PEM)",
 
   // Gitlab
   gitlab_url: "GitLab URL",

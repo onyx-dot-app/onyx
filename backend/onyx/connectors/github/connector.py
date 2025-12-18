@@ -9,6 +9,7 @@ from typing import Any
 from typing import cast
 
 from github import Github
+from github import GithubIntegration
 from github import RateLimitExceededException
 from github import Repository
 from github.GithubException import GithubException
@@ -418,17 +419,61 @@ class GithubConnector(CheckpointedConnectorWithPermSync[GithubConnectorCheckpoin
         self.github_client: Github | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        # defaults to 30 items per page, can be set to as high as 100
-        self.github_client = (
-            Github(
-                credentials["github_access_token"],
-                base_url=GITHUB_CONNECTOR_BASE_URL,
-                per_page=ITEMS_PER_PAGE,
-            )
-            if GITHUB_CONNECTOR_BASE_URL
-            else Github(credentials["github_access_token"], per_page=ITEMS_PER_PAGE)
-        )
+        self.github_client = self._build_github_client(credentials)
         return None
+
+    def _build_github_client(self, credentials: dict[str, Any]) -> Github:
+        """
+        Build a Github client from either a PAT or a GitHub App installation.
+        """
+        github_access_token = credentials.get("github_access_token")
+        if github_access_token:
+            return (
+                Github(
+                    github_access_token,
+                    base_url=GITHUB_CONNECTOR_BASE_URL,
+                    per_page=ITEMS_PER_PAGE,
+                )
+                if GITHUB_CONNECTOR_BASE_URL
+                else Github(github_access_token, per_page=ITEMS_PER_PAGE)
+            )
+
+        app_id = credentials.get("github_app_id")
+        installation_id = credentials.get("github_app_installation_id")
+        private_key = credentials.get("github_app_private_key")
+
+        # Require all GitHub App fields if using that auth path
+        if app_id and installation_id and private_key:
+            try:
+                app_id_int = int(app_id)
+                installation_id_int = int(installation_id)
+            except (TypeError, ValueError):
+                raise ConnectorMissingCredentialError(
+                    "GitHub App credentials must include numeric app and installation IDs."
+                )
+
+            integration = (
+                GithubIntegration(
+                    app_id_int, private_key, base_url=GITHUB_CONNECTOR_BASE_URL
+                )
+                if GITHUB_CONNECTOR_BASE_URL
+                else GithubIntegration(app_id_int, private_key)
+            )
+            app_token = integration.get_access_token(installation_id_int).token
+
+            return (
+                Github(
+                    app_token,
+                    base_url=GITHUB_CONNECTOR_BASE_URL,
+                    per_page=ITEMS_PER_PAGE,
+                )
+                if GITHUB_CONNECTOR_BASE_URL
+                else Github(app_token, per_page=ITEMS_PER_PAGE)
+            )
+
+        raise ConnectorMissingCredentialError(
+            "GitHub credentials not loaded. Provide a PAT or GitHub App credentials."
+        )
 
     def get_github_repo(
         self, github_client: Github, attempt_num: int = 0
