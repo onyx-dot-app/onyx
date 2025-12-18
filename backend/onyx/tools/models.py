@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 from typing import Literal
 from uuid import UUID
@@ -16,6 +17,10 @@ from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
+
+
+TOOL_CALL_MSG_FUNC_NAME = "function_name"
+TOOL_CALL_MSG_ARGUMENTS = "arguments"
 
 
 class CustomToolUserFileSnapshot(BaseModel):
@@ -35,6 +40,14 @@ class ToolCallKickoff(BaseModel):
 
     turn_index: int
     tab_index: int
+
+    def to_msg_str(self) -> str:
+        return json.dumps(
+            {
+                TOOL_CALL_MSG_FUNC_NAME: self.tool_name,
+                TOOL_CALL_MSG_ARGUMENTS: self.tool_args,
+            }
+        )
 
 
 class ToolResponse(BaseModel):

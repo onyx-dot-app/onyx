@@ -244,6 +244,15 @@ def batch_index_vespa_chunks(
     multitenant: bool,
     executor: concurrent.futures.ThreadPoolExecutor | None = None,
 ) -> None:
+    """Indexes a list of chunks in a Vespa index in parallel.
+
+    Args:
+        chunks: List of chunks to index.
+        index_name: Name of the index to index into.
+        http_client: HTTP client to use for the request.
+        multitenant: Whether the index is multitenant.
+        executor: Executor to use for the request.
+    """
     external_executor = True
 
     if not executor:

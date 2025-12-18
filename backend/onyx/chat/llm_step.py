@@ -36,6 +36,8 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningDone
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
+from onyx.tools.models import TOOL_CALL_MSG_ARGUMENTS
+from onyx.tools.models import TOOL_CALL_MSG_FUNC_NAME
 from onyx.tools.models import ToolCallKickoff
 from onyx.tracing.framework.create import generation_span
 from onyx.utils.b64 import get_image_type_from_bytes
@@ -43,10 +45,6 @@ from onyx.utils.logger import setup_logger
 
 
 logger = setup_logger()
-
-
-TOOL_CALL_MSG_FUNC_NAME = "function_name"
-TOOL_CALL_MSG_ARGUMENTS = "arguments"
 
 
 def _format_message_history_for_logging(
