@@ -7,7 +7,7 @@ export interface SidebarBodyProps {
   actionButton?: React.ReactNode;
   children?: React.ReactNode;
   footer?: React.ReactNode;
-  scrollKey?: string;
+  scrollKey: string;
 }
 
 export default function SidebarBody({
