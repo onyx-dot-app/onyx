@@ -571,13 +571,15 @@ class GithubConnector(CheckpointedConnectorWithPermSync[GithubConnectorCheckpoin
             logger.info(f"Fetching PRs for repo: {repo.name}")
 
             try:
-                pr_batch = _get_batch_rate_limited(
-                    self._pull_requests_func(repo),
-                    checkpoint.curr_page,
-                    checkpoint.cursor_url,
-                    checkpoint.num_retrieved,
-                    cursor_url_callback,
-                    self.github_client,
+                pr_batch = list(
+                    _get_batch_rate_limited(
+                        self._pull_requests_func(repo),
+                        checkpoint.curr_page,
+                        checkpoint.cursor_url,
+                        checkpoint.num_retrieved,
+                        cursor_url_callback,
+                        self.github_client,
+                    )
                 )
             except RateLimitBudgetLow as e:
                 logger.info(
