@@ -96,6 +96,16 @@ test.describe("First user onboarding flow", () => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
 
+    // Reset the admin user's personalization to ensure onboarding starts from step 1
+    await page.evaluate(async () => {
+      await fetch("/api/user/personalization", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ name: "" }),
+      });
+    });
+
     await page.goto("http://localhost:3000/chat");
     await page.waitForLoadState("networkidle");
 
@@ -178,7 +188,6 @@ test.describe("First user onboarding flow", () => {
 
     const providerModal = page.getByRole("dialog", { name: /Set up GPT/i });
     await expect(providerModal).toBeVisible({ timeout: 15000 });
-    await expect(providerModal.getByText(/Set up GPT/i)).toBeVisible();
 
     const apiKeyInput = page
       .getByLabel("API Key", { exact: false })
