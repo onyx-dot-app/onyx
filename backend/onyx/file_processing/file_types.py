@@ -55,7 +55,7 @@ class OnyxFileExtensions:
         ".mdx",
         ".conf",
         ".log",
-        "json",
+        ".json",
         ".csv",
         ".tsv",
         ".xml",
