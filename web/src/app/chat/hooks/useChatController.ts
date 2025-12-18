@@ -9,7 +9,6 @@ import {
 import { StreamStopInfo } from "@/lib/search/interfaces";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePostHog } from "posthog-js/react";
 import { stopChatSession } from "../chat_search/utils";
 import {
   getLastSuccessfulMessageId,
@@ -33,7 +32,6 @@ import {
   Message,
   MessageResponseIDInfo,
   RegenerationState,
-  ResearchType,
   RetrievalType,
   StreamingError,
   ToolCallMetadata,
@@ -130,7 +128,6 @@ export function useChatController({
   const { forcedToolIds } = useActionsContext();
   const { fetchProjects, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
-  const posthog = usePostHog();
 
   // Use selectors to access only the specific fields we need
   const currentSessionId = useChatSessionStore(
