@@ -3,6 +3,7 @@ import { unstable_noStore as noStore } from "next/cache";
 import { requireAuth } from "@/lib/auth/requireAuth";
 import { ProjectsProvider } from "./projects/ProjectsContext";
 import AppSidebar from "@/sections/sidebar/AppSidebar";
+import { ChatSessionProvider } from "@/contexts/ChatSessionContext";
 
 export interface LayoutProps {
   children: React.ReactNode;
@@ -20,10 +21,12 @@ export default async function Layout({ children }: LayoutProps) {
 
   return (
     <ProjectsProvider>
-      <div className="flex flex-row w-full h-full">
-        <AppSidebar />
-        {children}
-      </div>
+      <ChatSessionProvider>
+        <div className="flex flex-row w-full h-full">
+          <AppSidebar />
+          {children}
+        </div>
+      </ChatSessionProvider>
     </ProjectsProvider>
   );
 }

@@ -27,12 +27,12 @@ import {
   useCurrentMessageTree,
   useUncaughtError,
 } from "@/app/chat/stores/useChatSessionStore";
-import useChatSessions from "@/hooks/useChatSessions";
 import { useDeepResearchToggle } from "../app/chat/hooks/useDeepResearchToggle";
 import { useUser } from "@/components/user/UserProvider";
 import { HORIZON_DISTANCE_PX } from "@/lib/constants";
 import Spacer from "@/refresh-components/Spacer";
 import { SvgChevronDown } from "@opal/icons";
+import { useChatSessionContext } from "@/contexts/ChatSessionContext";
 
 export interface ChatUIHandle {
   scrollToBottom: () => boolean;
@@ -80,7 +80,7 @@ const ChatUI = React.forwardRef(
     ref: ForwardedRef<ChatUIHandle>
   ) => {
     const { user } = useUser();
-    const { currentChatSessionId } = useChatSessions();
+    const { currentChatSessionId } = useChatSessionContext();
     const { deepResearchEnabled } = useDeepResearchToggle({
       chatSessionId: currentChatSessionId,
       assistantId: liveAssistant?.id,

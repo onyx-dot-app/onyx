@@ -16,7 +16,6 @@ import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import Dropzone from "react-dropzone";
 import ChatInputBar from "@/app/chat/components/input/ChatInputBar";
-import useChatSessions from "@/hooks/useChatSessions";
 import { useCCPairs } from "@/lib/hooks/useCCPairs";
 import { useTags } from "@/lib/hooks/useTags";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
@@ -68,6 +67,7 @@ import { SvgFileText } from "@opal/icons";
 import Spacer from "@/refresh-components/Spacer";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import { useAgentsContext } from "@/contexts/AgentsContext";
+import { useChatSessionContext } from "@/contexts/ChatSessionContext";
 
 export interface ChatPageProps {
   firstMessage?: string;
@@ -97,7 +97,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
 
   // Use SWR hooks for data fetching
   const { refreshChatSessions, currentChatSession, currentChatSessionId } =
-    useChatSessions();
+    useChatSessionContext();
   const { ccPairs } = useCCPairs();
   const { tags } = useTags();
   const { documentSets } = useDocumentSets();

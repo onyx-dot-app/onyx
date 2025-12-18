@@ -30,7 +30,7 @@ import {
 } from "@dnd-kit/modifiers";
 import Settings from "@/sections/sidebar/Settings/Settings";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
-import useChatSessions from "@/hooks/useChatSessions";
+import { useChatSessionContext } from "@/contexts/ChatSessionContext";
 import { useProjects } from "@/lib/hooks/useProjects";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
 import ProjectFolderButton from "@/sections/sidebar/ProjectFolderButton";
@@ -142,7 +142,7 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
     chatSessions,
     refreshChatSessions,
     isLoading: isLoadingChatSessions,
-  } = useChatSessions();
+  } = useChatSessionContext();
   const {
     projects,
     refreshProjects,

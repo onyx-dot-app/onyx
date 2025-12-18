@@ -4,8 +4,8 @@ import { useMemo } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
-import useChatSessions from "./useChatSessions";
 import { useAgentsContext } from "@/contexts/AgentsContext";
+import { useChatSessionContext } from "@/contexts/ChatSessionContext";
 
 /**
  * Hook to determine the currently active agent based on:
@@ -18,7 +18,7 @@ export function useCurrentAgent(): MinimalPersonaSnapshot | null {
   const searchParams = useSearchParams();
 
   const agentIdRaw = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
-  const { currentChatSession } = useChatSessions();
+  const { currentChatSession } = useChatSessionContext();
 
   const currentAgent = useMemo(() => {
     if (agents.length === 0) return null;
