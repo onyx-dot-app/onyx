@@ -26,7 +26,6 @@ from onyx.db.models import User
 from onyx.db.oauth_config import create_oauth_config
 from onyx.db.oauth_config import upsert_user_oauth_token
 from onyx.llm.factory import get_default_llm
-from onyx.llm.interfaces import LLM
 from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_constructor import SearchToolConfig
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
@@ -96,11 +95,6 @@ def _create_test_oauth_config(
         additional_params=None,
         db_session=db_session,
     )
-
-
-def _get_test_llm() -> LLM:
-    """Helper to get test LLM"""
-    return get_default_llm()
 
 
 def _get_authorization_header(headers: dict[str, str]) -> str | None:
@@ -179,7 +173,7 @@ class TestOAuthToolIntegrationPriority:
 
         # Create persona and chat session
         persona = _create_test_persona(db_session, user, [tool])
-        llm = _get_test_llm()
+        llm = get_default_llm()
 
         # Construct tools
         search_tool_config = SearchToolConfig()
@@ -239,7 +233,7 @@ class TestOAuthToolIntegrationPriority:
 
         # Create persona
         persona = _create_test_persona(db_session, user, [tool])
-        llm = _get_test_llm()
+        llm = get_default_llm()
 
         # Construct tools
         tool_dict = construct_tools(
@@ -290,7 +284,7 @@ class TestOAuthToolIntegrationPriority:
 
         # Create persona
         persona = _create_test_persona(db_session, user, [tool])
-        llm = _get_test_llm()
+        llm = get_default_llm()
 
         # Construct tools
         with caplog.at_level("WARNING"):
@@ -352,7 +346,7 @@ class TestOAuthToolIntegrationPriority:
 
         # Create persona
         persona = _create_test_persona(db_session, user, [tool])
-        llm = _get_test_llm()
+        llm = get_default_llm()
 
         # Construct tools
         tool_dict = construct_tools(
@@ -410,7 +404,7 @@ class TestOAuthToolIntegrationPriority:
 
         # Create persona
         persona = _create_test_persona(db_session, user, [tool])
-        llm = _get_test_llm()
+        llm = get_default_llm()
 
         # Mock the token refresh response
         mock_response = Mock()
@@ -490,7 +484,7 @@ class TestOAuthToolIntegrationPriority:
 
         # Create persona
         persona = _create_test_persona(db_session, user, [tool])
-        llm = _get_test_llm()
+        llm = get_default_llm()
 
         # Construct tools
         tool_dict = construct_tools(
@@ -543,7 +537,7 @@ class TestOAuthToolIntegrationPriority:
 
         # Create persona
         persona = _create_test_persona(db_session, user, [tool])
-        llm = _get_test_llm()
+        llm = get_default_llm()
 
         # Construct tools
         tool_dict = construct_tools(
