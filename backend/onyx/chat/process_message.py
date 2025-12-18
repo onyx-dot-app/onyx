@@ -51,8 +51,8 @@ from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.utils import load_in_memory_chat_files
 from onyx.file_store.utils import verify_user_files
+from onyx.llm.factory import get_llm_for_persona
 from onyx.llm.factory import get_llm_token_counter
-from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.utils import litellm_exception_to_error_msg
@@ -379,7 +379,7 @@ def stream_chat_message_objects(
                 "Must specify a set of documents for chat or specify search options"
             )
 
-        llm, fast_llm = get_llms_for_persona(
+        llm = get_llm_for_persona(
             persona=persona,
             user=user,
             llm_override=new_msg_req.llm_override or chat_session.llm_override,
@@ -475,7 +475,6 @@ def stream_chat_message_objects(
             emitter=emitter,
             user=user,
             llm=llm,
-            fast_llm=fast_llm,
             search_tool_config=SearchToolConfig(
                 user_selected_filters=user_selected_filters,
                 project_id=(

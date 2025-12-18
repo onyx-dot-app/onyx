@@ -47,7 +47,6 @@ class WellKnownLLMProviderDescriptor(BaseModel):
     custom_config_keys: list[CustomConfigKey] | None = None
     model_configurations: list[ModelConfigurationView]
     default_model: str | None = None
-    default_fast_model: str | None = None
     default_api_base: str | None = None
     # set for providers like Azure, which require a deployment name.
     deployment_name_required: bool = False
@@ -148,7 +147,6 @@ VERTEXAI_PROVIDER_NAME = "vertex_ai"
 VERTEX_CREDENTIALS_FILE_KWARG = "vertex_credentials"
 VERTEX_LOCATION_KWARG = "vertex_location"
 VERTEXAI_DEFAULT_MODEL = "gemini-2.5-flash"
-VERTEXAI_DEFAULT_FAST_MODEL = "gemini-2.5-flash-lite"
 # Curated list of Vertex AI models to show by default in the UI
 VERTEXAI_VISIBLE_MODEL_NAMES = {
     "gemini-2.5-flash",
@@ -335,7 +333,6 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                 OPENAI_PROVIDER_NAME
             ),
             default_model="gpt-4o",
-            default_fast_model="gpt-4o-mini",
         ),
         WellKnownLLMProviderDescriptor(
             name=OLLAMA_PROVIDER_NAME,
@@ -357,7 +354,6 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                 OLLAMA_PROVIDER_NAME
             ),
             default_model=None,
-            default_fast_model=None,
             default_api_base="http://127.0.0.1:11434",
         ),
         WellKnownLLMProviderDescriptor(
@@ -372,7 +368,6 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                 ANTHROPIC_PROVIDER_NAME
             ),
             default_model="claude-sonnet-4-5-20250929",
-            default_fast_model="claude-sonnet-4-20250514",
         ),
         WellKnownLLMProviderDescriptor(
             name=AZURE_PROVIDER_NAME,
@@ -455,7 +450,6 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                 BEDROCK_PROVIDER_NAME
             ),
             default_model=None,
-            default_fast_model=None,
         ),
         WellKnownLLMProviderDescriptor(
             name=VERTEXAI_PROVIDER_NAME,
@@ -488,7 +482,6 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                 ),
             ],
             default_model=VERTEXAI_DEFAULT_MODEL,
-            default_fast_model=VERTEXAI_DEFAULT_FAST_MODEL,
         ),
         WellKnownLLMProviderDescriptor(
             name=OPENROUTER_PROVIDER_NAME,
@@ -502,7 +495,6 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                 OPENROUTER_PROVIDER_NAME
             ),
             default_model=None,
-            default_fast_model=None,
             default_api_base="https://openrouter.ai/api/v1",
         ),
     ]

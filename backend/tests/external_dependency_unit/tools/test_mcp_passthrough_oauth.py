@@ -30,7 +30,7 @@ from onyx.db.models import OAuthAccount
 from onyx.db.models import Persona
 from onyx.db.models import Tool
 from onyx.db.models import User
-from onyx.llm.factory import get_default_llms
+from onyx.llm.factory import get_default_llm
 from onyx.llm.interfaces import LLM
 from onyx.tools.models import CustomToolCallSummary
 from onyx.tools.tool_constructor import construct_tools
@@ -71,10 +71,9 @@ def _create_test_persona_with_mcp_tool(
     return persona
 
 
-def _get_test_llms() -> tuple[LLM, LLM]:
-    """Helper to get test LLMs"""
-    llm, fast_llm = get_default_llms()
-    return llm, fast_llm
+def _get_test_llm() -> LLM:
+    """Helper to get test LLM"""
+    return get_default_llm()
 
 
 class TestMCPPassThroughOAuth:
@@ -142,7 +141,7 @@ class TestMCPPassThroughOAuth:
 
         # Create persona with the MCP tool
         persona = _create_test_persona_with_mcp_tool(db_session, user, [mcp_tool_db])
-        llm, fast_llm = _get_test_llms()
+        llm = _get_test_llm()
 
         # Construct tools
         search_tool_config = SearchToolConfig()
@@ -153,7 +152,6 @@ class TestMCPPassThroughOAuth:
             emitter=get_default_emitter(),
             user=user,
             llm=llm,
-            fast_llm=fast_llm,
             search_tool_config=search_tool_config,
         )
 
@@ -209,7 +207,7 @@ class TestMCPPassThroughOAuth:
 
         # Create persona
         persona = _create_test_persona_with_mcp_tool(db_session, user, [mcp_tool_db])
-        llm, fast_llm = _get_test_llms()
+        llm = _get_test_llm()
 
         tool_dict = construct_tools(
             persona=persona,
@@ -217,7 +215,6 @@ class TestMCPPassThroughOAuth:
             emitter=get_default_emitter(),
             user=user,
             llm=llm,
-            fast_llm=fast_llm,
             search_tool_config=SearchToolConfig(),
         )
 
@@ -285,7 +282,7 @@ class TestMCPPassThroughOAuth:
 
         # Create persona
         persona = _create_test_persona_with_mcp_tool(db_session, user, [mcp_tool_db])
-        llm, fast_llm = _get_test_llms()
+        llm = _get_test_llm()
 
         tool_dict = construct_tools(
             persona=persona,
@@ -293,7 +290,6 @@ class TestMCPPassThroughOAuth:
             emitter=get_default_emitter(),
             user=user,
             llm=llm,
-            fast_llm=fast_llm,
             search_tool_config=SearchToolConfig(),
         )
         # Verify MCP tool was constructed
@@ -361,7 +357,7 @@ class TestMCPPassThroughOAuth:
 
         # Create persona
         persona = _create_test_persona_with_mcp_tool(db_session, user, [mcp_tool_db])
-        llm, fast_llm = _get_test_llms()
+        llm = _get_test_llm()
 
         tool_dict = construct_tools(
             persona=persona,
@@ -369,7 +365,6 @@ class TestMCPPassThroughOAuth:
             emitter=get_default_emitter(),
             user=user,
             llm=llm,
-            fast_llm=fast_llm,
             search_tool_config=SearchToolConfig(),
         )
 
@@ -466,7 +461,7 @@ class TestMCPPassThroughOAuth:
 
         # Create persona
         persona = _create_test_persona_with_mcp_tool(db_session, user, [mcp_tool_db])
-        llm, fast_llm = _get_test_llms()
+        llm = _get_test_llm()
 
         # Construct tools
         tool_dict = construct_tools(
@@ -475,7 +470,6 @@ class TestMCPPassThroughOAuth:
             emitter=get_default_emitter(),
             user=user,
             llm=llm,
-            fast_llm=fast_llm,
             search_tool_config=SearchToolConfig(),
         )
         # Verify MCP tool was constructed
@@ -551,7 +545,7 @@ class TestMCPPassThroughOAuth:
         db_session.refresh(mcp_tool_db)
 
         persona = _create_test_persona_with_mcp_tool(db_session, user, [mcp_tool_db])
-        llm, fast_llm = _get_test_llms()
+        llm = _get_test_llm()
 
         tool_dict = construct_tools(
             persona=persona,
@@ -559,7 +553,6 @@ class TestMCPPassThroughOAuth:
             emitter=get_default_emitter(),
             user=user,
             llm=llm,
-            fast_llm=fast_llm,
             search_tool_config=SearchToolConfig(),
         )
 

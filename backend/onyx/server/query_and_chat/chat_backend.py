@@ -55,9 +55,9 @@ from onyx.db.projects import check_project_ownership
 from onyx.db.user_file import get_file_id_by_user_file_id
 from onyx.file_processing.extract_file_text import docx_to_txt_filename
 from onyx.file_store.file_store import get_default_file_store
-from onyx.llm.factory import get_default_llms
+from onyx.llm.factory import get_default_llm
+from onyx.llm.factory import get_llm_for_persona
 from onyx.llm.factory import get_llm_token_counter
-from onyx.llm.factory import get_llms_for_persona
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.redis.redis_pool import get_redis_client
 from onyx.secondary_llm_flows.chat_session_naming import (
@@ -117,7 +117,7 @@ def _get_available_tokens_for_persona(
             - default_reserved_tokens
         )
 
-    llm, _ = get_llms_for_persona(persona=persona, user=user)
+    llm = get_llm_for_persona(persona=persona, user=user)
     token_counter = get_llm_token_counter(llm)
 
     system_prompt = get_default_base_system_prompt(db_session)
@@ -354,7 +354,7 @@ def rename_chat_session(
         chat_session_id=chat_session_id, db_session=db_session
     )
 
-    llm, _ = get_default_llms(
+    llm = get_default_llm(
         additional_headers=extract_headers(
             request.headers, LITELLM_PASS_THROUGH_HEADERS
         )
@@ -670,7 +670,7 @@ def seed_chat(
         root_message = get_or_create_root_message(
             chat_session_id=new_chat_session.id, db_session=db_session
         )
-        llm, _fast_llm = get_llms_for_persona(
+        llm = get_llm_for_persona(
             persona=new_chat_session.persona,
             user=user,
         )

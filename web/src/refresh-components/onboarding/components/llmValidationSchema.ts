@@ -39,7 +39,6 @@ export const getValidationSchema = (
         )
         .min(1, "At least one model configuration is required"),
       default_model_name: Yup.string().required("Default model is required"),
-      fast_default_model_name: Yup.string().nullable(),
       custom_config: Yup.object(),
     });
   }
