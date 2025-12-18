@@ -661,6 +661,12 @@ def update_connector_files(
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid file_ids_to_remove format")
 
+    if not isinstance(file_ids_list, list):
+        raise HTTPException(
+            status_code=400,
+            detail="file_ids_to_remove must be a JSON-encoded list",
+        )
+
     # Get current connector config
     current_config = connector.connector_specific_config
     current_file_locations = current_config.get("file_locations", [])

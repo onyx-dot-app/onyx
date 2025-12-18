@@ -1,6 +1,6 @@
 import { test, expect, Page } from "@playwright/test";
-import { loginAs } from "../utils/auth";
-import { OnyxApiClient } from "../utils/onyxApiClient";
+import { loginAs } from "@tests/e2e/utils/auth";
+import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 /** Upload a file through the inline manager, retrying on transient failures. */
 async function uploadTestFile(
@@ -136,15 +136,18 @@ test.describe("InlineFileManagement", () => {
       "Test content for confirmation modal"
     );
     await page.getByRole("button", { name: /save changes/i }).click();
-    await expect(page.getByText("Confirm File Changes")).toBeVisible({
-      timeout: 5000,
+    const modalDialog = page.getByRole("dialog", {
+      name: /confirm file changes/i,
     });
-    await expect(page.getByText(/1 file\(s\) will be added/)).toBeVisible();
+    await expect(modalDialog).toBeVisible({ timeout: 5000 });
     await expect(
-      page.getByRole("button", { name: /confirm & save/i })
+      modalDialog.getByText(/1 file\(s\) will be added/)
+    ).toBeVisible();
+    await expect(
+      modalDialog.getByRole("button", { name: /confirm & save/i })
     ).toBeVisible();
     await page.keyboard.press("Escape");
-    await expect(page.getByText("Confirm File Changes")).not.toBeVisible();
+    await expect(modalDialog).not.toBeVisible();
     await expect(
       page.getByRole("button", { name: /save changes/i })
     ).toBeVisible();

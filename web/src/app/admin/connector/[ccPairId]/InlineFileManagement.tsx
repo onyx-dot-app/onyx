@@ -312,9 +312,7 @@ export function InlineFileManagement({
                     )}
                     <TableCell className="font-medium">
                       {file.name}
-                      <span className="ml-2 text-xs text-green-600 dark:text-green-400">
-                        New
-                      </span>
+                      <Text figureSmallValue>New</Text>
                     </TableCell>
                     <TableCell>{formatBytes(file.size)}</TableCell>
                     <TableCell>-</TableCell>
@@ -371,8 +369,8 @@ export function InlineFileManagement({
                   secondaryBody
                   className="text-red-700 dark:text-red-300 mt-1"
                 >
-                  Documents from these files will be pruned from Vespa search
-                  index
+                  Documents from these files will be pruned from the Document
+                  Index
                 </Text>
               </div>
             )}
@@ -383,14 +381,14 @@ export function InlineFileManagement({
                   mainUiBody
                   className="font-semibold text-green-800 dark:text-green-200"
                 >
-                  ➕ {filesToAdd.length} file(s) will be added
+                  {filesToAdd.length} file(s) will be added
                 </Text>
                 <Text
                   secondaryBody
                   className="text-green-700 dark:text-green-300 mt-1"
                 >
                   New files will be uploaded, chunked, embedded, and indexed in
-                  Vespa
+                  the Document Index
                 </Text>
               </div>
             )}
