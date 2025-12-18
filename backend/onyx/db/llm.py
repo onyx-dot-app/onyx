@@ -563,11 +563,10 @@ def sync_auto_mode_models(
 ) -> int:
     """Sync models from GitHub config to a provider in Auto mode.
 
-    In Auto mode, EVERYTHING is controlled by GitHub config:
-    - Model list
-    - Model visibility (is_visible)
-    - Default model
-    - Fast default model
+    In Auto mode, the model list and default are controlled by GitHub config.
+    The schema has:
+    - default_model: The default model config (always visible)
+    - additional_visible_models: List of additional visible models
 
     Admin only provides API credentials.
 
@@ -587,6 +586,12 @@ def sync_auto_mode_models(
 
     changes = 0
 
+    # Build the list of all visible models from the config
+    # All models in the config are visible (default + additional_visible_models)
+    all_github_models = [github_config.default_model] + list(
+        github_config.additional_visible_models
+    )
+
     # Get existing models
     existing_models: dict[str, ModelConfiguration] = {
         mc.name: mc
@@ -597,7 +602,7 @@ def sync_auto_mode_models(
         ).all()
     }
 
-    github_model_names = {m.name for m in github_config.models}
+    github_model_names = {m.name for m in all_github_models}
 
     # Remove models that are no longer in GitHub config
     for model_name, model in existing_models.items():
@@ -606,7 +611,7 @@ def sync_auto_mode_models(
             changes += 1
 
     # Add or update models from GitHub config
-    for github_model in github_config.models:
+    for github_model in all_github_models:
         if github_model.name in existing_models:
             # Update existing model
             existing = existing_models[github_model.name]
@@ -615,40 +620,28 @@ def sync_auto_mode_models(
             if existing.display_name != github_model.display_name:
                 existing.display_name = github_model.display_name
                 updated = True
-            if existing.max_input_tokens != github_model.max_input_tokens:
-                existing.max_input_tokens = github_model.max_input_tokens
-                updated = True
-            if existing.supports_image_input != github_model.supports_image_input:
-                existing.supports_image_input = github_model.supports_image_input
-                updated = True
-            if existing.is_visible != github_model.is_visible:
-                existing.is_visible = github_model.is_visible
+            # All models in the config are visible
+            if not existing.is_visible:
+                existing.is_visible = True
                 updated = True
             if updated:
                 changes += 1
         else:
-            # Add new model
+            # Add new model - all models from GitHub config are visible
             new_model = ModelConfiguration(
                 llm_provider_id=provider.id,
                 name=github_model.name,
                 display_name=github_model.display_name,
-                is_visible=github_model.is_visible,
-                max_input_tokens=github_model.max_input_tokens,
-                supports_image_input=github_model.supports_image_input,
+                is_visible=True,
             )
             db_session.add(new_model)
             changes += 1
 
-    # In Auto mode, default models are always set from GitHub config
-    if github_config.default_model:
-        if provider.default_model_name != github_config.default_model:
-            provider.default_model_name = github_config.default_model
-            changes += 1
-
-    if github_config.fast_default_model:
-        if provider.fast_default_model_name != github_config.fast_default_model:
-            provider.fast_default_model_name = github_config.fast_default_model
-            changes += 1
+    # In Auto mode, default model is always set from GitHub config
+    default_model_name = github_config.default_model.name
+    if provider.default_model_name != default_model_name:
+        provider.default_model_name = default_model_name
+        changes += 1
 
     db_session.commit()
     return changes
