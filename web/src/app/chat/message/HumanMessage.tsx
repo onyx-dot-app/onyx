@@ -239,7 +239,7 @@ export default function HumanMessage({
         )}
       >
         <FileDisplay alignBubble files={files || []} />
-        <div className="flex flex-wrap ml-auto justify-end break-words">
+        <div className="flex flex-wrap justify-end break-words">
           {isEditing ? (
             <MessageEditing
               content={content}
