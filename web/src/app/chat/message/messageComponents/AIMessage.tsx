@@ -208,6 +208,7 @@ export default function AIMessage({
     displayCompleteRef.current = isStreamingComplete(rawPackets);
     stopPacketSeenRef.current = isStreamingComplete(rawPackets);
     stopReasonRef.current = undefined;
+    setStopReason(undefined);
     seenGroupKeysRef.current = new Set();
     groupKeysWithSectionEndRef.current = new Set();
   };
@@ -357,10 +358,8 @@ export default function AIMessage({
         setStopPacketSeen(true);
         // Extract and store the stop reason
         const stopPacket = packet.obj as Stop;
-        if (stopPacket.stop_reason) {
-          setStopReason(stopPacket.stop_reason);
-          stopReasonRef.current = stopPacket.stop_reason;
-        }
+        setStopReason(stopPacket.stop_reason);
+        stopReasonRef.current = stopPacket.stop_reason;
         // Inject SECTION_END for all group keys that don't have one
         Array.from(seenGroupKeysRef.current).forEach((groupKey) => {
           if (!groupKeysWithSectionEndRef.current.has(groupKey)) {
