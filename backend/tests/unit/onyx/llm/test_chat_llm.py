@@ -232,9 +232,8 @@ def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
         assert assistant_msg.tool_calls[1].function.arguments == '{"timezone": "EST"}'
 
         # Verify that litellm.completion was called with the correct arguments
-        # TODO: add back responses API for openai once litellm fixes the issue
         mock_completion.assert_called_once_with(
-            model="openai/gpt-3.5-turbo",
+            model="openai/responses/gpt-3.5-turbo",
             api_key="test_key",
             base_url=None,
             api_version=None,
@@ -385,9 +384,8 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
         assert final_result.tool_calls[1].function.arguments == '{"timezone": "EST"}'
 
         # Verify that litellm.completion was called with the correct arguments
-        # TODO: add back responses API for openai once litellm fixes the issue
         mock_completion.assert_called_once_with(
-            model="openai/gpt-3.5-turbo",
+            model="openai/responses/gpt-3.5-turbo",
             api_key="test_key",
             base_url=None,
             api_version=None,

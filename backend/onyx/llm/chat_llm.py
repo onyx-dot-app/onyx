@@ -260,8 +260,8 @@ class LitellmLLM(LLM):
         # Needed to get reasoning tokens from the model
         # NOTE: OpenAI Responses API is disabled for parallel tool calls because LiteLLM's transformation layer
         # doesn't properly pass parallel_tool_calls to the API, causing the model to
-        # always return sequential tool calls.
-        if not parallel_tool_calls and (
+        # always return sequential tool calls. For this reason parallel tool calls won't work with OpenAI models
+        if (
             is_true_openai_model(self.config.model_provider, self.config.model_name)
             or self.config.model_provider == AZURE_PROVIDER_NAME
         ):
