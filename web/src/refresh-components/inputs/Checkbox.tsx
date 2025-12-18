@@ -26,10 +26,8 @@ const getRootClasses = (checked: boolean, indeterminate: boolean) => ({
       : ["bg-background-neutral-03", "border", "border-border-02"],
 });
 
-export interface CheckboxProps extends Omit<
-  React.ComponentPropsWithoutRef<"input">,
-  "type" | "size"
-> {
+export interface CheckboxProps
+  extends Omit<React.ComponentPropsWithoutRef<"input">, "type" | "size"> {
   checked?: boolean;
   defaultChecked?: boolean;
   onCheckedChange?: (checked: boolean) => void;

@@ -5,10 +5,8 @@ import IconButton, { IconButtonProps } from "./IconButton";
 import { SvgAlertTriangle, SvgCheck, SvgCopy } from "@opal/icons";
 type CopyState = "idle" | "copied" | "error";
 
-export interface CopyIconButtonProps extends Omit<
-  IconButtonProps,
-  "icon" | "onClick"
-> {
+export interface CopyIconButtonProps
+  extends Omit<IconButtonProps, "icon" | "onClick"> {
   // Function that returns the text to copy to clipboard
   getCopyText: () => string;
   // Optional function to get HTML content for rich copy

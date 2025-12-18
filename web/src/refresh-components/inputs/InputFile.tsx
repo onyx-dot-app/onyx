@@ -8,10 +8,11 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import { noProp } from "@/lib/utils";
 import { SvgPaperclip } from "@opal/icons";
 
-export interface InputFileProps extends Omit<
-  InputTypeInProps,
-  "type" | "rightSection" | "value" | "onChange" | "readOnly" | "onClear"
-> {
+export interface InputFileProps
+  extends Omit<
+    InputTypeInProps,
+    "type" | "rightSection" | "value" | "onChange" | "readOnly" | "onClear"
+  > {
   // Receives the extracted file content (text) or pasted value
   setValue: (value: string) => void;
   // Called when a value is committed via file selection or paste (not on each keystroke)

@@ -73,8 +73,8 @@ export default function MCPApiKeyModal({
 
     if (isTemplateMode) {
       // Check all required fields are filled
-      const hasAllFields = authTemplate!.required_fields.every((field) =>
-        credentials[field]?.trim()
+      const hasAllFields = authTemplate!.required_fields.every(
+        (field) => credentials[field]?.trim()
       );
       if (!hasAllFields) return;
 

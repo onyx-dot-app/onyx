@@ -7,9 +7,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
-export interface SimplePopoverProps extends React.ComponentPropsWithoutRef<
-  typeof PopoverContent
-> {
+export interface SimplePopoverProps
+  extends React.ComponentPropsWithoutRef<typeof PopoverContent> {
   onOpenChange?: (open: boolean) => void;
   trigger: React.ReactNode | ((open: boolean) => React.ReactNode);
 }

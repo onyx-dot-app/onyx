@@ -226,7 +226,8 @@ const iconClasses = (transient: boolean | undefined) =>
     },
   }) as const;
 
-export interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+export interface IconButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   // Top level button variants
   main?: boolean;
   action?: boolean;

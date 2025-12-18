@@ -22,11 +22,13 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ThreeDotsLoader } from "@/components/Loading";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
-import SvgEdit from "@/icons/edit";
-import SvgCheck from "@/icons/check";
-import SvgX from "@/icons/x";
-import SvgPlusCircle from "@/icons/plus-circle";
-import SvgFolderPlus from "@/icons/folder-plus";
+import {
+  SvgCheck,
+  SvgEdit,
+  SvgFolderPlus,
+  SvgPlusCircle,
+  SvgX,
+} from "@opal/icons";
 import { formatBytes } from "@/lib/utils";
 import { timestampToReadableDate } from "@/lib/dateUtils";
 

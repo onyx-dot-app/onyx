@@ -3,7 +3,8 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 
-export interface VerticalShadowScrollerProps extends React.HtmlHTMLAttributes<HTMLDivElement> {
+export interface VerticalShadowScrollerProps
+  extends React.HtmlHTMLAttributes<HTMLDivElement> {
   // Mask related
   disableMask?: boolean;
   backgroundColor?: string;

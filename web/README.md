@@ -44,6 +44,7 @@ DEBUG_AUTH_COOKIE=your_cookie_value_here
 ```
 
 **Important notes:**
+
 - The `.env.local` file should be created in the `web/` directory (same level as `package.json`)
 - After creating or modifying `.env.local`, restart your development server for changes to take effect
 - The `DEBUG_AUTH_COOKIE` is only used in development mode (`NODE_ENV=development`)
