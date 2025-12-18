@@ -155,7 +155,7 @@ def mt_cloud_telemetry(
         return
 
     # Automatically include tenant_id in properties
-    all_properties = {**properties}
+    all_properties = {**properties} if properties else {}
     if "tenant_id" in properties:
         logger.warning(
             f"tenant_id already in properties: {properties}. "
