@@ -84,6 +84,12 @@ ONE_DAY = ONE_HOUR * 24
 MAX_CACHED_IDS = 100
 
 
+def _get_page_id(page: dict[str, Any], allow_missing: bool = False) -> str:
+    if allow_missing and "id" not in page:
+        return "unknown"
+    return str(page["id"])
+
+
 class ConfluenceCheckpoint(ConnectorCheckpoint):
 
     next_page_url: str | None
@@ -299,7 +305,7 @@ class ConfluenceConnector(
         page_id = page_url = ""
         try:
             # Extract basic page information
-            page_id = page["id"]
+            page_id = _get_page_id(page)
             page_title = page["title"]
             logger.info(f"Converting page {page_title} to document")
             page_url = build_confluence_document_id(
@@ -382,7 +388,9 @@ class ConfluenceConnector(
         this function. The returned documents/connectorfailures are for non-inline attachments
         and those at the end of the page.
         """
-        attachment_query = self._construct_attachment_query(page["id"], start, end)
+        attachment_query = self._construct_attachment_query(
+            _get_page_id(page), start, end
+        )
         attachment_failures: list[ConnectorFailure] = []
         attachment_docs: list[Document] = []
         page_url = ""
@@ -430,7 +438,7 @@ class ConfluenceConnector(
                     response = convert_attachment_to_content(
                         confluence_client=self.confluence_client,
                         attachment=attachment,
-                        page_id=page["id"],
+                        page_id=_get_page_id(page),
                         allow_images=self.allow_images,
                     )
                     if response is None:
@@ -515,14 +523,23 @@ class ConfluenceConnector(
         except HTTPError as e:
             # If we get a 403 after all retries, the user likely doesn't have permission
             # to access attachments on this page. Log and skip rather than failing the whole job.
-            if e.response and e.response.status_code == 403:
-                page_title = page.get("title", "unknown")
-                page_id = page.get("id", "unknown")
-                logger.warning(
-                    f"Permission denied (403) when fetching attachments for page '{page_title}' "
-                    f"(ID: {page_id}). The user may not have permission to query attachments on this page. "
-                    "Skipping attachments for this page."
-                )
+            page_id = _get_page_id(page, allow_missing=True)
+            page_title = page.get("title", "unknown")
+            if e.response and e.response.status_code in [401, 403]:
+                if e.response.status_code == 401:
+                    failure_message = (
+                        f"Invalid credentials (401) when fetching attachments for page '{page_title}' "
+                        f"(ID: {page_id}). The user may not have permission to query attachments on this page. "
+                        "Skipping attachments for this page."
+                    )
+                else:
+                    failure_message = (
+                        f"Permission denied (403) when fetching attachments for page '{page_title}' "
+                        f"(ID: {page_id}). The user may not have permission to query attachments on this page. "
+                        "Skipping attachments for this page."
+                    )
+                logger.warning(failure_message)
+
                 # Build the page URL for the failure record
                 try:
                     page_url = build_confluence_document_id(
@@ -537,7 +554,7 @@ class ConfluenceConnector(
                             document_id=page_id,
                             document_link=page_url,
                         ),
-                        failure_message=f"Permission denied (403) when fetching attachments for page '{page_title}'",
+                        failure_message=failure_message,
                         exception=e,
                     )
                 ]
@@ -708,7 +725,7 @@ class ConfluenceConnector(
             expand=restrictions_expand,
             limit=_SLIM_DOC_BATCH_SIZE,
         ):
-            page_id = page["id"]
+            page_id = _get_page_id(page)
             page_restrictions = page.get("restrictions") or {}
             page_space_key = page.get("space", {}).get("key")
             page_ancestors = page.get("ancestors", [])
@@ -728,7 +745,7 @@ class ConfluenceConnector(
             )
 
             # Query attachments for each page
-            attachment_query = self._construct_attachment_query(page["id"])
+            attachment_query = self._construct_attachment_query(_get_page_id(page))
             for attachment in self.confluence_client.cql_paginate_all_expansions(
                 cql=attachment_query,
                 expand=restrictions_expand,
