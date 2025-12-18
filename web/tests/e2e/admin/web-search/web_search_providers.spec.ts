@@ -64,11 +64,8 @@ test.describe("Web Search Provider Configuration", () => {
       await openProviderModal(page, "Exa");
 
       // Wait for modal to open - Modal uses Radix Dialog with role="dialog"
-      const modalDialog = page.getByRole("dialog");
+      const modalDialog = page.getByRole("dialog", { name: /set up exa/i });
       await expect(modalDialog).toBeVisible({ timeout: 10000 });
-
-      const modalTitle = page.getByText("Set up Exa", { exact: false });
-      await expect(modalTitle).toBeVisible({ timeout: 5000 });
 
       // Enter API key - clear first in case modal opened with masked credentials
       const apiKeyInput = page.locator('input[type="password"]');
@@ -124,11 +121,10 @@ test.describe("Web Search Provider Configuration", () => {
       await openProviderModal(page, "Google PSE");
 
       // Wait for modal to open
-      const modalDialog = page.getByRole("dialog");
+      const modalDialog = page.getByRole("dialog", {
+        name: /set up google pse/i,
+      });
       await expect(modalDialog).toBeVisible({ timeout: 10000 });
-      await expect(
-        page.getByText("Set up Google PSE", { exact: false })
-      ).toBeVisible();
 
       // Google PSE requires both Search Engine ID and API key
       // Enter Search Engine ID
@@ -188,11 +184,10 @@ test.describe("Web Search Provider Configuration", () => {
       // Only configure if Connect button is visible (not already configured)
       if (await connectButton.isVisible()) {
         await connectButton.click();
-        const setupDialog = page.getByRole("dialog");
+        const setupDialog = page.getByRole("dialog", {
+          name: /set up google pse/i,
+        });
         await expect(setupDialog).toBeVisible({ timeout: 10000 });
-        await expect(
-          page.getByText("Set up Google PSE", { exact: false })
-        ).toBeVisible();
 
         const searchEngineIdInput = page.locator(
           'input[placeholder="Enter search engine ID"]'
@@ -224,11 +219,10 @@ test.describe("Web Search Provider Configuration", () => {
       await editButton.click();
 
       // Modal should open with masked API key
-      const modalDialog = page.getByRole("dialog");
+      const modalDialog = page.getByRole("dialog", {
+        name: /set up google pse/i,
+      });
       await expect(modalDialog).toBeVisible({ timeout: 10000 });
-      await expect(
-        page.getByText("Set up Google PSE", { exact: false })
-      ).toBeVisible();
 
       // Verify the API key input shows masked value
       const apiKeyInput = page.locator('input[type="password"]');
@@ -280,11 +274,10 @@ test.describe("Web Search Provider Configuration", () => {
       // Only configure if Connect button is visible (not already configured)
       if (await connectButton.isVisible()) {
         await connectButton.click();
-        const setupDialog = page.getByRole("dialog");
+        const setupDialog = page.getByRole("dialog", {
+          name: /set up google pse/i,
+        });
         await expect(setupDialog).toBeVisible({ timeout: 10000 });
-        await expect(
-          page.getByText("Set up Google PSE", { exact: false })
-        ).toBeVisible();
 
         const searchEngineIdInput = page.locator(
           'input[placeholder="Enter search engine ID"]'
@@ -316,11 +309,10 @@ test.describe("Web Search Provider Configuration", () => {
       await editButton.click();
 
       // Modal should open with masked API key
-      const modalDialog = page.getByRole("dialog");
+      const modalDialog = page.getByRole("dialog", {
+        name: /set up google pse/i,
+      });
       await expect(modalDialog).toBeVisible({ timeout: 10000 });
-      await expect(
-        page.getByText("Set up Google PSE", { exact: false })
-      ).toBeVisible();
 
       // Change the search engine ID to an invalid value
       const searchEngineIdInput = page.locator(
@@ -378,11 +370,8 @@ test.describe("Web Search Provider Configuration", () => {
       // Only configure if Connect button is visible (not already configured)
       if (await connectButton.isVisible()) {
         await connectButton.click();
-        const exaDialog = page.getByRole("dialog");
+        const exaDialog = page.getByRole("dialog", { name: /set up exa/i });
         await expect(exaDialog).toBeVisible({ timeout: 10000 });
-        await expect(
-          page.getByText("Set up Exa", { exact: false })
-        ).toBeVisible();
 
         const apiKeyInput = page.locator('input[type="password"]');
         await apiKeyInput.waitFor({ state: "visible", timeout: 5000 });
@@ -403,11 +392,10 @@ test.describe("Web Search Provider Configuration", () => {
 
       if (await connectButton.isVisible()) {
         await connectButton.click();
-        const googleDialog = page.getByRole("dialog");
+        const googleDialog = page.getByRole("dialog", {
+          name: /set up google pse/i,
+        });
         await expect(googleDialog).toBeVisible({ timeout: 10000 });
-        await expect(
-          page.getByText("Set up Google PSE", { exact: false })
-        ).toBeVisible();
 
         const searchEngineIdInput = page.locator(
           'input[placeholder="Enter search engine ID"]'
