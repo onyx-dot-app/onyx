@@ -39,7 +39,7 @@ CLAUDE_REASONING_BUDGET_TOKENS: dict[ReasoningEffort, int] = {
 # Also there should be auto for reasoning level which is not used here.
 OPENAI_REASONING_EFFORT: dict[ReasoningEffort | None, str] = {
     None: "medium",  # Seems there is no auto mode in this version unfortunately
-    ReasoningEffort.OFF: "low",  # Issues with 5.2 models not supporting this
+    ReasoningEffort.OFF: "low",  # Issues with 5.2 models not supporting minimal or off with this version of litellm
     ReasoningEffort.LOW: "low",
     ReasoningEffort.MEDIUM: "medium",
     ReasoningEffort.HIGH: "high",
