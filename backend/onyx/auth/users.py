@@ -663,7 +663,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     user=user,
                     distinct_id=user.email,
                     event_type=event_type,
-                    properties=None,
+                    properties={
+                        "tenant_id": tenant_id,
+                    },
                     db_session=db_session,
                 )
 
