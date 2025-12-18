@@ -64,8 +64,8 @@ export default function ActionLineItem({
   }
 
   function handleDisable() {
-    // const target = disabled ? ToolState.Enabled : ToolState.Enabled;
-    setToolStatus(tool.id, ToolState.Disabled);
+    const target = disabled ? ToolState.Enabled : ToolState.Disabled;
+    setToolStatus(tool.id, target);
   }
   const isSearchToolAndNotInProject =
     tool?.in_code_tool_id === SEARCH_TOOL_ID && !currentProjectId;

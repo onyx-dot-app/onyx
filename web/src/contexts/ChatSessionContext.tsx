@@ -55,7 +55,7 @@ interface ChatSessionProviderProps {
 }
 
 export function ChatSessionProvider({ children }: ChatSessionProviderProps) {
-  const { data, error, mutate } = useSWR<ChatSessionsResponse>(
+  const { data, isLoading, error, mutate } = useSWR<ChatSessionsResponse>(
     "/api/chat/get-user-chat-sessions",
     errorHandlingFetcher,
     {
@@ -85,18 +85,18 @@ export function ChatSessionProvider({ children }: ChatSessionProviderProps) {
     );
   }, [agents, currentChatSession]);
 
-  const value: ChatSessionContextValue = {
-    chatSessions,
-    currentChatSessionId,
-    currentChatSession,
-    agentForCurrentChatSession,
-    isLoading: !error && !data,
-    error,
-    refreshChatSessions: mutate,
-  };
-
   return (
-    <ChatSessionContext.Provider value={value}>
+    <ChatSessionContext.Provider
+      value={{
+        chatSessions,
+        currentChatSessionId,
+        currentChatSession,
+        agentForCurrentChatSession,
+        isLoading,
+        error,
+        refreshChatSessions: mutate,
+      }}
+    >
       {children}
     </ChatSessionContext.Provider>
   );

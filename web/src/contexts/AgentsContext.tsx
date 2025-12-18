@@ -70,17 +70,16 @@ interface AgentsProviderProps {
 export function AgentsProvider({ children }: AgentsProviderProps) {
   const {
     data: agentsData,
-    error,
+    isLoading,
     mutate: refreshAgents,
   } = useSWR<MinimalPersonaSnapshot[]>("/api/persona", errorHandlingFetcher, {
-    revalidateOnFocus: false,
+    revalidateOnFocus: true,
     dedupingInterval: 60000,
   });
 
   const { user, refreshUser } = useUser();
 
   const agents = agentsData ?? [];
-  const isLoadingAgents = !error && !agentsData;
   const searchParams = useSearchParams();
 
   const serverPinnedAgentIds = useMemo(
@@ -177,7 +176,7 @@ export function AgentsProvider({ children }: AgentsProviderProps) {
         agents,
         pinnedAgents: localPinnedAgents,
         pinnedAgentIds: localPinnedAgents.map((agent) => agent.id),
-        isLoading: isLoadingAgents,
+        isLoading,
         currentAgent,
         currentAgentId: currentAgent?.id ?? null,
         refreshAgents,
