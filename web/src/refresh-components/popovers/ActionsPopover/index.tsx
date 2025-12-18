@@ -101,12 +101,20 @@ export default function ActionsPopover({
     selectedAssistant.id
   );
 
-  const { enableAllSources, disableAllSources, toggleSource, isSourceEnabled } =
-    useSourcePreferences({
-      availableSources,
-      selectedSources,
-      setSelectedSources,
-    });
+  const {
+    enableAllSources: baseEnableAllSources,
+    disableAllSources: baseDisableAllSources,
+    toggleSource: baseToggleSource,
+    isSourceEnabled,
+  } = useSourcePreferences({
+    availableSources,
+    selectedSources,
+    setSelectedSources,
+  });
+
+  const [explicitlyUnpinnedToolIds, setExplicitlyUnpinnedToolIds] = useState<
+    Set<number>
+  >(new Set());
 
   // Store MCP server auth/loading state (tools are part of selectedAssistant.tools)
   const [mcpServerData, setMcpServerData] = useState<{
@@ -133,7 +141,84 @@ export default function ActionsPopover({
     isAuthenticated: false,
   });
 
-  const { toolMap, setToolStatus, setToolsStatus } = useActionsContext();
+  const { toolMap, setToolStatus, setToolsStatus, forcedToolIds } =
+    useActionsContext();
+
+  const internalSearchTool = useMemo(
+    () =>
+      selectedAssistant.tools.find(
+        (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID && !tool.mcp_server_id
+      ),
+    [selectedAssistant.tools]
+  );
+
+  const isExplicitlyUnpinned = useCallback(
+    (toolId: number) => explicitlyUnpinnedToolIds.has(toolId),
+    [explicitlyUnpinnedToolIds]
+  );
+
+  const markExplicitlyUnpinned = useCallback((toolId: number) => {
+    setExplicitlyUnpinnedToolIds((prev) => new Set(prev).add(toolId));
+  }, []);
+
+  const clearExplicitlyUnpinned = useCallback((toolId: number) => {
+    setExplicitlyUnpinnedToolIds((prev) => {
+      const next = new Set(prev);
+      next.delete(toolId);
+      return next;
+    });
+  }, []);
+
+  const enableAllSources = useCallback(() => {
+    baseEnableAllSources();
+    if (internalSearchTool && !isExplicitlyUnpinned(internalSearchTool.id)) {
+      setToolStatus(internalSearchTool.id, ToolState.Forced);
+    }
+  }, [
+    baseEnableAllSources,
+    internalSearchTool,
+    isExplicitlyUnpinned,
+    setToolStatus,
+  ]);
+
+  const disableAllSources = useCallback(() => {
+    baseDisableAllSources();
+    if (internalSearchTool && forcedToolIds.includes(internalSearchTool.id)) {
+      setToolStatus(internalSearchTool.id, ToolState.Enabled);
+    }
+  }, [baseDisableAllSources, internalSearchTool, forcedToolIds, setToolStatus]);
+
+  const toggleSource = useCallback(
+    (sourceUniqueKey: string) => {
+      const wasEnabled = isSourceEnabled(sourceUniqueKey);
+      baseToggleSource(sourceUniqueKey);
+
+      if (internalSearchTool) {
+        if (!wasEnabled) {
+          if (!isExplicitlyUnpinned(internalSearchTool.id)) {
+            setToolStatus(internalSearchTool.id, ToolState.Forced);
+          }
+        } else {
+          const configuredSources = getConfiguredSources(availableSources);
+          const remainingEnabled = configuredSources.filter(
+            (s) =>
+              s.uniqueKey !== sourceUniqueKey && isSourceEnabled(s.uniqueKey)
+          );
+          if (remainingEnabled.length === 0) {
+            setToolStatus(internalSearchTool.id, ToolState.Enabled);
+          }
+        }
+      }
+    },
+    [
+      baseToggleSource,
+      internalSearchTool,
+      isExplicitlyUnpinned,
+      isSourceEnabled,
+      availableSources,
+      setToolStatus,
+    ]
+  );
 
   const { isAdmin, isCurator } = useUser();
 
@@ -483,6 +568,17 @@ export default function ActionsPopover({
     (source) => !isSourceEnabled(source.uniqueKey)
   );
 
+  const handleForceToggle = useCallback(
+    (toolId: number, newState: ToolState) => {
+      if (newState === ToolState.Enabled) {
+        markExplicitlyUnpinned(toolId);
+      } else if (newState === ToolState.Forced) {
+        clearExplicitlyUnpinned(toolId);
+      }
+    },
+    [markExplicitlyUnpinned, clearExplicitlyUnpinned]
+  );
+
   const primaryView = (
     <PopoverMenu medium>
       {[
@@ -504,6 +600,7 @@ export default function ActionsPopover({
             hasNoConnectors={hasNoConnectors}
             toolAuthStatus={getToolAuthStatus(tool)}
             onOAuthAuthenticate={() => authenticateTool(tool)}
+            onForceToggle={handleForceToggle}
             onClose={() => setOpen(false)}
           />
         )),

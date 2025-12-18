@@ -113,24 +113,24 @@ export function useChatSessionController({
 
     textAreaRef.current?.focus();
 
-    // Only clear things if we're going from one chat session to another
-    const isChatSessionSwitch = existingChatSessionId !== priorChatSessionId;
-    if (isChatSessionSwitch) {
-      // De-select documents
-      // Reset all filters
+    const isCreatingNewSession =
+      priorChatSessionId === null && existingChatSessionId !== null;
+    const isSwitchingBetweenSessions =
+      priorChatSessionId !== null &&
+      existingChatSessionId !== priorChatSessionId;
+
+    // Clear uploaded files on any session change (they're already in context)
+    if (isCreatingNewSession || isSwitchingBetweenSessions) {
+      setCurrentMessageFiles([]);
+    }
+
+    // Only reset filters/selections when switching between existing sessions
+    if (isSwitchingBetweenSessions) {
+      setSelectedDocuments([]);
       filterManager.setSelectedDocumentSets([]);
       filterManager.setSelectedSources([]);
       filterManager.setSelectedTags([]);
       filterManager.setTimeRange(null);
-
-      // Remove uploaded files
-      setCurrentMessageFiles([]);
-
-      // If switching from one chat to another, then need to scroll again
-      // If we're creating a brand new chat, then don't need to scroll
-      if (priorChatSessionId !== null) {
-        setSelectedDocuments([]);
-      }
     }
 
     async function initialSessionFetch() {

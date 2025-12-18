@@ -22,6 +22,7 @@ export interface ActionItemProps {
   hasNoConnectors?: boolean;
   toolAuthStatus?: ToolAuthStatus;
   onOAuthAuthenticate?: () => void;
+  onForceToggle?: (toolId: number, newState: ToolState) => void;
   onClose?: () => void;
 }
 
@@ -32,6 +33,7 @@ export default function ActionLineItem({
   hasNoConnectors = false,
   toolAuthStatus,
   onOAuthAuthenticate,
+  onForceToggle,
   onClose,
 }: ActionItemProps) {
   const { currentProjectId } = useProjectsContext();
@@ -61,6 +63,7 @@ export default function ActionLineItem({
   function handleToggle() {
     const target = isForced ? ToolState.Enabled : ToolState.Forced;
     setToolStatus(tool.id, target);
+    onForceToggle?.(tool.id, target);
   }
 
   function handleDisable() {
