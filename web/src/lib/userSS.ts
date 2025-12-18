@@ -193,12 +193,17 @@ export const processCookies = (cookies: ReadonlyRequestCookies): string => {
     .map((cookie) => `${cookie.name}=${cookie.value}`)
     .join("; ");
 
-  // Inject debug auth cookie for local development against remote backend
+  // Inject debug auth cookie for local development against remote backend (only if not already present)
   if (process.env.DEBUG_AUTH_COOKIE && process.env.NODE_ENV === "development") {
-    const debugCookie = `fastapiusersauth=${process.env.DEBUG_AUTH_COOKIE}`;
-    cookieString = cookieString
-      ? `${cookieString}; ${debugCookie}`
-      : debugCookie;
+    const hasAuthCookie = cookieString
+      .split(/;\s*/)
+      .some((c) => c.startsWith("fastapiusersauth="));
+    if (!hasAuthCookie) {
+      const debugCookie = `fastapiusersauth=${process.env.DEBUG_AUTH_COOKIE}`;
+      cookieString = cookieString
+        ? `${cookieString}; ${debugCookie}`
+        : debugCookie;
+    }
   }
 
   return cookieString;

@@ -60,20 +60,15 @@ export class UrlBuilder {
 export async function fetchSS(url: string, options?: RequestInit) {
   const cookieString = processCookies(await cookies());
 
-  const init = options || {
+  const init: RequestInit = {
     credentials: "include",
     cache: "no-store",
+    ...options,
     headers: {
+      ...options?.headers,
       cookie: cookieString,
     },
   };
-
-  // Ensure cookie header is set
-  const headers = new Headers(init.headers);
-  if (!headers.has("cookie")) {
-    headers.set("cookie", cookieString);
-  }
-  init.headers = headers;
 
   return fetch(buildUrl(url), init);
 }
