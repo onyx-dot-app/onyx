@@ -1,7 +1,7 @@
 """Remove fast_default_model_name from llm_provider
 
 Revision ID: a2b3c4d5e6f7
-Revises: 4cebcbc9b2ae
+Revises: 2a391f840e85
 Create Date: 2024-12-17
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "a2b3c4d5e6f7"
-down_revision = "4cebcbc9b2ae"
+down_revision = "2a391f840e85"
 branch_labels: None = None
 depends_on: None = None
 
