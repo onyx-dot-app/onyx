@@ -79,7 +79,7 @@ function Main() {
   }
 
   return (
-    <div className="h-screen">
+    <div>
       {searchSettingsPopup}
       {!futureEmbeddingModel ? (
         <>
