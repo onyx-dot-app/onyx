@@ -106,8 +106,12 @@ const ChatUI = React.forwardRef(
     const virtualizer = useVirtualizer({
       count: messages.length,
       getScrollElement: () => scrollContainerRef.current,
-      estimateSize: () => 150, // Estimated height per message
-      overscan: 5, // Render 5 extra items above/below viewport for smooth scrolling
+      estimateSize: () => 200, // Estimated height per message (larger estimate reduces layout shifts)
+      overscan: 5, // Render 5 extra items above/below viewport for smooth fast scrolling
+      getItemKey: useCallback(
+        (index: number) => messages[index]?.nodeId ?? index,
+        [messages]
+      ),
     });
 
     const createRegenerator = useCallback(
@@ -143,6 +147,10 @@ const ChatUI = React.forwardRef(
       [onSubmit, deepResearchEnabled]
     );
 
+    // Throttle state updates during scroll to prevent excessive re-renders
+    const lastScrollUpdate = useRef(0);
+    const pendingScrollUpdate = useRef<number | null>(null);
+
     const handleScroll = useCallback(() => {
       const container = scrollContainerRef.current;
       if (!container) return;
@@ -151,7 +159,35 @@ const ChatUI = React.forwardRef(
         container.scrollHeight - (container.scrollTop + container.clientHeight);
 
       scrollDist.current = distanceFromBottom;
-      setAboveHorizon(distanceFromBottom > HORIZON_DISTANCE_PX);
+
+      // Throttle the aboveHorizon state update to avoid re-renders during fast scroll
+      const now = Date.now();
+      const newAboveHorizon = distanceFromBottom > HORIZON_DISTANCE_PX;
+
+      if (now - lastScrollUpdate.current > 100) {
+        // Update immediately if throttle period has passed
+        lastScrollUpdate.current = now;
+        setAboveHorizon(newAboveHorizon);
+      } else if (!pendingScrollUpdate.current) {
+        // Schedule an update for after the throttle period
+        pendingScrollUpdate.current = window.setTimeout(() => {
+          pendingScrollUpdate.current = null;
+          lastScrollUpdate.current = Date.now();
+          const currentDistance =
+            container.scrollHeight -
+            (container.scrollTop + container.clientHeight);
+          setAboveHorizon(currentDistance > HORIZON_DISTANCE_PX);
+        }, 100);
+      }
+    }, []);
+
+    // Cleanup pending scroll update on unmount
+    useEffect(() => {
+      return () => {
+        if (pendingScrollUpdate.current) {
+          clearTimeout(pendingScrollUpdate.current);
+        }
+      };
     }, []);
 
     const scrollToBottom = useCallback(() => {
@@ -201,14 +237,14 @@ const ChatUI = React.forwardRef(
     const lastMessage = messages[messages.length - 1];
     useEffect(() => {
       if (lastMessage?.is_generating) {
-        // During streaming, periodically re-measure the last item
+        // During streaming, periodically re-measure the last item (200ms to reduce layout thrashing)
         const interval = setInterval(() => {
           virtualizer.measureElement(
             document.querySelector(
               `[data-index="${messages.length - 1}"]`
             ) as HTMLElement | null
           );
-        }, 100);
+        }, 200);
         return () => clearInterval(interval);
       }
     }, [lastMessage?.is_generating, messages.length, virtualizer]);
@@ -245,6 +281,7 @@ const ChatUI = React.forwardRef(
               height: `${virtualizer.getTotalSize()}px`,
               width: "100%",
               position: "relative",
+              contain: "strict",
             }}
           >
             {virtualItems.map((virtualItem) => {
@@ -267,6 +304,8 @@ const ChatUI = React.forwardRef(
                     left: 0,
                     width: "100%",
                     transform: `translateY(${virtualItem.start}px)`,
+                    willChange: "transform",
+                    contain: "layout style",
                   }}
                 >
                   {message.type === "user" ? (
