@@ -627,6 +627,23 @@ def extract_text_and_images(
     """
     Primary new function for the updated connector.
     Returns structured extraction result with text content, embedded images, and metadata.
+
+    Args:
+        file: File-like object to extract content from.
+        file_name: Name of the file (used to determine extension/type).
+        pdf_pass: Optional password for encrypted PDFs.
+        content_type: Optional MIME type override for the file.
+        image_callback: Optional callback for streaming image extraction. When provided,
+            embedded images are passed to this callback one at a time as (bytes, filename)
+            instead of being accumulated in the returned ExtractionResult.embedded_images
+            list. This is a memory optimization for large documents with many images -
+            the caller can process/store each image immediately rather than holding all
+            images in memory. When using a callback, ExtractionResult.embedded_images
+            will be an empty list.
+
+    Returns:
+        ExtractionResult containing text_content, embedded_images (empty if callback used),
+        and metadata extracted from the file.
     """
     res = _extract_text_and_images(
         file, file_name, pdf_pass, content_type, image_callback
