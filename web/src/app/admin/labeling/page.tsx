@@ -59,7 +59,7 @@ export default function LabelingPage() {
       )
       .nullable(),
     logo_display_style: Yup.string()
-      .oneOf(["logo_and_name", "logo_only", "none"])
+      .oneOf(["logo_and_name", "logo_only", "name_only"])
       .required(),
     use_custom_logo: Yup.boolean().required(),
     custom_greeting_message: Yup.string()

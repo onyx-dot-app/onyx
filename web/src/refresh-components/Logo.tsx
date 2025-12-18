@@ -23,6 +23,7 @@ export default function Logo({ folded, size, className }: LogoProps) {
   const unfoldedSize = size ?? LOGO_UNFOLDED_SIZE_PX;
   const settings = useSettingsContext();
   const logoDisplayStyle = settings.enterpriseSettings?.logo_display_style;
+  const applicationName = settings.enterpriseSettings?.application_name;
 
   const logo = useMemo(
     () =>
@@ -46,38 +47,52 @@ export default function Logo({ folded, size, className }: LogoProps) {
     [className, settings.enterpriseSettings?.use_custom_logo]
   );
 
-  // Handle "none" display style
-  if (logoDisplayStyle === "none") {
-    return null;
-  }
+  const renderNameAndPoweredBy = (opts: { includeLogo: boolean }) => {
+    if (!applicationName) {
+      return null;
+    }
+
+    return (
+      <div className="flex flex-col min-w-0">
+        <div className="flex flex-row items-center gap-2 min-w-0">
+          {opts.includeLogo && logo}
+          <div className="flex-1 min-w-0">
+            <Truncated headingH3 className={cn(folded && "invisible")}>
+              {applicationName}
+            </Truncated>
+          </div>
+        </div>
+        {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && (
+          <Text
+            secondaryBody
+            text03
+            className={cn(
+              "line-clamp-1 truncate",
+              opts.includeLogo && "ml-[33px]",
+              folded && "invisible"
+            )}
+            nowrap
+          >
+            Powered by Onyx
+          </Text>
+        )}
+      </div>
+    );
+  };
 
   // Handle "logo_only" display style
   if (logoDisplayStyle === "logo_only") {
     return logo;
   }
 
+  // Handle "name_only" display style
+  if (logoDisplayStyle === "name_only") {
+    return renderNameAndPoweredBy({ includeLogo: false });
+  }
+
   // Handle "logo_and_name" or default behavior
-  return settings.enterpriseSettings?.application_name ? (
-    <div className="flex flex-col">
-      <div className="flex flex-row items-center gap-2 min-w-0">
-        {logo}
-        <div className="flex-1 min-w-0">
-          <Truncated headingH3 className={cn(folded && "invisible")}>
-            {settings.enterpriseSettings?.application_name}
-          </Truncated>
-        </div>
-      </div>
-      {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && (
-        <Text
-          secondaryBody
-          text03
-          className={cn("ml-[33px] line-clamp-1 truncate", folded && "hidden")}
-          nowrap
-        >
-          Powered by Onyx
-        </Text>
-      )}
-    </div>
+  return applicationName ? (
+    renderNameAndPoweredBy({ includeLogo: true })
   ) : folded ? (
     <OnyxIcon size={foldedSize} className={cn("flex-shrink-0", className)} />
   ) : (

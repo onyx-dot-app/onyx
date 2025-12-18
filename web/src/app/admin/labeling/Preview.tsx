@@ -5,14 +5,46 @@ import Truncated from "@/refresh-components/texts/Truncated";
 import { cn } from "@/lib/utils";
 import { OnyxIcon } from "@/components/icons/icons";
 
+export type PreviewHighlightTarget =
+  | "sidebar"
+  | "greeting"
+  | "chat_header"
+  | "chat_footer";
+
 export interface PreviewProps {
-  logoDisplayStyle: "logo_and_name" | "logo_only" | "none";
+  logoDisplayStyle: "logo_and_name" | "logo_only" | "name_only";
   applicationDisplayName: string;
   chat_footer_content: string;
   chat_header_content: string;
   greeting_message: string;
   className?: string;
   logoSrc?: string;
+  highlightTarget?: PreviewHighlightTarget | null;
+}
+
+function PreviewLogo({
+  logoSrc,
+  size,
+  className,
+}: {
+  logoSrc?: string;
+  size: number;
+  className?: string;
+}) {
+  return logoSrc ? (
+    <img
+      src={logoSrc}
+      alt="Logo"
+      style={{
+        objectFit: "contain",
+        height: `${size}px`,
+        width: `${size}px`,
+      }}
+      className={cn("flex-shrink-0", className)}
+    />
+  ) : (
+    <OnyxIcon size={size} className={cn("flex-shrink-0", className)} />
+  );
 }
 
 export function InputPreview() {
@@ -30,47 +62,56 @@ function PreviewStart({
   chat_header_content,
   greeting_message,
   logoSrc,
+  highlightTarget,
 }: PreviewProps) {
   return (
     <div className="flex h-60 rounded-12 shadow-00 bg-background-tint-01 relative">
       {/* Sidebar */}
-      <div className="flex w-[6rem] h-full bg-background-tint-02 rounded-l-12 p-1 justify-center">
-        <div className="flex flex-col h-fit w-full justify-center">
-          {logoDisplayStyle !== "none" && (
-            <div className="flex flex-row items-center justify-center w-28 gap-1 origin-top-left scale-75">
-              {logoSrc ? (
-                <img
-                  src={logoSrc}
-                  alt="Logo"
-                  style={{
-                    objectFit: "contain",
-                    height: "18px",
-                    width: "18px",
-                  }}
-                  className="flex-shrink-0"
-                />
-              ) : (
-                <OnyxIcon size={18} className="flex-shrink-0" />
+      <div className="flex w-[6rem] h-full bg-background-tint-02 rounded-l-12 p-1 justify-start">
+        <div className="flex flex-col h-fit w-full justify-start">
+          <div
+            className={cn(
+              "rounded-08 border border-transparent px-1 py-0.5 transition-colors",
+              highlightTarget === "sidebar" && "border-theme-primary-05"
+            )}
+          >
+            <div className="flex flex-row items-center justify-start w-28 gap-1 origin-top-left scale-75">
+              {logoDisplayStyle !== "name_only" && (
+                <PreviewLogo logoSrc={logoSrc} size={18} />
               )}
-              {logoDisplayStyle === "logo_and_name" && (
+              {(logoDisplayStyle === "logo_and_name" ||
+                logoDisplayStyle === "name_only") && (
                 <Truncated headingH3>{applicationDisplayName}</Truncated>
               )}
             </div>
-          )}
+          </div>
         </div>
       </div>
       {/* Chat */}
       <div className="flex flex-col flex-1 h-full">
         {/* Chat Body */}
         <div className="flex flex-col flex-1 h-full items-center justify-center px-3">
-          <Text text04 headingH3>
-            {greeting_message}
-          </Text>
+          <div
+            className={cn(
+              "flex flex-row items-center justify-center gap-2 mb-2 rounded-08 border border-transparent px-2 py-1 transition-colors",
+              highlightTarget === "greeting" && "border-theme-primary-05"
+            )}
+          >
+            <PreviewLogo logoSrc={logoSrc} size={18} />
+            <Text text04 headingH3>
+              {greeting_message}
+            </Text>
+          </div>
           <InputPreview />
         </div>
         {/* Chat Footer */}
         <div className="flex flex-col items-center justify-end p-2 w-full">
-          <div className="flex gap-1 items-start justify-center px-1 py-0.5 rounded-04">
+          <div
+            className={cn(
+              "flex gap-1 items-start justify-center px-1 py-0.5 rounded-04 border border-transparent transition-colors",
+              highlightTarget === "chat_footer" && "border-theme-primary-05"
+            )}
+          >
             <Text text03 className="origin-top-left scale-75">
               {chat_footer_content}
             </Text>
@@ -84,17 +125,26 @@ function PreviewStart({
 function PreviewChat({
   chat_header_content,
   chat_footer_content,
+  highlightTarget,
 }: {
   chat_header_content: string;
   chat_footer_content: string;
+  highlightTarget?: PreviewHighlightTarget | null;
 }) {
   return (
     <div className="flex flex-col h-60 relative bg-background-tint-01 rounded-12 shadow-00">
       {/* Header */}
       <div className="flex justify-center p-2 w-full">
-        <Text text03 className="origin-top-left scale-75">
-          {chat_header_content}
-        </Text>
+        <div
+          className={cn(
+            "rounded-08 border border-transparent px-2 py-1 transition-colors",
+            highlightTarget === "chat_header" && "border-theme-primary-05"
+          )}
+        >
+          <Text text03 className="origin-top-left scale-75">
+            {chat_header_content}
+          </Text>
+        </div>
       </div>
 
       {/* Main Content */}
@@ -119,7 +169,12 @@ function PreviewChat({
 
       {/* Footer */}
       <div className="flex flex-col items-center justify-end p-2 w-full">
-        <div className="flex gap-1 items-start justify-center px-1 py-0.5 rounded-04">
+        <div
+          className={cn(
+            "flex gap-1 items-start justify-center px-1 py-0.5 rounded-04 border border-transparent transition-colors",
+            highlightTarget === "chat_footer" && "border-theme-primary-05"
+          )}
+        >
           <Text text03 className="origin-top-left scale-75">
             {chat_footer_content}
           </Text>
@@ -136,6 +191,7 @@ export function Preview({
   greeting_message,
   logoSrc,
   className,
+  highlightTarget,
 }: PreviewProps) {
   return (
     <div className={cn("grid grid-cols-2 gap-2", className)}>
@@ -146,10 +202,12 @@ export function Preview({
         chat_header_content={chat_header_content}
         greeting_message={greeting_message}
         logoSrc={logoSrc}
+        highlightTarget={highlightTarget}
       />
       <PreviewChat
         chat_header_content={chat_header_content}
         chat_footer_content={chat_footer_content}
+        highlightTarget={highlightTarget}
       />
     </div>
   );

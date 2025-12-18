@@ -10,7 +10,8 @@ import Switch from "@/refresh-components/inputs/Switch";
 import Text from "@/refresh-components/texts/Text";
 import InputImage from "@/refresh-components/inputs/InputImage";
 import { useFormikContext } from "formik";
-import { useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { PreviewHighlightTarget } from "./Preview";
 
 interface CharacterCountProps {
   value: string;
@@ -46,6 +47,42 @@ export function AppearanceThemeSettings({
 }: AppearanceThemeSettingsProps) {
   const { values, errors, setFieldValue } = useFormikContext<any>();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const noticeHeaderInputRef = useRef<HTMLInputElement>(null);
+  const prevShowFirstVisitNoticeRef = useRef<boolean>(
+    Boolean(values.show_first_visit_notice)
+  );
+  const [focusedPreviewTarget, setFocusedPreviewTarget] =
+    useState<PreviewHighlightTarget | null>(null);
+  const [hoveredPreviewTarget, setHoveredPreviewTarget] =
+    useState<PreviewHighlightTarget | null>(null);
+
+  const highlightTarget = useMemo(
+    () => focusedPreviewTarget ?? hoveredPreviewTarget,
+    [focusedPreviewTarget, hoveredPreviewTarget]
+  );
+
+  const getPreviewHandlers = (target: PreviewHighlightTarget) => ({
+    onFocus: () => setFocusedPreviewTarget(target),
+    onBlur: () =>
+      setFocusedPreviewTarget((cur) => (cur === target ? null : cur)),
+    onMouseEnter: () => setHoveredPreviewTarget(target),
+    onMouseLeave: () =>
+      setHoveredPreviewTarget((cur) => (cur === target ? null : cur)),
+  });
+
+  useEffect(() => {
+    const prev = prevShowFirstVisitNoticeRef.current;
+    const next = Boolean(values.show_first_visit_notice);
+
+    // When enabling the toggle, autofocus the "Notice Header" input.
+    if (!prev && next) {
+      requestAnimationFrame(() => {
+        noticeHeaderInputRef.current?.focus();
+      });
+    }
+
+    prevShowFirstVisitNoticeRef.current = next;
+  }, [values.show_first_visit_notice]);
 
   const handleLogoEdit = () => {
     fileInputRef.current?.click();
@@ -104,6 +141,7 @@ export function AppearanceThemeSettings({
               <InputTypeIn
                 showClearButton
                 value={values.application_name}
+                {...getPreviewHandlers("sidebar")}
                 onChange={(e) =>
                   setFieldValue("application_name", e.target.value)
                 }
@@ -127,14 +165,35 @@ export function AppearanceThemeSettings({
                 }
               >
                 <TabsList className="w-full grid grid-cols-3">
-                  <TabsTrigger value="logo_and_name">Logo & Name</TabsTrigger>
-                  <TabsTrigger value="logo_only">Logo Only</TabsTrigger>
-                  <TabsTrigger value="none">None</TabsTrigger>
+                  <TabsTrigger
+                    value="logo_and_name"
+                    tooltip="Show both your application logo and name."
+                    tooltipSide="top"
+                    {...getPreviewHandlers("sidebar")}
+                  >
+                    Logo & Name
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="logo_only"
+                    tooltip="Show only your application logo."
+                    tooltipSide="top"
+                    {...getPreviewHandlers("sidebar")}
+                  >
+                    Logo Only
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="name_only"
+                    tooltip="Add a custom application name to display"
+                    tooltipSide="top"
+                    {...getPreviewHandlers("sidebar")}
+                  >
+                    Name Only
+                  </TabsTrigger>
                 </TabsList>
               </Tabs>
             </FormField.Control>
             <FormField.Description>
-              Show both your application logo and name on the sidebar.
+              Choose what to display at the top of the sidebar.
             </FormField.Description>
           </FormField>
         </div>
@@ -168,6 +227,7 @@ export function AppearanceThemeSettings({
           values.custom_greeting_message || "Welcome to Acme Chat"
         }
         logoSrc={getLogoSrc()}
+        highlightTarget={highlightTarget}
       />
 
       <FormField state={errors.custom_greeting_message ? "error" : "idle"}>
@@ -185,6 +245,7 @@ export function AppearanceThemeSettings({
           <InputTypeIn
             showClearButton
             value={values.custom_greeting_message}
+            {...getPreviewHandlers("greeting")}
             onChange={(e) =>
               setFieldValue("custom_greeting_message", e.target.value)
             }
@@ -213,6 +274,7 @@ export function AppearanceThemeSettings({
           <InputTypeIn
             showClearButton
             value={values.custom_header_content}
+            {...getPreviewHandlers("chat_header")}
             onChange={(e) =>
               setFieldValue("custom_header_content", e.target.value)
             }
@@ -241,6 +303,7 @@ export function AppearanceThemeSettings({
             rows={3}
             placeholder="Add markdown content"
             value={values.custom_lower_disclaimer_content}
+            {...getPreviewHandlers("chat_footer")}
             onChange={(e) =>
               setFieldValue("custom_lower_disclaimer_content", e.target.value)
             }
@@ -289,6 +352,7 @@ export function AppearanceThemeSettings({
               </FormField.Label>
               <FormField.Control asChild>
                 <InputTypeIn
+                  ref={noticeHeaderInputRef}
                   showClearButton
                   value={values.custom_popup_header}
                   onChange={(e) =>

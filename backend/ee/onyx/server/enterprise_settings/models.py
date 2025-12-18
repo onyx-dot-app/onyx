@@ -31,7 +31,9 @@ class EnterpriseSettings(BaseModel):
     application_name: str | None = None
     use_custom_logo: bool = False
     use_custom_logotype: bool = False
-    logo_display_style: str | None = None  # "logo_and_name", "logo_only", or "none"
+    logo_display_style: str | None = (
+        None  # "logo_and_name", "logo_only", or "name_only"
+    )
 
     # custom navigation
     custom_nav_items: List[NavigationItem] = Field(default_factory=list)

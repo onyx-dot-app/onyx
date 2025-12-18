@@ -3,6 +3,7 @@
 import * as React from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import { cn } from "@/lib/utils";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 const Tabs = TabsPrimitive.Root;
 
@@ -21,10 +22,17 @@ const TabsList = React.forwardRef<
 ));
 TabsList.displayName = TabsPrimitive.List.displayName;
 
+type TabsTriggerProps = React.ComponentPropsWithoutRef<
+  typeof TabsPrimitive.Trigger
+> & {
+  tooltip?: string;
+  tooltipSide?: "top" | "bottom" | "left" | "right";
+};
+
 const TabsTrigger = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.Trigger>,
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>
->(({ className, ...props }, ref) => (
+  TabsTriggerProps
+>(({ className, tooltip, tooltipSide = "top", children, ...props }, ref) => (
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
@@ -38,7 +46,15 @@ const TabsTrigger = React.forwardRef<
       className
     )}
     {...props}
-  />
+  >
+    {tooltip ? (
+      <SimpleTooltip tooltip={tooltip} side={tooltipSide}>
+        {children}
+      </SimpleTooltip>
+    ) : (
+      children
+    )}
+  </TabsPrimitive.Trigger>
 ));
 TabsTrigger.displayName = TabsPrimitive.Trigger.displayName;
 

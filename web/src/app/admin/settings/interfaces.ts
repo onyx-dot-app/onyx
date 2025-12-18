@@ -69,7 +69,7 @@ export interface EnterpriseSettings {
   application_name: string | null;
   use_custom_logo: boolean;
   use_custom_logotype: boolean;
-  logo_display_style: string | null; // "logo_and_name", "logo_only", or "none"
+  logo_display_style: string | null; // "logo_and_name", "logo_only", or "name_only"
 
   // custom navigation
   custom_nav_items: NavigationItem[];
