@@ -14,7 +14,7 @@ import {
   PacketType,
   SearchToolPacket,
 } from "@/app/chat/services/streamingModels";
-import { constructCurrentSearchState } from "./renderers/SearchToolRendererV2";
+import { constructCurrentSearchState } from "./renderers/SearchToolRenderer";
 
 export function getToolKey(turn_index: number, tab_index: number): string {
   return `${turn_index}-${tab_index}`;

@@ -38,7 +38,7 @@ export const createToolPacket = (
  * with both queries and at least one result document.
  *
  * This is used to exercise the two-step internal search rendering
- * in MultiToolRenderer and SearchToolRendererV2.
+ * in MultiToolRenderer and SearchToolRenderer.
  */
 export const createInternalSearchToolGroup = (
   turn_index: number = 0,
