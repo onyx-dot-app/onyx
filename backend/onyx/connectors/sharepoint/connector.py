@@ -386,7 +386,7 @@ def _convert_driveitem_to_document_with_permissions(
             return None
 
     sections: list[TextSection | ImageSection] = []
-    file_ext = "." + driveitem.name.split(".")[-1].lower()
+    file_ext = get_file_ext(driveitem.name)
 
     if not content_bytes:
         logger.warning(

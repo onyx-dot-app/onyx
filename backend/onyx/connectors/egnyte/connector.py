@@ -69,7 +69,7 @@ def _process_egnyte_file(
     file_name = file_metadata["name"]
     extension = get_file_ext(file_name)
 
-    # Explicitly excluding image exnteions here. TODO: consider allowing images
+    # Explicitly excluding image extensions here. TODO: consider allowing images
     if extension not in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS:
         logger.warning(f"Skipping file '{file_name}' with extension '{extension}'")
         return None
