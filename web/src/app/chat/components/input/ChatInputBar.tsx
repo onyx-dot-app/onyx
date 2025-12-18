@@ -130,7 +130,7 @@ const ChatInputBar = React.memo(
     disabled,
   }: ChatInputBarProps) => {
     const { user } = useUser();
-    const { forcedToolIds, setToolsStatus } = useActionsContext();
+    const { forcedToolIds, setToolStatus } = useActionsContext();
     const { currentMessageFiles, setCurrentMessageFiles } =
       useProjectsContext();
 
@@ -609,10 +609,7 @@ const ChatInputBar = React.memo(
                         key={toolId}
                         leftIcon={getIconForAction(tool)}
                         onClick={() => {
-                          setToolsStatus(
-                            forcedToolIds.filter((id) => id !== toolId),
-                            ToolState.Forced
-                          );
+                          setToolStatus(toolId, ToolState.Enabled);
                         }}
                         engaged
                         action

@@ -79,6 +79,11 @@ export function ActionsProvider({ children }: ActionsProviderProps) {
     Record<number, ToolState>
   >({});
 
+  // Reset local overrides when switching agents to prevent state leakage
+  useEffect(() => {
+    setLocalOverrides({});
+  }, [agentId]);
+
   // Merge base map with local overrides
   const toolMap = useMemo(() => {
     return { ...baseToolMap, ...localOverrides };
