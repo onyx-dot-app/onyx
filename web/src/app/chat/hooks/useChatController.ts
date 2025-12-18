@@ -66,11 +66,11 @@ import {
   useCurrentMessageHistory,
 } from "../stores/useChatSessionStore";
 import { Packet, MessageStart, PacketType } from "../services/streamingModels";
-import { useAssistantPreferences } from "@/app/chat/hooks/useAssistantPreferences";
-import { useForcedTools } from "@/lib/hooks/useForcedTools";
+import useAgentPreferences from "@/hooks/useAgentPreferences";
 import { ProjectFile, useProjectsContext } from "../projects/ProjectsContext";
 import { useAppParams } from "@/hooks/appNavigation";
 import { projectFilesToFileDescriptors } from "../services/fileUtils";
+import { useActionsContext } from "@/contexts/ActionsContext";
 
 const SYSTEM_MESSAGE_ID = -3;
 
@@ -127,8 +127,8 @@ export function useChatController({
   const searchParams = useSearchParams();
   const params = useAppParams();
   const { refreshChatSessions } = useChatSessionContext();
-  const { assistantPreferences } = useAssistantPreferences();
-  const { forcedToolIds } = useForcedTools();
+  const { agentPreferences: assistantPreferences } = useAgentPreferences();
+  const { forcedToolIds } = useActionsContext();
   const { fetchProjects, uploadFiles, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
   const posthog = usePostHog();

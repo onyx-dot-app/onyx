@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { getIconForAction } from "@/app/chat/services/actionUtils";
@@ -11,15 +11,12 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn, noProp } from "@/lib/utils";
 import type { IconProps } from "@opal/types";
 import { SvgChevronRight, SvgKey, SvgSettings, SvgSlash } from "@opal/icons";
+import { useActionsContext, ToolState } from "@/contexts/ActionsContext";
 
 export interface ActionItemProps {
   tool?: ToolSnapshot;
   Icon?: React.FunctionComponent<IconProps>;
   label?: string;
-  disabled: boolean;
-  isForced: boolean;
-  onToggle: () => void;
-  onForceToggle: () => void;
   onSourceManagementOpen?: () => void;
   hasNoConnectors?: boolean;
   toolAuthStatus?: ToolAuthStatus;
@@ -31,18 +28,22 @@ export default function ActionLineItem({
   tool,
   Icon: ProvidedIcon,
   label: providedLabel,
-  disabled,
-  isForced,
-  onToggle,
-  onForceToggle,
   onSourceManagementOpen,
   hasNoConnectors = false,
   toolAuthStatus,
   onOAuthAuthenticate,
   isProjectContext = false,
 }: ActionItemProps) {
+  const { toolMap, setToolStatus } = useActionsContext();
   const Icon = tool ? getIconForAction(tool) : ProvidedIcon!;
   const toolName = tool?.name || providedLabel || "";
+
+  const toolState = useMemo(() => {
+    if (!tool) return ToolState.Enabled;
+    return toolMap[tool.id] ?? ToolState.Enabled;
+  }, [tool, toolMap]);
+  const disabled = toolState === ToolState.Disabled;
+  const isForced = toolState === ToolState.Forced;
 
   let label = tool ? tool.display_name || tool.name : providedLabel!;
   if (isProjectContext && tool?.in_code_tool_id === SEARCH_TOOL_ID) {
@@ -54,14 +55,31 @@ export default function ActionLineItem({
     tool?.in_code_tool_id === SEARCH_TOOL_ID &&
     hasNoConnectors;
 
+  const handleToggle = () => {
+    if (!tool) return;
+    const target = disabled ? ToolState.Enabled : ToolState.Disabled;
+    setToolStatus(tool.id, target);
+  };
+
+  const handleForceToggle = () => {
+    if (!tool) return;
+    const target =
+      toolState === ToolState.Forced ? ToolState.Enabled : ToolState.Forced;
+    // If currently disabled, first enable so forcing makes sense
+    if (toolState === ToolState.Disabled) {
+      setToolStatus(tool.id, ToolState.Enabled);
+    }
+    setToolStatus(tool.id, target);
+  };
+
   return (
     <SimpleTooltip tooltip={tool?.description} className="max-w-[30rem]">
       <div data-testid={`tool-option-${toolName}`}>
         <LineItem
           onClick={() => {
             if (isSearchToolWithNoConnectors) return;
-            if (onToggle && disabled) onToggle();
-            onForceToggle();
+            if (disabled) handleToggle();
+            handleForceToggle();
           }}
           selected={isForced}
           strikethrough={disabled || isSearchToolWithNoConnectors}
@@ -92,7 +110,7 @@ export default function ActionLineItem({
               {!isSearchToolWithNoConnectors && (
                 <IconButton
                   icon={SvgSlash}
-                  onClick={noProp(onToggle)}
+                  onClick={noProp(handleToggle)}
                   internal
                   className={cn(
                     !disabled && "invisible group-hover/LineItem:visible"

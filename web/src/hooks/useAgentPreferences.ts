@@ -1,3 +1,5 @@
+"use client";
+
 import useSWR from "swr";
 import {
   UserSpecificAssistantPreference,
@@ -6,18 +8,21 @@ import {
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useCallback } from "react";
 
-const ASSISTANT_PREFERENCES_URL = "/api/user/assistant/preferences";
-
-const buildUpdateAssistantPreferenceUrl = (assistantId: number) =>
-  `/api/user/assistant/${assistantId}/preferences`;
+interface UseAgentPreferencesOutput {
+  agentPreferences: UserSpecificAssistantPreferences | null;
+  setAgentPreference: (
+    agentId: number,
+    preference: UserSpecificAssistantPreference
+  ) => Promise<void>;
+}
 
 /**
  * Hook for managing user-specific assistant preferences using SWR.
  * Provides automatic caching, deduplication, and revalidation.
  */
-export function useAssistantPreferences() {
+export default function useAgentPreferences(): UseAgentPreferencesOutput {
   const { data, mutate } = useSWR<UserSpecificAssistantPreferences>(
-    ASSISTANT_PREFERENCES_URL,
+    "/api/user/assistant/preferences",
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
@@ -25,7 +30,7 @@ export function useAssistantPreferences() {
     }
   );
 
-  const setSpecificAssistantPreferences = useCallback(
+  const setAgentPreference = useCallback(
     async (
       assistantId: number,
       newAssistantPreference: UserSpecificAssistantPreference
@@ -41,7 +46,7 @@ export function useAssistantPreferences() {
 
       try {
         const response = await fetch(
-          buildUpdateAssistantPreferenceUrl(assistantId),
+          `/api/user/assistant/${assistantId}/preferences`,
           {
             method: "PATCH",
             headers: {
@@ -67,7 +72,7 @@ export function useAssistantPreferences() {
   );
 
   return {
-    assistantPreferences: data ?? null,
-    setSpecificAssistantPreferences,
+    agentPreferences: data ?? null,
+    setAgentPreference,
   };
 }
