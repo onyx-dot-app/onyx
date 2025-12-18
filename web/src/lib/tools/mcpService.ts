@@ -8,12 +8,10 @@ import {
   MCPServerUpdateRequest,
   MCPServerStatus,
   ApiResponse,
-} from "@/lib/tools/types";
-import { ToolSnapshot } from "@/lib/tools/types";
-import {
+  ToolSnapshot,
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
-} from "@/lib/tools/types";
+} from "@/lib/tools/interfaces";
 export interface ToolStatusUpdateRequest {
   tool_ids: number[];
   enabled: boolean;

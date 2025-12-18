@@ -3,7 +3,7 @@
 import React, { memo } from "react";
 import { cn } from "@/lib/utils";
 import type { IconProps } from "@opal/types";
-import Truncated from "../texts/Truncated";
+import Truncated from "@/refresh-components/texts/Truncated";
 
 export interface InfoBlockProps extends React.HTMLAttributes<HTMLDivElement> {
   icon: React.FunctionComponent<IconProps>;

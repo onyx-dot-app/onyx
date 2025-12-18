@@ -31,7 +31,7 @@ const Actionbar: React.FC<ActionbarProps> = ({
     <div
       className={cn(
         "flex gap-4 items-center rounded-16",
-        !hasActions ? "bg-background-tint-00 border border-border-01" : "",
+        !hasActions ? "bg-background-tint-00 border border-border-01 p-4" : "",
         className
       )}
     >

@@ -15,7 +15,7 @@ import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import KeyValueInput, {
   KeyValue,
 } from "@/refresh-components/inputs/InputKeyValue";
-import { OAuthConfig } from "@/lib/tools/types";
+import { OAuthConfig } from "@/lib/tools/interfaces";
 import { getOAuthConfig } from "@/lib/oauth/api";
 import { SvgArrowExchange } from "@opal/icons";
 import { useAuthType } from "@/lib/hooks";
@@ -48,8 +48,6 @@ interface OpenAPIAuthenticationModalProps {
   entityName?: string | null;
   passthroughOAuthEnabled?: boolean;
 }
-
-const redirectUri = "https://cloud.onyx.app/oauth-config/callback";
 
 const MASKED_CREDENTIAL_VALUE = "********";
 
@@ -99,6 +97,13 @@ export default function OpenAPIAuthenticationModal({
     isLoadingOAuthConfig &&
     !existingOAuthConfig &&
     !oauthConfigError;
+
+  const redirectUri = useMemo(() => {
+    if (typeof window === "undefined") {
+      return "https://{YOUR_DOMAIN}/oauth-config/callback";
+    }
+    return `${window.location.origin}/oauth-config/callback`;
+  }, []);
 
   useEffect(() => {
     let isActive = true;
@@ -180,19 +185,25 @@ export default function OpenAPIAuthenticationModal({
           otherwise: (schema) => schema.notRequired(),
         }),
         scopes: Yup.string().notRequired(),
-        headers: Yup.array()
-          .of(
-            Yup.object({
-              key: Yup.string().required("Header key is required"),
-              value: Yup.string().required("Header value is required"),
-            })
-          )
-          .when("authMethod", {
-            is: "custom-header",
-            then: (schema) =>
-              schema.min(1, "Add at least one authentication header"),
-            otherwise: (schema) => schema.optional(),
-          }),
+        headers: Yup.array().when("authMethod", {
+          is: "custom-header",
+          then: () =>
+            Yup.array()
+              .of(
+                Yup.object({
+                  key: Yup.string().required("Header key is required"),
+                  value: Yup.string().required("Header value is required"),
+                })
+              )
+              .min(1, "Add at least one authentication header"),
+          otherwise: () =>
+            Yup.array().of(
+              Yup.object({
+                key: Yup.string(),
+                value: Yup.string(),
+              })
+            ),
+        }),
       }),
     [isEditingOAuthConfig]
   );
@@ -400,7 +411,7 @@ export default function OpenAPIAuthenticationModal({
                       </FormField>
                     </div>
 
-                    <Separator />
+                    <Separator className="py-0" />
 
                     {values.authMethod === "oauth" && (
                       <section className="flex flex-col gap-4 rounded-12 bg-background-tint-00 border border-border-01 p-4">
@@ -645,7 +656,7 @@ export default function OpenAPIAuthenticationModal({
                 )}
               </Modal.Body>
 
-              <Modal.Footer className="p-4 gap-2 bg-background-tint-00">
+              <Modal.Footer className="gap-2">
                 <Button main tertiary type="button" onClick={handleSkip}>
                   Cancel
                 </Button>

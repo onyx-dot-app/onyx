@@ -43,6 +43,7 @@ import {
   SvgUsers,
   SvgZoomIn,
 } from "@opal/icons";
+import SvgMcp from "@opal/icons/mcp";
 const connectors_items = () => [
   {
     name: "Existing Connectors",
@@ -87,25 +88,25 @@ const custom_assistants_items = (
   ];
 
   if (!isCurator) {
-    items.push(
-      {
-        name: "Slack Bots",
-        icon: SlackIconSkeleton,
-        link: "/admin/bots",
-      },
-      {
-        name: "Actions",
-        icon: SvgActions,
-        link: "/admin/actions",
-      }
-    );
-  } else {
     items.push({
-      name: "Actions",
-      icon: SvgActions,
-      link: "/admin/actions",
+      name: "Slack Bots",
+      icon: SlackIconSkeleton,
+      link: "/admin/bots",
     });
   }
+
+  items.push(
+    {
+      name: "MCP Actions",
+      icon: SvgMcp,
+      link: "/admin/actions/mcp",
+    },
+    {
+      name: "OpenAPI Actions",
+      icon: SvgActions,
+      link: "/admin/actions/open-api",
+    }
+  );
 
   if (enableEnterprise) {
     items.push({

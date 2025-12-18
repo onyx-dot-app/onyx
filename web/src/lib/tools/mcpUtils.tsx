@@ -38,7 +38,3 @@ export function getActionIcon(
 
   return SvgServer;
 }
-
-export function getMCPServerDisplayName(server: MCPServer): string {
-  return server.name;
-}
