@@ -13,6 +13,7 @@ from slack_sdk.errors import SlackApiError
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
+from onyx.configs.app_configs import MAX_SLACK_THREAD_CONTEXT_MESSAGES
 from onyx.configs.app_configs import SLACK_THREAD_CONTEXT_BATCH_SIZE
 from onyx.configs.chat_configs import DOC_TIME_DECAY
 from onyx.connectors.models import IndexingDocument
@@ -744,7 +745,7 @@ def fetch_thread_contexts_with_rate_limit_handling(
     access_token: str,
     team_id: str | None,
     batch_size: int = SLACK_THREAD_CONTEXT_BATCH_SIZE,
-    max_messages: int | None = None,
+    max_messages: int | None = MAX_SLACK_THREAD_CONTEXT_MESSAGES,
 ) -> list[str]:
     """
     Fetch thread contexts in controlled batches, stopping if rate limited.
