@@ -2215,6 +2215,8 @@ class ToolCall(Base):
     # The tools with the same turn number (and parent) were called in parallel
     # Ones with different turn numbers (and same parent) were called sequentially
     turn_number: Mapped[int] = mapped_column(Integer)
+    # Index order of tool calls from the LLM for parallel tool calls
+    tab_index: Mapped[int] = mapped_column(Integer, default=0)
 
     # Not a FK because we want to be able to delete the tool without deleting
     # this entry
@@ -3917,3 +3919,22 @@ class ExternalGroupPermissionSyncAttempt(Base):
 
     def is_finished(self) -> bool:
         return self.status.is_terminal()
+
+
+class License(Base):
+    """Stores the signed license blob (singleton pattern - only one row)."""
+
+    __tablename__ = "license"
+    __table_args__ = (
+        # Singleton pattern - unique index on constant ensures only one row
+        Index("idx_license_singleton", text("(true)"), unique=True),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    license_data: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

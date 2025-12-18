@@ -279,10 +279,9 @@ PacketObj = Union[
 
 class Packet(BaseModel):
     turn_index: int | None
+    # For parallel tool calls to preserve order of execution
+    tab_index: int = 0
+    # Used for tools/agents that call other tools, this currently doesn't support nested agents but can be added later
+    sub_turn_index: int | None = None
+
     obj: Annotated[PacketObj, Field(discriminator="type")]
-
-
-# This is for replaying it back from the DB to the frontend
-class EndStepPacketList(BaseModel):
-    turn_index: int
-    packet_list: list[Packet]

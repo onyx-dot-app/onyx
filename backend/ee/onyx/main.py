@@ -14,6 +14,7 @@ from ee.onyx.server.enterprise_settings.api import (
     basic_router as enterprise_settings_router,
 )
 from ee.onyx.server.evals.api import router as evals_router
+from ee.onyx.server.license.api import router as license_router
 from ee.onyx.server.manage.standard_answer import router as standard_answer_router
 from ee.onyx.server.middleware.tenant_tracking import (
     add_api_server_tenant_id_middleware,
@@ -139,6 +140,8 @@ def get_application() -> FastAPI:
     )
     include_router_with_global_prefix_prepended(application, enterprise_settings_router)
     include_router_with_global_prefix_prepended(application, usage_export_router)
+    # License management
+    include_router_with_global_prefix_prepended(application, license_router)
 
     if MULTI_TENANT:
         # Tenant management

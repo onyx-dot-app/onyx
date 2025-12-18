@@ -27,7 +27,7 @@ interface ActionsProps {
   onToggleTools?: () => void;
 }
 
-const Actions: React.FC<ActionsProps> = React.memo(
+const Actions = React.memo(
   ({
     status,
     serverName,

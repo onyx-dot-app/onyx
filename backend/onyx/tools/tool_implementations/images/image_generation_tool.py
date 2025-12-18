@@ -120,10 +120,11 @@ class ImageGenerationTool(Tool[None]):
             },
         }
 
-    def emit_start(self, turn_index: int) -> None:
+    def emit_start(self, turn_index: int, tab_index: int) -> None:
         self.emitter.emit(
             Packet(
                 turn_index=turn_index,
+                tab_index=tab_index,
                 obj=ImageGenerationToolStart(),
             )
         )
@@ -209,7 +210,8 @@ class ImageGenerationTool(Tool[None]):
     def run(
         self,
         turn_index: int,
-        override_kwargs: None,
+        tab_index: int,
+        override_kwargs: None = None,
         **llm_kwargs: Any,
     ) -> ToolResponse:
         prompt = cast(str, llm_kwargs["prompt"])
@@ -258,6 +260,7 @@ class ImageGenerationTool(Tool[None]):
             self.emitter.emit(
                 Packet(
                     turn_index=turn_index,
+                    tab_index=tab_index,
                     obj=ImageGenerationToolHeartbeat(),
                 )
             )
@@ -302,6 +305,7 @@ class ImageGenerationTool(Tool[None]):
         self.emitter.emit(
             Packet(
                 turn_index=turn_index,
+                tab_index=tab_index,
                 obj=ImageGenerationFinal(images=generated_images_metadata),
             )
         )

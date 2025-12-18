@@ -178,11 +178,12 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             },
         }
 
-    def emit_start(self, turn_index: int) -> None:
+    def emit_start(self, turn_index: int, tab_index: int) -> None:
         """Emit start packet to signal tool has started."""
         self.emitter.emit(
             Packet(
                 turn_index=turn_index,
+                tab_index=tab_index,
                 obj=OpenUrlStart(),
             )
         )
@@ -190,6 +191,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
     def run(
         self,
         turn_index: int,
+        tab_index: int,
         override_kwargs: OpenURLToolOverrideKwargs,
         **llm_kwargs: Any,
     ) -> ToolResponse:
@@ -197,6 +199,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
 
         Args:
             turn_index: The current turn index in the conversation.
+            tab_index: The tab index for parallel tool calls.
             override_kwargs: Override arguments including starting citation number
                 and existing citation_mapping to reuse citations for already-cited URLs.
             **llm_kwargs: Arguments provided by the LLM, including the 'urls' field.
@@ -209,6 +212,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         self.emitter.emit(
             Packet(
                 turn_index=turn_index,
+                tab_index=tab_index,
                 obj=OpenUrlUrls(urls=urls),
             )
         )
@@ -245,6 +249,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         self.emitter.emit(
             Packet(
                 turn_index=turn_index,
+                tab_index=tab_index,
                 obj=OpenUrlDocuments(documents=search_docs),
             )
         )

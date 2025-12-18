@@ -1,4 +1,5 @@
 import json
+from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Mapping
 from collections.abc import Sequence
@@ -17,6 +18,7 @@ from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.llm.model_response import Delta
 from onyx.llm.models import AssistantMessage
 from onyx.llm.models import ChatCompletionMessage
 from onyx.llm.models import FunctionCall
@@ -34,6 +36,8 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningDone
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
+from onyx.tools.models import TOOL_CALL_MSG_ARGUMENTS
+from onyx.tools.models import TOOL_CALL_MSG_FUNC_NAME
 from onyx.tools.models import ToolCallKickoff
 from onyx.tracing.framework.create import generation_span
 from onyx.utils.b64 import get_image_type_from_bytes
@@ -41,10 +45,6 @@ from onyx.utils.logger import setup_logger
 
 
 logger = setup_logger()
-
-
-TOOL_CALL_MSG_FUNC_NAME = "function_name"
-TOOL_CALL_MSG_ARGUMENTS = "arguments"
 
 
 def _format_message_history_for_logging(
@@ -153,12 +153,15 @@ def _update_tool_call_with_delta(
 
 def _extract_tool_call_kickoffs(
     id_to_tool_call_map: dict[int, dict[str, Any]],
+    turn_index: int,
 ) -> list[ToolCallKickoff]:
     """Extract ToolCallKickoff objects from the tool call map.
 
     Returns a list of ToolCallKickoff objects for valid tool calls (those with both id and name).
+    Each tool call is assigned the given turn_index and a tab_index based on its order.
     """
     tool_calls: list[ToolCallKickoff] = []
+    tab_index = 0
     for tool_call_data in id_to_tool_call_map.values():
         if tool_call_data.get("id") and tool_call_data.get("name"):
             try:
@@ -180,8 +183,11 @@ def _extract_tool_call_kickoffs(
                     tool_call_id=tool_call_data["id"],
                     tool_name=tool_call_data["name"],
                     tool_args=tool_args,
+                    turn_index=turn_index,
+                    tab_index=tab_index,
                 )
             )
+            tab_index += 1
     return tool_calls
 
 
@@ -334,10 +340,15 @@ def run_llm_step(
     state_container: ChatStateContainer,
     final_documents: list[SearchDoc] | None = None,
     user_identity: LLMUserIdentity | None = None,
+    custom_token_processor: (
+        Callable[[Delta | None, Any], tuple[Delta | None, Any]] | None
+    ) = None,
 ) -> Generator[Packet, None, tuple[LlmStepResult, int]]:
     # The second return value is for the turn index because reasoning counts on the frontend as a turn
     # TODO this is maybe ok but does not align well with the backend logic too well
     llm_msg_history = translate_history_to_llm_format(history)
+
+    has_reasoned = False
 
     # Uncomment the line below to log the entire message history to the console
     if LOG_ONYX_MODEL_INTERACTIONS:
@@ -350,6 +361,8 @@ def run_llm_step(
     answer_start = False
     accumulated_reasoning = ""
     accumulated_answer = ""
+
+    processor_state: Any = None
 
     with generation_span(
         model=llm.config.model_name,
@@ -379,6 +392,17 @@ def run_llm_step(
                 }
             delta = packet.choice.delta
 
+            if custom_token_processor:
+                # The custom token processor can modify the deltas for specific custom logic
+                # It can also return a state so that it can handle aggregated delta logic etc.
+                # Loosely typed so the function can be flexible
+                modified_delta, processor_state = custom_token_processor(
+                    delta, processor_state
+                )
+                if modified_delta is None:
+                    continue
+                delta = modified_delta
+
             # Should only happen once, frontend does not expect multiple
             # ReasoningStart or ReasoningDone packets.
             if delta.reasoning_content:
@@ -402,7 +426,7 @@ def run_llm_step(
                         turn_index=turn_index,
                         obj=ReasoningDone(),
                     )
-                    turn_index += 1
+                    has_reasoned = True
                     reasoning_start = False
 
                 if not answer_start:
@@ -435,13 +459,20 @@ def run_llm_step(
                         turn_index=turn_index,
                         obj=ReasoningDone(),
                     )
-                    turn_index += 1
+                    has_reasoned = True
                     reasoning_start = False
 
                 for tool_call_delta in delta.tool_calls:
                     _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
 
-        tool_calls = _extract_tool_call_kickoffs(id_to_tool_call_map)
+        # Flush custom token processor to get any final tool calls
+        if custom_token_processor:
+            flush_delta, processor_state = custom_token_processor(None, processor_state)
+            if flush_delta and flush_delta.tool_calls:
+                for tool_call_delta in flush_delta.tool_calls:
+                    _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
+
+        tool_calls = _extract_tool_call_kickoffs(id_to_tool_call_map, turn_index)
         if tool_calls:
             tool_calls_list: list[ToolCall] = [
                 ToolCall(
@@ -474,7 +505,7 @@ def run_llm_step(
             turn_index=turn_index,
             obj=ReasoningDone(),
         )
-        turn_index += 1
+        has_reasoned = True
 
     # Flush any remaining content from citation processor
     if citation_processor:
@@ -514,5 +545,5 @@ def run_llm_step(
             answer=accumulated_answer if accumulated_answer else None,
             tool_calls=tool_calls if tool_calls else None,
         ),
-        turn_index,
+        has_reasoned,
     )
