@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { HOST_URL, INTERNAL_URL } from "./constants";
+import { processCookies } from "./userSS";
 
 export function buildClientUrl(path: string) {
   if (path.startsWith("/")) {
@@ -57,19 +58,7 @@ export class UrlBuilder {
 }
 
 export async function fetchSS(url: string, options?: RequestInit) {
-  // Build cookie string from Next.js cookies
-  let cookieString = (await cookies())
-    .getAll()
-    .map((cookie) => `${cookie.name}=${cookie.value}`)
-    .join("; ");
-
-  // Inject debug auth cookie for local development against remote backend
-  if (process.env.DEBUG_AUTH_COOKIE && process.env.NODE_ENV === "development") {
-    const debugCookie = `fastapiusersauth=${process.env.DEBUG_AUTH_COOKIE}`;
-    cookieString = cookieString
-      ? `${cookieString}; ${debugCookie}`
-      : debugCookie;
-  }
+  const cookieString = processCookies(await cookies());
 
   const init = options || {
     credentials: "include",
@@ -91,7 +80,11 @@ export async function fetchSS(url: string, options?: RequestInit) {
       // Append debug cookie to existing cookies
       const existingCookies = headers.get("cookie") || "";
       const debugCookie = `fastapiusersauth=${process.env.DEBUG_AUTH_COOKIE}`;
-      if (!existingCookies.includes("fastapiusersauth=")) {
+      if (
+        !existingCookies
+          .split("; ")
+          .some((c) => c.startsWith("fastapiusersauth="))
+      ) {
         headers.set("cookie", `${existingCookies}; ${debugCookie}`);
       }
     }

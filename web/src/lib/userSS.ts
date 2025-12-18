@@ -165,21 +165,7 @@ export const logoutSS = async (
 
 export const getCurrentUserSS = async (): Promise<User | null> => {
   try {
-    let cookieString = (await cookies())
-      .getAll()
-      .map((cookie) => `${cookie.name}=${cookie.value}`)
-      .join("; ");
-
-    // Inject debug auth cookie for local development against remote backend
-    if (
-      process.env.DEBUG_AUTH_COOKIE &&
-      process.env.NODE_ENV === "development"
-    ) {
-      const debugCookie = `fastapiusersauth=${process.env.DEBUG_AUTH_COOKIE}`;
-      cookieString = cookieString
-        ? `${cookieString}; ${debugCookie}`
-        : debugCookie;
-    }
+    const cookieString = processCookies(await cookies());
 
     const response = await fetch(buildUrl("/me"), {
       credentials: "include",
