@@ -30,8 +30,8 @@ const Actionbar: React.FC<ActionbarProps> = ({
   return (
     <div
       className={cn(
-        "flex gap-4 items-center p-4 rounded-16",
-        !hasActions ? "bg-background-tint-00 border border-border-01" : "",
+        "flex gap-4 items-center rounded-16",
+        !hasActions ? "bg-background-tint-00 border border-border-01 p-4" : "",
         className
       )}
     >
@@ -43,7 +43,7 @@ const Actionbar: React.FC<ActionbarProps> = ({
             onChange={handleSearchChange}
             leftSearchIcon
             showClearButton
-            className="w-full bg-transparent border-none"
+            className="w-full !bg-transparent !border-transparent [&:is(:hover,:active,:focus,:focus-within)]:!bg-background-neutral-00 [&:is(:hover,:active,:focus,:focus-within)]:!border-border-01 [&:is(:focus,:focus-within)]:!shadow-none"
           />
         </div>
       ) : (

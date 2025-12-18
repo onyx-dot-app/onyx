@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import datetime
 import hashlib
 import json
 from collections.abc import Awaitable
@@ -40,6 +41,7 @@ from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import MCPTransport
 from onyx.db.mcp import create_connection_config
 from onyx.db.mcp import create_mcp_server__no_commit
+from onyx.db.mcp import delete_all_user_connection_configs_for_server_no_commit
 from onyx.db.mcp import delete_connection_config
 from onyx.db.mcp import delete_mcp_server
 from onyx.db.mcp import delete_user_connection_configs_for_server
@@ -1012,6 +1014,7 @@ def _db_mcp_server_to_api_mcp_server(
         is_authenticated=is_authenticated,
         user_authenticated=user_authenticated,
         status=db_server.status,
+        last_refreshed_at=db_server.last_refreshed_at,
         tool_count=tool_count,
         auth_template=auth_template,
         user_credentials=user_credentials,
@@ -1133,6 +1136,7 @@ def get_mcp_server_tools_snapshots(
                 server_id=server_id,
                 db_session=db,
                 status=MCPServerStatus.CONNECTED,
+                last_refreshed_at=datetime.datetime.now(datetime.timezone.utc),
             )
             db.commit()
         except Exception as e:
@@ -1205,7 +1209,7 @@ def _upsert_db_tools(
             db_session=db,
             passthrough_auth=False,
             mcp_server_id=mcp_server_id,
-            enabled=False,
+            enabled=True,
         )
         new_tool.display_name = display_name
         new_tool.mcp_input_schema = input_schema
@@ -1383,7 +1387,21 @@ def _upsert_mcp_server(
         )
 
         # Cleanup: Delete existing connection configs
-        if changing_connection_config and mcp_server.admin_connection_config_id:
+        # If the auth type is OAUTH, delete all user connection configs
+        # If the auth type is API_TOKEN, delete the admin connection config and the admin user connection configs
+        if (
+            changing_connection_config
+            and mcp_server.admin_connection_config_id
+            and request.auth_type == MCPAuthenticationType.OAUTH
+        ):
+            delete_all_user_connection_configs_for_server_no_commit(
+                mcp_server.id, db_session
+            )
+        elif (
+            changing_connection_config
+            and mcp_server.admin_connection_config_id
+            and request.auth_type == MCPAuthenticationType.API_TOKEN
+        ):
             delete_connection_config(mcp_server.admin_connection_config_id, db_session)
             if user and user.email:
                 delete_user_connection_configs_for_server(

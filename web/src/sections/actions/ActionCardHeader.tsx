@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { cn } from "@/lib/utils";
-import { ActionStatus } from "@/lib/tools/types";
+import { ActionStatus } from "@/lib/tools/interfaces";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
@@ -52,7 +52,7 @@ function ActionCardHeader({
   };
 
   return (
-    <div className="flex flex-1 gap-2 items-start max-w-[480px]">
+    <div className="flex gap-2 items-start flex-1 min-w-0 mr-2">
       <div
         className={cn(
           "flex items-center px-0 py-0.5 shrink-0",
@@ -62,8 +62,8 @@ function ActionCardHeader({
         <Icon size={20} className="h-5 w-5 stroke-text-04" />
       </div>
 
-      <div className="flex flex-col items-start flex-1 min-w-0">
-        <div className="flex items-center gap-1 min-w-0">
+      <div className="flex flex-col items-start flex-1 min-w-0 overflow-hidden">
+        <div className="flex items-center gap-1 min-w-0 w-full">
           {isRenaming ? (
             <ButtonRenaming
               initialName={title}
@@ -79,7 +79,7 @@ function ActionCardHeader({
               )}
             />
           ) : (
-            <div className="min-w-0 shrink">
+            <div className="min-w-0 shrink overflow-hidden">
               <Truncated
                 mainContentEmphasis
                 className={cn(
@@ -96,12 +96,12 @@ function ActionCardHeader({
             </div>
           )}
           {isPending && !isRenaming && (
-            <Text mainUiMuted text03>
+            <Text mainUiMuted text03 className="shrink-0 whitespace-nowrap">
               (Not Authenticated)
             </Text>
           )}
           {isDisconnected && !isRenaming && (
-            <Text mainUiMuted text02>
+            <Text mainUiMuted text02 className="shrink-0 whitespace-nowrap">
               (Disconnected)
             </Text>
           )}

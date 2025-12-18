@@ -3673,6 +3673,9 @@ class MCPServer(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    last_refreshed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Relationships
     admin_connection_config: Mapped["MCPConnectionConfig | None"] = relationship(
@@ -3685,6 +3688,7 @@ class MCPServer(Base):
         "MCPConnectionConfig",
         foreign_keys="MCPConnectionConfig.mcp_server_id",
         back_populates="mcp_server",
+        passive_deletes=True,
     )
     current_actions: Mapped[list["Tool"]] = relationship(
         "Tool", back_populates="mcp_server", cascade="all, delete-orphan"

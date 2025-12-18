@@ -49,8 +49,6 @@ interface OpenAPIAuthenticationModalProps {
   passthroughOAuthEnabled?: boolean;
 }
 
-const redirectUri = "https://cloud.onyx.app/oauth-config/callback";
-
 const MASKED_CREDENTIAL_VALUE = "********";
 
 const defaultValues: OpenAPIAuthFormValues = {
@@ -99,6 +97,13 @@ export default function OpenAPIAuthenticationModal({
     isLoadingOAuthConfig &&
     !existingOAuthConfig &&
     !oauthConfigError;
+
+  const redirectUri = useMemo(() => {
+    if (typeof window === "undefined") {
+      return "https://{YOUR_DOMAIN}/oauth-config/callback";
+    }
+    return `${window.location.origin}/oauth-config/callback`;
+  }, []);
 
   useEffect(() => {
     let isActive = true;
@@ -180,19 +185,25 @@ export default function OpenAPIAuthenticationModal({
           otherwise: (schema) => schema.notRequired(),
         }),
         scopes: Yup.string().notRequired(),
-        headers: Yup.array()
-          .of(
-            Yup.object({
-              key: Yup.string().required("Header key is required"),
-              value: Yup.string().required("Header value is required"),
-            })
-          )
-          .when("authMethod", {
-            is: "custom-header",
-            then: (schema) =>
-              schema.min(1, "Add at least one authentication header"),
-            otherwise: (schema) => schema.optional(),
-          }),
+        headers: Yup.array().when("authMethod", {
+          is: "custom-header",
+          then: () =>
+            Yup.array()
+              .of(
+                Yup.object({
+                  key: Yup.string().required("Header key is required"),
+                  value: Yup.string().required("Header value is required"),
+                })
+              )
+              .min(1, "Add at least one authentication header"),
+          otherwise: () =>
+            Yup.array().of(
+              Yup.object({
+                key: Yup.string(),
+                value: Yup.string(),
+              })
+            ),
+        }),
       }),
     [isEditingOAuthConfig]
   );
@@ -328,6 +339,7 @@ export default function OpenAPIAuthenticationModal({
             setFieldError,
             isSubmitting,
             isValid,
+            dirty,
           }) => (
             <Form className="flex flex-col h-full">
               <Modal.Body className="flex-1 overflow-y-auto max-h-[580px] p-2 bg-background-tint-01 w-full">
@@ -347,7 +359,7 @@ export default function OpenAPIAuthenticationModal({
                   </div>
                 ) : (
                   <>
-                    <div className="flex flex-col gap-4 p-2">
+                    <div className="flex flex-col gap-4 px-2 pt-2">
                       <FormField
                         name="authMethod"
                         state={
@@ -399,7 +411,7 @@ export default function OpenAPIAuthenticationModal({
                       </FormField>
                     </div>
 
-                    <Separator />
+                    <Separator className="py-0" />
 
                     {values.authMethod === "oauth" && (
                       <section className="flex flex-col gap-4 rounded-12 bg-background-tint-00 border border-border-01 p-4">
@@ -644,21 +656,19 @@ export default function OpenAPIAuthenticationModal({
                 )}
               </Modal.Body>
 
-              <Modal.Footer className="p-4 gap-2 bg-background-tint-00">
+              <Modal.Footer className="gap-2">
                 <Button main tertiary type="button" onClick={handleSkip}>
-                  Skip for Now
+                  Cancel
                 </Button>
                 <Button
                   main
                   primary
                   type="submit"
-                  disabled={!isValid || isSubmitting || shouldDisableForm}
+                  disabled={
+                    !isValid || isSubmitting || shouldDisableForm || !dirty
+                  }
                 >
-                  {isSubmitting
-                    ? "Saving..."
-                    : isEditMode
-                      ? "Save Changes"
-                      : "Save & Connect"}
+                  {isSubmitting ? "Connecting..." : "Connect"}
                 </Button>
               </Modal.Footer>
             </Form>

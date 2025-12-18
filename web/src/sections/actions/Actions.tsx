@@ -1,5 +1,5 @@
 "use client";
-import { ActionStatus } from "@/lib/tools/types";
+import { ActionStatus } from "@/lib/tools/interfaces";
 import React from "react";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Button from "@/refresh-components/buttons/Button";

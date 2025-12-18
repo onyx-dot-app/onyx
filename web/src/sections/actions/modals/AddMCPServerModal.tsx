@@ -12,8 +12,8 @@ import { createMCPServer, updateMCPServer } from "@/lib/tools/mcpService";
 import {
   MCPServerCreateRequest,
   MCPServerStatus,
-  MCPServerWithStatus,
-} from "@/lib/tools/types";
+  MCPServer,
+} from "@/lib/tools/interfaces";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Separator from "@/refresh-components/Separator";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -23,12 +23,11 @@ import { SvgCheckCircle, SvgServer, SvgUnplug } from "@opal/icons";
 
 interface AddMCPServerModalProps {
   skipOverlay?: boolean;
-  serverToManage: MCPServerWithStatus | null;
-  setServerToManage: (server: MCPServerWithStatus | null) => void;
-  setServerToDisconnect: (server: MCPServerWithStatus | null) => void;
+  activeServer: MCPServer | null;
+  setActiveServer: (server: MCPServer | null) => void;
   disconnectModal: ModalCreationInterface;
   manageServerModal: ModalCreationInterface;
-  onServerCreated?: (server: MCPServerWithStatus) => void;
+  onServerCreated?: (server: MCPServer) => void;
   handleAuthenticate: (serverId: number) => void;
   setPopup?: (spec: PopupSpec) => void;
   mutateMcpServers?: () => Promise<void>;
@@ -44,9 +43,8 @@ const validationSchema = Yup.object().shape({
 
 export default function AddMCPServerModal({
   skipOverlay = false,
-  serverToManage,
-  setServerToManage,
-  setServerToDisconnect,
+  activeServer,
+  setActiveServer,
   disconnectModal,
   manageServerModal,
   onServerCreated,
@@ -57,13 +55,13 @@ export default function AddMCPServerModal({
   const { isOpen, toggle } = useModal();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Use serverToManage from props
-  const server = serverToManage;
+  // Use activeServer from props
+  const server = activeServer;
 
   // Handler for disconnect button
   const handleDisconnectClick = () => {
-    if (serverToManage) {
-      setServerToDisconnect(serverToManage);
+    if (activeServer) {
+      // Server stays the same, just toggle modals
       manageServerModal.toggle(false);
       disconnectModal.toggle(true);
     }
@@ -105,9 +103,10 @@ export default function AddMCPServerModal({
           onServerCreated(createdServer);
         }
       }
-      // Close modal and clear server state
+      // Close modal. Do NOT clear `activeServer` here because this modal
+      // frequently transitions to other modals (authenticate/disconnect), and
+      // clearing would race those flows.
       toggle(false);
-      setServerToManage(null);
     } catch (error) {
       console.error(
         `Error ${isEditMode ? "updating" : "creating"} MCP server:`,
@@ -128,9 +127,6 @@ export default function AddMCPServerModal({
   // Handle modal close to clear server state
   const handleModalClose = (open: boolean) => {
     toggle(open);
-    if (!open) {
-      setServerToManage(null);
-    }
   };
 
   return (
@@ -145,7 +141,7 @@ export default function AddMCPServerModal({
           validationSchema={validationSchema}
           onSubmit={handleSubmit}
         >
-          {({ values, errors, touched, handleChange, handleBlur }) => (
+          {({ values, errors, touched, handleChange, handleBlur, dirty }) => (
             <Form className="gap-0">
               <Modal.Header
                 icon={SvgServer}
@@ -221,7 +217,7 @@ export default function AddMCPServerModal({
                   />
                 </FormField>
 
-                <Separator className="-my-2" />
+                <Separator className="py-0" />
 
                 <FormField
                   id="server_url"
@@ -306,7 +302,7 @@ export default function AddMCPServerModal({
                   )}
               </Modal.Body>
 
-              <Modal.Footer className="p-4 gap-2">
+              <Modal.Footer className="gap-2">
                 <Button
                   secondary
                   type="button"
@@ -315,7 +311,7 @@ export default function AddMCPServerModal({
                 >
                   Cancel
                 </Button>
-                <Button primary type="submit" disabled={isSubmitting}>
+                <Button primary type="submit" disabled={isSubmitting || !dirty}>
                   {isSubmitting
                     ? isEditMode
                       ? "Saving..."
