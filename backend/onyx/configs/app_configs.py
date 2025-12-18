@@ -817,6 +817,17 @@ except json.JSONDecodeError:
 # LLM Model Update API endpoint
 LLM_MODEL_UPDATE_API_URL = os.environ.get("LLM_MODEL_UPDATE_API_URL")
 
+# Auto LLM Configuration - fetches model configs from GitHub for providers in Auto mode
+AUTO_LLM_CONFIG_URL = os.environ.get(
+    "AUTO_LLM_CONFIG_URL",
+    "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/llm-configs/models.json",
+)
+
+# How often to check for auto LLM model updates (in seconds)
+AUTO_LLM_UPDATE_INTERVAL_SECONDS = int(
+    os.environ.get("AUTO_LLM_UPDATE_INTERVAL_SECONDS", 1800)  # 30 minutes
+)
+
 # Federated Search Configs
 MAX_FEDERATED_SECTIONS = int(
     os.environ.get("MAX_FEDERATED_SECTIONS", "5")

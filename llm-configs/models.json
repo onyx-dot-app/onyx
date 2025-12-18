@@ -1,0 +1,96 @@
+{
+  "version": "1.0",
+  "updated_at": "2025-12-17T00:00:00Z",
+  "providers": {
+    "openai": {
+      "models": [
+        {
+          "name": "gpt-4o",
+          "display_name": "GPT-4o",
+          "max_input_tokens": 128000,
+          "supports_image_input": true,
+          "supports_reasoning": false,
+          "is_visible": true
+        },
+        {
+          "name": "gpt-4o-mini",
+          "display_name": "GPT-4o Mini",
+          "max_input_tokens": 128000,
+          "supports_image_input": true,
+          "supports_reasoning": false,
+          "is_visible": true
+        },
+        {
+          "name": "o1",
+          "display_name": "o1",
+          "max_input_tokens": 200000,
+          "supports_image_input": true,
+          "supports_reasoning": true,
+          "is_visible": true
+        },
+        {
+          "name": "o1-mini",
+          "display_name": "o1 Mini",
+          "max_input_tokens": 128000,
+          "supports_image_input": false,
+          "supports_reasoning": true,
+          "is_visible": true
+        }
+      ],
+      "default_model": "gpt-4o",
+      "fast_default_model": "gpt-4o-mini"
+    },
+    "anthropic": {
+      "models": [
+        {
+          "name": "claude-opus-4-5-20251101",
+          "display_name": "Claude Opus 4.5",
+          "max_input_tokens": 200000,
+          "supports_image_input": true,
+          "supports_reasoning": false,
+          "is_visible": true
+        },
+        {
+          "name": "claude-sonnet-4-20250514",
+          "display_name": "Claude Sonnet 4",
+          "max_input_tokens": 200000,
+          "supports_image_input": true,
+          "supports_reasoning": false,
+          "is_visible": true
+        },
+        {
+          "name": "claude-3-5-haiku-20241022",
+          "display_name": "Claude 3.5 Haiku",
+          "max_input_tokens": 200000,
+          "supports_image_input": true,
+          "supports_reasoning": false,
+          "is_visible": true
+        }
+      ],
+      "default_model": "claude-sonnet-4-20250514",
+      "fast_default_model": "claude-3-5-haiku-20241022"
+    },
+    "azure": {
+      "models": [
+        {
+          "name": "gpt-4o",
+          "display_name": "GPT-4o",
+          "max_input_tokens": 128000,
+          "supports_image_input": true,
+          "supports_reasoning": false,
+          "is_visible": true
+        },
+        {
+          "name": "gpt-4o-mini",
+          "display_name": "GPT-4o Mini",
+          "max_input_tokens": 128000,
+          "supports_image_input": true,
+          "supports_reasoning": false,
+          "is_visible": true
+        }
+      ],
+      "default_model": "gpt-4o",
+      "fast_default_model": "gpt-4o-mini"
+    }
+  }
+}

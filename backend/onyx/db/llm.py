@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 from sqlalchemy import delete
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
@@ -21,6 +23,9 @@ from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRe
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
 from shared_configs.enums import EmbeddingProvider
+
+if TYPE_CHECKING:
+    from onyx.llm.auto_update_models import GitHubProviderConfig
 
 
 def update_group_llm_provider_relationships__no_commit(
@@ -235,6 +240,7 @@ def upsert_llm_provider(
         llm_provider_upsert_request.default_model_name
     )
     existing_llm_provider.is_public = llm_provider_upsert_request.is_public
+    existing_llm_provider.is_auto_mode = llm_provider_upsert_request.is_auto_mode
     existing_llm_provider.deployment_name = llm_provider_upsert_request.deployment_name
 
     if not existing_llm_provider.id:
@@ -537,3 +543,112 @@ def update_default_vision_provider(
     new_default.is_default_vision_provider = True
     new_default.default_vision_model = vision_model
     db_session.commit()
+
+
+def fetch_auto_mode_providers(db_session: Session) -> list[LLMProviderModel]:
+    """Fetch all LLM providers that are in Auto mode."""
+    return list(
+        db_session.scalars(
+            select(LLMProviderModel)
+            .where(LLMProviderModel.is_auto_mode == True)  # noqa: E712
+            .options(selectinload(LLMProviderModel.model_configurations))
+        ).all()
+    )
+
+
+def sync_auto_mode_models(
+    db_session: Session,
+    provider: LLMProviderModel,
+    github_config: "GitHubProviderConfig",
+) -> int:
+    """Sync models from GitHub config to a provider in Auto mode.
+
+    In Auto mode, EVERYTHING is controlled by GitHub config:
+    - Model list
+    - Model visibility (is_visible)
+    - Default model
+    - Fast default model
+
+    Admin only provides API credentials.
+
+    Args:
+        db_session: Database session
+        provider: LLM provider in Auto mode
+        github_config: Configuration from GitHub
+
+    Returns:
+        The number of changes made.
+    """
+    from onyx.llm.auto_update_models import GitHubProviderConfig
+
+    # Type check for the import
+    if not isinstance(github_config, GitHubProviderConfig):
+        raise TypeError(f"Expected GitHubProviderConfig, got {type(github_config)}")
+
+    changes = 0
+
+    # Get existing models
+    existing_models: dict[str, ModelConfiguration] = {
+        mc.name: mc
+        for mc in db_session.scalars(
+            select(ModelConfiguration).where(
+                ModelConfiguration.llm_provider_id == provider.id
+            )
+        ).all()
+    }
+
+    github_model_names = {m.name for m in github_config.models}
+
+    # Remove models that are no longer in GitHub config
+    for model_name, model in existing_models.items():
+        if model_name not in github_model_names:
+            db_session.delete(model)
+            changes += 1
+
+    # Add or update models from GitHub config
+    for github_model in github_config.models:
+        if github_model.name in existing_models:
+            # Update existing model
+            existing = existing_models[github_model.name]
+            # Check each field for changes
+            updated = False
+            if existing.display_name != github_model.display_name:
+                existing.display_name = github_model.display_name
+                updated = True
+            if existing.max_input_tokens != github_model.max_input_tokens:
+                existing.max_input_tokens = github_model.max_input_tokens
+                updated = True
+            if existing.supports_image_input != github_model.supports_image_input:
+                existing.supports_image_input = github_model.supports_image_input
+                updated = True
+            if existing.is_visible != github_model.is_visible:
+                existing.is_visible = github_model.is_visible
+                updated = True
+            if updated:
+                changes += 1
+        else:
+            # Add new model
+            new_model = ModelConfiguration(
+                llm_provider_id=provider.id,
+                name=github_model.name,
+                display_name=github_model.display_name,
+                is_visible=github_model.is_visible,
+                max_input_tokens=github_model.max_input_tokens,
+                supports_image_input=github_model.supports_image_input,
+            )
+            db_session.add(new_model)
+            changes += 1
+
+    # In Auto mode, default models are always set from GitHub config
+    if github_config.default_model:
+        if provider.default_model_name != github_config.default_model:
+            provider.default_model_name = github_config.default_model
+            changes += 1
+
+    if github_config.fast_default_model:
+        if provider.fast_default_model_name != github_config.fast_default_model:
+            provider.fast_default_model_name = github_config.fast_default_model
+            changes += 1
+
+    db_session.commit()
+    return changes
