@@ -329,6 +329,7 @@ export default function AdminSidebar({
   return (
     <SidebarWrapper>
       <SidebarBody
+        scrollKey="admin-sidebar"
         actionButton={
           <SidebarTab
             leftIcon={({ className }) => (
