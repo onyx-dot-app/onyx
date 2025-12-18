@@ -29,7 +29,11 @@ interface ChatSessionContextValue {
   /** Session matching `currentChatSessionId`, or null. */
   currentChatSession: ChatSession | null;
 
-  /** Agent for `currentChatSession` via `persona_id`; null if none. */
+  /** Agent for `currentChatSession` via `persona_id`; null if none.
+   *
+   * This is different than the `currentAgent` provided by the `AgentsContext` because this agent is pulled from the *chat-session*.
+   * The `currentAgent` provided by `AgentsContext` is from the URL.
+   */
   agentForCurrentChatSession: MinimalPersonaSnapshot | null;
 
   /** True while sessions are loading. */

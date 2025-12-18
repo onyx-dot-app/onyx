@@ -42,7 +42,10 @@ interface AgentsContextValue {
   /** Agent resolved from the `assistantId` URL param if present; null when missing or not found. */
   currentAgent: MinimalPersonaSnapshot | null;
 
-  /** Parsed `assistantId` from URL when present; `null` otherwise. */
+  /** Parsed `agentId` from URL when present; `null` otherwise.
+   *
+   * If you want to access the agent-id for a specific chat-session, use `ChatSessionContext`'s `agentForCurrentChatSession` instead!
+   */
   currentAgentId: number | null;
 
   /** SWR mutate for the agents list; call after server-side changes to assistants. */
