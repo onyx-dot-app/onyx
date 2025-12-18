@@ -269,7 +269,6 @@ def configure_default_api_keys(db_session: Session) -> None:
             provider=ANTHROPIC_PROVIDER_NAME,
             api_key=ANTHROPIC_DEFAULT_API_KEY,
             default_model_name="claude-3-7-sonnet-20250219",
-            fast_default_model_name="claude-3-5-sonnet-20241022",
             model_configurations=[
                 ModelConfigurationUpsertRequest(
                     name=name,
@@ -296,7 +295,6 @@ def configure_default_api_keys(db_session: Session) -> None:
             provider=OPENAI_PROVIDER_NAME,
             api_key=OPENAI_DEFAULT_API_KEY,
             default_model_name="gpt-4o",
-            fast_default_model_name="gpt-4o-mini",
             model_configurations=[
                 ModelConfigurationUpsertRequest(
                     name=model_name,

@@ -1,7 +1,7 @@
 from collections.abc import Callable
 
 from onyx.configs.constants import MessageType
-from onyx.llm.factory import get_default_llms
+from onyx.llm.factory import get_default_llm
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import AssistantMessage
 from onyx.llm.models import ChatCompletionMessage
@@ -224,11 +224,11 @@ def keyword_query_expansion(
 
 
 def llm_multilingual_query_expansion(query: str, language: str) -> str:
-    _, fast_llm = get_default_llms(timeout=5)
+    llm = get_default_llm(timeout=5)
 
     prompt = LANGUAGE_REPHRASE_PROMPT.format(query=query, target_language=language)
     model_output = llm_response_to_string(
-        fast_llm.invoke(prompt, reasoning_effort=ReasoningEffort.OFF)
+        llm.invoke(prompt, reasoning_effort=ReasoningEffort.OFF)
     )
     logger.debug(model_output)
 

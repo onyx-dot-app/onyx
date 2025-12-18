@@ -12,7 +12,7 @@ from onyx.file_processing.extract_file_text import ACCEPTED_IMAGE_FILE_EXTENSION
 from onyx.file_processing.extract_file_text import ALL_ACCEPTED_FILE_EXTENSIONS
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
-from onyx.llm.factory import get_default_llms
+from onyx.llm.factory import get_default_llm
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -124,7 +124,7 @@ def categorize_uploaded_files(files: list[UploadFile]) -> CategorizedFiles:
     """
 
     results = CategorizedFiles()
-    llm, _ = get_default_llms()
+    llm = get_default_llm()
 
     tokenizer = get_tokenizer(
         model_name=llm.config.model_name, provider_type=llm.config.model_provider

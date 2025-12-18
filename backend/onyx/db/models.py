@@ -2384,7 +2384,6 @@ class LLMProvider(Base):
         postgresql.JSONB(), nullable=True
     )
     default_model_name: Mapped[str] = mapped_column(String)
-    fast_default_model_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
     deployment_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
