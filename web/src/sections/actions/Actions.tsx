@@ -39,7 +39,7 @@ const Actions = React.memo(
     toolCount,
     isToolsExpanded,
     onToggleTools,
-  }) => {
+  }: ActionsProps) => {
     const { isHovered: isParentHovered } = useActionCardContext();
     const showViewToolsButton =
       (status === ActionStatus.CONNECTED ||
