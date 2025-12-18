@@ -13,6 +13,8 @@
  * - `pinnedAgents`: MinimalPersonaSnapshot[] — assistants currently pinned, in display order (optimistic).
  * - `pinnedAgentIds`: number[] — ids of `pinnedAgents` for lightweight checks.
  * - `isLoading`: boolean — true while the initial agents list is still loading.
+ * - `currentAgent`: MinimalPersonaSnapshot | null — agent resolved from the `assistantId` URL param if present; null when missing or not found.
+ * - `currentAgentId`: number | null — parsed `assistantId` from URL when present; `null` otherwise.
  * - `togglePinnedAgent(agentId, shouldPin)`: Promise<void> — pin/unpin an agent with optimistic UI updates; persists via `pinAgents`.
  * - `updatePinnedAgents(agentIds)`: Promise<void> — replace/reorder the entire pinned list (e.g., drag-and-drop); persists and updates local state.
  * - `refreshAgents()`: Promise<MinimalPersonaSnapshot[] | undefined> — SWR mutate for the agents list; call after server-side changes to assistants.
@@ -33,12 +35,16 @@ import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { pinAgents } from "@/lib/assistants/orderAssistants";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useUser } from "@/components/user/UserProvider";
+import { useSearchParams } from "next/navigation";
+import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 
 interface AgentsContextValue {
   agents: MinimalPersonaSnapshot[];
   pinnedAgents: MinimalPersonaSnapshot[];
   pinnedAgentIds: number[];
   isLoading: boolean;
+  currentAgent: MinimalPersonaSnapshot | null;
+  currentAgentId: number | null;
   refreshAgents: () => Promise<MinimalPersonaSnapshot[] | undefined>;
   refreshPinnedAgents: () => Promise<void>;
   togglePinnedAgent: (agentId: number, shouldPin: boolean) => Promise<void>;
@@ -61,6 +67,7 @@ export function AgentsProvider({ children }: { children: ReactNode }) {
 
   const agents = agentsData ?? [];
   const isLoadingAgents = !error && !agentsData;
+  const searchParams = useSearchParams();
 
   const serverPinnedAgentIds = user?.preferences?.pinned_assistants ?? [];
 
@@ -88,6 +95,13 @@ export function AgentsProvider({ children }: { children: ReactNode }) {
     () => setLocalPinnedAgents(serverPinnedAgents),
     [serverPinnedAgents]
   );
+
+  const currentAgent = useMemo(() => {
+    const agentIdRaw = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
+    const agentId = agentIdRaw ? parseInt(agentIdRaw, 10) : NaN;
+    if (Number.isNaN(agentId)) return null;
+    return agents.find((agent) => agent.id === agentId) ?? null;
+  }, [agents, searchParams]);
 
   const persistPins = useCallback(
     async (pinnedIds: number[]) => {
@@ -131,6 +145,8 @@ export function AgentsProvider({ children }: { children: ReactNode }) {
         pinnedAgents: localPinnedAgents,
         pinnedAgentIds: localPinnedAgents.map((agent) => agent.id),
         isLoading: isLoadingAgents,
+        currentAgent,
+        currentAgentId: currentAgent?.id ?? null,
         refreshAgents,
         refreshPinnedAgents: refreshUser,
         togglePinnedAgent,
