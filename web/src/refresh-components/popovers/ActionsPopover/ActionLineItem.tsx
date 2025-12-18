@@ -12,6 +12,7 @@ import { cn, noProp } from "@/lib/utils";
 import type { IconProps } from "@opal/types";
 import { SvgChevronRight, SvgKey, SvgSettings, SvgSlash } from "@opal/icons";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
+import { useRouter } from "next/router";
 
 export interface ActionItemProps {
   tool?: ToolSnapshot;
@@ -40,6 +41,7 @@ export default function ActionLineItem({
   toolAuthStatus,
   onOAuthAuthenticate,
 }: ActionItemProps) {
+  const router = useRouter();
   const { currentProjectId } = useProjectsContext();
 
   const Icon = tool ? getIconForAction(tool) : ProvidedIcon!;
@@ -113,7 +115,7 @@ export default function ActionLineItem({
                   }
                   onClick={noProp(() => {
                     if (isSearchToolWithNoConnectors)
-                      window.location.href = "/admin/add-connector";
+                      router.push("/admin/add-connector");
                     else onSourceManagementOpen?.();
                   })}
                   internal
@@ -123,7 +125,7 @@ export default function ActionLineItem({
                   )}
                   tooltip={
                     isSearchToolWithNoConnectors
-                      ? "Setup Connectors"
+                      ? "Add Connectors"
                       : "Configure Connectors"
                   }
                 />
