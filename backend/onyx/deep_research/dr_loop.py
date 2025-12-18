@@ -375,7 +375,7 @@ def run_deep_research_llm_loop(
                     )
                     simple_chat_history.append(tool_call_response_msg)
 
-            if not think_tool_call:
+            if not special_tool_calls.think_tool_call:
                 most_recent_reasoning = None
         else:
             logger.warning("No tool calls found, this should not happen.")
