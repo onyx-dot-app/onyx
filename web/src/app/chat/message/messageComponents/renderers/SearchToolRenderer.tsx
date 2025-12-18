@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo, JSX } from "react";
-import { FiSearch, FiGlobe, FiBookOpen } from "react-icons/fi";
+import { FiSearch, FiGlobe, FiBookOpen, FiXCircle } from "react-icons/fi";
 import {
   PacketType,
   SearchToolPacket,
@@ -96,10 +96,12 @@ export const constructCurrentSearchState = (
 export function SearchToolStep1Renderer({
   packets,
   isActive,
+  isCancelled,
   children,
 }: {
   packets: SearchToolPacket[];
   isActive: boolean;
+  isCancelled?: boolean;
   children: (result: RendererResult) => JSX.Element;
 }) {
   const { queries } = constructCurrentSearchState(packets);
@@ -147,7 +149,12 @@ export function SearchToolStep1Renderer({
               />
             </div>
           )}
-          {queries.length === 0 && <BlinkingDot />}
+          {queries.length === 0 &&
+            (isCancelled ? (
+              <FiXCircle className="w-3.5 h-3.5 text-text-400" />
+            ) : (
+              <BlinkingDot />
+            ))}
         </div>
       </div>
     ),
@@ -158,10 +165,12 @@ export function SearchToolStep1Renderer({
 export function SearchToolStep2Renderer({
   packets,
   isActive,
+  isCancelled,
   children,
 }: {
   packets: SearchToolPacket[];
   isActive: boolean;
+  isCancelled?: boolean;
   children: (result: RendererResult) => JSX.Element;
 }) {
   const { results } = constructCurrentSearchState(packets);
@@ -219,7 +228,12 @@ export function SearchToolStep2Renderer({
               />
             </div>
           )}
-          {results.length === 0 && <BlinkingDot />}
+          {results.length === 0 &&
+            (isCancelled ? (
+              <FiXCircle className="w-3.5 h-3.5 text-text-400" />
+            ) : (
+              <BlinkingDot />
+            ))}
         </div>
       </div>
     ),

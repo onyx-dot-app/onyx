@@ -5,11 +5,13 @@ import {
   FiChevronLeft,
   FiCircle,
   FiGitBranch,
+  FiXCircle,
 } from "react-icons/fi";
 import {
   Packet,
   PacketType,
   SearchToolPacket,
+  StopReason,
 } from "@/app/chat/services/streamingModels";
 import { FullChatState, RendererResult } from "./interfaces";
 import { RendererComponent } from "./renderMessageComponent";
@@ -66,12 +68,14 @@ function ToolItemRow({
   status,
   isLastItem,
   isLoading,
+  isCancelled,
 }: {
   icon: ((props: { size: number }) => JSX.Element) | null;
   content: JSX.Element | string;
   status: string | null;
   isLastItem: boolean;
   isLoading?: boolean;
+  isCancelled?: boolean;
 }) {
   return (
     <div className="relative">
@@ -91,7 +95,9 @@ function ToolItemRow({
         <div className="flex flex-col items-center w-5">
           <div className="flex-shrink-0 flex items-center justify-center w-5 h-5 bg-background rounded-full">
             {icon ? (
-              <div className={cn(isLoading && "text-shimmer-base")}>
+              <div
+                className={cn(isLoading && !isCancelled && "text-shimmer-base")}
+              >
                 {icon({ size: 14 })}
               </div>
             ) : (
@@ -102,7 +108,10 @@ function ToolItemRow({
         <div className={cn("flex-1", !isLastItem && "pb-4")}>
           <Text
             text02
-            className={cn("text-sm mb-1", isLoading && "loading-text")}
+            className={cn(
+              "text-sm mb-1",
+              isLoading && !isCancelled && "loading-text"
+            )}
           >
             {status}
           </Text>
@@ -117,12 +126,14 @@ function ParallelToolTabs({
   items,
   chatState,
   stopPacketSeen,
+  stopReason,
   shouldStopShimmering,
   handleToolComplete,
 }: {
   items: DisplayItem[];
   chatState: FullChatState;
   stopPacketSeen: boolean;
+  stopReason?: StopReason;
   shouldStopShimmering: boolean;
   handleToolComplete: (turnIndex: number, tabIndex: number) => void;
 }) {
@@ -137,6 +148,7 @@ function ParallelToolTabs({
       icon: JSX.Element;
       packets: Packet[];
       isComplete: boolean;
+      isCancelled: boolean;
     }[] = [];
     items.forEach((item) => {
       if (!seen.has(item.tab_index)) {
@@ -145,12 +157,15 @@ function ParallelToolTabs({
         const isComplete = item.packets.some(
           (p) => p.obj.type === PacketType.SECTION_END
         );
+        // Check if generation was cancelled by user (via stopReason prop)
+        const isCancelled = stopReason === StopReason.USER_CANCELLED;
         tabs.push({
           tab_index: item.tab_index,
           name: getToolName(item.packets),
           icon: getToolIcon(item.packets),
           packets: item.packets,
           isComplete,
+          isCancelled,
         });
       }
     });
@@ -247,7 +262,17 @@ function ParallelToolTabs({
                         {tab.name}
                       </span>
                       {isLoading && <LoadingSpinner size="small" />}
-                      {tab.isComplete && !isLoading && (
+                      {tab.isCancelled && !isLoading && (
+                        <FiXCircle
+                          className={cn(
+                            "w-3 h-3",
+                            isActive && isExpanded
+                              ? "text-white opacity-70"
+                              : "text-text-400"
+                          )}
+                        />
+                      )}
+                      {tab.isComplete && !isLoading && !tab.isCancelled && (
                         <FiCheckCircle
                           className={cn(
                             "w-3 h-3",
@@ -335,9 +360,14 @@ function ParallelToolTabs({
                   key={item.key}
                   packets={item.packets as SearchToolPacket[]}
                   isActive={!shouldStopShimmering}
+                  isCancelled={stopReason === StopReason.USER_CANCELLED}
                 >
                   {(props) => (
-                    <ToolItemRow {...props} isLastItem={isLastItem} />
+                    <ToolItemRow
+                      {...props}
+                      isLastItem={isLastItem}
+                      isCancelled={stopReason === StopReason.USER_CANCELLED}
+                    />
                   )}
                 </SearchToolStep1Renderer>
               );
@@ -347,9 +377,14 @@ function ParallelToolTabs({
                   key={item.key}
                   packets={item.packets as SearchToolPacket[]}
                   isActive={!shouldStopShimmering}
+                  isCancelled={stopReason === StopReason.USER_CANCELLED}
                 >
                   {(props) => (
-                    <ToolItemRow {...props} isLastItem={isLastItem} />
+                    <ToolItemRow
+                      {...props}
+                      isLastItem={isLastItem}
+                      isCancelled={stopReason === StopReason.USER_CANCELLED}
+                    />
                   )}
                 </SearchToolStep2Renderer>
               );
@@ -368,7 +403,11 @@ function ParallelToolTabs({
                   useShortRenderer={false}
                 >
                   {(props) => (
-                    <ToolItemRow {...props} isLastItem={isLastItem} />
+                    <ToolItemRow
+                      {...props}
+                      isLastItem={isLastItem}
+                      isCancelled={stopReason === StopReason.USER_CANCELLED}
+                    />
                   )}
                 </RendererComponent>
               );
@@ -472,6 +511,7 @@ export default function MultiToolRenderer({
   isComplete,
   isFinalAnswerComing,
   stopPacketSeen,
+  stopReason,
   onAllToolsDisplayed,
   isStreaming,
 }: {
@@ -480,6 +520,7 @@ export default function MultiToolRenderer({
   isComplete: boolean;
   isFinalAnswerComing: boolean;
   stopPacketSeen: boolean;
+  stopReason?: StopReason;
   onAllToolsDisplayed?: () => void;
   isStreaming?: boolean;
 }) {
@@ -600,6 +641,7 @@ export default function MultiToolRenderer({
           key={item.key}
           packets={item.packets as SearchToolPacket[]}
           isActive={isStreaming}
+          isCancelled={stopReason === StopReason.USER_CANCELLED}
         >
           {childrenCallback}
         </SearchToolStep1Renderer>
@@ -610,6 +652,7 @@ export default function MultiToolRenderer({
           key={item.key}
           packets={item.packets as SearchToolPacket[]}
           isActive={isStreaming}
+          isCancelled={stopReason === StopReason.USER_CANCELLED}
         >
           {childrenCallback}
         </SearchToolStep2Renderer>
@@ -706,6 +749,7 @@ export default function MultiToolRenderer({
                       items={turnGroup.items}
                       chatState={chatState}
                       stopPacketSeen={stopPacketSeen}
+                      stopReason={stopReason}
                       shouldStopShimmering={shouldStopShimmering}
                       handleToolComplete={handleToolComplete}
                     />
@@ -753,6 +797,9 @@ export default function MultiToolRenderer({
                               status={status}
                               isLastItem={isLastItem}
                               isLoading={isLoading}
+                              isCancelled={
+                                stopReason === StopReason.USER_CANCELLED
+                              }
                             />
                           )
                         )}
@@ -814,6 +861,7 @@ export default function MultiToolRenderer({
                       items={turnGroup.items}
                       chatState={chatState}
                       stopPacketSeen={stopPacketSeen}
+                      stopReason={stopReason}
                       shouldStopShimmering={true}
                       handleToolComplete={handleToolComplete}
                     />

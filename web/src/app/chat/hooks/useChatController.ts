@@ -63,7 +63,12 @@ import {
   useCurrentChatState,
   useCurrentMessageHistory,
 } from "../stores/useChatSessionStore";
-import { Packet, MessageStart, PacketType } from "../services/streamingModels";
+import {
+  Packet,
+  MessageStart,
+  PacketType,
+  StopReason,
+} from "../services/streamingModels";
 import { useAssistantPreferences } from "@/app/chat/hooks/useAssistantPreferences";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile, useProjectsContext } from "../projects/ProjectsContext";
@@ -344,7 +349,10 @@ export function useChatController({
             : 0;
         const stopPacket: Packet = {
           turn_index: maxTurnIndex + 1,
-          obj: { type: PacketType.STOP },
+          obj: {
+            type: PacketType.STOP,
+            stop_reason: StopReason.USER_CANCELLED,
+          },
         } as Packet;
 
         const newMessageTree = new Map(currentMessageTree);
