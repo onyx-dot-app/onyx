@@ -159,14 +159,16 @@ class VespaDocumentIndex(DocumentIndex):
             len(doc_id_to_chunk_cnt_diff)
             == len(doc_id_to_previous_chunk_cnt)
             == len(doc_id_to_new_chunk_cnt)
-        )
+        ), "Bug: Doc ID to chunk maps have different lengths."
 
         # Vespa has restrictions on valid characters, yet document IDs come from
         # external w.r.t. this class. We need to sanitize them.
         cleaned_chunks: list[DocMetadataAwareIndexChunk] = [
             clean_chunk_id_copy(chunk) for chunk in chunks
         ]
-        assert len(cleaned_chunks) == len(chunks)
+        assert len(cleaned_chunks) == len(
+            chunks
+        ), "Bug: Cleaned chunks and input chunks have different lengths."
 
         # Needed so the final DocumentInsertionRecord returned can have the
         # original document ID. cleaned_chunks might not contain IDs exactly as

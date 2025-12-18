@@ -6,16 +6,6 @@ from onyx.access.models import DocumentAccess
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
-from dataclasses import dataclass
-from datetime import datetime
-from typing import Any
-
-from pydantic import BaseModel
-
-from onyx.access.models import DocumentAccess
-from onyx.context.search.enums import QueryType
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceChunk
 from onyx.db.enums import EmbeddingPrecision
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from shared_configs.model_server_models import Embedding
@@ -25,12 +15,6 @@ from shared_configs.model_server_models import Embedding
 # document chunks. By the terminology of most search engines / vector databases,
 # the individual objects stored are called documents, but in this case it refers
 # to a chunk.
-
-# Outside of searching and update capabilities, the document index must also
-# implement the ability to port all of the documents over to a secondary index.
-# This allows for embedding models to be updated and for porting documents to
-# happen in the background while the primary index still serves the main
-# traffic.
 
 
 __all__ = [
