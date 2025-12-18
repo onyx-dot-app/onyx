@@ -331,7 +331,7 @@ export default function Page() {
   }
 
   return (
-    <div className="mx-auto container">
+    <div className="container">
       <AdminPageTitle
         title="Knowledge Graph"
         icon={<BrainIcon size={32} className="my-auto" />}

@@ -428,7 +428,7 @@ const Main = () => {
 
 const Page = () => {
   return (
-    <div className="container mx-auto">
+    <div className="container">
       <AdminPageTitle
         icon={<ClipboardIcon size={32} />}
         title="Standard Answers"

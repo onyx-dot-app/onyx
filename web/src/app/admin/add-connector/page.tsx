@@ -267,7 +267,7 @@ export default function Page() {
   };
 
   return (
-    <div className="mx-auto container">
+    <div className="container">
       <AdminPageTitle
         icon={SvgUploadCloud}
         title="Add Connector"

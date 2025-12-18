@@ -116,7 +116,7 @@ function Main() {
 
 const Page = () => {
   return (
-    <div className="container mx-auto">
+    <div className="container">
       <AdminPageTitle icon={<FiDownload size={32} />} title="Debug Logs" />
       <Main />
     </div>

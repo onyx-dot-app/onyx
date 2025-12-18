@@ -178,7 +178,7 @@ function Main() {
 
 export default function Page() {
   return (
-    <div className="mx-auto container">
+    <div className="container">
       <AdminPageTitle title="Search Settings" icon={SvgSearch} />
       <Main />
     </div>
