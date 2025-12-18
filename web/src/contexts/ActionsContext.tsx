@@ -21,7 +21,7 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import useAgentPreferences from "@/hooks/useAgentPreferences";
-import { useChatSessionContext } from "./ChatSessionContext";
+import { useChatSessionContext } from "@/contexts/ChatSessionContext";
 
 export enum ToolState {
   Enabled = "enabled",
@@ -164,8 +164,6 @@ export function ActionsProvider({ children }: ActionsProviderProps) {
     });
     return map;
   }, [tools, forcedToolIds, disabledToolIds]);
-
-  console.log(toolMap);
 
   return (
     <ActionsContext.Provider

@@ -127,9 +127,9 @@ export function useChatController({
   const searchParams = useSearchParams();
   const params = useAppParams();
   const { refreshChatSessions } = useChatSessionContext();
-  const { agentPreferences: assistantPreferences } = useAgentPreferences();
+  const { agentPreferences } = useAgentPreferences();
   const { forcedToolIds } = useActionsContext();
-  const { fetchProjects, uploadFiles, setCurrentMessageFiles, beginUpload } =
+  const { fetchProjects, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
   const posthog = usePostHog();
 
@@ -644,7 +644,7 @@ export function useChatController({
           currentMessageTreeLocal
         );
         const disabledToolIds = liveAssistant
-          ? assistantPreferences?.[liveAssistant?.id]?.disabled_tool_ids
+          ? agentPreferences?.[liveAssistant?.id]?.disabled_tool_ids
           : undefined;
 
         const stack = new CurrentMessageFIFO();
@@ -917,7 +917,7 @@ export function useChatController({
       // Ensure latest forced tools are used when submitting
       forcedToolIds,
       // Keep tool preference-derived values fresh
-      assistantPreferences,
+      agentPreferences,
       fetchProjects,
     ]
   );
