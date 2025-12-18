@@ -13,6 +13,7 @@ from slack_sdk.errors import SlackApiError
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
+from onyx.configs.app_configs import SLACK_THREAD_CONTEXT_BATCH_SIZE
 from onyx.configs.chat_configs import DOC_TIME_DECAY
 from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import TextSection
@@ -623,33 +624,28 @@ def merge_slack_messages(
     return merged_messages, docid_to_message, all_filtered_channels
 
 
-def get_contextualized_thread_text(
+class SlackRateLimitError(Exception):
+    """Raised when Slack API returns a rate limit error (429)."""
+
+
+def _get_thread_context_or_raise_on_rate_limit(
     message: SlackMessage, access_token: str, team_id: str | None = None
 ) -> str:
     """
-    Retrieves the initial thread message as well as the text following the message
-    and combines them into a single string. If the slack query fails, returns the
-    original message text.
+    Fetch thread context for a message, raising SlackRateLimitError on 429.
 
-    The idea is that the message (the one that actually matched the search), the
-    initial thread message, and the replies to the message are important in answering
-    the user's query.
-
-    Args:
-        message: The SlackMessage to get context for
-        access_token: Slack OAuth access token
-        team_id: Slack team ID for caching user profiles (optional but recommended)
+    This allows batch processing to detect rate limits and stop early.
+    Other errors return the original message text (graceful degradation).
     """
     channel_id = message.channel_id
     thread_id = message.thread_id
     message_id = message.message_id
 
-    # if it's not a thread, return the message text
+    # If not a thread, return original text
     if thread_id is None:
         return message.text
 
-    # get the thread messages
-    slack_client = WebClient(token=access_token)
+    slack_client = WebClient(token=access_token, timeout=30)
     try:
         response = slack_client.conversations_replies(
             channel=channel_id,
@@ -658,19 +654,25 @@ def get_contextualized_thread_text(
         response.validate()
         messages: list[dict[str, Any]] = response.get("messages", [])
     except SlackApiError as e:
-        logger.error(f"Slack API error in get_contextualized_thread_text: {e}")
+        # Check for rate limit error specifically
+        if e.response and e.response.status_code == 429:
+            logger.warning(
+                f"Slack rate limit hit while fetching thread context for {channel_id}/{thread_id}"
+            )
+            raise SlackRateLimitError("Slack API rate limited") from e
+        # For other errors, log and return original text
+        logger.error(f"Slack API error in thread context fetch: {e}")
         return message.text
 
-    # make sure we didn't get an empty response or a single message (not a thread)
+    # If empty response or single message (not a thread), return original text
     if len(messages) <= 1:
         return message.text
 
-    # add the initial thread message
+    # Build thread text from thread starter + context window around matched message
     msg_text = messages[0].get("text", "")
     msg_sender = messages[0].get("user", "")
     thread_text = f"<@{msg_sender}>: {msg_text}"
 
-    # add the message (unless it's the initial message)
     thread_text += "\n\nReplies:"
     if thread_id == message_id:
         message_id_idx = 0
@@ -681,28 +683,21 @@ def get_contextualized_thread_text(
         if not message_id_idx:
             return thread_text
 
-        # Include a few messages BEFORE the matched message for context
-        # This helps understand what the matched message is responding to
-        start_idx = max(
-            1, message_id_idx - SLACK_THREAD_CONTEXT_WINDOW
-        )  # Start after thread starter
+        start_idx = max(1, message_id_idx - SLACK_THREAD_CONTEXT_WINDOW)
 
-        # Add ellipsis if we're skipping messages between thread starter and context window
         if start_idx > 1:
             thread_text += "\n..."
 
-        # Add context messages before the matched message
         for i in range(start_idx, message_id_idx):
             msg_text = messages[i].get("text", "")
             msg_sender = messages[i].get("user", "")
             thread_text += f"\n\n<@{msg_sender}>: {msg_text}"
 
-        # Add the matched message itself
         msg_text = messages[message_id_idx].get("text", "")
         msg_sender = messages[message_id_idx].get("user", "")
         thread_text += f"\n\n<@{msg_sender}>: {msg_text}"
 
-    # add the following replies to the thread text
+    # Add following replies
     len_replies = 0
     for msg in messages[message_id_idx + 1 :]:
         msg_text = msg.get("text", "")
@@ -710,22 +705,19 @@ def get_contextualized_thread_text(
         reply = f"\n\n<@{msg_sender}>: {msg_text}"
         thread_text += reply
 
-        # stop if len_replies exceeds chunk_size * 4 chars as the rest likely won't fit
         len_replies += len(reply)
         if len_replies >= DOC_EMBEDDING_CONTEXT_SIZE * 4:
             thread_text += "\n..."
             break
 
-    # replace user ids with names in the thread text using cached lookups
+    # Replace user IDs with names using cached lookups
     userids: set[str] = set(re.findall(r"<@([A-Z0-9]+)>", thread_text))
 
     if team_id:
-        # Use cached batch lookup when team_id is available
         user_profiles = batch_get_user_profiles(access_token, team_id, userids)
         for userid, name in user_profiles.items():
             thread_text = thread_text.replace(f"<@{userid}>", name)
     else:
-        # Fallback to individual lookups (no caching) when team_id not available
         for userid in userids:
             try:
                 response = slack_client.users_profile_get(user=userid)
@@ -735,7 +727,7 @@ def get_contextualized_thread_text(
             except SlackApiError as e:
                 if "user_not_found" in str(e):
                     logger.debug(
-                        f"User {userid} not found in Slack workspace (likely deleted/deactivated)"
+                        f"User {userid} not found (likely deleted/deactivated)"
                     )
                 else:
                     logger.warning(f"Could not fetch profile for user {userid}: {e}")
@@ -745,6 +737,91 @@ def get_contextualized_thread_text(
             thread_text = thread_text.replace(f"<@{userid}>", user_name)
 
     return thread_text
+
+
+def fetch_thread_contexts_with_rate_limit_handling(
+    slack_messages: list[SlackMessage],
+    access_token: str,
+    team_id: str | None,
+    batch_size: int = SLACK_THREAD_CONTEXT_BATCH_SIZE,
+    max_messages: int | None = None,
+) -> list[str]:
+    """
+    Fetch thread contexts in controlled batches, stopping if rate limited.
+
+    Args:
+        slack_messages: Messages to fetch thread context for (should be sorted by relevance)
+        access_token: Slack OAuth token
+        team_id: Slack team ID for user profile caching
+        batch_size: Number of concurrent API calls per batch
+        max_messages: Maximum messages to fetch thread context for (None = no limit)
+
+    Returns:
+        List of thread texts, one per input message.
+        Messages beyond max_messages or after rate limiting get their original text.
+    """
+    if not slack_messages:
+        return []
+
+    # Limit how many messages we fetch thread context for (if max_messages is set)
+    if max_messages is not None and max_messages < len(slack_messages):
+        messages_for_context = slack_messages[:max_messages]
+        messages_without_context = slack_messages[max_messages:]
+    else:
+        messages_for_context = slack_messages
+        messages_without_context = []
+
+    logger.info(
+        f"Fetching thread context for {len(messages_for_context)} of {len(slack_messages)} messages "
+        f"(batch_size={batch_size}, max={max_messages or 'unlimited'})"
+    )
+
+    results: list[str] = []
+    rate_limited = False
+
+    # Process in batches
+    for i in range(0, len(messages_for_context), batch_size):
+        if rate_limited:
+            # Skip remaining batches, use original message text
+            remaining = messages_for_context[i:]
+            logger.warning(
+                f"Skipping {len(remaining)} thread context fetches due to rate limiting"
+            )
+            results.extend([msg.text for msg in remaining])
+            break
+
+        batch = messages_for_context[i : i + batch_size]
+
+        try:
+            batch_results = run_functions_tuples_in_parallel(
+                [
+                    (
+                        _get_thread_context_or_raise_on_rate_limit,
+                        (msg, access_token, team_id),
+                    )
+                    for msg in batch
+                ],
+                allow_failures=False,  # We want to catch rate limit errors
+                max_workers=batch_size,
+            )
+            results.extend(batch_results)
+        except SlackRateLimitError:
+            # Rate limited - add original text for this batch and stop
+            rate_limited = True
+            results.extend([msg.text for msg in batch])
+            logger.warning(
+                f"Rate limit detected at batch {i // batch_size + 1}, "
+                f"stopping further thread context fetches"
+            )
+        except Exception as e:
+            # Other errors - log and use original text for batch, but continue
+            logger.error(f"Error fetching thread context batch: {e}")
+            results.extend([msg.text for msg in batch])
+
+    # Add original text for messages we didn't fetch context for
+    results.extend([msg.text for msg in messages_without_context])
+
+    return results
 
 
 def convert_slack_score(slack_score: float) -> float:
@@ -964,11 +1041,12 @@ def slack_retrieval(
     if not slack_messages:
         return []
 
-    thread_texts: list[str] = run_functions_tuples_in_parallel(
-        [
-            (get_contextualized_thread_text, (slack_message, access_token, team_id))
-            for slack_message in slack_messages
-        ]
+    # Fetch thread context with rate limit handling and message limiting
+    # Messages are already sorted by relevance (slack_score), so top N get full context
+    thread_texts = fetch_thread_contexts_with_rate_limit_handling(
+        slack_messages=slack_messages,
+        access_token=access_token,
+        team_id=team_id,
     )
     for slack_message, thread_text in zip(slack_messages, thread_texts):
         slack_message.text = thread_text
