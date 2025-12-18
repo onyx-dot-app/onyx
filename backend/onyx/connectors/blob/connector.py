@@ -40,8 +40,7 @@ from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_processing.extract_file_text import get_file_ext
-from onyx.file_processing.extract_file_text import is_accepted_file_ext
-from onyx.file_processing.extract_file_text import OnyxExtensionType
+from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.utils.logger import setup_logger
 
@@ -410,7 +409,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                     continue
 
                 # Handle image files
-                if is_accepted_file_ext(file_ext, OnyxExtensionType.Multimedia):
+                if file_ext in OnyxFileExtensions.IMAGE_EXTENSIONS:
                     if not self._allow_images:
                         logger.debug(
                             f"Skipping image file: {key} (image processing not enabled)"

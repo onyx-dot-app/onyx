@@ -55,12 +55,10 @@ from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.connectors.sharepoint.connector_utils import get_sharepoint_external_access
-from onyx.file_processing.extract_file_text import ACCEPTED_IMAGE_FILE_EXTENSIONS
 from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_processing.extract_file_text import get_file_ext
-from onyx.file_processing.extract_file_text import is_accepted_file_ext
-from onyx.file_processing.extract_file_text import OnyxExtensionType
-from onyx.file_processing.file_validation import EXCLUDED_IMAGE_TYPES
+from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.file_processing.file_types import OnyxMimeTypes
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
@@ -328,7 +326,7 @@ def _convert_driveitem_to_document_with_permissions(
     try:
         item_json = driveitem.to_json()
         mime_type = item_json.get("file", {}).get("mimeType")
-        if not mime_type or mime_type in EXCLUDED_IMAGE_TYPES:
+        if not mime_type or mime_type in OnyxMimeTypes.EXCLUDED_IMAGE_TYPES:
             # NOTE: this function should be refactored to look like Drive doc_conversion.py pattern
             # for now, this skip must happen before we download the file
             # Similar to Google Drive, we'll just semi-silently skip excluded image types
@@ -388,14 +386,14 @@ def _convert_driveitem_to_document_with_permissions(
             return None
 
     sections: list[TextSection | ImageSection] = []
-    file_ext = driveitem.name.split(".")[-1]
+    file_ext = "." + driveitem.name.split(".")[-1].lower()
 
     if not content_bytes:
         logger.warning(
             f"Zero-length content for '{driveitem.name}'. Skipping text/image extraction."
         )
-    elif "." + file_ext in ACCEPTED_IMAGE_FILE_EXTENSIONS:
-        # NOTE: this if should use is_valid_image_type instead with mime_type
+    elif file_ext in OnyxFileExtensions.IMAGE_EXTENSIONS:
+        # NOTE: this if should probably check mime_type instead
         image_section, _ = store_image_and_create_section(
             image_data=content_bytes,
             file_id=driveitem.id,
@@ -418,7 +416,7 @@ def _convert_driveitem_to_document_with_permissions(
 
             # The only mime type that would be returned by get_image_type_from_bytes that is in
             # EXCLUDED_IMAGE_TYPES is image/gif.
-            if mime_type in EXCLUDED_IMAGE_TYPES:
+            if mime_type in OnyxMimeTypes.EXCLUDED_IMAGE_TYPES:
                 logger.debug(
                     "Skipping embedded image of excluded type %s for %s",
                     mime_type,
@@ -1506,7 +1504,7 @@ class SharepointConnector(
             )
             for driveitem in driveitems:
                 driveitem_extension = get_file_ext(driveitem.name)
-                if not is_accepted_file_ext(driveitem_extension, OnyxExtensionType.All):
+                if driveitem_extension not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
                     logger.warning(
                         f"Skipping {driveitem.web_url} as it is not a supported file type"
                     )
@@ -1514,7 +1512,7 @@ class SharepointConnector(
 
                 # Only yield empty documents if they are PDFs or images
                 should_yield_if_empty = (
-                    driveitem_extension in ACCEPTED_IMAGE_FILE_EXTENSIONS
+                    driveitem_extension in OnyxFileExtensions.IMAGE_EXTENSIONS
                     or driveitem_extension == ".pdf"
                 )
 
