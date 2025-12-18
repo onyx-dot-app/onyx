@@ -41,6 +41,7 @@ from onyx.document_index.interfaces import (
 from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
 from onyx.document_index.interfaces import IndexBatchParams
 from onyx.document_index.interfaces import MinimalDocumentIndexingInfo
+from onyx.document_index.interfaces import UpdateRequest
 from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.document_index.interfaces import VespaDocumentFields
 from onyx.document_index.interfaces import VespaDocumentUserFields
@@ -642,6 +643,9 @@ class VespaIndex(DocumentIndex):
             len(processed_updates_requests),
             time.monotonic() - update_start,
         )
+
+    def update(self, update_requests: list[UpdateRequest], *, tenant_id: str) -> None:
+        raise NotImplementedError
 
     def update_single(
         self,
