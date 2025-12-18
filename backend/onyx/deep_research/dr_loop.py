@@ -38,7 +38,9 @@ from onyx.server.query_and_chat.streaming_models import DeepResearchPlanDelta
 from onyx.server.query_and_chat.streaming_models import DeepResearchPlanStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.tools.fake_tools.research_agent import run_research_agent_calls
 from onyx.tools.models import ToolCallInfo
+from onyx.tools.models import ToolCallKickoff
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
@@ -225,6 +227,8 @@ def run_deep_research_llm_loop(
 
     reasoning_cycles = 0
     for cycle in range(MAX_ORCHESTRATOR_CYCLES):
+        research_agent_calls: list[ToolCallKickoff] = []
+
         orchestrator_prompt = orchestrator_prompt_template.format(
             current_datetime=get_current_llm_day_time(full_sentence=False),
             current_cycle_count=cycle,
@@ -291,7 +295,6 @@ def run_deep_research_llm_loop(
 
         most_recent_reasoning: str | None = None
         if tool_calls:
-            # Check if there's a THINK_TOOL in the calls - if so, only process that one
             think_tool_call = next(
                 (
                     tool_call
@@ -312,6 +315,7 @@ def run_deep_research_llm_loop(
 
             if generate_report_tool_call:
                 logger.info("Generate report tool call found, not implemented yet.")
+                break
             elif think_tool_call:
                 # Only process the THINK_TOOL and skip all other tool calls
                 # This will not actually get saved to the db as a tool call but we'll attach it to the tool(s) called after
@@ -337,12 +341,34 @@ def run_deep_research_llm_loop(
                     image_files=None,
                 )
                 simple_chat_history.append(think_tool_response_msg)
+                reasoning_cycles += 1
+                continue
             else:
                 for tool_call in tool_calls:
                     if tool_call.tool_name != RESEARCH_AGENT_TOOL_NAME:
                         logger.warning(f"Unexpected tool call: {tool_call.tool_name}")
                         continue
 
+                    research_agent_calls.append(tool_call)
+
+                if not research_agent_calls:
+                    logger.warning(
+                        "No research agent tool calls found, this should not happen."
+                    )
+                    # TODO generate report, best attempt
+                    break
+
+                research_results = run_research_agent_calls(
+                    research_agent_calls,
+                    tools,
+                    emitter,
+                    state_container,
+                    llm,
+                    token_counter,
+                )
+
+                # Need to process citations
+                for research_result in research_results:
                     tool_call_info = ToolCallInfo(
                         parent_tool_call_id=None,
                         turn_index=cycle + reasoning_cycles,
@@ -352,9 +378,9 @@ def run_deep_research_llm_loop(
                         tool_id=999,  # TODO
                         reasoning_tokens=most_recent_reasoning,
                         tool_call_arguments=tool_call.tool_args,
-                        tool_call_response="pending",  # TODO
-                        search_docs=None,  # TODO
-                        generated_images=None,  # TODO
+                        tool_call_response=research_result.report,
+                        search_docs=research_result.search_docs,
+                        generated_images=None,
                     )
                     state_container.add_tool_call(tool_call_info)
 
@@ -371,8 +397,8 @@ def run_deep_research_llm_loop(
                     simple_chat_history.append(tool_call_msg)
 
                     tool_call_response_msg = ChatMessageSimple(
-                        message="pending",  # TODO
-                        token_count=0,  # TODO
+                        message=research_result.report,
+                        token_count=token_counter(research_result.report),
                         message_type=MessageType.TOOL_CALL_RESPONSE,
                         tool_call_id=tool_call.tool_call_id,
                         image_files=None,
@@ -381,6 +407,9 @@ def run_deep_research_llm_loop(
 
             if not think_tool_call:
                 most_recent_reasoning = None
+        else:
+            logger.warning("No tool calls found, this should not happen.")
+            # TODO generate report, best attempt
 
         if llm_step_result.answer:
             state_container.set_answer_tokens(llm_step_result.answer)
