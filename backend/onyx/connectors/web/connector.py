@@ -86,6 +86,8 @@ WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS = 20
 IFRAME_TEXT_LENGTH_THRESHOLD = 700
 # Message indicating JavaScript is disabled, which often appears when scraping fails
 JAVASCRIPT_DISABLED_MESSAGE = "You have JavaScript disabled in your browser"
+# Grace period after page navigation to allow bot-detection challenges to complete
+BOT_DETECTION_GRACE_PERIOD_MS = 5000
 
 # Define common headers that mimic a real browser
 DEFAULT_USER_AGENT = (
@@ -563,8 +565,8 @@ class WebConnector(LoadConnector):
                 wait_until="commit",  # Wait for navigation to commit
             )
             # Give the page a moment to start rendering after navigation commits.
-            # 5 seconds allows CloudFlare challenges to complete while still being relatively fast.
-            page.wait_for_timeout(5000)  # 5 second grace period for initial content
+            # Allows CloudFlare and other bot-detection challenges to complete.
+            page.wait_for_timeout(BOT_DETECTION_GRACE_PERIOD_MS)
 
             last_modified = (
                 page_response.header_value("Last-Modified") if page_response else None
