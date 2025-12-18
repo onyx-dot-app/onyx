@@ -152,6 +152,7 @@ export default function TextView({
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent
+        onOpenAutoFocus={(e) => e.preventDefault()}
         hideCloseIcon
         overlayClassName="z-modal-overlay"
         className="z-modal max-w-4xl w-[90vw] flex flex-col justify-between gap-y-0 h-[90vh] max-h-[90vh] p-0"
