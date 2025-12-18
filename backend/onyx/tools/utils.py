@@ -47,3 +47,15 @@ def is_document_search_available(db_session: Session) -> bool:
     docs_exist = check_docs_exist(db_session)
     connectors_exist = check_connectors_exist(db_session)
     return docs_exist or connectors_exist
+
+
+def generate_tools_description(tools: list[Tool]) -> str:
+    if not tools:
+        return ""
+    if len(tools) == 1:
+        return tools[0].name
+    if len(tools) == 2:
+        return f"{tools[0].name} and {tools[1].name}"
+
+    names = [tool.name for tool in tools[:-1]]
+    return ", ".join(names) + f", and {tools[-1].name}"

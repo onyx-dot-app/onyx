@@ -5,6 +5,10 @@ from collections.abc import Mapping
 from collections.abc import Sequence
 from typing import Any
 from typing import cast
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from onyx.chat.emitter import Emitter
 
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.citation_processor import DynamicCitationProcessor
@@ -330,7 +334,7 @@ def translate_history_to_llm_format(
     return messages
 
 
-def run_llm_step(
+def run_llm_step_pkt_generator(
     history: list[ChatMessageSimple],
     tool_definitions: list[dict],
     tool_choice: ToolChoiceOptions,
@@ -547,3 +551,45 @@ def run_llm_step(
         ),
         has_reasoned,
     )
+
+
+def run_llm_step(
+    emitter: "Emitter",
+    history: list[ChatMessageSimple],
+    tool_definitions: list[dict],
+    tool_choice: ToolChoiceOptions,
+    llm: LLM,
+    turn_index: int,
+    citation_processor: DynamicCitationProcessor,
+    state_container: ChatStateContainer,
+    final_documents: list[SearchDoc] | None = None,
+    user_identity: LLMUserIdentity | None = None,
+    custom_token_processor: (
+        Callable[[Delta | None, Any], tuple[Delta | None, Any]] | None
+    ) = None,
+) -> tuple[LlmStepResult, bool]:
+    """Wrapper around run_llm_step_pkt_generator that consumes packets and emits them.
+
+    Returns:
+        tuple[LlmStepResult, bool]: The LLM step result and whether reasoning occurred.
+    """
+    step_generator = run_llm_step_pkt_generator(
+        history=history,
+        tool_definitions=tool_definitions,
+        tool_choice=tool_choice,
+        llm=llm,
+        turn_index=turn_index,
+        citation_processor=citation_processor,
+        state_container=state_container,
+        final_documents=final_documents,
+        user_identity=user_identity,
+        custom_token_processor=custom_token_processor,
+    )
+
+    while True:
+        try:
+            packet = next(step_generator)
+            emitter.emit(packet)
+        except StopIteration as e:
+            llm_step_result, has_reasoned = e.value
+            return llm_step_result, bool(has_reasoned)

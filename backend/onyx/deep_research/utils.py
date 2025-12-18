@@ -81,7 +81,7 @@ def create_think_tool_token_processor() -> (
     which gets displayed as reasoning tokens in the UI.
 
     Returns:
-        A function compatible with run_llm_step's custom_token_processor parameter.
+        A function compatible with run_llm_step_pkt_generator's custom_token_processor parameter.
         The function takes (Delta, state) and returns (modified Delta | None, new state).
     """
 

@@ -12,6 +12,7 @@ from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.llm_step import run_llm_step
+from onyx.chat.llm_step import run_llm_step_pkt_generator
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import LlmStepResult
 from onyx.configs.constants import MessageType
@@ -83,7 +84,7 @@ def run_deep_research_llm_loop(
 
     # Filter tools to only allow web search, internal search, and open URL
     allowed_tool_names = {SearchTool.NAME, WebSearchTool.NAME, OpenURLTool.NAME}
-    [tool for tool in tools if tool.name in allowed_tool_names]
+    allowed_tools = [tool for tool in tools if tool.name in allowed_tool_names]
 
     #########################################################
     # CLARIFICATION STEP (optional)
@@ -108,7 +109,8 @@ def run_deep_research_llm_loop(
             last_n_user_messages=MAX_USER_MESSAGES_FOR_CONTEXT,
         )
 
-        step_generator = run_llm_step(
+        llm_step_result, _ = run_llm_step(
+            emitter=emitter,
             history=truncated_message_history,
             tool_definitions=get_clarification_tool_definitions(),
             tool_choice=ToolChoiceOptions.AUTO,
@@ -121,18 +123,6 @@ def run_deep_research_llm_loop(
             final_documents=None,
             user_identity=user_identity,
         )
-
-        # Consume the generator, emitting packets and capturing the final result
-        while True:
-            try:
-                packet = next(step_generator)
-                emitter.emit(packet)
-            except StopIteration as e:
-                llm_step_result, _ = e.value
-                break
-
-        # Type narrowing: generator always returns a result, so this can't be None
-        llm_step_result = cast(LlmStepResult, llm_step_result)
 
         if not llm_step_result.tool_calls:
             # Mark this turn as a clarification question
@@ -164,7 +154,7 @@ def run_deep_research_llm_loop(
         last_n_user_messages=MAX_USER_MESSAGES_FOR_CONTEXT,
     )
 
-    research_plan_generator = run_llm_step(
+    research_plan_generator = run_llm_step_pkt_generator(
         history=truncated_message_history,
         tool_definitions=[],
         tool_choice=ToolChoiceOptions.NONE,
@@ -258,12 +248,14 @@ def run_deep_research_llm_loop(
             create_think_tool_token_processor() if not is_reasoning_model else None
         )
 
-        orchestrator_generator = run_llm_step(
+        # TODO handle reasoning cycles
+        llm_step_result, _ = run_llm_step(
+            emitter=emitter,
             history=truncated_message_history,
             tool_definitions=get_orchestrator_tools(
                 include_think_tool=not is_reasoning_model
             ),
-            tool_choice=ToolChoiceOptions.AUTO,
+            tool_choice=ToolChoiceOptions.REQUIRED,
             llm=llm,
             turn_index=cycle + reasoning_cycles,
             # No citations in this step, it should just pass through all
@@ -274,16 +266,6 @@ def run_deep_research_llm_loop(
             user_identity=user_identity,
             custom_token_processor=custom_processor,
         )
-
-        while True:
-            try:
-                packet = next(orchestrator_generator)
-                emitter.emit(packet)
-            except StopIteration as e:
-                # TODO handle reasoning cycles
-                llm_step_result, _ = e.value
-                break
-        llm_step_result = cast(LlmStepResult, llm_step_result)
         tool_calls = llm_step_result.tool_calls or []
 
         if not tool_calls and cycle == 0:
@@ -359,12 +341,12 @@ def run_deep_research_llm_loop(
                     break
 
                 research_results = run_research_agent_calls(
-                    research_agent_calls,
-                    tools,
-                    emitter,
-                    state_container,
-                    llm,
-                    token_counter,
+                    research_agent_calls=research_agent_calls,
+                    tools=allowed_tools,
+                    emitter=emitter,
+                    state_container=state_container,
+                    llm=llm,
+                    token_counter=token_counter,
                 )
 
                 # Need to process citations

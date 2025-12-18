@@ -1,5 +1,4 @@
 from collections.abc import Callable
-from typing import cast
 
 from sqlalchemy.orm import Session
 
@@ -438,7 +437,8 @@ def run_llm_loop(
 
             # This calls the LLM, yields packets (reasoning, answers, etc.) and returns the result
             # It also pre-processes the tool calls in preparation for running them
-            step_generator = run_llm_step(
+            llm_step_result, has_reasoned = run_llm_step(
+                emitter=emitter,
                 history=truncated_message_history,
                 tool_definitions=[tool.tool_definition() for tool in final_tools],
                 tool_choice=tool_choice,
@@ -452,20 +452,8 @@ def run_llm_loop(
                 final_documents=gathered_documents,
                 user_identity=user_identity,
             )
-
-            # Consume the generator, emitting packets and capturing the final result
-            while True:
-                try:
-                    packet = next(step_generator)
-                    emitter.emit(packet)
-                except StopIteration as e:
-                    llm_step_result, has_reasoned = e.value
-                    if has_reasoned:
-                        reasoning_cycles += 1
-                    break
-
-            # Type narrowing: generator always returns a result, so this can't be None
-            llm_step_result = cast(LlmStepResult, llm_step_result)
+            if has_reasoned:
+                reasoning_cycles += 1
 
             # Save citation mapping after each LLM step for incremental state updates
             state_container.set_citation_mapping(citation_processor.citation_to_doc)
