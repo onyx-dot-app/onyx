@@ -527,6 +527,7 @@ export default function ActionsPopover({
             hasNoConnectors={hasNoConnectors}
             toolAuthStatus={getToolAuthStatus(tool)}
             onOAuthAuthenticate={() => authenticateTool(tool)}
+            onClose={() => setOpen(false)}
           />
         )),
 

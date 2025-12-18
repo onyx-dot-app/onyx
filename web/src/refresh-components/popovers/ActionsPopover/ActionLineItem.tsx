@@ -12,7 +12,7 @@ import { cn, noProp } from "@/lib/utils";
 import type { IconProps } from "@opal/types";
 import { SvgChevronRight, SvgKey, SvgSettings, SvgSlash } from "@opal/icons";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import { useRouter } from "next/router";
+import { useRouter } from "next/navigation";
 
 export interface ActionItemProps {
   tool?: ToolSnapshot;
@@ -26,6 +26,7 @@ export interface ActionItemProps {
   hasNoConnectors?: boolean;
   toolAuthStatus?: ToolAuthStatus;
   onOAuthAuthenticate?: () => void;
+  onClose?: () => void;
 }
 
 export default function ActionLineItem({
@@ -40,6 +41,7 @@ export default function ActionLineItem({
   hasNoConnectors = false,
   toolAuthStatus,
   onOAuthAuthenticate,
+  onClose,
 }: ActionItemProps) {
   const router = useRouter();
   const { currentProjectId } = useProjectsContext();
@@ -70,6 +72,7 @@ export default function ActionLineItem({
             onForceToggle();
             if (isSearchToolAndNotInProject && !isForced)
               onSourceManagementOpen?.();
+            else onClose?.();
           }}
           selected={isForced}
           strikethrough={disabled || isSearchToolWithNoConnectors}
