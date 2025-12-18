@@ -554,12 +554,16 @@ class WebConnector(LoadConnector):
 
         page = session_ctx.playwright_context.new_page()
         try:
-            # Can't use wait_until="networkidle" because it interferes with the scrolling behavior
+            # Use "commit" instead of "domcontentloaded" to avoid hanging on bot-detection pages
+            # that may never fire domcontentloaded. "commit" waits only for navigation to be
+            # committed (response received), then we add a short wait for initial rendering.
             page_response = page.goto(
                 initial_url,
                 timeout=30000,  # 30 seconds
-                wait_until="domcontentloaded",  # Wait for DOM to be ready
+                wait_until="commit",  # Wait for navigation to commit
             )
+            # Give the page a moment to start rendering after navigation commits
+            page.wait_for_timeout(2000)  # 2 second grace period for initial content
 
             last_modified = (
                 page_response.header_value("Last-Modified") if page_response else None

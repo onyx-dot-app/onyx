@@ -28,6 +28,8 @@ from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.github.models import SerializedRepository
+from onyx.connectors.github.rate_limit_utils import raise_if_approaching_rate_limit
+from onyx.connectors.github.rate_limit_utils import RateLimitBudgetLow
 from onyx.connectors.github.rate_limit_utils import sleep_after_rate_limit_exception
 from onyx.connectors.github.utils import deserialize_repository
 from onyx.connectors.github.utils import get_external_access_permission
@@ -172,6 +174,7 @@ def _get_batch_rate_limited(
         raise RuntimeError(
             "Re-tried fetching batch too many times. Something is going wrong with fetching objects from Github"
         )
+    raise_if_approaching_rate_limit(github_client)
     try:
         if cursor_url:
             # when this is set, we are resuming from an earlier
@@ -567,14 +570,22 @@ class GithubConnector(CheckpointedConnectorWithPermSync[GithubConnectorCheckpoin
         if self.include_prs and checkpoint.stage == GithubConnectorStage.PRS:
             logger.info(f"Fetching PRs for repo: {repo.name}")
 
-            pr_batch = _get_batch_rate_limited(
-                self._pull_requests_func(repo),
-                checkpoint.curr_page,
-                checkpoint.cursor_url,
-                checkpoint.num_retrieved,
-                cursor_url_callback,
-                self.github_client,
-            )
+            try:
+                pr_batch = _get_batch_rate_limited(
+                    self._pull_requests_func(repo),
+                    checkpoint.curr_page,
+                    checkpoint.cursor_url,
+                    checkpoint.num_retrieved,
+                    cursor_url_callback,
+                    self.github_client,
+                )
+            except RateLimitBudgetLow as e:
+                logger.info(
+                    "Stopping GitHub fetch early to avoid hitting rate limit "
+                    f"(remaining={e.remaining}, threshold={e.threshold}, "
+                    f"resets_at={e.reset_at.isoformat()}, seconds_until_reset={e.seconds_until_reset:.0f})."
+                )
+                return checkpoint
             checkpoint.curr_page += 1  # NOTE: not used for cursor-based fallback
             done_with_prs = False
             num_prs = 0
@@ -640,16 +651,24 @@ class GithubConnector(CheckpointedConnectorWithPermSync[GithubConnectorCheckpoin
         if self.include_issues and checkpoint.stage == GithubConnectorStage.ISSUES:
             logger.info(f"Fetching issues for repo: {repo.name}")
 
-            issue_batch = list(
-                _get_batch_rate_limited(
-                    self._issues_func(repo),
-                    checkpoint.curr_page,
-                    checkpoint.cursor_url,
-                    checkpoint.num_retrieved,
-                    cursor_url_callback,
-                    self.github_client,
+            try:
+                issue_batch = list(
+                    _get_batch_rate_limited(
+                        self._issues_func(repo),
+                        checkpoint.curr_page,
+                        checkpoint.cursor_url,
+                        checkpoint.num_retrieved,
+                        cursor_url_callback,
+                        self.github_client,
+                    )
                 )
-            )
+            except RateLimitBudgetLow as e:
+                logger.info(
+                    "Stopping GitHub fetch early to avoid hitting rate limit "
+                    f"(remaining={e.remaining}, threshold={e.threshold}, "
+                    f"resets_at={e.reset_at.isoformat()}, seconds_until_reset={e.seconds_until_reset:.0f})."
+                )
+                return checkpoint
             logger.info(f"Fetched {len(issue_batch)} issues for repo: {repo.name}")
             checkpoint.curr_page += 1
             done_with_issues = False

@@ -24,6 +24,8 @@ from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.github.connector import GithubConnector
 from onyx.connectors.github.connector import GithubConnectorStage
 from onyx.connectors.github.models import SerializedRepository
+from onyx.connectors.github.rate_limit_utils import raise_if_approaching_rate_limit
+from onyx.connectors.github.rate_limit_utils import RateLimitBudgetLow
 from onyx.connectors.models import Document
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 from tests.unit.onyx.connectors.utils import (
@@ -289,6 +291,112 @@ def test_load_from_checkpoint_with_rate_limit(
         assert outputs[1].items[0].id == "https://github.com/test-org/test-repo/pull/1"
 
         assert outputs[-1].next_checkpoint.has_more is False
+
+
+def test_raise_if_approaching_rate_limit_raises_when_under_threshold() -> None:
+    github_client = MagicMock(spec=Github)
+    rate_limit_reset = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    rate_limit = MagicMock(spec=RateLimit)
+    rate_limit.core = MagicMock(remaining=5, reset=rate_limit_reset)
+    github_client.get_rate_limit.return_value = rate_limit
+
+    with pytest.raises(RateLimitBudgetLow) as excinfo:
+        raise_if_approaching_rate_limit(github_client, minimum_remaining=10)
+
+    assert excinfo.value.remaining == 5
+    assert excinfo.value.threshold == 10
+    assert excinfo.value.reset_at == rate_limit_reset
+
+
+def test_raise_if_approaching_rate_limit_allows_when_above_threshold() -> None:
+    github_client = MagicMock(spec=Github)
+    rate_limit_reset = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    rate_limit = MagicMock(spec=RateLimit)
+    rate_limit.core = MagicMock(remaining=50, reset=rate_limit_reset)
+    github_client.get_rate_limit.return_value = rate_limit
+
+    # Should not raise
+    raise_if_approaching_rate_limit(github_client, minimum_remaining=10)
+
+
+def test_fetch_from_github_returns_checkpoint_when_rate_limit_low_prs(
+    build_github_connector: Callable[..., GithubConnector],
+    mock_github_client: MagicMock,
+    create_mock_repo: Callable[..., MagicMock],
+) -> None:
+    github_connector = build_github_connector()
+    github_connector.github_client = mock_github_client
+    mock_repo = create_mock_repo()
+
+    checkpoint = github_connector.build_dummy_checkpoint()
+    checkpoint.cached_repo = SerializedRepository(
+        id=mock_repo.id, headers=mock_repo.raw_headers, raw_data=mock_repo.raw_data
+    )
+    checkpoint.cached_repo_ids = []
+    checkpoint.stage = GithubConnectorStage.PRS
+
+    rate_limit_exception = RateLimitBudgetLow(
+        remaining=1, threshold=10, reset_at=datetime.now(timezone.utc)
+    )
+    with (
+        patch.object(SerializedRepository, "to_Repository", return_value=mock_repo),
+        patch(
+            "onyx.connectors.github.connector._get_batch_rate_limited",
+            side_effect=rate_limit_exception,
+        ) as mock_batch,
+    ):
+        gen = github_connector._fetch_from_github(checkpoint)
+        with pytest.raises(StopIteration) as stop_exc:
+            next(gen)
+
+        returned_checkpoint = stop_exc.value.value
+
+    mock_batch.assert_called_once()
+    assert returned_checkpoint.stage == GithubConnectorStage.PRS
+    assert returned_checkpoint.curr_page == 0
+    assert returned_checkpoint.num_retrieved == 0
+    assert returned_checkpoint.cached_repo is not None
+    assert returned_checkpoint.cached_repo.id == mock_repo.id
+
+
+def test_fetch_from_github_returns_checkpoint_when_rate_limit_low_issues(
+    build_github_connector: Callable[..., GithubConnector],
+    mock_github_client: MagicMock,
+    create_mock_repo: Callable[..., MagicMock],
+) -> None:
+    github_connector = build_github_connector()
+    github_connector.github_client = mock_github_client
+    mock_repo = create_mock_repo()
+
+    checkpoint = github_connector.build_dummy_checkpoint()
+    checkpoint.cached_repo = SerializedRepository(
+        id=mock_repo.id, headers=mock_repo.raw_headers, raw_data=mock_repo.raw_data
+    )
+    checkpoint.cached_repo_ids = []
+    checkpoint.stage = GithubConnectorStage.ISSUES
+
+    rate_limit_exception = RateLimitBudgetLow(
+        remaining=1, threshold=10, reset_at=datetime.now(timezone.utc)
+    )
+    with (
+        patch.object(SerializedRepository, "to_Repository", return_value=mock_repo),
+        patch(
+            "onyx.connectors.github.connector._get_batch_rate_limited",
+            side_effect=rate_limit_exception,
+        ) as mock_batch,
+    ):
+        gen = github_connector._fetch_from_github(checkpoint)
+        with pytest.raises(StopIteration) as stop_exc:
+            next(gen)
+
+        returned_checkpoint = stop_exc.value.value
+
+    mock_batch.assert_called_once()
+    assert returned_checkpoint.stage == GithubConnectorStage.ISSUES
+    assert returned_checkpoint.curr_page == 0
+    assert returned_checkpoint.num_retrieved == 0
+    assert returned_checkpoint.cached_repo is not None
+    assert returned_checkpoint.cached_repo.id == mock_repo.id
 
 
 def test_load_from_checkpoint_with_empty_repo(
