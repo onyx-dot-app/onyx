@@ -499,7 +499,7 @@ class VespaDocumentIndex(DocumentIndex):
                 for doc_id in update_request.document_ids:
                     chunk_count = update_request.doc_id_to_chunk_cnt[doc_id]
                     sanitized_doc_id = replace_invalid_doc_id_characters(doc_id)
-                    enriched_doc_infos = _enrich_basic_chunk_info(
+                    enriched_doc_info = _enrich_basic_chunk_info(
                         index_name=self._index_name,
                         http_client=httpx_client,
                         document_id=sanitized_doc_id,
@@ -508,7 +508,7 @@ class VespaDocumentIndex(DocumentIndex):
                     )
 
                     doc_chunk_ids = get_document_chunk_ids(
-                        enriched_document_info_list=[enriched_doc_infos],
+                        enriched_document_info_list=[enriched_doc_info],
                         tenant_id=self._tenant_id,
                         large_chunks_enabled=self._large_chunks_enabled,
                     )
