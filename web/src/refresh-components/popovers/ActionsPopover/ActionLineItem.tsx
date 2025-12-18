@@ -12,81 +12,73 @@ import { cn, noProp } from "@/lib/utils";
 import type { IconProps } from "@opal/types";
 import { SvgChevronRight, SvgKey, SvgSettings, SvgSlash } from "@opal/icons";
 import { useActionsContext, ToolState } from "@/contexts/ActionsContext";
+import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 
 export interface ActionItemProps {
-  tool?: ToolSnapshot;
+  tool: ToolSnapshot;
   Icon?: React.FunctionComponent<IconProps>;
-  label?: string;
   onSourceManagementOpen?: () => void;
   hasNoConnectors?: boolean;
   toolAuthStatus?: ToolAuthStatus;
   onOAuthAuthenticate?: () => void;
-  isProjectContext?: boolean;
 }
 
 export default function ActionLineItem({
   tool,
   Icon: ProvidedIcon,
-  label: providedLabel,
   onSourceManagementOpen,
   hasNoConnectors = false,
   toolAuthStatus,
   onOAuthAuthenticate,
-  isProjectContext = false,
 }: ActionItemProps) {
+  const { currentProjectId } = useProjectsContext();
+  const isProjectContext = !!currentProjectId;
   const { toolMap, setToolStatus } = useActionsContext();
   const Icon = tool ? getIconForAction(tool) : ProvidedIcon!;
-  const toolName = tool?.name || providedLabel || "";
+  const toolName = tool.name;
 
   const toolState = useMemo(() => {
-    if (!tool) return ToolState.Enabled;
     return toolMap[tool.id] ?? ToolState.Enabled;
   }, [tool, toolMap]);
   const disabled = toolState === ToolState.Disabled;
   const isForced = toolState === ToolState.Forced;
 
-  let label = tool ? tool.display_name || tool.name : providedLabel!;
-  if (isProjectContext && tool?.in_code_tool_id === SEARCH_TOOL_ID) {
-    label = "Project Search";
-  }
+  let label =
+    isProjectContext && tool.in_code_tool_id === SEARCH_TOOL_ID
+      ? "Project Search"
+      : tool.display_name;
 
   const isSearchToolWithNoConnectors =
     !isProjectContext &&
-    tool?.in_code_tool_id === SEARCH_TOOL_ID &&
+    tool.in_code_tool_id === SEARCH_TOOL_ID &&
     hasNoConnectors;
 
-  const handleToggle = () => {
-    if (!tool) return;
-    const target = disabled ? ToolState.Enabled : ToolState.Disabled;
+  function handleToggle() {
+    const target = isForced ? ToolState.Enabled : ToolState.Forced;
     setToolStatus(tool.id, target);
-  };
+  }
 
-  const handleForceToggle = () => {
-    if (!tool) return;
-    const target =
-      toolState === ToolState.Forced ? ToolState.Enabled : ToolState.Forced;
-    // If currently disabled, first enable so forcing makes sense
-    if (toolState === ToolState.Disabled) {
-      setToolStatus(tool.id, ToolState.Enabled);
-    }
-    setToolStatus(tool.id, target);
-  };
+  function handleDisable() {
+    // const target = disabled ? ToolState.Enabled : ToolState.Enabled;
+    setToolStatus(tool.id, ToolState.Disabled);
+  }
 
   return (
-    <SimpleTooltip tooltip={tool?.description} className="max-w-[30rem]">
+    <SimpleTooltip tooltip={tool.description}>
       <div data-testid={`tool-option-${toolName}`}>
         <LineItem
           onClick={() => {
             if (isSearchToolWithNoConnectors) return;
-            if (disabled) handleToggle();
-            handleForceToggle();
+            handleToggle();
+            // if (disabled) handleToggle();
+            // handleForceToggle();
           }}
           selected={isForced}
           strikethrough={disabled || isSearchToolWithNoConnectors}
           icon={Icon}
           rightChildren={
             <div className="flex flex-row items-center gap-1">
-              {tool?.oauth_config_id && toolAuthStatus && (
+              {tool.oauth_config_id && toolAuthStatus && (
                 <IconButton
                   icon={({ className }) => (
                     <SvgKey
@@ -110,7 +102,7 @@ export default function ActionLineItem({
               {!isSearchToolWithNoConnectors && (
                 <IconButton
                   icon={SvgSlash}
-                  onClick={noProp(handleToggle)}
+                  onClick={noProp(handleDisable)}
                   internal
                   className={cn(
                     !disabled && "invisible group-hover/LineItem:visible"

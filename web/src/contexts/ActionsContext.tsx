@@ -41,9 +41,6 @@ interface ActionsContextValue {
 
   /** Set multiple tools' state for the current agent. */
   setToolsStatus: (toolIds: number[], state: ToolState) => void;
-
-  /** Override forced tool selection for the current agent. */
-  setForcedToolIds: (toolIds: number[]) => void;
 }
 
 const ActionsContext = createContext<ActionsContextValue | undefined>(
@@ -58,112 +55,99 @@ export function ActionsProvider({ children }: ActionsProviderProps) {
   const { agentForCurrentChatSession } = useChatSessionContext();
   const { agentPreferences, setAgentPreference } = useAgentPreferences();
 
-  const agentId = agentForCurrentChatSession?.id;
+  const agentId = agentForCurrentChatSession?.id ?? null;
   const tools = agentForCurrentChatSession?.tools ?? [];
-
-  const [forcedToolIds, setForcedToolIdsState] = useState<number[]>([]);
 
   const disabledToolIds =
     (agentId && agentPreferences?.[agentId]?.disabled_tool_ids) || [];
 
-  // Keep forcedToolIds cleared when agent changes
-  useEffect(() => {
-    setForcedToolIdsState([]);
-  }, [agentId]);
-
-  const updateDisabledTools = useCallback(
-    (updater: (current: number[]) => number[]) => {
-      if (!agentId) return;
-      const next = updater(disabledToolIds);
-      setAgentPreference(agentId, {
-        disabled_tool_ids: next,
-      });
-    },
-    [agentId, disabledToolIds, setAgentPreference]
-  );
-
-  const setForcedToolIds = useCallback(
-    (toolIds: number[]) => {
-      const forcedId = toolIds.length > 0 ? toolIds[0] : null;
-      const next = forcedId != null ? [forcedId] : [];
-      setForcedToolIdsState(next);
-      if (!agentId) return;
-      if (forcedId != null) {
-        updateDisabledTools((current) =>
-          current.filter((id) => id !== forcedId)
-        );
-      }
-    },
-    [agentId, updateDisabledTools]
-  );
-
-  const setToolStatus = useCallback(
-    (toolId: number, state: ToolState) => {
-      if (!agentId) return;
-      if (state === ToolState.Forced) {
-        setForcedToolIds([toolId]);
-        return;
-      }
-
-      const nextForced = forcedToolIds.filter((id) => id !== toolId);
-      if (nextForced.length !== forcedToolIds.length) {
-        setForcedToolIdsState(nextForced);
-      }
-
-      if (state === ToolState.Disabled) {
-        updateDisabledTools((current) =>
-          current.includes(toolId) ? current : [...current, toolId]
-        );
-      } else {
-        updateDisabledTools((current) => current.filter((id) => id !== toolId));
-      }
-    },
-    [agentId, forcedToolIds, setForcedToolIds, updateDisabledTools]
-  );
-
-  const setToolsStatus = useCallback(
-    (toolIds: number[], state: ToolState) => {
-      if (!agentId) return;
-      if (state === ToolState.Forced) {
-        setForcedToolIds(toolIds);
-        updateDisabledTools((current) =>
-          current.filter((id) => !toolIds.includes(id))
-        );
-        return;
-      }
-
-      const nextForced = forcedToolIds.filter((id) => !toolIds.includes(id));
-      if (nextForced.length !== forcedToolIds.length) {
-        setForcedToolIdsState(nextForced);
-      }
-
-      if (state === ToolState.Disabled) {
-        updateDisabledTools((current) => {
-          const merged = new Set([...current, ...toolIds]);
-          return Array.from(merged);
-        });
-      } else {
-        updateDisabledTools((current) =>
-          current.filter((id) => !toolIds.includes(id))
-        );
-      }
-    },
-    [agentId, forcedToolIds, setForcedToolIds, updateDisabledTools]
-  );
-
-  const toolMap = useMemo(() => {
+  // Derive toolMap from tools and disabledToolIds - this is the source of truth from the server
+  const baseToolMap = useMemo(() => {
     const map: Record<number, ToolState> = {};
     tools.forEach((tool) => {
-      if (forcedToolIds.includes(tool.id)) {
-        map[tool.id] = ToolState.Forced;
-      } else if (disabledToolIds.includes(tool.id)) {
+      if (disabledToolIds.includes(tool.id)) {
         map[tool.id] = ToolState.Disabled;
       } else {
         map[tool.id] = ToolState.Enabled;
       }
     });
     return map;
-  }, [tools, forcedToolIds, disabledToolIds]);
+  }, [tools, disabledToolIds]);
+
+  // Local overrides for user actions (enabled/disabled/forced changes)
+  const [localOverrides, setLocalOverrides] = useState<
+    Record<number, ToolState>
+  >({});
+
+  // Merge base map with local overrides
+  const toolMap = useMemo(() => {
+    return { ...baseToolMap, ...localOverrides };
+  }, [baseToolMap, localOverrides]);
+
+  function setToolStatus(toolId: number, state: ToolState) {
+    setToolsStatus([toolId], state);
+  }
+
+  function setToolsStatus(toolIds: number[], state: ToolState) {
+    if (toolIds.length === 0) return;
+
+    if (state === ToolState.Forced) {
+      const first = toolIds[0]!;
+      setLocalOverrides((prev) => {
+        const updated = { ...prev };
+        Object.keys(toolMap).forEach((key) => {
+          const toolId = Number.parseInt(key);
+          if (toolId === first) {
+            updated[toolId] = ToolState.Forced;
+          } else if (prev[toolId] === ToolState.Forced) {
+            // Remove the forced override, let it fall back to base
+            delete updated[toolId];
+          }
+        });
+        return updated;
+      });
+    } else {
+      setLocalOverrides((prev) => {
+        const updated = { ...prev };
+        toolIds.forEach((toolId) => {
+          if (!(toolId in toolMap)) return;
+          updated[toolId] = state;
+        });
+        return updated;
+      });
+    }
+  }
+
+  const forcedToolIds = useMemo(
+    () =>
+      Object.entries(toolMap)
+        .filter(([toolId, toolState]) => toolState === ToolState.Forced)
+        .map(([toolId, _toolState]) => Number.parseInt(toolId)),
+    [toolMap]
+  );
+
+  // Sync local overrides back to agentPreference
+  useEffect(() => {
+    if (agentId === null || Object.keys(localOverrides).length === 0) return;
+
+    const updatedDisabledToolIds = Object.entries(toolMap)
+      .filter(([_toolId, toolState]) => toolState === ToolState.Disabled)
+      .map(([toolId, _toolState]) => Number.parseInt(toolId));
+
+    // Only update if the disabled tools have actually changed
+    const currentDisabled = new Set(disabledToolIds);
+    const newDisabled = new Set(updatedDisabledToolIds);
+
+    const hasChanged =
+      currentDisabled.size !== newDisabled.size ||
+      !updatedDisabledToolIds.every((id) => currentDisabled.has(id));
+
+    if (hasChanged) {
+      setAgentPreference(agentId, {
+        disabled_tool_ids: updatedDisabledToolIds,
+      });
+    }
+  }, [localOverrides, agentId, disabledToolIds, toolMap, setAgentPreference]);
 
   return (
     <ActionsContext.Provider
@@ -172,7 +156,6 @@ export function ActionsProvider({ children }: ActionsProviderProps) {
         forcedToolIds,
         setToolStatus,
         setToolsStatus,
-        setForcedToolIds,
       }}
     >
       {children}

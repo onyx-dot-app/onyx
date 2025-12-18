@@ -35,7 +35,7 @@ import {
   hasSearchToolsAvailable,
 } from "@/app/chat/services/actionUtils";
 import { SvgArrowUp, SvgHourglass, SvgPlusCircle, SvgStop } from "@opal/icons";
-import { useActionsContext } from "@/contexts/ActionsContext";
+import { ToolState, useActionsContext } from "@/contexts/ActionsContext";
 
 const MAX_INPUT_HEIGHT = 200;
 
@@ -130,7 +130,7 @@ const ChatInputBar = React.memo(
     disabled,
   }: ChatInputBarProps) => {
     const { user } = useUser();
-    const { forcedToolIds, setForcedToolIds } = useActionsContext();
+    const { forcedToolIds, setToolsStatus } = useActionsContext();
     const { currentMessageFiles, setCurrentMessageFiles } =
       useProjectsContext();
 
@@ -609,8 +609,9 @@ const ChatInputBar = React.memo(
                         key={toolId}
                         leftIcon={getIconForAction(tool)}
                         onClick={() => {
-                          setForcedToolIds(
-                            forcedToolIds.filter((id) => id !== toolId)
+                          setToolsStatus(
+                            forcedToolIds.filter((id) => id !== toolId),
+                            ToolState.Forced
                           );
                         }}
                         engaged
