@@ -234,7 +234,7 @@ export default function HumanMessage({
     >
       <div
         className={cn(
-          "text-user-text max-w-[790px]",
+          "text-user-text max-w-[790px] md:px-4",
           shared ? "w-full" : "w-[90%]"
         )}
       >
