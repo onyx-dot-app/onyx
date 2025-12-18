@@ -156,7 +156,7 @@ def mt_cloud_telemetry(
 
     # Automatically include tenant_id in properties
     all_properties = {**properties} if properties else {}
-    if "tenant_id" in properties:
+    if properties and "tenant_id" in properties:
         logger.warning(
             f"tenant_id already in properties: {properties}. "
             f"Overwriting with new value {tenant_id}."
