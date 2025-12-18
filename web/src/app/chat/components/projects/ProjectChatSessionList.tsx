@@ -6,13 +6,13 @@ import { ChatSessionMorePopup } from "@/components/sidebar/ChatSessionMorePopup"
 import { useProjectsContext } from "../../projects/ProjectsContext";
 import { ChatSession } from "@/app/chat/interfaces";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
-import { useAgents } from "@/hooks/useAgents";
 import { formatRelativeTime } from "./project_utils";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import ChatSessionSkeleton from "@/refresh-components/skeletons/ChatSessionSkeleton";
 import { SvgBubbleText } from "@opal/icons";
+import { useAgentsContext } from "@/contexts/AgentsContext";
 
 export default function ProjectChatSessionList() {
   const {
@@ -21,7 +21,7 @@ export default function ProjectChatSessionList() {
     refreshCurrentProjectDetails,
     isLoadingProjectDetails,
   } = useProjectsContext();
-  const { agents: assistants } = useAgents();
+  const { agents } = useAgentsContext();
   const [isRenamingChat, setIsRenamingChat] = React.useState<string | null>(
     null
   );
@@ -78,7 +78,7 @@ export default function ProjectChatSessionList() {
                         currentProjectDetails?.persona_id_to_is_default || {};
                       const isDefault = personaIdToDefault[chat.persona_id];
                       if (isDefault === false) {
-                        const assistant = assistants.find(
+                        const assistant = agents.find(
                           (a) => a.id === chat.persona_id
                         );
                         if (assistant) {

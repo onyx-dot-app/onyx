@@ -10,7 +10,6 @@ import Text from "@/refresh-components/texts/Text";
 import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { useAgents } from "@/hooks/useAgents";
 import Separator from "@/refresh-components/Separator";
 import { SubLabel } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
@@ -23,6 +22,7 @@ import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import { HoverPopup } from "@/components/HoverPopup";
 import { Info } from "lucide-react";
 import { SvgOnyxLogo } from "@opal/icons";
+import { useAgentsContext } from "@/contexts/AgentsContext";
 
 interface DefaultAssistantConfiguration {
   tool_ids: number[];
@@ -37,7 +37,7 @@ interface DefaultAssistantUpdateRequest {
 function DefaultAssistantConfig() {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
-  const { refresh: refreshAgents } = useAgents();
+  const { refreshAgents } = useAgentsContext();
   const combinedSettings = useSettingsContext();
 
   const {

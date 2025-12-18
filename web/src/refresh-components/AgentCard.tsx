@@ -10,7 +10,6 @@ import { useAppRouter } from "@/hooks/appNavigation";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Truncated from "@/refresh-components/texts/Truncated";
 import type { IconProps } from "@opal/types";
-import { usePinnedAgentsWithDetails } from "@/hooks/useAgents";
 import { cn, noProp } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
@@ -25,6 +24,7 @@ import {
   SvgPinned,
   SvgUser,
 } from "@opal/icons";
+import { useAgentsContext } from "@/contexts/AgentsContext";
 interface IconLabelProps {
   icon: React.FunctionComponent<IconProps>;
   children: string;
@@ -48,7 +48,7 @@ export interface AgentCardProps {
 export default function AgentCard({ agent }: AgentCardProps) {
   const route = useAppRouter();
   const router = useRouter();
-  const { pinnedAgents, togglePinnedAgent } = usePinnedAgentsWithDetails();
+  const { pinnedAgents, togglePinnedAgent } = useAgentsContext();
   const pinned = useMemo(
     () => pinnedAgents.some((pinnedAgent) => pinnedAgent.id === agent.id),
     [agent.id, pinnedAgents]
@@ -105,7 +105,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
               <IconButton
                 icon={pinned ? SvgPinned : SvgPin}
                 tertiary
-                onClick={noProp(() => togglePinnedAgent(agent, !pinned))}
+                onClick={noProp(() => togglePinnedAgent(agent.id, !pinned))}
                 tooltip={pinned ? "Unpin from Sidebar" : "Pin to Sidebar"}
                 transient={hovered && pinned}
                 className={cn(!pinned && "hidden group-hover/AgentCard:flex")}

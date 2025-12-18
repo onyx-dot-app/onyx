@@ -32,7 +32,6 @@ import Settings from "@/sections/sidebar/Settings/Settings";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useProjects } from "@/lib/hooks/useProjects";
-import { useAgents, usePinnedAgentsWithDetails } from "@/hooks/useAgents";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
 import ProjectFolderButton from "@/sections/sidebar/ProjectFolderButton";
 import CreateProjectModal from "@/components/modals/CreateProjectModal";
@@ -66,6 +65,7 @@ import {
   SvgOnyxOctagon,
   SvgSettings,
 } from "@opal/icons";
+import { useAgentsContext } from "@/contexts/AgentsContext";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -148,19 +148,16 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
     refreshProjects,
     isLoading: isLoadingProjects,
   } = useProjects();
-  const { agents, isLoading: isLoadingAgents } = useAgents();
   const {
+    agents,
     pinnedAgents,
     updatePinnedAgents,
-    isLoading: isLoadingPinnedAgents,
-  } = usePinnedAgentsWithDetails();
+    isLoading: isLoadingAgents,
+  } = useAgentsContext();
 
   // Wait for ALL dynamic data before showing any sections
   const isLoadingDynamicContent =
-    isLoadingChatSessions ||
-    isLoadingProjects ||
-    isLoadingAgents ||
-    isLoadingPinnedAgents;
+    isLoadingChatSessions || isLoadingProjects || isLoadingAgents;
 
   // Still need some context for stateful operations
   const { refreshCurrentProjectDetails, currentProjectId } =
@@ -241,7 +238,7 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
         newPinnedAgents = arrayMove(visibleAgents, activeIndex, overIndex);
       }
 
-      updatePinnedAgents(newPinnedAgents);
+      updatePinnedAgents(newPinnedAgents.map((agent) => agent.id));
     },
     [
       visibleAgentIds,

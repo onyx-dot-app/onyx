@@ -20,7 +20,6 @@ import useChatSessions from "@/hooks/useChatSessions";
 import { useCCPairs } from "@/lib/hooks/useCCPairs";
 import { useTags } from "@/lib/hooks/useTags";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
-import { useAgents } from "@/hooks/useAgents";
 import { ChatPopup } from "@/app/chat/components/ChatPopup";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
@@ -68,6 +67,7 @@ import { HeaderData } from "@/lib/headers/fetchHeaderDataSS";
 import { SvgFileText } from "@opal/icons";
 import Spacer from "@/refresh-components/Spacer";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
+import { useAgentsContext } from "@/contexts/AgentsContext";
 
 export interface ChatPageProps {
   firstMessage?: string;
@@ -124,7 +124,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
 
   const isInitialLoad = useRef(true);
 
-  const { agents, isLoading: isLoadingAgents } = useAgents();
+  const { agents, isLoading: isLoadingAgents } = useAgentsContext();
 
   // Also fetch federated connectors for the sources list
   const { data: federatedConnectorsData } = useFederatedConnectors();

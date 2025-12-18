@@ -15,6 +15,8 @@
  * - `isLoading`: boolean — true while the initial agents list is still loading.
  * - `togglePinnedAgent(agentId, shouldPin)`: Promise<void> — pin/unpin an agent with optimistic UI updates; persists via `pinAgents`.
  * - `updatePinnedAgents(agentIds)`: Promise<void> — replace/reorder the entire pinned list (e.g., drag-and-drop); persists and updates local state.
+ * - `refreshAgents()`: Promise<MinimalPersonaSnapshot[] | undefined> — SWR mutate for the agents list; call after server-side changes to assistants.
+ * - `refreshPinnedAgents()`: Promise<void> — refreshes user data to re-pull pinned ids from `/me` (used after pin/unpin elsewhere).
  */
 
 import {
@@ -37,6 +39,8 @@ interface AgentsContextValue {
   pinnedAgents: MinimalPersonaSnapshot[];
   pinnedAgentIds: number[];
   isLoading: boolean;
+  refreshAgents: () => Promise<MinimalPersonaSnapshot[] | undefined>;
+  refreshPinnedAgents: () => Promise<void>;
   togglePinnedAgent: (agentId: number, shouldPin: boolean) => Promise<void>;
   updatePinnedAgents: (agentIds: number[]) => Promise<void>;
 }
@@ -44,14 +48,14 @@ interface AgentsContextValue {
 const AgentsContext = createContext<AgentsContextValue | undefined>(undefined);
 
 export function AgentsProvider({ children }: { children: ReactNode }) {
-  const { data: agentsData, error } = useSWR<MinimalPersonaSnapshot[]>(
-    "/api/persona",
-    errorHandlingFetcher,
-    {
-      revalidateOnFocus: false,
-      dedupingInterval: 60000,
-    }
-  );
+  const {
+    data: agentsData,
+    error,
+    mutate: refreshAgents,
+  } = useSWR<MinimalPersonaSnapshot[]>("/api/persona", errorHandlingFetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 60000,
+  });
 
   const { user, refreshUser } = useUser();
 
@@ -127,6 +131,8 @@ export function AgentsProvider({ children }: { children: ReactNode }) {
         pinnedAgents: localPinnedAgents,
         pinnedAgentIds: localPinnedAgents.map((agent) => agent.id),
         isLoading: isLoadingAgents,
+        refreshAgents,
+        refreshPinnedAgents: refreshUser,
         togglePinnedAgent,
         updatePinnedAgents,
       }}

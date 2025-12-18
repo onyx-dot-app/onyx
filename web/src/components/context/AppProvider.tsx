@@ -8,6 +8,7 @@ import { User } from "@/lib/types";
 import { ModalProvider } from "@/components/context/ModalContext";
 import { AuthTypeMetadata } from "@/lib/userSS";
 import { AppSidebarProvider } from "@/refresh-components/contexts/AppSidebarContext";
+import { AgentsProvider } from "@/contexts/AgentsContext";
 
 interface AppProviderProps {
   children: React.ReactNode;
@@ -32,11 +33,13 @@ export default function AppProvider({
         authTypeMetadata={authTypeMetadata}
       >
         <ProviderContextProvider>
-          <ModalProvider user={user}>
-            <AppSidebarProvider folded={!!folded}>
-              {children}
-            </AppSidebarProvider>
-          </ModalProvider>
+          <AgentsProvider>
+            <ModalProvider user={user}>
+              <AppSidebarProvider folded={!!folded}>
+                {children}
+              </AppSidebarProvider>
+            </ModalProvider>
+          </AgentsProvider>
         </ProviderContextProvider>
       </UserProvider>
     </SettingsProvider>
