@@ -135,7 +135,7 @@ class TestMCPPassThroughOAuth:
 
         # Create persona with the MCP tool
         persona = _create_test_persona_with_mcp_tool(db_session, user, [mcp_tool_db])
-        llm = get_default_llm()()
+        llm = get_default_llm()
 
         # Construct tools
         search_tool_config = SearchToolConfig()
@@ -201,7 +201,7 @@ class TestMCPPassThroughOAuth:
 
         # Create persona
         persona = _create_test_persona_with_mcp_tool(db_session, user, [mcp_tool_db])
-        llm = get_default_llm()()
+        llm = get_default_llm()
 
         tool_dict = construct_tools(
             persona=persona,
@@ -276,7 +276,7 @@ class TestMCPPassThroughOAuth:
 
         # Create persona
         persona = _create_test_persona_with_mcp_tool(db_session, user, [mcp_tool_db])
-        llm = get_default_llm()()
+        llm = get_default_llm()
 
         tool_dict = construct_tools(
             persona=persona,
@@ -351,7 +351,7 @@ class TestMCPPassThroughOAuth:
 
         # Create persona
         persona = _create_test_persona_with_mcp_tool(db_session, user, [mcp_tool_db])
-        llm = get_default_llm()()
+        llm = get_default_llm()
 
         tool_dict = construct_tools(
             persona=persona,
@@ -455,7 +455,7 @@ class TestMCPPassThroughOAuth:
 
         # Create persona
         persona = _create_test_persona_with_mcp_tool(db_session, user, [mcp_tool_db])
-        llm = get_default_llm()()
+        llm = get_default_llm()
 
         # Construct tools
         tool_dict = construct_tools(
@@ -539,7 +539,7 @@ class TestMCPPassThroughOAuth:
         db_session.refresh(mcp_tool_db)
 
         persona = _create_test_persona_with_mcp_tool(db_session, user, [mcp_tool_db])
-        llm = get_default_llm()()
+        llm = get_default_llm()
 
         tool_dict = construct_tools(
             persona=persona,
