@@ -80,4 +80,6 @@ def get_orchestrator_tools(include_think_tool: bool) -> list[dict]:
     return tools
 
 
+THINK_TOOL_RESPONSE_MESSAGE = "Acknowledged, please continue."
+THINK_TOOL_RESPONSE_TOKEN_COUNT = 10
 # ruff: noqa: E501, W605 end

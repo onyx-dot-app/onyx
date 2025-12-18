@@ -1,4 +1,3 @@
-import json
 from collections.abc import Callable
 from typing import cast
 
@@ -8,8 +7,6 @@ from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
 from onyx.chat.llm_step import run_llm_step
-from onyx.chat.llm_step import TOOL_CALL_MSG_ARGUMENTS
-from onyx.chat.llm_step import TOOL_CALL_MSG_FUNC_NAME
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import ExtractedProjectFiles
 from onyx.chat.models import LlmStepResult
@@ -325,7 +322,6 @@ def run_llm_loop(
         # Pass the total budget to construct_message_history, which will handle token allocation
         available_tokens = llm.config.max_input_tokens
         tool_choice: ToolChoiceOptions = ToolChoiceOptions.AUTO
-        collected_tool_calls: list[ToolCallInfo] = []
         # Initialize gathered_documents with project files if present
         gathered_documents: list[SearchDoc] | None = (
             list(project_citation_mapping.values())
@@ -545,16 +541,11 @@ def run_llm_loop(
                         search_docs=search_docs,
                         generated_images=generated_images,
                     )
-                    collected_tool_calls.append(tool_call_info)
                     # Add to state container for partial save support
                     state_container.add_tool_call(tool_call_info)
 
                     # Store tool call with function name and arguments in separate layers
-                    tool_call_data = {
-                        TOOL_CALL_MSG_FUNC_NAME: tool_call.tool_name,
-                        TOOL_CALL_MSG_ARGUMENTS: tool_call.tool_args,
-                    }
-                    tool_call_message = json.dumps(tool_call_data)
+                    tool_call_message = tool_call.to_msg_str()
                     tool_call_token_count = token_counter(tool_call_message)
 
                     tool_call_msg = ChatMessageSimple(
