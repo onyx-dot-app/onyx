@@ -967,10 +967,13 @@ class VespaIndex(DocumentIndex):
             large_chunks_enabled=self.large_chunks_enabled,
             httpx_client=self.httpx_client,
         )
-        assert (
+        if not (
             ranking_profile_type == QueryExpansionType.KEYWORD
             or ranking_profile_type == QueryExpansionType.SEMANTIC
-        )
+        ):
+            raise ValueError(
+                f"Bug: Received invalid ranking profile type: {ranking_profile_type}"
+            )
         query_type = (
             QueryType.KEYWORD
             if ranking_profile_type == QueryExpansionType.KEYWORD
