@@ -102,16 +102,21 @@ const ChatUI = React.forwardRef(
     const [aboveHorizon, setAboveHorizon] = useState(false);
     const debounceNumber = 100;
 
-    // Virtualizer for efficient message rendering - only renders visible messages
+    // Only enable virtualization for sessions with many messages (threshold: 20)
+    const VIRTUALIZATION_THRESHOLD = 20;
+    const shouldVirtualize = messages.length >= VIRTUALIZATION_THRESHOLD;
+
+    // Virtualizer for efficient message rendering - only used for large sessions
     const virtualizer = useVirtualizer({
       count: messages.length,
       getScrollElement: () => scrollContainerRef.current,
-      estimateSize: () => 200, // Estimated height per message (larger estimate reduces layout shifts)
-      overscan: 5, // Render 5 extra items above/below viewport for smooth fast scrolling
+      estimateSize: () => 200, // Estimated height per message
+      overscan: 5, // Render 5 extra items above/below viewport
       getItemKey: useCallback(
         (index: number) => messages[index]?.nodeId ?? index,
         [messages]
       ),
+      enabled: shouldVirtualize, // Disable virtualizer overhead for small sessions
     });
 
     const createRegenerator = useCallback(
@@ -228,15 +233,20 @@ const ChatUI = React.forwardRef(
     useLayoutEffect(() => {
       if (messages.length > prevMessagesLength.current) {
         // New message was added, scroll to bottom
-        virtualizer.scrollToIndex(messages.length - 1, { align: "end" });
+        if (shouldVirtualize) {
+          virtualizer.scrollToIndex(messages.length - 1, { align: "end" });
+        } else if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop =
+            scrollContainerRef.current.scrollHeight;
+        }
       }
       prevMessagesLength.current = messages.length;
-    }, [messages.length, virtualizer]);
+    }, [messages.length, virtualizer, shouldVirtualize]);
 
-    // Re-measure items when the last message updates (streaming)
+    // Re-measure items when the last message updates (streaming) - only needed for virtualized mode
     const lastMessage = messages[messages.length - 1];
     useEffect(() => {
-      if (lastMessage?.is_generating) {
+      if (shouldVirtualize && lastMessage?.is_generating) {
         // During streaming, periodically re-measure the last item (200ms to reduce layout thrashing)
         const interval = setInterval(() => {
           virtualizer.measureElement(
@@ -247,7 +257,12 @@ const ChatUI = React.forwardRef(
         }, 200);
         return () => clearInterval(interval);
       }
-    }, [lastMessage?.is_generating, messages.length, virtualizer]);
+    }, [
+      shouldVirtualize,
+      lastMessage?.is_generating,
+      messages.length,
+      virtualizer,
+    ]);
 
     if (!liveAssistant) return <div className="flex-1" />;
 
@@ -275,115 +290,218 @@ const ChatUI = React.forwardRef(
           className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden default-scrollbar"
           onScroll={handleScroll}
         >
-          {/* Virtualized message list - only visible messages are in the DOM */}
-          <div
-            style={{
-              height: `${virtualizer.getTotalSize()}px`,
-              width: "100%",
-              position: "relative",
-              contain: "strict",
-            }}
-          >
-            {virtualItems.map((virtualItem) => {
-              const i = virtualItem.index;
-              const message = messages[i];
-              if (!message) return null;
-              const messageReactComponentKey = `message-${message.nodeId}`;
-              const parentMessage = message.parentNodeId
-                ? messageTree?.get(message.parentNodeId)
-                : null;
+          {shouldVirtualize ? (
+            // Virtualized message list - only visible messages are in the DOM
+            <div
+              style={{
+                height: `${virtualizer.getTotalSize()}px`,
+                width: "100%",
+                position: "relative",
+                contain: "strict",
+              }}
+            >
+              {virtualItems.map((virtualItem) => {
+                const i = virtualItem.index;
+                const message = messages[i];
+                if (!message) return null;
+                const messageReactComponentKey = `message-${message.nodeId}`;
+                const parentMessage = message.parentNodeId
+                  ? messageTree?.get(message.parentNodeId)
+                  : null;
 
-              return (
-                <div
-                  key={messageReactComponentKey}
-                  data-index={i}
-                  ref={virtualizer.measureElement}
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    transform: `translateY(${virtualItem.start}px)`,
-                    willChange: "transform",
-                    contain: "layout style",
-                  }}
-                >
-                  {message.type === "user" ? (
-                    <div id={messageReactComponentKey}>
-                      <HumanMessage
-                        disableSwitchingForStreaming={
-                          messages[i + 1]?.is_generating || false
-                        }
-                        stopGenerating={stopGenerating}
-                        content={message.message}
-                        files={message.files}
-                        messageId={message.messageId}
-                        onEdit={(editedContent) => {
-                          if (
-                            message.messageId !== undefined &&
-                            message.messageId !== null
-                          ) {
-                            handleEditWithMessageId(
-                              editedContent,
-                              message.messageId
-                            );
+                return (
+                  <div
+                    key={messageReactComponentKey}
+                    data-index={i}
+                    ref={virtualizer.measureElement}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      transform: `translateY(${virtualItem.start}px)`,
+                      willChange: "transform",
+                      contain: "layout style",
+                    }}
+                  >
+                    {message.type === "user" ? (
+                      <div id={messageReactComponentKey}>
+                        <HumanMessage
+                          disableSwitchingForStreaming={
+                            messages[i + 1]?.is_generating || false
                           }
-                        }}
-                        otherMessagesCanSwitchTo={
-                          parentMessage?.childrenNodeIds ?? emptyChildrenIds
-                        }
-                        onMessageSelection={onMessageSelection}
-                      />
-                    </div>
-                  ) : message.type === "assistant" ? (
-                    (error || loadError) && i === messages.length - 1 ? (
-                      <div className="max-w-message-max mx-auto">
-                        <ErrorBanner
-                          resubmit={handleResubmitLastMessage}
-                          error={error || loadError || ""}
-                          errorCode={message.errorCode || undefined}
-                          isRetryable={message.isRetryable ?? true}
-                          details={message.errorDetails || undefined}
-                          stackTrace={message.stackTrace || undefined}
-                        />
-                      </div>
-                    ) : (
-                      <div id={`message-${message.nodeId}`}>
-                        <AIMessage
-                          rawPackets={message.packets}
-                          chatState={{
-                            assistant: liveAssistant,
-                            docs: message.documents ?? emptyDocs,
-                            citations: message.citations,
-                            setPresentingDocument,
-                            regenerate:
-                              message.messageId !== undefined &&
-                              i > 0 &&
-                              messages[i - 1]
-                                ? createRegenerator({
-                                    messageId: message.messageId,
-                                    parentMessage: messages[i - 1]!,
-                                  })
-                                : undefined,
-                            overriddenModel: llmManager.currentLlm?.modelName,
-                            researchType: message.researchType,
-                          }}
-                          nodeId={message.nodeId}
+                          stopGenerating={stopGenerating}
+                          content={message.message}
+                          files={message.files}
                           messageId={message.messageId}
-                          currentFeedback={message.currentFeedback}
-                          llmManager={llmManager}
+                          onEdit={(editedContent) => {
+                            if (
+                              message.messageId !== undefined &&
+                              message.messageId !== null
+                            ) {
+                              handleEditWithMessageId(
+                                editedContent,
+                                message.messageId
+                              );
+                            }
+                          }}
                           otherMessagesCanSwitchTo={
                             parentMessage?.childrenNodeIds ?? emptyChildrenIds
                           }
                           onMessageSelection={onMessageSelection}
                         />
                       </div>
-                    )
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
+                    ) : message.type === "assistant" ? (
+                      (error || loadError) && i === messages.length - 1 ? (
+                        <div className="max-w-message-max mx-auto">
+                          <ErrorBanner
+                            resubmit={handleResubmitLastMessage}
+                            error={error || loadError || ""}
+                            errorCode={message.errorCode || undefined}
+                            isRetryable={message.isRetryable ?? true}
+                            details={message.errorDetails || undefined}
+                            stackTrace={message.stackTrace || undefined}
+                          />
+                        </div>
+                      ) : (
+                        <div id={`message-${message.nodeId}`}>
+                          <AIMessage
+                            rawPackets={message.packets}
+                            chatState={{
+                              assistant: liveAssistant,
+                              docs: message.documents ?? emptyDocs,
+                              citations: message.citations,
+                              setPresentingDocument,
+                              regenerate:
+                                message.messageId !== undefined &&
+                                i > 0 &&
+                                messages[i - 1]
+                                  ? createRegenerator({
+                                      messageId: message.messageId,
+                                      parentMessage: messages[i - 1]!,
+                                    })
+                                  : undefined,
+                              overriddenModel: llmManager.currentLlm?.modelName,
+                              researchType: message.researchType,
+                            }}
+                            nodeId={message.nodeId}
+                            messageId={message.messageId}
+                            currentFeedback={message.currentFeedback}
+                            llmManager={llmManager}
+                            otherMessagesCanSwitchTo={
+                              parentMessage?.childrenNodeIds ?? emptyChildrenIds
+                            }
+                            onMessageSelection={onMessageSelection}
+                          />
+                        </div>
+                      )
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            // Simple rendering for small sessions (< 20 messages)
+            messages.map((message, i) => {
+              const messageReactComponentKey = `message-${message.nodeId}`;
+              const parentMessage = message.parentNodeId
+                ? messageTree?.get(message.parentNodeId)
+                : null;
+
+              if (message.type === "user") {
+                const nextMessage =
+                  messages.length > i + 1 ? messages[i + 1] : null;
+
+                return (
+                  <div
+                    id={messageReactComponentKey}
+                    key={messageReactComponentKey}
+                  >
+                    <HumanMessage
+                      disableSwitchingForStreaming={
+                        (nextMessage && nextMessage.is_generating) || false
+                      }
+                      stopGenerating={stopGenerating}
+                      content={message.message}
+                      files={message.files}
+                      messageId={message.messageId}
+                      onEdit={(editedContent) => {
+                        if (
+                          message.messageId !== undefined &&
+                          message.messageId !== null
+                        ) {
+                          handleEditWithMessageId(
+                            editedContent,
+                            message.messageId
+                          );
+                        }
+                      }}
+                      otherMessagesCanSwitchTo={
+                        parentMessage?.childrenNodeIds ?? emptyChildrenIds
+                      }
+                      onMessageSelection={onMessageSelection}
+                    />
+                  </div>
+                );
+              } else if (message.type === "assistant") {
+                if ((error || loadError) && i === messages.length - 1) {
+                  return (
+                    <div
+                      key={`error-${message.nodeId}`}
+                      className="max-w-message-max mx-auto"
+                    >
+                      <ErrorBanner
+                        resubmit={handleResubmitLastMessage}
+                        error={error || loadError || ""}
+                        errorCode={message.errorCode || undefined}
+                        isRetryable={message.isRetryable ?? true}
+                        details={message.errorDetails || undefined}
+                        stackTrace={message.stackTrace || undefined}
+                      />
+                    </div>
+                  );
+                }
+
+                const previousMessage = i !== 0 ? messages[i - 1] : null;
+                const regenerate =
+                  message.messageId !== undefined && previousMessage
+                    ? createRegenerator({
+                        messageId: message.messageId,
+                        parentMessage: previousMessage,
+                      })
+                    : undefined;
+                const chatStateData = {
+                  assistant: liveAssistant,
+                  docs: message.documents ?? emptyDocs,
+                  citations: message.citations,
+                  setPresentingDocument,
+                  regenerate,
+                  overriddenModel: llmManager.currentLlm?.modelName,
+                  researchType: message.researchType,
+                };
+                return (
+                  <div
+                    id={`message-${message.nodeId}`}
+                    key={messageReactComponentKey}
+                  >
+                    <AIMessage
+                      rawPackets={message.packets}
+                      chatState={chatStateData}
+                      nodeId={message.nodeId}
+                      messageId={message.messageId}
+                      currentFeedback={message.currentFeedback}
+                      llmManager={llmManager}
+                      otherMessagesCanSwitchTo={
+                        parentMessage?.childrenNodeIds ?? emptyChildrenIds
+                      }
+                      onMessageSelection={onMessageSelection}
+                    />
+                  </div>
+                );
+              }
+              return null;
+            })
+          )}
 
           {/* Error banner for user messages that failed */}
           {showTrailingError && (
