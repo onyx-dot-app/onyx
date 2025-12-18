@@ -50,7 +50,13 @@ def mock_github_client() -> MagicMock:
     mock.get_repo = MagicMock()
     mock.get_organization = MagicMock()
     mock.get_user = MagicMock()
-    mock.get_rate_limit = MagicMock(return_value=MagicMock(spec=RateLimit))
+
+    # Mock rate limit to avoid triggering RateLimitBudgetLow
+    mock_rate_limit = MagicMock(spec=RateLimit)
+    mock_rate_limit.core.remaining = 5000
+    mock_rate_limit.core.reset = datetime.now(timezone.utc)
+    mock.get_rate_limit = MagicMock(return_value=mock_rate_limit)
+
     mock._requester = MagicMock(spec=Requester)
     return mock
 
@@ -268,6 +274,7 @@ def test_load_from_checkpoint_with_rate_limit(
 
     # Mock rate limit reset time
     mock_rate_limit = MagicMock(spec=RateLimit)
+    mock_rate_limit.core.remaining = 5000
     mock_rate_limit.core.reset = datetime.now(timezone.utc)
     github_connector.github_client.get_rate_limit.return_value = mock_rate_limit
 
