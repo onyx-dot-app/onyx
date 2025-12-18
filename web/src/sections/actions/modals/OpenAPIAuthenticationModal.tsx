@@ -18,8 +18,11 @@ import KeyValueInput, {
 import { OAuthConfig } from "@/lib/tools/interfaces";
 import { getOAuthConfig } from "@/lib/oauth/api";
 import { SvgArrowExchange } from "@opal/icons";
+import { useAuthType } from "@/lib/hooks";
+import { AuthType } from "@/lib/constants";
+import Message from "@/refresh-components/messages/Message";
 
-export type AuthMethod = "oauth" | "custom-header";
+export type AuthMethod = "oauth" | "custom-header" | "pt-oauth";
 
 export interface OpenAPIAuthFormValues {
   authMethod: AuthMethod;
@@ -43,23 +46,22 @@ interface OpenAPIAuthenticationModalProps {
   onConnect?: (values: OpenAPIAuthFormValues) => Promise<void> | void;
   onSkip?: () => void;
   entityName?: string | null;
+  passthroughOAuthEnabled?: boolean;
 }
-
-const redirectUri = "https://cloud.onyx.app/oauth-config/callback";
 
 const MASKED_CREDENTIAL_VALUE = "********";
 
 const defaultValues: OpenAPIAuthFormValues = {
   authMethod: "oauth",
-  authorizationUrl: "https://example.com/oauth/authorize",
-  tokenUrl: "https://example.com/oauth/access_token",
+  authorizationUrl: "",
+  tokenUrl: "",
   clientId: "",
   clientSecret: "",
   scopes: "",
   headers: [
     {
       key: "Authorization",
-      value: "API Key",
+      value: "",
     },
   ],
 };
@@ -73,10 +75,14 @@ export default function OpenAPIAuthenticationModal({
   defaultMethod = "oauth",
   oauthConfigId = null,
   initialHeaders = null,
+  passthroughOAuthEnabled = false,
   onConnect,
   onSkip,
   entityName = null,
 }: OpenAPIAuthenticationModalProps) {
+  const authType = useAuthType();
+  const isOAuthEnabled =
+    authType === AuthType.OIDC || authType === AuthType.GOOGLE_OAUTH;
   const [existingOAuthConfig, setExistingOAuthConfig] =
     useState<OAuthConfig | null>(null);
   const [isLoadingOAuthConfig, setIsLoadingOAuthConfig] = useState(false);
@@ -91,6 +97,13 @@ export default function OpenAPIAuthenticationModal({
     isLoadingOAuthConfig &&
     !existingOAuthConfig &&
     !oauthConfigError;
+
+  const redirectUri = useMemo(() => {
+    if (typeof window === "undefined") {
+      return "https://{YOUR_DOMAIN}/oauth-config/callback";
+    }
+    return `${window.location.origin}/oauth-config/callback`;
+  }, []);
 
   useEffect(() => {
     let isActive = true;
@@ -139,7 +152,7 @@ export default function OpenAPIAuthenticationModal({
     () =>
       Yup.object({
         authMethod: Yup.mixed<AuthMethod>()
-          .oneOf(["oauth", "custom-header"])
+          .oneOf(["oauth", "pt-oauth", "custom-header"])
           .required("Authentication method is required"),
         authorizationUrl: Yup.string()
           .url("Enter a valid URL")
@@ -172,19 +185,25 @@ export default function OpenAPIAuthenticationModal({
           otherwise: (schema) => schema.notRequired(),
         }),
         scopes: Yup.string().notRequired(),
-        headers: Yup.array()
-          .of(
-            Yup.object({
-              key: Yup.string().required("Header key is required"),
-              value: Yup.string().required("Header value is required"),
-            })
-          )
-          .when("authMethod", {
-            is: "custom-header",
-            then: (schema) =>
-              schema.min(1, "Add at least one authentication header"),
-            otherwise: (schema) => schema.optional(),
-          }),
+        headers: Yup.array().when("authMethod", {
+          is: "custom-header",
+          then: () =>
+            Yup.array()
+              .of(
+                Yup.object({
+                  key: Yup.string().required("Header key is required"),
+                  value: Yup.string().required("Header value is required"),
+                })
+              )
+              .min(1, "Add at least one authentication header"),
+          otherwise: () =>
+            Yup.array().of(
+              Yup.object({
+                key: Yup.string(),
+                value: Yup.string(),
+              })
+            ),
+        }),
       }),
     [isEditingOAuthConfig]
   );
@@ -220,6 +239,13 @@ export default function OpenAPIAuthenticationModal({
       };
     }
 
+    if (passthroughOAuthEnabled) {
+      return {
+        ...defaultValues,
+        authMethod: "pt-oauth",
+      };
+    }
+
     return {
       ...defaultValues,
       authMethod: defaultMethod,
@@ -231,6 +257,7 @@ export default function OpenAPIAuthenticationModal({
     hasInitialHeaders,
     initialHeaders,
     isEditingOAuthConfig,
+    passthroughOAuthEnabled,
   ]);
 
   const handleSubmit = useCallback(
@@ -312,6 +339,7 @@ export default function OpenAPIAuthenticationModal({
             setFieldError,
             isSubmitting,
             isValid,
+            dirty,
           }) => (
             <Form className="flex flex-col h-full">
               <Modal.Body className="flex-1 overflow-y-auto max-h-[580px] p-2 bg-background-tint-01 w-full">
@@ -331,7 +359,7 @@ export default function OpenAPIAuthenticationModal({
                   </div>
                 ) : (
                   <>
-                    <div className="flex flex-col gap-4 p-2">
+                    <div className="flex flex-col gap-4 px-2 pt-2">
                       <FormField
                         name="authMethod"
                         state={
@@ -356,8 +384,16 @@ export default function OpenAPIAuthenticationModal({
                                 value="oauth"
                                 description="Each user authenticates via OAuth with their own credentials."
                               >
-                                OAuth 2.0
+                                OAuth
                               </InputSelect.Item>
+                              {isOAuthEnabled && (
+                                <InputSelect.Item
+                                  value="pt-oauth"
+                                  description="Forward the user's OAuth access token used to authenticate Onyx."
+                                >
+                                  OAuth Pass-through
+                                </InputSelect.Item>
+                              )}
                               <InputSelect.Item
                                 value="custom-header"
                                 description="Send custom headers with every request."
@@ -375,259 +411,264 @@ export default function OpenAPIAuthenticationModal({
                       </FormField>
                     </div>
 
-                    <Separator className="my-2" />
+                    <Separator className="py-0" />
 
-                    <section className="flex flex-col gap-4 rounded-12 bg-background-tint-00 border border-border-01 p-4">
-                      {values.authMethod === "oauth" ? (
-                        <>
-                          <FormField
-                            name="authorizationUrl"
-                            state={
-                              errors.authorizationUrl &&
-                              touched.authorizationUrl
-                                ? "error"
-                                : touched.authorizationUrl
-                                  ? "success"
-                                  : "idle"
-                            }
-                          >
-                            <FormField.Label>Authorization URL</FormField.Label>
-                            <FormField.Control asChild>
-                              <InputTypeIn
-                                name="authorizationUrl"
-                                value={values.authorizationUrl}
-                                onChange={handleChange}
-                                placeholder="https://example.com/oauth/authorize"
-                                showClearButton={false}
-                              />
-                            </FormField.Control>
-                            <FormField.Message
-                              messages={{
-                                error: errors.authorizationUrl,
-                              }}
+                    {values.authMethod === "oauth" && (
+                      <section className="flex flex-col gap-4 rounded-12 bg-background-tint-00 border border-border-01 p-4">
+                        <FormField
+                          name="authorizationUrl"
+                          state={
+                            errors.authorizationUrl && touched.authorizationUrl
+                              ? "error"
+                              : touched.authorizationUrl
+                                ? "success"
+                                : "idle"
+                          }
+                        >
+                          <FormField.Label>Authorization URL</FormField.Label>
+                          <FormField.Control asChild>
+                            <InputTypeIn
+                              name="authorizationUrl"
+                              value={values.authorizationUrl}
+                              onChange={handleChange}
+                              placeholder="https://example.com/oauth/authorize"
+                              showClearButton={false}
                             />
-                          </FormField>
+                          </FormField.Control>
+                          <FormField.Message
+                            messages={{
+                              error: errors.authorizationUrl,
+                            }}
+                          />
+                        </FormField>
 
-                          <FormField
-                            name="tokenUrl"
-                            state={
-                              errors.tokenUrl && touched.tokenUrl
-                                ? "error"
-                                : touched.tokenUrl
-                                  ? "success"
-                                  : "idle"
-                            }
-                          >
-                            <FormField.Label>Token URL</FormField.Label>
-                            <FormField.Control asChild>
-                              <InputTypeIn
-                                name="tokenUrl"
-                                value={values.tokenUrl}
-                                onChange={handleChange}
-                                placeholder="https://example.com/oauth/access_token"
-                                showClearButton={false}
-                              />
-                            </FormField.Control>
-                            <FormField.Message
-                              messages={{
-                                error: errors.tokenUrl,
-                              }}
+                        <FormField
+                          name="tokenUrl"
+                          state={
+                            errors.tokenUrl && touched.tokenUrl
+                              ? "error"
+                              : touched.tokenUrl
+                                ? "success"
+                                : "idle"
+                          }
+                        >
+                          <FormField.Label>Token URL</FormField.Label>
+                          <FormField.Control asChild>
+                            <InputTypeIn
+                              name="tokenUrl"
+                              value={values.tokenUrl}
+                              onChange={handleChange}
+                              placeholder="https://example.com/oauth/access_token"
+                              showClearButton={false}
                             />
-                          </FormField>
+                          </FormField.Control>
+                          <FormField.Message
+                            messages={{
+                              error: errors.tokenUrl,
+                            }}
+                          />
+                        </FormField>
 
-                          <FormField
-                            name="clientId"
-                            state={
-                              errors.clientId && touched.clientId
-                                ? "error"
-                                : touched.clientId
-                                  ? "success"
-                                  : "idle"
-                            }
-                          >
-                            <FormField.Label>OAuth Client ID</FormField.Label>
-                            <FormField.Control asChild>
-                              <InputTypeIn
-                                name="clientId"
-                                value={values.clientId}
-                                onChange={handleChange}
-                                placeholder=" "
-                                showClearButton={false}
-                              />
-                            </FormField.Control>
-                            {isEditingOAuthConfig && (
-                              <FormField.Description>
-                                Leave blank to keep the current client ID.
-                              </FormField.Description>
-                            )}
-                            <FormField.Message
-                              messages={{
-                                error: errors.clientId,
-                              }}
+                        <FormField
+                          name="clientId"
+                          state={
+                            errors.clientId && touched.clientId
+                              ? "error"
+                              : touched.clientId
+                                ? "success"
+                                : "idle"
+                          }
+                        >
+                          <FormField.Label>OAuth Client ID</FormField.Label>
+                          <FormField.Control asChild>
+                            <InputTypeIn
+                              name="clientId"
+                              value={values.clientId}
+                              onChange={handleChange}
+                              placeholder=" "
+                              showClearButton={false}
                             />
-                          </FormField>
-
-                          <FormField
-                            name="clientSecret"
-                            state={
-                              errors.clientSecret && touched.clientSecret
-                                ? "error"
-                                : touched.clientSecret
-                                  ? "success"
-                                  : "idle"
-                            }
-                          >
-                            <FormField.Label>
-                              OAuth Client Secret
-                            </FormField.Label>
-                            <FormField.Control asChild>
-                              <PasswordInputTypeIn
-                                name="clientSecret"
-                                value={values.clientSecret}
-                                onChange={handleChange}
-                                placeholder=" "
-                                showClearButton={false}
-                              />
-                            </FormField.Control>
-                            {isEditingOAuthConfig && (
-                              <FormField.Description>
-                                Leave blank to keep the current client secret.
-                              </FormField.Description>
-                            )}
-                            <FormField.Message
-                              messages={{
-                                error: errors.clientSecret,
-                              }}
-                            />
-                          </FormField>
-
-                          <FormField
-                            name="scopes"
-                            state={
-                              errors.scopes && touched.scopes
-                                ? "error"
-                                : touched.scopes
-                                  ? "success"
-                                  : "idle"
-                            }
-                          >
-                            <FormField.Label>
-                              Scopes{" "}
-                              <span className="text-text-03">(Optional)</span>
-                            </FormField.Label>
-                            <FormField.Control asChild>
-                              <InputTypeIn
-                                name="scopes"
-                                value={values.scopes}
-                                onChange={handleChange}
-                                placeholder="e.g. repo, user"
-                                showClearButton={false}
-                              />
-                            </FormField.Control>
+                          </FormField.Control>
+                          {isEditingOAuthConfig && (
                             <FormField.Description>
-                              Comma-separated list of OAuth scopes to request.
+                              Leave blank to keep the current client ID.
                             </FormField.Description>
-                            <FormField.Message
-                              messages={{
-                                error: errors.scopes,
-                              }}
-                            />
-                          </FormField>
+                          )}
+                          <FormField.Message
+                            messages={{
+                              error: errors.clientId,
+                            }}
+                          />
+                        </FormField>
 
-                          <div className="flex flex-col gap-3 rounded-12 bg-background-tint-01 p-3">
-                            <Text text03 secondaryBody>
-                              OAuth passthrough is only available if you enable
-                              OIDC or OAuth authentication.
+                        <FormField
+                          name="clientSecret"
+                          state={
+                            errors.clientSecret && touched.clientSecret
+                              ? "error"
+                              : touched.clientSecret
+                                ? "success"
+                                : "idle"
+                          }
+                        >
+                          <FormField.Label>OAuth Client Secret</FormField.Label>
+                          <FormField.Control asChild>
+                            <PasswordInputTypeIn
+                              name="clientSecret"
+                              value={values.clientSecret}
+                              onChange={handleChange}
+                              placeholder=" "
+                              showClearButton={false}
+                            />
+                          </FormField.Control>
+                          {isEditingOAuthConfig && (
+                            <FormField.Description>
+                              Leave blank to keep the current client secret.
+                            </FormField.Description>
+                          )}
+                          <FormField.Message
+                            messages={{
+                              error: errors.clientSecret,
+                            }}
+                          />
+                        </FormField>
+
+                        <FormField
+                          name="scopes"
+                          state={
+                            errors.scopes && touched.scopes
+                              ? "error"
+                              : touched.scopes
+                                ? "success"
+                                : "idle"
+                          }
+                        >
+                          <FormField.Label>
+                            Scopes{" "}
+                            <span className="text-text-03">(Optional)</span>
+                          </FormField.Label>
+                          <FormField.Control asChild>
+                            <InputTypeIn
+                              name="scopes"
+                              value={values.scopes}
+                              onChange={handleChange}
+                              placeholder="e.g. repo, user"
+                              showClearButton={false}
+                            />
+                          </FormField.Control>
+                          <FormField.Description>
+                            Comma-separated list of OAuth scopes to request.
+                          </FormField.Description>
+                          <FormField.Message
+                            messages={{
+                              error: errors.scopes,
+                            }}
+                          />
+                        </FormField>
+
+                        <div className="flex flex-col gap-3 rounded-12 bg-background-tint-01 p-3">
+                          <Text text03 secondaryBody>
+                            OAuth passthrough is only available if you enable
+                            OIDC or OAuth authentication.
+                          </Text>
+                          <div className="flex flex-col gap-2 w-full">
+                            <Text
+                              text03
+                              secondaryBody
+                              className="flex flex-wrap gap-1"
+                            >
+                              Use{" "}
+                              <span className="font-secondary-action">
+                                redirect URI
+                              </span>
+                              :
                             </Text>
-                            <div className="flex flex-col gap-2 w-full">
+                            <div className="flex items-center gap-2 rounded-08 border border-border-01 bg-background-tint-00 px-3 py-2">
                               <Text
-                                text03
-                                secondaryBody
-                                className="flex flex-wrap gap-1"
+                                text04
+                                className="font-mono text-[12px] leading-[16px] truncate flex-1"
                               >
-                                Use{" "}
-                                <span className="font-secondary-action">
-                                  redirect URI
-                                </span>
-                                :
+                                {redirectUri}
                               </Text>
-                              <div className="flex items-center gap-2 rounded-08 border border-border-01 bg-background-tint-00 px-3 py-2">
-                                <Text
-                                  text04
-                                  className="font-mono text-[12px] leading-[16px] truncate flex-1"
-                                >
-                                  {redirectUri}
-                                </Text>
-                                <CopyIconButton
-                                  getCopyText={() => redirectUri}
-                                  tooltip="Copy redirect URI"
-                                  internal
-                                />
-                              </div>
+                              <CopyIconButton
+                                getCopyText={() => redirectUri}
+                                tooltip="Copy redirect URI"
+                                internal
+                              />
                             </div>
                           </div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="flex flex-col gap-2">
-                            <Text mainUiAction text04>
-                              Authentication Headers
-                            </Text>
-                            <Text secondaryBody text03>
-                              Specify custom headers for all requests sent to
-                              this action&apos;s API endpoint.
-                            </Text>
-                          </div>
-                          <FormField
-                            name="headers"
-                            state={errors.headers ? "error" : "idle"}
-                          >
-                            <FormField.Control asChild>
-                              <KeyValueInput
-                                keyTitle="Header"
-                                valueTitle="Value"
-                                items={values.headers}
-                                onChange={(items) =>
-                                  setFieldValue("headers", items)
-                                }
-                                addButtonLabel="Add Header"
-                                onValidationError={(message) =>
-                                  setFieldError("headers", message || undefined)
-                                }
-                                layout="equal"
-                              />
-                            </FormField.Control>
-                            <FormField.Message
-                              messages={{
-                                error:
-                                  typeof errors.headers === "string"
-                                    ? errors.headers
-                                    : undefined,
-                              }}
+                        </div>
+                      </section>
+                    )}
+                    {values.authMethod === "custom-header" && (
+                      <section className="flex flex-col gap-4 rounded-12 bg-background-tint-00 border border-border-01 p-4">
+                        <div className="flex flex-col gap-2">
+                          <Text mainUiAction text04>
+                            Authentication Headers
+                          </Text>
+                          <Text secondaryBody text03>
+                            Specify custom headers for all requests sent to this
+                            action&apos;s API endpoint.
+                          </Text>
+                        </div>
+                        <FormField
+                          name="headers"
+                          state={errors.headers ? "error" : "idle"}
+                        >
+                          <FormField.Control asChild>
+                            <KeyValueInput
+                              keyTitle="Header"
+                              valueTitle="Value"
+                              items={values.headers}
+                              onChange={(items) =>
+                                setFieldValue("headers", items)
+                              }
+                              addButtonLabel="Add Header"
+                              onValidationError={(message) =>
+                                setFieldError("headers", message || undefined)
+                              }
+                              layout="equal"
                             />
-                          </FormField>
-                        </>
-                      )}
-                    </section>
+                          </FormField.Control>
+                          <FormField.Message
+                            messages={{
+                              error:
+                                typeof errors.headers === "string"
+                                  ? errors.headers
+                                  : undefined,
+                            }}
+                          />
+                        </FormField>
+                      </section>
+                    )}
+                    {values.authMethod === "pt-oauth" && (
+                      <Message
+                        text="Use pass-through for services with shared identity provider."
+                        description="Onyx will forward the user's OAuth access token directly to the server as an Authorization header. Make sure the server supports authentication with the same provider."
+                        default
+                        medium
+                        static
+                        className="w-full"
+                        close={false}
+                      />
+                    )}
                   </>
                 )}
               </Modal.Body>
 
-              <Modal.Footer className="p-4 gap-2 bg-background-tint-00">
+              <Modal.Footer className="gap-2">
                 <Button main tertiary type="button" onClick={handleSkip}>
-                  Skip for Now
+                  Cancel
                 </Button>
                 <Button
                   main
                   primary
                   type="submit"
-                  disabled={!isValid || isSubmitting || shouldDisableForm}
+                  disabled={
+                    !isValid || isSubmitting || shouldDisableForm || !dirty
+                  }
                 >
-                  {isSubmitting
-                    ? "Saving..."
-                    : isEditMode
-                      ? "Save Changes"
-                      : "Save & Connect"}
+                  {isSubmitting ? "Connecting..." : "Connect"}
                 </Button>
               </Modal.Footer>
             </Form>

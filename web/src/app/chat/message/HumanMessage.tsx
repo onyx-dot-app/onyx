@@ -228,128 +228,111 @@ export default function HumanMessage({
   return (
     <div
       id="onyx-human-message"
-      className="pt-5 pb-1 w-full lg:px-5 flex -mr-6 relative"
+      className="pt-5 pb-1 w-full lg:px-5 flex justify-center -mr-6 relative"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       <div
         className={cn(
-          "text-user-text mx-auto max-w-[790px]",
+          "text-user-text max-w-[790px] md:px-4",
           shared ? "w-full" : "w-[90%]"
         )}
       >
-        <div className="xl:ml-8">
-          <div className="flex flex-col desktop:mr-4">
-            <FileDisplay alignBubble files={files || []} />
-
-            <div className="flex justify-end mt-1">
-              <div className="w-full ml-8 flex w-full w-[800px] break-words">
-                {isEditing ? (
-                  <MessageEditing
-                    content={content}
-                    onSubmitEdit={(editedContent) => {
-                      onEdit?.(editedContent);
-                      setContent(editedContent);
-                      setIsEditing(false);
-                    }}
-                    onCancelEdit={() => setIsEditing(false)}
-                  />
-                ) : typeof content === "string" ? (
-                  <>
-                    <div className="ml-auto flex items-center mr-1 h-fit mb-auto">
-                      {onEdit &&
-                      isHovered &&
-                      !isEditing &&
-                      (!files || files.length === 0) ? (
-                        <div className="flex flex-row items-center justify-center gap-1">
-                          <CopyIconButton
-                            getCopyText={() => content}
-                            tertiary
-                            data-testid="HumanMessage/copy-button"
-                          />
-                          <IconButton
-                            icon={SvgEdit}
-                            tertiary
-                            tooltip="Edit"
-                            onClick={() => {
-                              setIsEditing(true);
-                              setIsHovered(false);
-                            }}
-                            data-testid="HumanMessage/edit-button"
-                          />
-                        </div>
-                      ) : (
-                        <div className="w-7" />
-                      )}
-                    </div>
-
-                    <div
-                      className={cn(
-                        "max-w-[25rem] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3",
-                        !(
-                          onEdit &&
-                          isHovered &&
-                          !isEditing &&
-                          (!files || files.length === 0)
-                        ) && "ml-auto"
-                      )}
-                    >
-                      <Text mainContentBody>{content}</Text>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    {onEdit &&
-                    isHovered &&
-                    !isEditing &&
-                    (!files || files.length === 0) ? (
-                      <div className="my-auto">
-                        <IconButton
-                          icon={SvgEdit}
-                          onClick={() => {
-                            setIsEditing(true);
-                            setIsHovered(false);
-                          }}
-                          tertiary
-                          tooltip="Edit"
-                        />
-                      </div>
-                    ) : (
-                      <div className="h-[27px]" />
-                    )}
-                    <div className="ml-auto rounded-lg p-1">{content}</div>
-                  </>
-                )}
+        <FileDisplay alignBubble files={files || []} />
+        <div className="flex flex-wrap justify-end break-words">
+          {isEditing ? (
+            <MessageEditing
+              content={content}
+              onSubmitEdit={(editedContent) => {
+                onEdit?.(editedContent);
+                setContent(editedContent);
+                setIsEditing(false);
+              }}
+              onCancelEdit={() => setIsEditing(false)}
+            />
+          ) : typeof content === "string" ? (
+            <>
+              <div className="md:max-w-[25rem] flex basis-[100%] md:basis-auto justify-end md:order-1">
+                <div
+                  className={
+                    "max-w-[25rem] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3"
+                  }
+                >
+                  <Text mainContentBody>{content}</Text>
+                </div>
               </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col md:flex-row gap-x-0.5 mt-1">
+              {onEdit &&
+              isHovered &&
+              !isEditing &&
+              (!files || files.length === 0) ? (
+                <div className="flex flex-row gap-1 p-1">
+                  <CopyIconButton
+                    getCopyText={() => content}
+                    tertiary
+                    data-testid="HumanMessage/copy-button"
+                  />
+                  <IconButton
+                    icon={SvgEdit}
+                    tertiary
+                    tooltip="Edit"
+                    onClick={() => {
+                      setIsEditing(true);
+                      setIsHovered(false);
+                    }}
+                    data-testid="HumanMessage/edit-button"
+                  />
+                </div>
+              ) : (
+                <div className="w-7 h-10" />
+              )}
+            </>
+          ) : (
+            <>
+              {onEdit &&
+              isHovered &&
+              !isEditing &&
+              (!files || files.length === 0) ? (
+                <div className="my-auto">
+                  <IconButton
+                    icon={SvgEdit}
+                    onClick={() => {
+                      setIsEditing(true);
+                      setIsHovered(false);
+                    }}
+                    tertiary
+                    tooltip="Edit"
+                  />
+                </div>
+              ) : (
+                <div className="h-[27px]" />
+              )}
+              <div className="ml-auto rounded-lg p-1">{content}</div>
+            </>
+          )}
+          <div className="md:min-w-[100%] flex justify-end order-1 mt-1">
             {currentMessageInd !== undefined &&
               onMessageSelection &&
               otherMessagesCanSwitchTo &&
               otherMessagesCanSwitchTo.length > 1 && (
-                <div className="ml-auto mr-3">
-                  <MessageSwitcher
-                    disableForStreaming={disableSwitchingForStreaming}
-                    currentPage={currentMessageInd + 1}
-                    totalPages={otherMessagesCanSwitchTo.length}
-                    handlePrevious={() => {
-                      stopGenerating();
-                      const prevMessage = getPreviousMessage();
-                      if (prevMessage !== undefined) {
-                        onMessageSelection(prevMessage);
-                      }
-                    }}
-                    handleNext={() => {
-                      stopGenerating();
-                      const nextMessage = getNextMessage();
-                      if (nextMessage !== undefined) {
-                        onMessageSelection(nextMessage);
-                      }
-                    }}
-                  />
-                </div>
+                <MessageSwitcher
+                  disableForStreaming={disableSwitchingForStreaming}
+                  currentPage={currentMessageInd + 1}
+                  totalPages={otherMessagesCanSwitchTo.length}
+                  handlePrevious={() => {
+                    stopGenerating();
+                    const prevMessage = getPreviousMessage();
+                    if (prevMessage !== undefined) {
+                      onMessageSelection(prevMessage);
+                    }
+                  }}
+                  handleNext={() => {
+                    stopGenerating();
+                    const nextMessage = getNextMessage();
+                    if (nextMessage !== undefined) {
+                      onMessageSelection(nextMessage);
+                    }
+                  }}
+                />
               )}
           </div>
         </div>

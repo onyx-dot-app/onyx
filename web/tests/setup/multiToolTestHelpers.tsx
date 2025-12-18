@@ -12,7 +12,8 @@ import MultiToolRenderer from "@/app/chat/message/messageComponents/MultiToolRen
  */
 export const createToolPacket = (
   turn_index: number,
-  type: "search" | "custom" | "reasoning" | "fetch" = "custom"
+  type: "search" | "custom" | "reasoning" | "fetch" = "custom",
+  tab_index: number = 0
 ): Packet => {
   const packetTypes = {
     search: PacketType.SEARCH_TOOL_START,
@@ -23,6 +24,7 @@ export const createToolPacket = (
 
   return {
     turn_index,
+    tab_index,
     obj: {
       type: packetTypes[type],
       tool_name: `Tool ${turn_index + 1}`,
@@ -39,11 +41,13 @@ export const createToolPacket = (
  * in MultiToolRenderer and SearchToolRendererV2.
  */
 export const createInternalSearchToolGroup = (
-  turn_index: number = 0
-): { turn_index: number; packets: Packet[] } => {
+  turn_index: number = 0,
+  tab_index: number = 0
+): { turn_index: number; tab_index: number; packets: Packet[] } => {
   const packets: Packet[] = [
     {
       turn_index,
+      tab_index,
       obj: {
         type: PacketType.SEARCH_TOOL_START,
         is_internet_search: false,
@@ -51,6 +55,7 @@ export const createInternalSearchToolGroup = (
     },
     {
       turn_index,
+      tab_index,
       obj: {
         type: PacketType.SEARCH_TOOL_QUERIES_DELTA,
         queries: ["example query"],
@@ -58,6 +63,7 @@ export const createInternalSearchToolGroup = (
     },
     {
       turn_index,
+      tab_index,
       obj: {
         type: PacketType.SEARCH_TOOL_DOCUMENTS_DELTA,
         documents: [
@@ -70,13 +76,14 @@ export const createInternalSearchToolGroup = (
     },
     {
       turn_index,
+      tab_index,
       obj: {
         type: PacketType.SECTION_END,
       } as any,
     },
   ];
 
-  return { turn_index, packets };
+  return { turn_index, tab_index, packets };
 };
 
 /**
@@ -85,8 +92,68 @@ export const createInternalSearchToolGroup = (
 export const createToolGroups = (count: number) =>
   Array.from({ length: count }, (_, i) => ({
     turn_index: i,
+    tab_index: 0,
     packets: [createToolPacket(i)],
   }));
+
+/**
+ * Create parallel tool groups (multiple tools with the same turn_index but different tab_index)
+ */
+export const createParallelToolGroups = (
+  turn_index: number,
+  toolConfigs: Array<{
+    type: "search" | "custom" | "reasoning" | "fetch";
+    isInternet?: boolean;
+  }>
+) =>
+  toolConfigs.map((config, i) => {
+    if (config.type === "search") {
+      return {
+        turn_index,
+        tab_index: i,
+        packets: [
+          {
+            turn_index,
+            tab_index: i,
+            obj: {
+              type: PacketType.SEARCH_TOOL_START,
+              is_internet_search: config.isInternet ?? false,
+            } as any,
+          },
+          {
+            turn_index,
+            tab_index: i,
+            obj: {
+              type: PacketType.SEARCH_TOOL_QUERIES_DELTA,
+              queries: ["test query"],
+            } as any,
+          },
+          {
+            turn_index,
+            tab_index: i,
+            obj: {
+              type: PacketType.SEARCH_TOOL_DOCUMENTS_DELTA,
+              documents: [
+                { document_id: `doc-${i}`, semantic_identifier: `Doc ${i}` },
+              ],
+            } as any,
+          },
+          {
+            turn_index,
+            tab_index: i,
+            obj: {
+              type: PacketType.SECTION_END,
+            } as any,
+          },
+        ],
+      };
+    }
+    return {
+      turn_index,
+      tab_index: i,
+      packets: [createToolPacket(turn_index, config.type, i)],
+    };
+  });
 
 /**
  * Create minimal mock chatState
@@ -122,7 +189,11 @@ export const renderMultiToolRenderer = (
     stopPacketSeen?: boolean;
     onAllToolsDisplayed?: () => void;
     chatState?: any;
-    packetGroups?: { turn_index: number; packets: Packet[] }[];
+    packetGroups?: {
+      turn_index: number;
+      tab_index: number;
+      packets: Packet[];
+    }[];
   } = {}
 ) => {
   const {

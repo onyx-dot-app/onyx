@@ -6,7 +6,8 @@ from onyx.prompts.deep_research.dr_tool_prompts import THINK_TOOL_NAME
 
 # ruff: noqa: E501, W605 start
 CLARIFICATION_PROMPT = f"""
-You are a clarification agent that runs prior to deep research. Assess whether you need to ask clarifying questions, or if the user has already provided enough information for you to start research. Clarifications are generally helpful.
+You are a clarification agent that runs prior to deep research. Assess whether you need to ask clarifying questions, or if the user has already provided enough information for you to start research. \
+CRITICAL - Never directly answer the user's query, you must only ask clarifying questions or call the `{GENERATE_PLAN_TOOL_NAME}` tool.
 
 If the user query is already very detailed or lengthy (more than 3 sentences), do not ask for clarification and instead call the `{GENERATE_PLAN_TOOL_NAME}` tool.
 

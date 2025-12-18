@@ -35,8 +35,11 @@ CLAUDE_REASONING_BUDGET_TOKENS: dict[ReasoningEffort, int] = {
 }
 
 # OpenAI reasoning effort mapping (direct string values)
-OPENAI_REASONING_EFFORT: dict[ReasoningEffort, str] = {
-    ReasoningEffort.OFF: "none",  # this only works for the 5 series though
+# TODO this needs to be cleaned up, there is a lot of jank and unnecessary slowness
+# Also there should be auto for reasoning level which is not used here.
+OPENAI_REASONING_EFFORT: dict[ReasoningEffort | None, str] = {
+    None: "medium",  # Seems there is no auto mode in this version unfortunately
+    ReasoningEffort.OFF: "low",  # Issues with 5.2 models not supporting minimal or off with this version of litellm
     ReasoningEffort.LOW: "low",
     ReasoningEffort.MEDIUM: "medium",
     ReasoningEffort.HIGH: "high",

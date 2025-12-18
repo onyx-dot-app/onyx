@@ -4,12 +4,8 @@ import React from "react";
 import { cn } from "@/lib/utils";
 import Button from "@/refresh-components/buttons/Button";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import IconButton from "@/refresh-components/buttons/IconButton";
-import { SvgFold, SvgRefreshCw } from "@opal/icons";
+import { SvgFold } from "@opal/icons";
 interface ToolsSectionProps {
-  isRefreshing?: boolean;
-  onRefresh?: () => void;
-  onDisableAll?: () => void;
   onFold?: () => void;
   searchQuery: string;
   onSearchQueryChange: (query: string) => void;
@@ -17,9 +13,6 @@ interface ToolsSectionProps {
 }
 
 const ToolsSection: React.FC<ToolsSectionProps> = ({
-  isRefreshing,
-  onRefresh,
-  onDisableAll,
   onFold,
   searchQuery,
   onSearchQueryChange,
@@ -47,24 +40,6 @@ const ToolsSection: React.FC<ToolsSectionProps> = ({
 
         {/* Actions */}
         <div className="flex gap-1 items-center p-1">
-          {/* Refresh Button */}
-          {onRefresh && (
-            <IconButton
-              icon={SvgRefreshCw}
-              onClick={onRefresh}
-              tertiary
-              tooltip="Refresh tools"
-              className={cn(isRefreshing && "animate-spin")}
-            />
-          )}
-
-          {/* Disable All Button */}
-          {onDisableAll && (
-            <Button tertiary onClick={onDisableAll}>
-              Disable All
-            </Button>
-          )}
-
           {/* Fold Button */}
           {onFold && (
             <Button tertiary onClick={onFold} rightIcon={SvgFold}>

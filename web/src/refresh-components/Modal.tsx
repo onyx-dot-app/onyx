@@ -7,6 +7,8 @@ import type { IconProps } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgX } from "@opal/icons";
+import Truncated from "@/refresh-components/texts/Truncated";
+
 /**
  * Modal Root Component
  *
@@ -382,9 +384,9 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
             )}
           </div>
           <DialogPrimitive.Title asChild>
-            <Text headingH3 as="span">
+            <Truncated headingH3 as="span">
               {title}
-            </Text>
+            </Truncated>
           </DialogPrimitive.Title>
           {description && (
             <DialogPrimitive.Description>
@@ -461,7 +463,7 @@ const ModalFooter = React.forwardRef<HTMLDivElement, ModalFooterProps>(
       <div
         ref={ref}
         className={cn(
-          "flex flex-row items-center justify-end gap-1 p-4",
+          "flex flex-row items-center justify-end gap-1 p-4 w-full",
           className
         )}
         {...props}

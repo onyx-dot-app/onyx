@@ -397,7 +397,9 @@ class TestMCPPassThroughOAuth:
             side_effect=mock_call_mcp_tool,
         ):
             # Run the tool
-            response = mcp_tool.run(turn_index=0, override_kwargs=None, input="test")
+            response = mcp_tool.run(
+                turn_index=0, tab_index=0, override_kwargs=None, input="test"
+            )
             print(response.rich_response)
             assert isinstance(response.rich_response, CustomToolCallSummary)
             print(response.rich_response.tool_result)

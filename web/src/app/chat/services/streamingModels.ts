@@ -215,56 +215,67 @@ export type ObjTypes =
 // Packet wrapper for streaming objects
 export interface Packet {
   turn_index: number;
+  tab_index?: number; // For parallel tool calls - tools with same turn_index but different tab_index run in parallel
   obj: ObjTypes;
 }
 
 export interface ChatPacket {
   turn_index: number;
+  tab_index?: number;
   obj: ChatObj;
 }
 
 export interface StopPacket {
   turn_index: number;
+  tab_index?: number;
   obj: StopObj;
 }
 
 export interface CitationPacket {
   turn_index: number;
+  tab_index?: number;
   obj: CitationObj;
 }
 
 // New specific tool packet types
 export interface SearchToolPacket {
   turn_index: number;
+  tab_index?: number;
   obj: SearchToolObj;
 }
 
 export interface ImageGenerationToolPacket {
   turn_index: number;
+  tab_index?: number;
   obj: ImageGenerationToolObj;
 }
 
 export interface PythonToolPacket {
   turn_index: number;
+  tab_index?: number;
   obj: PythonToolObj;
 }
 
 export interface FetchToolPacket {
   turn_index: number;
+  tab_index?: number;
   obj: FetchToolObj;
 }
 
 export interface CustomToolPacket {
   turn_index: number;
+  tab_index?: number;
   obj: CustomToolObj;
 }
 
 export interface ReasoningPacket {
   turn_index: number;
+  tab_index?: number;
   obj: ReasoningObj;
 }
 
 export interface SectionEndPacket {
   turn_index: number;
+  tab_index?: number;
   obj: SectionEndObj;
 }

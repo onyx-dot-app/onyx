@@ -35,6 +35,7 @@ import {
 import { useMessageSwitching } from "@/app/chat/message/messageComponents/hooks/useMessageSwitching";
 import MultiToolRenderer from "@/app/chat/message/messageComponents/MultiToolRenderer";
 import { RendererComponent } from "@/app/chat/message/messageComponents/renderMessageComponent";
+import { parseToolKey } from "@/app/chat/message/messageComponents/toolDisplayHelpers";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
@@ -174,16 +175,17 @@ export default function AIMessage({
   // CitationMap for immediate rendering: citation_num -> document_id
   const citationMapRef = useRef<CitationMap>({});
   const documentMapRef = useRef<Map<string, OnyxDocument>>(new Map());
-  const groupedPacketsMapRef = useRef<Map<number, Packet[]>>(new Map());
-  const groupedPacketsRef = useRef<{ turn_index: number; packets: Packet[] }[]>(
-    []
-  );
+  // Use composite key "turn_index-tab_index" for grouping to support parallel tool calls
+  const groupedPacketsMapRef = useRef<Map<string, Packet[]>>(new Map());
+  const groupedPacketsRef = useRef<
+    { turn_index: number; tab_index: number; packets: Packet[] }[]
+  >([]);
   const finalAnswerComingRef = useRef<boolean>(isFinalAnswerComing(rawPackets));
   const displayCompleteRef = useRef<boolean>(isStreamingComplete(rawPackets));
   const stopPacketSeenRef = useRef<boolean>(isStreamingComplete(rawPackets));
-  // Track turn_index values for graceful SECTION_END injection
-  const seenTurnIndicesRef = useRef<Set<number>>(new Set());
-  const turnIndicesWithSectionEndRef = useRef<Set<number>>(new Set());
+  // Track composite keys "turn_index-tab_index" for graceful SECTION_END injection
+  const seenGroupKeysRef = useRef<Set<string>>(new Set());
+  const groupKeysWithSectionEndRef = useRef<Set<string>>(new Set());
 
   // Reset incremental state when switching messages or when stream resets
   const resetState = () => {
@@ -197,8 +199,8 @@ export default function AIMessage({
     finalAnswerComingRef.current = isFinalAnswerComing(rawPackets);
     displayCompleteRef.current = isStreamingComplete(rawPackets);
     stopPacketSeenRef.current = isStreamingComplete(rawPackets);
-    seenTurnIndicesRef.current = new Set();
-    turnIndicesWithSectionEndRef.current = new Set();
+    seenGroupKeysRef.current = new Set();
+    groupKeysWithSectionEndRef.current = new Set();
   };
   useEffect(() => {
     resetState();
@@ -226,21 +228,24 @@ export default function AIMessage({
   };
 
   // Helper function to inject synthetic SECTION_END packet
-  const injectSectionEnd = (turn_index: number) => {
-    if (turnIndicesWithSectionEndRef.current.has(turn_index)) {
+  const injectSectionEnd = (groupKey: string) => {
+    if (groupKeysWithSectionEndRef.current.has(groupKey)) {
       return; // Already has SECTION_END
     }
 
+    const { turn_index, tab_index } = parseToolKey(groupKey);
+
     const syntheticPacket: Packet = {
       turn_index,
+      tab_index,
       obj: { type: PacketType.SECTION_END },
     };
 
-    const existingGroup = groupedPacketsMapRef.current.get(turn_index);
+    const existingGroup = groupedPacketsMapRef.current.get(groupKey);
     if (existingGroup) {
       existingGroup.push(syntheticPacket);
     }
-    turnIndicesWithSectionEndRef.current.add(turn_index);
+    groupKeysWithSectionEndRef.current.add(groupKey);
   };
 
   // Process only the new packets synchronously for this render
@@ -250,31 +255,39 @@ export default function AIMessage({
       if (!packet) continue;
 
       const currentTurnIndex = packet.turn_index;
-      const isNewTurnIndex = !seenTurnIndicesRef.current.has(currentTurnIndex);
+      const currentTabIndex = packet.tab_index ?? 0;
+      const currentGroupKey = `${currentTurnIndex}-${currentTabIndex}`;
+      // If we see a new turn_index (not just tab_index), inject SECTION_END for previous groups
+      // We only inject SECTION_END when moving to a completely new turn, not for parallel tools
+      const previousTurnIndices = new Set(
+        Array.from(seenGroupKeysRef.current).map(
+          (key) => parseToolKey(key).turn_index
+        )
+      );
+      const isNewTurnIndex = !previousTurnIndices.has(currentTurnIndex);
 
-      // If we see a new turn_index, inject SECTION_END for previous turn indices
-      if (isNewTurnIndex && seenTurnIndicesRef.current.size > 0) {
-        Array.from(seenTurnIndicesRef.current).forEach((prevTurnIndex) => {
-          if (!turnIndicesWithSectionEndRef.current.has(prevTurnIndex)) {
-            injectSectionEnd(prevTurnIndex);
+      if (isNewTurnIndex && seenGroupKeysRef.current.size > 0) {
+        Array.from(seenGroupKeysRef.current).forEach((prevGroupKey) => {
+          if (!groupKeysWithSectionEndRef.current.has(prevGroupKey)) {
+            injectSectionEnd(prevGroupKey);
           }
         });
       }
 
-      // Track this turn_index
-      seenTurnIndicesRef.current.add(currentTurnIndex);
+      // Track this group key
+      seenGroupKeysRef.current.add(currentGroupKey);
 
       // Track SECTION_END packets
       if (packet.obj.type === PacketType.SECTION_END) {
-        turnIndicesWithSectionEndRef.current.add(currentTurnIndex);
+        groupKeysWithSectionEndRef.current.add(currentGroupKey);
       }
 
-      // Grouping by turn_index
-      const existingGroup = groupedPacketsMapRef.current.get(packet.turn_index);
+      // Grouping by composite key (turn_index, tab_index)
+      const existingGroup = groupedPacketsMapRef.current.get(currentGroupKey);
       if (existingGroup) {
         existingGroup.push(packet);
       } else {
-        groupedPacketsMapRef.current.set(packet.turn_index, [packet]);
+        groupedPacketsMapRef.current.set(currentGroupKey, [packet]);
       }
 
       // Citations - handle CITATION_INFO packets
@@ -324,15 +337,19 @@ export default function AIMessage({
         packet.obj.type === PacketType.PYTHON_TOOL_START ||
         packet.obj.type === PacketType.PYTHON_TOOL_DELTA
       ) {
+        // Set both ref and state to trigger re-render and show message content
+        if (!finalAnswerComingRef.current) {
+          setFinalAnswerComing(true);
+        }
         finalAnswerComingRef.current = true;
       }
 
       if (packet.obj.type === PacketType.STOP && !stopPacketSeenRef.current) {
         setStopPacketSeen(true);
-        // Inject SECTION_END for all turn_indices that don't have one
-        Array.from(seenTurnIndicesRef.current).forEach((turnIdx) => {
-          if (!turnIndicesWithSectionEndRef.current.has(turnIdx)) {
-            injectSectionEnd(turnIdx);
+        // Inject SECTION_END for all group keys that don't have one
+        Array.from(seenGroupKeysRef.current).forEach((groupKey) => {
+          if (!groupKeysWithSectionEndRef.current.has(groupKey)) {
+            injectSectionEnd(groupKey);
           }
         });
       }
@@ -349,15 +366,27 @@ export default function AIMessage({
       }
     }
 
-    // Rebuild the grouped packets array sorted by turn_index
+    // Rebuild the grouped packets array sorted by turn_index, then tab_index
     // Clone packet arrays to ensure referential changes so downstream memo hooks update
     // Filter out empty groups (groups with only SECTION_END and no content)
     groupedPacketsRef.current = Array.from(
       groupedPacketsMapRef.current.entries()
     )
-      .map(([turn_index, packets]) => ({ turn_index, packets: [...packets] }))
+      .map(([key, packets]) => {
+        const { turn_index, tab_index } = parseToolKey(key);
+        return {
+          turn_index,
+          tab_index,
+          packets: [...packets],
+        };
+      })
       .filter(({ packets }) => hasContentPackets(packets))
-      .sort((a, b) => a.turn_index - b.turn_index);
+      .sort((a, b) => {
+        if (a.turn_index !== b.turn_index) {
+          return a.turn_index - b.turn_index;
+        }
+        return a.tab_index - b.tab_index;
+      });
 
     lastProcessedIndexRef.current = rawPackets.length;
   }
@@ -445,7 +474,7 @@ export default function AIMessage({
                               (group) =>
                                 group.packets[0] &&
                                 isToolPacket(group.packets[0], false)
-                            ) as { turn_index: number; packets: Packet[] }[];
+                            );
 
                             // Non-tools include messages AND image generation
                             const displayGroups =
@@ -481,7 +510,7 @@ export default function AIMessage({
                                 {/* Render all display groups (messages + image generation) in main area */}
                                 {displayGroups.map((displayGroup, index) => (
                                   <RendererComponent
-                                    key={displayGroup.turn_index}
+                                    key={`${displayGroup.turn_index}-${displayGroup.tab_index}`}
                                     packets={displayGroup.packets}
                                     chatState={effectiveChatState}
                                     onComplete={() => {

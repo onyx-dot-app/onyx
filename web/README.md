@@ -22,6 +22,35 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 _Note:_ if you are having problems accessing the ^, try setting the `WEB_DOMAIN` env variable to
 `http://127.0.0.1:3000` and accessing it there.
 
+### Connecting to a Cloud Backend
+
+To test your local frontend development server against a cloud backend (e.g., staging or production),
+create a `.env.local` file in the `web/` directory with the following configuration:
+
+```text
+# Point local dev server to cloud backend
+# This allows testing frontend changes against the production/staging backend
+INTERNAL_URL=https://cloud.onyx.app/api
+
+# Debug auth cookie for authenticating against remote backend
+# This cookie is automatically injected into API requests when in development mode
+# To get this value:
+#   1. Go to https://st-dev.onyx.app (or your target backend URL) and log in
+#   2. Open DevTools (F12) → Application → Cookies → [your backend domain]
+#   3. Find the "fastapiusersauth" cookie and copy its value
+#   4. Paste the value below (without quotes)
+# Note: This cookie may expire, so you may need to refresh it periodically
+DEBUG_AUTH_COOKIE=your_cookie_value_here
+```
+
+**Important notes:**
+
+- The `.env.local` file should be created in the `web/` directory (same level as `package.json`)
+- After creating or modifying `.env.local`, restart your development server for changes to take effect
+- The `DEBUG_AUTH_COOKIE` is only used in development mode (`NODE_ENV=development`)
+- If `INTERNAL_URL` is not set, the frontend will connect to the local backend at `http://127.0.0.1:8080`
+- Keep your `.env.local` file secure and never commit it to version control (it should already be in `.gitignore`)
+
 ## Testing
 
 This testing process will reset your application into a clean state.

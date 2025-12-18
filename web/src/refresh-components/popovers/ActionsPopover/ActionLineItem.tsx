@@ -13,6 +13,7 @@ import type { IconProps } from "@opal/types";
 import { SvgChevronRight, SvgKey, SvgSettings, SvgSlash } from "@opal/icons";
 import { useActionsContext, ToolState } from "@/contexts/ActionsContext";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
+import { useRouter } from "next/navigation";
 
 export interface ActionItemProps {
   tool: ToolSnapshot;
@@ -21,6 +22,7 @@ export interface ActionItemProps {
   hasNoConnectors?: boolean;
   toolAuthStatus?: ToolAuthStatus;
   onOAuthAuthenticate?: () => void;
+  onClose?: () => void;
 }
 
 export default function ActionLineItem({
@@ -30,10 +32,13 @@ export default function ActionLineItem({
   hasNoConnectors = false,
   toolAuthStatus,
   onOAuthAuthenticate,
+  onClose,
 }: ActionItemProps) {
   const { currentProjectId } = useProjectsContext();
   const isProjectContext = !!currentProjectId;
+  const router = useRouter();
   const { toolMap, setToolStatus } = useActionsContext();
+
   const Icon = tool ? getIconForAction(tool) : ProvidedIcon!;
   const toolName = tool.name;
 
@@ -43,7 +48,7 @@ export default function ActionLineItem({
   const disabled = toolState === ToolState.Disabled;
   const isForced = toolState === ToolState.Forced;
 
-  let label =
+  const label =
     isProjectContext && tool.in_code_tool_id === SEARCH_TOOL_ID
       ? "Project Search"
       : tool.display_name;
@@ -62,6 +67,8 @@ export default function ActionLineItem({
     // const target = disabled ? ToolState.Enabled : ToolState.Enabled;
     setToolStatus(tool.id, ToolState.Disabled);
   }
+  const isSearchToolAndNotInProject =
+    tool?.in_code_tool_id === SEARCH_TOOL_ID && !currentProjectId;
 
   return (
     <SimpleTooltip tooltip={tool.description}>
@@ -70,8 +77,9 @@ export default function ActionLineItem({
           onClick={() => {
             if (isSearchToolWithNoConnectors) return;
             handleToggle();
-            // if (disabled) handleToggle();
-            // handleForceToggle();
+            if (isSearchToolAndNotInProject && !isForced)
+              onSourceManagementOpen?.();
+            else onClose?.();
           }}
           selected={isForced}
           strikethrough={disabled || isSearchToolWithNoConnectors}
@@ -110,32 +118,28 @@ export default function ActionLineItem({
                   tooltip={disabled ? "Enable" : "Disable"}
                 />
               )}
-              {tool &&
-                tool.in_code_tool_id === SEARCH_TOOL_ID &&
-                !isProjectContext && (
-                  <IconButton
-                    icon={
-                      isSearchToolWithNoConnectors
-                        ? SvgSettings
-                        : SvgChevronRight
-                    }
-                    onClick={noProp(() => {
-                      if (isSearchToolWithNoConnectors)
-                        window.location.href = "/admin/add-connector";
-                      else onSourceManagementOpen?.();
-                    })}
-                    internal
-                    className={cn(
-                      isSearchToolWithNoConnectors &&
-                        "invisible group-hover/LineItem:visible"
-                    )}
-                    tooltip={
-                      isSearchToolWithNoConnectors
-                        ? "Setup Connectors"
-                        : "Configure Connectors"
-                    }
-                  />
-                )}
+              {isSearchToolAndNotInProject && (
+                <IconButton
+                  icon={
+                    isSearchToolWithNoConnectors ? SvgSettings : SvgChevronRight
+                  }
+                  onClick={noProp(() => {
+                    if (isSearchToolWithNoConnectors)
+                      router.push("/admin/add-connector");
+                    else onSourceManagementOpen?.();
+                  })}
+                  internal
+                  className={cn(
+                    isSearchToolWithNoConnectors &&
+                      "invisible group-hover/LineItem:visible"
+                  )}
+                  tooltip={
+                    isSearchToolWithNoConnectors
+                      ? "Add Connectors"
+                      : "Configure Connectors"
+                  }
+                />
+              )}
             </div>
           }
         >

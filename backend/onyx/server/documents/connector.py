@@ -10,6 +10,8 @@ from typing import cast
 
 from fastapi import APIRouter
 from fastapi import Depends
+from fastapi import File
+from fastapi import Form
 from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
@@ -23,6 +25,9 @@ from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
+from onyx.background.celery.tasks.pruning.tasks import (
+    try_creating_prune_generator_task,
+)
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.app_configs import ENABLED_CONNECTOR_TYPES
@@ -111,9 +116,13 @@ from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import AuthStatus
 from onyx.server.documents.models import AuthUrl
+from onyx.server.documents.models import ConnectorBase
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
+from onyx.server.documents.models import ConnectorFileInfo
+from onyx.server.documents.models import ConnectorFilesResponse
 from onyx.server.documents.models import ConnectorIndexingStatusLite
 from onyx.server.documents.models import ConnectorIndexingStatusLiteResponse
 from onyx.server.documents.models import ConnectorSnapshot
@@ -537,12 +546,246 @@ def upload_files(
     )
 
 
+def _normalize_file_names_for_backwards_compatibility(
+    file_locations: list[str], file_names: list[str]
+) -> list[str]:
+    """
+    Ensures file_names list is the same length as file_locations for backwards compatibility.
+    In legacy data, file_names might not exist or be shorter than file_locations.
+    If file_names is shorter, pads it with corresponding file_locations values.
+    """
+    return file_names + file_locations[len(file_names) :]
+
+
 @router.post("/admin/connector/file/upload")
 def upload_files_api(
     files: list[UploadFile],
     _: User = Depends(current_curator_or_admin_user),
 ) -> FileUploadResponse:
     return upload_files(files, FileOrigin.OTHER)
+
+
+@router.get("/admin/connector/{connector_id}/files")
+def list_connector_files(
+    connector_id: int,
+    user: User = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+) -> ConnectorFilesResponse:
+    """List all files in a file connector."""
+    connector = fetch_connector_by_id(connector_id, db_session)
+    if connector is None:
+        raise HTTPException(status_code=404, detail="Connector not found")
+
+    if connector.source != DocumentSource.FILE:
+        raise HTTPException(
+            status_code=400, detail="This endpoint only works with file connectors"
+        )
+
+    file_locations = connector.connector_specific_config.get("file_locations", [])
+    file_names = connector.connector_specific_config.get("file_names", [])
+
+    # Normalize file_names for backwards compatibility with legacy data
+    file_names = _normalize_file_names_for_backwards_compatibility(
+        file_locations, file_names
+    )
+
+    file_store = get_default_file_store()
+    files = []
+
+    for file_id, file_name in zip(file_locations, file_names):
+        try:
+            file_record = file_store.read_file_record(file_id)
+            file_size = None
+            upload_date = None
+            if file_record:
+                file_size = file_store.get_file_size(file_id)
+                upload_date = (
+                    file_record.created_at.isoformat()
+                    if file_record.created_at
+                    else None
+                )
+            files.append(
+                ConnectorFileInfo(
+                    file_id=file_id,
+                    file_name=file_name,
+                    file_size=file_size,
+                    upload_date=upload_date,
+                )
+            )
+        except Exception as e:
+            logger.warning(f"Error reading file record for {file_id}: {e}")
+            # Include file with basic info even if record fetch fails
+            files.append(
+                ConnectorFileInfo(
+                    file_id=file_id,
+                    file_name=file_name,
+                )
+            )
+
+    return ConnectorFilesResponse(files=files)
+
+
+@router.post("/admin/connector/{connector_id}/files/update")
+def update_connector_files(
+    connector_id: int,
+    files: list[UploadFile] | None = File(None),
+    file_ids_to_remove: str = Form("[]"),
+    user: User = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+) -> FileUploadResponse:
+    """
+    Update files in a connector by adding new files and/or removing existing ones.
+    This is an atomic operation that validates, updates the connector config, and triggers indexing.
+    """
+    files = files or []
+    connector = fetch_connector_by_id(connector_id, db_session)
+    if connector is None:
+        raise HTTPException(status_code=404, detail="Connector not found")
+
+    if connector.source != DocumentSource.FILE:
+        raise HTTPException(
+            status_code=400, detail="This endpoint only works with file connectors"
+        )
+
+    # Get the connector-credential pair for indexing/pruning triggers
+    cc_pair = fetch_connector_credential_pair_for_connector(db_session, connector_id)
+    if cc_pair is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No Connector-Credential Pair found for this connector",
+        )
+
+    # Parse file IDs to remove
+    try:
+        file_ids_list = json.loads(file_ids_to_remove)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid file_ids_to_remove format")
+
+    if not isinstance(file_ids_list, list):
+        raise HTTPException(
+            status_code=400,
+            detail="file_ids_to_remove must be a JSON-encoded list",
+        )
+
+    # Get current connector config
+    current_config = connector.connector_specific_config
+    current_file_locations = current_config.get("file_locations", [])
+    current_file_names = current_config.get("file_names", [])
+    current_zip_metadata = current_config.get("zip_metadata", {})
+
+    # Upload new files if any
+    new_file_paths = []
+    new_file_names_list = []
+    new_zip_metadata = {}
+
+    if files and len(files) > 0:
+        upload_response = upload_files(files, FileOrigin.CONNECTOR)
+        new_file_paths = upload_response.file_paths
+        new_file_names_list = upload_response.file_names
+        new_zip_metadata = upload_response.zip_metadata
+
+    # Remove specified files
+    files_to_remove_set = set(file_ids_list)
+
+    # Normalize file_names for backwards compatibility with legacy data
+    current_file_names = _normalize_file_names_for_backwards_compatibility(
+        current_file_locations, current_file_names
+    )
+
+    remaining_file_locations = []
+    remaining_file_names = []
+
+    for file_id, file_name in zip(current_file_locations, current_file_names):
+        if file_id not in files_to_remove_set:
+            remaining_file_locations.append(file_id)
+            remaining_file_names.append(file_name)
+
+    # Combine remaining files with new files
+    final_file_locations = remaining_file_locations + new_file_paths
+    final_file_names = remaining_file_names + new_file_names_list
+
+    # Validate that at least one file remains
+    if not final_file_locations:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot remove all files from connector. At least one file must remain.",
+        )
+
+    # Update zip metadata
+    final_zip_metadata = {
+        key: value
+        for key, value in current_zip_metadata.items()
+        if key not in files_to_remove_set
+    }
+    final_zip_metadata.update(new_zip_metadata)
+
+    # Update connector config
+    updated_config = {
+        **current_config,
+        "file_locations": final_file_locations,
+        "file_names": final_file_names,
+        "zip_metadata": final_zip_metadata,
+    }
+
+    connector_base = ConnectorBase(
+        name=connector.name,
+        source=connector.source,
+        input_type=connector.input_type,
+        connector_specific_config=updated_config,
+        refresh_freq=connector.refresh_freq,
+        prune_freq=connector.prune_freq,
+        indexing_start=connector.indexing_start,
+    )
+
+    updated_connector = update_connector(connector_id, connector_base, db_session)
+    if updated_connector is None:
+        raise HTTPException(
+            status_code=500, detail="Failed to update connector configuration"
+        )
+
+    # Trigger re-indexing for new files and pruning for removed files
+    try:
+        tenant_id = get_current_tenant_id()
+
+        # If files were added, mark for UPDATE indexing (only new docs)
+        if new_file_paths:
+            mark_ccpair_with_indexing_trigger(
+                cc_pair.id, IndexingMode.UPDATE, db_session
+            )
+
+            # Send task to check for indexing immediately
+            client_app.send_task(
+                OnyxCeleryTask.CHECK_FOR_INDEXING,
+                kwargs={"tenant_id": tenant_id},
+                priority=OnyxCeleryPriority.HIGH,
+            )
+            logger.info(
+                f"Marked cc_pair {cc_pair.id} for UPDATE indexing (new files) for connector {connector_id}"
+            )
+
+        # If files were removed, trigger pruning immediately
+        if file_ids_list:
+            r = get_redis_client()
+            payload_id = try_creating_prune_generator_task(
+                client_app, cc_pair, db_session, r, tenant_id
+            )
+            if payload_id:
+                logger.info(
+                    f"Triggered pruning for cc_pair {cc_pair.id} (removed files) for connector "
+                    f"{connector_id}, payload_id={payload_id}"
+                )
+            else:
+                logger.warning(
+                    f"Failed to trigger pruning for cc_pair {cc_pair.id} (removed files) for connector {connector_id}"
+                )
+    except Exception as e:
+        logger.error(f"Failed to trigger re-indexing after file update: {e}")
+
+    return FileUploadResponse(
+        file_paths=final_file_locations,
+        file_names=final_file_names,
+        zip_metadata=final_zip_metadata,
+    )
 
 
 @router.get("/admin/connector")
