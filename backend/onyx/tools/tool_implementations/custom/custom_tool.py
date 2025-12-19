@@ -18,6 +18,7 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.tools.interface import Tool
 from onyx.tools.models import CHAT_SESSION_ID_PLACEHOLDER
 from onyx.tools.models import CustomToolCallSummary
 from onyx.tools.models import CustomToolUserFileSnapshot

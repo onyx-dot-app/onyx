@@ -14,6 +14,7 @@ from onyx.server.query_and_chat.streaming_models import OpenUrlDocuments
 from onyx.server.query_and_chat.streaming_models import OpenUrlStart
 from onyx.server.query_and_chat.streaming_models import OpenUrlUrls
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.tools.interface import Tool
 from onyx.tools.models import OpenURLToolOverrideKwargs
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.open_url.models import WebContentProvider
