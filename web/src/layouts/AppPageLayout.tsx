@@ -11,7 +11,7 @@ import { useChatPageLayout } from "@/app/chat/stores/useChatSessionStore";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import { useChatSessionContext } from "@/contexts/ChatSessionContext";
+import useChatSessions from "@/hooks/useChatSessions";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import {
   handleMoveOperation,
@@ -72,7 +72,7 @@ export default function AppPageLayout({
     refreshCurrentProjectDetails,
     currentProjectId,
   } = useProjectsContext();
-  const { refreshChatSessions } = useChatSessionContext();
+  const { refreshChatSessions } = useChatSessions();
   const { popup, setPopup } = usePopup();
   const router = useRouter();
 

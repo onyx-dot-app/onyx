@@ -703,6 +703,15 @@ AVERAGE_SUMMARY_EMBEDDINGS = (
 
 MAX_TOKENS_FOR_FULL_INCLUSION = 4096
 
+# The intent was to have this be configurable per query, but I don't think any
+# codepath was actually configuring this, so for the migrated Vespa interface
+# we'll just use the default value, but also have it be configurable by env var.
+RECENCY_BIAS_MULTIPLIER = float(os.environ.get("RECENCY_BIAS_MULTIPLIER") or 1.0)
+
+# Should match the rerank-count value set in
+# backend/onyx/document_index/vespa/app_config/schemas/danswer_chunk.sd.jinja.
+RERANK_COUNT = int(os.environ.get("RERANK_COUNT") or 1000)
+
 
 #####
 # Tool Configs

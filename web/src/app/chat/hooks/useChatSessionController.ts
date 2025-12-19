@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useCallback, useState } from "react";
-import { ReadonlyURLSearchParams } from "next/navigation";
+import { useEffect, useRef, useCallback, useState } from "react";
+import { ReadonlyURLSearchParams, useRouter } from "next/navigation";
 import {
   nameChatSession,
   processRawChatHistory,
@@ -22,6 +22,8 @@ import {
   useChatSessionStore,
   useCurrentMessageHistory,
 } from "../stores/useChatSessionStore";
+import { getAvailableContextTokens } from "../services/lib";
+import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile } from "../projects/projectsService";
 import { getSessionProjectTokenCount } from "../projects/projectsService";
 import { getProjectFilesForSession } from "../projects/projectsService";
@@ -103,6 +105,7 @@ export function useChatSessionController({
   );
   const currentChatHistory = useCurrentMessageHistory();
   const chatSessions = useChatSessionStore((state) => state.sessions);
+  const { setForcedToolIds } = useForcedTools();
 
   // Fetch chat messages for the chat session
   useEffect(() => {
@@ -131,6 +134,18 @@ export function useChatSessionController({
       filterManager.setSelectedSources([]);
       filterManager.setSelectedTags([]);
       filterManager.setTimeRange(null);
+
+      // Remove uploaded files
+      setCurrentMessageFiles([]);
+
+      // If switching from one chat to another, then need to scroll again
+      // If we're creating a brand new chat, then don't need to scroll
+      if (priorChatSessionId !== null) {
+        setSelectedDocuments([]);
+
+        // Clear forced tool ids if and only if we're switching to a new chat session
+        setForcedToolIds([]);
+      }
     }
 
     async function initialSessionFetch() {

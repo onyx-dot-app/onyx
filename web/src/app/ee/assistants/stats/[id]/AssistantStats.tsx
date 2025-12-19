@@ -7,10 +7,10 @@ import {
   AdminDateRangeSelector,
   DateRange,
 } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
+import { useAgents } from "@/hooks/useAgents";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { AreaChartDisplay } from "@/components/ui/areaChart";
-import { useAgentsContext } from "@/contexts/AgentsContext";
 
 type AssistantDailyUsageEntry = {
   date: string;
@@ -24,14 +24,10 @@ type AssistantStatsResponse = {
   total_unique_users: number;
 };
 
-export interface AssistantStatsProps {
-  assistantId: number;
-}
-
-export default function AssistantStats({ assistantId }: AssistantStatsProps) {
+export function AssistantStats({ assistantId }: { assistantId: number }) {
   const [assistantStats, setAssistantStats] =
     useState<AssistantStatsResponse | null>(null);
-  const { agents } = useAgentsContext();
+  const { agents: assistants } = useAgents();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<DateRange>({
@@ -40,8 +36,8 @@ export default function AssistantStats({ assistantId }: AssistantStatsProps) {
   });
 
   const assistant = useMemo(() => {
-    return agents.find((a) => a.id === assistantId);
-  }, [agents, assistantId]);
+    return assistants.find((a) => a.id === assistantId);
+  }, [assistants, assistantId]);
 
   useEffect(() => {
     async function fetchStats() {

@@ -2,7 +2,7 @@
 
 import React, { useState, memo, useMemo, useEffect } from "react";
 import { useDraggable } from "@dnd-kit/core";
-import { useChatSessionContext } from "@/contexts/ChatSessionContext";
+import useChatSessions from "@/hooks/useChatSessions";
 import { deleteChatSession, renameChatSession } from "@/app/chat/services/lib";
 import { ChatSession } from "@/app/chat/interfaces";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -131,7 +131,7 @@ const ChatButton = memo(
     const [showShareModal, setShowShareModal] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [popoverItems, setPopoverItems] = useState<React.ReactNode[]>([]);
-    const { refreshChatSessions } = useChatSessionContext();
+    const { refreshChatSessions } = useChatSessions();
     const {
       refreshCurrentProjectDetails,
       projects,

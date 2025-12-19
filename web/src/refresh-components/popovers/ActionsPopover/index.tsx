@@ -1,7 +1,7 @@
 "use client";
 
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Popover,
   PopoverContent,
@@ -16,6 +16,8 @@ import {
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
 } from "@/lib/tools/interfaces";
+import { useForcedTools } from "@/lib/hooks/useForcedTools";
+import { useAssistantPreferences } from "@/app/chat/hooks/useAssistantPreferences";
 import { useUser } from "@/components/user/UserProvider";
 import { FilterManager, useSourcePreferences } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";
@@ -35,7 +37,6 @@ import MCPLineItem, {
   MCPServer,
 } from "@/refresh-components/popovers/ActionsPopover/MCPLineItem";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import { useActionsContext, ToolState } from "@/contexts/ActionsContext";
 import { SvgActions, SvgChevronRight, SvgKey, SvgSliders } from "@opal/icons";
 
 // Get source metadata for configured sources - deduplicated by source type
@@ -101,20 +102,12 @@ export default function ActionsPopover({
     selectedAssistant.id
   );
 
-  const {
-    enableAllSources: baseEnableAllSources,
-    disableAllSources: baseDisableAllSources,
-    toggleSource: baseToggleSource,
-    isSourceEnabled,
-  } = useSourcePreferences({
-    availableSources,
-    selectedSources,
-    setSelectedSources,
-  });
-
-  const [explicitlyUnpinnedToolIds, setExplicitlyUnpinnedToolIds] = useState<
-    Set<number>
-  >(new Set());
+  const { enableAllSources, disableAllSources, toggleSource, isSourceEnabled } =
+    useSourcePreferences({
+      availableSources,
+      selectedSources,
+      setSelectedSources,
+    });
 
   // Store MCP server auth/loading state (tools are part of selectedAssistant.tools)
   const [mcpServerData, setMcpServerData] = useState<{
@@ -141,84 +134,10 @@ export default function ActionsPopover({
     isAuthenticated: false,
   });
 
-  const { toolMap, setToolStatus, setToolsStatus, forcedToolIds } =
-    useActionsContext();
-
-  const internalSearchTool = useMemo(
-    () =>
-      selectedAssistant.tools.find(
-        (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID && !tool.mcp_server_id
-      ),
-    [selectedAssistant.tools]
-  );
-
-  const isExplicitlyUnpinned = useCallback(
-    (toolId: number) => explicitlyUnpinnedToolIds.has(toolId),
-    [explicitlyUnpinnedToolIds]
-  );
-
-  const markExplicitlyUnpinned = useCallback((toolId: number) => {
-    setExplicitlyUnpinnedToolIds((prev) => new Set(prev).add(toolId));
-  }, []);
-
-  const clearExplicitlyUnpinned = useCallback((toolId: number) => {
-    setExplicitlyUnpinnedToolIds((prev) => {
-      const next = new Set(prev);
-      next.delete(toolId);
-      return next;
-    });
-  }, []);
-
-  const enableAllSources = useCallback(() => {
-    baseEnableAllSources();
-    if (internalSearchTool && !isExplicitlyUnpinned(internalSearchTool.id)) {
-      setToolStatus(internalSearchTool.id, ToolState.Forced);
-    }
-  }, [
-    baseEnableAllSources,
-    internalSearchTool,
-    isExplicitlyUnpinned,
-    setToolStatus,
-  ]);
-
-  const disableAllSources = useCallback(() => {
-    baseDisableAllSources();
-    if (internalSearchTool && forcedToolIds.includes(internalSearchTool.id)) {
-      setToolStatus(internalSearchTool.id, ToolState.Enabled);
-    }
-  }, [baseDisableAllSources, internalSearchTool, forcedToolIds, setToolStatus]);
-
-  const toggleSource = useCallback(
-    (sourceUniqueKey: string) => {
-      const wasEnabled = isSourceEnabled(sourceUniqueKey);
-      baseToggleSource(sourceUniqueKey);
-
-      if (internalSearchTool) {
-        if (!wasEnabled) {
-          if (!isExplicitlyUnpinned(internalSearchTool.id)) {
-            setToolStatus(internalSearchTool.id, ToolState.Forced);
-          }
-        } else {
-          const configuredSources = getConfiguredSources(availableSources);
-          const remainingEnabled = configuredSources.filter(
-            (s) =>
-              s.uniqueKey !== sourceUniqueKey && isSourceEnabled(s.uniqueKey)
-          );
-          if (remainingEnabled.length === 0) {
-            setToolStatus(internalSearchTool.id, ToolState.Enabled);
-          }
-        }
-      }
-    },
-    [
-      baseToggleSource,
-      internalSearchTool,
-      isExplicitlyUnpinned,
-      isSourceEnabled,
-      availableSources,
-      setToolStatus,
-    ]
-  );
+  // Get the assistant preference for this assistant
+  const { assistantPreferences, setSpecificAssistantPreferences } =
+    useAssistantPreferences();
+  const { forcedToolIds, setForcedToolIds } = useForcedTools();
 
   const { isAdmin, isCurator } = useUser();
 
@@ -230,16 +149,31 @@ export default function ActionsPopover({
   // Check if there are any connectors available
   const hasNoConnectors = !ccPairs || ccPairs.length === 0;
 
-  const toggleToolForCurrentAssistant = useCallback(
-    (toolId: number) => {
-      const isDisabled = toolMap[toolId] === ToolState.Disabled;
-      setToolStatus(
-        toolId,
-        isDisabled ? ToolState.Enabled : ToolState.Disabled
-      );
-    },
-    [setToolStatus, toolMap]
-  );
+  const assistantPreference = assistantPreferences?.[selectedAssistant.id];
+  const disabledToolIds = assistantPreference?.disabled_tool_ids || [];
+  const toggleToolForCurrentAssistant = (toolId: number) => {
+    const disabled = disabledToolIds.includes(toolId);
+    setSpecificAssistantPreferences(selectedAssistant.id, {
+      disabled_tool_ids: disabled
+        ? disabledToolIds.filter((id) => id !== toolId)
+        : [...disabledToolIds, toolId],
+    });
+
+    // If we're disabling a tool that is currently forced, remove it from forced tools
+    if (!disabled && forcedToolIds.includes(toolId)) {
+      setForcedToolIds(forcedToolIds.filter((id) => id !== toolId));
+    }
+  };
+
+  const toggleForcedTool = (toolId: number) => {
+    if (forcedToolIds.includes(toolId)) {
+      // If clicking on already forced tool, unforce it
+      setForcedToolIds([]);
+    } else {
+      // If clicking on a new tool, replace any existing forced tools with just this one
+      setForcedToolIds([toolId]);
+    }
+  };
 
   // Filter out MCP tools from the main list (they have mcp_server_id)
   // and filter out tools that are not available
@@ -508,24 +442,32 @@ export default function ActionsPopover({
     id: tool.id.toString(),
     label: tool.display_name || tool.name,
     description: tool.description,
-    isEnabled: toolMap[tool.id] !== ToolState.Disabled,
+    isEnabled: !disabledToolIds.includes(tool.id),
     onToggle: () => toggleToolForCurrentAssistant(tool.id),
   }));
 
-  const mcpAllDisabled = selectedMcpTools.every(
-    (tool) => toolMap[tool.id] === ToolState.Disabled
+  const mcpAllDisabled = selectedMcpTools.every((tool) =>
+    disabledToolIds.includes(tool.id)
   );
 
   const disableAllToolsForSelectedServer = () => {
     if (!selectedMcpServer) return;
     const serverToolIds = selectedMcpTools.map((tool) => tool.id);
-    setToolsStatus(serverToolIds, ToolState.Disabled);
+    const merged = Array.from(new Set([...disabledToolIds, ...serverToolIds]));
+    setSpecificAssistantPreferences(selectedAssistant.id, {
+      disabled_tool_ids: merged,
+    });
+    setForcedToolIds(forcedToolIds.filter((id) => !serverToolIds.includes(id)));
   };
 
   const enableAllToolsForSelectedServer = () => {
     if (!selectedMcpServer) return;
-    const serverToolIds = selectedMcpTools.map((tool) => tool.id);
-    setToolsStatus(serverToolIds, ToolState.Enabled);
+    const serverToolIdSet = new Set(selectedMcpTools.map((tool) => tool.id));
+    setSpecificAssistantPreferences(selectedAssistant.id, {
+      disabled_tool_ids: disabledToolIds.filter(
+        (id) => !serverToolIdSet.has(id)
+      ),
+    });
   };
 
   const handleFooterReauthClick = () => {
@@ -568,17 +510,6 @@ export default function ActionsPopover({
     (source) => !isSourceEnabled(source.uniqueKey)
   );
 
-  const handleForceToggle = useCallback(
-    (toolId: number, newState: ToolState) => {
-      if (newState === ToolState.Enabled) {
-        markExplicitlyUnpinned(toolId);
-      } else if (newState === ToolState.Forced) {
-        clearExplicitlyUnpinned(toolId);
-      }
-    },
-    [markExplicitlyUnpinned, clearExplicitlyUnpinned]
-  );
-
   const primaryView = (
     <PopoverMenu medium>
       {[
@@ -596,11 +527,14 @@ export default function ActionsPopover({
           <ActionLineItem
             key={tool.id}
             tool={tool}
+            disabled={disabledToolIds.includes(tool.id)}
+            isForced={forcedToolIds.includes(tool.id)}
+            onToggle={() => toggleToolForCurrentAssistant(tool.id)}
+            onForceToggle={() => toggleForcedTool(tool.id)}
             onSourceManagementOpen={() => setSecondaryView({ type: "sources" })}
             hasNoConnectors={hasNoConnectors}
             toolAuthStatus={getToolAuthStatus(tool)}
             onOAuthAuthenticate={() => authenticateTool(tool)}
-            onForceToggle={handleForceToggle}
             onClose={() => setOpen(false)}
           />
         )),
@@ -618,7 +552,7 @@ export default function ActionsPopover({
             (t) => t.mcp_server_id === Number(server.id)
           );
           const enabledTools = serverTools.filter(
-            (t) => toolMap[t.id] !== ToolState.Disabled
+            (t) => !disabledToolIds.includes(t.id)
           );
 
           return (
