@@ -36,17 +36,7 @@ class DrupalWikiPage(BaseModel):
     homeSpace: int
     lastModified: int
     type: str
-
-
-class DrupalWikiPageContent(BaseModel):
-    """Model for the content of a Drupal Wiki page"""
-
-    id: int
-    title: str
-    body: str
-    homeSpace: int
-    lastModified: int
-    type: str
+    body: Optional[str] = None
 
 
 T = TypeVar("T")

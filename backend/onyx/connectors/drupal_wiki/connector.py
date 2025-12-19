@@ -1,4 +1,3 @@
-import copy
 import mimetypes
 from io import BytesIO
 from pathlib import Path
@@ -15,16 +14,16 @@ from onyx.configs.app_configs import DRUPAL_WIKI_ATTACHMENT_SIZE_THRESHOLD
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
+    datetime_from_utc_timestamp,
+)
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rl_requests
 from onyx.connectors.drupal_wiki.models import DrupalWikiCheckpoint
 from onyx.connectors.drupal_wiki.models import DrupalWikiPage
-from onyx.connectors.drupal_wiki.models import DrupalWikiPageContent
 from onyx.connectors.drupal_wiki.models import DrupalWikiPageResponse
-from onyx.connectors.drupal_wiki.models import DrupalWikiSpace
 from onyx.connectors.drupal_wiki.models import DrupalWikiSpaceResponse
 from onyx.connectors.drupal_wiki.utils import build_drupal_wiki_document_id
-from onyx.connectors.drupal_wiki.utils import datetime_from_timestamp
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import CheckpointOutput
@@ -38,8 +37,8 @@ from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
-from onyx.file_processing.extract_file_text import ALL_ACCEPTED_FILE_EXTENSIONS
 from onyx.file_processing.extract_file_text import extract_text_and_images
+from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -50,8 +49,9 @@ from onyx.utils.retry_wrapper import retry_builder
 logger = setup_logger()
 
 MAX_API_PAGE_SIZE = 2000  # max allowed by API
+DRUPAL_WIKI_SPACE_KEY = "space"
 
-SUPPORTED_ATTACHMENT_EXTENSIONS = set(ALL_ACCEPTED_FILE_EXTENSIONS)
+SUPPORTED_ATTACHMENT_EXTENSIONS = OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS
 
 
 rate_limited_get = retry_builder()(
@@ -119,16 +119,10 @@ class DrupalWikiConnector(
         self.allow_images = allow_images
 
         # Will be set by load_credentials
-        self.headers: Optional[Dict[str, str]] = None
-        self._api_token: Optional[str] = None
+        self.headers: dict[str, str] | None
+        self._api_token: str | None
 
     def set_allow_images(self, value: bool) -> None:
-        """
-        Set whether to allow image section processing.
-
-        Args:
-            value: Whether to allow image section processing.
-        """
         logger.info(f"Setting allow_images to {value}.")
         self.allow_images = value
 
@@ -385,21 +379,22 @@ class DrupalWikiConnector(
 
         return None
 
-    def _get_spaces(self) -> List[DrupalWikiSpace]:
+    def _get_space_ids(self) -> List[int]:
         """
-        Get all spaces from the Drupal Wiki instance.
+        Get all space IDs from the Drupal Wiki instance.
 
         Returns:
-            List of DrupalWikiSpace objects.
+            List of space IDs (deduplicated). The list is sorted to be deterministic.
         """
         url = f"{self.base_url}/api/rest/scope/api/space"
         size = MAX_API_PAGE_SIZE
         page = 0
-        all_spaces = []
+        all_space_ids: set[int] = set()
         has_more = True
-        max_pages = 100  # Safety limit to prevent infinite loops
+        last_num_ids = -1
 
-        while has_more and page < max_pages:
+        while has_more and len(all_space_ids) > last_num_ids:
+            last_num_ids = len(all_space_ids)
             params = {"size": size, "page": page}
             logger.info(f"Fetching spaces from {url} (page={page}, size={size})")
             response = rate_limited_get(url, headers=self.headers, params=params)
@@ -408,20 +403,19 @@ class DrupalWikiConnector(
             space_response = DrupalWikiSpaceResponse.model_validate(resp_json)
 
             logger.info(f"Fetched {len(space_response.content)} spaces (page={page})")
-            all_spaces.extend(space_response.content)
+            # Collect ids into the set to deduplicate
+            for space in space_response.content:
+                all_space_ids.add(space.id)
 
             # Continue if we got a full page, indicating there might be more
             has_more = len(space_response.content) >= size
 
             page += 1
 
-        if page >= max_pages:
-            logger.warning(
-                f"Reached maximum page limit ({max_pages}) while fetching spaces"
-            )
-
-        logger.info(f"Total spaces fetched: {len(all_spaces)}")
-        return all_spaces
+        # Return a deterministic, sorted list of ids
+        space_id_list = list(sorted(all_space_ids))
+        logger.info(f"Total spaces fetched: {len(space_id_list)}")
+        return space_id_list
 
     def _get_pages_for_space(
         self, space_id: int, modified_after: Optional[SecondsSinceUnixEpoch] = None
@@ -445,7 +439,7 @@ class DrupalWikiConnector(
 
         while has_more and page < max_pages:
             params: dict[str, str | int] = {
-                "space": str(space_id),
+                DRUPAL_WIKI_SPACE_KEY: str(space_id),
                 "size": size,
                 "page": page,
             }
@@ -455,7 +449,7 @@ class DrupalWikiConnector(
                 params["modifiedAfter"] = int(modified_after)
 
             logger.info(
-                f"Fetching pages for space {space_id} from {url} (page={page}, size={size}, modified_after={modified_after})"
+                f"Fetching pages for space {space_id} from {url} ({page=}, {size=}, {modified_after=})"
             )
             response = rate_limited_get(url, headers=self.headers, params=params)
             response.raise_for_status()
@@ -489,7 +483,7 @@ class DrupalWikiConnector(
         logger.info(f"Total pages fetched for space {space_id}: {len(all_pages)}")
         return all_pages
 
-    def _get_page_content(self, page_id: int) -> DrupalWikiPageContent:
+    def _get_page_content(self, page_id: int) -> DrupalWikiPage:
         """
         Get the content of a specific page.
 
@@ -497,13 +491,13 @@ class DrupalWikiConnector(
             page_id: ID of the page.
 
         Returns:
-            DrupalWikiPageContent object.
+            DrupalWikiPage object.
         """
         url = f"{self.base_url}/api/rest/scope/api/page/{page_id}"
         response = rate_limited_get(url, headers=self.headers)
         response.raise_for_status()
 
-        return DrupalWikiPageContent.model_validate(response.json())
+        return DrupalWikiPage.model_validate(response.json())
 
     def _process_page(self, page: DrupalWikiPage) -> Document | ConnectorFailure:
         """
@@ -516,11 +510,8 @@ class DrupalWikiConnector(
             Document object or ConnectorFailure.
         """
         try:
-            # Get page content
-            page_content = self._get_page_content(page.id)
-
             # Extract text from HTML
-            text_content = parse_html_page_basic(page_content.body)
+            text_content = parse_html_page_basic(page.body)
 
             # Create document URL
             page_url = build_drupal_wiki_document_id(self.base_url, page.id)
@@ -581,7 +572,7 @@ class DrupalWikiConnector(
                 source=DocumentSource.DRUPAL_WIKI,
                 semantic_identifier=page.title,
                 metadata=metadata,
-                doc_updated_at=datetime_from_timestamp(page.lastModified),
+                doc_updated_at=datetime_from_utc_timestamp(page.lastModified),
             )
         except Exception as e:
             logger.error(f"Error processing page {page.id}: {e}")
@@ -612,63 +603,51 @@ class DrupalWikiConnector(
         Returns:
             Generator yielding documents and the updated checkpoint.
         """
-        checkpoint = copy.deepcopy(checkpoint)
-        logger.info(
-            f"Starting load_from_checkpoint with include_all_spaces={self.include_all_spaces}, spaces={self.spaces}"
-        )
+        while checkpoint.current_page_id_index < len(checkpoint.page_ids):
+            page_id = checkpoint.page_ids[checkpoint.current_page_id_index]
+            logger.info(f"Processing page ID: {page_id}")
 
-        # Process specific page IDs if provided
-        if self.pages:
-            logger.info(f"Processing specific pages: {self.pages}")
-            # Initialize the checkpoint for specific pages if needed
-            if not checkpoint.is_processing_specific_pages:
-                checkpoint.is_processing_specific_pages = True
-                checkpoint.page_ids = [int(page_id.strip()) for page_id in self.pages]
-                checkpoint.current_page_id_index = 0
+            try:
+                # Get the page content directly
+                page = self._get_page_content(page_id)
 
-            # Process pages from the checkpoint
-            while checkpoint.current_page_id_index < len(checkpoint.page_ids):
-                page_id = checkpoint.page_ids[checkpoint.current_page_id_index]
-                logger.info(f"Processing page ID: {page_id}")
+                # Skip pages outside the time range
+                if not self._is_page_in_time_range(page.lastModified, start, end):
+                    logger.info(f"Skipping page {page_id} - outside time range")
+                    checkpoint.current_page_id_index += 1
+                    continue
 
-                try:
-                    # Get the page content directly
-                    page_content = self._get_page_content(page_id)
+                # Process the page
+                doc_or_failure = self._process_page(page)
+                yield doc_or_failure
 
-                    # Create a DrupalWikiPage object
-                    page = DrupalWikiPage(
-                        id=page_content.id,
-                        title=page_content.title,
-                        homeSpace=page_content.homeSpace,
-                        lastModified=page_content.lastModified,
-                        type=page_content.type,
-                    )
-
-                    # Skip pages outside the time range
-                    if not self._is_page_in_time_range(page.lastModified, start, end):
-                        logger.info(f"Skipping page {page_id} - outside time range")
-                        checkpoint.current_page_id_index += 1
-                        continue
-
-                    # Process the page
-                    doc_or_failure = self._process_page(page)
-                    yield doc_or_failure
-
-                except Exception as e:
-                    logger.error(f"Error processing page ID {page_id}: {e}")
-                    yield ConnectorFailure(
-                        failed_document=DocumentFailure(
-                            document_id=str(page_id),
-                            document_link=build_drupal_wiki_document_id(
-                                self.base_url, page_id
-                            ),
+            except Exception as e:
+                logger.error(f"Error processing page ID {page_id}: {e}")
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=str(page_id),
+                        document_link=build_drupal_wiki_document_id(
+                            self.base_url, page_id
                         ),
-                        failure_message=f"Error processing page ID {page_id}: {e}",
-                        exception=e,
-                    )
+                    ),
+                    failure_message=f"Error processing page ID {page_id}: {e}",
+                    exception=e,
+                )
 
-                # Move to the next page ID
-                checkpoint.current_page_id_index += 1
+            # Move to the next page ID
+            checkpoint.current_page_id_index += 1
+
+        # TODO: The main benefit of CheckpointedConnectors is that they can "save their work"
+        # by storing a checkpoint so transient errors are easy to recover from: simply resume
+        # from the last checkpoint. The way to get checkpoints saved is to return them somewhere
+        # in the middle of this function. The guarantee our checkpointing system gives to you,
+        # the connector implementer, is that when you return a checkpoint, this connector will
+        # at a later time (generally within a few seconds) call the load_from_checkpoint function
+        # again with the checkpoint you last returned as long as has_more=True.
+        #
+        # So, the current implementation doesn't take advantage of that system. This means that
+        # all runs of the connector will start from scratch, i.e. what you've implemented here is
+        # more akin to a LoadConnector.
 
         # Process spaces if include_all_spaces is True or spaces are provided
         if self.include_all_spaces or self.spaces:
@@ -677,8 +656,9 @@ class DrupalWikiConnector(
             if self.include_all_spaces:
                 logger.info("Fetching all spaces")
                 # Fetch all spaces
-                all_spaces = self._get_spaces()
-                checkpoint.spaces = [space.id for space in all_spaces]
+                all_space_ids = self._get_space_ids()
+                # checkpoint.spaces expects a list of ints; assign returned list
+                checkpoint.spaces = all_space_ids
                 logger.info(f"Found {len(checkpoint.spaces)} spaces to process")
             # Otherwise, use provided spaces if checkpoint is empty
             elif not checkpoint.spaces:
@@ -755,6 +735,10 @@ class DrupalWikiConnector(
         """
         return DrupalWikiCheckpoint.model_validate_json(checkpoint_json)
 
+    # TODO: unify approach with load_from_checkpoint.
+    # Ideally slim retrieval shares a lot of the same code with non-slim
+    # and we pass in a param is_slim to the main helper function
+    # that does the retrieval.
     @override
     def retrieve_all_slim_docs(
         self,
@@ -844,8 +828,8 @@ class DrupalWikiConnector(
             if self.include_all_spaces:
                 logger.info("Fetching all spaces for slim documents")
                 # Fetch all spaces
-                all_spaces = self._get_spaces()
-                spaces_to_process = [space.id for space in all_spaces]
+                all_space_ids = self._get_space_ids()
+                spaces_to_process = all_space_ids
                 logger.info(f"Found {len(spaces_to_process)} spaces to process")
             else:
                 logger.info(f"Using provided spaces: {self.spaces}")
@@ -921,7 +905,8 @@ class DrupalWikiConnector(
 
         try:
             # Try to fetch spaces to validate the connection
-            self._get_spaces()
+            # Call the new helper which returns the list of space ids
+            self._get_space_ids()
         except requests.exceptions.RequestException as e:
             raise ConnectorValidationError(f"Failed to connect to Drupal Wiki: {e}")
 
@@ -942,8 +927,6 @@ class DrupalWikiConnector(
         Returns:
             True if the page is within the time range, False otherwise.
         """
-        if start and last_modified < start:
-            return False
-        if end and last_modified >= end:
-            return False
-        return True
+        return (not start or last_modified >= start) and (
+            not end or last_modified < end
+        )
