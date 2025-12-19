@@ -447,7 +447,7 @@ export default function AIMessage({
         <div className="mx-auto w-[min(50rem,100%)] px-4 max-w-message-max">
           <div className="flex items-start">
             <AgentAvatar agent={chatState.assistant} size={24} />
-            <div className="max-w-message-max break-words pl-4">
+            <div className="max-w-message-max break-words px-4">
               <div
                 ref={markdownRef}
                 className="overflow-x-visible max-w-content-max focus:outline-none select-text"
