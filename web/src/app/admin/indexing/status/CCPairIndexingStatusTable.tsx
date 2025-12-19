@@ -36,6 +36,10 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgSettings } from "@opal/icons";
 
 // Helper to handle navigation with cmd/ctrl+click support
+// NOTE: using this rather than Next/Link (or similar) since shadcn
+// table row components must be direct descendants of the table component
+// and putting the <Link> inside the <TableRow> would causes some parts of the
+// row to not navigate as expected.
 function navigateWithModifier(
   e: React.MouseEvent,
   url: string,
@@ -55,6 +59,7 @@ function isFederatedConnectorStatus(
 
 const NUMBER_OF_ROWS_PER_PAGE = 10;
 const NUMBER_OF_COLUMNS = 6;
+
 function SummaryRow({
   source,
   summary,
