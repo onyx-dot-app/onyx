@@ -665,7 +665,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
               {/* ChatInputBar container */}
               <div
                 ref={inputRef}
-                className="max-w-[50rem] w-full pointer-events-auto z-sticky flex flex-col px-4 justify-center items-center"
+                className="max-w-[50rem] w-full pointer-events-auto z-sticky flex flex-col px-4 md:px-0 justify-center items-center"
               >
                 {(showOnboarding ||
                   (user?.role !== UserRole.ADMIN &&
