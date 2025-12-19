@@ -10,7 +10,6 @@ from onyx.context.search.utils import convert_inference_sections_to_search_docs
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.web_search import fetch_active_web_search_provider
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import Placement
 from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
@@ -114,7 +113,8 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
     def emit_start(self, turn_index: int, tab_index: int) -> None:
         self.emitter.emit(
             Packet(
-                placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                turn_index=turn_index,
+                tab_index=tab_index,
                 obj=SearchToolStart(is_internet_search=True),
             )
         )
@@ -140,7 +140,8 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         # Emit queries
         self.emitter.emit(
             Packet(
-                placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                turn_index=turn_index,
+                tab_index=tab_index,
                 obj=SearchToolQueriesDelta(queries=queries),
             )
         )
@@ -204,7 +205,8 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         # Emit documents
         self.emitter.emit(
             Packet(
-                placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                turn_index=turn_index,
+                tab_index=tab_index,
                 obj=SearchToolDocumentsDelta(documents=search_docs),
             )
         )

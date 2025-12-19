@@ -38,7 +38,6 @@ from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import Placement
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningDone
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
@@ -513,11 +512,11 @@ def run_llm_step_pkt_generator(
                 state_container.set_reasoning_tokens(accumulated_reasoning)
                 if not reasoning_start:
                     yield Packet(
-                        placement=Placement(turn_index=turn_index),
+                        turn_index=turn_index,
                         obj=ReasoningStart(),
                     )
                 yield Packet(
-                    placement=Placement(turn_index=turn_index),
+                    turn_index=turn_index,
                     obj=ReasoningDelta(reasoning=delta.reasoning_content),
                 )
                 reasoning_start = True
@@ -525,7 +524,7 @@ def run_llm_step_pkt_generator(
             if delta.content:
                 if reasoning_start:
                     yield Packet(
-                        placement=Placement(turn_index=turn_index),
+                        turn_index=turn_index,
                         obj=ReasoningDone(),
                     )
                     has_reasoned = 1
@@ -536,7 +535,7 @@ def run_llm_step_pkt_generator(
 
                 if not answer_start:
                     yield Packet(
-                        placement=Placement(turn_index=turn_index),
+                        turn_index=turn_index,
                         obj=AgentResponseStart(
                             final_documents=final_documents,
                         ),
@@ -550,12 +549,12 @@ def run_llm_step_pkt_generator(
                             # Save answer incrementally to state container
                             state_container.set_answer_tokens(accumulated_answer)
                             yield Packet(
-                                placement=Placement(turn_index=turn_index),
+                                turn_index=turn_index,
                                 obj=AgentResponseDelta(content=result),
                             )
                         elif isinstance(result, CitationInfo):
                             yield Packet(
-                                placement=Placement(turn_index=turn_index),
+                                turn_index=turn_index,
                                 obj=result,
                             )
                 else:
@@ -564,14 +563,14 @@ def run_llm_step_pkt_generator(
                     # Save answer incrementally to state container
                     state_container.set_answer_tokens(accumulated_answer)
                     yield Packet(
-                        placement=Placement(turn_index=turn_index),
+                        turn_index=turn_index,
                         obj=AgentResponseDelta(content=delta.content),
                     )
 
             if delta.tool_calls:
                 if reasoning_start:
                     yield Packet(
-                        placement=Placement(turn_index=turn_index),
+                        turn_index=turn_index,
                         obj=ReasoningDone(),
                     )
                     has_reasoned = 1
@@ -636,12 +635,12 @@ def run_llm_step_pkt_generator(
                 # Save answer incrementally to state container
                 state_container.set_answer_tokens(accumulated_answer)
                 yield Packet(
-                    placement=Placement(turn_index=turn_index),
+                    turn_index=turn_index,
                     obj=AgentResponseDelta(content=result),
                 )
             elif isinstance(result, CitationInfo):
                 yield Packet(
-                    placement=Placement(turn_index=turn_index),
+                    turn_index=turn_index,
                     obj=result,
                 )
 

@@ -236,7 +236,8 @@ export default function AIMessage({
     const { turn_index, tab_index } = parseToolKey(groupKey);
 
     const syntheticPacket: Packet = {
-      placement: { turn_index, tab_index },
+      turn_index,
+      tab_index,
       obj: { type: PacketType.SECTION_END },
     };
 
@@ -253,8 +254,8 @@ export default function AIMessage({
       const packet = rawPackets[i];
       if (!packet) continue;
 
-      const currentTurnIndex = packet.placement.turn_index;
-      const currentTabIndex = packet.placement.tab_index ?? 0;
+      const currentTurnIndex = packet.turn_index;
+      const currentTabIndex = packet.tab_index ?? 0;
       const currentGroupKey = `${currentTurnIndex}-${currentTabIndex}`;
       // If we see a new turn_index (not just tab_index), inject SECTION_END for previous groups
       // We only inject SECTION_END when moving to a completely new turn, not for parallel tools

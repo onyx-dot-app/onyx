@@ -142,7 +142,8 @@ def run_research_agent_call(
 
     emitter.emit(
         Packet(
-            placement=Placement(turn_index=turn_index, tab_index=tab_index),
+            turn_index=turn_index,
+            tab_index=tab_index,
             obj=ResearchAgentStart(research_task=research_topic),
         )
     )

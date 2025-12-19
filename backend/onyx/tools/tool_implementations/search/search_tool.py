@@ -65,7 +65,6 @@ from onyx.secondary_llm_flows.document_filter import select_sections_for_expansi
 from onyx.secondary_llm_flows.query_expansion import keyword_query_expansion
 from onyx.secondary_llm_flows.query_expansion import semantic_query_rephrase
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import Placement
 from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
@@ -359,7 +358,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
     def emit_start(self, turn_index: int, tab_index: int) -> None:
         self.emitter.emit(
             Packet(
-                placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                turn_index=turn_index,
+                tab_index=tab_index,
                 obj=SearchToolStart(),
             )
         )
@@ -488,7 +488,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             # Emit the queries early so the UI can display them immediately
             self.emitter.emit(
                 Packet(
-                    placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                    turn_index=turn_index,
+                    tab_index=tab_index,
                     obj=SearchToolQueriesDelta(
                         queries=all_queries,
                     ),
@@ -596,7 +597,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
             self.emitter.emit(
                 Packet(
-                    placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                    turn_index=turn_index,
+                    tab_index=tab_index,
                     obj=SearchToolDocumentsDelta(
                         documents=final_ui_docs,
                     ),

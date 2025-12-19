@@ -29,7 +29,6 @@ from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER
 from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import Placement
 from onyx.tools.models import ToolCallInfo
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
@@ -626,7 +625,7 @@ def run_llm_loop(
 
         emitter.emit(
             Packet(
-                placement=Placement(turn_index=llm_cycle_count + reasoning_cycles),
+                turn_index=llm_cycle_count + reasoning_cycles,
                 obj=OverallStop(type="stop"),
             )
         )

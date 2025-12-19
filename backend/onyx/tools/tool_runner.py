@@ -8,7 +8,6 @@ from onyx.chat.models import ChatMessageSimple
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import Placement
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tools.models import OpenURLToolOverrideKwargs
@@ -128,7 +127,8 @@ def _run_single_tool(
     # Emit SectionEnd after tool completes (success or failure)
     tool.emitter.emit(
         Packet(
-            placement=Placement(turn_index=turn_index, tab_index=tab_index),
+            turn_index=turn_index,
+            tab_index=tab_index,
             obj=SectionEnd(),
         )
     )

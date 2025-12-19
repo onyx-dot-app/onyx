@@ -17,7 +17,6 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import Placement
 from onyx.tools.models import CHAT_SESSION_ID_PLACEHOLDER
 from onyx.tools.models import CustomToolCallSummary
 from onyx.tools.models import CustomToolUserFileSnapshot
@@ -137,7 +136,8 @@ class CustomTool(Tool[None]):
     def emit_start(self, turn_index: int, tab_index: int) -> None:
         self.emitter.emit(
             Packet(
-                placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                turn_index=turn_index,
+                tab_index=tab_index,
                 obj=CustomToolStart(tool_name=self._name),
             )
         )
@@ -212,7 +212,8 @@ class CustomTool(Tool[None]):
         # Emit CustomToolDelta packet
         self.emitter.emit(
             Packet(
-                placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                turn_index=turn_index,
+                tab_index=tab_index,
                 obj=CustomToolDelta(
                     tool_name=self._name,
                     response_type=response_type,
