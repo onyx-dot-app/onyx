@@ -1,5 +1,6 @@
 import concurrent.futures
 import json
+import time
 import uuid
 from abc import ABC
 from abc import abstractmethod
@@ -125,7 +126,6 @@ def get_existing_documents_from_chunks(
     return document_ids
 
 
-@retry(tries=5, delay=1, backoff=2)
 def _index_vespa_chunk(
     chunk: DocMetadataAwareIndexChunk,
     index_name: str,
@@ -217,24 +217,78 @@ def _index_vespa_chunk(
             vespa_document_fields[TENANT_ID] = chunk.tenant_id
     vespa_url = f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{vespa_chunk_id}"
     logger.debug(f'Indexing to URL "{vespa_url}"')
-    res = http_client.post(
-        vespa_url, headers=json_header, json={"fields": vespa_document_fields}
-    )
-    try:
-        res.raise_for_status()
-    except Exception as e:
-        logger.exception(
-            f"Failed to index document: '{document.id}'. Got response: '{res.text}'"
-        )
-        if isinstance(e, httpx.HTTPStatusError):
-            if e.response.status_code == HTTPStatus.INSUFFICIENT_STORAGE:
+
+    # Retry logic with exponential backoff for rate limiting
+    max_retries = 5
+    base_delay = 1.0
+    max_delay = 60.0
+
+    for attempt in range(max_retries):
+        try:
+            res = http_client.post(
+                vespa_url, headers=json_header, json={"fields": vespa_document_fields}
+            )
+            res.raise_for_status()
+            return  # Success, exit the function
+        except httpx.HTTPStatusError as e:
+            # Handle 429 rate limiting specifically
+            if e.response.status_code == HTTPStatus.TOO_MANY_REQUESTS:
+                if attempt < max_retries - 1:
+                    # Calculate exponential backoff with jitter
+                    delay = min(base_delay * (2**attempt), max_delay)
+                    logger.warning(
+                        f"Rate limited while indexing document '{document.id}' "
+                        f"(attempt {attempt + 1}/{max_retries}). "
+                        f"Vespa response: '{res.text}'. "
+                        f"Backing off for {delay:.2f} seconds."
+                    )
+                    time.sleep(delay)
+                    continue
+                else:
+                    logger.error(
+                        f"Failed to index document '{document.id}' after {max_retries} attempts "
+                        f"due to rate limiting. Vespa response: '{res.text}'"
+                    )
+                    raise
+            elif e.response.status_code == HTTPStatus.INSUFFICIENT_STORAGE:
+                logger.error(
+                    f"Failed to index document: '{document.id}'. Got response: '{res.text}'"
+                )
                 logger.error(
                     "NOTE: HTTP Status 507 Insufficient Storage usually means "
                     "you need to allocate more memory or disk space to the "
                     "Vespa/index container."
                 )
-
-        raise e
+                raise
+            else:
+                # For other HTTP errors, retry with shorter backoff
+                if attempt < max_retries - 1:
+                    delay = base_delay * (1.5**attempt)
+                    logger.warning(
+                        f"HTTP error {e.response.status_code} while indexing document '{document.id}' "
+                        f"(attempt {attempt + 1}/{max_retries}). Retrying in {delay:.2f} seconds."
+                    )
+                    time.sleep(delay)
+                    continue
+                else:
+                    logger.exception(
+                        f"Failed to index document: '{document.id}'. Got response: '{res.text}'"
+                    )
+                    raise
+        except Exception as e:
+            # For non-HTTP errors, use simple retry logic
+            if attempt < max_retries - 1:
+                delay = base_delay * (1.5**attempt)
+                logger.warning(
+                    f"Error while indexing document '{document.id}' "
+                    f"(attempt {attempt + 1}/{max_retries}): {str(e)}. "
+                    f"Retrying in {delay:.2f} seconds."
+                )
+                time.sleep(delay)
+                continue
+            else:
+                logger.exception(f"Failed to index document: '{document.id}'")
+                raise
 
 
 def batch_index_vespa_chunks(
