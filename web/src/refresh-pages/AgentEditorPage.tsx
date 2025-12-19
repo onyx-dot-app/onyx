@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { SimplePageHeader } from "@/layouts/headers";
-import PageLayout from "@/refresh-components/layouts/PageLayout";
+import { SettingsPageLayout } from "@/layouts/pages";
 import Button from "@/refresh-components/buttons/Button";
 import { FullPersona } from "@/app/admin/assistants/interfaces";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
@@ -416,7 +416,7 @@ export default function AgentEditorPage({
   }
 
   return (
-    <PageLayout
+    <SettingsPageLayout
       data-testid="AgentsEditorPage/container"
       aria-label="Agents Editor Page"
       className="pb-20"
@@ -793,6 +793,6 @@ export default function AgentEditorPage({
           </>
         )}
       </Formik>
-    </PageLayout>
+    </SettingsPageLayout>
   );
 }

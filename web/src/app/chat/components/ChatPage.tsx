@@ -63,7 +63,7 @@ import Suggestions from "@/sections/Suggestions";
 import OnboardingFlow from "@/refresh-components/onboarding/OnboardingFlow";
 import { useOnboardingState } from "@/refresh-components/onboarding/useOnboardingState";
 import { OnboardingStep } from "@/refresh-components/onboarding/types";
-import AppPageLayout from "@/layouts/AppPageLayout";
+import { AppPageLayout } from "@/layouts/pages";
 import { HeaderData } from "@/lib/headers/fetchHeaderDataSS";
 import { SvgFileText } from "@opal/icons";
 import Spacer from "@/refresh-components/Spacer";

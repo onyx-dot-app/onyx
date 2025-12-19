@@ -46,7 +46,7 @@ export interface AppPageLayoutProps
 // It also provides the "Share Chat" and kebab-menu on the right side of the header (for shareable chat pages).
 //
 // Since this is such a ubiquitous component, it's been moved to its own `layouts` directory.
-export default function AppPageLayout({
+export function AppPageLayout({
   settings,
   chatSession,
   className,
@@ -302,5 +302,24 @@ export default function AppPageLayout({
         )}
       </div>
     </>
+  );
+}
+
+// Wraps all pages with the default, standard CSS styles.
+export function SettingsPageLayout(
+  props: React.HtmlHTMLAttributes<HTMLDivElement>
+) {
+  return (
+    <div
+      id="page-wrapper-scroll-container"
+      className="w-full h-full flex flex-col items-center overflow-y-auto"
+    >
+      {/* WARNING: The id="page-wrapper-scroll-container" above is used by PageHeader.tsx
+          to detect scroll position and show/hide the scroll shadow.
+          DO NOT REMOVE this ID without updating PageHeader.tsx accordingly. */}
+      <div className="h-full w-[min(50rem,100%)]">
+        <div {...props} />
+      </div>
+    </div>
   );
 }

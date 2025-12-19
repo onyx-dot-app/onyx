@@ -9,7 +9,7 @@ import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { PageHeader } from "@/layouts/headers";
-import PageLayout from "@/refresh-components/layouts/PageLayout";
+import { SettingsPageLayout } from "@/layouts/pages";
 import CounterSeparator from "@/refresh-components/CounterSeparator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import FilterButton from "@/refresh-components/buttons/FilterButton";
@@ -413,7 +413,10 @@ export default function AgentsNavigationPage() {
   }, [selectedActionIds, selectedMcpServerIds, uniqueActions]);
 
   return (
-    <PageLayout data-testid="AgentsPage/container" aria-label="Agents Page">
+    <SettingsPageLayout
+      data-testid="AgentsPage/container"
+      aria-label="Agents Page"
+    >
       <PageHeader
         icon={SvgOnyxOctagon}
         title="Agents & Assistants"
@@ -654,6 +657,6 @@ export default function AgentsNavigationPage() {
           </>
         )}
       </div>
-    </PageLayout>
+    </SettingsPageLayout>
   );
 }
