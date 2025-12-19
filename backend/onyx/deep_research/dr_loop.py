@@ -1,6 +1,7 @@
 # TODO: Notes for potential extensions and future improvements:
 # 1. Allow tools that aren't search specific tools
 # 2. Use user provided custom prompts
+# 3. Save the plan for replay
 
 from collections.abc import Callable
 from typing import cast
@@ -390,6 +391,8 @@ def run_deep_research_llm_loop(
             # This will not actually get saved to the db as a tool call but we'll attach it to the tool(s) called after
             # it as if it were just a reasoning model doing it. In the chat history, because it happens in 2 steps,
             # we will show it as a separate message.
+            # NOTE: This does not need to increment the reasoning cycles because the custom token processor causes
+            # the LLM step to handle this
             most_recent_reasoning = state_container.reasoning_tokens
             tool_call_message = think_tool_call.to_msg_str()
 
@@ -410,7 +413,6 @@ def run_deep_research_llm_loop(
                 image_files=None,
             )
             simple_chat_history.append(think_tool_response_msg)
-            reasoning_cycles += 1
             continue
         else:
             for tool_call in tool_calls:

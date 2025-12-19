@@ -144,7 +144,6 @@ def run_research_agent_call(
         Packet(
             turn_index=turn_index,
             tab_index=tab_index,
-            sub_turn_index=0,
             obj=ResearchAgentStart(research_task=research_topic),
         )
     )
@@ -159,6 +158,7 @@ def run_research_agent_call(
     citation_mapping: dict[int, str] = {}
     while cycle_count <= RESEARCH_CYCLE_CAP:
         if cycle_count == RESEARCH_CYCLE_CAP:
+            # For the last cycle, do not use any more searches, only reason or generate a report
             current_tools = [
                 tool
                 for tool in tools

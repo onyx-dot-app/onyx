@@ -38,8 +38,9 @@ class ToolCallKickoff(BaseModel):
     tool_name: str
     tool_args: dict[str, Any]
 
-    turn_index: int
+    turn_index: int  # TODO
     tab_index: int
+    sub_turn_index: int | None = None
 
     def to_msg_str(self) -> str:
         return json.dumps(
