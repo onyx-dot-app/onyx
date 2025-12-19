@@ -49,6 +49,14 @@ class StreamPacketObj(TypedDict, total=False):
     documents: list[dict[str, Any]]
 
 
+class PlacementData(TypedDict, total=False):
+    """Structure for packet placement information."""
+
+    turn_index: int
+    tab_index: int
+    sub_turn_index: int | None
+
+
 class StreamPacketData(TypedDict, total=False):
     """Structure for streaming response packets."""
 
@@ -56,7 +64,7 @@ class StreamPacketData(TypedDict, total=False):
     error: str
     stack_trace: str
     obj: StreamPacketObj
-    turn_index: int
+    placement: PlacementData
 
 
 class ChatSessionManager:
@@ -192,7 +200,7 @@ class ChatSessionManager:
                         (
                             data.get("ind")
                             if data.get("ind") is not None
-                            else data.get("turn_index")
+                            else data.get("placement", {}).get("turn_index")
                         ),
                     )
                 )
