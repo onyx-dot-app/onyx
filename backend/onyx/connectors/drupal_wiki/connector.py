@@ -2,9 +2,6 @@ import mimetypes
 from io import BytesIO
 from pathlib import Path
 from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
 
 import requests
 from typing_extensions import override
@@ -66,12 +63,12 @@ class DrupalWikiConnector(
     def __init__(
         self,
         base_url: str,
-        spaces: Optional[List[str]] = None,
-        pages: Optional[List[str]] = None,
+        spaces: list[str] | None = None,
+        pages: list[str] | None = None,
         include_all_spaces: bool = False,
         batch_size: int = INDEX_BATCH_SIZE,
         continue_on_failure: bool = CONTINUE_ON_CONNECTOR_FAILURE,
-        drupal_wiki_scope: Optional[str] = None,
+        drupal_wiki_scope: str | None = None,
         include_attachments: bool = False,
         allow_images: bool = False,
     ) -> None:
@@ -126,17 +123,7 @@ class DrupalWikiConnector(
         logger.info(f"Setting allow_images to {value}.")
         self.allow_images = value
 
-    def set_include_attachments(self, value: bool) -> None:
-        """
-        Set whether to allow attachment processing (text and images).
-
-        Args:
-            value: Whether to allow attachment processing.
-        """
-        logger.info(f"Setting include_attachments to {value}.")
-        self.include_attachments = value
-
-    def _get_page_attachments(self, page_id: int) -> List[Dict[str, Any]]:
+    def _get_page_attachments(self, page_id: int) -> list[dict[str, Any]]:
         """
         Get all attachments for a specific page.
 
@@ -185,7 +172,7 @@ class DrupalWikiConnector(
 
         return response.content
 
-    def _validate_attachment_filetype(self, attachment: Dict[str, Any]) -> bool:
+    def _validate_attachment_filetype(self, attachment: dict[str, Any]) -> bool:
         """
         Validate if the attachment file type is supported.
 
@@ -222,10 +209,10 @@ class DrupalWikiConnector(
 
     def _process_attachment(
         self,
-        attachment: Dict[str, Any],
+        attachment: dict[str, Any],
         page_id: int,
         download_url: str,
-    ) -> tuple[List[TextSection | ImageSection], Optional[str]]:
+    ) -> tuple[list[TextSection | ImageSection], str | None]:
         """
         Process a single attachment and return generated sections.
 
@@ -238,7 +225,7 @@ class DrupalWikiConnector(
             Tuple of (sections, error_message). If error_message is not None, the
             sections list should be treated as invalid.
         """
-        sections: List[TextSection | ImageSection] = []
+        sections: list[TextSection | ImageSection] = []
 
         try:
             if not self._validate_attachment_filetype(attachment):
@@ -356,7 +343,7 @@ class DrupalWikiConnector(
             )
             return [], f"Failed to process attachment: {e}"
 
-    def load_credentials(self, credentials: Dict[str, Any]) -> Dict[str, Any] | None:
+    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """
         Load credentials for the Drupal Wiki connector.
 
@@ -379,7 +366,7 @@ class DrupalWikiConnector(
 
         return None
 
-    def _get_space_ids(self) -> List[int]:
+    def _get_space_ids(self) -> list[int]:
         """
         Get all space IDs from the Drupal Wiki instance.
 
@@ -418,8 +405,8 @@ class DrupalWikiConnector(
         return space_id_list
 
     def _get_pages_for_space(
-        self, space_id: int, modified_after: Optional[SecondsSinceUnixEpoch] = None
-    ) -> List[DrupalWikiPage]:
+        self, space_id: int, modified_after: SecondsSinceUnixEpoch | None = None
+    ) -> list[DrupalWikiPage]:
         """
         Get all pages for a specific space, optionally filtered by modification time.
 
@@ -521,7 +508,7 @@ class DrupalWikiConnector(
             page_url = build_drupal_wiki_document_id(self.base_url, page.id)
 
             # Create sections with just the page content
-            sections: List[TextSection | ImageSection] = [
+            sections: list[TextSection | ImageSection] = [
                 TextSection(text=text_content, link=page_url)
             ]
 
@@ -563,7 +550,7 @@ class DrupalWikiConnector(
                         )
 
             # Create metadata
-            metadata: Dict[str, str | List[str]] = {
+            metadata: dict[str, str | list[str]] = {
                 "space_id": str(page.homeSpace),
                 "page_id": str(page.id),
                 "type": page.type,
@@ -774,7 +761,7 @@ class DrupalWikiConnector(
         Returns:
             Generator yielding batches of SlimDocument objects.
         """
-        slim_docs: List[SlimDocument] = []
+        slim_docs: list[SlimDocument] = []
         logger.info(
             f"Starting retrieve_all_slim_docs with include_all_spaces={self.include_all_spaces}, spaces={self.spaces}"
         )
@@ -930,8 +917,8 @@ class DrupalWikiConnector(
     def _is_page_in_time_range(
         self,
         last_modified: int,
-        start: Optional[SecondsSinceUnixEpoch],
-        end: Optional[SecondsSinceUnixEpoch],
+        start: SecondsSinceUnixEpoch | None,
+        end: SecondsSinceUnixEpoch | None,
     ) -> bool:
         """
         Check if a page's last modified timestamp falls within the specified time range.
