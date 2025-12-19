@@ -83,14 +83,11 @@ def try_creating_docfetching_task(
 
         # Use higher priority for first-time indexing to ensure new connectors
         # get processed before re-indexing of existing connectors
-        is_first_time_indexing = cc_pair.status in (
-            ConnectorCredentialPairStatus.SCHEDULED,
-            ConnectorCredentialPairStatus.INITIAL_INDEXING,
-        )
+        has_successful_attempt = cc_pair.last_successful_index_time is not None
         priority = (
-            OnyxCeleryPriority.HIGH
-            if is_first_time_indexing
-            else OnyxCeleryPriority.MEDIUM
+            OnyxCeleryPriority.MEDIUM
+            if has_successful_attempt
+            else OnyxCeleryPriority.HIGH
         )
 
         # Send the task to Celery

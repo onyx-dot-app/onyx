@@ -369,22 +369,17 @@ def connector_document_extraction(
         db_credential = index_attempt.connector_credential_pair.credential
         is_primary = index_attempt.search_settings.status == IndexModelStatus.PRESENT
 
-        # Use higher priority for first-time indexing to ensure new connectors
-        # get processed before re-indexing of existing connectors
-        cc_pair_status = index_attempt.connector_credential_pair.status
-        is_first_time_indexing = cc_pair_status in (
-            ConnectorCredentialPairStatus.SCHEDULED,
-            ConnectorCredentialPairStatus.INITIAL_INDEXING,
-        )
-        docprocessing_priority = (
-            OnyxCeleryPriority.HIGH
-            if is_first_time_indexing
-            else OnyxCeleryPriority.MEDIUM
-        )
         from_beginning = index_attempt.from_beginning
         has_successful_attempt = (
             index_attempt.connector_credential_pair.last_successful_index_time
             is not None
+        )
+        # Use higher priority for first-time indexing to ensure new connectors
+        # get processed before re-indexing of existing connectors
+        docprocessing_priority = (
+            OnyxCeleryPriority.MEDIUM
+            if has_successful_attempt
+            else OnyxCeleryPriority.HIGH
         )
 
         earliest_index_time = (

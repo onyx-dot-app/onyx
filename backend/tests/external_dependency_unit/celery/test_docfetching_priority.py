@@ -1,12 +1,15 @@
 """
 External dependency unit tests for document processing job priority.
 
-Tests that first-time indexing connectors (SCHEDULED, INITIAL_INDEXING status)
-get higher priority than re-indexing jobs from active connectors.
+Tests that first-time indexing connectors (no last_successful_index_time)
+get higher priority than re-indexing jobs from connectors that have
+previously completed indexing.
 
 Uses real Redis for locking and real database objects for CC pairs and search settings.
 """
 
+from datetime import datetime
+from datetime import timezone
 from unittest.mock import MagicMock
 from unittest.mock import patch
 from uuid import uuid4
@@ -67,6 +70,7 @@ def _create_test_cc_pair(
     credential: Credential,
     status: ConnectorCredentialPairStatus,
     name: str,
+    last_successful_index_time: datetime | None = None,
 ) -> ConnectorCredentialPair:
     """Create a connector credential pair with the specified status."""
     cc_pair = ConnectorCredentialPair(
@@ -75,6 +79,7 @@ def _create_test_cc_pair(
         credential_id=credential.id,
         status=status,
         access_type=AccessType.PUBLIC,
+        last_successful_index_time=last_successful_index_time,
     )
     db_session.add(cc_pair)
     db_session.commit()
@@ -104,52 +109,60 @@ def _create_test_search_settings(
 
 class TestDocfetchingTaskPriorityWithRealObjects:
     """
-    Tests for document fetching task priority based on connector status.
+    Tests for document fetching task priority based on last_successful_index_time.
 
     Uses real Redis for locking and real database objects for CC pairs
     and search settings.
     """
 
     @pytest.mark.parametrize(
-        "cc_pair_status,expected_priority",
+        "has_successful_index,expected_priority",
         [
-            # First-time indexing statuses should get HIGH priority
-            (ConnectorCredentialPairStatus.SCHEDULED, OnyxCeleryPriority.HIGH),
-            (ConnectorCredentialPairStatus.INITIAL_INDEXING, OnyxCeleryPriority.HIGH),
-            # Active/subsequent indexing should get MEDIUM priority
-            (ConnectorCredentialPairStatus.ACTIVE, OnyxCeleryPriority.MEDIUM),
-            (ConnectorCredentialPairStatus.PAUSED, OnyxCeleryPriority.MEDIUM),
+            # First-time indexing (no last_successful_index_time) should get HIGH priority
+            (False, OnyxCeleryPriority.HIGH),
+            # Re-indexing (has last_successful_index_time) should get MEDIUM priority
+            (True, OnyxCeleryPriority.MEDIUM),
         ],
     )
     @patch(
         "onyx.background.celery.tasks.docprocessing.utils.IndexingCoordination.try_create_index_attempt"
     )
-    def test_priority_based_on_connector_status(
+    def test_priority_based_on_last_successful_index_time(
         self,
         mock_try_create_index_attempt: MagicMock,
         db_session: Session,
-        cc_pair_status: ConnectorCredentialPairStatus,
+        has_successful_index: bool,
         expected_priority: OnyxCeleryPriority,
     ) -> None:
         """
         Test that first-time indexing connectors get higher priority than re-indexing.
+
+        Priority is determined by last_successful_index_time:
+        - None (never indexed): HIGH priority
+        - Has timestamp (previously indexed): MEDIUM priority
 
         Uses real Redis for locking and real database objects.
         """
         # Create unique names to avoid conflicts between test runs
         unique_suffix = uuid4().hex[:8]
 
+        # Determine last_successful_index_time based on the test case
+        last_successful_index_time = (
+            datetime.now(timezone.utc) if has_successful_index else None
+        )
+
         # Create real database objects
         connector = _create_test_connector(
-            db_session, f"test_connector_{cc_pair_status.value}_{unique_suffix}"
+            db_session, f"test_connector_{has_successful_index}_{unique_suffix}"
         )
         credential = _create_test_credential(db_session)
         cc_pair = _create_test_cc_pair(
             db_session,
             connector,
             credential,
-            cc_pair_status,
-            name=f"test_cc_pair_{cc_pair_status.value}_{unique_suffix}",
+            ConnectorCredentialPairStatus.ACTIVE,
+            name=f"test_cc_pair_{has_successful_index}_{unique_suffix}",
+            last_successful_index_time=last_successful_index_time,
         )
         search_settings = _create_test_search_settings(
             db_session, f"test_index_{unique_suffix}"
@@ -184,7 +197,7 @@ class TestDocfetchingTaskPriorityWithRealObjects:
         call_kwargs = mock_celery_app.send_task.call_args
         actual_priority = call_kwargs.kwargs["priority"]
         assert actual_priority == expected_priority, (
-            f"Expected priority {expected_priority} for status {cc_pair_status}, "
+            f"Expected priority {expected_priority} for has_successful_index={has_successful_index}, "
             f"but got {actual_priority}"
         )
 
@@ -425,5 +438,5 @@ class TestDocfetchingTaskPriorityWithRealObjects:
         mock_celery_app.send_task.assert_called_once()
         call_kwargs = mock_celery_app.send_task.call_args
         assert call_kwargs.kwargs["queue"] == OnyxCeleryQueues.USER_FILES_INDEXING
-        # User files with INITIAL_INDEXING should still get HIGH priority
+        # User files with no last_successful_index_time should get HIGH priority
         assert call_kwargs.kwargs["priority"] == OnyxCeleryPriority.HIGH
