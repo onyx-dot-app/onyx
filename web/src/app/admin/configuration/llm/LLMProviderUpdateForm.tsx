@@ -32,6 +32,7 @@ import isEqual from "lodash/isEqual";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import { AgentsMultiSelect } from "@/components/AgentsMultiSelect";
 import { SvgTrash } from "@opal/icons";
+
 function AutoFetchModelsOnEdit({
   llmProviderDescriptor,
   existingLlmProvider,
