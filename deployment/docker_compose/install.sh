@@ -44,7 +44,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-INSTALL_ROOT="${INSTALL_PREFIX:-$PWD/onyx_data}"
+INSTALL_ROOT="${INSTALL_PREFIX:-onyx_data}"
 
 # Colors for output
 RED='\033[0;31m'
