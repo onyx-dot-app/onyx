@@ -40,6 +40,7 @@ export { default as SvgCpu } from "@opal/icons/cpu";
 export { default as SvgDevKit } from "@opal/icons/dev-kit";
 export { default as SvgDownloadCloud } from "@opal/icons/download-cloud";
 export { default as SvgEditBig } from "@opal/icons/edit-big";
+export { default as SvgExpand } from "@opal/icons/expand";
 export { default as SvgEdit } from "@opal/icons/edit";
 export { default as SvgExternalLink } from "@opal/icons/external-link";
 export { default as SvgEyeClosed } from "@opal/icons/eye-closed";

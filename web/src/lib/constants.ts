@@ -135,3 +135,10 @@ export const LOGO_FOLDED_SIZE_PX = 24;
 export const LOGO_UNFOLDED_SIZE_PX = 88;
 
 export const DEFAULT_CONTEXT_TOKENS = 120_000;
+
+export const CONVERSATION_STARTERS = [
+  "Give me an overview of some documents.",
+  "Find the latest sales report.",
+  "Compile a list of our engineering goals for this quarter.",
+  "Summarize my goals for today.",
+];

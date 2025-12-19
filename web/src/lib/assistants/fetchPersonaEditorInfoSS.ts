@@ -5,6 +5,7 @@ import { fetchSS } from "../utilsSS";
 import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
 import { ToolSnapshot } from "../tools/interfaces";
 import { fetchToolsSS } from "../tools/fetchTools";
+
 export async function fetchAssistantEditorInfoSS(
   personaId?: number | string
 ): Promise<

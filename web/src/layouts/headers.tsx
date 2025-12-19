@@ -1,10 +1,10 @@
 "use client";
 
-// This should be used as the header for *all* pages (including admin pages).
-
-import type { IconProps } from "@opal/types";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
+import BackButton from "@/refresh-components/buttons/BackButton";
+import Separator from "@/refresh-components/Separator";
+import { IconProps } from "@opal/types";
 import { useEffect, useRef, useState } from "react";
 
 export interface PageHeaderProps {
@@ -16,7 +16,7 @@ export interface PageHeaderProps {
   rightChildren?: React.ReactNode;
 }
 
-export default function PageHeader({
+export function PageHeader({
   icon: Icon,
   title,
   description,
@@ -79,6 +79,38 @@ export default function PageHeader({
           //   "radial-gradient(ellipse 50% 80% at 50% 0%, var(--mask-03), transparent)",
         }}
       />
+    </div>
+  );
+}
+
+export interface SimplePageHeaderProps {
+  title: string;
+  className?: string;
+  rightChildren?: React.ReactNode;
+}
+
+export function SimplePageHeader({
+  title,
+  className,
+  rightChildren,
+}: SimplePageHeaderProps) {
+  return (
+    <div
+      className={cn(
+        "sticky top-0 z-10 flex flex-col gap-4 px-3 bg-background-tint-01 w-full",
+        className
+      )}
+    >
+      <div className="flex flex-col gap-4 pt-6">
+        <BackButton />
+        <div className="flex flex-col gap-6 px-2">
+          <div className="flex flex-row justify-between items-center">
+            <Text headingH2>{title}</Text>
+            {rightChildren}
+          </div>
+          <Separator className="my-0" />
+        </div>
+      </div>
     </div>
   );
 }

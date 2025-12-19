@@ -1,4 +1,4 @@
-import AgentsPage from "@/refresh-pages/AgentsPage";
+import AgentsNavigationPage from "@/refresh-pages/AgentsNavigationPage";
 import AppPageLayout from "@/layouts/AppPageLayout";
 import { fetchHeaderDataSS } from "@/lib/headers/fetchHeaderDataSS";
 
@@ -7,7 +7,7 @@ export default async function Page() {
 
   return (
     <AppPageLayout {...headerData}>
-      <AgentsPage />
+      <AgentsNavigationPage />
     </AppPageLayout>
   );
 }

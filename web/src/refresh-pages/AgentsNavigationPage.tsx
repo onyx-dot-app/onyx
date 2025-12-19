@@ -8,7 +8,7 @@ import { useAgents } from "@/hooks/useAgents";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import PageHeader from "@/refresh-components/headers/PageHeader";
+import { PageHeader } from "@/layouts/headers";
 import PageLayout from "@/refresh-components/layouts/PageLayout";
 import CounterSeparator from "@/refresh-components/CounterSeparator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -63,7 +63,7 @@ function AgentsSection({ title, description, agents }: AgentsSectionProps) {
   );
 }
 
-export default function AgentsPage() {
+export default function AgentsNavigationPage() {
   const { agents } = useAgents();
   const [creatorFilterOpen, setCreatorFilterOpen] = useState(false);
   const [actionsFilterOpen, setActionsFilterOpen] = useState(false);
@@ -421,7 +421,7 @@ export default function AgentsPage() {
         className="bg-background-tint-01"
         rightChildren={
           <div data-testid="AgentsPage/new-agent-button">
-            <Button href="/assistants/new" leftIcon={SvgPlus}>
+            <Button href="/chat/agents/create" leftIcon={SvgPlus}>
               New Agent
             </Button>
           </div>

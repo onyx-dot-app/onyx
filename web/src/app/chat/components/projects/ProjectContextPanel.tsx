@@ -126,7 +126,6 @@ export default function ProjectContextPanel({
         <UserFilesModal
           title="Project files"
           description="Sessions in this project can access the files here."
-          icon={SvgFiles}
           recentFiles={[...allCurrentProjectFiles]}
           onView={handleOnView}
           handleUploadChange={handleUploadChange}
