@@ -25,14 +25,14 @@ from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
 from onyx.background.celery.celery_utils import httpx_init_vespa_pool
 from onyx.background.celery.memory_monitoring import emit_process_memory
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
+from onyx.background.celery.tasks.docfetching.task_creation_utils import (
+    try_creating_docfetching_task,
+)
 from onyx.background.celery.tasks.docprocessing.heartbeat import start_heartbeat
 from onyx.background.celery.tasks.docprocessing.heartbeat import stop_heartbeat
 from onyx.background.celery.tasks.docprocessing.utils import IndexingCallback
 from onyx.background.celery.tasks.docprocessing.utils import is_in_repeated_error_state
 from onyx.background.celery.tasks.docprocessing.utils import should_index
-from onyx.background.celery.tasks.docprocessing.utils import (
-    try_creating_docfetching_task,
-)
 from onyx.background.celery.tasks.models import DocProcessingContext
 from onyx.background.indexing.checkpointing_utils import cleanup_checkpoint
 from onyx.background.indexing.checkpointing_utils import (
