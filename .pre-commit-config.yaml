@@ -1,4 +1,7 @@
 default_install_hook_types:
+  # Required for `tag-check`.
+  - pre-push
+  # Below are required for `uv-sync`.
   - pre-commit
   - post-checkout
   - post-merge
@@ -102,6 +105,10 @@ repos:
         - --additional-pattern
         - ^sk-[A-Za-z0-9_\-]{20,}$
 
+  - repo: https://github.com/jmelahman/tag
+    rev: a069af54b5de5379d3581e3fc027395d1ad0a982  # frozen: v0.5.0
+    hooks:
+      - id: tag-check
 
   - repo: local
     hooks:
