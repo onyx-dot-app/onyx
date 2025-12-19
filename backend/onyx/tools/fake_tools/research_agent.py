@@ -34,8 +34,8 @@ from onyx.prompts.deep_research.research_agent import RESEARCH_REPORT_PROMPT
 from onyx.prompts.deep_research.research_agent import USER_REPORT_QUERY
 from onyx.prompts.prompt_utils import get_current_llm_day_time
 from onyx.prompts.tool_prompts import INTERNAL_SEARCH_GUIDANCE
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import Placement
 from onyx.server.query_and_chat.streaming_models import ResearchAgentStart
 from onyx.tools.models import ToolCallInfo
 from onyx.tools.models import ToolCallKickoff
@@ -134,8 +134,8 @@ def run_research_agent_call(
     reasoning_cycles = 0
     just_ran_web_search = False
 
-    turn_index = research_agent_call.turn_index
-    tab_index = research_agent_call.tab_index
+    turn_index = research_agent_call.placement.turn_index
+    tab_index = research_agent_call.placement.tab_index
 
     # If this fails to parse, we can't run the loop anyway, let this one fail in that case
     research_topic = research_agent_call.tool_args[RESEARCH_AGENT_TASK_KEY]
@@ -315,7 +315,7 @@ def run_research_agent_call(
                     raise ValueError("Tool response missing tool_call reference")
 
                 tool_call = tool_response.tool_call
-                tab_index = tool_call.tab_index
+                tab_index = tool_call.placement.tab_index
 
                 tool = tools_by_name.get(tool_call.tool_name)
                 if not tool:

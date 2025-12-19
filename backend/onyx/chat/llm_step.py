@@ -38,7 +38,7 @@ from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import Placement
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningDone
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
@@ -224,9 +224,11 @@ def _extract_tool_call_kickoffs(
                     tool_call_id=tool_call_data["id"],
                     tool_name=tool_call_data["name"],
                     tool_args=tool_args,
-                    turn_index=turn_index,
-                    tab_index=tab_index,
-                    sub_turn_index=sub_turn_index,
+                    placement=Placement(
+                        turn_index=turn_index,
+                        tab_index=tab_index,
+                        sub_turn_index=sub_turn_index,
+                    ),
                 )
             )
             tab_index += 1

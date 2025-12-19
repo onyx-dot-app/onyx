@@ -7,8 +7,8 @@ from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.models import ChatMessageSimple
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import Placement
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tools.models import OpenURLToolOverrideKwargs
@@ -74,9 +74,8 @@ def _merge_tool_calls(tool_calls: list[ToolCallKickoff]) -> list[ToolCallKickoff
                 tool_call_id=calls[0].tool_call_id,  # Use first call's ID
                 tool_name=tool_name,
                 tool_args=merged_args,
-                turn_index=calls[0].turn_index,
-                # Use first call's tab_index since merged calls become a single call
-                tab_index=calls[0].tab_index,
+                # Use first call's placement since merged calls become a single call
+                placement=calls[0].placement,
             )
             merged_calls.append(merged_call)
         else:
@@ -95,8 +94,8 @@ def _run_single_tool(
 
     This function is designed to be run in parallel via run_functions_tuples_in_parallel.
     """
-    turn_index = tool_call.turn_index
-    tab_index = tool_call.tab_index
+    turn_index = tool_call.placement.turn_index
+    tab_index = tool_call.placement.tab_index
 
     with function_span(tool.name) as span_fn:
         span_fn.span_data.input = str(tool_call.tool_args)
@@ -210,7 +209,10 @@ def run_tool_calls(
         tool = tools_by_name[tool_call.tool_name]
 
         # Emit the tool start packet before running the tool
-        tool.emit_start(turn_index=tool_call.turn_index, tab_index=tool_call.tab_index)
+        tool.emit_start(
+            turn_index=tool_call.placement.turn_index,
+            tab_index=tool_call.placement.tab_index,
+        )
 
         override_kwargs: (
             SearchToolOverrideKwargs

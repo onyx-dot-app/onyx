@@ -6,10 +6,10 @@ from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import MCPTransport
 from onyx.db.models import MCPConnectionConfig
 from onyx.db.models import MCPServer
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import Placement
 from onyx.tools.models import CustomToolCallSummary
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool

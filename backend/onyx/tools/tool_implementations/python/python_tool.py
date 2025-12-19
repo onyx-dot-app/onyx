@@ -14,8 +14,8 @@ from onyx.configs.app_configs import CODE_INTERPRETER_MAX_OUTPUT_LENGTH
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.utils import build_full_frontend_file_url
 from onyx.file_store.utils import get_default_file_store
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import Placement
 from onyx.server.query_and_chat.streaming_models import PythonToolDelta
 from onyx.server.query_and_chat.streaming_models import PythonToolStart
 from onyx.tools.models import LlmPythonExecutionResult

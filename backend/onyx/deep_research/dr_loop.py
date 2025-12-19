@@ -38,13 +38,13 @@ from onyx.prompts.deep_research.orchestration_layer import ORCHESTRATOR_PROMPT_R
 from onyx.prompts.deep_research.orchestration_layer import RESEARCH_PLAN_PROMPT
 from onyx.prompts.deep_research.orchestration_layer import USER_FINAL_REPORT_QUERY
 from onyx.prompts.prompt_utils import get_current_llm_day_time
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import DeepResearchPlanDelta
 from onyx.server.query_and_chat.streaming_models import DeepResearchPlanStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import Placement
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.fake_tools.research_agent import run_research_agent_calls
 from onyx.tools.models import ToolCallInfo

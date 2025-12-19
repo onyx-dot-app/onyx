@@ -6,10 +6,10 @@ from typing import Any
 
 from onyx.chat.emitter import Emitter
 from onyx.context.search.models import SearchDoc
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketException
-from onyx.server.query_and_chat.streaming_models import Placement
 from onyx.tools.models import ToolCallInfo
 from onyx.utils.threadpool_concurrency import run_in_background
 from onyx.utils.threadpool_concurrency import wait_on_background
