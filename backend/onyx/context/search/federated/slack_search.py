@@ -793,31 +793,36 @@ def fetch_thread_contexts_with_rate_limit_handling(
 
         batch = messages_for_context[i : i + batch_size]
 
-        try:
-            batch_results = run_functions_tuples_in_parallel(
-                [
-                    (
-                        _get_thread_context_or_raise_on_rate_limit,
-                        (msg, access_token, team_id),
-                    )
-                    for msg in batch
-                ],
-                allow_failures=False,  # We want to catch rate limit errors
-                max_workers=batch_size,
-            )
-            results.extend(batch_results)
-        except SlackRateLimitError:
-            # Rate limited - add original text for this batch and stop
-            rate_limited = True
-            results.extend([msg.text for msg in batch])
+        # Use allow_failures=True to preserve partial results when rate limited
+        batch_results = run_functions_tuples_in_parallel(
+            [
+                (
+                    _get_thread_context_or_raise_on_rate_limit,
+                    (msg, access_token, team_id),
+                )
+                for msg in batch
+            ],
+            allow_failures=True,
+            max_workers=batch_size,
+        )
+
+        # Check results - None indicates failure (rate limit or other error)
+        # Preserve successful results, use original text for failures
+        for j, result in enumerate(batch_results):
+            if result is None:
+                # Task failed - use original text and check if rate limited
+                results.append(batch[j].text)
+                # We can't distinguish rate limit from other errors with allow_failures=True,
+                # but any failure mid-batch suggests we should stop to avoid further issues
+                rate_limited = True
+            else:
+                results.append(result)
+
+        if rate_limited:
             logger.warning(
-                f"Rate limit detected at batch {i // batch_size + 1}, "
+                f"Failure detected at batch {i // batch_size + 1}, "
                 f"stopping further thread context fetches"
             )
-        except Exception as e:
-            # Other errors - log and use original text for batch, but continue
-            logger.error(f"Error fetching thread context batch: {e}")
-            results.extend([msg.text for msg in batch])
 
     # Add original text for messages we didn't fetch context for
     results.extend([msg.text for msg in messages_without_context])

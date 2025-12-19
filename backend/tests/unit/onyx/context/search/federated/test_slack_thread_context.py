@@ -210,10 +210,14 @@ class TestFetchThreadContextsWithRateLimitHandling:
             for i in range(6)
         ]
 
-        # First batch succeeds, second batch hits rate limit
+        # First batch succeeds, second batch has partial failure (one succeeds, one fails)
+        # With allow_failures=True, failures become None in the result list
         mock_parallel.side_effect = [
-            ["enriched1", "enriched2"],  # First batch succeeds
-            SlackRateLimitError("Rate limited"),  # Second batch fails
+            ["enriched0", "enriched1"],  # First batch succeeds
+            [
+                "enriched2",
+                None,
+            ],  # Second batch: first succeeds, second fails (rate limit)
         ]
 
         result = fetch_thread_contexts_with_rate_limit_handling(
@@ -227,16 +231,16 @@ class TestFetchThreadContextsWithRateLimitHandling:
         # Should have 6 results total
         assert len(result) == 6
         # First 2 should be enriched
-        assert result[0] == "enriched1"
-        assert result[1] == "enriched2"
-        # Next 2 (rate limited batch) should be original text
-        assert result[2] == "msg2"
+        assert result[0] == "enriched0"
+        assert result[1] == "enriched1"
+        # Second batch: first enriched (preserved!), second failed so original text
+        assert result[2] == "enriched2"
         assert result[3] == "msg3"
         # Last 2 (skipped due to rate limit) should be original text
         assert result[4] == "msg4"
         assert result[5] == "msg5"
 
-        # Should only call parallel twice (stopped after rate limit)
+        # Should only call parallel twice (stopped after failure detected)
         assert mock_parallel.call_count == 2
 
 
