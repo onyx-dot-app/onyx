@@ -1,7 +1,5 @@
 from collections.abc import Callable
 
-from pydantic import BaseModel
-
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import create_tool_call_failure_messages
 from onyx.chat.citation_processor import DynamicCitationProcessor
@@ -18,6 +16,7 @@ from onyx.deep_research.dr_mock_tools import (
 from onyx.deep_research.dr_mock_tools import RESEARCH_AGENT_TASK_KEY
 from onyx.deep_research.dr_mock_tools import THINK_TOOL_RESPONSE_MESSAGE
 from onyx.deep_research.dr_mock_tools import THINK_TOOL_RESPONSE_TOKEN_COUNT
+from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.deep_research.utils import check_special_tool_calls
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
@@ -31,6 +30,8 @@ from onyx.prompts.deep_research.dr_tool_prompts import (
 from onyx.prompts.deep_research.dr_tool_prompts import WEB_SEARCH_TOOL_DESCRIPTION
 from onyx.prompts.deep_research.research_agent import RESEARCH_AGENT_PROMPT
 from onyx.prompts.deep_research.research_agent import RESEARCH_AGENT_PROMPT_REASONING
+from onyx.prompts.deep_research.research_agent import RESEARCH_REPORT_PROMPT
+from onyx.prompts.deep_research.research_agent import USER_REPORT_QUERY
 from onyx.prompts.prompt_utils import get_current_llm_day_time
 from onyx.prompts.tool_prompts import INTERNAL_SEARCH_GUIDANCE
 from onyx.tools.models import ToolCallInfo
@@ -47,12 +48,62 @@ from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
 
+
 RESEARCH_CYCLE_CAP = 3
 
 
-class ResearchAgentCallResult(BaseModel):
-    report: str
-    search_docs: list[SearchDoc]
+def generate_intermediate_report(
+    research_topic: str,
+    history: list[ChatMessageSimple],
+    llm: LLM,
+    token_counter: Callable[[str], int],
+    user_identity: LLMUserIdentity | None,
+    state_container: ChatStateContainer,
+    emitter: Emitter,
+) -> str:
+    system_prompt = ChatMessageSimple(
+        message=RESEARCH_REPORT_PROMPT,
+        token_count=token_counter(RESEARCH_REPORT_PROMPT),
+        message_type=MessageType.SYSTEM,
+    )
+
+    reminder_str = USER_REPORT_QUERY.format(research_topic=research_topic)
+    reminder_message = ChatMessageSimple(
+        message=reminder_str,
+        token_count=token_counter(reminder_str),
+        message_type=MessageType.USER,
+    )
+
+    research_history = construct_message_history(
+        system_prompt=system_prompt,
+        custom_agent_prompt=None,
+        simple_chat_history=history,
+        reminder_message=reminder_message,
+        project_files=None,
+        available_tokens=llm.config.max_input_tokens,
+    )
+
+    llm_step_result, _ = run_llm_step(
+        emitter=emitter,
+        history=research_history,
+        tool_definitions=[],
+        tool_choice=ToolChoiceOptions.NONE,
+        llm=llm,
+        turn_index=999,  # TODO
+        citation_processor=DynamicCitationProcessor(),
+        state_container=state_container,
+        reasoning_effort=ReasoningEffort.LOW,
+        final_documents=None,
+        user_identity=user_identity,
+    )
+
+    final_report = llm_step_result.answer
+    if final_report is None:
+        raise ValueError(
+            f"LLM failed to generate a report for research task: {research_topic}"
+        )
+
+    return final_report
 
 
 def run_research_agent_call(
@@ -178,7 +229,18 @@ def run_research_agent_call(
 
         special_tool_calls = check_special_tool_calls(tool_calls=tool_calls)
         if special_tool_calls.generate_report_tool_call:
-            logger.info("Generate report tool called")
+            final_report = generate_intermediate_report(
+                research_topic=research_topic,
+                history=msg_history,
+                llm=llm,
+                token_counter=token_counter,
+                user_identity=user_identity,
+                state_container=state_container,
+                emitter=emitter,
+            )
+            return ResearchAgentCallResult(
+                intermediate_report=final_report, search_docs=[]
+            )
         elif special_tool_calls.think_tool_call:
             think_tool_call = special_tool_calls.think_tool_call
             tool_call_message = think_tool_call.to_msg_str()
@@ -294,7 +356,17 @@ def run_research_agent_call(
 
         llm_cycle_count += 1
 
-    return ResearchAgentCallResult(report="final_report", search_docs=[])
+    # If we've run out of cycles, just try to generate a report from everything so far
+    final_report = generate_intermediate_report(
+        research_topic=research_topic,
+        history=msg_history,
+        llm=llm,
+        token_counter=token_counter,
+        user_identity=user_identity,
+        state_container=state_container,
+        emitter=emitter,
+    )
+    return ResearchAgentCallResult(intermediate_report=final_report, search_docs=[])
 
 
 def run_research_agent_calls(

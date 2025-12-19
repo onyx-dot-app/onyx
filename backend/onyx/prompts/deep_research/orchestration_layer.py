@@ -110,7 +110,7 @@ Provide inline citations in the format [1], [2], [3], etc. based on the citation
 """
 
 
-USER_FINAL_REPORT_QUERY = """
+USER_FINAL_REPORT_QUERY = f"""
 Provide a comprehensive answer to my previous query. CRITICAL: be as detailed as possible, stay on topic, and provide clear organization in your response.
 
 Ignore the format styles of the intermediate {RESEARCH_AGENT_TOOL_NAME} reports, those are not end user facing and different from your task.

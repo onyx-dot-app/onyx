@@ -25,12 +25,15 @@ from onyx.deep_research.utils import check_special_tool_calls
 from onyx.deep_research.utils import create_think_tool_token_processor
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.models import ToolChoiceOptions
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.prompts.deep_research.orchestration_layer import CLARIFICATION_PROMPT
+from onyx.prompts.deep_research.orchestration_layer import FINAL_REPORT_PROMPT
 from onyx.prompts.deep_research.orchestration_layer import ORCHESTRATOR_PROMPT
 from onyx.prompts.deep_research.orchestration_layer import ORCHESTRATOR_PROMPT_REASONING
 from onyx.prompts.deep_research.orchestration_layer import RESEARCH_PLAN_PROMPT
+from onyx.prompts.deep_research.orchestration_layer import USER_FINAL_REPORT_QUERY
 from onyx.prompts.prompt_utils import get_current_llm_day_time
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
@@ -51,6 +54,57 @@ logger = setup_logger()
 
 MAX_USER_MESSAGES_FOR_CONTEXT = 5
 MAX_ORCHESTRATOR_CYCLES = 8
+
+
+def generate_final_report(
+    history: list[ChatMessageSimple],
+    llm: LLM,
+    token_counter: Callable[[str], int],
+    state_container: ChatStateContainer,
+    emitter: Emitter,
+    user_identity: LLMUserIdentity | None,
+) -> None:
+    final_report_prompt = FINAL_REPORT_PROMPT.format(
+        current_datetime=get_current_llm_day_time(full_sentence=False),
+    )
+    system_prompt = ChatMessageSimple(
+        message=final_report_prompt,
+        token_count=token_counter(final_report_prompt),
+        message_type=MessageType.SYSTEM,
+    )
+    reminder_message = ChatMessageSimple(
+        message=USER_FINAL_REPORT_QUERY,
+        token_count=token_counter(USER_FINAL_REPORT_QUERY),
+        message_type=MessageType.USER,
+    )
+    final_report_history = construct_message_history(
+        system_prompt=system_prompt,
+        custom_agent_prompt=None,
+        simple_chat_history=history,
+        reminder_message=reminder_message,
+        project_files=None,
+        available_tokens=llm.config.max_input_tokens,
+    )
+
+    llm_step_result, _ = run_llm_step(
+        emitter=emitter,
+        history=final_report_history,
+        tool_definitions=[],
+        tool_choice=ToolChoiceOptions.NONE,
+        llm=llm,
+        turn_index=999,  # TODO
+        citation_processor=DynamicCitationProcessor(),
+        state_container=state_container,
+        reasoning_effort=ReasoningEffort.LOW,
+        final_documents=None,
+        user_identity=user_identity,
+    )
+
+    final_report = llm_step_result.answer
+    if final_report is None:
+        raise ValueError("LLM failed to generate the final deep research report")
+
+    state_container.set_answer_tokens(final_report)
 
 
 def run_deep_research_llm_loop(
@@ -281,7 +335,14 @@ def run_deep_research_llm_loop(
             special_tool_calls = check_special_tool_calls(tool_calls=tool_calls)
 
             if special_tool_calls.generate_report_tool_call:
-                logger.info("Generate report tool call found, not implemented yet.")
+                generate_final_report(
+                    history=simple_chat_history,
+                    llm=llm,
+                    token_counter=token_counter,
+                    state_container=state_container,
+                    emitter=emitter,
+                    user_identity=user_identity,
+                )
                 break
             elif special_tool_calls.think_tool_call:
                 think_tool_call = special_tool_calls.think_tool_call
@@ -323,7 +384,14 @@ def run_deep_research_llm_loop(
                     logger.warning(
                         "No research agent tool calls found, this should not happen."
                     )
-                    # TODO generate report, best attempt
+                    generate_final_report(
+                        history=simple_chat_history,
+                        llm=llm,
+                        token_counter=token_counter,
+                        state_container=state_container,
+                        emitter=emitter,
+                        user_identity=user_identity,
+                    )
                     break
 
                 research_results = run_research_agent_calls(
@@ -337,7 +405,6 @@ def run_deep_research_llm_loop(
                     user_identity=user_identity,
                 )
 
-                # Need to process citations
                 for research_result in research_results:
                     tool_call_info = ToolCallInfo(
                         parent_tool_call_id=None,
@@ -348,7 +415,7 @@ def run_deep_research_llm_loop(
                         tool_id=999,  # TODO
                         reasoning_tokens=most_recent_reasoning,
                         tool_call_arguments=tool_call.tool_args,
-                        tool_call_response=research_result.report,
+                        tool_call_response=research_result.intermediate_report,
                         search_docs=research_result.search_docs,
                         generated_images=None,
                     )
@@ -367,8 +434,8 @@ def run_deep_research_llm_loop(
                     simple_chat_history.append(tool_call_msg)
 
                     tool_call_response_msg = ChatMessageSimple(
-                        message=research_result.report,
-                        token_count=token_counter(research_result.report),
+                        message=research_result.intermediate_report,
+                        token_count=token_counter(research_result.intermediate_report),
                         message_type=MessageType.TOOL_CALL_RESPONSE,
                         tool_call_id=tool_call.tool_call_id,
                         image_files=None,
@@ -379,7 +446,11 @@ def run_deep_research_llm_loop(
                 most_recent_reasoning = None
         else:
             logger.warning("No tool calls found, this should not happen.")
-            # TODO generate report, best attempt
-
-        if llm_step_result.answer:
-            state_container.set_answer_tokens(llm_step_result.answer)
+            generate_final_report(
+                history=simple_chat_history,
+                llm=llm,
+                token_counter=token_counter,
+                state_container=state_container,
+                emitter=emitter,
+                user_identity=user_identity,
+            )

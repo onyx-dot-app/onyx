@@ -22,6 +22,7 @@ GENERATE_PLAN_TOOL_DESCRIPTION = {
     },
 }
 
+
 RESEARCH_AGENT_TOOL_DESCRIPTION = {
     "type": "function",
     "function": {
@@ -40,6 +41,7 @@ RESEARCH_AGENT_TOOL_DESCRIPTION = {
     },
 }
 
+
 GENERATE_REPORT_TOOL_DESCRIPTION = {
     "type": "function",
     "function": {
@@ -52,6 +54,7 @@ GENERATE_REPORT_TOOL_DESCRIPTION = {
         },
     },
 }
+
 
 THINK_TOOL_DESCRIPTION = {
     "type": "function",
@@ -70,6 +73,40 @@ THINK_TOOL_DESCRIPTION = {
         },
     },
 }
+
+
+RESEARCH_AGENT_THINK_TOOL_DESCRIPTION = {
+    "type": "function",
+    "function": {
+        "name": "think_tool",
+        "description": "Use this for reasoning between research steps. Think deeply about key results, identify knowledge gaps, and plan next steps.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "reasoning": {
+                    "type": "string",
+                    "description": "Your chain of thought reasoning, can be as long as a lengthy paragraph.",
+                }
+            },
+            "required": ["reasoning"],
+        },
+    },
+}
+
+
+RESEARCH_AGENT_GENERATE_REPORT_TOOL_DESCRIPTION = {
+    "type": "function",
+    "function": {
+        "name": "generate_report",
+        "description": "Generate the final research report from all findings. Should be called when research is complete.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+}
+
 
 THINK_TOOL_RESPONSE_MESSAGE = "Acknowledged, please continue."
 THINK_TOOL_RESPONSE_TOKEN_COUNT = 10
@@ -94,7 +131,7 @@ def get_research_agent_additional_tool_definitions(
 ) -> list[dict]:
     tools = [GENERATE_REPORT_TOOL_DESCRIPTION]
     if include_think_tool:
-        tools.append(THINK_TOOL_DESCRIPTION)
+        tools.append(RESEARCH_AGENT_THINK_TOOL_DESCRIPTION)
     return tools
 
 
