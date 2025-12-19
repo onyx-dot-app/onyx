@@ -186,14 +186,19 @@ function SettingsHeader({
   return (
     <div
       ref={headerRef}
-      className="pt-10 sticky top-0 z-10 w-full bg-background-tint-01"
+      className={cn(
+        "sticky top-0 z-10 w-full bg-background-tint-01",
+        backButton ? "pt-4" : "pt-10"
+      )}
     >
       {backButton && (
         <div className="px-2">
           <BackButton />
         </div>
       )}
-      <div className="flex flex-col gap-6 px-4 pt-4">
+      <div
+        className={cn("flex flex-col gap-6 px-4", backButton ? "pt-2" : "pt-4")}
+      >
         <div className="flex flex-col">
           <div className="flex flex-row justify-between items-center gap-4">
             <Icon className="stroke-text-04 h-[1.75rem] w-[1.75rem]" />
@@ -271,7 +276,11 @@ export interface SettingsBodyProps {
 }
 
 function SettingsBody({ children }: SettingsBodyProps) {
-  return <div className="py-6 px-4 flex flex-col gap-8 w-full">{children}</div>;
+  return (
+    <div className="pt-6 pb-[4.5rem] px-4 flex flex-col gap-8 w-full">
+      {children}
+    </div>
+  );
 }
 
 const Settings = {
