@@ -80,7 +80,7 @@ def _enrich_basic_chunk_info(
     http_client: httpx.Client,
     document_id: str,
     previous_chunk_count: int | None,
-    new_chunk_count: int,  # TODO: This makes no sense.
+    new_chunk_count: int,
 ) -> EnrichedDocumentIndexingInfo:
     """Determines which chunks need to be deleted during document reindexing.
 
@@ -210,6 +210,7 @@ def _cleanup_chunks(chunks: list[InferenceChunkUncleaned]) -> list[InferenceChun
     tries=3,
     delay=1,
     backoff=2,
+    exceptions=httpx.HTTPError,
 )
 def _update_single_chunk(
     doc_chunk_id: UUID,
@@ -220,7 +221,7 @@ def _update_single_chunk(
 ) -> None:
     """Updates a single document chunk in Vespa.
 
-    TODO: Couldn't this be batched?
+    TODO(andrei): Couldn't this be batched?
 
     Args:
         doc_chunk_id: The ID of the chunk to update.
@@ -327,8 +328,14 @@ def _update_single_chunk(
             f"Failed to update doc chunk {doc_chunk_id} (doc_id={doc_id}). "
             f"Code: {e.response.status_code}. Details: {e.response.text}"
         )
-        # Re-raise so the @retry decorator will catch and retry.
-        raise
+        # Re-raise so the @retry decorator will catch and retry, unless the
+        # status code is < 5xx, in which case wrap the exception in something
+        # other than an HTTPError to skip retries.
+        if e.response.status_code >= 500:
+            raise
+        raise RuntimeError(
+            f"Non-retryable error updating chunk {doc_chunk_id}: {e}"
+        ) from e
 
 
 class VespaDocumentIndex(DocumentIndex):
