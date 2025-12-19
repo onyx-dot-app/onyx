@@ -261,7 +261,7 @@ export default function AppPageLayout({
               <Text text03>{customHeaderContent}</Text>
             </div>
 
-            {/* Center - contains the custom-header-content */}
+            {/* Right - contains the share and more-options buttons */}
             <div
               className={cn(
                 "flex-1 flex flex-row items-center justify-end px-1",
