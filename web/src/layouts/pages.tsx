@@ -35,10 +35,6 @@ import {
   SvgSidebar,
   SvgTrash,
 } from "@opal/icons";
-import type { IconProps } from "@opal/types";
-import Separator from "@/refresh-components/Separator";
-import { AdminPageHeader } from "@/layouts/headers";
-
 export interface AppPageLayoutProps
   extends React.HtmlHTMLAttributes<HTMLDivElement> {
   settings: CombinedSettings | null;
@@ -305,59 +301,5 @@ export function AppPageLayout({
         )}
       </div>
     </>
-  );
-}
-
-// Wraps all pages with the default, standard CSS styles.
-export function SettingsPageLayout(
-  props: React.HtmlHTMLAttributes<HTMLDivElement>
-) {
-  return (
-    <div
-      id="page-wrapper-scroll-container"
-      className="w-full h-full flex flex-col items-center overflow-y-auto"
-    >
-      {/* WARNING: The id="page-wrapper-scroll-container" above is used by PageHeader.tsx
-          to detect scroll position and show/hide the scroll shadow.
-          DO NOT REMOVE this ID without updating PageHeader.tsx accordingly. */}
-      <div className="h-full w-[min(50rem,100%)]">
-        <div {...props} />
-      </div>
-    </div>
-  );
-}
-
-export interface AdminPageLayoutProps {
-  children: React.ReactNode;
-  icon: React.FunctionComponent<IconProps>;
-  title: string;
-  description: string;
-  rightChildren?: React.ReactNode;
-}
-
-export function AdminPageLayout({
-  children,
-  icon,
-  title,
-  description,
-  rightChildren,
-}: AdminPageLayoutProps) {
-  return (
-    <div className="flex flex-col w-full h-full overflow-hidden">
-      <div className="container max-w-[60rem] flex flex-col h-full overflow-hidden">
-        <div className="px-4 pt-14 pb-6 gap-6 flex flex-col flex-shrink-0">
-          <AdminPageHeader
-            icon={icon}
-            title={title}
-            description={description}
-            rightChildren={rightChildren}
-          />
-          <Separator className="py-0" />
-        </div>
-        <div className="px-4 pb-6 flex-1 overflow-y-auto min-h-0">
-          {children}
-        </div>
-      </div>
-    </div>
   );
 }

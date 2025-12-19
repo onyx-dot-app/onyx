@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { SettingsPageHeader } from "@/layouts/headers";
-import { SettingsPageLayout } from "@/layouts/pages";
+import Settings from "@/layouts/settings-pages";
 import Button from "@/refresh-components/buttons/Button";
 import { FullPersona } from "@/app/admin/assistants/interfaces";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
@@ -405,10 +404,9 @@ export default function AgentEditorPage({
   }
 
   return (
-    <SettingsPageLayout
+    <div
       data-testid="AgentsEditorPage/container"
       aria-label="Agents Editor Page"
-      className="pb-20"
     >
       <Formik
         initialValues={initialValues}
@@ -465,9 +463,9 @@ export default function AgentEditorPage({
               />
             </userFilesModal.Provider>
 
-            <Form className="w-full h-fit flex flex-col overflow-hidden">
-              <SettingsPageLayout>
-                <SettingsPageHeader
+            <Form>
+              <Settings.Root>
+                <Settings.Header
                   icon={SvgSearch}
                   title={existingAgent ? "Edit Agent" : "Create Agent"}
                   description=""
@@ -480,7 +478,7 @@ export default function AgentEditorPage({
                 />
 
                 {/* Agent Form Content */}
-                <div className="py-6 px-4 flex flex-col gap-8 w-full">
+                <Settings.Body>
                   <div className="flex flex-row gap-10 justify-between items-start w-full">
                     <Section>
                       <VerticalLabelWrapper name="name" label="Name">
@@ -779,12 +777,12 @@ export default function AgentEditorPage({
                       </div>
                     </Section>
                   </SimpleCollapsible>
-                </div>
-              </SettingsPageLayout>
+                </Settings.Body>
+              </Settings.Root>
             </Form>
           </>
         )}
       </Formik>
-    </SettingsPageLayout>
+    </div>
   );
 }
