@@ -198,133 +198,137 @@ const ChatUI = React.forwardRef(
         <div
           key={currentChatSessionId}
           ref={scrollContainerRef}
-          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden default-scrollbar"
+          className="flex flex-1 justify-center min-h-0 px-6 overflow-y-auto overflow-x-hidden default-scrollbar"
           onScroll={handleScroll}
         >
-          {messages.map((message, i) => {
-            const messageReactComponentKey = `message-${message.nodeId}`;
-            const parentMessage = message.parentNodeId
-              ? messageTree?.get(message.parentNodeId)
-              : null;
+          <div>
+            {messages.map((message, i) => {
+              const messageReactComponentKey = `message-${message.nodeId}`;
+              const parentMessage = message.parentNodeId
+                ? messageTree?.get(message.parentNodeId)
+                : null;
 
-            if (message.type === "user") {
-              const nextMessage =
-                messages.length > i + 1 ? messages[i + 1] : null;
+              if (message.type === "user") {
+                const nextMessage =
+                  messages.length > i + 1 ? messages[i + 1] : null;
 
-              return (
-                <div
-                  id={messageReactComponentKey}
-                  key={messageReactComponentKey}
-                >
-                  <HumanMessage
-                    disableSwitchingForStreaming={
-                      (nextMessage && nextMessage.is_generating) || false
-                    }
-                    stopGenerating={stopGenerating}
-                    content={message.message}
-                    files={message.files}
-                    messageId={message.messageId}
-                    onEdit={(editedContent) => {
-                      if (
-                        message.messageId !== undefined &&
-                        message.messageId !== null
-                      ) {
-                        handleEditWithMessageId(
-                          editedContent,
-                          message.messageId
-                        );
-                      }
-                    }}
-                    otherMessagesCanSwitchTo={
-                      parentMessage?.childrenNodeIds ?? emptyChildrenIds
-                    }
-                    onMessageSelection={onMessageSelection}
-                  />
-                </div>
-              );
-            } else if (message.type === "assistant") {
-              if ((error || loadError) && i === messages.length - 1) {
                 return (
                   <div
-                    key={`error-${message.nodeId}`}
-                    className="max-w-message-max mx-auto"
+                    id={messageReactComponentKey}
+                    key={messageReactComponentKey}
                   >
-                    <ErrorBanner
-                      resubmit={handleResubmitLastMessage}
-                      error={error || loadError || ""}
-                      errorCode={message.errorCode || undefined}
-                      isRetryable={message.isRetryable ?? true}
-                      details={message.errorDetails || undefined}
-                      stackTrace={message.stackTrace || undefined}
+                    <HumanMessage
+                      disableSwitchingForStreaming={
+                        (nextMessage && nextMessage.is_generating) || false
+                      }
+                      stopGenerating={stopGenerating}
+                      content={message.message}
+                      files={message.files}
+                      messageId={message.messageId}
+                      onEdit={(editedContent) => {
+                        if (
+                          message.messageId !== undefined &&
+                          message.messageId !== null
+                        ) {
+                          handleEditWithMessageId(
+                            editedContent,
+                            message.messageId
+                          );
+                        }
+                      }}
+                      otherMessagesCanSwitchTo={
+                        parentMessage?.childrenNodeIds ?? emptyChildrenIds
+                      }
+                      onMessageSelection={onMessageSelection}
+                    />
+                  </div>
+                );
+              } else if (message.type === "assistant") {
+                if ((error || loadError) && i === messages.length - 1) {
+                  return (
+                    <div
+                      key={`error-${message.nodeId}`}
+                      className="max-w-message-max mx-auto"
+                    >
+                      <ErrorBanner
+                        resubmit={handleResubmitLastMessage}
+                        error={error || loadError || ""}
+                        errorCode={message.errorCode || undefined}
+                        isRetryable={message.isRetryable ?? true}
+                        details={message.errorDetails || undefined}
+                        stackTrace={message.stackTrace || undefined}
+                      />
+                    </div>
+                  );
+                }
+
+                // NOTE: it's fine to use the previous entry in messageHistory
+                // since this is a "parsed" version of the message tree
+                // so the previous message is guaranteed to be the parent of the current message
+                const previousMessage = i !== 0 ? messages[i - 1] : null;
+                const regenerate =
+                  message.messageId !== undefined && previousMessage
+                    ? createRegenerator({
+                        messageId: message.messageId,
+                        parentMessage: previousMessage,
+                      })
+                    : undefined;
+                const chatStateData = {
+                  assistant: liveAssistant,
+                  docs: message.documents ?? emptyDocs,
+                  citations: message.citations,
+                  setPresentingDocument,
+                  regenerate,
+                  overriddenModel: llmManager.currentLlm?.modelName,
+                  researchType: message.researchType,
+                };
+                return (
+                  <div
+                    id={`message-${message.nodeId}`}
+                    key={messageReactComponentKey}
+                  >
+                    <AIMessage
+                      rawPackets={message.packets}
+                      chatState={chatStateData}
+                      nodeId={message.nodeId}
+                      messageId={message.messageId}
+                      currentFeedback={message.currentFeedback}
+                      llmManager={llmManager}
+                      otherMessagesCanSwitchTo={
+                        parentMessage?.childrenNodeIds ?? emptyChildrenIds
+                      }
+                      onMessageSelection={onMessageSelection}
                     />
                   </div>
                 );
               }
+            })}
 
-              // NOTE: it's fine to use the previous entry in messageHistory
-              // since this is a "parsed" version of the message tree
-              // so the previous message is guaranteed to be the parent of the current message
-              const previousMessage = i !== 0 ? messages[i - 1] : null;
-              const regenerate =
-                message.messageId !== undefined && previousMessage
-                  ? createRegenerator({
-                      messageId: message.messageId,
-                      parentMessage: previousMessage,
-                    })
-                  : undefined;
-              const chatStateData = {
-                assistant: liveAssistant,
-                docs: message.documents ?? emptyDocs,
-                citations: message.citations,
-                setPresentingDocument,
-                regenerate,
-                overriddenModel: llmManager.currentLlm?.modelName,
-                researchType: message.researchType,
-              };
-              return (
-                <div
-                  id={`message-${message.nodeId}`}
-                  key={messageReactComponentKey}
-                >
-                  <AIMessage
-                    rawPackets={message.packets}
-                    chatState={chatStateData}
-                    nodeId={message.nodeId}
-                    messageId={message.messageId}
-                    currentFeedback={message.currentFeedback}
-                    llmManager={llmManager}
-                    otherMessagesCanSwitchTo={
-                      parentMessage?.childrenNodeIds ?? emptyChildrenIds
-                    }
-                    onMessageSelection={onMessageSelection}
-                  />
-                </div>
-              );
-            }
-          })}
+            {(((error !== null || loadError !== null) &&
+              messages[messages.length - 1]?.type === "user") ||
+              messages[messages.length - 1]?.type === "error") && (
+              <div className="max-w-message-max mx-auto">
+                <ErrorBanner
+                  resubmit={handleResubmitLastMessage}
+                  error={error || loadError || ""}
+                  errorCode={
+                    messages[messages.length - 1]?.errorCode || undefined
+                  }
+                  isRetryable={
+                    messages[messages.length - 1]?.isRetryable ?? true
+                  }
+                  details={
+                    messages[messages.length - 1]?.errorDetails || undefined
+                  }
+                  stackTrace={
+                    messages[messages.length - 1]?.stackTrace || undefined
+                  }
+                />
+              </div>
+            )}
 
-          {(((error !== null || loadError !== null) &&
-            messages[messages.length - 1]?.type === "user") ||
-            messages[messages.length - 1]?.type === "error") && (
-            <div className="max-w-message-max mx-auto">
-              <ErrorBanner
-                resubmit={handleResubmitLastMessage}
-                error={error || loadError || ""}
-                errorCode={
-                  messages[messages.length - 1]?.errorCode || undefined
-                }
-                isRetryable={messages[messages.length - 1]?.isRetryable ?? true}
-                details={
-                  messages[messages.length - 1]?.errorDetails || undefined
-                }
-                stackTrace={
-                  messages[messages.length - 1]?.stackTrace || undefined
-                }
-              />
-            </div>
-          )}
-
-          <div ref={endDivRef} />
+            <div ref={endDivRef} />
+          </div>
         </div>
       </div>
     );

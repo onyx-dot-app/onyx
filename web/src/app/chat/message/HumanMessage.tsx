@@ -122,15 +122,15 @@ function MessageEditing({
   return (
     <div className="w-full">
       <div
-        className={cn(
+        className={
           "w-full h-full border rounded-16 overflow-hidden p-3 flex flex-col gap-2"
-        )}
+        }
       >
         <textarea
           ref={textareaRef}
-          className={cn(
+          className={
             "w-full h-full resize-none outline-none bg-transparent overflow-y-scroll whitespace-normal break-word"
-          )}
+          }
           aria-multiline
           role="textarea"
           value={editedContent}
@@ -226,108 +226,106 @@ export default function HumanMessage({
   return (
     <div
       id="onyx-human-message"
-      className="pt-5 pb-1 w-full lg:px-5 flex justify-center -mr-6 relative"
+      className="text-user-text pt-5 pb-1 w-full flex justify-end -mr-6 relative"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className={cn("text-user-text max-w-[790px] px-4 w-full")}>
-        <FileDisplay alignBubble files={files || []} />
-        <div className="flex flex-wrap justify-end break-words">
-          {isEditing ? (
-            <MessageEditing
-              content={content}
-              onSubmitEdit={(editedContent) => {
-                onEdit?.(editedContent);
-                setContent(editedContent);
-                setIsEditing(false);
-              }}
-              onCancelEdit={() => setIsEditing(false)}
-            />
-          ) : typeof content === "string" ? (
-            <>
-              <div className="md:max-w-[25rem] flex basis-[100%] md:basis-auto justify-end md:order-1">
-                <div
-                  className={
-                    "max-w-[25rem] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3"
-                  }
-                >
-                  <Text mainContentBody>{content}</Text>
-                </div>
+      <FileDisplay alignBubble files={files || []} />
+      <div className="flex flex-wrap justify-end break-words">
+        {isEditing ? (
+          <MessageEditing
+            content={content}
+            onSubmitEdit={(editedContent) => {
+              onEdit?.(editedContent);
+              setContent(editedContent);
+              setIsEditing(false);
+            }}
+            onCancelEdit={() => setIsEditing(false)}
+          />
+        ) : typeof content === "string" ? (
+          <>
+            <div className="md:max-w-[25rem] flex basis-[100%] md:basis-auto justify-end md:order-1">
+              <div
+                className={
+                  "max-w-[25rem] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3"
+                }
+              >
+                <Text mainContentBody>{content}</Text>
               </div>
-              {onEdit &&
-              isHovered &&
-              !isEditing &&
-              (!files || files.length === 0) ? (
-                <div className="flex flex-row gap-1 p-1">
-                  <CopyIconButton
-                    getCopyText={() => content}
-                    tertiary
-                    data-testid="HumanMessage/copy-button"
-                  />
-                  <IconButton
-                    icon={SvgEdit}
-                    tertiary
-                    tooltip="Edit"
-                    onClick={() => {
-                      setIsEditing(true);
-                      setIsHovered(false);
-                    }}
-                    data-testid="HumanMessage/edit-button"
-                  />
-                </div>
-              ) : (
-                <div className="w-7 h-10" />
-              )}
-            </>
-          ) : (
-            <>
-              {onEdit &&
-              isHovered &&
-              !isEditing &&
-              (!files || files.length === 0) ? (
-                <div className="my-auto">
-                  <IconButton
-                    icon={SvgEdit}
-                    onClick={() => {
-                      setIsEditing(true);
-                      setIsHovered(false);
-                    }}
-                    tertiary
-                    tooltip="Edit"
-                  />
-                </div>
-              ) : (
-                <div className="h-[27px]" />
-              )}
-              <div className="ml-auto rounded-lg p-1">{content}</div>
-            </>
-          )}
-          <div className="md:min-w-[100%] flex justify-end order-1 mt-1">
-            {currentMessageInd !== undefined &&
-              onMessageSelection &&
-              otherMessagesCanSwitchTo &&
-              otherMessagesCanSwitchTo.length > 1 && (
-                <MessageSwitcher
-                  disableForStreaming={disableSwitchingForStreaming}
-                  currentPage={currentMessageInd + 1}
-                  totalPages={otherMessagesCanSwitchTo.length}
-                  handlePrevious={() => {
-                    stopGenerating();
-                    const prevMessage = getPreviousMessage();
-                    if (prevMessage !== undefined) {
-                      onMessageSelection(prevMessage);
-                    }
-                  }}
-                  handleNext={() => {
-                    stopGenerating();
-                    const nextMessage = getNextMessage();
-                    if (nextMessage !== undefined) {
-                      onMessageSelection(nextMessage);
-                    }
-                  }}
+            </div>
+            {onEdit &&
+            isHovered &&
+            !isEditing &&
+            (!files || files.length === 0) ? (
+              <div className="flex flex-row gap-1 p-1">
+                <CopyIconButton
+                  getCopyText={() => content}
+                  tertiary
+                  data-testid="HumanMessage/copy-button"
                 />
-              )}
-          </div>
+                <IconButton
+                  icon={SvgEdit}
+                  tertiary
+                  tooltip="Edit"
+                  onClick={() => {
+                    setIsEditing(true);
+                    setIsHovered(false);
+                  }}
+                  data-testid="HumanMessage/edit-button"
+                />
+              </div>
+            ) : (
+              <div className="w-7 h-10" />
+            )}
+          </>
+        ) : (
+          <>
+            {onEdit &&
+            isHovered &&
+            !isEditing &&
+            (!files || files.length === 0) ? (
+              <div className="my-auto">
+                <IconButton
+                  icon={SvgEdit}
+                  onClick={() => {
+                    setIsEditing(true);
+                    setIsHovered(false);
+                  }}
+                  tertiary
+                  tooltip="Edit"
+                />
+              </div>
+            ) : (
+              <div className="h-[27px]" />
+            )}
+            <div className="ml-auto rounded-lg p-1">{content}</div>
+          </>
+        )}
+        <div className="md:min-w-[100%] flex justify-end order-1 mt-1">
+          {currentMessageInd !== undefined &&
+            onMessageSelection &&
+            otherMessagesCanSwitchTo &&
+            otherMessagesCanSwitchTo.length > 1 && (
+              <MessageSwitcher
+                disableForStreaming={disableSwitchingForStreaming}
+                currentPage={currentMessageInd + 1}
+                totalPages={otherMessagesCanSwitchTo.length}
+                handlePrevious={() => {
+                  stopGenerating();
+                  const prevMessage = getPreviousMessage();
+                  if (prevMessage !== undefined) {
+                    onMessageSelection(prevMessage);
+                  }
+                }}
+                handleNext={() => {
+                  stopGenerating();
+                  const nextMessage = getNextMessage();
+                  if (nextMessage !== undefined) {
+                    onMessageSelection(nextMessage);
+                  }
+                }}
+              />
+            )}
         </div>
       </div>
     </div>

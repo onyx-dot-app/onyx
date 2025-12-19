@@ -76,7 +76,7 @@ export default function SharedChatDisplay({
         </div>
 
         {isMounted ? (
-          <div className="w-full px-8">
+          <div className="max-w-[50rem] m-auto">
             {messages.map((message, i) => {
               if (message.type === "user") {
                 return (
