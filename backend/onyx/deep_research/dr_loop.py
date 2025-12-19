@@ -154,6 +154,7 @@ def run_deep_research_llm_loop(
     # Filter tools to only allow web search, internal search, and open URL
     allowed_tool_names = {SearchTool.NAME, WebSearchTool.NAME, OpenURLTool.NAME}
     allowed_tools = [tool for tool in tools if tool.name in allowed_tool_names]
+    orchestrator_start_turn_index = 0
 
     #########################################################
     # CLARIFICATION STEP (optional)
