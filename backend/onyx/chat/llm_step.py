@@ -52,6 +52,45 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+def _parse_tool_args_to_dict(raw_args: Any) -> dict[str, Any]:
+    """Parse tool arguments into a dict.
+
+    Normal case:
+    - raw_args == '{"queries":[...]}' -> dict via json.loads
+
+    Defensive case (JSON string literal of an object):
+    - raw_args == '"{\\"queries\\":[...]}"' -> json.loads -> str -> json.loads -> dict
+
+    Anything else returns {}.
+    """
+
+    if raw_args is None:
+        return {}
+
+    if isinstance(raw_args, dict):
+        return raw_args
+
+    if not isinstance(raw_args, str):
+        return {}
+
+    try:
+        parsed1: Any = json.loads(raw_args)
+    except json.JSONDecodeError:
+        return {}
+
+    if isinstance(parsed1, dict):
+        return parsed1
+
+    if isinstance(parsed1, str):
+        try:
+            parsed2: Any = json.loads(parsed1)
+        except json.JSONDecodeError:
+            return {}
+        return parsed2 if isinstance(parsed2, dict) else {}
+
+    return {}
+
+
 def _format_message_history_for_logging(
     message_history: LanguageModelInput,
 ) -> str:
@@ -170,12 +209,7 @@ def _extract_tool_call_kickoffs(
     for tool_call_data in id_to_tool_call_map.values():
         if tool_call_data.get("id") and tool_call_data.get("name"):
             try:
-                # Parse arguments JSON string to dict
-                tool_args = (
-                    json.loads(tool_call_data["arguments"])
-                    if tool_call_data["arguments"]
-                    else {}
-                )
+                tool_args = _parse_tool_args_to_dict(tool_call_data.get("arguments"))
             except json.JSONDecodeError:
                 # If parsing fails, try empty dict, most tools would fail though
                 logger.error(
@@ -283,12 +317,18 @@ def translate_history_to_llm_format(
                         function_name = tool_call_data.get(
                             TOOL_CALL_MSG_FUNC_NAME, "unknown"
                         )
-                        tool_args = tool_call_data.get(TOOL_CALL_MSG_ARGUMENTS, {})
+                        raw_args = tool_call_data.get(TOOL_CALL_MSG_ARGUMENTS, {})
                     else:
                         function_name = "unknown"
-                        tool_args = (
+                        raw_args = (
                             tool_call_data if isinstance(tool_call_data, dict) else {}
                         )
+
+                    # IMPORTANT: `FunctionCall.arguments` must be a JSON object string.
+                    # If `raw_args` is accidentally a JSON string literal of an object
+                    # (e.g. '"{\\"queries\\":[...]}"'), calling `json.dumps(raw_args)`
+                    # would produce a quoted JSON literal and break Anthropic tool parsing.
+                    tool_args = _parse_tool_args_to_dict(raw_args)
 
                     # NOTE: if the model is trained on a different tool call format, this may slightly interfere
                     # with the future tool calls, if it doesn't look like this. Almost certainly not a big deal.
@@ -341,8 +381,8 @@ def run_llm_step_pkt_generator(
     tool_choice: ToolChoiceOptions,
     llm: LLM,
     turn_index: int,
-    citation_processor: DynamicCitationProcessor,
     state_container: ChatStateContainer,
+    citation_processor: DynamicCitationProcessor | None,
     reasoning_effort: ReasoningEffort | None = None,
     final_documents: list[SearchDoc] | None = None,
     user_identity: LLMUserIdentity | None = None,
@@ -353,8 +393,7 @@ def run_llm_step_pkt_generator(
     # The second return value is for the turn index because reasoning counts on the frontend as a turn
     # TODO this is maybe ok but does not align well with the backend logic too well
     llm_msg_history = translate_history_to_llm_format(history)
-
-    has_reasoned = False
+    has_reasoned = 0
 
     # Uncomment the line below to log the entire message history to the console
     if LOG_ONYX_MODEL_INTERACTIONS:
@@ -432,32 +471,42 @@ def run_llm_step_pkt_generator(
                         turn_index=turn_index,
                         obj=ReasoningDone(),
                     )
-                    has_reasoned = True
+                    has_reasoned = 1
                     reasoning_start = False
 
                 if not answer_start:
                     yield Packet(
-                        turn_index=turn_index,
+                        turn_index=turn_index + has_reasoned,
                         obj=AgentResponseStart(
                             final_documents=final_documents,
                         ),
                     )
                     answer_start = True
 
-                for result in citation_processor.process_token(delta.content):
-                    if isinstance(result, str):
-                        accumulated_answer += result
-                        # Save answer incrementally to state container
-                        state_container.set_answer_tokens(accumulated_answer)
-                        yield Packet(
-                            turn_index=turn_index,
-                            obj=AgentResponseDelta(content=result),
-                        )
-                    elif isinstance(result, CitationInfo):
-                        yield Packet(
-                            turn_index=turn_index,
-                            obj=result,
-                        )
+                if citation_processor:
+                    for result in citation_processor.process_token(delta.content):
+                        if isinstance(result, str):
+                            accumulated_answer += result
+                            # Save answer incrementally to state container
+                            state_container.set_answer_tokens(accumulated_answer)
+                            yield Packet(
+                                turn_index=turn_index + has_reasoned,
+                                obj=AgentResponseDelta(content=result),
+                            )
+                        elif isinstance(result, CitationInfo):
+                            yield Packet(
+                                turn_index=turn_index + has_reasoned,
+                                obj=result,
+                            )
+                else:
+                    # When citation_processor is None, use delta.content directly without modification
+                    accumulated_answer += delta.content
+                    # Save answer incrementally to state container
+                    state_container.set_answer_tokens(accumulated_answer)
+                    yield Packet(
+                        turn_index=turn_index + has_reasoned,
+                        obj=AgentResponseDelta(content=delta.content),
+                    )
 
             if delta.tool_calls:
                 if reasoning_start:
@@ -465,7 +514,7 @@ def run_llm_step_pkt_generator(
                         turn_index=turn_index,
                         obj=ReasoningDone(),
                     )
-                    has_reasoned = True
+                    has_reasoned = 1
                     reasoning_start = False
 
                 for tool_call_delta in delta.tool_calls:
@@ -478,7 +527,9 @@ def run_llm_step_pkt_generator(
                 for tool_call_delta in flush_delta.tool_calls:
                     _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
 
-        tool_calls = _extract_tool_call_kickoffs(id_to_tool_call_map, turn_index)
+        tool_calls = _extract_tool_call_kickoffs(
+            id_to_tool_call_map, turn_index + has_reasoned
+        )
         if tool_calls:
             tool_calls_list: list[ToolCall] = [
                 ToolCall(
@@ -511,7 +562,7 @@ def run_llm_step_pkt_generator(
             turn_index=turn_index,
             obj=ReasoningDone(),
         )
-        has_reasoned = True
+        has_reasoned = 1
 
     # Flush any remaining content from citation processor
     if citation_processor:
@@ -521,12 +572,12 @@ def run_llm_step_pkt_generator(
                 # Save answer incrementally to state container
                 state_container.set_answer_tokens(accumulated_answer)
                 yield Packet(
-                    turn_index=turn_index,
+                    turn_index=turn_index + has_reasoned,
                     obj=AgentResponseDelta(content=result),
                 )
             elif isinstance(result, CitationInfo):
                 yield Packet(
-                    turn_index=turn_index,
+                    turn_index=turn_index + has_reasoned,
                     obj=result,
                 )
 
@@ -551,7 +602,7 @@ def run_llm_step_pkt_generator(
             answer=accumulated_answer if accumulated_answer else None,
             tool_calls=tool_calls if tool_calls else None,
         ),
-        has_reasoned,
+        bool(has_reasoned),
     )
 
 
@@ -562,8 +613,8 @@ def run_llm_step(
     tool_choice: ToolChoiceOptions,
     llm: LLM,
     turn_index: int,
-    citation_processor: DynamicCitationProcessor,
     state_container: ChatStateContainer,
+    citation_processor: DynamicCitationProcessor | None,
     reasoning_effort: ReasoningEffort | None = None,
     final_documents: list[SearchDoc] | None = None,
     user_identity: LLMUserIdentity | None = None,
@@ -582,8 +633,8 @@ def run_llm_step(
         tool_choice=tool_choice,
         llm=llm,
         turn_index=turn_index,
-        citation_processor=citation_processor,
         state_container=state_container,
+        citation_processor=citation_processor,
         reasoning_effort=reasoning_effort,
         final_documents=final_documents,
         user_identity=user_identity,

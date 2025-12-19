@@ -29,8 +29,7 @@ create a `.env.local` file in the `web/` directory with the following configurat
 
 ```text
 # Point local dev server to cloud backend
-# This allows testing frontend changes against the production/staging backend
-INTERNAL_URL=https://cloud.onyx.app/api
+INTERNAL_URL=https://st-dev.onyx.app/api
 
 # Debug auth cookie for authenticating against remote backend
 # This cookie is automatically injected into API requests when in development mode
@@ -42,6 +41,9 @@ INTERNAL_URL=https://cloud.onyx.app/api
 # Note: This cookie may expire, so you may need to refresh it periodically
 DEBUG_AUTH_COOKIE=your_cookie_value_here
 ```
+
+By default, this does _NOT_ override existing cookies, so if you've logged in previously, you
+may need to delete the cookies for the `localhost` domain.
 
 **Important notes:**
 
