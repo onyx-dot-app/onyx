@@ -87,7 +87,7 @@ class ChatStateContainer:
             return self.is_clarification
 
 
-def run_chat_llm_with_state_containers(
+def run_chat_loop_with_state_containers(
     func: Callable[..., None],
     is_connected: Callable[[], bool],
     emitter: Emitter,
@@ -111,7 +111,7 @@ def run_chat_llm_with_state_containers(
         **kwargs: Additional keyword arguments for func
 
     Usage:
-        packets = run_chat_llm_with_state_containers(
+        packets = run_chat_loop_with_state_containers(
             my_func,
             emitter=emitter,
             state_container=state_container,

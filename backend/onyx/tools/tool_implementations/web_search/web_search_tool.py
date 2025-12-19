@@ -14,9 +14,9 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
+from onyx.tools.interface import Tool
 from onyx.tools.models import ToolResponse
 from onyx.tools.models import WebSearchToolOverrideKwargs
-from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.utils import (
     convert_inference_sections_to_llm_string,
 )

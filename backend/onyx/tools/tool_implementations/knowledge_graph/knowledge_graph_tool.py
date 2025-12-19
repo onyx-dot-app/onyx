@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 
 from onyx.chat.emitter import Emitter
 from onyx.db.kg_config import get_kg_config_settings
+from onyx.tools.interface import Tool
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool import Tool
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

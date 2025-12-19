@@ -20,7 +20,6 @@ from onyx.server.query_and_chat.streaming_models import ImageGenerationToolHeart
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
 )
