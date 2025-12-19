@@ -80,7 +80,7 @@ def _enrich_basic_chunk_info(
     http_client: httpx.Client,
     document_id: str,
     previous_chunk_count: int | None,
-    new_chunk_count: int,  # TODO: This makes no sense.
+    new_chunk_count: int,
 ) -> EnrichedDocumentIndexingInfo:
     """Determines which chunks need to be deleted during document reindexing.
 
