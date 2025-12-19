@@ -32,7 +32,6 @@ from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceChunkUncleaned
 from onyx.context.search.models import QueryExpansionType
 from onyx.db.enums import EmbeddingPrecision
-from onyx.document_index.document_index_utils import get_document_chunk_ids
 from onyx.document_index.document_index_utils import get_uuid_from_chunk_info
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import (
@@ -52,7 +51,6 @@ from onyx.document_index.vespa.chunk_retrieval import (
     parallel_visit_api_retrieval,
 )
 from onyx.document_index.vespa.chunk_retrieval import query_vespa
-from onyx.document_index.vespa.deletion import delete_vespa_chunks
 from onyx.document_index.vespa.indexing_utils import BaseHTTPXClientContext
 from onyx.document_index.vespa.indexing_utils import check_for_final_chunk_existence
 from onyx.document_index.vespa.indexing_utils import GlobalHTTPXClientContext
@@ -709,49 +707,16 @@ class VespaIndex(DocumentIndex):
         tenant_id: str,
         chunk_count: int | None,
     ) -> int:
-        total_chunks_deleted = 0
-
-        doc_id = replace_invalid_doc_id_characters(doc_id)
-
-        # NOTE: using `httpx` here since `requests` doesn't support HTTP2. This is beneficial for
-        # indexing / updates / deletes since we have to make a large volume of requests.
-        index_names = [self.index_name]
-        if self.secondary_index_name:
-            index_names.append(self.secondary_index_name)
-
-        with (
-            self.httpx_client_context as http_client,
-            concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor,
-        ):
-            for (
-                index_name,
-                large_chunks_enabled,
-            ) in self.index_to_large_chunks_enabled.items():
-                enriched_doc_infos = VespaIndex.enrich_basic_chunk_info(
-                    index_name=index_name,
-                    http_client=http_client,
-                    document_id=doc_id,
-                    previous_chunk_count=chunk_count,
-                    new_chunk_count=0,
-                )
-                chunks_to_delete = get_document_chunk_ids(
-                    enriched_document_info_list=[enriched_doc_infos],
-                    tenant_id=tenant_id,
-                    large_chunks_enabled=large_chunks_enabled,
-                )
-
-                for doc_chunk_ids_batch in batch_generator(
-                    chunks_to_delete, BATCH_SIZE
-                ):
-                    total_chunks_deleted += len(doc_chunk_ids_batch)
-                    delete_vespa_chunks(
-                        doc_chunk_ids=doc_chunk_ids_batch,
-                        index_name=index_name,
-                        http_client=http_client,
-                        executor=executor,
-                    )
-
-        return total_chunks_deleted
+        vespa_document_index = VespaDocumentIndex(
+            index_name=self.index_name,
+            tenant_state=TenantState(
+                tenant_id=tenant_id,
+                multitenant=self.multitenant,
+            ),
+            large_chunks_enabled=self.large_chunks_enabled,
+            httpx_client=self.httpx_client,
+        )
+        return vespa_document_index.delete(document_id=doc_id, chunk_count=chunk_count)
 
     def id_based_retrieval(
         self,
