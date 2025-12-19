@@ -242,7 +242,7 @@ def _index_vespa_chunk(
                     logger.warning(
                         f"Rate limited while indexing document '{document.id}' "
                         f"(attempt {attempt + 1}/{max_retries}). "
-                        f"Vespa response: '{res.text}'. "
+                        f"Vespa response: '{e.response.text}'. "
                         f"Backing off for {delay:.2f} seconds."
                     )
                     time.sleep(delay)
@@ -250,12 +250,12 @@ def _index_vespa_chunk(
                 else:
                     logger.error(
                         f"Failed to index document '{document.id}' after {max_retries} attempts "
-                        f"due to rate limiting. Vespa response: '{res.text}'"
+                        f"due to rate limiting. Vespa response: '{e.response.text}'"
                     )
                     raise
             elif e.response.status_code == HTTPStatus.INSUFFICIENT_STORAGE:
                 logger.error(
-                    f"Failed to index document: '{document.id}'. Got response: '{res.text}'"
+                    f"Failed to index document: '{document.id}'. Got response: '{e.response.text}'"
                 )
                 logger.error(
                     "NOTE: HTTP Status 507 Insufficient Storage usually means "
@@ -275,7 +275,7 @@ def _index_vespa_chunk(
                     continue
                 else:
                     logger.exception(
-                        f"Failed to index document: '{document.id}'. Got response: '{res.text}'"
+                        f"Failed to index document: '{document.id}'. Got response: '{e.response.text}'"
                     )
                     raise
         except Exception as e:
