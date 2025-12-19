@@ -37,6 +37,24 @@ variable "cluster_endpoint_public_access_cidrs" {
   default     = []
 }
 
+variable "main_node_instance_types" {
+  type        = list(string)
+  description = "Instance types for the main node group"
+  default     = ["m7i.4xlarge"]
+}
+
+variable "vespa_node_instance_types" {
+  type        = list(string)
+  description = "Instance types for the Vespa node group"
+  default     = ["m6i.2xlarge"]
+}
+
+variable "vespa_node_subnet_ids" {
+  type        = list(string)
+  description = "Subnet IDs for the Vespa node group (must be in same AZ as Vespa PV). If not specified, uses all cluster subnets."
+  default     = []
+}
+
 variable "eks_managed_node_groups" {
   type        = map(any)
   description = "EKS managed node groups with EBS volume configuration"
@@ -44,7 +62,7 @@ variable "eks_managed_node_groups" {
     # Main node group for all pods except Vespa
     main = {
       name           = "main-node-group"
-      instance_types = ["r7i.4xlarge"]
+      instance_types = null # Will be set from var.main_node_instance_types
       min_size       = 1
       max_size       = 5
       # EBS volume configuration
@@ -52,7 +70,7 @@ variable "eks_managed_node_groups" {
         xvda = {
           device_name = "/dev/xvda"
           ebs = {
-            volume_size           = 50
+            volume_size           = 100
             volume_type           = "gp3"
             encrypted             = true
             delete_on_termination = true
@@ -67,7 +85,7 @@ variable "eks_managed_node_groups" {
     # Vespa dedicated node group
     vespa = {
       name           = "vespa-node-group"
-      instance_types = ["m6i.2xlarge"]
+      instance_types = null # Will be set from var.vespa_node_instance_types
       min_size       = 1
       max_size       = 1
       # Larger EBS volume for Vespa storage

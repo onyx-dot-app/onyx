@@ -102,7 +102,7 @@ export default function Page(props: {
   const documentSetId = parseInt(params.documentSetId);
 
   return (
-    <div className="container">
+    <div className="container mx-auto">
       <BackButton />
 
       <Main documentSetId={documentSetId} />

@@ -18,6 +18,7 @@ export const buildInitialValues = (
       api_base: "",
       api_version: "",
       default_model_name: "",
+      fast_default_model_name: "",
       model_configurations: [
         {
           name: "",
@@ -44,6 +45,8 @@ export const buildInitialValues = (
     custom_config: {},
     deployment_name: "",
     target_uri: "",
+    fast_default_model_name:
+      llmDescriptor?.default_fast_model ?? llmDescriptor?.default_model ?? "",
     name: llmDescriptor?.name ?? "Default",
     provider: llmDescriptor?.name ?? "",
     model_configurations:

@@ -79,7 +79,7 @@ const Main = () => {
 
 const Page = () => {
   return (
-    <div className="container">
+    <div className="container mx-auto">
       <AdminPageTitle
         icon={<SourceIcon iconSize={36} sourceType={ValidSources.Slack} />}
         title="Slack Bots"

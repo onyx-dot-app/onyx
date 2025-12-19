@@ -213,7 +213,7 @@ export default function Status() {
   });
 
   return (
-    <div className="container">
+    <div className="mx-auto container">
       {popup}
       <AdminPageTitle
         icon={<NotebookIcon size={32} />}

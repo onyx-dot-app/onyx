@@ -375,7 +375,7 @@ const AddUserButton = ({
 
 const Page = () => {
   return (
-    <div className="container">
+    <div className="mx-auto container">
       <AdminPageTitle title="Manage Users" icon={SvgUser} />
       <SearchableTables />
     </div>

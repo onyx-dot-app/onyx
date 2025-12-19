@@ -167,6 +167,9 @@ export function LLMProviderUpdateForm({
       existingLlmProvider?.default_model_name ??
       (llmProviderDescriptor.default_model ||
         llmProviderDescriptor.model_configurations[0]?.name),
+    fast_default_model_name:
+      existingLlmProvider?.fast_default_model_name ??
+      (llmProviderDescriptor.default_fast_model || null),
     custom_config:
       existingLlmProvider?.custom_config ??
       llmProviderDescriptor.custom_config_keys?.reduce(
@@ -252,6 +255,7 @@ export function LLMProviderUpdateForm({
         ? Yup.string().required("Deployment Name is required")
         : Yup.string().nullable(),
     default_model_name: Yup.string().required("Model name is required"),
+    fast_default_model_name: Yup.string().nullable(),
     // EE Only
     is_public: Yup.boolean().required(),
     groups: Yup.array().of(Yup.number()),
@@ -323,6 +327,7 @@ export function LLMProviderUpdateForm({
           .filter(
             (modelConfiguration) =>
               modelConfiguration.name === rest.default_model_name ||
+              modelConfiguration.name === rest.fast_default_model_name ||
               modelConfiguration.is_visible
           );
 
@@ -370,6 +375,9 @@ export function LLMProviderUpdateForm({
             body: JSON.stringify({
               provider: llmProviderDescriptor.name,
               ...finalValues,
+              fast_default_model_name:
+                finalValues.fast_default_model_name ||
+                finalValues.default_model_name,
             }),
           }
         );
@@ -652,6 +660,32 @@ export function LLMProviderUpdateForm({
                       placeholder="Deployment Name"
                     />
                   )}
+
+                {!llmProviderDescriptor.single_model_supported &&
+                  (currentModelConfigurations.length > 0 ? (
+                    <SelectorFormField
+                      name="fast_default_model_name"
+                      subtext="The model to use for lighter flows like `LLM Chunk Filter` for this provider. If not set, will use the Default Model configured above."
+                      label="[Optional] Fast Model"
+                      options={currentModelConfigurations.map(
+                        (modelConfiguration) => ({
+                          // don't clean up names here to give admins descriptive names / handle duplicates
+                          // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
+                          name: modelConfiguration.name,
+                          value: modelConfiguration.name,
+                        })
+                      )}
+                      includeDefault
+                      maxHeight="max-h-56"
+                    />
+                  ) : (
+                    <TextFormField
+                      name="fast_default_model_name"
+                      subtext="The model to use for lighter flows like `LLM Chunk Filter` for this provider. If not set, will use the Default Model configured above."
+                      label="[Optional] Fast Model"
+                      placeholder="E.g. gpt-4"
+                    />
+                  ))}
 
                 <>
                   <Separator />

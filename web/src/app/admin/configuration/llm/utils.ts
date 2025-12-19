@@ -316,6 +316,14 @@ export const fetchModels = async (
       setFieldValue("default_model_name", availableModelNames[0]);
     }
 
+    // Clear fast model if it's not in the new list
+    if (
+      values.fast_default_model_name &&
+      !availableModelNames.includes(values.fast_default_model_name)
+    ) {
+      setFieldValue("fast_default_model_name", null);
+    }
+
     // Force a re-render by updating a timestamp or counter
     setFieldValue("_modelListUpdated", Date.now());
 

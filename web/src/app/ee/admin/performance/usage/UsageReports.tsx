@@ -406,7 +406,7 @@ export default function UsageReports() {
   return (
     <>
       {isWaitingForReport && <Spinner />}
-      <div className="container">
+      <div className="mx-auto container">
         <GenerateReportInput
           onReportGenerated={handleReportGenerated}
           isWaitingForReport={isWaitingForReport}

@@ -7,6 +7,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.chat.chat_milestones import process_multi_assistant_milestone
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_state import run_chat_llm_with_state_containers
 from onyx.chat.chat_utils import convert_chat_history
@@ -31,7 +32,6 @@ from onyx.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import MessageType
-from onyx.configs.constants import MilestoneRecordType
 from onyx.context.search.models import CitationDocInfo
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import create_new_chat_message
@@ -51,8 +51,8 @@ from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.utils import load_in_memory_chat_files
 from onyx.file_store.utils import verify_user_files
-from onyx.llm.factory import get_llm_for_persona
 from onyx.llm.factory import get_llm_token_counter
+from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.utils import litellm_exception_to_error_msg
@@ -72,7 +72,6 @@ from onyx.tools.tool_constructor import SearchToolConfig
 from onyx.tools.tool_constructor import SearchToolUsage
 from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
-from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
 from onyx.utils.timing import log_generator_function_time
 from shared_configs.contextvars import get_current_tenant_id
@@ -368,10 +367,11 @@ def stream_chat_message_objects(
         )
 
         # Milestone tracking, most devs using the API don't need to understand this
-        mt_cloud_telemetry(
+        process_multi_assistant_milestone(
+            user=user,
+            assistant_id=persona.id,
             tenant_id=tenant_id,
-            distinct_id=user.email if user else tenant_id,
-            event=MilestoneRecordType.MULTIPLE_ASSISTANTS,
+            db_session=db_session,
         )
 
         if reference_doc_ids is None and retrieval_options is None:
@@ -379,7 +379,7 @@ def stream_chat_message_objects(
                 "Must specify a set of documents for chat or specify search options"
             )
 
-        llm = get_llm_for_persona(
+        llm, fast_llm = get_llms_for_persona(
             persona=persona,
             user=user,
             llm_override=new_msg_req.llm_override or chat_session.llm_override,
@@ -475,6 +475,7 @@ def stream_chat_message_objects(
             emitter=emitter,
             user=user,
             llm=llm,
+            fast_llm=fast_llm,
             search_tool_config=SearchToolConfig(
                 user_selected_filters=user_selected_filters,
                 project_id=(

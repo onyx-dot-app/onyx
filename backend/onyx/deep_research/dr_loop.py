@@ -12,16 +12,16 @@ from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.llm_step import run_llm_step
-from onyx.chat.llm_step import run_llm_step_pkt_generator
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import LlmStepResult
 from onyx.configs.constants import MessageType
+from onyx.deep_research.dr_mock_tools import GENERATE_REPORT_TOOL_NAME
 from onyx.deep_research.dr_mock_tools import get_clarification_tool_definitions
 from onyx.deep_research.dr_mock_tools import get_orchestrator_tools
 from onyx.deep_research.dr_mock_tools import RESEARCH_AGENT_TOOL_NAME
+from onyx.deep_research.dr_mock_tools import THINK_TOOL_NAME
 from onyx.deep_research.dr_mock_tools import THINK_TOOL_RESPONSE_MESSAGE
 from onyx.deep_research.dr_mock_tools import THINK_TOOL_RESPONSE_TOKEN_COUNT
-from onyx.deep_research.utils import check_special_tool_calls
 from onyx.deep_research.utils import create_think_tool_token_processor
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
@@ -38,9 +38,7 @@ from onyx.server.query_and_chat.streaming_models import DeepResearchPlanDelta
 from onyx.server.query_and_chat.streaming_models import DeepResearchPlanStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.tools.fake_tools.research_agent import run_research_agent_calls
 from onyx.tools.models import ToolCallInfo
-from onyx.tools.models import ToolCallKickoff
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
@@ -83,7 +81,7 @@ def run_deep_research_llm_loop(
 
     # Filter tools to only allow web search, internal search, and open URL
     allowed_tool_names = {SearchTool.NAME, WebSearchTool.NAME, OpenURLTool.NAME}
-    allowed_tools = [tool for tool in tools if tool.name in allowed_tool_names]
+    [tool for tool in tools if tool.name in allowed_tool_names]
 
     #########################################################
     # CLARIFICATION STEP (optional)
@@ -108,8 +106,7 @@ def run_deep_research_llm_loop(
             last_n_user_messages=MAX_USER_MESSAGES_FOR_CONTEXT,
         )
 
-        llm_step_result, _ = run_llm_step(
-            emitter=emitter,
+        step_generator = run_llm_step(
             history=truncated_message_history,
             tool_definitions=get_clarification_tool_definitions(),
             tool_choice=ToolChoiceOptions.AUTO,
@@ -122,6 +119,18 @@ def run_deep_research_llm_loop(
             final_documents=None,
             user_identity=user_identity,
         )
+
+        # Consume the generator, emitting packets and capturing the final result
+        while True:
+            try:
+                packet = next(step_generator)
+                emitter.emit(packet)
+            except StopIteration as e:
+                llm_step_result, _ = e.value
+                break
+
+        # Type narrowing: generator always returns a result, so this can't be None
+        llm_step_result = cast(LlmStepResult, llm_step_result)
 
         if not llm_step_result.tool_calls:
             # Mark this turn as a clarification question
@@ -153,7 +162,7 @@ def run_deep_research_llm_loop(
         last_n_user_messages=MAX_USER_MESSAGES_FOR_CONTEXT,
     )
 
-    research_plan_generator = run_llm_step_pkt_generator(
+    research_plan_generator = run_llm_step(
         history=truncated_message_history,
         tool_definitions=[],
         tool_choice=ToolChoiceOptions.NONE,
@@ -216,8 +225,6 @@ def run_deep_research_llm_loop(
 
     reasoning_cycles = 0
     for cycle in range(MAX_ORCHESTRATOR_CYCLES):
-        research_agent_calls: list[ToolCallKickoff] = []
-
         orchestrator_prompt = orchestrator_prompt_template.format(
             current_datetime=get_current_llm_day_time(full_sentence=False),
             current_cycle_count=cycle,
@@ -247,13 +254,12 @@ def run_deep_research_llm_loop(
             create_think_tool_token_processor() if not is_reasoning_model else None
         )
 
-        llm_step_result, has_reasoned = run_llm_step(
-            emitter=emitter,
+        orchestrator_generator = run_llm_step(
             history=truncated_message_history,
             tool_definitions=get_orchestrator_tools(
                 include_think_tool=not is_reasoning_model
             ),
-            tool_choice=ToolChoiceOptions.REQUIRED,
+            tool_choice=ToolChoiceOptions.AUTO,
             llm=llm,
             turn_index=cycle + reasoning_cycles,
             # No citations in this step, it should just pass through all
@@ -264,9 +270,16 @@ def run_deep_research_llm_loop(
             user_identity=user_identity,
             custom_token_processor=custom_processor,
         )
-        if has_reasoned:
-            reasoning_cycles += 1
 
+        while True:
+            try:
+                packet = next(orchestrator_generator)
+                emitter.emit(packet)
+            except StopIteration as e:
+                # TODO handle reasoning cycles
+                llm_step_result, _ = e.value
+                break
+        llm_step_result = cast(LlmStepResult, llm_step_result)
         tool_calls = llm_step_result.tool_calls or []
 
         if not tool_calls and cycle == 0:
@@ -278,13 +291,28 @@ def run_deep_research_llm_loop(
 
         most_recent_reasoning: str | None = None
         if tool_calls:
-            special_tool_calls = check_special_tool_calls(tool_calls=tool_calls)
+            # Check if there's a THINK_TOOL in the calls - if so, only process that one
+            think_tool_call = next(
+                (
+                    tool_call
+                    for tool_call in tool_calls
+                    if tool_call.tool_name == THINK_TOOL_NAME
+                ),
+                None,
+            )
 
-            if special_tool_calls.generate_report_tool_call:
+            generate_report_tool_call = next(
+                (
+                    tool_call
+                    for tool_call in tool_calls
+                    if tool_call.tool_name == GENERATE_REPORT_TOOL_NAME
+                ),
+                None,
+            )
+
+            if generate_report_tool_call:
                 logger.info("Generate report tool call found, not implemented yet.")
-                break
-            elif special_tool_calls.think_tool_call:
-                think_tool_call = special_tool_calls.think_tool_call
+            elif think_tool_call:
                 # Only process the THINK_TOOL and skip all other tool calls
                 # This will not actually get saved to the db as a tool call but we'll attach it to the tool(s) called after
                 # it as if it were just a reasoning model doing it. In the chat history, because it happens in 2 steps,
@@ -309,36 +337,12 @@ def run_deep_research_llm_loop(
                     image_files=None,
                 )
                 simple_chat_history.append(think_tool_response_msg)
-                reasoning_cycles += 1
-                continue
             else:
                 for tool_call in tool_calls:
                     if tool_call.tool_name != RESEARCH_AGENT_TOOL_NAME:
                         logger.warning(f"Unexpected tool call: {tool_call.tool_name}")
                         continue
 
-                    research_agent_calls.append(tool_call)
-
-                if not research_agent_calls:
-                    logger.warning(
-                        "No research agent tool calls found, this should not happen."
-                    )
-                    # TODO generate report, best attempt
-                    break
-
-                research_results = run_research_agent_calls(
-                    research_agent_calls=research_agent_calls,
-                    tools=allowed_tools,
-                    emitter=emitter,
-                    state_container=state_container,
-                    llm=llm,
-                    is_reasoning_model=is_reasoning_model,
-                    token_counter=token_counter,
-                    user_identity=user_identity,
-                )
-
-                # Need to process citations
-                for research_result in research_results:
                     tool_call_info = ToolCallInfo(
                         parent_tool_call_id=None,
                         turn_index=cycle + reasoning_cycles,
@@ -348,9 +352,9 @@ def run_deep_research_llm_loop(
                         tool_id=999,  # TODO
                         reasoning_tokens=most_recent_reasoning,
                         tool_call_arguments=tool_call.tool_args,
-                        tool_call_response=research_result.report,
-                        search_docs=research_result.search_docs,
-                        generated_images=None,
+                        tool_call_response="pending",  # TODO
+                        search_docs=None,  # TODO
+                        generated_images=None,  # TODO
                     )
                     state_container.add_tool_call(tool_call_info)
 
@@ -367,19 +371,16 @@ def run_deep_research_llm_loop(
                     simple_chat_history.append(tool_call_msg)
 
                     tool_call_response_msg = ChatMessageSimple(
-                        message=research_result.report,
-                        token_count=token_counter(research_result.report),
+                        message="pending",  # TODO
+                        token_count=0,  # TODO
                         message_type=MessageType.TOOL_CALL_RESPONSE,
                         tool_call_id=tool_call.tool_call_id,
                         image_files=None,
                     )
                     simple_chat_history.append(tool_call_response_msg)
 
-            if not special_tool_calls.think_tool_call:
+            if not think_tool_call:
                 most_recent_reasoning = None
-        else:
-            logger.warning("No tool calls found, this should not happen.")
-            # TODO generate report, best attempt
 
         if llm_step_result.answer:
             state_container.set_answer_tokens(llm_step_result.answer)

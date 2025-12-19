@@ -139,7 +139,7 @@ export default function Page() {
   });
 
   return (
-    <div className="container">
+    <div className="mx-auto container">
       <AdminPageTitle icon={SvgOnyxOctagon} title="Assistants" />
 
       {isLoading && <ThreeDotsLoader />}

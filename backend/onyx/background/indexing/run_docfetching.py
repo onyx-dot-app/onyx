@@ -1,6 +1,7 @@
 import sys
 import time
 import traceback
+from collections import defaultdict
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
@@ -20,6 +21,7 @@ from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.app_configs import LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE
 from onyx.configs.app_configs import MAX_FILE_SIZE_BYTES
 from onyx.configs.app_configs import POLL_CONNECTOR_OFFSET
+from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
@@ -30,8 +32,11 @@ from onyx.connectors.factory import instantiate_connector
 from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorStopSignal
+from onyx.connectors.models import DocExtractionContext
 from onyx.connectors.models import Document
+from onyx.connectors.models import IndexAttemptMetadata
 from onyx.connectors.models import TextSection
+from onyx.db.connector import mark_cc_pair_as_permissions_synced
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import get_last_successful_attempt_poll_range_end
@@ -44,16 +49,34 @@ from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
 from onyx.db.index_attempt import create_index_attempt_error
 from onyx.db.index_attempt import get_index_attempt
+from onyx.db.index_attempt import get_index_attempt_errors_for_cc_pair
 from onyx.db.index_attempt import get_recent_completed_attempts_for_cc_pair
 from onyx.db.index_attempt import mark_attempt_canceled
 from onyx.db.index_attempt import mark_attempt_failed
+from onyx.db.index_attempt import mark_attempt_partially_succeeded
+from onyx.db.index_attempt import mark_attempt_succeeded
 from onyx.db.index_attempt import transition_attempt_to_in_progress
+from onyx.db.index_attempt import update_docs_indexed
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import IndexAttempt
+from onyx.db.models import IndexAttemptError
+from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
+from onyx.httpx.httpx_pool import HttpxPool
+from onyx.indexing.adapters.document_indexing_adapter import (
+    DocumentIndexingBatchAdapter,
+)
+from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.natural_language_processing.search_nlp_models import (
+    InformationContentClassificationModel,
+)
 from onyx.utils.logger import setup_logger
+from onyx.utils.middleware import make_randomized_onyx_request_id
+from onyx.utils.telemetry import create_milestone_and_report
+from onyx.utils.telemetry import optional_telemetry
+from onyx.utils.telemetry import RecordType
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
@@ -247,6 +270,583 @@ def _check_failure_threshold(
             f"Connector run encountered too many errors, aborting. "
             f"Last error: {last_failure}"
         )
+
+
+# NOTE: this is the old run_indexing function that the new decoupled approach
+# is based on. Leaving this for comparison purposes, but if you see this comment
+# has been here for >2 month, please delete this function.
+def _run_indexing(
+    db_session: Session,
+    index_attempt_id: int,
+    tenant_id: str,
+    callback: IndexingHeartbeatInterface | None = None,
+) -> None:
+    """
+    1. Get documents which are either new or updated from specified application
+    2. Embed and index these documents into the chosen datastore (vespa)
+    3. Updates Postgres to record the indexed documents + the outcome of this run
+    """
+    from onyx.indexing.indexing_pipeline import run_indexing_pipeline
+
+    start_time = time.monotonic()  # jsut used for logging
+
+    with get_session_with_current_tenant() as db_session_temp:
+        index_attempt_start = get_index_attempt(
+            db_session_temp,
+            index_attempt_id,
+            eager_load_cc_pair=True,
+            eager_load_search_settings=True,
+        )
+        if not index_attempt_start:
+            raise ValueError(
+                f"Index attempt {index_attempt_id} does not exist in DB. This should not be possible."
+            )
+
+        if index_attempt_start.search_settings is None:
+            raise ValueError(
+                "Search settings must be set for indexing. This should not be possible."
+            )
+
+        db_connector = index_attempt_start.connector_credential_pair.connector
+        db_credential = index_attempt_start.connector_credential_pair.credential
+        is_primary = (
+            index_attempt_start.search_settings.status == IndexModelStatus.PRESENT
+        )
+        from_beginning = index_attempt_start.from_beginning
+        has_successful_attempt = (
+            index_attempt_start.connector_credential_pair.last_successful_index_time
+            is not None
+        )
+        ctx = DocExtractionContext(
+            index_name=index_attempt_start.search_settings.index_name,
+            cc_pair_id=index_attempt_start.connector_credential_pair.id,
+            connector_id=db_connector.id,
+            credential_id=db_credential.id,
+            source=db_connector.source,
+            earliest_index_time=(
+                db_connector.indexing_start.timestamp()
+                if db_connector.indexing_start
+                else 0
+            ),
+            from_beginning=from_beginning,
+            # Only update cc-pair status for primary index jobs
+            # Secondary index syncs at the end when swapping
+            is_primary=is_primary,
+            should_fetch_permissions_during_indexing=(
+                index_attempt_start.connector_credential_pair.access_type
+                == AccessType.SYNC
+                and source_should_fetch_permissions_during_indexing(db_connector.source)
+                and is_primary
+                # if we've already successfully indexed, let the doc_sync job
+                # take care of doc-level permissions
+                and (from_beginning or not has_successful_attempt)
+            ),
+            search_settings_status=index_attempt_start.search_settings.status,
+            doc_extraction_complete_batch_num=None,
+        )
+
+        last_successful_index_poll_range_end = (
+            ctx.earliest_index_time
+            if ctx.from_beginning
+            else get_last_successful_attempt_poll_range_end(
+                cc_pair_id=ctx.cc_pair_id,
+                earliest_index=ctx.earliest_index_time,
+                search_settings=index_attempt_start.search_settings,
+                db_session=db_session_temp,
+            )
+        )
+        if last_successful_index_poll_range_end > POLL_CONNECTOR_OFFSET:
+            window_start = datetime.fromtimestamp(
+                last_successful_index_poll_range_end, tz=timezone.utc
+            ) - timedelta(minutes=POLL_CONNECTOR_OFFSET)
+        else:
+            # don't go into "negative" time if we've never indexed before
+            window_start = datetime.fromtimestamp(0, tz=timezone.utc)
+
+        most_recent_attempt = next(
+            iter(
+                get_recent_completed_attempts_for_cc_pair(
+                    cc_pair_id=ctx.cc_pair_id,
+                    search_settings_id=index_attempt_start.search_settings_id,
+                    db_session=db_session_temp,
+                    limit=1,
+                )
+            ),
+            None,
+        )
+
+        # if the last attempt failed, try and use the same window. This is necessary
+        # to ensure correctness with checkpointing. If we don't do this, things like
+        # new slack channels could be missed (since existing slack channels are
+        # cached as part of the checkpoint).
+        if (
+            most_recent_attempt
+            and most_recent_attempt.poll_range_end
+            and (
+                most_recent_attempt.status == IndexingStatus.FAILED
+                or most_recent_attempt.status == IndexingStatus.CANCELED
+            )
+        ):
+            window_end = most_recent_attempt.poll_range_end
+        else:
+            window_end = datetime.now(tz=timezone.utc)
+
+        # add start/end now that they have been set
+        index_attempt_start.poll_range_start = window_start
+        index_attempt_start.poll_range_end = window_end
+        db_session_temp.add(index_attempt_start)
+        db_session_temp.commit()
+
+        embedding_model = DefaultIndexingEmbedder.from_db_search_settings(
+            search_settings=index_attempt_start.search_settings,
+            callback=callback,
+        )
+
+    information_content_classification_model = InformationContentClassificationModel()
+
+    document_index = get_default_document_index(
+        index_attempt_start.search_settings,
+        None,
+        httpx_client=HttpxPool.get("vespa"),
+    )
+
+    # Initialize memory tracer. NOTE: won't actually do anything if
+    # `INDEXING_TRACER_INTERVAL` is 0.
+    memory_tracer = MemoryTracer(interval=INDEXING_TRACER_INTERVAL)
+    memory_tracer.start()
+
+    index_attempt_md = IndexAttemptMetadata(
+        attempt_id=index_attempt_id,
+        connector_id=ctx.connector_id,
+        credential_id=ctx.credential_id,
+    )
+
+    total_failures = 0
+    batch_num = 0
+    net_doc_change = 0
+    document_count = 0
+    chunk_count = 0
+    index_attempt: IndexAttempt | None = None
+    try:
+        with get_session_with_current_tenant() as db_session_temp:
+            index_attempt = get_index_attempt(
+                db_session_temp, index_attempt_id, eager_load_cc_pair=True
+            )
+            if not index_attempt:
+                raise RuntimeError(f"Index attempt {index_attempt_id} not found in DB.")
+
+            connector_runner = _get_connector_runner(
+                db_session=db_session_temp,
+                attempt=index_attempt,
+                batch_size=INDEX_BATCH_SIZE,
+                start_time=window_start,
+                end_time=window_end,
+                include_permissions=ctx.should_fetch_permissions_during_indexing,
+            )
+
+            # don't use a checkpoint if we're explicitly indexing from
+            # the beginning in order to avoid weird interactions between
+            # checkpointing / failure handling
+            # OR
+            # if the last attempt was successful
+            if index_attempt.from_beginning or (
+                most_recent_attempt and most_recent_attempt.status.is_successful()
+            ):
+                checkpoint = connector_runner.connector.build_dummy_checkpoint()
+            else:
+                checkpoint, _ = get_latest_valid_checkpoint(
+                    db_session=db_session_temp,
+                    cc_pair_id=ctx.cc_pair_id,
+                    search_settings_id=index_attempt.search_settings_id,
+                    window_start=window_start,
+                    window_end=window_end,
+                    connector=connector_runner.connector,
+                )
+
+            # save the initial checkpoint to have a proper record of the
+            # "last used checkpoint"
+            save_checkpoint(
+                db_session=db_session_temp,
+                index_attempt_id=index_attempt_id,
+                checkpoint=checkpoint,
+            )
+
+            unresolved_errors = get_index_attempt_errors_for_cc_pair(
+                cc_pair_id=ctx.cc_pair_id,
+                unresolved_only=True,
+                db_session=db_session_temp,
+            )
+            doc_id_to_unresolved_errors: dict[str, list[IndexAttemptError]] = (
+                defaultdict(list)
+            )
+            for error in unresolved_errors:
+                if error.document_id:
+                    doc_id_to_unresolved_errors[error.document_id].append(error)
+
+            entity_based_unresolved_errors = [
+                error for error in unresolved_errors if error.entity_id
+            ]
+
+        while checkpoint.has_more:
+            logger.info(
+                f"Running '{ctx.source.value}' connector with checkpoint: {checkpoint}"
+            )
+            for document_batch, failure, next_checkpoint in connector_runner.run(
+                checkpoint
+            ):
+                # Check if connector is disabled mid run and stop if so unless it's the secondary
+                # index being built. We want to populate it even for paused connectors
+                # Often paused connectors are sources that aren't updated frequently but the
+                # contents still need to be initially pulled.
+                if callback:
+                    if callback.should_stop():
+                        raise ConnectorStopSignal("Connector stop signal detected")
+
+                    # NOTE: this progress callback runs on every loop. We've seen cases
+                    # where we loop many times with no new documents and eventually time
+                    # out, so only doing the callback after indexing isn't sufficient.
+                    callback.progress("_run_indexing", 0)
+
+                # TODO: should we move this into the above callback instead?
+                with get_session_with_current_tenant() as db_session_temp:
+                    # will exception if the connector/index attempt is marked as paused/failed
+                    _check_connector_and_attempt_status(
+                        db_session_temp,
+                        ctx.cc_pair_id,
+                        ctx.search_settings_status,
+                        index_attempt_id,
+                    )
+
+                # save record of any failures at the connector level
+                if failure is not None:
+                    total_failures += 1
+                    with get_session_with_current_tenant() as db_session_temp:
+                        create_index_attempt_error(
+                            index_attempt_id,
+                            ctx.cc_pair_id,
+                            failure,
+                            db_session_temp,
+                        )
+
+                    _check_failure_threshold(
+                        total_failures, document_count, batch_num, failure
+                    )
+
+                # save the new checkpoint (if one is provided)
+                if next_checkpoint:
+                    checkpoint = next_checkpoint
+
+                # below is all document processing logic, so if no batch we can just continue
+                if document_batch is None:
+                    continue
+
+                batch_description = []
+
+                # Generate an ID that can be used to correlate activity between here
+                # and the embedding model server
+                doc_batch_cleaned = strip_null_characters(document_batch)
+                for doc in doc_batch_cleaned:
+                    batch_description.append(doc.to_short_descriptor())
+
+                    doc_size = 0
+                    for section in doc.sections:
+                        if (
+                            isinstance(section, TextSection)
+                            and section.text is not None
+                        ):
+                            doc_size += len(section.text)
+
+                    if doc_size > INDEXING_SIZE_WARNING_THRESHOLD:
+                        logger.warning(
+                            f"Document size: doc='{doc.to_short_descriptor()}' "
+                            f"size={doc_size} "
+                            f"threshold={INDEXING_SIZE_WARNING_THRESHOLD}"
+                        )
+
+                logger.debug(f"Indexing batch of documents: {batch_description}")
+
+                index_attempt_md.request_id = make_randomized_onyx_request_id("CIX")
+                index_attempt_md.structured_id = (
+                    f"{tenant_id}:{ctx.cc_pair_id}:{index_attempt_id}:{batch_num}"
+                )
+                index_attempt_md.batch_num = batch_num + 1  # use 1-index for this
+
+                # real work happens here!
+                adapter = DocumentIndexingBatchAdapter(
+                    db_session=db_session,
+                    connector_id=ctx.connector_id,
+                    credential_id=ctx.credential_id,
+                    tenant_id=tenant_id,
+                    index_attempt_metadata=index_attempt_md,
+                )
+                index_pipeline_result = run_indexing_pipeline(
+                    embedder=embedding_model,
+                    information_content_classification_model=information_content_classification_model,
+                    document_index=document_index,
+                    ignore_time_skip=(
+                        ctx.from_beginning
+                        or (ctx.search_settings_status == IndexModelStatus.FUTURE)
+                    ),
+                    db_session=db_session,
+                    tenant_id=tenant_id,
+                    document_batch=doc_batch_cleaned,
+                    request_id=index_attempt_md.request_id,
+                    adapter=adapter,
+                )
+
+                batch_num += 1
+                net_doc_change += index_pipeline_result.new_docs
+                chunk_count += index_pipeline_result.total_chunks
+                document_count += index_pipeline_result.total_docs
+
+                # resolve errors for documents that were successfully indexed
+                failed_document_ids = [
+                    failure.failed_document.document_id
+                    for failure in index_pipeline_result.failures
+                    if failure.failed_document
+                ]
+                successful_document_ids = [
+                    document.id
+                    for document in document_batch
+                    if document.id not in failed_document_ids
+                ]
+                for document_id in successful_document_ids:
+                    with get_session_with_current_tenant() as db_session_temp:
+                        if document_id in doc_id_to_unresolved_errors:
+                            logger.info(
+                                f"Resolving IndexAttemptError for document '{document_id}'"
+                            )
+                            for error in doc_id_to_unresolved_errors[document_id]:
+                                error.is_resolved = True
+                                db_session_temp.add(error)
+                        db_session_temp.commit()
+
+                # add brand new failures
+                if index_pipeline_result.failures:
+                    total_failures += len(index_pipeline_result.failures)
+                    with get_session_with_current_tenant() as db_session_temp:
+                        for failure in index_pipeline_result.failures:
+                            create_index_attempt_error(
+                                index_attempt_id,
+                                ctx.cc_pair_id,
+                                failure,
+                                db_session_temp,
+                            )
+
+                    _check_failure_threshold(
+                        total_failures,
+                        document_count,
+                        batch_num,
+                        index_pipeline_result.failures[-1],
+                    )
+
+                # This new value is updated every batch, so UI can refresh per batch update
+                with get_session_with_current_tenant() as db_session_temp:
+                    # NOTE: Postgres uses the start of the transactions when computing `NOW()`
+                    # so we need either to commit() or to use a new session
+                    update_docs_indexed(
+                        db_session=db_session_temp,
+                        index_attempt_id=index_attempt_id,
+                        total_docs_indexed=document_count,
+                        new_docs_indexed=net_doc_change,
+                        docs_removed_from_index=0,
+                    )
+
+                if callback:
+                    callback.progress("_run_indexing", len(doc_batch_cleaned))
+
+                # Add telemetry for indexing progress
+                optional_telemetry(
+                    record_type=RecordType.INDEXING_PROGRESS,
+                    data={
+                        "index_attempt_id": index_attempt_id,
+                        "cc_pair_id": ctx.cc_pair_id,
+                        "current_docs_indexed": document_count,
+                        "current_chunks_indexed": chunk_count,
+                        "source": ctx.source.value,
+                    },
+                    tenant_id=tenant_id,
+                )
+
+                memory_tracer.increment_and_maybe_trace()
+
+            # `make sure the checkpoints aren't getting too large`at some regular interval
+            CHECKPOINT_SIZE_CHECK_INTERVAL = 100
+            if batch_num % CHECKPOINT_SIZE_CHECK_INTERVAL == 0:
+                check_checkpoint_size(checkpoint)
+
+            # save latest checkpoint
+            with get_session_with_current_tenant() as db_session_temp:
+                save_checkpoint(
+                    db_session=db_session_temp,
+                    index_attempt_id=index_attempt_id,
+                    checkpoint=checkpoint,
+                )
+
+        optional_telemetry(
+            record_type=RecordType.INDEXING_COMPLETE,
+            data={
+                "index_attempt_id": index_attempt_id,
+                "cc_pair_id": ctx.cc_pair_id,
+                "total_docs_indexed": document_count,
+                "total_chunks": chunk_count,
+                "time_elapsed_seconds": time.monotonic() - start_time,
+                "source": ctx.source.value,
+            },
+            tenant_id=tenant_id,
+        )
+
+    except Exception as e:
+        logger.exception(
+            "Connector run exceptioned after elapsed time: "
+            f"{time.monotonic() - start_time} seconds"
+        )
+        if isinstance(e, ConnectorValidationError):
+            # On validation errors during indexing, we want to cancel the indexing attempt
+            # and mark the CCPair as invalid. This prevents the connector from being
+            # used in the future until the credentials are updated.
+            with get_session_with_current_tenant() as db_session_temp:
+                logger.exception(
+                    f"Marking attempt {index_attempt_id} as canceled due to validation error."
+                )
+                mark_attempt_canceled(
+                    index_attempt_id,
+                    db_session_temp,
+                    reason=f"{CONNECTOR_VALIDATION_ERROR_MESSAGE_PREFIX}{str(e)}",
+                )
+
+                if ctx.is_primary:
+                    if not index_attempt:
+                        # should always be set by now
+                        raise RuntimeError("Should never happen.")
+
+                    VALIDATION_ERROR_THRESHOLD = 5
+
+                    recent_index_attempts = get_recent_completed_attempts_for_cc_pair(
+                        cc_pair_id=ctx.cc_pair_id,
+                        search_settings_id=index_attempt.search_settings_id,
+                        limit=VALIDATION_ERROR_THRESHOLD,
+                        db_session=db_session_temp,
+                    )
+                    num_validation_errors = len(
+                        [
+                            index_attempt
+                            for index_attempt in recent_index_attempts
+                            if index_attempt.error_msg
+                            and index_attempt.error_msg.startswith(
+                                CONNECTOR_VALIDATION_ERROR_MESSAGE_PREFIX
+                            )
+                        ]
+                    )
+
+                    if num_validation_errors >= VALIDATION_ERROR_THRESHOLD:
+                        logger.warning(
+                            f"Connector {ctx.connector_id} has {num_validation_errors} consecutive validation"
+                            f" errors. Marking the CC Pair as invalid."
+                        )
+                        update_connector_credential_pair(
+                            db_session=db_session_temp,
+                            connector_id=ctx.connector_id,
+                            credential_id=ctx.credential_id,
+                            status=ConnectorCredentialPairStatus.INVALID,
+                        )
+            memory_tracer.stop()
+            raise e
+
+        elif isinstance(e, ConnectorStopSignal):
+            with get_session_with_current_tenant() as db_session_temp:
+                logger.exception(
+                    f"Marking attempt {index_attempt_id} as canceled due to stop signal."
+                )
+                mark_attempt_canceled(
+                    index_attempt_id,
+                    db_session_temp,
+                    reason=str(e),
+                )
+
+                if ctx.is_primary:
+                    update_connector_credential_pair(
+                        db_session=db_session_temp,
+                        connector_id=ctx.connector_id,
+                        credential_id=ctx.credential_id,
+                        net_docs=net_doc_change,
+                    )
+
+            memory_tracer.stop()
+            raise e
+        else:
+            with get_session_with_current_tenant() as db_session_temp:
+                mark_attempt_failed(
+                    index_attempt_id,
+                    db_session_temp,
+                    failure_reason=str(e),
+                    full_exception_trace=traceback.format_exc(),
+                )
+
+                if ctx.is_primary:
+                    update_connector_credential_pair(
+                        db_session=db_session_temp,
+                        connector_id=ctx.connector_id,
+                        credential_id=ctx.credential_id,
+                        net_docs=net_doc_change,
+                    )
+
+            memory_tracer.stop()
+            raise e
+
+    memory_tracer.stop()
+
+    # we know index attempt is successful (at least partially) at this point,
+    # all other cases have been short-circuited
+    elapsed_time = time.monotonic() - start_time
+    with get_session_with_current_tenant() as db_session_temp:
+        # resolve entity-based errors
+        for error in entity_based_unresolved_errors:
+            logger.info(f"Resolving IndexAttemptError for entity '{error.entity_id}'")
+            error.is_resolved = True
+            db_session_temp.add(error)
+            db_session_temp.commit()
+
+        if total_failures == 0:
+            mark_attempt_succeeded(index_attempt_id, db_session_temp)
+
+            create_milestone_and_report(
+                user=None,
+                distinct_id=tenant_id or "N/A",
+                event_type=MilestoneRecordType.CONNECTOR_SUCCEEDED,
+                properties=None,
+                db_session=db_session_temp,
+            )
+
+            logger.info(
+                f"Connector succeeded: "
+                f"docs={document_count} chunks={chunk_count} elapsed={elapsed_time:.2f}s"
+            )
+
+        else:
+            mark_attempt_partially_succeeded(index_attempt_id, db_session_temp)
+            logger.info(
+                f"Connector completed with some errors: "
+                f"failures={total_failures} "
+                f"batches={batch_num} "
+                f"docs={document_count} "
+                f"chunks={chunk_count} "
+                f"elapsed={elapsed_time:.2f}s"
+            )
+
+        if ctx.is_primary:
+            update_connector_credential_pair(
+                db_session=db_session_temp,
+                connector_id=ctx.connector_id,
+                credential_id=ctx.credential_id,
+                run_dt=window_end,
+            )
+            if ctx.should_fetch_permissions_during_indexing:
+                mark_cc_pair_as_permissions_synced(
+                    db_session=db_session_temp,
+                    cc_pair_id=ctx.cc_pair_id,
+                    start_time=window_end,
+                )
 
 
 def run_docfetching_entrypoint(

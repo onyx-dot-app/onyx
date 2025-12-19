@@ -362,7 +362,7 @@ export default function Page() {
         : undefined);
 
     return (
-      <div className="container">
+      <div className="container mx-auto">
         <AdminPageTitle
           title="Web Search"
           icon={SvgGlobe}
@@ -382,7 +382,7 @@ export default function Page() {
 
   if (isLoading) {
     return (
-      <div className="container">
+      <div className="container mx-auto">
         <AdminPageTitle
           title="Web Search"
           icon={SvgGlobe}
@@ -752,7 +752,7 @@ export default function Page() {
 
   return (
     <>
-      <div className="container">
+      <div className="container mx-auto">
         <div className="w-full">
           <div className="mb-4">
             <HealthCheckBanner />

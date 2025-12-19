@@ -30,7 +30,7 @@ from onyx.db.models import User
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
-from onyx.llm.factory import get_default_llm
+from onyx.llm.factory import get_default_llms
 from onyx.llm.utils import test_llm
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.server.manage.models import BoostDoc
@@ -121,7 +121,7 @@ def validate_existing_genai_api_key(
         pass
 
     try:
-        llm = get_default_llm(timeout=10)
+        llm, __ = get_default_llms(timeout=10)
     except ValueError:
         raise HTTPException(status_code=404, detail="LLM not setup")
 

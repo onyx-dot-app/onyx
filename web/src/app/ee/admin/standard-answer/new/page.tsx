@@ -23,7 +23,7 @@ async function Page() {
     (await standardAnswerCategoriesResponse.json()) as StandardAnswerCategory[];
 
   return (
-    <div className="container">
+    <div className="container mx-auto">
       <BackButton />
       <AdminPageTitle
         title="New Standard Answer"

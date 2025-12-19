@@ -3,13 +3,10 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from onyx.deep_research.dr_mock_tools import GENERATE_REPORT_TOOL_NAME
 from onyx.deep_research.dr_mock_tools import THINK_TOOL_NAME
-from onyx.deep_research.models import SpecialToolCalls
 from onyx.llm.model_response import ChatCompletionDeltaToolCall
 from onyx.llm.model_response import Delta
 from onyx.llm.model_response import FunctionCall
-from onyx.tools.models import ToolCallKickoff
 
 
 # JSON prefixes to detect in think_tool arguments
@@ -84,7 +81,7 @@ def create_think_tool_token_processor() -> (
     which gets displayed as reasoning tokens in the UI.
 
     Returns:
-        A function compatible with run_llm_step_pkt_generator's custom_token_processor parameter.
+        A function compatible with run_llm_step's custom_token_processor parameter.
         The function takes (Delta, state) and returns (modified Delta | None, new state).
     """
 
@@ -150,19 +147,3 @@ def create_think_tool_token_processor() -> (
         return delta, state
 
     return process_token
-
-
-def check_special_tool_calls(tool_calls: list[ToolCallKickoff]) -> SpecialToolCalls:
-    think_tool_call: ToolCallKickoff | None = None
-    generate_report_tool_call: ToolCallKickoff | None = None
-
-    for tool_call in tool_calls:
-        if tool_call.tool_name == THINK_TOOL_NAME:
-            think_tool_call = tool_call
-        elif tool_call.tool_name == GENERATE_REPORT_TOOL_NAME:
-            generate_report_tool_call = tool_call
-
-    return SpecialToolCalls(
-        think_tool_call=think_tool_call,
-        generate_report_tool_call=generate_report_tool_call,
-    )

@@ -8,10 +8,11 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 
+from onyx.file_processing.extract_file_text import ACCEPTED_IMAGE_FILE_EXTENSIONS
+from onyx.file_processing.extract_file_text import ALL_ACCEPTED_FILE_EXTENSIONS
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
-from onyx.file_processing.file_types import OnyxFileExtensions
-from onyx.llm.factory import get_default_llm
+from onyx.llm.factory import get_default_llms
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -123,7 +124,7 @@ def categorize_uploaded_files(files: list[UploadFile]) -> CategorizedFiles:
     """
 
     results = CategorizedFiles()
-    llm = get_default_llm()
+    llm, _ = get_default_llms()
 
     tokenizer = get_tokenizer(
         model_name=llm.config.model_name, provider_type=llm.config.model_provider
@@ -154,7 +155,7 @@ def categorize_uploaded_files(files: list[UploadFile]) -> CategorizedFiles:
             extension = get_file_ext(filename)
 
             # If image, estimate tokens via dedicated method first
-            if extension in OnyxFileExtensions.IMAGE_EXTENSIONS:
+            if extension in ACCEPTED_IMAGE_FILE_EXTENSIONS:
                 try:
                     token_count = estimate_image_tokens_for_upload(upload)
                 except (UnidentifiedImageError, OSError) as e:
@@ -172,7 +173,10 @@ def categorize_uploaded_files(files: list[UploadFile]) -> CategorizedFiles:
                 continue
 
             # Otherwise, handle as text/document: extract text and count tokens
-            elif extension in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
+            if (
+                extension in ALL_ACCEPTED_FILE_EXTENSIONS
+                and extension not in ACCEPTED_IMAGE_FILE_EXTENSIONS
+            ):
                 text_content = extract_file_text(
                     file=upload.file,
                     file_name=filename,

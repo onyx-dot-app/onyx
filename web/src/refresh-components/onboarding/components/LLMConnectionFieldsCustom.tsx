@@ -291,6 +291,40 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
           </FormField>
         )}
       />
+
+      <FormikField<string>
+        name="fast_default_model_name"
+        render={(field, helper, meta, state) => (
+          <FormField
+            name="fast_default_model_name"
+            state={state}
+            className="w-full"
+          >
+            <FormField.Label optional>Fast Model</FormField.Label>
+            <FormField.Control>
+              <InputTypeIn
+                {...field}
+                placeholder="Use default model"
+                showClearButton={false}
+                disabled={disabled}
+              />
+            </FormField.Control>
+            <FormField.Message
+              messages={{
+                idle: (
+                  <>
+                    A <strong>faster</strong>, more{" "}
+                    <strong>cost-effective</strong> model for quick background
+                    tasks (e.g. categorizing prompts, naming sessions). Falls
+                    back to the default model if not specified.
+                  </>
+                ),
+                error: meta.error,
+              }}
+            />
+          </FormField>
+        )}
+      />
     </>
   );
 };

@@ -1,3 +1,4 @@
+import io
 import json
 import math
 import mimetypes
@@ -111,7 +112,9 @@ from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
 from onyx.db.models import User
 from onyx.db.models import UserRole
+from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.models import ChatFileType
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import AuthStatus
@@ -142,8 +145,9 @@ from onyx.server.documents.models import RunConnectorRequest
 from onyx.server.documents.models import SourceSummary
 from onyx.server.federated.models import FederatedConnectorStatus
 from onyx.server.models import StatusResponse
+from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import mt_cloud_telemetry
+from onyx.utils.telemetry import create_milestone_and_report
 from onyx.utils.threadpool_concurrency import CallableProtocol
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -461,6 +465,9 @@ def is_zip_file(file: UploadFile) -> bool:
 def upload_files(
     files: list[UploadFile], file_origin: FileOrigin = FileOrigin.CONNECTOR
 ) -> FileUploadResponse:
+    for file in files:
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="File name cannot be empty")
 
     # Skip directories and known macOS metadata entries
     def should_process_file(file_path: str) -> bool:
@@ -474,10 +481,6 @@ def upload_files(
         file_store = get_default_file_store()
         seen_zip = False
         for file in files:
-            if not file.filename:
-                logger.warning("File has no filename, skipping")
-                continue
-
             if is_zip_file(file):
                 if seen_zip:
                     raise HTTPException(status_code=400, detail=SEEN_ZIP_DETAIL)
@@ -507,6 +510,24 @@ def upload_files(
                         deduped_file_names.append(os.path.basename(file_info))
                 continue
 
+            # For mypy, actual check happens at start of function
+            assert file.filename is not None
+
+            # Special handling for doc files - only store the plaintext version
+            file_type = mime_type_to_chat_file_type(file.content_type)
+            if file_type == ChatFileType.DOC:
+                extracted_text = extract_file_text(file.file, file.filename or "")
+                text_file_id = file_store.save_file(
+                    content=io.BytesIO(extracted_text.encode()),
+                    display_name=file.filename,
+                    file_origin=file_origin,
+                    file_type="text/plain",
+                )
+                deduped_file_paths.append(text_file_id)
+                deduped_file_names.append(file.filename)
+                continue
+
+            # Default handling for all other file types
             file_id = file_store.save_file(
                 content=file.file,
                 display_name=file.filename,
@@ -1156,10 +1177,12 @@ def get_connector_indexing_status(
             ].total_docs_indexed += connector_status.docs_indexed
 
     # Track admin page visit for analytics
-    mt_cloud_telemetry(
-        tenant_id=tenant_id,
-        distinct_id=user.email if user else tenant_id,
-        event=MilestoneRecordType.VISITED_ADMIN_PAGE,
+    create_milestone_and_report(
+        user=user,
+        distinct_id=user.email if user else tenant_id or "N/A",
+        event_type=MilestoneRecordType.VISITED_ADMIN_PAGE,
+        properties=None,
+        db_session=db_session,
     )
 
     # Group statuses by source for pagination
@@ -1371,10 +1394,12 @@ def create_connector_from_model(
             connector_data=connector_base,
         )
 
-        mt_cloud_telemetry(
-            tenant_id=tenant_id,
-            distinct_id=user.email if user else tenant_id,
-            event=MilestoneRecordType.CREATED_CONNECTOR,
+        create_milestone_and_report(
+            user=user,
+            distinct_id=user.email if user else tenant_id or "N/A",
+            event_type=MilestoneRecordType.CREATED_CONNECTOR,
+            properties=None,
+            db_session=db_session,
         )
 
         return connector_response
@@ -1450,10 +1475,12 @@ def create_connector_with_mock_credential(
             f"cc_pair={response.data}"
         )
 
-        mt_cloud_telemetry(
-            tenant_id=tenant_id,
-            distinct_id=user.email if user else tenant_id,
-            event=MilestoneRecordType.CREATED_CONNECTOR,
+        create_milestone_and_report(
+            user=user,
+            distinct_id=user.email if user else tenant_id or "N/A",
+            event_type=MilestoneRecordType.CREATED_CONNECTOR,
+            properties=None,
+            db_session=db_session,
         )
         return response
 

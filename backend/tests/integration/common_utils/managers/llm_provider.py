@@ -40,6 +40,7 @@ class LLMProviderManager:
             api_base=api_base,
             api_version=api_version,
             custom_config=None,
+            fast_default_model_name=default_model_name or "gpt-4o-mini",
             is_public=True if is_public is None else is_public,
             groups=groups or [],
             personas=personas or [],

@@ -29,14 +29,14 @@ from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
+from onyx.file_processing.extract_file_text import ALL_ACCEPTED_FILE_EXTENSIONS
 from onyx.file_processing.extract_file_text import docx_to_text_and_images
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.extract_file_text import pptx_to_text
 from onyx.file_processing.extract_file_text import read_pdf_file
 from onyx.file_processing.extract_file_text import xlsx_to_text
-from onyx.file_processing.file_types import OnyxFileExtensions
-from onyx.file_processing.file_types import OnyxMimeTypes
+from onyx.file_processing.file_validation import is_valid_image_type
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
@@ -114,6 +114,14 @@ def onyx_document_id_from_drive_file(file: GoogleDriveFileType) -> str:
     return urlunparse(parsed_url)
 
 
+def is_gdrive_image_mime_type(mime_type: str) -> bool:
+    """
+    Return True if the mime_type is a common image type in GDrive.
+    (e.g. 'image/png', 'image/jpeg')
+    """
+    return is_valid_image_type(mime_type)
+
+
 def download_request(
     service: GoogleDriveService, file_id: str, size_threshold: int
 ) -> bytes:
@@ -165,7 +173,7 @@ def _download_and_extract_sections_basic(
     def response_call() -> bytes:
         return download_request(service, file_id, size_threshold)
 
-    if mime_type in OnyxMimeTypes.IMAGE_MIME_TYPES:
+    if is_gdrive_image_mime_type(mime_type):
         # Skip images if not explicitly enabled
         if not allow_images:
             return []
@@ -252,7 +260,7 @@ def _download_and_extract_sections_basic(
 
     # Final attempt at extracting text
     file_ext = get_file_ext(file.get("name", ""))
-    if file_ext not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
+    if file_ext not in ALL_ACCEPTED_FILE_EXTENSIONS:
         logger.warning(f"Skipping file {file.get('name')} due to extension.")
         return []
 

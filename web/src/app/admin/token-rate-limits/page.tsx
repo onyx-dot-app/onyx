@@ -225,7 +225,7 @@ function Main() {
 
 export default function Page() {
   return (
-    <div className="container">
+    <div className="mx-auto container">
       <AdminPageTitle title="Token Rate Limits" icon={SvgShield} />
       <Main />
     </div>

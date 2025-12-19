@@ -19,7 +19,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
       <ProjectsProvider>
         <div className="w-full py-8">
           <div className="px-32">
-            <div className="container">
+            <div className="mx-auto container">
               <CardSection className="!border-none !bg-transparent !ring-none">
                 <AssistantEditor {...values} defaultPublic={false} />
               </CardSection>

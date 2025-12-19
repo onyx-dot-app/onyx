@@ -234,6 +234,9 @@ def upsert_llm_provider(
     existing_llm_provider.default_model_name = (
         llm_provider_upsert_request.default_model_name
     )
+    existing_llm_provider.fast_default_model_name = (
+        llm_provider_upsert_request.fast_default_model_name
+    )
     existing_llm_provider.is_public = llm_provider_upsert_request.is_public
     existing_llm_provider.deployment_name = llm_provider_upsert_request.deployment_name
 

@@ -23,7 +23,7 @@ from onyx.indexing.models import BuildMetadataAwareChunksResult
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import IndexChunk
 from onyx.indexing.models import UpdatableChunkData
-from onyx.llm.factory import get_default_llm
+from onyx.llm.factory import get_default_llms
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.utils.logger import setup_logger
 
@@ -140,7 +140,7 @@ class UserFileIndexingAdapter:
 
         # Initialize tokenizer used for token count calculation
         try:
-            llm = get_default_llm()
+            llm, _ = get_default_llms()
             llm_tokenizer = get_tokenizer(
                 model_name=llm.config.model_name,
                 provider_type=llm.config.model_provider,

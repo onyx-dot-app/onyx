@@ -68,7 +68,7 @@ async function Page(props: { params: Promise<{ id: string }> }) {
   const standardAnswerCategories =
     (await standardAnswerCategoriesResponse.json()) as StandardAnswerCategory[];
   return (
-    <div className="container">
+    <div className="container mx-auto">
       <BackButton />
       <AdminPageTitle
         title="Edit Standard Answer"

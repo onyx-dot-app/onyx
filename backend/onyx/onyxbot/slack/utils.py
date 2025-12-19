@@ -34,7 +34,7 @@ from onyx.configs.onyxbot_configs import (
 from onyx.connectors.slack.utils import SlackTextCleaner
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.users import get_user_by_email
-from onyx.llm.factory import get_default_llm
+from onyx.llm.factory import get_default_llms
 from onyx.llm.utils import llm_response_to_string
 from onyx.onyxbot.slack.constants import FeedbackVisibility
 from onyx.onyxbot.slack.models import ChannelType
@@ -141,7 +141,7 @@ def check_message_limit() -> bool:
 
 
 def rephrase_slack_message(msg: str) -> str:
-    llm = get_default_llm(timeout=5)
+    llm, _ = get_default_llms(timeout=5)
     prompt = SLACK_LANGUAGE_REPHRASE_PROMPT.format(query=msg)
     model_output = llm_response_to_string(llm.invoke(prompt))
     logger.debug(model_output)

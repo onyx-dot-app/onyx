@@ -59,7 +59,7 @@ from onyx.server.manage.llm.api import get_valid_model_names_for_persona
 from onyx.server.models import DisplayPriorityRequest
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import mt_cloud_telemetry
+from onyx.utils.telemetry import create_milestone_and_report
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -282,10 +282,12 @@ def create_persona(
         user=user,
         db_session=db_session,
     )
-    mt_cloud_telemetry(
-        tenant_id=tenant_id,
-        distinct_id=user.email if user else tenant_id,
-        event=MilestoneRecordType.CREATED_ASSISTANT,
+    create_milestone_and_report(
+        user=user,
+        distinct_id=tenant_id or "N/A",
+        event_type=MilestoneRecordType.CREATED_ASSISTANT,
+        properties=None,
+        db_session=db_session,
     )
 
     return persona_snapshot

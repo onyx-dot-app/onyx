@@ -220,6 +220,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # Used for filter settings
         persona: Persona,
         llm: LLM,
+        fast_llm: LLM,
         document_index: DocumentIndex,
         # Respecting user selections
         user_selected_filters: BaseFilters | None,
@@ -234,6 +235,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.user = user
         self.persona = persona
         self.llm = llm
+        self.fast_llm = fast_llm
         self.document_index = document_index
         self.user_selected_filters = user_selected_filters
         self.project_id = project_id

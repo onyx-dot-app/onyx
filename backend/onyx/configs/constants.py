@@ -332,6 +332,7 @@ class FileType(str, Enum):
 class MilestoneRecordType(str, Enum):
     TENANT_CREATED = "tenant_created"
     USER_SIGNED_UP = "user_signed_up"
+    MULTIPLE_USERS = "multiple_users"
     VISITED_ADMIN_PAGE = "visited_admin_page"
     CREATED_CONNECTOR = "created_connector"
     CONNECTOR_SUCCEEDED = "connector_succeeded"

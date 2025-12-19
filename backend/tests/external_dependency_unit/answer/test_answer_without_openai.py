@@ -47,6 +47,7 @@ def test_answer_with_only_anthropic_provider(
             provider="anthropic",
             api_key=anthropic_api_key,
             default_model_name=anthropic_model,
+            fast_default_model_name=anthropic_model,
             is_public=True,
             groups=[],
             model_configurations=[

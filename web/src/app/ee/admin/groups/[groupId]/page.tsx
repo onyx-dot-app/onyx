@@ -51,7 +51,7 @@ const Page = (props: { params: Promise<{ groupId: string }> }) => {
   }
 
   return (
-    <div className="container">
+    <div className="mx-auto container">
       <BackButton />
 
       <AdminPageTitle title={userGroup.name || "Unknown"} icon={SvgUsers} />

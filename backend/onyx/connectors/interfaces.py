@@ -27,6 +27,8 @@ CT = TypeVar("CT", bound=ConnectorCheckpoint)
 
 class BaseConnector(abc.ABC, Generic[CT]):
     REDIS_KEY_PREFIX = "da_connector_data:"
+    # Common image file extensions supported across connectors
+    IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
     @abc.abstractmethod
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:

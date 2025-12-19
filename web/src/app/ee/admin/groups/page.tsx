@@ -81,7 +81,7 @@ const Main = () => {
 
 const Page = () => {
   return (
-    <div className="container">
+    <div className="mx-auto container">
       <AdminPageTitle title="Manage User Groups" icon={SvgUsers} />
 
       <Main />

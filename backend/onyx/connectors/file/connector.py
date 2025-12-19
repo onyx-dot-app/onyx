@@ -18,7 +18,8 @@ from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_processing.extract_file_text import get_file_ext
-from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.file_processing.extract_file_text import is_accepted_file_ext
+from onyx.file_processing.extract_file_text import OnyxExtensionType
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
@@ -89,7 +90,7 @@ def _process_file(
     # Get file extension and determine file type
     extension = get_file_ext(file_name)
 
-    if extension not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
+    if not is_accepted_file_ext(extension, OnyxExtensionType.All):
         logger.warning(
             f"Skipping file '{file_name}' with unrecognized extension '{extension}'"
         )
@@ -110,7 +111,7 @@ def _process_file(
     title = metadata.get("title") or file_display_name
 
     # 1) If the file itself is an image, handle that scenario quickly
-    if extension in OnyxFileExtensions.IMAGE_EXTENSIONS:
+    if extension in LoadConnector.IMAGE_EXTENSIONS:
         # Read the image data
         image_data = file.read()
         if not image_data:

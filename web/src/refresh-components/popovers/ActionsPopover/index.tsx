@@ -476,14 +476,6 @@ export default function ActionsPopover({
     }
   };
 
-  const handleOpenChange = (newOpen: boolean) => {
-    setOpen(newOpen);
-    if (newOpen) {
-      setSecondaryView(null);
-      setSearchTerm("");
-    }
-  };
-
   const mcpFooter = showActiveReauthRow ? (
     <LineItem
       onClick={handleFooterReauthClick}
@@ -618,7 +610,7 @@ export default function ActionsPopover({
 
   return (
     <>
-      <Popover open={open} onOpenChange={handleOpenChange}>
+      <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <div data-testid="action-management-toggle">
             <IconButton

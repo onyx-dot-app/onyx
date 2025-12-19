@@ -199,6 +199,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       api_base: "",
       api_version: "",
       default_model_name: "claude-3-opus",
+      fast_default_model_name: null,
       model_configurations: [
         {
           name: "claude-3-opus",

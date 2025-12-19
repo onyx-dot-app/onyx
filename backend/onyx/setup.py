@@ -11,6 +11,7 @@ from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.configs.constants import KV_SEARCH_SETTINGS
 from onyx.configs.embedding_configs import SUPPORTED_EMBEDDING_MODELS
 from onyx.configs.embedding_configs import SupportedEmbeddingModel
+from onyx.configs.model_configs import FAST_GEN_AI_MODEL_VERSION
 from onyx.configs.model_configs import GEN_AI_API_KEY
 from onyx.configs.model_configs import GEN_AI_MODEL_VERSION
 from onyx.context.search.models import SavedSearchSettings
@@ -294,6 +295,7 @@ def setup_postgres(db_session: Session) -> None:
         logger.notice("Setting up default OpenAI LLM for dev.")
 
         llm_model = GEN_AI_MODEL_VERSION or "gpt-4o-mini"
+        fast_model = FAST_GEN_AI_MODEL_VERSION or "gpt-4o-mini"
         model_req = LLMProviderUpsertRequest(
             name="DevEnvPresetOpenAI",
             provider="openai",
@@ -302,6 +304,7 @@ def setup_postgres(db_session: Session) -> None:
             api_version=None,
             custom_config=None,
             default_model_name=llm_model,
+            fast_default_model_name=fast_model,
             is_public=True,
             groups=[],
             model_configurations=[
