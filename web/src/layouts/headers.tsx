@@ -114,3 +114,34 @@ export function SimplePageHeader({
     </div>
   );
 }
+
+export interface AdminPageHeaderProps {
+  icon: React.FunctionComponent<IconProps>;
+  title: string;
+  description: string;
+  rightChildren?: React.ReactNode;
+}
+
+export function AdminPageHeader({
+  icon: Icon,
+  title,
+  description,
+  rightChildren,
+}: AdminPageHeaderProps) {
+  return (
+    <div className="flex flex-col">
+      <div className="flex flex-row justify-between items-center gap-4">
+        <Icon className="stroke-text-04 h-[1.75rem] w-[1.75rem]" />
+        {rightChildren}
+      </div>
+      <div className="flex flex-col">
+        <Text headingH2 aria-label="admin-page-title">
+          {title}
+        </Text>
+        <Text secondaryBody text03>
+          {description}
+        </Text>
+      </div>
+    </div>
+  );
+}
