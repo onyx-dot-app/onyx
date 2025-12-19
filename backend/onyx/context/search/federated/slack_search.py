@@ -748,7 +748,11 @@ def fetch_thread_contexts_with_rate_limit_handling(
     max_messages: int | None = MAX_SLACK_THREAD_CONTEXT_MESSAGES,
 ) -> list[str]:
     """
-    Fetch thread contexts in controlled batches, stopping if rate limited.
+    Fetch thread contexts in controlled batches, stopping on any failure.
+
+    This function uses "best effort" failure detection - any task failure (rate limit,
+    network error, etc.) will stop further batches. Successful results within a batch
+    are preserved even if other tasks in the same batch fail.
 
     Args:
         slack_messages: Messages to fetch thread context for (should be sorted by relevance)
@@ -759,7 +763,7 @@ def fetch_thread_contexts_with_rate_limit_handling(
 
     Returns:
         List of thread texts, one per input message.
-        Messages beyond max_messages or after rate limiting get their original text.
+        Messages beyond max_messages or after failure get their original text.
     """
     if not slack_messages:
         return []
