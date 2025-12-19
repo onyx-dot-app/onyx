@@ -377,6 +377,15 @@ def translate_history_to_llm_format(
     return messages
 
 
+def _increment_turns(
+    turn_index: int, sub_turn_index: int | None
+) -> tuple[int, int | None]:
+    if sub_turn_index is None:
+        return turn_index + 1, None
+    else:
+        return turn_index, sub_turn_index + 1
+
+
 def run_llm_step_pkt_generator(
     history: list[ChatMessageSimple],
     tool_definitions: list[dict],
@@ -455,7 +464,6 @@ def run_llm_step_pkt_generator(
     accumulated_answer = ""
 
     processor_state: Any = None
-    reasoning_incremented = False
 
     with generation_span(
         model=llm.config.model_name,
@@ -496,13 +504,6 @@ def run_llm_step_pkt_generator(
                     continue
                 delta = modified_delta
 
-            if not reasoning_incremented and has_reasoned:
-                if sub_turn_index is None:
-                    turn_index += 1
-                else:
-                    sub_turn_index += 1
-                reasoning_incremented = True
-
             # Should only happen once, frontend does not expect multiple
             # ReasoningStart or ReasoningDone packets.
             if delta.reasoning_content:
@@ -527,6 +528,9 @@ def run_llm_step_pkt_generator(
                         obj=ReasoningDone(),
                     )
                     has_reasoned = 1
+                    turn_index, sub_turn_index = _increment_turns(
+                        turn_index, sub_turn_index
+                    )
                     reasoning_start = False
 
                 if not answer_start:
@@ -570,6 +574,9 @@ def run_llm_step_pkt_generator(
                         obj=ReasoningDone(),
                     )
                     has_reasoned = 1
+                    turn_index, sub_turn_index = _increment_turns(
+                        turn_index, sub_turn_index
+                    )
                     reasoning_start = False
 
                 for tool_call_delta in delta.tool_calls:
