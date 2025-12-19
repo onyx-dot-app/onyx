@@ -829,14 +829,21 @@ def fetch_thread_contexts_with_rate_limit_handling(
 
     results: list[str] = []
     rate_limited = False
+    total_batches = (len(messages_for_context) + batch_size - 1) // batch_size
+    rate_limit_batch = 0
 
     # Process in batches
     for i in range(0, len(messages_for_context), batch_size):
+        current_batch = i // batch_size + 1
+
         if rate_limited:
             # Skip remaining batches, use original message text
             remaining = messages_for_context[i:]
+            skipped_batches = total_batches - rate_limit_batch
             logger.warning(
-                f"Skipping {len(remaining)} thread context fetches due to rate limiting"
+                f"Slack rate limit: skipping {len(remaining)} remaining messages "
+                f"({skipped_batches} of {total_batches} batches). "
+                f"Successfully enriched {len(results)} messages before rate limit."
             )
             results.extend([msg.text for msg in remaining])
             break
@@ -866,18 +873,20 @@ def fetch_thread_contexts_with_rate_limit_handling(
                 logger.error(f"Unexpected None result for message {j} in batch")
                 results.append(batch[j].text)
                 rate_limited = True
+                rate_limit_batch = current_batch
             elif result.is_rate_limited:
                 # Rate limit hit - use original text, stop further batches
                 results.append(result.text)
                 rate_limited = True
+                rate_limit_batch = current_batch
             else:
                 # Success or recoverable error - use the text (enriched or original)
                 results.append(result.text)
 
         if rate_limited:
             logger.warning(
-                f"Rate limit detected at batch {i // batch_size + 1}, "
-                f"stopping further thread context fetches"
+                f"Slack rate limit (429) hit at batch {current_batch}/{total_batches} "
+                f"while fetching thread context. Stopping further API calls."
             )
 
     # Add original text for messages we didn't fetch context for
