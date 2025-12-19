@@ -90,6 +90,16 @@ def _build_index_filters(
     if not source_filter and detected_source_filter:
         source_filter = detected_source_filter
 
+    # CRITICAL FIX: If user_file_ids are present, we must ensure "user_file"
+    # source type is included in the filter, otherwise user files will be excluded!
+    if user_file_ids and source_filter:
+        from onyx.configs.constants import DocumentSource
+
+        # Add user_file to the source filter if not already present
+        if DocumentSource.USER_FILE not in source_filter:
+            source_filter = list(source_filter) + [DocumentSource.USER_FILE]
+            logger.debug("Added USER_FILE to source_filter for user knowledge search")
+
     user_acl_filters = (
         None if bypass_acl else build_access_filters_for_user(user, db_session)
     )
@@ -104,6 +114,7 @@ def _build_index_filters(
         access_control_list=user_acl_filters,
         tenant_id=get_current_tenant_id() if MULTI_TENANT else None,
     )
+
     return final_filters
 
 

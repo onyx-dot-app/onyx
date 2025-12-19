@@ -302,9 +302,19 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
     @classmethod
     def is_available(cls, db_session: Session) -> bool:
-        """Check if search tool is available by verifying connectors exist."""
-        return check_connectors_exist(db_session) or check_federated_connectors_exist(
-            db_session
+        """Check if search tool is available.
+
+        The search tool is available if ANY of the following exist:
+        - Regular connectors (team knowledge)
+        - Federated connectors (e.g., Slack)
+        - User files (User Knowledge mode)
+        """
+        from onyx.db.connector import check_user_files_exist
+
+        return (
+            check_connectors_exist(db_session)
+            or check_federated_connectors_exist(db_session)
+            or check_user_files_exist(db_session)
         )
 
     @property
