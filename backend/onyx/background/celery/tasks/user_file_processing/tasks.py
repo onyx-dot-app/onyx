@@ -874,7 +874,9 @@ def user_file_docid_migration_task(self: Task, *, tenant_id: str) -> bool:
                     )
 
                     # Now update Vespa chunks with the found chunk count using retry_index
-                    # WARNING: This will error; as of #6792 we no longer support updating document ID.
+                    # WARNING: In the future this will error; we no longer want
+                    # to support changing document ID.
+                    # TODO(andrei): Delete soon.
                     retry_index.update_single(
                         doc_id=str(normalized_doc_id),
                         tenant_id=tenant_id,

@@ -211,7 +211,14 @@ class Updatable(abc.ABC):
     """
 
     @abc.abstractmethod
-    def update(self, update_requests: list[MetadataUpdateRequest]) -> None:
+    def update(
+        self,
+        update_requests: list[MetadataUpdateRequest],
+        # TODO(andrei), WARNING: Very temporary, this is not the interface we want
+        # in Updatable, we only have this to continue supporting
+        # user_file_docid_migration_task for Vespa which should be done soon.
+        old_doc_id_to_new_doc_id: dict[str, str],
+    ) -> None:
         """
         Updates some set of chunks. The document and fields to update are specified in the update
         requests. Each update request in the list applies its changes to a list of document ids.

@@ -662,12 +662,13 @@ class VespaIndex(DocumentIndex):
         """
         if fields is None and user_fields is None:
             raise ValueError(
-                f"Bug: Tried up update document {doc_id} with no updated fields or user fields."
+                f"Bug: Tried to update document {doc_id} with no updated fields or user fields."
             )
-        if fields is not None and fields.document_id is not None:
-            raise ValueError(
-                "The new vector db interface does not support updating the document ID field."
-            )
+        # TODO(andrei): Very temporary, reinstate this soon.
+        # if fields is not None and fields.document_id is not None:
+        #     raise ValueError(
+        #         "The new vector db interface does not support updating the document ID field."
+        #     )
 
         vespa_document_index = VespaDocumentIndex(
             index_name=self.index_name,
@@ -694,7 +695,12 @@ class VespaIndex(DocumentIndex):
             project_ids=project_ids,
         )
 
-        vespa_document_index.update([update_request])
+        old_doc_id_to_new_doc_id: dict[str, str] = dict()
+        if fields is not None and fields.document_id is not None:
+            old_doc_id_to_new_doc_id[doc_id] = fields.document_id
+        vespa_document_index.update(
+            [update_request], old_doc_id_to_new_doc_id=old_doc_id_to_new_doc_id
+        )
 
     def delete_single(
         self,
