@@ -31,6 +31,7 @@ from onyx.db.models import Persona
 from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.llm.factory import get_default_llm
+from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.models import CustomToolCallSummary
 from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_constructor import SearchToolConfig
@@ -387,7 +388,9 @@ class TestMCPPassThroughOAuth:
         ):
             # Run the tool
             response = mcp_tool.run(
-                turn_index=0, tab_index=0, override_kwargs=None, input="test"
+                placement=Placement(turn_index=0, tab_index=0),
+                override_kwargs=None,
+                input="test",
             )
             print(response.rich_response)
             assert isinstance(response.rich_response, CustomToolCallSummary)
