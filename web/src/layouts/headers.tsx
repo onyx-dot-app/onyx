@@ -14,15 +14,17 @@ export interface PageHeaderProps {
   className?: string;
   children?: React.ReactNode;
   rightChildren?: React.ReactNode;
+  renderBackButton?: boolean;
 }
 
-export function PageHeader({
+export function SettingsPageHeader({
   icon: Icon,
   title,
   description,
   className,
   children,
   rightChildren,
+  renderBackButton,
 }: PageHeaderProps) {
   const [showShadow, setShowShadow] = useState(false);
   const headerRef = useRef<HTMLDivElement>(null);
@@ -48,7 +50,11 @@ export function PageHeader({
   }, []);
 
   return (
-    <div ref={headerRef} className={cn("pt-10 sticky top-0 z-10", className)}>
+    <div
+      ref={headerRef}
+      className={cn("pt-10 sticky top-0 z-10 w-full", className)}
+    >
+      {renderBackButton && <BackButton />}
       <div className="flex flex-col gap-6 px-4 pt-4 pb-2">
         <div className="flex flex-col">
           <div className="flex flex-row justify-between items-center gap-4">

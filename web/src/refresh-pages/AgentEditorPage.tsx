@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { SimplePageHeader } from "@/layouts/headers";
+import { SettingsPageHeader } from "@/layouts/headers";
 import { SettingsPageLayout } from "@/layouts/pages";
 import Button from "@/refresh-components/buttons/Button";
 import { FullPersona } from "@/app/admin/assistants/interfaces";
@@ -38,7 +38,6 @@ import {
   ProjectFile,
   UserFileStatus,
 } from "@/app/chat/projects/projectsService";
-import { BookIcon, FileIcon } from "lucide-react";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import {
   Popover,
@@ -54,7 +53,6 @@ import {
   SvgTwoLineSmall,
 } from "@opal/icons";
 import { IconProps } from "@opal/types";
-import { useCCPairs } from "@/lib/hooks/useCCPairs";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
@@ -298,7 +296,6 @@ export default function AgentEditorPage({
     knowledge_cutoff_date: new Date(),
     current_datetime_aware: false,
     overwrite_system_prompts: false,
-    system_prompt_override: "",
     reminders: "",
     image_generation: false,
     web_search: false,
@@ -329,14 +326,6 @@ export default function AgentEditorPage({
     knowledge_cutoff_date: Yup.date().optional(),
     current_datetime_aware: Yup.boolean(),
     overwrite_system_prompts: Yup.boolean(),
-    system_prompt_override: Yup.string().when("overwrite_system_prompts", {
-      is: true,
-      then: (schema) =>
-        schema.required(
-          "System prompt override is required when overwriting system prompts."
-        ),
-      otherwise: (schema) => schema.optional(),
-    }),
     reminders: Yup.string().optional(),
     image_generation: Yup.boolean(),
     web_search: Yup.boolean(),
@@ -477,318 +466,321 @@ export default function AgentEditorPage({
             </userFilesModal.Provider>
 
             <Form className="w-full h-fit flex flex-col overflow-hidden">
-              <SimplePageHeader
-                title={existingAgent ? "Edit Agent" : "Create Agent"}
-                rightChildren={
-                  <Button type="submit" disabled={isSubmitting}>
-                    {existingAgent ? "Save" : "Create"}
-                  </Button>
-                }
-              />
+              <SettingsPageLayout>
+                <SettingsPageHeader
+                  icon={SvgSearch}
+                  title={existingAgent ? "Edit Agent" : "Create Agent"}
+                  description=""
+                  rightChildren={
+                    <Button type="submit" disabled={isSubmitting}>
+                      {existingAgent ? "Save" : "Create"}
+                    </Button>
+                  }
+                  renderBackButton
+                />
 
-              {/* Agent Form Content */}
-              <div className="py-6 px-8 flex flex-col gap-8 w-full">
-                <div className="flex flex-row gap-10 justify-between items-start w-full">
+                {/* Agent Form Content */}
+                <div className="py-6 px-4 flex flex-col gap-8 w-full">
+                  <div className="flex flex-row gap-10 justify-between items-start w-full">
+                    <Section>
+                      <VerticalLabelWrapper name="name" label="Name">
+                        <InputTypeInField
+                          name="name"
+                          placeholder="Name your agent"
+                        />
+                      </VerticalLabelWrapper>
+
+                      <VerticalLabelWrapper
+                        name="description"
+                        label="Description"
+                      >
+                        <InputTextAreaField
+                          name="description"
+                          placeholder="What does this agent do?"
+                        />
+                      </VerticalLabelWrapper>
+                    </Section>
+
+                    <Section className="flex flex-col items-center w-fit gap-1">
+                      <FieldLabel
+                        name="agent_avatar"
+                        label="Agent Avatar"
+                        className="w-fit"
+                      />
+                      <AgentIconEditor existingAgent={existingAgent} />
+                    </Section>
+                  </div>
+
+                  <Separator noPadding />
+
                   <Section>
-                    <VerticalLabelWrapper name="name" label="Name">
-                      <InputTypeInField
-                        name="name"
-                        placeholder="Name your agent"
+                    <VerticalLabelWrapper
+                      name="instructions"
+                      label="Instructions"
+                      optional
+                      description="Add instructions to tailor the response for this agent."
+                    >
+                      <InputTextAreaField
+                        name="instructions"
+                        placeholder="Think step by step and show reasoning for complex problems. Use specific examples. Emphasize action items, and leave blanks for the human to fill in when you have unknown. Use a polite enthusiastic tone."
                       />
                     </VerticalLabelWrapper>
 
                     <VerticalLabelWrapper
-                      name="description"
-                      label="Description"
+                      name="conversation_starters"
+                      label="Conversation Starters"
+                      description="Example messages that help users understand what this agent can do and how to interact with it effectively."
+                      optional
                     >
-                      <InputTextAreaField
-                        name="description"
-                        placeholder="What does this agent do?"
-                      />
+                      <ConversationStarters />
                     </VerticalLabelWrapper>
                   </Section>
 
-                  <Section className="flex flex-col items-center w-fit gap-1">
-                    <FieldLabel
-                      name="agent_avatar"
-                      label="Agent Avatar"
-                      className="w-fit"
-                    />
-                    <AgentIconEditor existingAgent={existingAgent} />
-                  </Section>
-                </div>
+                  <Separator noPadding />
 
-                <Separator noPadding />
-
-                <Section>
-                  <VerticalLabelWrapper
-                    name="instructions"
-                    label="Instructions"
-                    optional
-                    description="Add instructions to tailor the response for this agent."
-                  >
-                    <InputTextAreaField
-                      name="instructions"
-                      placeholder="Think step by step and show reasoning for complex problems. Use specific examples. Emphasize action items, and leave blanks for the human to fill in when you have unknown. Use a polite enthusiastic tone."
-                    />
-                  </VerticalLabelWrapper>
-
-                  <VerticalLabelWrapper
-                    name="conversation_starters"
-                    label="Conversation Starters"
-                    description="Example messages that help users understand what this agent can do and how to interact with it effectively."
-                    optional
-                  >
-                    <ConversationStarters />
-                  </VerticalLabelWrapper>
-                </Section>
-
-                <Separator noPadding />
-
-                <Section>
-                  <div className="flex flex-col gap-4">
-                    <FieldLabel
-                      name="knowledge"
-                      label="Knowledge"
-                      description="Add specific connectors and documents for this agent should use to inform its responses."
-                    />
-
-                    <Card>
-                      <HorizontalLabelWrapper
-                        name="enable_knowledge"
-                        label="Enable Knowledge"
-                      >
-                        <SwitchField name="enable_knowledge" />
-                      </HorizontalLabelWrapper>
-
-                      {values.enable_knowledge && (
-                        <HorizontalLabelWrapper
-                          name="knowledge_source"
-                          label="Knowledge Source"
-                          description="Choose the sources of truth this agent refers to."
-                        >
-                          <InputSelectField
-                            name="knowledge_source"
-                            className="w-full"
-                          >
-                            <InputSelect.Trigger />
-                            <InputSelect.Content>
-                              <InputSelect.Item value="team_knowledge">
-                                Team Knowledge
-                              </InputSelect.Item>
-                              <InputSelect.Item value="user_knowledge">
-                                User Knowledge
-                              </InputSelect.Item>
-                            </InputSelect.Content>
-                          </InputSelectField>
-                        </HorizontalLabelWrapper>
-                      )}
-
-                      {values.enable_knowledge &&
-                        values.knowledge_source === "team_knowledge" &&
-                        documentSets &&
-                        (documentSets?.length ?? 0) > 0 && (
-                          <div className="flex gap-2 flex-wrap">
-                            {documentSets!.map((documentSet) => (
-                              <DocumentSetSelectable
-                                key={documentSet.id}
-                                documentSet={documentSet}
-                                isSelected={values.document_set_ids.includes(
-                                  documentSet.id
-                                )}
-                                onSelect={() => {
-                                  const index = values.document_set_ids.indexOf(
-                                    documentSet.id
-                                  );
-                                  if (index !== -1) {
-                                    const newIds = [...values.document_set_ids];
-                                    newIds.splice(index, 1);
-                                    setFieldValue("document_set_ids", newIds);
-                                  } else {
-                                    setFieldValue("document_set_ids", [
-                                      ...values.document_set_ids,
-                                      documentSet.id,
-                                    ]);
-                                  }
-                                }}
-                              />
-                            ))}
-                          </div>
-                        )}
-
-                      {values.enable_knowledge &&
-                        values.knowledge_source === "user_knowledge" && (
-                          <div className="flex flex-col gap-2">
-                            <FilePickerPopover
-                              trigger={(open) => (
-                                <CreateButton transient={open}>
-                                  Add User Files
-                                </CreateButton>
-                              )}
-                              selectedFileIds={values.user_file_ids}
-                              onPickRecent={(file) =>
-                                handlePickRecentFile(
-                                  file,
-                                  values.user_file_ids,
-                                  setFieldValue
-                                )
-                              }
-                              onUnpickRecent={(file) =>
-                                handleUnpickRecentFile(
-                                  file,
-                                  values.user_file_ids,
-                                  setFieldValue
-                                )
-                              }
-                              onFileClick={handleFileClick}
-                              handleUploadChange={(e) =>
-                                handleUploadChange(
-                                  e,
-                                  values.user_file_ids,
-                                  setFieldValue
-                                )
-                              }
-                            />
-
-                            {values.user_file_ids.length > 0 && (
-                              <div className="flex flex-wrap gap-2">
-                                {values.user_file_ids.map((fileId) => {
-                                  const file = allRecentFiles.find(
-                                    (f) => f.id === fileId
-                                  );
-                                  if (!file) return null;
-
-                                  return (
-                                    <FileCard
-                                      key={fileId}
-                                      file={file}
-                                      removeFile={(id: string) => {
-                                        setFieldValue(
-                                          "user_file_ids",
-                                          values.user_file_ids.filter(
-                                            (fid) => fid !== id
-                                          )
-                                        );
-                                      }}
-                                      onFileClick={(f: ProjectFile) => {
-                                        setPresentingDocument({
-                                          document_id: `project_file__${f.file_id}`,
-                                          semantic_identifier: f.name,
-                                        });
-                                      }}
-                                    />
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                    </Card>
-                  </div>
-                </Section>
-
-                <Separator noPadding />
-
-                <SimpleCollapsible
-                  trigger={
-                    <SimpleCollapsible.Header
-                      title="Actions"
-                      description="Tools and capabilities available for this agent to use."
-                    />
-                  }
-                >
-                  <Section className="gap-2">
-                    <Card>
-                      <HorizontalLabelWrapper
-                        name="image_generation"
-                        label="Image Generation"
-                        description="Generate and manipulate images using AI-powered tools."
-                      >
-                        <SwitchField name="image_generation" />
-                      </HorizontalLabelWrapper>
-                    </Card>
-
-                    <Card>
-                      <HorizontalLabelWrapper
-                        name="web_search"
-                        label="Web Search"
-                        description="Search the web for real-time information and up-to-date results."
-                      >
-                        <SwitchField name="web_search" />
-                      </HorizontalLabelWrapper>
-                    </Card>
-
-                    <Card>
-                      <HorizontalLabelWrapper
-                        name="code_interpreter"
-                        label="Code Interpreter"
-                        description="Generate and run code."
-                      >
-                        <SwitchField name="code_interpreter" />
-                      </HorizontalLabelWrapper>
-                    </Card>
-
-                    <Separator noPadding className="py-1" />
-
-                    {/* MCP tools here */}
-                    <div className="h-[2rem] w-full dbg-red" />
-                  </Section>
-                </SimpleCollapsible>
-
-                <Separator noPadding />
-
-                <SimpleCollapsible
-                  trigger={
-                    <SimpleCollapsible.Header
-                      title="Advanced Options"
-                      description="Fine-tune agent prompts and knowledge."
-                    />
-                  }
-                >
                   <Section>
-                    <Card>
-                      <HorizontalLabelWrapper
-                        name="current_datetime_aware"
-                        label="Current Datetime Aware"
-                        description='Include the current date and time explicitly in the agent prompt (formatted as "Thursday Jan 1, 1970 00:01"). To inject it in a specific place in the prompt, use the pattern [[CURRENT_DATETIME]].'
-                      >
-                        <SwitchField name="current_datetime_aware" />
-                      </HorizontalLabelWrapper>
-                      <HorizontalLabelWrapper
-                        name="overwrite_system_prompts"
-                        label="Overwrite System Prompts"
-                        description='Completely replace the base system prompt. This might affect response quality since it will also overwrite useful system instructions (e.g. "You (the LLM) can provide markdown and it will be rendered").'
-                      >
-                        <SwitchField name="overwrite_system_prompts" />
-                      </HorizontalLabelWrapper>
+                    <div className="flex flex-col gap-4">
+                      <FieldLabel
+                        name="knowledge"
+                        label="Knowledge"
+                        description="Add specific connectors and documents for this agent should use to inform its responses."
+                      />
 
-                      {values.overwrite_system_prompts && (
-                        <VerticalLabelWrapper name="system_prompt_override">
-                          <InputTextAreaField
-                            name="system_prompt_override"
-                            placeholder="You (the LLM) can provide markdown and it will be rendered..."
-                          />
-                        </VerticalLabelWrapper>
-                      )}
-                    </Card>
+                      <Card>
+                        <HorizontalLabelWrapper
+                          name="enable_knowledge"
+                          label="Enable Knowledge"
+                        >
+                          <SwitchField name="enable_knowledge" />
+                        </HorizontalLabelWrapper>
 
-                    <div className="flex flex-col gap-1">
-                      <VerticalLabelWrapper name="reminders" label="Reminders">
-                        <InputTextAreaField
-                          name="reminders"
-                          placeholder="Remember, I want you to always format your response as a numbered list."
-                        />
-                      </VerticalLabelWrapper>
-                      <Text text03 secondaryBody>
-                        Append a brief reminder to the prompt messages. Use this
-                        to remind the agent if you find that it tends to forget
-                        certain instructions as the chat progresses. This should
-                        be brief and not interfere with the user messages.
-                      </Text>
+                        {values.enable_knowledge && (
+                          <HorizontalLabelWrapper
+                            name="knowledge_source"
+                            label="Knowledge Source"
+                            description="Choose the sources of truth this agent refers to."
+                          >
+                            <InputSelectField
+                              name="knowledge_source"
+                              className="w-full"
+                            >
+                              <InputSelect.Trigger />
+                              <InputSelect.Content>
+                                <InputSelect.Item value="team_knowledge">
+                                  Team Knowledge
+                                </InputSelect.Item>
+                                <InputSelect.Item value="user_knowledge">
+                                  User Knowledge
+                                </InputSelect.Item>
+                              </InputSelect.Content>
+                            </InputSelectField>
+                          </HorizontalLabelWrapper>
+                        )}
+
+                        {values.enable_knowledge &&
+                          values.knowledge_source === "team_knowledge" &&
+                          documentSets &&
+                          (documentSets?.length ?? 0) > 0 && (
+                            <div className="flex gap-2 flex-wrap">
+                              {documentSets!.map((documentSet) => (
+                                <DocumentSetSelectable
+                                  key={documentSet.id}
+                                  documentSet={documentSet}
+                                  isSelected={values.document_set_ids.includes(
+                                    documentSet.id
+                                  )}
+                                  onSelect={() => {
+                                    const index =
+                                      values.document_set_ids.indexOf(
+                                        documentSet.id
+                                      );
+                                    if (index !== -1) {
+                                      const newIds = [
+                                        ...values.document_set_ids,
+                                      ];
+                                      newIds.splice(index, 1);
+                                      setFieldValue("document_set_ids", newIds);
+                                    } else {
+                                      setFieldValue("document_set_ids", [
+                                        ...values.document_set_ids,
+                                        documentSet.id,
+                                      ]);
+                                    }
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          )}
+
+                        {values.enable_knowledge &&
+                          values.knowledge_source === "user_knowledge" && (
+                            <div className="flex flex-col gap-2">
+                              <FilePickerPopover
+                                trigger={(open) => (
+                                  <CreateButton transient={open}>
+                                    Add User Files
+                                  </CreateButton>
+                                )}
+                                selectedFileIds={values.user_file_ids}
+                                onPickRecent={(file) =>
+                                  handlePickRecentFile(
+                                    file,
+                                    values.user_file_ids,
+                                    setFieldValue
+                                  )
+                                }
+                                onUnpickRecent={(file) =>
+                                  handleUnpickRecentFile(
+                                    file,
+                                    values.user_file_ids,
+                                    setFieldValue
+                                  )
+                                }
+                                onFileClick={handleFileClick}
+                                handleUploadChange={(e) =>
+                                  handleUploadChange(
+                                    e,
+                                    values.user_file_ids,
+                                    setFieldValue
+                                  )
+                                }
+                              />
+
+                              {values.user_file_ids.length > 0 && (
+                                <div className="flex flex-wrap gap-2">
+                                  {values.user_file_ids.map((fileId) => {
+                                    const file = allRecentFiles.find(
+                                      (f) => f.id === fileId
+                                    );
+                                    if (!file) return null;
+
+                                    return (
+                                      <FileCard
+                                        key={fileId}
+                                        file={file}
+                                        removeFile={(id: string) => {
+                                          setFieldValue(
+                                            "user_file_ids",
+                                            values.user_file_ids.filter(
+                                              (fid) => fid !== id
+                                            )
+                                          );
+                                        }}
+                                        onFileClick={(f: ProjectFile) => {
+                                          setPresentingDocument({
+                                            document_id: `project_file__${f.file_id}`,
+                                            semantic_identifier: f.name,
+                                          });
+                                        }}
+                                      />
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                      </Card>
                     </div>
                   </Section>
-                </SimpleCollapsible>
-              </div>
+
+                  <Separator noPadding />
+
+                  <SimpleCollapsible
+                    trigger={
+                      <SimpleCollapsible.Header
+                        title="Actions"
+                        description="Tools and capabilities available for this agent to use."
+                      />
+                    }
+                  >
+                    <Section className="gap-2">
+                      <Card>
+                        <HorizontalLabelWrapper
+                          name="image_generation"
+                          label="Image Generation"
+                          description="Generate and manipulate images using AI-powered tools."
+                        >
+                          <SwitchField name="image_generation" />
+                        </HorizontalLabelWrapper>
+                      </Card>
+
+                      <Card>
+                        <HorizontalLabelWrapper
+                          name="web_search"
+                          label="Web Search"
+                          description="Search the web for real-time information and up-to-date results."
+                        >
+                          <SwitchField name="web_search" />
+                        </HorizontalLabelWrapper>
+                      </Card>
+
+                      <Card>
+                        <HorizontalLabelWrapper
+                          name="code_interpreter"
+                          label="Code Interpreter"
+                          description="Generate and run code."
+                        >
+                          <SwitchField name="code_interpreter" />
+                        </HorizontalLabelWrapper>
+                      </Card>
+
+                      <Separator noPadding className="py-1" />
+
+                      {/* MCP tools here */}
+                      <div className="h-[2rem] w-full dbg-red" />
+                    </Section>
+                  </SimpleCollapsible>
+
+                  <Separator noPadding />
+
+                  <SimpleCollapsible
+                    trigger={
+                      <SimpleCollapsible.Header
+                        title="Advanced Options"
+                        description="Fine-tune agent prompts and knowledge."
+                      />
+                    }
+                  >
+                    <Section>
+                      <Card>
+                        <HorizontalLabelWrapper
+                          name="current_datetime_aware"
+                          label="Current Datetime Aware"
+                          description='Include the current date and time explicitly in the agent prompt (formatted as "Thursday Jan 1, 1970 00:01"). To inject it in a specific place in the prompt, use the pattern [[CURRENT_DATETIME]].'
+                        >
+                          <SwitchField name="current_datetime_aware" />
+                        </HorizontalLabelWrapper>
+                        <HorizontalLabelWrapper
+                          name="overwrite_system_prompts"
+                          label="Overwrite System Prompts"
+                          description='Completely replace the base system prompt. This might affect response quality since it will also overwrite useful system instructions (e.g. "You (the LLM) can provide markdown and it will be rendered").'
+                        >
+                          <SwitchField name="overwrite_system_prompts" />
+                        </HorizontalLabelWrapper>
+                      </Card>
+
+                      <div className="flex flex-col gap-1">
+                        <VerticalLabelWrapper
+                          name="reminders"
+                          label="Reminders"
+                        >
+                          <InputTextAreaField
+                            name="reminders"
+                            placeholder="Remember, I want you to always format your response as a numbered list."
+                          />
+                        </VerticalLabelWrapper>
+                        <Text text03 secondaryBody>
+                          Append a brief reminder to the prompt messages. Use
+                          this to remind the agent if you find that it tends to
+                          forget certain instructions as the chat progresses.
+                          This should be brief and not interfere with the user
+                          messages.
+                        </Text>
+                      </div>
+                    </Section>
+                  </SimpleCollapsible>
+                </div>
+              </SettingsPageLayout>
             </Form>
           </>
         )}

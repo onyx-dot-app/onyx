@@ -8,7 +8,7 @@ import { useAgents } from "@/hooks/useAgents";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { PageHeader } from "@/layouts/headers";
+import { SettingsPageHeader } from "@/layouts/headers";
 import { SettingsPageLayout } from "@/layouts/pages";
 import CounterSeparator from "@/refresh-components/CounterSeparator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -417,7 +417,7 @@ export default function AgentsNavigationPage() {
       data-testid="AgentsPage/container"
       aria-label="Agents Page"
     >
-      <PageHeader
+      <SettingsPageHeader
         icon={SvgOnyxOctagon}
         title="Agents & Assistants"
         description="Customize AI behavior and knowledge for you and your team’s use cases."
@@ -631,7 +631,7 @@ export default function AgentsNavigationPage() {
             </Popover>
           </div>
         </div>
-      </PageHeader>
+      </SettingsPageHeader>
 
       {/* Agents List */}
       <div className="p-4 flex flex-col gap-8">
