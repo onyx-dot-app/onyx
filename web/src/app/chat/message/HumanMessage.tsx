@@ -232,12 +232,7 @@ export default function HumanMessage({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div
-        className={cn(
-          "text-user-text max-w-[790px] md:px-4",
-          shared ? "w-full" : "w-[90%]"
-        )}
-      >
+      <div className={cn("text-user-text max-w-[790px] md:px-8 w-[90%]")}>
         <FileDisplay alignBubble files={files || []} />
         <div className="flex flex-wrap justify-end break-words">
           {isEditing ? (
