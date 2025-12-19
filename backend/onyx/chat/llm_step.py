@@ -341,8 +341,8 @@ def run_llm_step_pkt_generator(
     tool_choice: ToolChoiceOptions,
     llm: LLM,
     turn_index: int,
-    citation_processor: DynamicCitationProcessor,
     state_container: ChatStateContainer,
+    citation_processor: DynamicCitationProcessor | None,
     reasoning_effort: ReasoningEffort | None = None,
     final_documents: list[SearchDoc] | None = None,
     user_identity: LLMUserIdentity | None = None,
@@ -443,20 +443,30 @@ def run_llm_step_pkt_generator(
                     )
                     answer_start = True
 
-                for result in citation_processor.process_token(delta.content):
-                    if isinstance(result, str):
-                        accumulated_answer += result
-                        # Save answer incrementally to state container
-                        state_container.set_answer_tokens(accumulated_answer)
-                        yield Packet(
-                            turn_index=turn_index + has_reasoned,
-                            obj=AgentResponseDelta(content=result),
-                        )
-                    elif isinstance(result, CitationInfo):
-                        yield Packet(
-                            turn_index=turn_index + has_reasoned,
-                            obj=result,
-                        )
+                if citation_processor:
+                    for result in citation_processor.process_token(delta.content):
+                        if isinstance(result, str):
+                            accumulated_answer += result
+                            # Save answer incrementally to state container
+                            state_container.set_answer_tokens(accumulated_answer)
+                            yield Packet(
+                                turn_index=turn_index + has_reasoned,
+                                obj=AgentResponseDelta(content=result),
+                            )
+                        elif isinstance(result, CitationInfo):
+                            yield Packet(
+                                turn_index=turn_index + has_reasoned,
+                                obj=result,
+                            )
+                else:
+                    # When citation_processor is None, use delta.content directly without modification
+                    accumulated_answer += delta.content
+                    # Save answer incrementally to state container
+                    state_container.set_answer_tokens(accumulated_answer)
+                    yield Packet(
+                        turn_index=turn_index + has_reasoned,
+                        obj=AgentResponseDelta(content=delta.content),
+                    )
 
             if delta.tool_calls:
                 if reasoning_start:
@@ -563,8 +573,8 @@ def run_llm_step(
     tool_choice: ToolChoiceOptions,
     llm: LLM,
     turn_index: int,
-    citation_processor: DynamicCitationProcessor,
     state_container: ChatStateContainer,
+    citation_processor: DynamicCitationProcessor | None,
     reasoning_effort: ReasoningEffort | None = None,
     final_documents: list[SearchDoc] | None = None,
     user_identity: LLMUserIdentity | None = None,
@@ -583,8 +593,8 @@ def run_llm_step(
         tool_choice=tool_choice,
         llm=llm,
         turn_index=turn_index,
-        citation_processor=citation_processor,
         state_container=state_container,
+        citation_processor=citation_processor,
         reasoning_effort=reasoning_effort,
         final_documents=final_documents,
         user_identity=user_identity,

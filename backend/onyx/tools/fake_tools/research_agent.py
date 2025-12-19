@@ -34,6 +34,9 @@ from onyx.prompts.deep_research.research_agent import RESEARCH_REPORT_PROMPT
 from onyx.prompts.deep_research.research_agent import USER_REPORT_QUERY
 from onyx.prompts.prompt_utils import get_current_llm_day_time
 from onyx.prompts.tool_prompts import INTERNAL_SEARCH_GUIDANCE
+from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import Placement
+from onyx.server.query_and_chat.streaming_models import ResearchAgentStart
 from onyx.tools.models import ToolCallInfo
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
@@ -60,6 +63,7 @@ def generate_intermediate_report(
     user_identity: LLMUserIdentity | None,
     state_container: ChatStateContainer,
     emitter: Emitter,
+    placement: Placement,
 ) -> str:
     system_prompt = ChatMessageSimple(
         message=RESEARCH_REPORT_PROMPT,
@@ -103,6 +107,13 @@ def generate_intermediate_report(
             f"LLM failed to generate a report for research task: {research_topic}"
         )
 
+    # emitter.emit(
+    #     Packet(
+    #         obj=ResearchAgentStart(research_task=research_topic),
+    #         placement=placement,
+    #     )
+    # )
+
     return final_report
 
 
@@ -123,8 +134,20 @@ def run_research_agent_call(
     reasoning_cycles = 0
     just_ran_web_search = False
 
+    turn_index = research_agent_call.turn_index
+    tab_index = research_agent_call.tab_index
+
     # If this fails to parse, we can't run the loop anyway, let this one fail in that case
     research_topic = research_agent_call.tool_args[RESEARCH_AGENT_TASK_KEY]
+
+    emitter.emit(
+        Packet(
+            turn_index=turn_index,
+            tab_index=tab_index,
+            sub_turn_index=0,
+            obj=ResearchAgentStart(research_task=research_topic),
+        )
+    )
 
     initial_user_message = ChatMessageSimple(
         message=research_topic,
@@ -237,6 +260,9 @@ def run_research_agent_call(
                 user_identity=user_identity,
                 state_container=state_container,
                 emitter=emitter,
+                placement=Placement(
+                    turn_index=turn_index, tab_index=tab_index, sub_turn_index=0
+                ),  # TODO
             )
             return ResearchAgentCallResult(
                 intermediate_report=final_report, search_docs=[]
@@ -365,6 +391,9 @@ def run_research_agent_call(
         user_identity=user_identity,
         state_container=state_container,
         emitter=emitter,
+        placement=Placement(
+            turn_index=turn_index, tab_index=tab_index, sub_turn_index=0
+        ),  # TODO
     )
     return ResearchAgentCallResult(intermediate_report=final_report, search_docs=[])
 

@@ -1,5 +1,6 @@
 GENERATE_PLAN_TOOL_NAME = "generate_plan"
 
+RESEARCH_AGENT_DB_NAME = "ResearchAgent"
 RESEARCH_AGENT_TOOL_NAME = "research_agent"
 RESEARCH_AGENT_TASK_KEY = "task"
 
