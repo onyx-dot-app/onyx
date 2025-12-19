@@ -22,7 +22,7 @@ interface UseChatSessionsOutput {
   refreshChatSessions: KeyedMutator<ChatSessionsResponse>;
 }
 
-function findAgentForCurrentChatSession(
+function useFindAgentForCurrentChatSession(
   currentChatSession: ChatSession | null
 ): MinimalPersonaSnapshot | null {
   const { agents } = useAgents();
@@ -68,7 +68,7 @@ export default function useChatSessions(): UseChatSessionsOutput {
     ) ?? null;
 
   const agentForCurrentChatSession =
-    findAgentForCurrentChatSession(currentChatSession);
+    useFindAgentForCurrentChatSession(currentChatSession);
 
   return {
     chatSessions,
