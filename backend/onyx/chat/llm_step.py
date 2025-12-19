@@ -52,6 +52,45 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+def _parse_tool_args_to_dict(raw_args: Any) -> dict[str, Any]:
+    """Parse tool arguments into a dict.
+
+    Normal case:
+    - raw_args == '{"queries":[...]}' -> dict via json.loads
+
+    Defensive case (JSON string literal of an object):
+    - raw_args == '"{\\"queries\\":[...]}"' -> json.loads -> str -> json.loads -> dict
+
+    Anything else returns {}.
+    """
+
+    if raw_args is None:
+        return {}
+
+    if isinstance(raw_args, dict):
+        return raw_args
+
+    if not isinstance(raw_args, str):
+        return {}
+
+    try:
+        parsed1: Any = json.loads(raw_args)
+    except json.JSONDecodeError:
+        return {}
+
+    if isinstance(parsed1, dict):
+        return parsed1
+
+    if isinstance(parsed1, str):
+        try:
+            parsed2: Any = json.loads(parsed1)
+        except json.JSONDecodeError:
+            return {}
+        return parsed2 if isinstance(parsed2, dict) else {}
+
+    return {}
+
+
 def _format_message_history_for_logging(
     message_history: LanguageModelInput,
 ) -> str:
@@ -170,12 +209,7 @@ def _extract_tool_call_kickoffs(
     for tool_call_data in id_to_tool_call_map.values():
         if tool_call_data.get("id") and tool_call_data.get("name"):
             try:
-                # Parse arguments JSON string to dict
-                tool_args = (
-                    json.loads(tool_call_data["arguments"])
-                    if tool_call_data["arguments"]
-                    else {}
-                )
+                tool_args = _parse_tool_args_to_dict(tool_call_data.get("arguments"))
             except json.JSONDecodeError:
                 # If parsing fails, try empty dict, most tools would fail though
                 logger.error(
@@ -283,12 +317,18 @@ def translate_history_to_llm_format(
                         function_name = tool_call_data.get(
                             TOOL_CALL_MSG_FUNC_NAME, "unknown"
                         )
-                        tool_args = tool_call_data.get(TOOL_CALL_MSG_ARGUMENTS, {})
+                        raw_args = tool_call_data.get(TOOL_CALL_MSG_ARGUMENTS, {})
                     else:
                         function_name = "unknown"
-                        tool_args = (
+                        raw_args = (
                             tool_call_data if isinstance(tool_call_data, dict) else {}
                         )
+
+                    # IMPORTANT: `FunctionCall.arguments` must be a JSON object string.
+                    # If `raw_args` is accidentally a JSON string literal of an object
+                    # (e.g. '"{\\"queries\\":[...]}"'), calling `json.dumps(raw_args)`
+                    # would produce a quoted JSON literal and break Anthropic tool parsing.
+                    tool_args = _parse_tool_args_to_dict(raw_args)
 
                     # NOTE: if the model is trained on a different tool call format, this may slightly interfere
                     # with the future tool calls, if it doesn't look like this. Almost certainly not a big deal.
