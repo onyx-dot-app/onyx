@@ -2,7 +2,7 @@ import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { unstable_noStore as noStore } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAuth } from "@/lib/auth/requireAuth";
-import AssistantStats from "./AssistantStats";
+import { AssistantStats } from "./AssistantStats";
 import { BackButton } from "@/components/BackButton";
 
 export default async function GalleryPage(props: {

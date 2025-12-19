@@ -90,13 +90,13 @@ import {
 } from "@/app/chat/projects/projectsService";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
+import { useAgents } from "@/hooks/useAgents";
 import Text from "@/refresh-components/texts/Text";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import { SvgFiles, SvgTrash } from "@opal/icons";
-import { useAgentsContext } from "@/contexts/AgentsContext";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
@@ -150,7 +150,7 @@ export default function AssistantEditor({
 }: AssistantEditorProps) {
   // NOTE: assistants = agents
   // TODO: rename everything to agents
-  const { refreshAgents } = useAgentsContext();
+  const { refresh: refreshAgents } = useAgents();
 
   const router = useRouter();
   const searchParams = useSearchParams();

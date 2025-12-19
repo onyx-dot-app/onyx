@@ -273,6 +273,7 @@ schema {{ schema_name }} {
                 # Boost based on aggregated boost calculation
                 * aggregated_chunk_boost
             }
+            # Target hits for hybrid retrieval should be at least this value.
             rerank-count: 1000
         }
 
@@ -341,6 +342,7 @@ schema {{ schema_name }} {
                 # Boost based on aggregated boost calculation
                 * aggregated_chunk_boost
             }
+            # Target hits for hybrid retrieval should be at least this value.
             rerank-count: 1000
         }
 

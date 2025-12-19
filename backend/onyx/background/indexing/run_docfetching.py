@@ -368,10 +368,18 @@ def connector_document_extraction(
         db_connector = index_attempt.connector_credential_pair.connector
         db_credential = index_attempt.connector_credential_pair.credential
         is_primary = index_attempt.search_settings.status == IndexModelStatus.PRESENT
+
         from_beginning = index_attempt.from_beginning
         has_successful_attempt = (
             index_attempt.connector_credential_pair.last_successful_index_time
             is not None
+        )
+        # Use higher priority for first-time indexing to ensure new connectors
+        # get processed before re-indexing of existing connectors
+        docprocessing_priority = (
+            OnyxCeleryPriority.MEDIUM
+            if has_successful_attempt
+            else OnyxCeleryPriority.HIGH
         )
 
         earliest_index_time = (
@@ -495,6 +503,7 @@ def connector_document_extraction(
                     tenant_id,
                     app,
                     most_recent_attempt,
+                    docprocessing_priority,
                 )
                 last_batch_num = reissued_batch_count + completed_batches
                 index_attempt.completed_batches = completed_batches
@@ -607,7 +616,7 @@ def connector_document_extraction(
                     OnyxCeleryTask.DOCPROCESSING_TASK,
                     kwargs=processing_batch_data,
                     queue=OnyxCeleryQueues.DOCPROCESSING,
-                    priority=OnyxCeleryPriority.MEDIUM,
+                    priority=docprocessing_priority,
                 )
 
                 batch_num += 1
@@ -758,6 +767,7 @@ def reissue_old_batches(
     tenant_id: str,
     app: Celery,
     most_recent_attempt: IndexAttempt | None,
+    priority: OnyxCeleryPriority,
 ) -> tuple[int, int]:
     # When loading from a checkpoint, we need to start new docprocessing tasks
     # tied to the new index attempt for any batches left over in the file store
@@ -785,7 +795,7 @@ def reissue_old_batches(
                 "batch_num": path_info.batch_num,  # use same batch num as previously
             },
             queue=OnyxCeleryQueues.DOCPROCESSING,
-            priority=OnyxCeleryPriority.MEDIUM,
+            priority=priority,
         )
     recent_batches = most_recent_attempt.completed_batches if most_recent_attempt else 0
     # resume from the batch num of the last attempt. This should be one more

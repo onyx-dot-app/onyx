@@ -18,7 +18,7 @@ import {
   EnterpriseSettings,
   ApplicationStatus,
 } from "./admin/settings/interfaces";
-import AppProvider from "@/contexts/AppProvider";
+import AppProvider from "@/components/context/AppProvider";
 import { PHProvider } from "./providers";
 import { getAuthTypeMetadataSS, getCurrentUserSS } from "@/lib/userSS";
 import { Suspense } from "react";

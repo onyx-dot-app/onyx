@@ -2,6 +2,7 @@
 
 import React, { memo } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { usePinnedAgentsWithDetails } from "@/hooks/useAgents";
 import { useAppRouter } from "@/hooks/appNavigation";
 import { cn, noProp } from "@/lib/utils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
@@ -12,7 +13,6 @@ import useAppFocus from "@/hooks/useAppFocus";
 import useOnMount from "@/hooks/useOnMount";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { SvgPin, SvgX } from "@opal/icons";
-import { useAgentsContext } from "@/contexts/AgentsContext";
 
 interface SortableItemProps {
   id: number;
@@ -51,7 +51,7 @@ interface AgentButtonProps {
 function AgentButtonInner({ agent }: AgentButtonProps) {
   const route = useAppRouter();
   const activeSidebarTab = useAppFocus();
-  const { pinnedAgents, togglePinnedAgent } = useAgentsContext();
+  const { pinnedAgents, togglePinnedAgent } = usePinnedAgentsWithDetails();
   const pinned = pinnedAgents.some(
     (pinnedAgent) => pinnedAgent.id === agent.id
   );
@@ -72,7 +72,7 @@ function AgentButtonInner({ agent }: AgentButtonProps) {
             <IconButton
               icon={pinned ? SvgX : SvgPin}
               internal
-              onClick={noProp(() => togglePinnedAgent(agent.id, !pinned))}
+              onClick={noProp(() => togglePinnedAgent(agent, !pinned))}
               className={cn("hidden group-hover/SidebarTab:flex")}
               tooltip={pinned ? "Unpin Agent" : "Pin Agent"}
             />
