@@ -356,10 +356,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             },
         }
 
-    def emit_start(self, turn_index: int, tab_index: int) -> None:
+    def emit_start(self, placement: Placement) -> None:
         self.emitter.emit(
             Packet(
-                placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                placement=placement,
                 obj=SearchToolStart(),
             )
         )
@@ -367,8 +367,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
     @log_function_time(print_only=True)
     def run(
         self,
-        turn_index: int,
-        tab_index: int,
+        placement: Placement,
         override_kwargs: SearchToolOverrideKwargs,
         **llm_kwargs: Any,
     ) -> ToolResponse:
@@ -488,7 +487,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             # Emit the queries early so the UI can display them immediately
             self.emitter.emit(
                 Packet(
-                    placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                    placement=placement,
                     obj=SearchToolQueriesDelta(
                         queries=all_queries,
                     ),
@@ -596,7 +595,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
             self.emitter.emit(
                 Packet(
-                    placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                    placement=placement,
                     obj=SearchToolDocumentsDelta(
                         documents=final_ui_docs,
                     ),

@@ -111,10 +111,10 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
             },
         }
 
-    def emit_start(self, turn_index: int, tab_index: int) -> None:
+    def emit_start(self, placement: Placement) -> None:
         self.emitter.emit(
             Packet(
-                placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                placement=placement,
                 obj=SearchToolStart(is_internet_search=True),
             )
         )
@@ -129,8 +129,7 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
 
     def run(
         self,
-        turn_index: int,
-        tab_index: int,
+        placement: Placement,
         override_kwargs: WebSearchToolOverrideKwargs,
         **llm_kwargs: Any,
     ) -> ToolResponse:
@@ -140,7 +139,7 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         # Emit queries
         self.emitter.emit(
             Packet(
-                placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                placement=placement,
                 obj=SearchToolQueriesDelta(queries=queries),
             )
         )
@@ -204,7 +203,7 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         # Emit documents
         self.emitter.emit(
             Packet(
-                placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                placement=placement,
                 obj=SearchToolDocumentsDelta(documents=search_docs),
             )
         )

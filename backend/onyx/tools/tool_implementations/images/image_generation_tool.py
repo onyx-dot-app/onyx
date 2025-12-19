@@ -121,10 +121,10 @@ class ImageGenerationTool(Tool[None]):
             },
         }
 
-    def emit_start(self, turn_index: int, tab_index: int) -> None:
+    def emit_start(self, placement: Placement) -> None:
         self.emitter.emit(
             Packet(
-                placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                placement=placement,
                 obj=ImageGenerationToolStart(),
             )
         )
@@ -209,8 +209,7 @@ class ImageGenerationTool(Tool[None]):
 
     def run(
         self,
-        turn_index: int,
-        tab_index: int,
+        placement: Placement,
         override_kwargs: None = None,
         **llm_kwargs: Any,
     ) -> ToolResponse:
@@ -259,7 +258,7 @@ class ImageGenerationTool(Tool[None]):
             # Emit a heartbeat packet to prevent timeout
             self.emitter.emit(
                 Packet(
-                    placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                    placement=placement,
                     obj=ImageGenerationToolHeartbeat(),
                 )
             )
@@ -303,7 +302,7 @@ class ImageGenerationTool(Tool[None]):
         # Emit final packet with generated images
         self.emitter.emit(
             Packet(
-                placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                placement=placement,
                 obj=ImageGenerationFinal(images=generated_images_metadata),
             )
         )

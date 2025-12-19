@@ -134,18 +134,17 @@ class CustomTool(Tool[None]):
 
     """Actual execution of the tool"""
 
-    def emit_start(self, turn_index: int, tab_index: int) -> None:
+    def emit_start(self, placement: Placement) -> None:
         self.emitter.emit(
             Packet(
-                placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                placement=placement,
                 obj=CustomToolStart(tool_name=self._name),
             )
         )
 
     def run(
         self,
-        turn_index: int,
-        tab_index: int,
+        placement: Placement,
         override_kwargs: None = None,
         **llm_kwargs: Any,
     ) -> ToolResponse:
@@ -212,7 +211,7 @@ class CustomTool(Tool[None]):
         # Emit CustomToolDelta packet
         self.emitter.emit(
             Packet(
-                placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                placement=placement,
                 obj=CustomToolDelta(
                     tool_name=self._name,
                     response_type=response_type,

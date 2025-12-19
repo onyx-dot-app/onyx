@@ -115,7 +115,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
             },
         }
 
-    def emit_start(self, turn_index: int, tab_index: int) -> None:
+    def emit_start(self, placement: Placement) -> None:
         """Emit start packet for this tool. Code will be emitted in run() method."""
         # Note: PythonToolStart requires code, but we don't have it in emit_start
         # The code is available in run() method via llm_kwargs
@@ -123,8 +123,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
 
     def run(
         self,
-        turn_index: int,
-        tab_index: int,
+        placement: Placement,
         override_kwargs: PythonToolOverrideKwargs,
         **llm_kwargs: Any,
     ) -> ToolResponse:
@@ -132,8 +131,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
         Execute Python code in the Code Interpreter service.
 
         Args:
-            turn_index: The turn index for this tool execution
-            tab_index: The tab index for parallel tool calls
+            placement: The placement info (turn_index and tab_index) for this tool call.
             override_kwargs: Contains chat_files to stage for execution
             **llm_kwargs: Contains 'code' parameter from LLM
 
@@ -146,7 +144,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
         # Emit start event with the code
         self.emitter.emit(
             Packet(
-                placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                placement=placement,
                 obj=PythonToolStart(code=code),
             )
         )
@@ -253,7 +251,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
             # Emit delta with stdout/stderr and generated files
             self.emitter.emit(
                 Packet(
-                    placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                    placement=placement,
                     obj=PythonToolDelta(
                         stdout=truncated_stdout,
                         stderr=truncated_stderr,
@@ -288,7 +286,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
             # Emit error delta
             self.emitter.emit(
                 Packet(
-                    placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                    placement=placement,
                     obj=PythonToolDelta(
                         stdout="",
                         stderr=error_msg,

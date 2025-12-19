@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from onyx.chat.emitter import Emitter
 from onyx.db.kg_config import get_kg_config_settings
+from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolResponse
 from onyx.utils.logger import setup_logger
@@ -68,13 +69,12 @@ class KnowledgeGraphTool(Tool[None]):
             },
         }
 
-    def emit_start(self, turn_index: int, tab_index: int) -> None:
+    def emit_start(self, placement: Placement) -> None:
         raise NotImplementedError("KnowledgeGraphTool.emit_start is not implemented.")
 
     def run(
         self,
-        turn_index: int,
-        tab_index: int,
+        placement: Placement,
         override_kwargs: None = None,
         **llm_kwargs: Any,
     ) -> ToolResponse:

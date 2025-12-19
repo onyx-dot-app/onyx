@@ -7,7 +7,6 @@ from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.models import ChatMessageSimple
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
-from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.interface import Tool
@@ -94,16 +93,12 @@ def _run_single_tool(
 
     This function is designed to be run in parallel via run_functions_tuples_in_parallel.
     """
-    turn_index = tool_call.placement.turn_index
-    tab_index = tool_call.placement.tab_index
-
     with function_span(tool.name) as span_fn:
         span_fn.span_data.input = str(tool_call.tool_args)
         try:
             tool_response = tool.run(
-                turn_index=turn_index,
+                placement=tool_call.placement,
                 override_kwargs=override_kwargs,
-                tab_index=tab_index,
                 **tool_call.tool_args,
             )
             span_fn.span_data.output = tool_response.llm_facing_response
@@ -127,7 +122,7 @@ def _run_single_tool(
     # Emit SectionEnd after tool completes (success or failure)
     tool.emitter.emit(
         Packet(
-            placement=Placement(turn_index=turn_index, tab_index=tab_index),
+            placement=tool_call.placement,
             obj=SectionEnd(),
         )
     )
@@ -209,10 +204,7 @@ def run_tool_calls(
         tool = tools_by_name[tool_call.tool_name]
 
         # Emit the tool start packet before running the tool
-        tool.emit_start(
-            turn_index=tool_call.placement.turn_index,
-            tab_index=tool_call.placement.tab_index,
-        )
+        tool.emit_start(placement=tool_call.placement)
 
         override_kwargs: (
             SearchToolOverrideKwargs
