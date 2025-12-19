@@ -44,10 +44,10 @@ def test_tool_seeding_migration() -> None:
         )
         tools = result.fetchall()
 
-        # Should have all 6 builtin tools
+        # Should have all 8 builtin tools
         assert (
-            len(tools) == 7
-        ), f"Should have created exactly 7 builtin tools, got {len(tools)}"
+            len(tools) == 8
+        ), f"Should have created exactly 8 builtin tools, got {len(tools)}"
 
         # Check SearchTool
         search_tool = next((t for t in tools if t[1] == "SearchTool"), None)
@@ -92,3 +92,13 @@ def test_tool_seeding_migration() -> None:
             python_tool[2] == "Code Interpreter"
         ), "PythonTool display name should be 'Code Interpreter'"
         assert python_tool[5] is None, "PythonTool should not have a user_id (builtin)"
+
+        # Check ResearchAgent (Deep Research as a tool)
+        research_agent = next((t for t in tools if t[1] == "ResearchAgent"), None)
+        assert research_agent is not None, "ResearchAgent should exist"
+        assert (
+            research_agent[2] == "Research Agent"
+        ), "ResearchAgent display name should be 'Research Agent'"
+        assert (
+            research_agent[5] is None
+        ), "ResearchAgent should not have a user_id (builtin)"
