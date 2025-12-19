@@ -184,7 +184,10 @@ function SettingsHeader({
   }, []);
 
   return (
-    <div ref={headerRef} className={cn("pt-10 sticky top-0 z-10 w-full")}>
+    <div
+      ref={headerRef}
+      className="pt-10 sticky top-0 z-10 w-full bg-background-tint-01"
+    >
       {backButton && (
         <div className="px-2">
           <BackButton />

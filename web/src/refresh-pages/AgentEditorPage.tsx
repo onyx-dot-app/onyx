@@ -407,6 +407,7 @@ export default function AgentEditorPage({
     <div
       data-testid="AgentsEditorPage/container"
       aria-label="Agents Editor Page"
+      className="h-full w-full"
     >
       <Formik
         initialValues={initialValues}
@@ -463,7 +464,7 @@ export default function AgentEditorPage({
               />
             </userFilesModal.Provider>
 
-            <Form>
+            <Form className="h-full w-full">
               <Settings.Root>
                 <Settings.Header
                   icon={SvgSearch}
