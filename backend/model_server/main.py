@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from prometheus_fastapi_instrumentator import Instrumentator
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
-from transformers import logging as transformer_logging  # type:ignore
+from transformers import logging as transformer_logging
 
 from model_server.custom_models import router as custom_models_router
 from model_server.custom_models import warm_up_information_content_model

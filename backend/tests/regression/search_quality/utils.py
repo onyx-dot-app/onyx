@@ -5,13 +5,13 @@ from textwrap import indent
 from typing import Any
 from typing import TextIO
 
-from ragas import evaluate  # type: ignore
-from ragas import EvaluationDataset  # type: ignore
-from ragas import SingleTurnSample  # type: ignore
-from ragas.dataset_schema import EvaluationResult  # type: ignore
-from ragas.metrics import FactualCorrectness  # type: ignore
-from ragas.metrics import Faithfulness  # type: ignore
-from ragas.metrics import ResponseRelevancy  # type: ignore
+from ragas import evaluate  # type: ignore[import-not-found]
+from ragas import EvaluationDataset
+from ragas import SingleTurnSample
+from ragas.dataset_schema import EvaluationResult  # type: ignore[import-not-found]
+from ragas.metrics import FactualCorrectness  # type: ignore[import-not-found]
+from ragas.metrics import Faithfulness
+from ragas.metrics import ResponseRelevancy
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource

@@ -152,7 +152,7 @@ def litellm_exception_to_error_msg(
         if message_attr:
             upstream_detail = str(message_attr)
         elif hasattr(core_exception, "api_error"):
-            api_error = core_exception.api_error  # type: ignore[attr-defined]
+            api_error = core_exception.api_error
             if isinstance(api_error, dict):
                 upstream_detail = (
                     api_error.get("message")

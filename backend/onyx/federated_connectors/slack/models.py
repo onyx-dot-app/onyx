@@ -47,10 +47,10 @@ class SlackEntities(BaseModel):
 
     # Message count per slack request
     max_messages_per_query: int = Field(
-        default=25,
+        default=10,
         description=(
             "Maximum number of messages to retrieve per search query. "
-            "Higher values provide more context but may be slower."
+            "Higher values increase API calls and may trigger rate limits."
         ),
     )
 

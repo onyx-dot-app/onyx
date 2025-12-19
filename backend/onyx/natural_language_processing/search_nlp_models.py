@@ -15,10 +15,10 @@ from typing import cast
 import aioboto3  # type: ignore
 import httpx
 import requests
-import voyageai  # type: ignore
+import voyageai  # type: ignore[import-untyped]
 from cohere import AsyncClient as CohereAsyncClient
 from cohere.core.api_error import ApiError
-from google.oauth2 import service_account  # type: ignore
+from google.oauth2 import service_account
 from httpx import HTTPError
 from requests import JSONDecodeError
 from requests import RequestException
@@ -271,8 +271,8 @@ class CloudEmbedding:
         embedding_type: str,
         reduced_dimension: int | None,
     ) -> list[Embedding]:
-        from google import genai  # type: ignore[import-untyped]
-        from google.genai import types as genai_types  # type: ignore[import-untyped]
+        from google import genai
+        from google.genai import types as genai_types
 
         if not model:
             model = DEFAULT_VERTEX_MODEL

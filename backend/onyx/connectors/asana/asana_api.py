@@ -38,7 +38,7 @@ class AsanaAPI:
     def __init__(
         self, api_token: str, workspace_gid: str, team_gid: str | None
     ) -> None:
-        self._user = None  # type: ignore
+        self._user = None
         self.workspace_gid = workspace_gid
         self.team_gid = team_gid
 

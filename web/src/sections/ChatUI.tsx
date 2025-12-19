@@ -21,9 +21,10 @@ import { ProjectFile } from "@/app/chat/projects/projectsService";
 import { useScrollonStream } from "@/app/chat/services/lib";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
-  useChatPageLayout,
   useCurrentChatState,
+  useCurrentMessageHistory,
   useCurrentMessageTree,
+  useLoadingError,
   useUncaughtError,
 } from "@/app/chat/stores/useChatSessionStore";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -84,8 +85,8 @@ const ChatUI = React.forwardRef(
       assistantId: liveAssistant?.id,
     });
     const { isMobile } = useScreenSize();
-    const { messageHistory: messages, loadingError: loadError } =
-      useChatPageLayout();
+    const loadError = useLoadingError();
+    const messages = useCurrentMessageHistory();
     const error = useUncaughtError();
     const messageTree = useCurrentMessageTree();
     const currentChatState = useCurrentChatState();

@@ -115,9 +115,8 @@ const ChatButton = memo(
     const activeSidebarTab = useAppFocus();
     const active = useMemo(
       () =>
-        typeof activeSidebarTab === "object" &&
-        activeSidebarTab.type === "chat" &&
-        activeSidebarTab.id === chatSession.id,
+        activeSidebarTab.isChat() &&
+        activeSidebarTab.getId() === chatSession.id,
       [activeSidebarTab, chatSession.id]
     );
     const mounted = useOnMount();

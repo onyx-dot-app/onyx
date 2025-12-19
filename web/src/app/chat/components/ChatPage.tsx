@@ -41,7 +41,7 @@ import { useDeepResearchToggle } from "@/app/chat/hooks/useDeepResearchToggle";
 import { useIsDefaultAgent } from "@/app/chat/hooks/useIsDefaultAgent";
 import {
   useChatSessionStore,
-  useChatPageLayout,
+  useCurrentMessageHistory,
 } from "@/app/chat/stores/useChatSessionStore";
 import {
   useCurrentChatState,
@@ -344,7 +344,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
   const updateCurrentDocumentSidebarVisible = useChatSessionStore(
     (state) => state.updateCurrentDocumentSidebarVisible
   );
-  const { messageHistory } = useChatPageLayout();
+  const messageHistory = useCurrentMessageHistory();
 
   const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
     useChatController({

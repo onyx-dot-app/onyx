@@ -2959,7 +2959,7 @@ class SlackChannelConfig(Base):
             "slack_bot_id",
             "is_default",
             unique=True,
-            postgresql_where=(is_default is True),  #   type: ignore
+            postgresql_where=(is_default is True),
         ),
     )
 
