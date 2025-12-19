@@ -5,6 +5,8 @@ import httpx
 from pydantic import BaseModel
 
 from onyx.configs.app_configs import BLURB_SIZE
+from onyx.configs.app_configs import RECENCY_BIAS_MULTIPLIER
+from onyx.configs.app_configs import RERANK_COUNT
 from onyx.configs.chat_configs import DOC_TIME_DECAY
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
 from onyx.configs.constants import RETURN_SEPARATOR
@@ -37,8 +39,6 @@ from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
 from onyx.document_index.vespa_constants import BATCH_SIZE
 from onyx.document_index.vespa_constants import CONTENT_SUMMARY
 from onyx.document_index.vespa_constants import NUM_THREADS
-from onyx.document_index.vespa_constants import RECENCY_BIAS_MULTIPLIER
-from onyx.document_index.vespa_constants import RERANK_COUNT
 from onyx.document_index.vespa_constants import VESPA_TIMEOUT
 from onyx.document_index.vespa_constants import YQL_BASE
 from onyx.indexing.models import DocMetadataAwareIndexChunk
@@ -183,10 +183,10 @@ def _cleanup_chunks(chunks: list[InferenceChunkUncleaned]) -> list[InferenceChun
 
     def _remove_contextual_rag(chunk: InferenceChunkUncleaned) -> str:
         # remove document summary
-        if chunk.content.startswith(chunk.doc_summary):
+        if chunk.doc_summary and chunk.content.startswith(chunk.doc_summary):
             chunk.content = chunk.content[len(chunk.doc_summary) :].lstrip()
         # remove chunk context
-        if chunk.content.endswith(chunk.chunk_context):
+        if chunk.chunk_context and chunk.content.endswith(chunk.chunk_context):
             chunk.content = chunk.content[
                 : len(chunk.content) - len(chunk.chunk_context)
             ].rstrip()
@@ -391,12 +391,9 @@ class VespaDocumentIndex(DocumentIndex):
 
         final_query = " ".join(final_keywords) if final_keywords else query
 
-        if query_type == QueryType.KEYWORD:
-            ranking_profile = f"hybrid_search_keyword_base_{len(query_embedding)}"
-        elif query_type == QueryType.SEMANTIC:
-            ranking_profile = f"hybrid_search_semantic_base_{len(query_embedding)}"
-        else:
-            raise ValueError(f"Received unexpected query type: {query_type}")
+        ranking_profile = (
+            f"hybrid_search_{query_type.value}_base_{len(query_embedding)}"
+        )
 
         LOGGER.info(f"Selected ranking profile: {ranking_profile}")
 

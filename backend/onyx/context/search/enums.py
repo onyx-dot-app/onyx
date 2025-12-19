@@ -21,6 +21,13 @@ class OptionalSearchSetting(str, Enum):
 
 
 class QueryType(str, Enum):
+    """
+    The type of first-pass query to use for hybrid search.
+
+    The values of this enum are injected into the ranking profile name which
+    should match the name in the schema.
+    """
+
     KEYWORD = "keyword"
     SEMANTIC = "semantic"
 
