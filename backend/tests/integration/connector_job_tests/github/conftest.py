@@ -58,8 +58,9 @@ def github_access_token(request: pytest.FixtureRequest) -> str:
     tokens = _get_github_test_tokens()
     if not tokens:
         pytest.skip(
-            "Skipping GitHub tests due to missing env var "
-            "GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN"
+            "Skipping GitHub tests due to missing env vars "
+            "GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN and "
+            "GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN_CLASSIC"
         )
     return request.param
 
