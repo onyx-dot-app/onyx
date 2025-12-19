@@ -255,7 +255,7 @@ fastapi==0.116.1
     #   onyx
 fastapi-limiter==0.1.6
     # via onyx
-fastapi-users==14.0.1
+fastapi-users==15.0.2
     # via
     #   fastapi-users-db-sqlalchemy
     #   onyx
