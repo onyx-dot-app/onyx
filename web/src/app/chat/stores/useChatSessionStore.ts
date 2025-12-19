@@ -584,27 +584,6 @@ export interface ChatPageLayout {
   showCenteredInput: boolean;
 }
 
-export function useChatPageLayout(): ChatPageLayout {
-  const messageHistory = useCurrentMessageHistory();
-  const isFetchingChatMessages = useIsFetching();
-  const submittedMessage = useSubmittedMessage();
-  const loadingError = useLoadingError();
-
-  const showCenteredInput =
-    messageHistory.length === 0 &&
-    !isFetchingChatMessages &&
-    !loadingError &&
-    !submittedMessage;
-
-  return {
-    messageHistory,
-    isFetchingChatMessages,
-    submittedMessage,
-    loadingError,
-    showCenteredInput,
-  };
-}
-
 // Session-specific state hooks (previously global)
 export const useIsFetching = () =>
   useChatSessionStore((state) => {
