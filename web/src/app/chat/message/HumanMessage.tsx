@@ -164,7 +164,6 @@ interface HumanMessageProps {
   // Content and display
   content: string;
   files?: FileDescriptor[];
-  shared?: boolean;
 
   // Message navigation
   messageId?: number | null;
@@ -186,7 +185,6 @@ export default function HumanMessage({
   otherMessagesCanSwitchTo,
   onEdit,
   onMessageSelection,
-  shared,
   stopGenerating = () => null,
   disableSwitchingForStreaming = false,
 }: HumanMessageProps) {
