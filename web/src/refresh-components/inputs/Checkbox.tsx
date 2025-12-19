@@ -2,9 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import SvgCheck from "@/icons/check";
-import SvgMinus from "@/icons/minus";
-
+import { SvgCheck, SvgMinus } from "@opal/icons";
 const getRootClasses = (checked: boolean, indeterminate: boolean) => ({
   main:
     checked || indeterminate

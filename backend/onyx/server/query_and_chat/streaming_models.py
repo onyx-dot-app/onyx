@@ -34,14 +34,18 @@ class StreamingType(Enum):
     REASONING_DONE = "reasoning_done"
     CITATION_INFO = "citation_info"
 
+    DEEP_RESEARCH_PLAN_START = "deep_research_plan_start"
+    DEEP_RESEARCH_PLAN_DELTA = "deep_research_plan_delta"
+    RESEARCH_AGENT_START = "research_agent_start"
+
 
 class BaseObj(BaseModel):
     type: str = ""
 
 
-"""Reasoning Packets"""
-
-
+################################################
+# Reasoning Packets
+################################################
 # Tells the frontend to display the reasoning block
 class ReasoningStart(BaseObj):
     type: Literal["reasoning_start"] = StreamingType.REASONING_START.value
@@ -58,9 +62,9 @@ class ReasoningDone(BaseObj):
     type: Literal["reasoning_done"] = StreamingType.REASONING_DONE.value
 
 
-"""Final Agent Response Packets"""
-
-
+################################################
+# Final Agent Response Packets
+################################################
 # Start of the final answer
 class AgentResponseStart(BaseObj):
     type: Literal["message_start"] = StreamingType.MESSAGE_START.value
@@ -87,9 +91,9 @@ class CitationInfo(BaseObj):
     document_id: str
 
 
-"""Control Packets"""
-
-
+################################################
+# Control Packets
+################################################
 # This one isn't strictly necessary, remove in the future
 class SectionEnd(BaseObj):
     type: Literal["section_end"] = "section_end"
@@ -106,9 +110,9 @@ class OverallStop(BaseObj):
     type: Literal["stop"] = StreamingType.STOP.value
 
 
-"""Tool Packets"""
-
-
+################################################
+# Tool Packets
+################################################
 # Search tool is called and the UI block needs to start
 class SearchToolStart(BaseObj):
     type: Literal["search_tool_start"] = StreamingType.SEARCH_TOOL_START.value
@@ -222,8 +226,31 @@ class CustomToolDelta(BaseObj):
     file_ids: list[str] | None = None
 
 
-"""Packet"""
+################################################
+# Deep Research Packets
+################################################
+class DeepResearchPlanStart(BaseObj):
+    type: Literal["deep_research_plan_start"] = (
+        StreamingType.DEEP_RESEARCH_PLAN_START.value
+    )
 
+
+class DeepResearchPlanDelta(BaseObj):
+    type: Literal["deep_research_plan_delta"] = (
+        StreamingType.DEEP_RESEARCH_PLAN_DELTA.value
+    )
+
+    content: str
+
+
+class ResearchAgentStart(BaseObj):
+    type: Literal["research_agent_start"] = StreamingType.RESEARCH_AGENT_START.value
+    research_task: str
+
+
+################################################
+# Packet Object
+################################################
 # Discriminated union of all possible packet object types
 PacketObj = Union[
     # Agent Response Packets
@@ -254,15 +281,27 @@ PacketObj = Union[
     ReasoningDone,
     # Citation Packets
     CitationInfo,
+    # Deep Research Packets
+    DeepResearchPlanStart,
+    DeepResearchPlanDelta,
+    ResearchAgentStart,
 ]
+
+
+class Placement(BaseModel):
+    # Which iterative block in the UI is this part of, these are ordered and smaller ones happened first
+    turn_index: int
+    # For parallel tool calls to preserve order of execution
+    tab_index: int
+    # Used for tools/agents that call other tools, this currently doesn't support nested agents but can be added later
+    sub_turn_index: int
 
 
 class Packet(BaseModel):
     turn_index: int | None
+    # For parallel tool calls to preserve order of execution
+    tab_index: int = 0
+    # Used for tools/agents that call other tools, this currently doesn't support nested agents but can be added later
+    sub_turn_index: int | None = None
+
     obj: Annotated[PacketObj, Field(discriminator="type")]
-
-
-# This is for replaying it back from the DB to the frontend
-class EndStepPacketList(BaseModel):
-    turn_index: int
-    packet_list: list[Packet]

@@ -117,7 +117,7 @@ from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import create_milestone_and_report
+from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
 from onyx.utils.timing import log_function_time
@@ -219,7 +219,7 @@ def verify_email_is_invited(email: str) -> None:
         raise PermissionError("Email must be specified")
 
     try:
-        email_info = validate_email(email)
+        email_info = validate_email(email, check_deliverability=False)
     except EmailUndeliverableError:
         raise PermissionError("Email is not valid")
 
@@ -227,7 +227,9 @@ def verify_email_is_invited(email: str) -> None:
         try:
             # normalized emails are now being inserted into the db
             # we can remove this normalization on read after some time has passed
-            email_info_whitelist = validate_email(email_whitelist)
+            email_info_whitelist = validate_email(
+                email_whitelist, check_deliverability=False
+            )
         except EmailNotValidError:
             continue
 
@@ -651,19 +653,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             user_count = await get_user_count()
             logger.debug(f"Current tenant user count: {user_count}")
 
-            with get_session_with_tenant(tenant_id=tenant_id) as db_session:
-                event_type = (
-                    MilestoneRecordType.USER_SIGNED_UP
-                    if user_count == 1
-                    else MilestoneRecordType.MULTIPLE_USERS
-                )
-                create_milestone_and_report(
-                    user=user,
-                    distinct_id=user.email,
-                    event_type=event_type,
-                    properties=None,
-                    db_session=db_session,
-                )
+            mt_cloud_telemetry(
+                tenant_id=tenant_id,
+                distinct_id=user.email,
+                event=MilestoneRecordType.USER_SIGNED_UP,
+            )
 
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)

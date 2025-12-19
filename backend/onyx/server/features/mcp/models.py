@@ -1,3 +1,4 @@
+import datetime
 from enum import Enum
 from typing import Any
 from typing import List
@@ -134,6 +135,10 @@ class MCPToolCreateRequest(BaseModel):
 
 class MCPToolUpdateRequest(BaseModel):
     server_id: int = Field(..., description="ID of the MCP server")
+    name: Optional[str] = Field(None, description="Updated name of the MCP server")
+    description: Optional[str] = Field(
+        None, description="Updated description of the MCP server"
+    )
     selected_tools: Optional[List[str]] = Field(
         None, description="List of selected tool names to create"
     )
@@ -293,6 +298,7 @@ class MCPServer(BaseModel):
     is_authenticated: bool
     user_authenticated: Optional[bool] = None
     status: MCPServerStatus
+    last_refreshed_at: Optional[datetime.datetime] = None
     tool_count: int = Field(
         default=0, description="Number of tools associated with this server"
     )
@@ -328,6 +334,7 @@ class MCPServerUpdateResponse(BaseModel):
     """Response for updating multiple MCP tools"""
 
     server_id: int
+    server_name: str
     updated_tools: int
 
 

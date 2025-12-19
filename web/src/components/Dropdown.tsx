@@ -13,8 +13,7 @@ import { FiCheck, FiChevronDown, FiInfo } from "react-icons/fi";
 import { Popover } from "./popover/Popover";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Button from "@/refresh-components/buttons/Button";
-import SvgPlus from "@/icons/plus";
-
+import { SvgPlus } from "@opal/icons";
 export interface Option<T> {
   name: string;
   value: T;

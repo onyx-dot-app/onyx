@@ -51,10 +51,9 @@ CROSS_ENCODER_RANGE_MIN = 0
 # Generative AI Model Configs
 #####
 
-# NOTE: the 3 below should only be used for dev.
+# NOTE: the 2 below should only be used for dev.
 GEN_AI_API_KEY = os.environ.get("GEN_AI_API_KEY")
 GEN_AI_MODEL_VERSION = os.environ.get("GEN_AI_MODEL_VERSION")
-FAST_GEN_AI_MODEL_VERSION = os.environ.get("FAST_GEN_AI_MODEL_VERSION")
 
 # Override the auto-detection of LLM max context length
 GEN_AI_MAX_TOKENS = int(os.environ.get("GEN_AI_MAX_TOKENS") or 0) or None
@@ -65,9 +64,10 @@ GEN_AI_NUM_RESERVED_OUTPUT_TOKENS = int(
     os.environ.get("GEN_AI_NUM_RESERVED_OUTPUT_TOKENS") or 1024
 )
 
-# Typically, GenAI models nowadays are at least 4K tokens
+# Fallback token limit for models where the max context is unknown
+# Set conservatively at 32K to handle most modern models
 GEN_AI_MODEL_FALLBACK_MAX_TOKENS = int(
-    os.environ.get("GEN_AI_MODEL_FALLBACK_MAX_TOKENS") or 4096
+    os.environ.get("GEN_AI_MODEL_FALLBACK_MAX_TOKENS") or 32000
 )
 
 # This is used when computing how much context space is available for documents

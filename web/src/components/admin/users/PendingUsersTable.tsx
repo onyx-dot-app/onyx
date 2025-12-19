@@ -16,8 +16,7 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { FetchError } from "@/lib/fetcher";
 import { CheckIcon } from "lucide-react";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
-import SvgCheck from "@/icons/check";
-
+import { SvgCheck } from "@opal/icons";
 const USERS_PER_PAGE = 10;
 
 interface Props {

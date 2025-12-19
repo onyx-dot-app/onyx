@@ -2,9 +2,9 @@
 
 import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
-import SvgUser from "@/icons/user";
 import Text from "@/refresh-components/texts/Text";
 import { useUser } from "@/components/user/UserProvider";
+import { SvgUser } from "@opal/icons";
 
 export default function NoAssistantModal() {
   const { isAdmin } = useUser();

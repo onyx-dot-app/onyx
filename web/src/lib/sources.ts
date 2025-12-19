@@ -19,6 +19,7 @@ import {
   JiraIcon,
   LinearIcon,
   LoopioIcon,
+  CodaIcon,
   NotionIcon,
   ProductboardIcon,
   R2Icon,
@@ -49,10 +50,9 @@ import {
 import { ValidSources } from "./types";
 import { SourceCategory, SourceMetadata } from "./search/interfaces";
 import { Persona } from "@/app/admin/assistants/interfaces";
-import SvgGlobe from "@/icons/globe";
 import React from "react";
-import SvgFileText from "@/icons/file-text";
 import { DOCS_ADMINS_PATH } from "./constants";
+import { SvgFileText, SvgGlobe } from "@opal/icons";
 
 interface PartialSourceMetadata {
   icon: React.FC<{ size?: number; className?: string }>;
@@ -102,6 +102,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/sharepoint`,
     isPopular: true,
+  },
+  coda: {
+    icon: CodaIcon,
+    displayName: "Coda",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.onyx.app/connectors/coda",
   },
   notion: {
     icon: NotionIcon,

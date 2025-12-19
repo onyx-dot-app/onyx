@@ -56,7 +56,6 @@ export interface WellKnownLLMProviderDescriptor {
   custom_config_keys: CustomConfigKey[] | null;
   model_configurations: ModelConfiguration[];
   default_model: string | null;
-  default_fast_model: string | null;
   default_api_base: string | null;
   is_public: boolean;
   groups: number[];
@@ -76,7 +75,6 @@ export interface LLMProvider {
   api_version: string | null;
   custom_config: { [key: string]: string } | null;
   default_model_name: string;
-  fast_default_model_name: string | null;
   is_public: boolean;
   groups: number[];
   personas: number[];
@@ -100,7 +98,6 @@ export interface LLMProviderDescriptor {
   provider: string;
   provider_display_name?: string;
   default_model_name: string;
-  fast_default_model_name: string | null;
   is_default_provider: boolean | null;
   is_default_vision_provider?: boolean | null;
   default_vision_model?: string | null;

@@ -33,19 +33,20 @@
 
 /* LineItem Text Variants */
 .line-item-text-main {
-  @apply text-text-04;
+  color: var(--text-04) !important;
 
   .group\/LineItem[data-selected="true"] & {
-    @apply text-action-link-05;
+    color: var(--action-link-05) !important;
   }
 }
 
 .line-item-text-strikethrough {
-  @apply text-text-02 line-through decoration-2;
+  color: var(--text-02) !important;
+  @apply line-through decoration-2 !important;
 }
 
 .line-item-text-danger {
-  @apply text-status-error-05;
+  color: var(--status-error-05) !important;
 }
 
 /* LineItem Icon Variants */

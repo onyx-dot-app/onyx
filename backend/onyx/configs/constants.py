@@ -177,6 +177,7 @@ class DocumentSource(str, Enum):
     SLAB = "slab"
     PRODUCTBOARD = "productboard"
     FILE = "file"
+    CODA = "coda"
     NOTION = "notion"
     ZULIP = "zulip"
     LINEAR = "linear"
@@ -331,7 +332,6 @@ class FileType(str, Enum):
 class MilestoneRecordType(str, Enum):
     TENANT_CREATED = "tenant_created"
     USER_SIGNED_UP = "user_signed_up"
-    MULTIPLE_USERS = "multiple_users"
     VISITED_ADMIN_PAGE = "visited_admin_page"
     CREATED_CONNECTOR = "created_connector"
     CONNECTOR_SUCCEEDED = "connector_succeeded"
@@ -596,6 +596,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.SLAB: "slab data",
     DocumentSource.PRODUCTBOARD: "productboard data (boards, etc.)",
     DocumentSource.FILE: "files",
+    DocumentSource.CODA: "coda - team workspace with docs, tables, and pages",
     DocumentSource.NOTION: "notion data - a workspace that combines note-taking, \
 project management, and collaboration tools into a single, customizable platform",
     DocumentSource.ZULIP: "zulip data",

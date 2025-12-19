@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any
 
 import requests
+from fastapi import HTTPException
 
 from onyx.tools.tool_implementations.web_search.models import (
     WebSearchProvider,
@@ -28,7 +29,7 @@ class GooglePSEClient(WebSearchProvider):
     ) -> None:
         self._api_key = api_key
         self._search_engine_id = search_engine_id
-        self._num_results = num_results
+        self._num_results = min(num_results, 10)  # Google API max is 10
         self._timeout_seconds = timeout_seconds
 
     @retry_builder(tries=3, delay=1, backoff=2)
@@ -119,3 +120,38 @@ class GooglePSEClient(WebSearchProvider):
             )
 
         return results
+
+    # TODO: I'm not really satisfied with how tailored this is to the particulars of Google PSE.
+    # In particular, I think this might flatten errors that are caused by the API key vs. ones caused
+    # by the search engine ID, or by other factors.
+    # I (David Edelstein) don't feel knowledgeable enough about the return behavior of the Google PSE API
+    # to ensure that we have nicely descriptive and actionable error messages. (Like, what's up with the
+    # thing where 200 status codes can have error messages in the response body?)
+    def test_connection(self) -> dict[str, str]:
+        try:
+            test_results = self.search("test")
+            if not test_results or not any(result.link for result in test_results):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Google PSE validation failed: search returned no results.",
+                )
+        except HTTPException:
+            raise
+        except Exception as e:
+            error_msg = str(e)
+            if (
+                "api" in error_msg.lower()
+                or "key" in error_msg.lower()
+                or "auth" in error_msg.lower()
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid Google PSE API key: {error_msg}",
+                ) from e
+            raise HTTPException(
+                status_code=400,
+                detail=f"Google PSE validation failed: {error_msg}",
+            ) from e
+
+        logger.info("Web search provider test succeeded for Google PSE.")
+        return {"status": "ok"}

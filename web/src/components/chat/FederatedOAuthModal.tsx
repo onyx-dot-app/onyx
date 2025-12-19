@@ -10,8 +10,7 @@ import { getSourceMetadata } from "@/lib/sources";
 import { useRouter } from "next/navigation";
 import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
 import Text from "@/refresh-components/texts/Text";
-import SvgLink from "@/icons/link";
-
+import { SvgLink } from "@opal/icons";
 export interface FederatedConnectorOAuthStatus {
   federated_connector_id: number;
   source: string;

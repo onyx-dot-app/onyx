@@ -8,13 +8,13 @@ import { getLatestMessageChain } from "@/app/chat/services/messageTree";
 import HumanMessage from "@/app/chat/message/HumanMessage";
 import AIMessage from "@/app/chat/message/messageComponents/AIMessage";
 import { Callout } from "@/components/ui/callout";
-import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
+import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import TextView from "@/components/chat/TextView";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import Text from "@/refresh-components/texts/Text";
-import useIsMounted from "@/hooks/useIsMounted";
+import useOnMount from "@/hooks/useOnMount";
 
 export interface SharedChatDisplayProps {
   chatSession: BackendChatSession | null;
@@ -28,7 +28,7 @@ export default function SharedChatDisplay({
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
 
-  const isMounted = useIsMounted();
+  const isMounted = useOnMount();
 
   if (!chatSession) {
     return (
@@ -81,7 +81,6 @@ export default function SharedChatDisplay({
               if (message.type === "user") {
                 return (
                   <HumanMessage
-                    shared
                     key={message.messageId}
                     content={message.message}
                     files={message.files}

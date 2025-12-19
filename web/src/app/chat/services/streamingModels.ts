@@ -36,7 +36,6 @@ export enum PacketType {
 
   // Citation packets
   CITATION_START = "citation_start",
-  CITATION_DELTA = "citation_delta",
   CITATION_END = "citation_end",
   // Backend sends individual citation_info packets during streaming
   CITATION_INFO = "citation_info",
@@ -163,11 +162,6 @@ export interface CitationStart extends BaseObj {
   type: "citation_start";
 }
 
-export interface CitationDelta extends BaseObj {
-  type: "citation_delta";
-  citations: StreamingCitation[];
-}
-
 // Individual citation info packet (sent during streaming from backend)
 export interface CitationInfo extends BaseObj {
   type: "citation_info";
@@ -207,11 +201,7 @@ export type NewToolObj =
 
 export type ReasoningObj = ReasoningStart | ReasoningDelta | SectionEnd;
 
-export type CitationObj =
-  | CitationStart
-  | CitationDelta
-  | CitationInfo
-  | SectionEnd;
+export type CitationObj = CitationStart | CitationInfo | SectionEnd;
 
 // Union type for all possible streaming objects
 export type ObjTypes =
@@ -225,56 +215,67 @@ export type ObjTypes =
 // Packet wrapper for streaming objects
 export interface Packet {
   turn_index: number;
+  tab_index?: number; // For parallel tool calls - tools with same turn_index but different tab_index run in parallel
   obj: ObjTypes;
 }
 
 export interface ChatPacket {
   turn_index: number;
+  tab_index?: number;
   obj: ChatObj;
 }
 
 export interface StopPacket {
   turn_index: number;
+  tab_index?: number;
   obj: StopObj;
 }
 
 export interface CitationPacket {
   turn_index: number;
+  tab_index?: number;
   obj: CitationObj;
 }
 
 // New specific tool packet types
 export interface SearchToolPacket {
   turn_index: number;
+  tab_index?: number;
   obj: SearchToolObj;
 }
 
 export interface ImageGenerationToolPacket {
   turn_index: number;
+  tab_index?: number;
   obj: ImageGenerationToolObj;
 }
 
 export interface PythonToolPacket {
   turn_index: number;
+  tab_index?: number;
   obj: PythonToolObj;
 }
 
 export interface FetchToolPacket {
   turn_index: number;
+  tab_index?: number;
   obj: FetchToolObj;
 }
 
 export interface CustomToolPacket {
   turn_index: number;
+  tab_index?: number;
   obj: CustomToolObj;
 }
 
 export interface ReasoningPacket {
   turn_index: number;
+  tab_index?: number;
   obj: ReasoningObj;
 }
 
 export interface SectionEndPacket {
   turn_index: number;
+  tab_index?: number;
   obj: SectionEndObj;
 }

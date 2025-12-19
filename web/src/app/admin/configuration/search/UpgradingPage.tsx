@@ -1,6 +1,5 @@
 import { ThreeDotsLoader } from "@/components/Loading";
 import Modal from "@/refresh-components/Modal";
-import SvgX from "@/icons/x";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import {
   ConnectorIndexingStatusLite,
@@ -23,6 +22,8 @@ import { Connector } from "@/lib/connectors/connectors";
 import { FailedReIndexAttempts } from "@/components/embedding/FailedReIndexAttempts";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
+import { SvgX } from "@opal/icons";
+import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
 
 export default function UpgradingPage({
   futureEmbeddingModel,
@@ -91,8 +92,21 @@ export default function UpgradingPage({
       .filter((status) => status.cc_pair_id !== undefined);
   }, [connectorIndexingStatuses]);
 
+  const visibleReindexingStatus = useMemo(() => {
+    const statuses = ongoingReIndexingStatus || [];
+
+    if (futureEmbeddingModel.switchover_type === "active_only") {
+      return statuses.filter(
+        (status) =>
+          status.cc_pair_status !== ConnectorCredentialPairStatus.PAUSED
+      );
+    }
+
+    return statuses;
+  }, [futureEmbeddingModel.switchover_type, ongoingReIndexingStatus]);
+
   const sortedReindexingProgress = useMemo(() => {
-    return [...(ongoingReIndexingStatus || [])].sort((a, b) => {
+    return [...(visibleReindexingStatus || [])].sort((a, b) => {
       const statusComparison =
         statusOrder[a.last_status || "not_started"] -
         statusOrder[b.last_status || "not_started"];
@@ -103,7 +117,9 @@ export default function UpgradingPage({
 
       return (a.cc_pair_id || 0) - (b.cc_pair_id || 0);
     });
-  }, [ongoingReIndexingStatus, statusOrder]);
+  }, [visibleReindexingStatus, statusOrder]);
+
+  const hasVisibleReindexingProgress = sortedReindexingProgress.length > 0;
 
   if (isLoadingConnectors || isLoadingOngoingReIndexingStatus) {
     return <ThreeDotsLoader />;
@@ -208,9 +224,21 @@ export default function UpgradingPage({
                   </Text>
 
                   {sortedReindexingProgress ? (
-                    <ReindexingProgressTable
-                      reindexingProgress={sortedReindexingProgress}
-                    />
+                    <>
+                      {futureEmbeddingModel.switchover_type === "active_only" &&
+                        !hasVisibleReindexingProgress && (
+                          <Text className="text-text-700 mt-4">
+                            All connectors are currently paused, so none are
+                            blocking the switchover. Paused connectors will keep
+                            re-indexing in the background.
+                          </Text>
+                        )}
+                      {hasVisibleReindexingProgress && (
+                        <ReindexingProgressTable
+                          reindexingProgress={sortedReindexingProgress}
+                        />
+                      )}
+                    </>
                   ) : (
                     <ErrorCallout errorTitle="Failed to fetch re-indexing progress" />
                   )}

@@ -8,10 +8,10 @@ import {
 } from "@/lib/extension/constants";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgX from "@/icons/x";
-import SvgSettings from "@/icons/settings";
-import SvgSun from "@/icons/sun";
-import SvgMoon from "@/icons/moon";
+import { SvgX } from "@opal/icons";
+import { SvgSettings } from "@opal/icons";
+import { SvgSun } from "@opal/icons";
+import { SvgMoon } from "@opal/icons";
 import { cn } from "@/lib/utils";
 
 interface SettingRowProps {

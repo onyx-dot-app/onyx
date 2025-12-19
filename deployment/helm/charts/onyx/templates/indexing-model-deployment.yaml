@@ -10,6 +10,10 @@ metadata:
     {{- end }}
 spec:
   replicas: {{ .Values.indexCapability.replicaCount }}
+  {{- with .Values.indexCapability.strategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "onyx.selectorLabels" . | nindent 6 }}

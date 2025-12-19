@@ -2,8 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FeedbackType } from "@/app/chat/interfaces";
-import SvgThumbsUp from "@/icons/thumbs-up";
-import SvgThumbsDown from "@/icons/thumbs-down";
 import Button from "@/refresh-components/buttons/Button";
 import FieldInput from "@/refresh-components/inputs/FieldInput";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -12,6 +10,7 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { useFeedbackController } from "../../hooks/useFeedbackController";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import DefaultModalLayout from "@/refresh-components/layouts/DefaultModalLayout";
+import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
 
 const predefinedPositiveFeedbackOptions = process.env
   .NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS

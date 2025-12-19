@@ -14,8 +14,7 @@ import {
 import { SelectorFormField } from "@/components/Field";
 import { ErrorMessage, Field, Form, Formik, useFormikContext } from "formik";
 import * as Yup from "yup";
-import SvgKey from "@/icons/key";
-
+import { SvgKey } from "@opal/icons";
 // Helper component to keep the effect logic clean:
 function UpdateCloudURLOnCloudIdChange({
   accessibleResources,

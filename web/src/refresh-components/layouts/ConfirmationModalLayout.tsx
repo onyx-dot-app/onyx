@@ -1,5 +1,5 @@
 import React from "react";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import Modal from "@/refresh-components/Modal";
@@ -30,7 +30,7 @@ export default function ConfirmationModalLayout({
     <Modal open onOpenChange={(isOpen) => !isOpen && onClose?.()}>
       <Modal.Content mini>
         <Modal.Header icon={icon} title={title} onClose={onClose} />
-        <Modal.Body className="p-4">
+        <Modal.Body className="p-4 bg-background-tint-01">
           {typeof children === "string" ? (
             <Text text03>{children}</Text>
           ) : (

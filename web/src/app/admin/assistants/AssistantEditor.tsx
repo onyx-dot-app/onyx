@@ -90,13 +90,13 @@ import {
 } from "@/app/chat/projects/projectsService";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
-import SvgTrash from "@/icons/trash";
-import SvgFiles from "@/icons/files";
-import { useAgents } from "@/lib/hooks/useAgents";
+import { useAgents } from "@/hooks/useAgents";
 import Text from "@/refresh-components/texts/Text";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import { buildImgUrl } from "@/app/chat/components/files/images/utils";
+import { SvgFiles, SvgTrash } from "@opal/icons";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
@@ -670,7 +670,7 @@ export default function AssistantEditor({
           const src =
             uploadedImagePreview ??
             (existingPersona?.uploaded_image_id && !removePersonaImage
-              ? existingPersona?.uploaded_image_id
+              ? buildImgUrl(existingPersona?.uploaded_image_id)
               : undefined);
 
           const iconElement = (

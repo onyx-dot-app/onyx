@@ -4,9 +4,13 @@ import React, { useState, useEffect, useRef } from "react";
 import ActionCardHeader from "@/sections/actions/ActionCardHeader";
 import ToolsSection from "@/sections/actions/ToolsSection";
 import { cn } from "@/lib/utils";
-import { ActionStatus } from "@/lib/tools/types";
-import { IconProps } from "@/icons";
-import SvgServer from "@/icons/server";
+import { ActionStatus } from "@/lib/tools/interfaces";
+import type { IconProps } from "@opal/types";
+import { SvgServer } from "@opal/icons";
+import {
+  ActionCardProvider,
+  ActionCardContextValue,
+} from "@/sections/actions/ActionCardContext";
 
 export interface ActionCardProps {
   // Core content
@@ -37,8 +41,6 @@ export interface ActionCardProps {
   onSearchQueryChange?: (query: string) => void;
 
   // Tools section actions
-  onRefresh?: () => void;
-  onDisableAll?: () => void;
   onFold?: () => void;
 
   // Content
@@ -66,8 +68,6 @@ export default function ActionCard({
   enableSearch = false,
   searchQuery = "",
   onSearchQueryChange,
-  onRefresh,
-  onDisableAll,
   onFold,
   children,
   ariaLabel,
@@ -75,8 +75,9 @@ export default function ActionCard({
 }: ActionCardProps) {
   // Internal state for uncontrolled mode
   const [internalExpanded, setInternalExpanded] = useState(initialExpanded);
-  const [isToolsRefreshing, setIsToolsRefreshing] = useState(false);
+
   const hasInitializedExpansion = useRef(false);
+  const [isHovered, setIsHovered] = useState(false);
 
   // Determine if we're in controlled mode
   const isControlled = controlledIsExpanded !== undefined;
@@ -92,14 +93,6 @@ export default function ActionCard({
     }
   }, [initialExpanded, isControlled]);
 
-  const handleRefreshTools = () => {
-    setIsToolsRefreshing(true);
-    onRefresh?.();
-    setTimeout(() => {
-      setIsToolsRefreshing(false);
-    }, 1000);
-  };
-
   const isConnected = status === ActionStatus.CONNECTED;
   const isDisconnected = status === ActionStatus.DISCONNECTED;
 
@@ -109,52 +102,57 @@ export default function ActionCard({
       ? "bg-background-neutral-02"
       : "";
 
-  return (
-    <div
-      className={cn(
-        "w-full",
-        backgroundColor,
-        "border border-border-01 rounded-16",
-        className
-      )}
-      role="article"
-      aria-label={ariaLabel || `${title} action card`}
-    >
-      <div className="flex flex-col w-full">
-        {/* Header Section */}
-        <div className="flex items-start justify-between p-3 w-full">
-          <ActionCardHeader
-            title={title}
-            description={description}
-            icon={icon || SvgServer}
-            status={status}
-            onEdit={onEdit}
-            onRename={onRename}
-          />
+  const contextValue: ActionCardContextValue = { isHovered };
 
-          {/* Action Buttons */}
-          {actions}
+  return (
+    <ActionCardProvider value={contextValue}>
+      <div
+        className={cn(
+          "w-full",
+          backgroundColor,
+          "border border-border-01 rounded-16",
+          "transition-shadow duration-200",
+          isHovered && "shadow-00",
+          className
+        )}
+        role="article"
+        aria-label={ariaLabel || `${title} action card`}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        <div className="flex flex-col w-full">
+          {/* Header Section */}
+          <div className="flex items-start justify-between gap-2 p-3 w-full">
+            <ActionCardHeader
+              title={title}
+              description={description}
+              icon={icon || SvgServer}
+              status={status}
+              onEdit={onEdit}
+              onRename={onRename}
+            />
+
+            {/* Action Buttons */}
+            <div className="shrink-0 flex items-start">{actions}</div>
+          </div>
+
+          {/* Tools Section (Only when expanded and search is enabled) */}
+          {isExpandedActual && enableSearch && (
+            <ToolsSection
+              onFold={onFold}
+              searchQuery={searchQuery}
+              onSearchQueryChange={onSearchQueryChange || (() => {})}
+            />
+          )}
         </div>
 
-        {/* Tools Section (Only when expanded and search is enabled) */}
-        {isExpandedActual && enableSearch && (
-          <ToolsSection
-            isRefreshing={isToolsRefreshing}
-            onRefresh={onRefresh ? handleRefreshTools : undefined}
-            onDisableAll={onDisableAll}
-            onFold={onFold}
-            searchQuery={searchQuery}
-            onSearchQueryChange={onSearchQueryChange || (() => {})}
-          />
+        {/* Content Area - Only render when expanded */}
+        {isExpandedActual && children && (
+          <div className="animate-in fade-in slide-in-from-top-2 duration-300 p-2 border-t border-border-01">
+            {children}
+          </div>
         )}
       </div>
-
-      {/* Content Area - Only render when expanded */}
-      {isExpandedActual && children && (
-        <div className="animate-in fade-in slide-in-from-top-2 duration-300 p-2 border-t border-border-01">
-          {children}
-        </div>
-      )}
-    </div>
+    </ActionCardProvider>
   );
 }

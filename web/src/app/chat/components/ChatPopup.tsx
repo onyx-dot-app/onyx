@@ -1,13 +1,13 @@
 "use client";
 
 import Modal from "@/refresh-components/Modal";
-import SvgAlertCircle from "@/icons/alert-circle";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import Button from "@/refresh-components/buttons/Button";
 import { useContext, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { transformLinkUri } from "@/lib/utils";
+import { SvgAlertCircle } from "@opal/icons";
 
 const ALL_USERS_INITIAL_POPUP_FLOW_COMPLETED =
   "allUsersInitialPopupFlowCompleted";

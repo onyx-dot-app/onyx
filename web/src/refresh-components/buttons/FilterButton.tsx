@@ -3,11 +3,9 @@
 import React, { useState } from "react";
 import Text from "@/refresh-components/texts/Text";
 import { cn, noProp } from "@/lib/utils";
-import { IconProps } from "@/icons";
-import SvgChevronDownSmall from "@/icons/chevron-down-small";
+import type { IconProps } from "@opal/types";
 import IconButton from "./IconButton";
-import SvgX from "@/icons/x";
-
+import { SvgChevronDownSmall, SvgX } from "@opal/icons";
 const buttonClasses = (transient?: boolean) =>
   ({
     active: [

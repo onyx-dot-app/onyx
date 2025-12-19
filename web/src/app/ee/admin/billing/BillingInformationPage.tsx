@@ -18,9 +18,7 @@ import {
 import Button from "@/refresh-components/buttons/Button";
 import { SubscriptionSummary } from "./SubscriptionSummary";
 import { BillingAlerts } from "./BillingAlerts";
-import SvgClipboard from "@/icons/clipboard";
-import SvgWallet from "@/icons/wallet";
-
+import { SvgClipboard, SvgWallet } from "@opal/icons";
 export default function BillingInformationPage() {
   const router = useRouter();
   const { popup, setPopup } = usePopup();

@@ -10,7 +10,7 @@ import { AdminPageTitle } from "@/components/admin/Title";
 import { FiActivity } from "react-icons/fi";
 import UsageReports from "./UsageReports";
 import Separator from "@/refresh-components/Separator";
-import { useAdminPersonas } from "@/app/admin/assistants/hooks";
+import { useAdminPersonas } from "@/hooks/useAdminPersonas";
 
 export default function AnalyticsPage() {
   const [timeRange, setTimeRange] = useTimeRange();

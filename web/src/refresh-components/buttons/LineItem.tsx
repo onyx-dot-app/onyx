@@ -3,7 +3,7 @@
 import React from "react";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal/types";
 import Truncated from "@/refresh-components/texts/Truncated";
 import Link from "next/link";
 
@@ -144,7 +144,6 @@ const LineItem = React.forwardRef<HTMLButtonElement, LineItemProps>(
           )}
           <Truncated
             mainUiMuted
-            text04
             className={cn("text-left w-full", textClassNames[variant])}
           >
             {children}

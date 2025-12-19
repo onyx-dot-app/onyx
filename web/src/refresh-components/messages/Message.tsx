@@ -5,12 +5,13 @@ import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Button from "@/refresh-components/buttons/Button";
-import SvgAlertCircle from "@/icons/alert-circle";
-import SvgCheckCircle from "@/icons/check-circle";
-import SvgAlertTriangle from "@/icons/alert-triangle";
-import SvgXOctagon from "@/icons/x-octagon";
-import SvgX from "@/icons/x";
-
+import {
+  SvgAlertCircle,
+  SvgAlertTriangle,
+  SvgCheckCircle,
+  SvgX,
+  SvgXOctagon,
+} from "@opal/icons";
 const containerClasses = {
   flash: {
     default: {

@@ -124,13 +124,14 @@ def create_reasoning_packets(reasoning_text: str, turn_index: int) -> list[Packe
 
 
 def create_image_generation_packets(
-    images: list[GeneratedImage], turn_index: int
+    images: list[GeneratedImage], turn_index: int, tab_index: int = 0
 ) -> list[Packet]:
     packets: list[Packet] = []
 
     packets.append(
         Packet(
             turn_index=turn_index,
+            tab_index=tab_index,
             obj=ImageGenerationToolStart(),
         )
     )
@@ -138,11 +139,12 @@ def create_image_generation_packets(
     packets.append(
         Packet(
             turn_index=turn_index,
+            tab_index=tab_index,
             obj=ImageGenerationFinal(images=images),
         ),
     )
 
-    packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
+    packets.append(Packet(turn_index=turn_index, tab_index=tab_index, obj=SectionEnd()))
 
     return packets
 
@@ -151,6 +153,7 @@ def create_custom_tool_packets(
     tool_name: str,
     response_type: str,
     turn_index: int,
+    tab_index: int = 0,
     data: dict | list | str | int | float | bool | None = None,
     file_ids: list[str] | None = None,
 ) -> list[Packet]:
@@ -159,6 +162,7 @@ def create_custom_tool_packets(
     packets.append(
         Packet(
             turn_index=turn_index,
+            tab_index=tab_index,
             obj=CustomToolStart(tool_name=tool_name),
         )
     )
@@ -166,6 +170,7 @@ def create_custom_tool_packets(
     packets.append(
         Packet(
             turn_index=turn_index,
+            tab_index=tab_index,
             obj=CustomToolDelta(
                 tool_name=tool_name,
                 response_type=response_type,
@@ -175,7 +180,7 @@ def create_custom_tool_packets(
         ),
     )
 
-    packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
+    packets.append(Packet(turn_index=turn_index, tab_index=tab_index, obj=SectionEnd()))
 
     return packets
 
@@ -184,12 +189,14 @@ def create_fetch_packets(
     fetch_docs: list[SavedSearchDoc],
     urls: list[str],
     turn_index: int,
+    tab_index: int = 0,
 ) -> list[Packet]:
     packets: list[Packet] = []
     # Emit start packet
     packets.append(
         Packet(
             turn_index=turn_index,
+            tab_index=tab_index,
             obj=OpenUrlStart(),
         )
     )
@@ -197,6 +204,7 @@ def create_fetch_packets(
     packets.append(
         Packet(
             turn_index=turn_index,
+            tab_index=tab_index,
             obj=OpenUrlUrls(urls=urls),
         )
     )
@@ -204,12 +212,13 @@ def create_fetch_packets(
     packets.append(
         Packet(
             turn_index=turn_index,
+            tab_index=tab_index,
             obj=OpenUrlDocuments(
                 documents=[SearchDoc(**doc.model_dump()) for doc in fetch_docs]
             ),
         )
     )
-    packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
+    packets.append(Packet(turn_index=turn_index, tab_index=tab_index, obj=SectionEnd()))
     return packets
 
 
@@ -218,12 +227,14 @@ def create_search_packets(
     search_docs: list[SavedSearchDoc],
     is_internet_search: bool,
     turn_index: int,
+    tab_index: int = 0,
 ) -> list[Packet]:
     packets: list[Packet] = []
 
     packets.append(
         Packet(
             turn_index=turn_index,
+            tab_index=tab_index,
             obj=SearchToolStart(
                 is_internet_search=is_internet_search,
             ),
@@ -235,6 +246,7 @@ def create_search_packets(
         packets.append(
             Packet(
                 turn_index=turn_index,
+                tab_index=tab_index,
                 obj=SearchToolQueriesDelta(queries=search_queries),
             ),
         )
@@ -247,6 +259,7 @@ def create_search_packets(
         packets.append(
             Packet(
                 turn_index=turn_index,
+                tab_index=tab_index,
                 obj=SearchToolDocumentsDelta(
                     documents=[
                         SearchDoc(**doc.model_dump()) for doc in sorted_search_docs
@@ -255,7 +268,7 @@ def create_search_packets(
             ),
         )
 
-    packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
+    packets.append(Packet(turn_index=turn_index, tab_index=tab_index, obj=SectionEnd()))
 
     return packets
 
@@ -311,6 +324,7 @@ def translate_assistant_message_to_packets(
                                 is_internet_search=tool.in_code_tool_id
                                 == WebSearchTool.__name__,
                                 turn_index=turn_num,
+                                tab_index=tool_call.tab_index,
                             )
                         )
 
@@ -324,7 +338,12 @@ def translate_assistant_message_to_packets(
                             list[str], tool_call.tool_call_arguments.get("urls", [])
                         )
                         packet_list.extend(
-                            create_fetch_packets(fetch_docs, urls, turn_num)
+                            create_fetch_packets(
+                                fetch_docs,
+                                urls,
+                                turn_num,
+                                tab_index=tool_call.tab_index,
+                            )
                         )
 
                     elif tool.in_code_tool_id == ImageGenerationTool.__name__:
@@ -334,7 +353,9 @@ def translate_assistant_message_to_packets(
                                 for img in tool_call.generated_images
                             ]
                             packet_list.extend(
-                                create_image_generation_packets(images, turn_num)
+                                create_image_generation_packets(
+                                    images, turn_num, tab_index=tool_call.tab_index
+                                )
                             )
 
                     else:
@@ -344,6 +365,7 @@ def translate_assistant_message_to_packets(
                                 tool_name=tool.display_name or tool.name,
                                 response_type="text",
                                 turn_index=turn_num,
+                                tab_index=tool_call.tab_index,
                                 data=tool_call.tool_call_response,
                             )
                         )

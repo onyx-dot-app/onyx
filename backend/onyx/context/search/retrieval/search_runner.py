@@ -118,6 +118,7 @@ def combine_retrieval_results(
     return sorted_chunks
 
 
+# TODO: This is unused code.
 @log_function_time(print_only=True)
 def doc_index_retrieval(
     query: SearchQuery,

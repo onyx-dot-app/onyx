@@ -1,7 +1,7 @@
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { useCallback, useMemo, useState } from "react";
 import { ChatSession } from "../interfaces";
-import { useAgents, usePinnedAgentsWithDetails } from "@/lib/hooks/useAgents";
+import { useAgents, usePinnedAgentsWithDetails } from "@/hooks/useAgents";
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "../services/searchParams";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";

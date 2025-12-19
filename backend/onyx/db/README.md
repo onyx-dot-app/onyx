@@ -1,7 +1,7 @@
 An explanation of how the history of messages, tool calls, and docs are stored in the database:
 
 Messages are grouped by a chat session, a tree structured is used to allow edits and for the
-user to switch between branches. Each ChatMessage is either a user message of an assistant message.
+user to switch between branches. Each ChatMessage is either a user message or an assistant message.
 It should always alternate between the two, System messages, custom agent prompt injections, and
 reminder messages are injected dynamically after the chat session is loaded into memory. The user
 and assistant messages are stored in pairs, though it is ok if the user message is stored and the

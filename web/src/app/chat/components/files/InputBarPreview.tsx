@@ -4,8 +4,7 @@ import { FiLoader, FiFileText } from "react-icons/fi";
 import { InputBarPreviewImage } from "./images/InputBarPreviewImage";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgX from "@/icons/x";
-
+import { SvgX } from "@opal/icons";
 export interface InputBarPreviewImageProviderProps {
   file: FileDescriptor;
   onDelete: () => void;

@@ -33,6 +33,11 @@ env:
   PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD: ${{ secrets.PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD }}
   PERM_SYNC_SHAREPOINT_DIRECTORY_ID: ${{ secrets.PERM_SYNC_SHAREPOINT_DIRECTORY_ID }}
   EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
+  GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN: ${{ secrets.ONYX_GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN }}
+  GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN_CLASSIC: ${{ secrets.ONYX_GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN_CLASSIC }}
+  GITHUB_ADMIN_EMAIL: ${{ secrets.ONYX_GITHUB_ADMIN_EMAIL }}
+  GITHUB_TEST_USER_1_EMAIL: ${{ secrets.ONYX_GITHUB_TEST_USER_1_EMAIL }}
+  GITHUB_TEST_USER_2_EMAIL: ${{ secrets.ONYX_GITHUB_TEST_USER_2_EMAIL }}
 
 jobs:
   discover-test-dirs:
@@ -43,7 +48,7 @@ jobs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -74,7 +79,7 @@ jobs:
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -129,7 +134,7 @@ jobs:
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -183,7 +188,7 @@ jobs:
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -259,7 +264,7 @@ jobs:
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -274,23 +279,28 @@ jobs:
 
       # NOTE: Use pre-ping/null pool to reduce flakiness due to dropped connections
       # NOTE: don't need web server for integration tests
-      - name: Start Docker containers
+      - name: Create .env file for Docker Compose
         env:
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
           RUN_ID: ${{ github.run_id }}
         run: |
+          cat <<EOF > deployment/docker_compose/.env
+          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
+          AUTH_TYPE=basic
+          POSTGRES_POOL_PRE_PING=true
+          POSTGRES_USE_NULL_POOL=true
+          REQUIRE_EMAIL_VERIFICATION=false
+          DISABLE_TELEMETRY=true
+          ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID}
+          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID}
+          INTEGRATION_TESTS_MODE=true
+          CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS=0.001
+          MCP_SERVER_ENABLED=true
+          EOF
+
+      - name: Start Docker containers
+        run: |
           cd deployment/docker_compose
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
-          AUTH_TYPE=basic \
-          POSTGRES_POOL_PRE_PING=true \
-          POSTGRES_USE_NULL_POOL=true \
-          REQUIRE_EMAIL_VERIFICATION=false \
-          DISABLE_TELEMETRY=true \
-          ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID} \
-          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID} \
-          INTEGRATION_TESTS_MODE=true \
-          CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS=0.001 \
-          MCP_SERVER_ENABLED=true \
           docker compose -f docker-compose.yml -f docker-compose.dev.yml up \
             relational_db \
             index \
@@ -394,6 +404,11 @@ jobs:
               -e PERM_SYNC_SHAREPOINT_PRIVATE_KEY="${PERM_SYNC_SHAREPOINT_PRIVATE_KEY}" \
               -e PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD=${PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD} \
               -e PERM_SYNC_SHAREPOINT_DIRECTORY_ID=${PERM_SYNC_SHAREPOINT_DIRECTORY_ID} \
+              -e GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN=${GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN} \
+              -e GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN_CLASSIC=${GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN_CLASSIC} \
+              -e GITHUB_ADMIN_EMAIL=${GITHUB_ADMIN_EMAIL} \
+              -e GITHUB_TEST_USER_1_EMAIL=${GITHUB_TEST_USER_1_EMAIL} \
+              -e GITHUB_TEST_USER_2_EMAIL=${GITHUB_TEST_USER_2_EMAIL} \
               -e TEST_WEB_HOSTNAME=test-runner \
               -e MOCK_CONNECTOR_SERVER_HOST=mock_connector_server \
               -e MOCK_CONNECTOR_SERVER_PORT=8001 \
@@ -436,7 +451,7 @@ jobs:
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 

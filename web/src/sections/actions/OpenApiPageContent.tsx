@@ -1,5 +1,5 @@
 "use client";
-import { ToolSnapshot } from "@/lib/tools/types";
+import { ToolSnapshot } from "@/lib/tools/interfaces";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -16,11 +16,14 @@ import { createOAuthConfig, updateOAuthConfig } from "@/lib/oauth/api";
 import { updateCustomTool, deleteCustomTool } from "@/lib/tools/openApiService";
 import { updateToolStatus } from "@/lib/tools/mcpService";
 import DisconnectEntityModal from "./modals/DisconnectEntityModal";
+import ActionCardSkeleton from "./skeleton/ActionCardSkeleton";
 
 export default function OpenApiPageContent() {
-  const { data: openApiTools, mutate: mutateOpenApiTools } = useSWR<
-    ToolSnapshot[]
-  >("/api/tool/openapi", errorHandlingFetcher, {
+  const {
+    data: openApiTools,
+    mutate: mutateOpenApiTools,
+    isLoading: isOpenApiLoading,
+  } = useSWR<ToolSnapshot[]>("/api/tool/openapi", errorHandlingFetcher, {
     refreshInterval: 10000,
   });
   const addOpenAPIActionModal = useCreateModal();
@@ -118,7 +121,7 @@ export default function OpenApiPageContent() {
             } successfully.`,
             type: "success",
           });
-        } else {
+        } else if (values.authMethod === "custom-header") {
           const customHeaders = values.headers
             .map(({ key, value }) => ({
               key: key.trim(),
@@ -138,6 +141,19 @@ export default function OpenApiPageContent() {
 
           setPopup({
             message: `${selectedTool.name} authentication headers saved successfully.`,
+            type: "success",
+          });
+        } else if (values.authMethod === "pt-oauth") {
+          const response = await updateCustomTool(selectedTool.id, {
+            passthrough_auth: true,
+            oauth_config_id: null,
+            custom_headers: [],
+          });
+          if (response.error) {
+            throw new Error(response.error);
+          }
+          setPopup({
+            message: `${selectedTool.name} authentication passthrough saved successfully.`,
             type: "success",
           });
         }
@@ -349,7 +365,7 @@ export default function OpenApiPageContent() {
   }, [openApiTools, searchQuery]);
 
   return (
-    <>
+    <div className="flex flex-col h-full overflow-hidden">
       {popup}
       {showSharedOverlay && (
         <div
@@ -358,29 +374,40 @@ export default function OpenApiPageContent() {
           aria-hidden="true"
         />
       )}
-      <Actionbar
-        hasActions={(openApiTools?.length ?? 0) > 0}
-        searchQuery={searchQuery}
-        onSearchQueryChange={setSearchQuery}
-        onAddAction={handleAddAction}
-        buttonText="Add OpenAPI Action"
-        className="mb-4"
-      />
 
-      <div className="flex flex-col gap-4 w-full">
-        {filteredTools?.map((tool) => (
-          <OpenApiActionCard
-            key={tool.id}
-            tool={tool}
-            onAuthenticate={handleOpenAuthModal}
-            onManage={handleManageTool}
-            onDelete={handleDeleteTool}
-            onRename={handleRenameTool}
-            mutateOpenApiTools={mutateOpenApiTools}
-            setPopup={setPopup}
-            onOpenDisconnectModal={handleOpenDisconnectModal}
-          />
-        ))}
+      <div className="flex-shrink-0 mb-4">
+        <Actionbar
+          hasActions={isOpenApiLoading || (openApiTools?.length ?? 0) > 0}
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
+          onAddAction={handleAddAction}
+          buttonText="Add OpenAPI Action"
+        />
+      </div>
+
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="flex flex-col gap-4 w-full pb-4">
+          {isOpenApiLoading ? (
+            <>
+              <ActionCardSkeleton />
+              <ActionCardSkeleton />
+            </>
+          ) : (
+            filteredTools.map((tool) => (
+              <OpenApiActionCard
+                key={tool.id}
+                tool={tool}
+                onAuthenticate={handleOpenAuthModal}
+                onManage={handleManageTool}
+                onDelete={handleDeleteTool}
+                onRename={handleRenameTool}
+                mutateOpenApiTools={mutateOpenApiTools}
+                setPopup={setPopup}
+                onOpenDisconnectModal={handleOpenDisconnectModal}
+              />
+            ))
+          )}
+        </div>
       </div>
 
       <addOpenAPIActionModal.Provider>
@@ -414,6 +441,7 @@ export default function OpenApiPageContent() {
           defaultMethod={authenticationDefaultMethod}
           oauthConfigId={selectedTool?.oauth_config_id ?? null}
           initialHeaders={selectedTool?.custom_headers ?? null}
+          passthroughOAuthEnabled={selectedTool?.passthrough_auth ?? false}
           onConnect={handleConnect}
           onSkip={resetAuthModal}
         />
@@ -431,6 +459,6 @@ export default function OpenApiPageContent() {
         isDisconnecting={isDisconnecting || isDeleting}
         skipOverlay
       />
-    </>
+    </div>
   );
 }

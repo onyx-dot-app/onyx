@@ -7,8 +7,7 @@ import { getSourceMetadata, isValidSource } from "@/lib/sources";
 import { ValidSources } from "@/lib/types";
 import CardSection from "@/components/admin/CardSection";
 import { handleOAuthAuthorizationResponse } from "@/lib/oauth_utils";
-import SvgKey from "@/icons/key";
-
+import { SvgKey } from "@opal/icons";
 export default function OAuthCallbackPage() {
   const router = useRouter();
   const searchParams = useSearchParams();

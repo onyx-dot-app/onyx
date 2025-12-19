@@ -1,14 +1,18 @@
 "use client";
-import { ActionStatus } from "@/lib/tools/types";
+import { ActionStatus } from "@/lib/tools/interfaces";
 import React from "react";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgUnplug from "@/icons/unplug";
-import SvgSettings from "@/icons/settings";
-import SvgTrash from "@/icons/trash";
 import Button from "@/refresh-components/buttons/Button";
-import SvgPlug from "@/icons/plug";
-import SvgArrowExchange from "@/icons/arrow-exchange";
-import SvgChevronDown from "@/icons/chevron-down";
+import {
+  SvgArrowExchange,
+  SvgChevronDown,
+  SvgPlug,
+  SvgSettings,
+  SvgTrash,
+  SvgUnplug,
+} from "@opal/icons";
+import { useActionCardContext } from "@/sections/actions/ActionCardContext";
+import { cn } from "@/lib/utils";
 
 interface ActionsProps {
   status: ActionStatus;
@@ -23,7 +27,7 @@ interface ActionsProps {
   onToggleTools?: () => void;
 }
 
-const Actions: React.FC<ActionsProps> = React.memo(
+const Actions = React.memo(
   ({
     status,
     serverName,
@@ -35,7 +39,8 @@ const Actions: React.FC<ActionsProps> = React.memo(
     toolCount,
     isToolsExpanded,
     onToggleTools,
-  }) => {
+  }: ActionsProps) => {
+    const { isHovered: isParentHovered } = useActionCardContext();
     const showViewToolsButton =
       (status === ActionStatus.CONNECTED ||
         status === ActionStatus.FETCHING ||
@@ -49,13 +54,22 @@ const Actions: React.FC<ActionsProps> = React.memo(
         <div className="flex flex-col gap-1 items-end">
           <div className="flex items-center">
             {onDisconnect && (
-              <IconButton
-                icon={SvgUnplug}
-                tooltip="Disconnect Server"
-                tertiary
-                onClick={onDisconnect}
-                aria-label={`Disconnect ${serverName} server`}
-              />
+              <div
+                className={cn(
+                  "inline-flex transition-all duration-200 ease-out",
+                  isParentHovered
+                    ? "opacity-100 translate-x-0 pointer-events-auto"
+                    : "opacity-0 translate-x-2 pointer-events-none"
+                )}
+              >
+                <IconButton
+                  icon={SvgUnplug}
+                  tooltip="Disconnect Server"
+                  tertiary
+                  onClick={onDisconnect}
+                  aria-label={`Disconnect ${serverName} server`}
+                />
+              </div>
             )}
             {onManage && (
               <IconButton
@@ -86,10 +100,10 @@ const Actions: React.FC<ActionsProps> = React.memo(
     // Pending state
     if (status === ActionStatus.PENDING) {
       return (
-        <div className="flex flex-col gap-1 items-end p-1 shrink-0">
+        <div className="flex flex-col gap-1 items-end shrink-0">
           {onAuthenticate && (
             <Button
-              secondary
+              tertiary
               onClick={onAuthenticate}
               rightIcon={SvgArrowExchange}
               aria-label={`Authenticate and connect to ${serverName}`}
@@ -97,7 +111,14 @@ const Actions: React.FC<ActionsProps> = React.memo(
               Authenticate
             </Button>
           )}
-          <div className="flex gap-1 items-center">
+          <div
+            className={cn(
+              "flex gap-1 items-center transition-opacity duration-200 ease-out",
+              isParentHovered
+                ? "opacity-100 pointer-events-auto"
+                : "opacity-0 pointer-events-none"
+            )}
+          >
             {onDelete && (
               <IconButton
                 icon={SvgTrash}

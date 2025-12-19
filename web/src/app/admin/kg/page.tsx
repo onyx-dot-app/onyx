@@ -29,8 +29,8 @@ import { redirect } from "next/navigation";
 import { useIsKGExposed } from "@/app/admin/kg/utils";
 import KGEntityTypes from "@/app/admin/kg/KGEntityTypes";
 import Text from "@/refresh-components/texts/Text";
-import SvgSettings from "@/icons/settings";
 import { cn } from "@/lib/utils";
+import { SvgSettings } from "@opal/icons";
 
 function createDomainField(
   name: string,
@@ -331,7 +331,7 @@ export default function Page() {
   }
 
   return (
-    <div className="mx-auto container">
+    <div className="container">
       <AdminPageTitle
         title="Knowledge Graph"
         icon={<BrainIcon size={32} className="my-auto" />}

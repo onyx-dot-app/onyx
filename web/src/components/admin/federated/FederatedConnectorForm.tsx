@@ -28,12 +28,12 @@ import { DropdownMenuItemWithTooltip } from "@/components/ui/dropdown-menu-with-
 import { usePopup } from "@/components/admin/connectors/Popup";
 
 import { Badge } from "@/components/ui/badge";
-import SvgSettings from "@/icons/settings";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { ListFieldInput } from "@/refresh-components/inputs/ListFieldInput";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import Separator from "@/refresh-components/Separator";
+import { SvgSettings } from "@opal/icons";
 
 export interface FederatedConnectorFormProps {
   connector: ConfigurableSources;
@@ -217,6 +217,9 @@ export function FederatedConnectorForm({
   const [isLoadingSchema, setIsLoadingSchema] = useState(
     !preloadedCredentialSchema
   );
+  const [configValidationErrors, setConfigValidationErrors] = useState<
+    Record<string, string>
+  >({});
 
   // Fetch credential schema if not preloaded
   useEffect(() => {
@@ -436,6 +439,19 @@ export function FederatedConnectorForm({
         }
       }
 
+      // Validate configuration fields (Slack-specific validation)
+      const configErrors = getConfigValidationErrors();
+      if (Object.keys(configErrors).length > 0) {
+        setConfigValidationErrors(configErrors);
+        // Show the first error message
+        const firstError = Object.values(configErrors)[0] as string;
+        setSubmitMessage(firstError);
+        setSubmitSuccess(false);
+        setIsSubmitting(false);
+        return;
+      }
+      setConfigValidationErrors({});
+
       // Validate credentials before creating/updating
       const validation = await validateCredentials(
         connector,
@@ -556,6 +572,35 @@ export function FederatedConnectorForm({
     return formState.config.search_all_channels === true;
   };
 
+  // Helper to determine if channels field is required for Slack
+  const isSlackChannelsRequired = (): boolean => {
+    if (connector !== "slack") {
+      return false;
+    }
+    // Channels are required when search_all_channels is false
+    return formState.config.search_all_channels === false;
+  };
+
+  // Get validation errors for configuration fields (Slack-specific)
+  const getConfigValidationErrors = (): Record<string, string> => {
+    const errors: Record<string, string> = {};
+
+    if (connector === "slack") {
+      // Check if channels are required but not provided
+      if (
+        formState.config.search_all_channels === false &&
+        (!formState.config.channels ||
+          !Array.isArray(formState.config.channels) ||
+          formState.config.channels.length === 0)
+      ) {
+        errors.channels =
+          "At least one channel is required when 'Search All Channels' is disabled";
+      }
+    }
+
+    return errors;
+  };
+
   const renderConfigFields = () => {
     if (formState.configurationSchemaError) {
       return (
@@ -617,19 +662,31 @@ export function FederatedConnectorForm({
                             fieldKey
                               .replace(/_/g, " ")
                               .replace(/\b\w/g, (l) => l.toUpperCase())}
-                          {fieldSpec.required && (
+                          {(fieldSpec.required ||
+                            (fieldKey === "channels" &&
+                              isSlackChannelsRequired())) && (
                             <span className="text-red-500 ml-1">*</span>
                           )}
                         </Text>
                         <ListFieldInput
                           values={
                             Array.isArray(formState.config[fieldKey])
-                              ? formState.config[fieldKey]
+                              ? (formState.config[fieldKey] as string[])
                               : []
                           }
-                          onChange={(values) =>
-                            handleConfigChange(fieldKey, values)
-                          }
+                          onChange={(values) => {
+                            handleConfigChange(fieldKey, values);
+                            // Clear validation error when user adds channels
+                            if (
+                              fieldKey === "channels" &&
+                              configValidationErrors.channels
+                            ) {
+                              setConfigValidationErrors((prev) => {
+                                const { channels, ...rest } = prev;
+                                return rest;
+                              });
+                            }
+                          }}
                           placeholder={
                             fieldSpec.example &&
                             Array.isArray(fieldSpec.example)
@@ -637,7 +694,13 @@ export function FederatedConnectorForm({
                               : "Type and press Enter to add an item"
                           }
                           disabled={disableSlackChannelInput(fieldKey)}
+                          error={!!configValidationErrors[fieldKey]}
                         />
+                        {configValidationErrors[fieldKey] && (
+                          <Text className="text-red-500 text-sm mt-1">
+                            {configValidationErrors[fieldKey]}
+                          </Text>
+                        )}
                       </>
                     ) : (
                       <div className="flex items-center justify-between gap-4 py-2">
@@ -692,7 +755,7 @@ export function FederatedConnectorForm({
   };
 
   return (
-    <div className="mx-auto w-[800px]">
+    <div className="mx-auto w-[800px] pb-8">
       {popup}
       <BackButton routerOverride="/admin/indexing/status" />
 

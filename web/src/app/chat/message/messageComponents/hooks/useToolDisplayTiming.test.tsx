@@ -25,9 +25,9 @@ describe("useToolDisplayTiming", () => {
         useToolDisplayTiming(toolGroups, false, false)
       );
 
-      // First tool visible immediately
+      // First tool visible immediately (key format: "turn_index-tab_index")
       expect(result.current.visibleTools.size).toBe(1);
-      expect(result.current.visibleTools.has(0)).toBe(true);
+      expect(result.current.visibleTools.has("0-0")).toBe(true);
     });
 
     test("shows all tools when isComplete=true on mount", () => {
@@ -37,11 +37,11 @@ describe("useToolDisplayTiming", () => {
         useToolDisplayTiming(toolGroups, true, true)
       );
 
-      // All tools visible
+      // All tools visible (key format: "turn_index-tab_index")
       expect(result.current.visibleTools.size).toBe(3);
-      expect(result.current.visibleTools.has(0)).toBe(true);
-      expect(result.current.visibleTools.has(1)).toBe(true);
-      expect(result.current.visibleTools.has(2)).toBe(true);
+      expect(result.current.visibleTools.has("0-0")).toBe(true);
+      expect(result.current.visibleTools.has("1-0")).toBe(true);
+      expect(result.current.visibleTools.has("2-0")).toBe(true);
     });
 
     test("shows allToolsDisplayed is true when isComplete and finalAnswerComing", () => {
@@ -76,9 +76,9 @@ describe("useToolDisplayTiming", () => {
       // Initially only first tool visible
       expect(result.current.visibleTools.size).toBe(1);
 
-      // Complete first tool
+      // Complete first tool (pass turn_index and tab_index)
       act(() => {
-        result.current.handleToolComplete(0);
+        result.current.handleToolComplete(0, 0);
       });
 
       // Advance time by 1.5s
@@ -88,7 +88,7 @@ describe("useToolDisplayTiming", () => {
 
       // Second tool should now be visible
       expect(result.current.visibleTools.size).toBe(2);
-      expect(result.current.visibleTools.has(1)).toBe(true);
+      expect(result.current.visibleTools.has("1-0")).toBe(true);
     });
 
     test("enforces 1.5s minimum display time before showing next tool", () => {
@@ -99,7 +99,7 @@ describe("useToolDisplayTiming", () => {
 
       // Complete first tool
       act(() => {
-        result.current.handleToolComplete(0);
+        result.current.handleToolComplete(0, 0);
       });
 
       // Advance time by 1.4s (not enough)
@@ -130,12 +130,12 @@ describe("useToolDisplayTiming", () => {
 
       // Now complete the tool
       act(() => {
-        result.current.handleToolComplete(0);
+        result.current.handleToolComplete(0, 0);
       });
 
       // Second tool should appear immediately
       expect(result.current.visibleTools.size).toBe(2);
-      expect(result.current.visibleTools.has(1)).toBe(true);
+      expect(result.current.visibleTools.has("1-0")).toBe(true);
     });
   });
 
@@ -148,12 +148,12 @@ describe("useToolDisplayTiming", () => {
 
       // Complete tool
       act(() => {
-        result.current.handleToolComplete(0);
+        result.current.handleToolComplete(0, 0);
         jest.advanceTimersByTime(1500);
       });
 
       // Next tool should be visible
-      expect(result.current.visibleTools.has(1)).toBe(true);
+      expect(result.current.visibleTools.has("1-0")).toBe(true);
     });
 
     test("calculates allToolsDisplayed correctly", () => {
@@ -171,12 +171,12 @@ describe("useToolDisplayTiming", () => {
 
       // Complete both tools
       act(() => {
-        result.current.handleToolComplete(0);
+        result.current.handleToolComplete(0, 0);
         jest.advanceTimersByTime(1500);
       });
 
       act(() => {
-        result.current.handleToolComplete(1);
+        result.current.handleToolComplete(1, 0);
         jest.advanceTimersByTime(1500);
       });
 
@@ -198,9 +198,9 @@ describe("useToolDisplayTiming", () => {
 
       // Call handleToolComplete multiple times rapidly
       act(() => {
-        result.current.handleToolComplete(0);
-        result.current.handleToolComplete(0);
-        result.current.handleToolComplete(0);
+        result.current.handleToolComplete(0, 0);
+        result.current.handleToolComplete(0, 0);
+        result.current.handleToolComplete(0, 0);
       });
 
       // Advance time
@@ -222,7 +222,7 @@ describe("useToolDisplayTiming", () => {
 
       // Complete a tool (starts timer)
       act(() => {
-        result.current.handleToolComplete(0);
+        result.current.handleToolComplete(0, 0);
       });
 
       // Unmount before timer completes
@@ -240,7 +240,11 @@ describe("useToolDisplayTiming", () => {
 
   describe("Edge Cases", () => {
     test("handles empty tool groups", () => {
-      const toolGroups: { turn_index: number; packets: any[] }[] = [];
+      const toolGroups: {
+        turn_index: number;
+        tab_index: number;
+        packets: any[];
+      }[] = [];
 
       const { result } = renderHook(() =>
         useToolDisplayTiming(toolGroups, false, false)
@@ -263,7 +267,7 @@ describe("useToolDisplayTiming", () => {
 
       // Complete the single tool
       act(() => {
-        result.current.handleToolComplete(0);
+        result.current.handleToolComplete(0, 0);
         jest.advanceTimersByTime(1500);
       });
 

@@ -7,24 +7,32 @@ import React, {
   useRef,
   useCallback,
 } from "react";
-import SvgServer from "@/icons/server";
 import ActionCard from "@/sections/actions/ActionCard";
 import Actions from "@/sections/actions/Actions";
 import ToolItem from "@/sections/actions/ToolItem";
 import ToolsList from "@/sections/actions/ToolsList";
-import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import { ActionStatus } from "@/lib/tools/types";
+import {
+  ActionStatus,
+  ToolSnapshot,
+  MCPServerStatus,
+  MCPServer,
+} from "@/lib/tools/interfaces";
 import { useServerTools } from "@/sections/actions/useServerTools";
-import { MCPServerStatus, MCPServerWithStatus } from "@/lib/tools/types";
-import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { KeyedMutator } from "swr";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal/types";
+import { SvgRefreshCw, SvgServer, SvgTrash } from "@opal/icons";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import Button from "@/refresh-components/buttons/Button";
+import Text from "@/refresh-components/texts/Text";
+import { timeAgo } from "@/lib/time";
+import { cn } from "@/lib/utils";
+import Modal from "@/refresh-components/layouts/ConfirmationModalLayout";
 
 export interface MCPActionCardProps {
   // Server identification
   serverId: number;
-  server: MCPServerWithStatus;
+  server: MCPServer;
 
   // Core content
   title: string;
@@ -44,7 +52,7 @@ export interface MCPActionCardProps {
   onDisconnect?: () => void;
   onManage?: () => void;
   onEdit?: () => void;
-  onDelete?: () => void;
+  onDelete?: () => Promise<void> | void;
   onAuthenticate?: () => void; // For pending state
   onReconnect?: () => void; // For disconnected state
   onRename?: (serverId: number, newName: string) => Promise<void>; // For renaming
@@ -60,9 +68,10 @@ export interface MCPActionCardProps {
     serverId: number,
     mutate: KeyedMutator<ToolSnapshot[]>
   ) => void;
-  onDisableAllTools?: (
+  onUpdateToolsStatus?: (
     serverId: number,
     toolIds: number[],
+    enabled: boolean,
     mutate: KeyedMutator<ToolSnapshot[]>
   ) => void;
 
@@ -89,16 +98,19 @@ export default function MCPActionCard({
   onRename,
   onToolToggle,
   onRefreshTools,
-  onDisableAllTools,
+  onUpdateToolsStatus,
   className,
 }: MCPActionCardProps) {
   const [isToolsExpanded, setIsToolsExpanded] = useState(initialExpanded);
   const [searchQuery, setSearchQuery] = useState("");
   const [showOnlyEnabled, setShowOnlyEnabled] = useState(false);
+  const [isToolsRefreshing, setIsToolsRefreshing] = useState(false);
   const deleteModal = useCreateModal();
 
   // Update expanded state when initialExpanded changes
   const hasInitializedExpansion = useRef(false);
+  const previousStatus = useRef<MCPServerStatus>(server.status);
+  const hasRetriedTools = useRef(false);
 
   // Apply initial expansion only once per component lifetime
   useEffect(() => {
@@ -124,6 +136,24 @@ export default function MCPActionCard({
     server,
     isExpanded: isToolsExpanded,
   });
+
+  // Retry tools fetch when server transitions from FETCHING_TOOLS to CONNECTED
+  useEffect(() => {
+    const statusChanged =
+      previousStatus.current === MCPServerStatus.FETCHING_TOOLS &&
+      server.status === MCPServerStatus.CONNECTED;
+
+    if (statusChanged && tools.length === 0 && !hasRetriedTools.current) {
+      console.log(
+        "Server status changed to CONNECTED with empty tools, retrying fetch"
+      );
+      hasRetriedTools.current = true;
+      mutate();
+    }
+
+    // Update previous status
+    previousStatus.current = server.status;
+  }, [server.status, tools.length, mutate]);
 
   const isNotAuthenticated = status === ActionStatus.PENDING;
 
@@ -207,6 +237,43 @@ export default function MCPActionCard({
     }
   };
 
+  const handleRefreshTools = () => {
+    setIsToolsRefreshing(true);
+    onRefreshTools?.(serverId, mutate);
+    setTimeout(() => {
+      setIsToolsRefreshing(false);
+    }, 1000);
+  };
+
+  // Left action for ToolsList footer
+  const leftAction = useMemo(() => {
+    const lastRefreshedText = timeAgo(server.last_refreshed_at);
+
+    return (
+      <div className="flex items-center gap-2">
+        <IconButton
+          icon={SvgRefreshCw}
+          internal
+          onClick={handleRefreshTools}
+          tooltip="Refresh tools"
+          aria-label="Refresh tools"
+          className={cn(isToolsRefreshing && "animate-spin")}
+        />
+        {lastRefreshedText && (
+          <Text text03 mainUiBody className="whitespace-nowrap">
+            Tools last refreshed {lastRefreshedText}
+          </Text>
+        )}
+      </div>
+    );
+  }, [
+    server.last_refreshed_at,
+    serverId,
+    mutate,
+    onRefreshTools,
+    isToolsRefreshing,
+  ]);
+
   return (
     <>
       <ActionCard
@@ -222,26 +289,27 @@ export default function MCPActionCard({
         enableSearch={true}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
-        onRefresh={() => onRefreshTools?.(serverId, mutate)}
-        onDisableAll={() => {
-          const toolIds = tools.map((tool) => parseInt(tool.id));
-          onDisableAllTools?.(serverId, toolIds, mutate);
-        }}
         onFold={handleFold}
         className={className}
         ariaLabel={`${title} MCP server card`}
       >
         <ToolsList
-          isFetching={server.status === MCPServerStatus.FETCHING_TOOLS}
-          onRetry={() => mutate()}
+          isFetching={
+            server.status === MCPServerStatus.FETCHING_TOOLS || isLoading
+          }
           totalCount={tools.length}
           enabledCount={tools.filter((tool) => tool.isEnabled).length}
           showOnlyEnabled={showOnlyEnabled}
           onToggleShowOnlyEnabled={handleToggleShowOnlyEnabled}
+          onUpdateToolsStatus={(enabled) => {
+            const toolIds = tools.map((tool) => parseInt(tool.id));
+            onUpdateToolsStatus?.(serverId, toolIds, enabled, mutate);
+          }}
           isEmpty={filteredTools.length === 0}
           searchQuery={searchQuery}
           emptyMessage="No tools available"
           emptySearchMessage="No tools found"
+          leftAction={leftAction}
         >
           {filteredTools.map((tool) => (
             <ToolItem
@@ -261,19 +329,38 @@ export default function MCPActionCard({
       </ActionCard>
 
       {deleteModal.isOpen && (
-        <ConfirmEntityModal
-          danger
-          actionButtonText="Delete"
-          entityType="MCP server"
-          entityName={title}
-          additionalDetails="This will permanently delete the server and all of its tools."
+        <Modal
+          icon={({ className }) => (
+            <SvgTrash className={cn(className, "stroke-action-danger-05")} />
+          )}
+          title="Delete MCP server"
           onClose={() => deleteModal.toggle(false)}
-          onSubmit={async () => {
-            if (!onDelete) return;
-            onDelete();
-            deleteModal.toggle(false);
-          }}
-        />
+          submit={
+            <Button
+              danger
+              onClick={async () => {
+                if (!onDelete) return;
+                try {
+                  await onDelete();
+                  deleteModal.toggle(false);
+                } catch (error) {
+                  // Keep modal open if deletion fails; caller should surface error feedback.
+                  console.error("Failed to delete MCP server", error);
+                }
+              }}
+            >
+              Delete
+            </Button>
+          }
+        >
+          <div className="flex flex-col gap-4">
+            <Text text03>
+              All tools connected to <b>{title}</b> will be removed. Deletion is
+              irreversible.
+            </Text>
+            <Text text03>Are you sure you want to delete this MCP server?</Text>
+          </div>
+        </Modal>
       )}
     </>
   );

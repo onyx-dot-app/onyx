@@ -2,13 +2,12 @@
 
 import * as React from "react";
 import { cn, noProp } from "@/lib/utils";
-import SvgX from "@/icons/x";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgSearch from "@/icons/search";
 import {
   innerClasses,
   wrapperClasses,
 } from "@/refresh-components/inputs/styles";
+import { SvgSearch, SvgX } from "@opal/icons";
 
 /**
  * InputTypeIn Component

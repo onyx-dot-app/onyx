@@ -10,8 +10,7 @@ import { AdminPageTitle } from "@/components/admin/Title";
 
 import { useUser } from "@/components/user/UserProvider";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import SvgUsers from "@/icons/users";
-
+import { SvgUsers } from "@opal/icons";
 const Main = () => {
   const { popup, setPopup } = usePopup();
   const [showForm, setShowForm] = useState(false);
@@ -82,7 +81,7 @@ const Main = () => {
 
 const Page = () => {
   return (
-    <div className="mx-auto container">
+    <div className="container">
       <AdminPageTitle title="Manage User Groups" icon={SvgUsers} />
 
       <Main />

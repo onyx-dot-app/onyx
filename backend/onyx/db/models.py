@@ -2141,6 +2141,8 @@ class ChatMessage(Base):
     time_sent: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # True if this assistant message is a clarification question (deep research flow)
+    is_clarification: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Relationships
     chat_session: Mapped[ChatSession] = relationship("ChatSession")
@@ -2213,6 +2215,8 @@ class ToolCall(Base):
     # The tools with the same turn number (and parent) were called in parallel
     # Ones with different turn numbers (and same parent) were called sequentially
     turn_number: Mapped[int] = mapped_column(Integer)
+    # Index order of tool calls from the LLM for parallel tool calls
+    tab_index: Mapped[int] = mapped_column(Integer, default=0)
 
     # Not a FK because we want to be able to delete the tool without deleting
     # this entry
@@ -2380,7 +2384,6 @@ class LLMProvider(Base):
         postgresql.JSONB(), nullable=True
     )
     default_model_name: Mapped[str] = mapped_column(String)
-    fast_default_model_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
     deployment_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
@@ -3671,6 +3674,9 @@ class MCPServer(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    last_refreshed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Relationships
     admin_connection_config: Mapped["MCPConnectionConfig | None"] = relationship(
@@ -3683,6 +3689,7 @@ class MCPServer(Base):
         "MCPConnectionConfig",
         foreign_keys="MCPConnectionConfig.mcp_server_id",
         back_populates="mcp_server",
+        passive_deletes=True,
     )
     current_actions: Mapped[list["Tool"]] = relationship(
         "Tool", back_populates="mcp_server", cascade="all, delete-orphan"
@@ -3911,3 +3918,22 @@ class ExternalGroupPermissionSyncAttempt(Base):
 
     def is_finished(self) -> bool:
         return self.status.is_terminal()
+
+
+class License(Base):
+    """Stores the signed license blob (singleton pattern - only one row)."""
+
+    __tablename__ = "license"
+    __table_args__ = (
+        # Singleton pattern - unique index on constant ensures only one row
+        Index("idx_license_singleton", text("(true)"), unique=True),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    license_data: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

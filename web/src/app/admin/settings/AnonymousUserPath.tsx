@@ -8,8 +8,7 @@ import Button from "@/refresh-components/buttons/Button";
 import { Input } from "@/components/ui/input";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import SvgCopy from "@/icons/copy";
-
+import { SvgCopy } from "@opal/icons";
 export function AnonymousUserPath({
   setPopup,
 }: {

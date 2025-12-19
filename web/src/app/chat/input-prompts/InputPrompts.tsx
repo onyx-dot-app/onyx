@@ -16,11 +16,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SourceChip } from "../components/input/ChatInputBar";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgX from "@/icons/x";
-import SvgMoreHorizontal from "@/icons/more-horizontal";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-import SvgPlus from "@/icons/plus";
-
+import { SvgMoreHorizontal, SvgPlus, SvgX } from "@opal/icons";
 export default function InputPrompts() {
   const [inputPrompts, setInputPrompts] = useState<InputPrompt[]>([]);
   const [editingPromptId, setEditingPromptId] = useState<number | null>(null);

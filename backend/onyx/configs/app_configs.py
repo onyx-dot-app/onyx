@@ -24,6 +24,12 @@ APP_PORT = 8080
 # prefix from requests directed towards the API server. In these cases, set this to `/api`
 APP_API_PREFIX = os.environ.get("API_PREFIX", "")
 
+# Whether to send user metadata (user_id/email and session_id) to the LLM provider.
+# Disabled by default.
+SEND_USER_METADATA_TO_LLM_PROVIDER = (
+    os.environ.get("SEND_USER_METADATA_TO_LLM_PROVIDER", "")
+).lower() == "true"
+
 #####
 # User Facing Features Configs
 #####
@@ -31,7 +37,6 @@ BLURB_SIZE = 128  # Number Encoder Tokens included in the chunk blurb
 GENERATIVE_MODEL_ACCESS_CHECK_FREQ = int(
     os.environ.get("GENERATIVE_MODEL_ACCESS_CHECK_FREQ") or 86400
 )  # 1 day
-DISABLE_GENERATIVE_AI = os.environ.get("DISABLE_GENERATIVE_AI", "").lower() == "true"
 
 # Controls whether users can use User Knowledge (personal documents) in assistants
 DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() == "true"
@@ -692,6 +697,15 @@ AVERAGE_SUMMARY_EMBEDDINGS = (
 )
 
 MAX_TOKENS_FOR_FULL_INCLUSION = 4096
+
+# The intent was to have this be configurable per query, but I don't think any
+# codepath was actually configuring this, so for the migrated Vespa interface
+# we'll just use the default value, but also have it be configurable by env var.
+RECENCY_BIAS_MULTIPLIER = float(os.environ.get("RECENCY_BIAS_MULTIPLIER") or 1.0)
+
+# Should match the rerank-count value set in
+# backend/onyx/document_index/vespa/app_config/schemas/danswer_chunk.sd.jinja.
+RERANK_COUNT = int(os.environ.get("RERANK_COUNT") or 1000)
 
 
 #####

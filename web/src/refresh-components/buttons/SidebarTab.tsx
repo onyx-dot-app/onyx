@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal/types";
 import { cn } from "@/lib/utils";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Link from "next/link";
@@ -118,7 +118,13 @@ export default function SidebarTab({
     </div>
   );
 
-  const content = href ? <Link href={href}>{innerContent}</Link> : innerContent;
+  const content = href ? (
+    <Link href={href} scroll={false}>
+      {innerContent}
+    </Link>
+  ) : (
+    innerContent
+  );
 
   if (typeof children !== "string") return content;
   if (folded)

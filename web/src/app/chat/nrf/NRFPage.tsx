@@ -23,7 +23,6 @@ import Button from "@/refresh-components/buttons/Button";
 import ChatInputBar from "@/app/chat/components/input/ChatInputBar";
 import { Menu, ExternalLink } from "lucide-react";
 import Modal from "@/refresh-components/Modal";
-import SvgUser from "@/icons/user";
 import { useNightTime } from "@/lib/dateUtils";
 import { useFilters, useLlmManager } from "@/lib/hooks";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
@@ -35,7 +34,7 @@ import LoginPage from "../../auth/login/LoginPage";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
 import ApiKeyModal from "@/components/llm/ApiKeyModal";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { useAgents } from "@/lib/hooks/useAgents";
+import { useAgents } from "@/hooks/useAgents";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { useDeepResearchToggle } from "@/app/chat/hooks/useDeepResearchToggle";
@@ -50,8 +49,8 @@ import {
   useCurrentMessageTree,
   useHasPerformedInitialScroll,
 } from "@/app/chat/stores/useChatSessionStore";
-import { MessagesDisplay } from "@/app/chat/components/MessagesDisplay";
-import { useChatSessions } from "@/lib/hooks/useChatSessions";
+import ChatPage from "@/app/chat/components/ChatPage";
+import useChatSessions from "@/hooks/useChatSessions";
 import { useScrollonStream } from "@/app/chat/services/lib";
 import { cn } from "@/lib/utils";
 import Logo from "@/refresh-components/Logo";
@@ -59,6 +58,7 @@ import useScreenSize from "@/hooks/useScreenSize";
 import TextView from "@/components/chat/TextView";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
 import DEFAULT_CONTEXT_TOKENS from "@/app/chat/components/ChatPage";
+import { SvgUser } from "@opal/icons";
 
 interface NRFPageProps {
   isSidePanel?: boolean;
@@ -282,7 +282,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       selectedDocuments,
       searchParams: searchParams!,
       setPopup,
-      clientScrollToBottom,
       resetInputBar,
       setSelectedAssistantFromId,
     });
@@ -300,11 +299,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       chatSessionIdRef,
       loadedIdSessionRef,
       textAreaRef,
-      scrollInitialized,
       isInitialLoad,
       submitOnLoadPerformed,
-      hasPerformedInitialScroll,
-      clientScrollToBottom,
       refreshChatSessions,
       onSubmit,
     });
@@ -477,28 +473,12 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                     className="flex-1 w-full flex flex-col default-scrollbar overflow-y-auto overflow-x-hidden relative"
                   >
                     <div className="relative w-full px-4">
-                      <MessagesDisplay
-                        messageHistory={messageHistory}
-                        completeMessageTree={completeMessageTree}
-                        liveAssistant={liveAssistant}
-                        llmManager={llmManager}
-                        deepResearchEnabled={deepResearchEnabled}
-                        currentMessageFiles={currentMessageFiles}
-                        setPresentingDocument={setPresentingDocument}
-                        onSubmit={onSubmit}
-                        onMessageSelection={onMessageSelection}
-                        stopGenerating={stopGenerating}
-                        uncaughtError={uncaughtError}
-                        loadingError={loadingError}
-                        handleResubmitLastMessage={handleResubmitLastMessage}
-                        autoScrollEnabled={autoScrollEnabled}
-                        getContainerHeight={getContainerHeight}
-                        lastMessageRef={lastMessageRef}
-                        endPaddingRef={endPaddingRef}
-                        endDivRef={endDivRef}
-                        hasPerformedInitialScroll={hasPerformedInitialScroll}
-                        chatSessionId={chatSessionId}
-                        enterpriseSettings={settings?.enterpriseSettings}
+                      <ChatPage
+                        firstMessage={message || undefined}
+                        headerData={{
+                          settings: settings,
+                          chatSession: null,
+                        }}
                       />
                     </div>
                   </div>

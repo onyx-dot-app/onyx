@@ -4,8 +4,7 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { User, UserGroup } from "@/lib/types";
 import { UserEditor } from "../UserEditor";
 import { useState } from "react";
-import SvgUserPlus from "@/icons/user-plus";
-
+import { SvgUserPlus } from "@opal/icons";
 export interface AddMemberFormProps {
   users: User[];
   userGroup: UserGroup;

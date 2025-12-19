@@ -39,7 +39,7 @@ from onyx.federated_connectors.slack.models import SlackEntities
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.models import DocAwareChunk
-from onyx.llm.factory import get_default_llms
+from onyx.llm.factory import get_default_llm
 from onyx.onyxbot.slack.models import ChannelType
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.redis.redis_pool import get_redis_client
@@ -830,8 +830,8 @@ def slack_retrieval(
         )
 
     # Query slack with entity filtering
-    _, fast_llm = get_default_llms()
-    query_strings = build_slack_queries(query, fast_llm, entities, available_channels)
+    llm = get_default_llm()
+    query_strings = build_slack_queries(query, llm, entities, available_channels)
 
     # Determine filtering based on entities OR context (bot)
     include_dm = False

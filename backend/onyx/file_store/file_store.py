@@ -127,6 +127,15 @@ class FileStore(ABC):
         """
 
     @abstractmethod
+    def get_file_size(
+        self, file_id: str, db_session: Session | None = None
+    ) -> int | None:
+        """
+        Get the size of a file in bytes.
+        Optionally provide a db_session for database access.
+        """
+
+    @abstractmethod
     def delete_file(self, file_id: str) -> None:
         """
         Delete a file by its ID.
@@ -421,6 +430,27 @@ class S3BackedFileStore(FileStore):
                 file_id=file_id, db_session=db_session
             )
         return file_record
+
+    def get_file_size(
+        self, file_id: str, db_session: Session | None = None
+    ) -> int | None:
+        """
+        Get the size of a file in bytes by querying S3 metadata.
+        """
+        try:
+            with get_session_with_current_tenant_if_none(db_session) as db_session:
+                file_record = get_filerecord_by_file_id(
+                    file_id=file_id, db_session=db_session
+                )
+
+            s3_client = self._get_s3_client()
+            response = s3_client.head_object(
+                Bucket=file_record.bucket_name, Key=file_record.object_key
+            )
+            return response.get("ContentLength")
+        except Exception as e:
+            logger.warning(f"Error getting file size for {file_id}: {e}")
+            return None
 
     def delete_file(self, file_id: str, db_session: Session | None = None) -> None:
         with get_session_with_current_tenant_if_none(db_session) as db_session:
