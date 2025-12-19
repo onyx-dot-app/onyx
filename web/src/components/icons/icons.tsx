@@ -1107,36 +1107,7 @@ export const ZulipIcon = createLogoIcon(zulipIcon);
 // ============================================================================
 // LLM PROVIDER ICON COMPONENT
 // ============================================================================
-// Aggregator providers that host models from multiple vendors
-const AGGREGATOR_PROVIDERS = new Set([
-  "bedrock",
-  "bedrock_converse",
-  "openrouter",
-  "ollama_chat",
-  "vertex_ai",
-]);
-
-const PROVIDER_ICON_MAP: Record<string, (props: IconProps) => JSX.Element> = {
-  amazon: AmazonIcon,
-  phi: MicrosoftIconSVG,
-  mistral: MistralIcon,
-  ministral: MistralIcon,
-  llama: MetaIcon,
-  ollama_chat: OllamaIcon,
-  ollama: OllamaIcon,
-  gemini: GeminiIcon,
-  deepseek: DeepseekIcon,
-  claude: AnthropicIcon,
-  anthropic: AnthropicIcon,
-  openai: OpenAISVG,
-  azure: AzureIcon,
-  microsoft: MicrosoftIconSVG,
-  meta: MetaIcon,
-  google: GeminiIcon,
-  qwen: QwenIcon,
-  qwq: QwenIcon,
-  zai: ZAIIcon,
-};
+import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 
 export interface ProviderIconProps extends IconProps {
   provider: string;
@@ -1149,38 +1120,8 @@ export const ProviderIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: ProviderIconProps) => {
-  const lowerProviderName = provider.toLowerCase();
-
-  // For aggregator providers, prioritize showing the vendor icon based on model name
-  if (AGGREGATOR_PROVIDERS.has(lowerProviderName) && modelName) {
-    const lowerModelName = modelName.toLowerCase();
-    for (const [key, Icon] of Object.entries(PROVIDER_ICON_MAP)) {
-      if (lowerModelName.includes(key)) {
-        return <Icon size={size} className={className} />;
-      }
-    }
-  }
-
-  // Check if provider name directly matches an icon
-  if (lowerProviderName in PROVIDER_ICON_MAP) {
-    const Icon = PROVIDER_ICON_MAP[lowerProviderName];
-    if (Icon) {
-      return <Icon size={size} className={className} />;
-    }
-  }
-
-  // For non-aggregator providers, check if model name contains any of the keys
-  if (modelName) {
-    const lowerModelName = modelName.toLowerCase();
-    for (const [key, Icon] of Object.entries(PROVIDER_ICON_MAP)) {
-      if (lowerModelName.includes(key)) {
-        return <Icon size={size} className={className} />;
-      }
-    }
-  }
-
-  // Fallback to CPU icon
-  return <CPUIcon size={size} className={className} />;
+  const Icon = getProviderIcon(provider, modelName);
+  return <Icon size={size} className={className} />;
 };
 
 // ============================================================================
