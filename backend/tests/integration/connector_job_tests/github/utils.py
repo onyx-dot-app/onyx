@@ -56,9 +56,6 @@ class GitHubManager:
                 )
                 return False
 
-            # # Change visibility
-            # repo.edit(private=(visibility == "private"))
-
             # Note: Internal repositories are only available for GitHub Enterprise
             try:
                 repo.edit(visibility=visibility)
