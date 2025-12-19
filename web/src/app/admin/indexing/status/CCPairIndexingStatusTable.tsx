@@ -34,6 +34,7 @@ import { PageSelector } from "@/components/PageSelector";
 import { ConnectorStaggeredSkeleton } from "./ConnectorRowSkeleton";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgSettings } from "@opal/icons";
+import { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 
 // Helper to handle navigation with cmd/ctrl+click support
 // NOTE: using this rather than Next/Link (or similar) since shadcn
@@ -43,14 +44,15 @@ import { SvgSettings } from "@opal/icons";
 function navigateWithModifier(
   e: React.MouseEvent,
   url: string,
-  fallback: () => void
+  router: AppRouterInstance
 ) {
   if (e.metaKey || e.ctrlKey) {
     window.open(url, "_blank");
   } else {
-    fallback();
+    router.push(url);
   }
 }
+
 function isFederatedConnectorStatus(
   status: ConnectorIndexingStatusLite | FederatedConnectorStatus
 ) {
@@ -148,7 +150,7 @@ function ConnectorRow({
   const connectorUrl = `/admin/connector/${ccPairsIndexingStatus.cc_pair_id}`;
 
   const handleRowClick = (e: React.MouseEvent) => {
-    navigateWithModifier(e, connectorUrl, () => router.push(connectorUrl));
+    navigateWithModifier(e, connectorUrl, router);
   };
 
   return (
@@ -229,7 +231,7 @@ function FederatedConnectorRow({
   const federatedUrl = `/admin/federated/${federatedConnector.id}`;
 
   const handleRowClick = (e: React.MouseEvent) => {
-    navigateWithModifier(e, federatedUrl, () => router.push(federatedUrl));
+    navigateWithModifier(e, federatedUrl, router);
   };
 
   return (
@@ -266,9 +268,7 @@ function FederatedConnectorRow({
           tertiary
           onClick={(e: React.MouseEvent) => {
             e.stopPropagation();
-            navigateWithModifier(e, federatedUrl, () =>
-              router.push(federatedUrl)
-            );
+            navigateWithModifier(e, federatedUrl, router);
           }}
           tooltip="Manage Federated Connector"
         />
