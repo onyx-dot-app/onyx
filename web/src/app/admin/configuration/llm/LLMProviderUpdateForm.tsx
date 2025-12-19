@@ -177,6 +177,7 @@ export function LLMProviderUpdateForm({
         {} as { [key: string]: string }
       ),
     is_public: existingLlmProvider?.is_public ?? true,
+    is_auto_mode: existingLlmProvider?.is_auto_mode ?? false,
     groups: existingLlmProvider?.groups ?? [],
     personas: existingLlmProvider?.personas ?? [],
     model_configurations: existingLlmProvider?.model_configurations ?? [],
@@ -254,6 +255,7 @@ export function LLMProviderUpdateForm({
     default_model_name: Yup.string().required("Model name is required"),
     // EE Only
     is_public: Yup.boolean().required(),
+    is_auto_mode: Yup.boolean().required(),
     groups: Yup.array().of(Yup.number()),
     personas: Yup.array().of(Yup.number()),
     selected_model_names: Yup.array().of(Yup.string()),
@@ -574,8 +576,47 @@ export function LLMProviderUpdateForm({
                 }
               }
             )}
-            {/* Fetch models button - automatically shows for supported providers */}
-            {dynamicConfig && (
+            {/* Auto Mode Toggle */}
+            {!firstTimeConfiguration && (
+              <div className="flex flex-col gap-3 py-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Text className="font-medium">Auto-update</Text>
+                    <Text className="text-sm text-text-02">
+                      Update the available models automatically when new models
+                      are released.
+                    </Text>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={formikProps.values.is_auto_mode}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      formikProps.values.is_auto_mode
+                        ? "bg-action-link-05"
+                        : "bg-background-neutral-03"
+                    }`}
+                    onClick={() =>
+                      formikProps.setFieldValue(
+                        "is_auto_mode",
+                        !formikProps.values.is_auto_mode
+                      )
+                    }
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        formikProps.values.is_auto_mode
+                          ? "translate-x-5"
+                          : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Fetch models button - automatically shows for supported providers (disabled in Auto mode) */}
+            {dynamicConfig && !formikProps.values.is_auto_mode && (
               <div className="flex flex-col gap-2">
                 <Button
                   onClick={() =>
@@ -620,28 +661,80 @@ export function LLMProviderUpdateForm({
               <>
                 <Separator />
 
-                {currentModelConfigurations.length > 0 ? (
-                  <SelectorFormField
-                    name="default_model_name"
-                    subtext="The model to use by default for this provider unless otherwise specified."
-                    label="Default Model"
-                    options={currentModelConfigurations.map(
-                      (modelConfiguration) => ({
-                        // don't clean up names here to give admins descriptive names / handle duplicates
-                        // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
-                        name: modelConfiguration.name,
-                        value: modelConfiguration.name,
-                      })
+                {formikProps.values.is_auto_mode ? (
+                  // Auto mode: Read-only model display
+                  <div className="space-y-4">
+                    <Text className="font-medium">Available Models</Text>
+                    <Text className="text-sm text-text-02">
+                      Models are automatically managed by Onyx. The default
+                      model and visible models will be set based on Onyx&apos;s
+                      recommended configuration.
+                    </Text>
+
+                    {currentModelConfigurations.length > 0 && (
+                      <div className="space-y-2">
+                        {currentModelConfigurations
+                          .filter((m) => m.is_visible)
+                          .map((model) => (
+                            <div
+                              key={model.name}
+                              className="flex items-center justify-between p-3 border border-border-01 rounded-md bg-background-neutral-01"
+                            >
+                              <div>
+                                <span className="font-medium text-text-01">
+                                  {model.display_name || model.name}
+                                </span>
+                                {model.display_name && (
+                                  <span className="text-sm text-text-02 ml-2">
+                                    ({model.name})
+                                  </span>
+                                )}
+                              </div>
+                              {formikProps.values.default_model_name ===
+                                model.name && (
+                                <span className="px-3 py-1 rounded text-sm bg-status-success-01 text-status-text-success-05">
+                                  Default
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                      </div>
                     )}
-                    maxHeight="max-h-56"
-                  />
+
+                    {currentModelConfigurations.length === 0 && (
+                      <Text className="text-sm text-text-02 italic">
+                        Models will be configured automatically when the
+                        provider is enabled.
+                      </Text>
+                    )}
+                  </div>
                 ) : (
-                  <TextFormField
-                    name="default_model_name"
-                    subtext="The model to use by default for this provider unless otherwise specified."
-                    label="Default Model"
-                    placeholder="E.g. gpt-4"
-                  />
+                  // Manual mode: Full model configuration
+                  <>
+                    {currentModelConfigurations.length > 0 ? (
+                      <SelectorFormField
+                        name="default_model_name"
+                        subtext="The model to use by default for this provider unless otherwise specified."
+                        label="Default Model"
+                        options={currentModelConfigurations.map(
+                          (modelConfiguration) => ({
+                            // don't clean up names here to give admins descriptive names / handle duplicates
+                            // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
+                            name: modelConfiguration.name,
+                            value: modelConfiguration.name,
+                          })
+                        )}
+                        maxHeight="max-h-56"
+                      />
+                    ) : (
+                      <TextFormField
+                        name="default_model_name"
+                        subtext="The model to use by default for this provider unless otherwise specified."
+                        label="Default Model"
+                        placeholder="E.g. gpt-4"
+                      />
+                    )}
+                  </>
                 )}
 
                 {llmProviderDescriptor.deployment_name_required &&
@@ -661,32 +754,34 @@ export function LLMProviderUpdateForm({
                   />
                   {showAdvancedOptions && (
                     <>
-                      {currentModelConfigurations.length > 0 && (
-                        <div className="w-full">
-                          <MultiSelectField
-                            selectedInitially={
-                              formikProps.values.selected_model_names ?? []
-                            }
-                            name="selected_model_names"
-                            label="Display Models"
-                            subtext="Select the models to make available to users. Unselected models will not be available."
-                            options={currentModelConfigurations.map(
-                              (modelConfiguration) => ({
-                                value: modelConfiguration.name,
-                                // don't clean up names here to give admins descriptive names / handle duplicates
-                                // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
-                                label: modelConfiguration.name,
-                              })
-                            )}
-                            onChange={(selected) =>
-                              formikProps.setFieldValue(
-                                "selected_model_names",
-                                selected
-                              )
-                            }
-                          />
-                        </div>
-                      )}
+                      {/* Display Models - only shown in Manual mode */}
+                      {!formikProps.values.is_auto_mode &&
+                        currentModelConfigurations.length > 0 && (
+                          <div className="w-full">
+                            <MultiSelectField
+                              selectedInitially={
+                                formikProps.values.selected_model_names ?? []
+                              }
+                              name="selected_model_names"
+                              label="Display Models"
+                              subtext="Select the models to make available to users. Unselected models will not be available."
+                              options={currentModelConfigurations.map(
+                                (modelConfiguration) => ({
+                                  value: modelConfiguration.name,
+                                  // don't clean up names here to give admins descriptive names / handle duplicates
+                                  // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
+                                  label: modelConfiguration.name,
+                                })
+                              )}
+                              onChange={(selected) =>
+                                formikProps.setFieldValue(
+                                  "selected_model_names",
+                                  selected
+                                )
+                              }
+                            />
+                          </div>
+                        )}
                       <Separator />
                       <div className="flex flex-col gap-3">
                         <Text headingH3>Access Controls</Text>

@@ -76,6 +76,7 @@ export interface LLMProvider {
   custom_config: { [key: string]: string } | null;
   default_model_name: string;
   is_public: boolean;
+  is_auto_mode: boolean;
   groups: number[];
   personas: number[];
   deployment_name: string | null;
