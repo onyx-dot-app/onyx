@@ -219,7 +219,7 @@ function Main() {
 
 export default function Page() {
   return (
-    <div className="mx-auto container">
+    <div className="container">
       <AdminPageTitle title="API Keys" icon={SvgKey} />
 
       <Main />

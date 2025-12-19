@@ -62,8 +62,6 @@ export function CustomLLMProviderUpdateForm({
     api_base: existingLlmProvider?.api_base ?? "",
     api_version: existingLlmProvider?.api_version ?? "",
     default_model_name: existingLlmProvider?.default_model_name ?? null,
-    fast_default_model_name:
-      existingLlmProvider?.fast_default_model_name ?? null,
     model_configurations: existingLlmProvider?.model_configurations.map(
       (modelConfiguration) => ({
         ...modelConfiguration,
@@ -100,7 +98,6 @@ export function CustomLLMProviderUpdateForm({
       })
     ),
     default_model_name: Yup.string().required("Model name is required"),
-    fast_default_model_name: Yup.string().nullable(),
     custom_config_list: Yup.array(),
     // EE Only
     is_public: Yup.boolean().required(),
@@ -133,7 +130,6 @@ export function CustomLLMProviderUpdateForm({
           .filter(
             (modelConfiguration) =>
               modelConfiguration.name === values.default_model_name ||
-              modelConfiguration.name === values.fast_default_model_name ||
               modelConfiguration.is_visible
           );
         finalValues.api_key_changed = values.api_key !== initialValues.api_key;
@@ -433,15 +429,6 @@ export function CustomLLMProviderUpdateForm({
               label="Default Model"
               placeholder="E.g. gpt-4"
             />
-
-            {!existingLlmProvider?.deployment_name && (
-              <TextFormField
-                name="fast_default_model_name"
-                subtext="The model to use for lighter flows like `LLM Chunk Filter` for this provider. If not set, will use the Default Model configured above."
-                label="[Optional] Fast Model"
-                placeholder="E.g. gpt-4"
-              />
-            )}
 
             {arePaidEnterpriseFeaturesEnabled && (
               <>

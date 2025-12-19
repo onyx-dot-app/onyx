@@ -1,41 +1,59 @@
 "use client";
 
 import Image from "next/image";
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-  memo,
-} from "react";
+import { useMemo, useState, useReducer } from "react";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { GlobeIcon, InfoIcon } from "@/components/icons/icons";
 import Text from "@/refresh-components/texts/Text";
-import { cn } from "@/lib/utils";
 import Separator from "@/refresh-components/Separator";
 import useSWR from "swr";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { Callout } from "@/components/ui/callout";
 import Button from "@/refresh-components/buttons/Button";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
-import { FormField } from "@/refresh-components/form/FormField";
-import RawModal from "@/refresh-components/RawModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import {
   SvgArrowExchange,
   SvgArrowRightCircle,
   SvgCheckSquare,
+  SvgEdit,
   SvgGlobe,
-  SvgKey,
   SvgOnyxLogo,
   SvgX,
 } from "@opal/icons";
-type WebSearchProviderType = "google_pse" | "serper" | "exa";
-type WebContentProviderType = "firecrawl" | "onyx_web_crawler" | (string & {});
+
+import { WebProviderSetupModal } from "@/app/admin/configuration/web-search/WebProviderSetupModal";
+import {
+  SEARCH_PROVIDERS_URL,
+  SEARCH_PROVIDER_DETAILS,
+  SEARCH_PROVIDER_ORDER,
+  getSearchProviderDisplayLabel,
+  buildSearchProviderConfig,
+  canConnectSearchProvider,
+  getSingleConfigFieldValueForForm,
+  isBuiltInSearchProviderType,
+  isSearchProviderConfigured,
+  searchProviderRequiresApiKey,
+  type WebSearchProviderType,
+} from "@/app/admin/configuration/web-search/searchProviderUtils";
+import {
+  CONTENT_PROVIDERS_URL,
+  CONTENT_PROVIDER_DETAILS,
+  CONTENT_PROVIDER_ORDER,
+  buildContentProviderConfig,
+  canConnectContentProvider,
+  getSingleContentConfigFieldValueForForm,
+  getCurrentContentProviderType,
+  isContentProviderConfigured,
+  type WebContentProviderType,
+} from "@/app/admin/configuration/web-search/contentProviderUtils";
+import {
+  initialWebProviderModalState,
+  WebProviderModalReducer,
+  MASKED_API_KEY_PLACEHOLDER,
+} from "@/app/admin/configuration/web-search/WebProviderModalReducer";
+import { connectProviderFlow } from "@/app/admin/configuration/web-search/connectProviderFlow";
 
 interface WebSearchProviderView {
   id: number;
@@ -55,302 +73,6 @@ interface WebContentProviderView {
   has_api_key: boolean;
 }
 
-const SEARCH_PROVIDERS_URL = "/api/admin/web-search/search-providers";
-const CONTENT_PROVIDERS_URL = "/api/admin/web-search/content-providers";
-
-const SEARCH_PROVIDER_LABEL: Record<WebSearchProviderType, string> = {
-  google_pse: "Google PSE",
-  serper: "Serper",
-  exa: "Exa",
-};
-
-const CONTENT_PROVIDER_LABEL: Record<string, string> = {
-  firecrawl: "Firecrawl",
-  onyx_web_crawler: "Onyx Web Crawler",
-};
-
-const CONTENT_PROVIDER_DETAILS: Record<
-  string,
-  { subtitle: string; description: string; logoSrc?: string }
-> = {
-  firecrawl: {
-    subtitle: "Leading open-source crawler.",
-    description:
-      "Connect Firecrawl to fetch and summarize page content from search results.",
-    logoSrc: "/firecrawl.svg",
-  },
-  onyx_web_crawler: {
-    subtitle:
-      "Built-in web crawler. Works for most pages but less performant in edge cases.",
-    description:
-      "Onyx’s built-in crawler processes URLs returned by your search engine.",
-  },
-};
-
-const CONTENT_PROVIDER_ORDER: WebContentProviderType[] = [
-  "onyx_web_crawler",
-  "firecrawl",
-];
-
-const SEARCH_PROVIDER_ORDER: WebSearchProviderType[] = [
-  "exa",
-  "serper",
-  "google_pse",
-];
-
-const SEARCH_PROVIDER_DETAILS: Record<
-  WebSearchProviderType,
-  { subtitle: string; helper: string; logoSrc?: string; apiKeyUrl: string }
-> = {
-  exa: {
-    subtitle: "Exa.ai",
-    helper: "Connect to Exa to set up web search.",
-    logoSrc: "/Exa.svg",
-    apiKeyUrl: "https://dashboard.exa.ai/api-keys",
-  },
-  serper: {
-    subtitle: "Serper.dev",
-    helper: "Connect to Serper to set up web search.",
-    logoSrc: "/Serper.svg",
-    apiKeyUrl: "https://serper.dev/api-key",
-  },
-  google_pse: {
-    subtitle: "Google",
-    helper: "Connect to Google PSE to set up web search.",
-    logoSrc: "/Google.svg",
-    apiKeyUrl: "https://programmablesearchengine.google.com/controlpanel/all",
-  },
-};
-
-type ProviderSetupModalProps = {
-  isOpen: boolean;
-  onClose: () => void;
-  providerLabel: string;
-  providerLogo: ReactNode;
-  description: string;
-  apiKeyValue: string;
-  onApiKeyChange: (value: string) => void;
-  optionalField?: {
-    label: string;
-    value: string;
-    onChange: (value: string) => void;
-    placeholder: string;
-    description?: ReactNode;
-    showFirst?: boolean;
-  };
-  helperMessage: ReactNode;
-  helperClass: string;
-  isProcessing: boolean;
-  canConnect: boolean;
-  onConnect: () => void;
-  apiKeyAutoFocus?: boolean;
-};
-
-const ProviderSetupModal = memo(
-  ({
-    isOpen,
-    onClose,
-    providerLabel,
-    providerLogo,
-    description,
-    apiKeyValue,
-    onApiKeyChange,
-    optionalField,
-    helperMessage,
-    helperClass,
-    isProcessing,
-    canConnect,
-    onConnect,
-    apiKeyAutoFocus = true,
-  }: ProviderSetupModalProps) => {
-    if (!isOpen) return null;
-
-    return (
-      <RawModal
-        onClose={onClose}
-        className="w-[32rem] h-fit flex flex-col focus:outline-none"
-      >
-        <div className="bg-background-tint-00 relative flex flex-col gap-1 p-4 rounded-tl-16 rounded-tr-16">
-          <div className="absolute right-2 top-2">
-            <IconButton icon={SvgX} internal onClick={onClose} />
-          </div>
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-1">
-              {providerLogo}
-              <div className="flex items-center justify-center size-4 p-0.5 shrink-0">
-                <SvgArrowExchange className="size-3 text-text-04" />
-              </div>
-              <div className="flex items-center justify-center size-7 p-0.5 shrink-0 overflow-clip">
-                <SvgOnyxLogo
-                  width={24}
-                  height={24}
-                  className="text-text-04 shrink-0"
-                />
-              </div>
-            </div>
-            <div className="flex flex-col gap-1">
-              <Text headingH3>{`Set up ${providerLabel}`}</Text>
-              <Text secondaryBody text03>
-                {description}
-              </Text>
-            </div>
-          </div>
-        </div>
-        <div className="bg-background-tint-01 flex flex-col gap-4 p-4 overflow-y-auto max-h-[512px]">
-          <div className="flex w-full flex-col gap-4">
-            {optionalField?.showFirst && (
-              <FormField
-                name={optionalField.label.toLowerCase().replace(/\s+/g, "_")}
-                state="idle"
-                className="w-full"
-              >
-                <FormField.Label>
-                  <Text mainUiAction text04>
-                    {optionalField.label}
-                  </Text>
-                </FormField.Label>
-                <FormField.Control>
-                  <InputTypeIn
-                    placeholder={optionalField.placeholder}
-                    value={optionalField.value}
-                    onChange={(event) =>
-                      optionalField.onChange(event.target.value)
-                    }
-                  />
-                </FormField.Control>
-                {optionalField.description && (
-                  <Text secondaryBody text03 className="ml-0.5">
-                    {optionalField.description}
-                  </Text>
-                )}
-              </FormField>
-            )}
-
-            <FormField
-              name="api_key"
-              state={
-                helperClass.includes("status-error") ||
-                helperClass.includes("error")
-                  ? "error"
-                  : helperClass.includes("green")
-                    ? "success"
-                    : "idle"
-              }
-              className="w-full"
-            >
-              <FormField.Label>
-                <Text mainUiAction text04>
-                  API Key
-                </Text>
-              </FormField.Label>
-              <FormField.Control>
-                <PasswordInputTypeIn
-                  placeholder="Enter API key"
-                  value={apiKeyValue}
-                  autoFocus={apiKeyAutoFocus}
-                  onFocus={(e) => {
-                    // Select all text if it's the masked placeholder when focused
-                    if (apiKeyValue === "••••••••••••••••") {
-                      e.target.select();
-                    }
-                  }}
-                  onChange={(event) => {
-                    onApiKeyChange(event.target.value);
-                  }}
-                  showClearButton={false}
-                />
-              </FormField.Control>
-              {isProcessing ? (
-                <FormField.APIMessage
-                  state="loading"
-                  messages={{
-                    loading:
-                      typeof helperMessage === "string"
-                        ? helperMessage
-                        : "Validating API key...",
-                  }}
-                />
-              ) : typeof helperMessage === "string" ? (
-                <FormField.Message
-                  messages={{
-                    idle:
-                      helperClass.includes("status-error") ||
-                      helperClass.includes("error")
-                        ? ""
-                        : helperClass.includes("green")
-                          ? ""
-                          : helperMessage,
-                    error:
-                      helperClass.includes("status-error") ||
-                      helperClass.includes("error")
-                        ? helperMessage
-                        : "",
-                    success: helperClass.includes("green") ? helperMessage : "",
-                  }}
-                />
-              ) : (
-                <div className="flex flex-row items-center gap-x-0.5">
-                  <Text
-                    text03
-                    secondaryBody
-                    className={cn(helperClass, "ml-0.5")}
-                  >
-                    {helperMessage}
-                  </Text>
-                </div>
-              )}
-            </FormField>
-
-            {optionalField && !optionalField.showFirst && (
-              <FormField
-                name={optionalField.label.toLowerCase().replace(/\s+/g, "_")}
-                state="idle"
-                className="w-full"
-              >
-                <FormField.Label>
-                  <Text mainUiAction text04>
-                    {optionalField.label}
-                  </Text>
-                </FormField.Label>
-                <FormField.Control>
-                  <InputTypeIn
-                    placeholder={optionalField.placeholder}
-                    value={optionalField.value}
-                    onChange={(event) =>
-                      optionalField.onChange(event.target.value)
-                    }
-                  />
-                </FormField.Control>
-                {optionalField.description && (
-                  <Text secondaryBody text03 className="ml-0.5">
-                    {optionalField.description}
-                  </Text>
-                )}
-              </FormField>
-            )}
-          </div>
-        </div>
-        <div className="bg-background-tint-00 flex flex-row items-center justify-end gap-2 p-4 rounded-bl-16 rounded-br-16">
-          <Button type="button" main secondary onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            main
-            primary
-            disabled={!canConnect || isProcessing}
-            onClick={onConnect}
-          >
-            {isProcessing ? "Connecting..." : "Connect"}
-          </Button>
-        </div>
-      </RawModal>
-    );
-  }
-);
-
-ProviderSetupModal.displayName = "ProviderSetupModal";
-
 const HoverIconButton = ({
   isHovered,
   onMouseEnter,
@@ -363,21 +85,9 @@ const HoverIconButton = ({
   onMouseLeave: () => void;
   children: React.ReactNode;
 } & React.ComponentProps<typeof Button>) => {
-  const HoverIcon = useMemo(() => {
-    const IconComponent: React.FunctionComponent<
-      React.SVGProps<SVGSVGElement>
-    > = ({ className, ...props }) => {
-      if (isHovered) {
-        return <SvgX className={className} {...props} />;
-      }
-      return <SvgCheckSquare className={className} {...props} />;
-    };
-    return IconComponent;
-  }, [isHovered]);
-
   return (
     <div onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
-      <Button {...buttonProps} rightIcon={HoverIcon}>
+      <Button {...buttonProps} rightIcon={isHovered ? SvgX : SvgCheckSquare}>
         {children}
       </Button>
     </div>
@@ -385,36 +95,15 @@ const HoverIconButton = ({
 };
 
 export default function Page() {
-  const [selectedProviderType, setSelectedProviderType] =
-    useState<WebSearchProviderType | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [apiKeyValue, setApiKeyValue] = useState("");
-  const [searchEngineIdValue, setSearchEngineIdValue] = useState("");
-  const [selectedContentProviderType, setSelectedContentProviderType] =
-    useState<WebContentProviderType | null>(null);
-  const [isContentModalOpen, setIsContentModalOpen] = useState(false);
-  const [contentApiKeyValue, setContentApiKeyValue] = useState("");
-  const [contentBaseUrlValue, setContentBaseUrlValue] = useState("");
-  const [isProcessingSearch, setIsProcessingSearch] = useState(false);
-  const [searchStatusMessage, setSearchStatusMessage] = useState<string | null>(
-    null
+  const [searchModal, dispatchSearchModal] = useReducer(
+    WebProviderModalReducer,
+    initialWebProviderModalState
   );
-  const [searchErrorMessage, setSearchErrorMessage] = useState<string | null>(
-    null
+  const [contentModal, dispatchContentModal] = useReducer(
+    WebProviderModalReducer,
+    initialWebProviderModalState
   );
-  const [isProcessingContent, setIsProcessingContent] = useState(false);
-  const [contentStatusMessage, setContentStatusMessage] = useState<
-    string | null
-  >(null);
-  const [contentErrorMessage, setContentErrorMessage] = useState<string | null>(
-    null
-  );
-  const [activatingProviderId, setActivatingProviderId] = useState<
-    number | null
-  >(null);
   const [activationError, setActivationError] = useState<string | null>(null);
-  const [activatingContentProviderId, setActivatingContentProviderId] =
-    useState<number | null>(null);
   const [contentActivationError, setContentActivationError] = useState<
     string | null
   >(null);
@@ -445,181 +134,148 @@ export default function Page() {
 
   const isLoading = isLoadingSearchProviders || isLoadingContentProviders;
 
-  const prevProviderTypeRef = useRef<WebSearchProviderType | null>(null);
-  const wasModalOpenRef = useRef(false);
+  // Modal form state is owned by reducers
 
-  useEffect(() => {
-    if (!isModalOpen || !selectedProviderType) {
-      setApiKeyValue("");
-      setSearchEngineIdValue("");
-      setSearchStatusMessage(null);
-      setSearchErrorMessage(null);
-      setIsProcessingSearch(false);
-      prevProviderTypeRef.current = null;
-      wasModalOpenRef.current = false;
-      return;
-    }
+  const openSearchModal = (
+    providerType: WebSearchProviderType,
+    provider?: WebSearchProviderView
+  ) => {
+    const requiresApiKey = searchProviderRequiresApiKey(providerType);
+    const hasStoredKey = provider?.has_api_key ?? false;
 
-    const modalJustOpened = !wasModalOpenRef.current;
-    const providerChanged =
-      prevProviderTypeRef.current !== selectedProviderType;
+    dispatchSearchModal({
+      type: "OPEN",
+      providerType,
+      initialApiKeyValue:
+        requiresApiKey && hasStoredKey ? MASKED_API_KEY_PLACEHOLDER : "",
+      initialConfigValue: getSingleConfigFieldValueForForm(
+        providerType,
+        provider
+      ),
+    });
+  };
 
-    const provider = searchProviders?.find(
-      (item) => item.provider_type === selectedProviderType
-    );
+  const openContentModal = (
+    providerType: WebContentProviderType,
+    provider?: WebContentProviderView
+  ) => {
+    const hasStoredKey = provider?.has_api_key ?? false;
+    const defaultFirecrawlBaseUrl = "https://api.firecrawl.dev/v1/scrape";
 
-    if (modalJustOpened || providerChanged) {
-      // If there's a stored key, show a masked placeholder
-      if (provider?.has_api_key) {
-        setApiKeyValue("••••••••••••••••");
-      } else {
-        setApiKeyValue("");
-      }
-      setSearchStatusMessage(null);
-      setSearchErrorMessage(null);
-    }
-    if (selectedProviderType === "google_pse") {
-      const config = provider?.config || {};
-      const searchId =
-        config.search_engine_id || config.cx || config.search_engine || "";
-      setSearchEngineIdValue(searchId);
-    } else {
-      setSearchEngineIdValue("");
-    }
-    prevProviderTypeRef.current = selectedProviderType;
-    wasModalOpenRef.current = true;
-  }, [isModalOpen, selectedProviderType, searchProviders]);
-
-  useEffect(() => {
-    if (!isContentModalOpen || !selectedContentProviderType) {
-      setContentApiKeyValue("");
-      setContentBaseUrlValue("");
-      setContentStatusMessage(null);
-      setContentErrorMessage(null);
-      setIsProcessingContent(false);
-      return;
-    }
-
-    const provider = contentProviders?.find(
-      (item) => item.provider_type === selectedContentProviderType
-    );
-
-    // If there's a stored key, show a masked placeholder
-    if (provider?.has_api_key) {
-      setContentApiKeyValue("••••••••••••••••");
-    } else {
-      setContentApiKeyValue("");
-    }
-
-    if (selectedContentProviderType === "firecrawl") {
-      const baseUrl =
-        provider?.config?.base_url ||
-        provider?.config?.api_base_url ||
-        "https://api.firecrawl.dev/v1/scrape";
-      setContentBaseUrlValue(baseUrl);
-    } else {
-      setContentBaseUrlValue("");
-    }
-  }, [isContentModalOpen, selectedContentProviderType, contentProviders]);
+    dispatchContentModal({
+      type: "OPEN",
+      providerType,
+      initialApiKeyValue: hasStoredKey ? MASKED_API_KEY_PLACEHOLDER : "",
+      initialConfigValue:
+        providerType === "firecrawl"
+          ? getSingleContentConfigFieldValueForForm(
+              providerType,
+              provider,
+              defaultFirecrawlBaseUrl
+            )
+          : "",
+    });
+  };
 
   const hasActiveSearchProvider = searchProviders.some(
     (provider) => provider.is_active
   );
 
-  const hasStoredApiKey = searchProviders.some(
-    (provider) => provider.has_api_key
+  const hasConfiguredSearchProvider = searchProviders.some((provider) =>
+    isSearchProviderConfigured(provider.provider_type, provider)
   );
 
-  const searchProvidersByType = useMemo(() => {
-    const map = new Map<
-      WebSearchProviderType | string,
-      WebSearchProviderView
-    >();
-    searchProviders.forEach((provider) => {
-      map.set(provider.provider_type, provider);
-    });
-    return map;
-  }, [searchProviders]);
+  const combinedSearchProviders = useMemo(() => {
+    const byType = new Map(
+      searchProviders.map((p) => [p.provider_type, p] as const)
+    );
 
-  type DisplaySearchProvider = {
-    key: number | string;
-    providerType: WebSearchProviderType | (string & {});
-    label: string;
-    subtitle: string;
-    logoSrc?: string;
-    provider?: WebSearchProviderView;
-  };
-
-  const orderedSearchProviders: DisplaySearchProvider[] =
-    SEARCH_PROVIDER_ORDER.map((providerType) => {
-      const provider = searchProvidersByType.get(providerType);
-      const label =
-        provider?.name || SEARCH_PROVIDER_LABEL[providerType] || providerType;
-      const { subtitle, logoSrc } = SEARCH_PROVIDER_DETAILS[providerType];
-
+    const ordered = SEARCH_PROVIDER_ORDER.map((providerType) => {
+      const provider = byType.get(providerType);
+      const details = SEARCH_PROVIDER_DETAILS[providerType];
       return {
         key: provider?.id ?? providerType,
         providerType,
-        label,
-        subtitle,
-        logoSrc,
+        label: getSearchProviderDisplayLabel(providerType, provider?.name),
+        subtitle: details.subtitle,
+        logoSrc: details.logoSrc,
         provider,
       };
     });
 
-  const additionalSearchProviders = searchProviders.filter(
-    (provider) => !SEARCH_PROVIDER_ORDER.includes(provider.provider_type)
-  );
-
-  const additionalSearchProviderCards: DisplaySearchProvider[] =
-    additionalSearchProviders.map((provider) => {
-      const fallbackLabel =
-        SEARCH_PROVIDER_LABEL[
-          provider.provider_type as WebSearchProviderType
-        ] || provider.provider_type;
-
-      return {
+    const additional = searchProviders
+      .filter((p) => !SEARCH_PROVIDER_ORDER.includes(p.provider_type))
+      .map((provider) => ({
         key: provider.id,
         providerType: provider.provider_type,
-        label: provider.name || fallbackLabel,
+        label: getSearchProviderDisplayLabel(
+          provider.provider_type,
+          provider.name
+        ),
         subtitle: "Custom integration",
+        logoSrc: undefined,
         provider,
-      };
-    });
+      }));
 
-  const combinedSearchProviders = [
-    ...orderedSearchProviders,
-    ...additionalSearchProviderCards,
-  ];
+    return [...ordered, ...additional];
+  }, [searchProviders]);
+
+  const selectedProviderType =
+    searchModal.providerType as WebSearchProviderType | null;
+  const selectedContentProviderType =
+    contentModal.providerType as WebContentProviderType | null;
 
   const providerLabel = selectedProviderType
-    ? SEARCH_PROVIDER_LABEL[selectedProviderType] || selectedProviderType
+    ? getSearchProviderDisplayLabel(selectedProviderType)
     : "";
-  const trimmedApiKey = apiKeyValue.trim();
-  const trimmedSearchEngineId = searchEngineIdValue.trim();
+  const searchProviderValues = useMemo(
+    () => ({
+      apiKey: searchModal.apiKeyValue.trim(),
+      config: searchModal.configValue.trim(),
+    }),
+    [searchModal.apiKeyValue, searchModal.configValue]
+  );
   const canConnect =
     !!selectedProviderType &&
-    trimmedApiKey.length > 0 &&
-    (selectedProviderType !== "google_pse" || trimmedSearchEngineId.length > 0);
+    canConnectSearchProvider(
+      selectedProviderType,
+      searchProviderValues.apiKey,
+      searchProviderValues.config
+    );
   const contentProviderLabel = selectedContentProviderType
-    ? CONTENT_PROVIDER_LABEL[selectedContentProviderType] ||
+    ? CONTENT_PROVIDER_DETAILS[selectedContentProviderType]?.label ||
       selectedContentProviderType
     : "";
-  const trimmedContentApiKey = contentApiKeyValue.trim();
-  const trimmedContentBaseUrl = contentBaseUrlValue.trim();
+  const contentProviderValues = useMemo(
+    () => ({
+      apiKey: contentModal.apiKeyValue.trim(),
+      config: contentModal.configValue.trim(),
+    }),
+    [contentModal.apiKeyValue, contentModal.configValue]
+  );
   const canConnectContent =
     !!selectedContentProviderType &&
-    trimmedContentApiKey.length > 0 &&
-    (selectedContentProviderType !== "firecrawl" ||
-      trimmedContentBaseUrl.length > 0);
+    canConnectContentProvider(
+      selectedContentProviderType,
+      contentProviderValues.apiKey,
+      contentProviderValues.config
+    );
 
-  const renderProviderLogo = (
-    logoSrc: string | undefined,
-    label: string,
+  const renderLogo = ({
+    logoSrc,
+    alt,
+    fallback,
     size = 16,
     isHighlighted = false,
-    containerSize?: number
-  ) => {
+    containerSize,
+  }: {
+    logoSrc?: string;
+    alt: string;
+    fallback?: React.ReactNode;
+    size?: number;
+    isHighlighted?: boolean;
+    containerSize?: number;
+  }) => {
     const containerSizeClass =
       size === 24 || containerSize === 28 ? "size-7" : "size-5";
 
@@ -628,14 +284,11 @@ export default function Page() {
         className={`flex items-center justify-center ${containerSizeClass} px-0.5 py-0 shrink-0 overflow-clip`}
       >
         {logoSrc ? (
-          <Image
-            src={logoSrc}
-            alt={`${label} logo`}
-            width={size}
-            height={size}
-          />
+          <Image src={logoSrc} alt={alt} width={size} height={size} />
+        ) : fallback ? (
+          fallback
         ) : (
-          <GlobeIcon
+          <SvgGlobe
             size={size}
             className={
               isHighlighted ? "text-action-text-link-05" : "text-text-02"
@@ -646,145 +299,51 @@ export default function Page() {
     );
   };
 
-  const renderContentProviderLogo = (
-    providerType: string,
-    isHighlighted = false,
-    size = 16,
-    containerSize?: number
-  ) => {
-    const logoContent =
-      providerType === "onyx_web_crawler" ? (
-        <SvgOnyxLogo
-          width={size}
-          height={size}
-          className="text-[#111111] dark:text-[#f5f5f5]"
-        />
-      ) : providerType === "firecrawl" ? (
-        <Image
-          src="/firecrawl.svg"
-          alt="Firecrawl logo"
-          width={size}
-          height={size}
-        />
-      ) : (
-        <GlobeIcon size={size} className="text-text-02" />
-      );
-
-    const containerSizeClass =
-      size === 24 || containerSize === 28 ? "size-7" : "size-5";
-
-    return (
-      <div
-        className={`flex items-center justify-center ${containerSizeClass} px-0.5 py-0 shrink-0 overflow-clip`}
-      >
-        {logoContent}
-      </div>
-    );
-  };
-
-  const renderKeyBadge = (hasKey: boolean, onClick?: () => void) => {
-    const baseClasses =
-      "flex h-4 w-4 shrink-0 items-center justify-center self-center text-text-03";
-    const clickableClasses = onClick
-      ? "cursor-pointer hover:text-text-01 transition-colors"
-      : "";
-
-    const content = (
-      <SvgKey width={16} height={16} className="h-4 w-4 shrink-0" />
+  const combinedContentProviders = useMemo(() => {
+    const byType = new Map(
+      contentProviders.map((p) => [p.provider_type, p] as const)
     );
 
-    if (onClick) {
-      return (
-        <button
-          type="button"
-          onClick={onClick}
-          className={`${baseClasses} ${clickableClasses}`}
-          title="Click to update API key"
-          aria-label="Click to update API key"
-        >
-          {content}
-        </button>
-      );
-    }
-
-    return (
-      <span
-        className={baseClasses}
-        title={hasKey ? "API key stored" : "API key missing"}
-        aria-label={hasKey ? "API key stored" : "API key missing"}
-      >
-        {content}
-      </span>
-    );
-  };
-
-  const orderedContentProviders = useMemo(() => {
-    const existingProviders = new Map<
-      WebContentProviderType | string,
-      WebContentProviderView
-    >();
-    contentProviders.forEach((provider) => {
-      existingProviders.set(provider.provider_type, provider);
-    });
-
+    // Always include our built-in providers in a stable order. If missing, inject
+    // a virtual placeholder so the UI can still render/activate it.
     const ordered = CONTENT_PROVIDER_ORDER.map((providerType) => {
-      const provider = existingProviders.get(providerType);
-      return provider ?? null;
+      const existing = byType.get(providerType);
+      if (existing) return existing;
+
+      if (providerType === "onyx_web_crawler") {
+        return {
+          id: -1,
+          name: "Onyx Web Crawler",
+          provider_type: "onyx_web_crawler",
+          is_active: true,
+          config: null,
+          has_api_key: true,
+        } satisfies WebContentProviderView;
+      }
+
+      if (providerType === "firecrawl") {
+        return {
+          id: -2,
+          name: "Firecrawl",
+          provider_type: "firecrawl",
+          is_active: false,
+          config: null,
+          has_api_key: false,
+        } satisfies WebContentProviderView;
+      }
+
+      return null;
     }).filter(Boolean) as WebContentProviderView[];
 
     const additional = contentProviders.filter(
-      (provider) => !CONTENT_PROVIDER_ORDER.includes(provider.provider_type)
+      (p) => !CONTENT_PROVIDER_ORDER.includes(p.provider_type)
     );
 
     return [...ordered, ...additional];
   }, [contentProviders]);
 
-  const displayContentProviders = useMemo(() => {
-    const providers = [...orderedContentProviders];
-    const hasOnyx = providers.some(
-      (provider) => provider.provider_type === "onyx_web_crawler"
-    );
-    const hasFirecrawl = providers.some(
-      (provider) => provider.provider_type === "firecrawl"
-    );
-
-    if (!hasOnyx) {
-      providers.unshift({
-        id: -1,
-        name: "Onyx Web Crawler",
-        provider_type: "onyx_web_crawler",
-        is_active: true,
-        config: null,
-        has_api_key: true,
-      });
-    }
-
-    if (!hasFirecrawl) {
-      providers.push({
-        id: -2,
-        name: "Firecrawl",
-        provider_type: "firecrawl",
-        is_active: false,
-        config: null,
-        has_api_key: false,
-      });
-    }
-
-    return providers;
-  }, [orderedContentProviders]);
-
-  const currentContentProviderType = useMemo(() => {
-    const nonDefaultActive = contentProviders.find(
-      (provider) =>
-        provider.is_active && provider.provider_type !== "onyx_web_crawler"
-    );
-    if (nonDefaultActive) return nonDefaultActive.provider_type;
-
-    const anyActive = contentProviders.find((provider) => provider.is_active);
-    if (anyActive) return anyActive.provider_type;
-
-    return "onyx_web_crawler";
-  }, [contentProviders]);
+  const currentContentProviderType =
+    getCurrentContentProviderType(contentProviders);
 
   if (searchProvidersError || contentProvidersError) {
     const message =
@@ -803,7 +362,7 @@ export default function Page() {
         : undefined);
 
     return (
-      <div className="container mx-auto">
+      <div className="container">
         <AdminPageTitle
           title="Web Search"
           icon={SvgGlobe}
@@ -823,7 +382,7 @@ export default function Page() {
 
   if (isLoading) {
     return (
-      <div className="container mx-auto">
+      <div className="container">
         <AdminPageTitle
           title="Web Search"
           icon={SvgGlobe}
@@ -836,154 +395,74 @@ export default function Page() {
     );
   }
 
-  const getSearchProviderHelperMessage = () => {
-    if (searchErrorMessage) {
-      return searchErrorMessage;
-    }
-    if (searchStatusMessage) {
-      return searchStatusMessage;
-    }
-    if (isProcessingSearch) {
-      return "Validating API key...";
-    }
-
-    const providerDetails = selectedProviderType
-      ? SEARCH_PROVIDER_DETAILS[selectedProviderType]
-      : null;
-    const apiKeyUrl = providerDetails?.apiKeyUrl || "#";
-
-    return (
-      <>
-        Paste your{" "}
-        <a
-          href={apiKeyUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline"
-        >
-          API key
-        </a>{" "}
-        {selectedProviderType === "google_pse"
-          ? "from PSE"
-          : selectedProviderType === "serper"
-            ? "from Serper"
-            : "from Exa"}{" "}
-        to access your search engine.
-      </>
-    );
-  };
-
-  const getSearchProviderHelperClass = () => {
-    if (searchErrorMessage) return "text-status-error-05";
-    if (searchStatusMessage) {
-      return searchStatusMessage.toLowerCase().includes("validated")
-        ? "text-green-500"
-        : "text-text-03";
-    }
-    return "text-text-03";
-  };
-
   const handleSearchConnect = async () => {
     if (!selectedProviderType) {
       return;
     }
 
-    const trimmedKey = trimmedApiKey;
-    if (!trimmedKey) {
-      return;
-    }
-
-    const config: Record<string, string> = {};
-    if (selectedProviderType === "google_pse" && trimmedSearchEngineId) {
-      config.search_engine_id = trimmedSearchEngineId;
-    }
+    const config = buildSearchProviderConfig(
+      selectedProviderType,
+      searchProviderValues.config
+    );
 
     const existingProvider = searchProviders.find(
       (provider) => provider.provider_type === selectedProviderType
     );
 
-    setIsProcessingSearch(true);
-    setSearchErrorMessage(null);
-    setSearchStatusMessage("Validating API key...");
+    const providerRequiresApiKey =
+      searchProviderRequiresApiKey(selectedProviderType);
+    // Only consider "API key changed" for providers that actually use API keys,
+    // and only when a real key (not the masked placeholder) is provided.
+    const apiKeyChangedForProvider =
+      providerRequiresApiKey &&
+      searchModal.apiKeyValue !== MASKED_API_KEY_PLACEHOLDER &&
+      searchProviderValues.apiKey.length > 0;
+
+    // Check if config changed from stored values
+    const storedConfigValue = getSingleConfigFieldValueForForm(
+      selectedProviderType,
+      existingProvider
+    );
+    const configChanged =
+      Object.keys(config).length > 0 &&
+      storedConfigValue !== searchProviderValues.config;
+
+    dispatchSearchModal({ type: "SET_PHASE", phase: "saving" });
+    dispatchSearchModal({ type: "CLEAR_MESSAGE" });
     setActivationError(null);
 
-    try {
-      const testResponse = await fetch(
-        "/api/admin/web-search/search-providers/test",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            provider_type: selectedProviderType,
-            api_key: trimmedKey,
-            config,
-          }),
-        }
-      );
-
-      if (!testResponse.ok) {
-        const errorBody = await testResponse.json().catch(() => ({}));
-        throw new Error(
-          typeof errorBody?.detail === "string"
-            ? errorBody.detail
-            : "Failed to validate API key."
-        );
-      }
-
-      setSearchStatusMessage("API key validated. Activating provider...");
-
-      const payload = {
-        id: existingProvider?.id ?? null,
-        name:
-          existingProvider?.name ??
-          SEARCH_PROVIDER_LABEL[selectedProviderType] ??
-          selectedProviderType,
-        provider_type: selectedProviderType,
-        api_key: trimmedKey,
-        api_key_changed: true,
-        config,
-        activate: true,
-      };
-
-      const upsertResponse = await fetch(
-        "/api/admin/web-search/search-providers",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        }
-      );
-
-      if (!upsertResponse.ok) {
-        const errorBody = await upsertResponse.json().catch(() => ({}));
-        throw new Error(
-          typeof errorBody?.detail === "string"
-            ? errorBody.detail
-            : "Failed to activate provider."
-        );
-      }
-
-      await mutateSearchProviders();
-      setIsModalOpen(false);
-      setSelectedProviderType(null);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unexpected error occurred.";
-      setSearchErrorMessage(message);
-      setSearchStatusMessage(null);
-      setIsProcessingSearch(false);
-      return;
-    }
-
-    setIsProcessingSearch(false);
+    await connectProviderFlow({
+      category: "search",
+      providerType: selectedProviderType,
+      existingProviderId: existingProvider?.id ?? null,
+      existingProviderName: existingProvider?.name ?? null,
+      existingProviderHasApiKey: existingProvider?.has_api_key ?? false,
+      displayName:
+        SEARCH_PROVIDER_DETAILS[selectedProviderType]?.label ??
+        selectedProviderType,
+      providerRequiresApiKey,
+      apiKeyChangedForProvider,
+      apiKey: searchProviderValues.apiKey,
+      config,
+      configChanged,
+      onValidating: (message) => (
+        dispatchSearchModal({ type: "SET_PHASE", phase: "validating" }),
+        dispatchSearchModal({ type: "SET_STATUS_MESSAGE", text: message })
+      ),
+      onSaving: (message) => (
+        dispatchSearchModal({ type: "SET_PHASE", phase: "saving" }),
+        dispatchSearchModal({ type: "SET_STATUS_MESSAGE", text: message })
+      ),
+      onError: (message) =>
+        dispatchSearchModal({ type: "SET_ERROR_MESSAGE", text: message }),
+      onClose: () => {
+        dispatchSearchModal({ type: "CLOSE" });
+      },
+      mutate: mutateSearchProviders,
+    });
   };
 
   const handleActivateSearchProvider = async (providerId: number) => {
-    setActivatingProviderId(providerId);
     setActivationError(null);
 
     try {
@@ -1011,13 +490,10 @@ export default function Page() {
       const message =
         error instanceof Error ? error.message : "Unexpected error occurred.";
       setActivationError(message);
-    } finally {
-      setActivatingProviderId(null);
     }
   };
 
   const handleDeactivateSearchProvider = async (providerId: number) => {
-    setActivatingProviderId(providerId);
     setActivationError(null);
 
     try {
@@ -1045,15 +521,12 @@ export default function Page() {
       const message =
         error instanceof Error ? error.message : "Unexpected error occurred.";
       setActivationError(message);
-    } finally {
-      setActivatingProviderId(null);
     }
   };
 
   const handleActivateContentProvider = async (
     provider: WebContentProviderView
   ) => {
-    setActivatingContentProviderId(provider.id);
     setContentActivationError(null);
 
     try {
@@ -1100,7 +573,7 @@ export default function Page() {
           id: null,
           name:
             provider.name ||
-            CONTENT_PROVIDER_LABEL[provider.provider_type] ||
+            CONTENT_PROVIDER_DETAILS[provider.provider_type]?.label ||
             provider.provider_type,
           provider_type: provider.provider_type,
           api_key: null,
@@ -1135,8 +608,6 @@ export default function Page() {
       const message =
         error instanceof Error ? error.message : "Unexpected error occurred.";
       setContentActivationError(message);
-    } finally {
-      setActivatingContentProviderId(null);
     }
   };
 
@@ -1144,7 +615,6 @@ export default function Page() {
     providerId: number,
     providerType: string
   ) => {
-    setActivatingContentProviderId(providerId);
     setContentActivationError(null);
 
     try {
@@ -1176,24 +646,25 @@ export default function Page() {
       const message =
         error instanceof Error ? error.message : "Unexpected error occurred.";
       setContentActivationError(message);
-    } finally {
-      setActivatingContentProviderId(null);
     }
   };
 
   const getContentProviderHelperMessage = () => {
-    if (contentErrorMessage) {
-      return contentErrorMessage;
+    if (contentModal.message?.kind === "error") {
+      return contentModal.message.text;
     }
-    if (contentStatusMessage) {
-      return contentStatusMessage;
+    if (contentModal.message?.kind === "status") {
+      return contentModal.message.text;
     }
-    if (isProcessingContent) {
+    if (
+      contentModal.phase === "validating" ||
+      contentModal.phase === "saving"
+    ) {
       return "Validating API key...";
     }
 
     const providerName = selectedContentProviderType
-      ? CONTENT_PROVIDER_LABEL[selectedContentProviderType] ||
+      ? CONTENT_PROVIDER_DETAILS[selectedContentProviderType]?.label ||
         selectedContentProviderType
       : "";
 
@@ -1208,9 +679,9 @@ export default function Page() {
   };
 
   const getContentProviderHelperClass = () => {
-    if (contentErrorMessage) return "text-status-error-05";
-    if (contentStatusMessage) {
-      return contentStatusMessage.toLowerCase().includes("validated")
+    if (contentModal.message?.kind === "error") return "text-status-error-05";
+    if (contentModal.message?.kind === "status") {
+      return contentModal.message.text.toLowerCase().includes("validated")
         ? "text-green-500"
         : "text-text-03";
     }
@@ -1222,102 +693,66 @@ export default function Page() {
       return;
     }
 
-    const trimmedKey = trimmedContentApiKey;
-    if (!trimmedKey) {
-      return;
-    }
-
-    const config: Record<string, string> = {};
-    if (selectedContentProviderType === "firecrawl" && trimmedContentBaseUrl) {
-      config.base_url = trimmedContentBaseUrl;
-    }
+    const config = buildContentProviderConfig(
+      selectedContentProviderType,
+      contentProviderValues.config
+    );
 
     const existingProvider = contentProviders.find(
       (provider) => provider.provider_type === selectedContentProviderType
     );
 
-    setIsProcessingContent(true);
-    setContentErrorMessage(null);
-    setContentStatusMessage("Validating API key...");
+    // Check if config changed from stored values
+    const storedBaseUrl = getSingleContentConfigFieldValueForForm(
+      selectedContentProviderType,
+      existingProvider,
+      "https://api.firecrawl.dev/v1/scrape"
+    );
+    const configChanged =
+      selectedContentProviderType === "firecrawl" &&
+      storedBaseUrl !== contentProviderValues.config;
 
-    try {
-      const testResponse = await fetch(
-        "/api/admin/web-search/content-providers/test",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            provider_type: selectedContentProviderType,
-            api_key: trimmedKey,
-            config,
-          }),
-        }
-      );
+    // Reuse shared connect flow for key-based providers (firecrawl + similar).
+    // Note: onyx_web_crawler doesn't go through this modal.
+    dispatchContentModal({ type: "SET_PHASE", phase: "saving" });
+    dispatchContentModal({ type: "CLEAR_MESSAGE" });
 
-      if (!testResponse.ok) {
-        const errorBody = await testResponse.json().catch(() => ({}));
-        throw new Error(
-          typeof errorBody?.detail === "string"
-            ? errorBody.detail
-            : "Failed to validate API key."
-        );
-      }
-
-      setContentStatusMessage("API key validated. Activating crawler...");
-
-      const payload = {
-        id: existingProvider?.id ?? null,
-        name:
-          existingProvider?.name ??
-          CONTENT_PROVIDER_LABEL[selectedContentProviderType] ??
-          selectedContentProviderType,
-        provider_type: selectedContentProviderType,
-        api_key: trimmedKey,
-        api_key_changed: true,
-        config,
-        activate: true,
-      };
-
-      const upsertResponse = await fetch(
-        "/api/admin/web-search/content-providers",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        }
-      );
-
-      if (!upsertResponse.ok) {
-        const errorBody = await upsertResponse.json().catch(() => ({}));
-        throw new Error(
-          typeof errorBody?.detail === "string"
-            ? errorBody.detail
-            : "Failed to activate content provider."
-        );
-      }
-
-      await mutateContentProviders();
-      setIsContentModalOpen(false);
-      setSelectedContentProviderType(null);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unexpected error occurred.";
-      setContentErrorMessage(message);
-      setContentStatusMessage(null);
-      setIsProcessingContent(false);
-      return;
-    }
-
-    setIsProcessingContent(false);
+    await connectProviderFlow({
+      category: "content",
+      providerType: selectedContentProviderType,
+      existingProviderId: existingProvider?.id ?? null,
+      existingProviderName: existingProvider?.name ?? null,
+      existingProviderHasApiKey: existingProvider?.has_api_key ?? false,
+      displayName:
+        CONTENT_PROVIDER_DETAILS[selectedContentProviderType]?.label ??
+        selectedContentProviderType,
+      providerRequiresApiKey: true,
+      apiKeyChangedForProvider:
+        contentModal.apiKeyValue !== MASKED_API_KEY_PLACEHOLDER &&
+        contentProviderValues.apiKey.length > 0,
+      apiKey: contentProviderValues.apiKey,
+      config,
+      configChanged,
+      onValidating: (message) => (
+        dispatchContentModal({ type: "SET_PHASE", phase: "validating" }),
+        dispatchContentModal({ type: "SET_STATUS_MESSAGE", text: message })
+      ),
+      onSaving: (message) => (
+        dispatchContentModal({ type: "SET_PHASE", phase: "saving" }),
+        dispatchContentModal({ type: "SET_STATUS_MESSAGE", text: message })
+      ),
+      onError: (message) =>
+        dispatchContentModal({ type: "SET_ERROR_MESSAGE", text: message }),
+      onClose: () => {
+        dispatchContentModal({ type: "CLOSE" });
+      },
+      mutate: mutateContentProviders,
+    });
   };
 
   return (
     <>
-      <div className="container mx-auto">
+      <div className="container">
         <div className="w-full">
           <div className="mb-4">
             <HealthCheckBanner />
@@ -1376,7 +811,7 @@ export default function Page() {
                     </div>
                   </div>
                   <Text className="flex-1 px-0.5" mainUiBody text04>
-                    {hasStoredApiKey
+                    {hasConfiguredSearchProvider
                       ? "Select a search engine to enable web search."
                       : "Connect a search engine to set up web search."}
                   </Text>
@@ -1387,25 +822,25 @@ export default function Page() {
             <div className="flex flex-col gap-2 self-stretch">
               {combinedSearchProviders.map(
                 ({ key, providerType, label, subtitle, logoSrc, provider }) => {
-                  const hasStoredKey = provider?.has_api_key ?? false;
+                  const isConfigured = isSearchProviderConfigured(
+                    providerType,
+                    provider
+                  );
                   const isActive = provider?.is_active ?? false;
                   const isHighlighted = isActive;
-                  const statusLabel = "";
                   const providerId = provider?.id;
-                  const canOpenModal = typeof providerType === "string";
+                  const canOpenModal =
+                    isBuiltInSearchProviderType(providerType);
 
                   const buttonState = (() => {
-                    if (!provider || !hasStoredKey) {
+                    if (!provider || !isConfigured) {
                       return {
                         label: "Connect",
                         disabled: false,
                         icon: "arrow" as const,
                         onClick: canOpenModal
                           ? () => {
-                              setSelectedProviderType(
-                                providerType as WebSearchProviderType
-                              );
-                              setIsModalOpen(true);
+                              openSearchModal(providerType, provider);
                               setActivationError(null);
                             }
                           : undefined,
@@ -1426,12 +861,9 @@ export default function Page() {
                     }
 
                     return {
-                      label:
-                        activatingProviderId === providerId
-                          ? "Setting..."
-                          : "Set as Default",
-                      disabled: activatingProviderId === providerId,
-                      icon: hasStoredKey ? ("arrow-circle" as const) : null,
+                      label: "Set as Default",
+                      disabled: false,
+                      icon: "arrow-circle" as const,
                       onClick: providerId
                         ? () => {
                             void handleActivateSearchProvider(providerId);
@@ -1468,7 +900,12 @@ export default function Page() {
                       }`}
                     >
                       <div className="flex flex-1 items-start gap-1 px-2 py-1">
-                        {renderProviderLogo(logoSrc, label, 16, isHighlighted)}
+                        {renderLogo({
+                          logoSrc,
+                          alt: `${label} logo`,
+                          size: 16,
+                          isHighlighted,
+                        })}
                         <div className="flex flex-col gap-0.5">
                           <Text mainUiAction text05>
                             {label}
@@ -1479,22 +916,23 @@ export default function Page() {
                         </div>
                       </div>
                       <div className="flex items-center justify-end gap-2">
-                        {hasStoredKey &&
-                          renderKeyBadge(hasStoredKey, () => {
-                            if (
-                              typeof providerType === "string" &&
-                              (providerType === "google_pse" ||
-                                providerType === "serper" ||
-                                providerType === "exa")
-                            ) {
-                              setSelectedProviderType(
-                                providerType as WebSearchProviderType
+                        {isConfigured && (
+                          <IconButton
+                            icon={SvgEdit}
+                            tooltip="Edit"
+                            internal
+                            tertiary
+                            onClick={() => {
+                              if (!canOpenModal) return;
+                              openSearchModal(
+                                providerType as WebSearchProviderType,
+                                provider
                               );
-                              setIsModalOpen(true);
-                              setSearchStatusMessage(null);
-                              setSearchErrorMessage(null);
-                            }
-                          })}
+                            }}
+                            className="h-6 w-6 opacity-70 hover:opacity-100"
+                            aria-label={`Edit ${label}`}
+                          />
+                        )}
                         {buttonState.icon === "check" ? (
                           <HoverIconButton
                             isHovered={isButtonHovered}
@@ -1561,35 +999,32 @@ export default function Page() {
             )}
 
             <div className="flex flex-col gap-2 self-stretch">
-              {displayContentProviders.map((provider) => {
+              {combinedContentProviders.map((provider) => {
                 const label =
                   provider.name ||
-                  CONTENT_PROVIDER_LABEL[provider.provider_type] ||
+                  CONTENT_PROVIDER_DETAILS[provider.provider_type]?.label ||
                   provider.provider_type;
 
                 const subtitle =
                   CONTENT_PROVIDER_DETAILS[provider.provider_type]?.subtitle ||
-                  CONTENT_PROVIDER_LABEL[provider.provider_type] ||
                   provider.provider_type;
 
                 const providerId = provider.id;
-                const hasStoredKey =
-                  provider.provider_type === "onyx_web_crawler"
-                    ? true
-                    : provider.has_api_key ?? false;
+                const isConfigured = isContentProviderConfigured(
+                  provider.provider_type,
+                  provider
+                );
                 const isCurrentCrawler =
                   provider.provider_type === currentContentProviderType;
-                const isActivating = activatingContentProviderId === providerId;
 
                 const buttonState = (() => {
-                  if (!hasStoredKey) {
+                  if (!isConfigured) {
                     return {
                       label: "Connect",
                       icon: "arrow" as const,
                       disabled: false,
                       onClick: () => {
-                        setSelectedContentProviderType(provider.provider_type);
-                        setIsContentModalOpen(true);
+                        openContentModal(provider.provider_type, provider);
                         setContentActivationError(null);
                       },
                     };
@@ -1614,9 +1049,9 @@ export default function Page() {
                     provider.provider_type === "onyx_web_crawler";
 
                   return {
-                    label: isActivating ? "Setting..." : "Set as Default",
+                    label: "Set as Default",
                     icon: "arrow-circle" as const,
-                    disabled: isActivating || !canActivate,
+                    disabled: !canActivate,
                     onClick: canActivate
                       ? () => {
                           void handleActivateContentProvider(provider);
@@ -1658,10 +1093,18 @@ export default function Page() {
                     }`}
                   >
                     <div className="flex flex-1 items-start gap-1 px-2 py-1">
-                      {renderContentProviderLogo(
-                        provider.provider_type,
-                        isCurrentCrawler
-                      )}
+                      {renderLogo({
+                        logoSrc:
+                          CONTENT_PROVIDER_DETAILS[provider.provider_type]
+                            ?.logoSrc,
+                        alt: `${label} logo`,
+                        fallback:
+                          provider.provider_type === "onyx_web_crawler" ? (
+                            <SvgOnyxLogo width={16} height={16} />
+                          ) : undefined,
+                        size: 16,
+                        isHighlighted: isCurrentCrawler,
+                      })}
                       <div className="flex flex-col gap-0.5">
                         <Text mainUiAction text05>
                           {label}
@@ -1673,15 +1116,22 @@ export default function Page() {
                     </div>
                     <div className="flex items-center justify-end gap-2">
                       {provider.provider_type !== "onyx_web_crawler" &&
-                        hasStoredKey &&
-                        renderKeyBadge(true, () => {
-                          setSelectedContentProviderType(
-                            provider.provider_type
-                          );
-                          setIsContentModalOpen(true);
-                          setContentStatusMessage(null);
-                          setContentErrorMessage(null);
-                        })}
+                        isConfigured && (
+                          <IconButton
+                            icon={SvgEdit}
+                            tooltip="Edit"
+                            internal
+                            tertiary
+                            onClick={() => {
+                              openContentModal(
+                                provider.provider_type,
+                                provider
+                              );
+                            }}
+                            className="h-6 w-6 opacity-70 hover:opacity-100"
+                            aria-label={`Edit ${label}`}
+                          />
+                        )}
                       {buttonState.icon === "check" ? (
                         <HoverIconButton
                           isHovered={isContentButtonHovered}
@@ -1730,22 +1180,20 @@ export default function Page() {
         </div>
       </div>
 
-      <ProviderSetupModal
-        isOpen={isModalOpen && !!selectedProviderType}
+      <WebProviderSetupModal
+        isOpen={selectedProviderType !== null}
         onClose={() => {
-          setIsModalOpen(false);
-          setSelectedProviderType(null);
+          dispatchSearchModal({ type: "CLOSE" });
         }}
         providerLabel={providerLabel}
-        providerLogo={renderProviderLogo(
-          selectedProviderType
+        providerLogo={renderLogo({
+          logoSrc: selectedProviderType
             ? SEARCH_PROVIDER_DETAILS[selectedProviderType]?.logoSrc
             : undefined,
-          providerLabel,
-          24,
-          false,
-          28
-        )}
+          alt: `${providerLabel} logo`,
+          size: 24,
+          containerSize: 28,
+        })}
         description={
           selectedProviderType
             ? SEARCH_PROVIDER_DETAILS[selectedProviderType]?.helper ??
@@ -1753,14 +1201,17 @@ export default function Page() {
               ""
             : ""
         }
-        apiKeyValue={apiKeyValue}
-        onApiKeyChange={(value) => setApiKeyValue(value)}
+        apiKeyValue={searchModal.apiKeyValue}
+        onApiKeyChange={(value) =>
+          dispatchSearchModal({ type: "SET_API_KEY", value })
+        }
         optionalField={
           selectedProviderType === "google_pse"
             ? {
                 label: "Search Engine ID",
-                value: searchEngineIdValue,
-                onChange: (value) => setSearchEngineIdValue(value),
+                value: searchModal.configValue,
+                onChange: (value) =>
+                  dispatchSearchModal({ type: "SET_CONFIG_VALUE", value }),
                 placeholder: "Enter search engine ID",
                 description: (
                   <>
@@ -1777,30 +1228,100 @@ export default function Page() {
                   </>
                 ),
               }
-            : undefined
+            : selectedProviderType === "searxng"
+              ? {
+                  label: "SearXNG Base URL",
+                  value: searchModal.configValue,
+                  onChange: (value) =>
+                    dispatchSearchModal({ type: "SET_CONFIG_VALUE", value }),
+                  placeholder: "https://your-searxng-instance.com",
+                  description: (
+                    <>
+                      Paste the base URL of your{" "}
+                      <a
+                        href="https://docs.searxng.org/admin/installation.html"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline"
+                      >
+                        private SearXNG instance
+                      </a>
+                      .
+                    </>
+                  ),
+                }
+              : undefined
         }
-        helperMessage={getSearchProviderHelperMessage()}
-        helperClass={getSearchProviderHelperClass()}
-        isProcessing={isProcessingSearch}
+        helperMessage={
+          searchModal.message?.kind === "error" ? (
+            searchModal.message.text
+          ) : searchModal.phase === "validating" ||
+            searchModal.phase === "saving" ? (
+            "Checking connection..."
+          ) : (
+            <>
+              Paste your{" "}
+              <a
+                href={
+                  (selectedProviderType
+                    ? SEARCH_PROVIDER_DETAILS[selectedProviderType]?.apiKeyUrl
+                    : undefined) ?? "#"
+                }
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                API key
+              </a>{" "}
+              to access your search engine.
+            </>
+          )
+        }
+        helperClass={
+          searchModal.message?.kind === "error"
+            ? "text-status-error-05"
+            : searchModal.phase === "validating" ||
+                searchModal.phase === "saving"
+              ? "text-text-03"
+              : "text-text-03"
+        }
+        isProcessing={
+          searchModal.phase === "validating" || searchModal.phase === "saving"
+        }
         canConnect={canConnect}
         onConnect={() => {
           void handleSearchConnect();
         }}
+        hideApiKey={
+          !!selectedProviderType &&
+          !searchProviderRequiresApiKey(selectedProviderType)
+        }
       />
 
-      <ProviderSetupModal
-        isOpen={isContentModalOpen && !!selectedContentProviderType}
+      <WebProviderSetupModal
+        isOpen={selectedContentProviderType !== null}
         onClose={() => {
-          setIsContentModalOpen(false);
-          setSelectedContentProviderType(null);
+          dispatchContentModal({ type: "CLOSE" });
         }}
         providerLabel={contentProviderLabel}
-        providerLogo={renderContentProviderLogo(
-          selectedContentProviderType || "",
-          false,
-          24,
-          28
-        )}
+        providerLogo={renderLogo({
+          logoSrc: selectedContentProviderType
+            ? CONTENT_PROVIDER_DETAILS[selectedContentProviderType]?.logoSrc
+            : undefined,
+          alt: `${
+            contentProviderLabel || selectedContentProviderType || "provider"
+          } logo`,
+          fallback:
+            selectedContentProviderType === "onyx_web_crawler" ? (
+              <SvgOnyxLogo
+                width={24}
+                height={24}
+                className="text-[#111111] dark:text-[#f5f5f5]"
+              />
+            ) : undefined,
+          size: 24,
+          containerSize: 28,
+        })}
         description={
           selectedContentProviderType
             ? CONTENT_PROVIDER_DETAILS[selectedContentProviderType]
@@ -1809,14 +1330,17 @@ export default function Page() {
               `Provide credentials for ${contentProviderLabel} to enable crawling.`
             : ""
         }
-        apiKeyValue={contentApiKeyValue}
-        onApiKeyChange={(value) => setContentApiKeyValue(value)}
+        apiKeyValue={contentModal.apiKeyValue}
+        onApiKeyChange={(value) =>
+          dispatchContentModal({ type: "SET_API_KEY", value })
+        }
         optionalField={
           selectedContentProviderType === "firecrawl"
             ? {
                 label: "API Base URL",
-                value: contentBaseUrlValue,
-                onChange: (value) => setContentBaseUrlValue(value),
+                value: contentModal.configValue,
+                onChange: (value) =>
+                  dispatchContentModal({ type: "SET_CONFIG_VALUE", value }),
                 placeholder: "https://",
                 description: "Your Firecrawl API base URL.",
                 showFirst: true,
@@ -1825,7 +1349,9 @@ export default function Page() {
         }
         helperMessage={getContentProviderHelperMessage()}
         helperClass={getContentProviderHelperClass()}
-        isProcessing={isProcessingContent}
+        isProcessing={
+          contentModal.phase === "validating" || contentModal.phase === "saving"
+        }
         canConnect={canConnectContent}
         onConnect={() => {
           void handleContentConnect();

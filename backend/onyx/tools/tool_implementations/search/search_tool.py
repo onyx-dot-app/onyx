@@ -220,7 +220,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # Used for filter settings
         persona: Persona,
         llm: LLM,
-        fast_llm: LLM,
         document_index: DocumentIndex,
         # Respecting user selections
         user_selected_filters: BaseFilters | None,
@@ -235,7 +234,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.user = user
         self.persona = persona
         self.llm = llm
-        self.fast_llm = fast_llm
         self.document_index = document_index
         self.user_selected_filters = user_selected_filters
         self.project_id = project_id
@@ -347,10 +345,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             },
         }
 
-    def emit_start(self, turn_index: int) -> None:
+    def emit_start(self, turn_index: int, tab_index: int) -> None:
         self.emitter.emit(
             Packet(
                 turn_index=turn_index,
+                tab_index=tab_index,
                 obj=SearchToolStart(),
             )
         )
@@ -359,6 +358,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
     def run(
         self,
         turn_index: int,
+        tab_index: int,
         override_kwargs: SearchToolOverrideKwargs,
         **llm_kwargs: Any,
     ) -> ToolResponse:
@@ -479,6 +479,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             self.emitter.emit(
                 Packet(
                     turn_index=turn_index,
+                    tab_index=tab_index,
                     obj=SearchToolQueriesDelta(
                         queries=all_queries,
                     ),
@@ -587,6 +588,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             self.emitter.emit(
                 Packet(
                     turn_index=turn_index,
+                    tab_index=tab_index,
                     obj=SearchToolDocumentsDelta(
                         documents=final_ui_docs,
                     ),

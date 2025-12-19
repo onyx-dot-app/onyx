@@ -1,5 +1,4 @@
 import os
-from collections.abc import Callable
 from datetime import datetime
 from datetime import timezone
 
@@ -32,14 +31,13 @@ from onyx.db.llm import upsert_llm_provider
 from onyx.db.llm import validate_persona_ids_exist
 from onyx.db.models import User
 from onyx.db.persona import user_can_access_persona
-from onyx.llm.factory import get_default_llms
+from onyx.llm.factory import get_default_llm
 from onyx.llm.factory import get_llm
 from onyx.llm.factory import get_max_input_tokens_from_llm_provider
 from onyx.llm.llm_provider_options import fetch_available_well_known_llms
 from onyx.llm.llm_provider_options import WellKnownLLMProviderDescriptor
 from onyx.llm.utils import get_bedrock_token_limit
 from onyx.llm.utils import get_llm_contextual_cost
-from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.utils import test_llm
 from onyx.server.manage.llm.models import BedrockFinalModelResponse
@@ -64,7 +62,6 @@ from onyx.server.manage.llm.utils import is_valid_bedrock_model
 from onyx.server.manage.llm.utils import ModelMetadata
 from onyx.server.manage.llm.utils import strip_openrouter_vendor_prefix
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
 
@@ -92,7 +89,7 @@ def test_llm_configuration(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    """Test regular llm and fast llm settings"""
+    """Test LLM configuration settings"""
 
     # the api key is sanitized if we are testing a provider already in the system
 
@@ -123,36 +120,10 @@ def test_llm_configuration(
         max_input_tokens=max_input_tokens,
     )
 
-    functions_with_args: list[tuple[Callable, tuple]] = [(test_llm, (llm,))]
-    if (
-        test_llm_request.fast_default_model_name
-        and test_llm_request.fast_default_model_name
-        != test_llm_request.default_model_name
-    ):
-        fast_llm = get_llm(
-            provider=test_llm_request.provider,
-            model=test_llm_request.fast_default_model_name,
-            api_key=test_api_key,
-            api_base=test_llm_request.api_base,
-            api_version=test_llm_request.api_version,
-            custom_config=test_llm_request.custom_config,
-            deployment_name=test_llm_request.deployment_name,
-            max_input_tokens=max_input_tokens,
-        )
-        functions_with_args.append((test_llm, (fast_llm,)))
+    error_msg = test_llm(llm)
 
-    parallel_results = run_functions_tuples_in_parallel(
-        functions_with_args, allow_failures=False
-    )
-    error = parallel_results[0] or (
-        parallel_results[1] if len(parallel_results) > 1 else None
-    )
-
-    if error:
-        client_error_msg = litellm_exception_to_error_msg(
-            error, llm, fallback_to_error_msg=True
-        )
-        raise HTTPException(status_code=400, detail=client_error_msg)
+    if error_msg:
+        raise HTTPException(status_code=400, detail=error_msg)
 
 
 @admin_router.post("/test/default")
@@ -160,21 +131,12 @@ def test_default_provider(
     _: User | None = Depends(current_admin_user),
 ) -> None:
     try:
-        llm, fast_llm = get_default_llms()
+        llm = get_default_llm()
     except ValueError:
         logger.exception("Failed to fetch default LLM Provider")
         raise HTTPException(status_code=400, detail="No LLM Provider setup")
 
-    functions_with_args: list[tuple[Callable, tuple]] = [
-        (test_llm, (llm,)),
-        (test_llm, (fast_llm,)),
-    ]
-    parallel_results = run_functions_tuples_in_parallel(
-        functions_with_args, allow_failures=False
-    )
-    error = parallel_results[0] or (
-        parallel_results[1] if len(parallel_results) > 1 else None
-    )
+    error = test_llm(llm)
     if error:
         raise HTTPException(status_code=400, detail=str(error))
 
@@ -254,34 +216,18 @@ def put_llm_provider(
         llm_provider_upsert_request.personas = deduplicated_personas
 
     default_model_found = False
-    default_fast_model_found = False
 
     for model_configuration in llm_provider_upsert_request.model_configurations:
         if model_configuration.name == llm_provider_upsert_request.default_model_name:
             model_configuration.is_visible = True
             default_model_found = True
-        if (
-            llm_provider_upsert_request.fast_default_model_name
-            and llm_provider_upsert_request.fast_default_model_name
-            == model_configuration.name
-        ):
-            model_configuration.is_visible = True
-            default_fast_model_found = True
 
-    default_inserts = set()
     if not default_model_found:
-        default_inserts.add(llm_provider_upsert_request.default_model_name)
-
-    if (
-        llm_provider_upsert_request.fast_default_model_name
-        and not default_fast_model_found
-    ):
-        default_inserts.add(llm_provider_upsert_request.fast_default_model_name)
-
-    llm_provider_upsert_request.model_configurations.extend(
-        ModelConfigurationUpsertRequest(name=name, is_visible=True)
-        for name in default_inserts
-    )
+        llm_provider_upsert_request.model_configurations.append(
+            ModelConfigurationUpsertRequest(
+                name=llm_provider_upsert_request.default_model_name, is_visible=True
+            )
+        )
 
     # the llm api key is sanitized when returned to clients, so the only time we
     # should get a real key is when it is explicitly changed

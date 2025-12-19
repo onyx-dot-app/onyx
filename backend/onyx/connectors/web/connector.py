@@ -18,6 +18,7 @@ from oauthlib.oauth2 import BackendApplicationClient
 from playwright.sync_api import BrowserContext
 from playwright.sync_api import Playwright
 from playwright.sync_api import sync_playwright
+from playwright.sync_api import TimeoutError
 from requests_oauthlib import OAuth2Session  # type:ignore
 from urllib3.exceptions import MaxRetryError
 
@@ -86,6 +87,8 @@ WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS = 20
 IFRAME_TEXT_LENGTH_THRESHOLD = 700
 # Message indicating JavaScript is disabled, which often appears when scraping fails
 JAVASCRIPT_DISABLED_MESSAGE = "You have JavaScript disabled in your browser"
+# Grace period after page navigation to allow bot-detection challenges to complete
+BOT_DETECTION_GRACE_PERIOD_MS = 5000
 
 # Define common headers that mimic a real browser
 DEFAULT_USER_AGENT = (
@@ -554,12 +557,17 @@ class WebConnector(LoadConnector):
 
         page = session_ctx.playwright_context.new_page()
         try:
-            # Can't use wait_until="networkidle" because it interferes with the scrolling behavior
+            # Use "commit" instead of "domcontentloaded" to avoid hanging on bot-detection pages
+            # that may never fire domcontentloaded. "commit" waits only for navigation to be
+            # committed (response received), then we add a short wait for initial rendering.
             page_response = page.goto(
                 initial_url,
                 timeout=30000,  # 30 seconds
-                wait_until="domcontentloaded",  # Wait for DOM to be ready
+                wait_until="commit",  # Wait for navigation to commit
             )
+            # Give the page a moment to start rendering after navigation commits.
+            # Allows CloudFlare and other bot-detection challenges to complete.
+            page.wait_for_timeout(BOT_DETECTION_GRACE_PERIOD_MS)
 
             last_modified = (
                 page_response.header_value("Last-Modified") if page_response else None
@@ -584,8 +592,15 @@ class WebConnector(LoadConnector):
                 previous_height = page.evaluate("document.body.scrollHeight")
                 while scroll_attempts < WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS:
                     page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                    # wait for the content to load if we scrolled
-                    page.wait_for_load_state("networkidle", timeout=30000)
+                    # Wait for content to load, but catch timeout if page never reaches networkidle
+                    # (e.g., CloudFlare protection keeps making requests)
+                    try:
+                        page.wait_for_load_state(
+                            "networkidle", timeout=BOT_DETECTION_GRACE_PERIOD_MS
+                        )
+                    except TimeoutError:
+                        # If networkidle times out, just give it a moment for content to render
+                        time.sleep(1)
                     time.sleep(0.5)  # let javascript run
 
                     new_height = page.evaluate("document.body.scrollHeight")

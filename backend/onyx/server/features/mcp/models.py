@@ -1,3 +1,4 @@
+import datetime
 from enum import Enum
 from typing import Any
 from typing import List
@@ -297,6 +298,7 @@ class MCPServer(BaseModel):
     is_authenticated: bool
     user_authenticated: Optional[bool] = None
     status: MCPServerStatus
+    last_refreshed_at: Optional[datetime.datetime] = None
     tool_count: int = Field(
         default=0, description="Number of tools associated with this server"
     )

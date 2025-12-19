@@ -16,7 +16,6 @@ import HumanMessage from "@/app/chat/message/HumanMessage";
 import { ErrorBanner } from "@/app/chat/message/Resubmit";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
-import { FileDescriptor } from "@/app/chat/interfaces";
 import AIMessage from "@/app/chat/message/messageComponents/AIMessage";
 import { ProjectFile } from "@/app/chat/projects/projectsService";
 import { useScrollonStream } from "@/app/chat/services/lib";
@@ -58,7 +57,6 @@ export interface ChatUIProps {
     forceSearch?: boolean;
     queryOverride?: string;
     isSeededChat?: boolean;
-    overrideFileDescriptors?: FileDescriptor[];
   }) => Promise<void>;
   onMessageSelection: (nodeId: number) => void;
   stopGenerating: () => void;
@@ -254,6 +252,10 @@ const ChatUI = React.forwardRef(
                     <ErrorBanner
                       resubmit={handleResubmitLastMessage}
                       error={error || loadError || ""}
+                      errorCode={message.errorCode || undefined}
+                      isRetryable={message.isRetryable ?? true}
+                      details={message.errorDetails || undefined}
+                      stackTrace={message.stackTrace || undefined}
                     />
                   </div>
                 );
@@ -308,6 +310,16 @@ const ChatUI = React.forwardRef(
               <ErrorBanner
                 resubmit={handleResubmitLastMessage}
                 error={error || loadError || ""}
+                errorCode={
+                  messages[messages.length - 1]?.errorCode || undefined
+                }
+                isRetryable={messages[messages.length - 1]?.isRetryable ?? true}
+                details={
+                  messages[messages.length - 1]?.errorDetails || undefined
+                }
+                stackTrace={
+                  messages[messages.length - 1]?.stackTrace || undefined
+                }
               />
             </div>
           )}

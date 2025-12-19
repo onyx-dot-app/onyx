@@ -79,7 +79,7 @@ function Main() {
   }
 
   return (
-    <div className="h-screen">
+    <div>
       {searchSettingsPopup}
       {!futureEmbeddingModel ? (
         <>
@@ -178,7 +178,7 @@ function Main() {
 
 export default function Page() {
   return (
-    <div className="mx-auto container">
+    <div className="container">
       <AdminPageTitle title="Search Settings" icon={SvgSearch} />
       <Main />
     </div>

@@ -46,7 +46,7 @@ const Main = () => {
   }
 
   return (
-    <div className="mb-8">
+    <div>
       <Title className="mb-2">Most Liked Documents</Title>
       <DocumentFeedbackTable documents={mostLikedDocuments} refresh={refresh} />
 
@@ -61,7 +61,7 @@ const Main = () => {
 
 const Page = () => {
   return (
-    <div className="container mx-auto">
+    <div className="container">
       <AdminPageTitle icon={SvgThumbsUp} title="Document Feedback" />
 
       <Main />

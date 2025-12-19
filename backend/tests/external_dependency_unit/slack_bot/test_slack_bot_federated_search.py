@@ -419,7 +419,6 @@ class TestSlackBotFederatedSearch:
             provider="openai",
             api_key=api_key,
             default_model_name="gpt-4o",
-            fast_default_model_name="gpt-4o-mini",
             is_default_provider=True,
             is_public=True,
         )

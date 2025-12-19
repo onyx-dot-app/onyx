@@ -11,7 +11,7 @@ import Separator from "@/refresh-components/Separator";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { MethodSpec, ToolSnapshot } from "@/lib/tools/types";
+import { MethodSpec, ToolSnapshot } from "@/lib/tools/interfaces";
 import {
   validateToolDefinition,
   createCustomTool,
@@ -28,8 +28,11 @@ import {
   SvgActions,
   SvgBracketCurly,
   SvgCheckCircle,
+  SvgAlertCircle,
   SvgUnplug,
 } from "@opal/icons";
+import InfoBlock from "@/refresh-components/messages/InfoBlock";
+import { getActionIcon } from "@/lib/tools/mcpUtils";
 
 interface AddOpenAPIActionModalProps {
   skipOverlay?: boolean;
@@ -101,6 +104,9 @@ export default function AddOpenAPIActionModal({
   const { isOpen, toggle } = useModal();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [methodSpecs, setMethodSpecs] = useState<MethodSpec[] | null>(null);
+  const [name, setName] = useState<string | null>(null);
+  const [description, setDescription] = useState<string | undefined>(undefined);
+  const [url, setUrl] = useState<string | undefined>(undefined);
   const [definitionError, setDefinitionError] = useState<string | null>(null);
   const isEditMode = Boolean(existingTool);
 
@@ -158,6 +164,14 @@ export default function AddOpenAPIActionModal({
 
     try {
       const parsedDefinition = parseJsonWithTrailingCommas(rawDefinition);
+      const derivedName = parsedDefinition?.info?.title;
+      const derivedDescription = parsedDefinition?.info?.description;
+      const derivedUrl = parsedDefinition?.servers?.[0]?.url;
+
+      setName(derivedName);
+      setDescription(derivedDescription);
+      setUrl(derivedUrl);
+
       const response = await validateToolDefinition({
         definition: parsedDefinition,
       });
@@ -327,6 +341,7 @@ export default function AddOpenAPIActionModal({
               handleChange,
               handleBlur,
               setFieldValue,
+              dirty,
             }) => {
               // Effect for validating definition
               useEffect(() => {
@@ -340,6 +355,7 @@ export default function AddOpenAPIActionModal({
                 }
 
                 debouncedValidateDefinition(values.definition);
+
                 return () => {
                   debouncedValidateDefinition.cancel();
                 };
@@ -425,22 +441,39 @@ export default function AddOpenAPIActionModal({
                     <Separator className="my-0 py-0" />
 
                     {methodSpecs && methodSpecs.length > 0 ? (
-                      <div className="flex flex-col gap-2">
-                        {methodSpecs.map((method) => (
-                          <ToolItem
-                            key={`${method.method}-${method.path}-${method.name}`}
-                            name={method.name}
-                            description={
-                              method.summary || "No summary provided"
-                            }
-                            variant="openapi"
-                            openApiMetadata={{
-                              method: method.method,
-                              path: method.path,
-                            }}
+                      <>
+                        {name && (
+                          <InfoBlock
+                            icon={getActionIcon(url || "", name || "")}
+                            title={name}
+                            description={description}
                           />
-                        ))}
-                      </div>
+                        )}
+                        {url && (
+                          <InfoBlock
+                            icon={SvgAlertCircle}
+                            title={url || ""}
+                            description="URL found in the schema. Only connect to servers you trust."
+                          />
+                        )}
+                        <Separator className="my-0 py-0" />
+                        <div className="flex flex-col gap-2">
+                          {methodSpecs.map((method) => (
+                            <ToolItem
+                              key={`${method.method}-${method.path}-${method.name}`}
+                              name={method.name}
+                              description={
+                                method.summary || "No summary provided"
+                              }
+                              variant="openapi"
+                              openApiMetadata={{
+                                method: method.method,
+                                path: method.path,
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </>
                     ) : (
                       <div className="flex flex-row gap-3 items-start p-1.5 rounded-08 border border-border-01 border-dashed">
                         <div className="rounded-08 bg-background-tint-01 p-1 flex items-center justify-center">
@@ -504,7 +537,7 @@ export default function AddOpenAPIActionModal({
                     )}
                   </Modal.Body>
 
-                  <Modal.Footer className="p-4 gap-2 bg-background-tint-00">
+                  <Modal.Footer className="gap-2">
                     <Button
                       main
                       secondary
@@ -514,7 +547,12 @@ export default function AddOpenAPIActionModal({
                     >
                       Cancel
                     </Button>
-                    <Button main primary type="submit" disabled={isSubmitting}>
+                    <Button
+                      main
+                      primary
+                      type="submit"
+                      disabled={isSubmitting || !dirty}
+                    >
                       {primaryButtonLabel}
                     </Button>
                   </Modal.Footer>

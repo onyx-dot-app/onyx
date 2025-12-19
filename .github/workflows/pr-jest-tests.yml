@@ -4,7 +4,14 @@ concurrency:
   cancel-in-progress: true
 
 on:
+  merge_group:
+  pull_request:
+    branches:
+      - main
+      - "release/**"
   push:
+    tags:
+      - "v*.*.*"
 
 permissions:
   contents: read

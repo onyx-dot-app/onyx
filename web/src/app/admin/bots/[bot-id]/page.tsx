@@ -98,7 +98,7 @@ export default function Page({
   params: Promise<{ "bot-id": string }>;
 }) {
   return (
-    <div className="container mx-auto">
+    <div className="container">
       <SlackBotEditPage params={params} />
     </div>
   );

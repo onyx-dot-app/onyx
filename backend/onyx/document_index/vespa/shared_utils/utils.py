@@ -64,10 +64,9 @@ def remove_invalid_unicode_chars(text: str) -> str:
 
 def get_vespa_http_client(no_timeout: bool = False, http2: bool = True) -> httpx.Client:
     """
-    Configure and return an HTTP client for communicating with Vespa,
+    Configures and returns an HTTP client for communicating with Vespa,
     including authentication if needed.
     """
-
     return httpx.Client(
         cert=(
             cast(tuple[str, str], (VESPA_CLOUD_CERT_PATH, VESPA_CLOUD_KEY_PATH))

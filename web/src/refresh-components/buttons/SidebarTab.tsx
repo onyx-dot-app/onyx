@@ -118,7 +118,13 @@ export default function SidebarTab({
     </div>
   );
 
-  const content = href ? <Link href={href}>{innerContent}</Link> : innerContent;
+  const content = href ? (
+    <Link href={href} scroll={false}>
+      {innerContent}
+    </Link>
+  ) : (
+    innerContent
+  );
 
   if (typeof children !== "string") return content;
   if (folded)

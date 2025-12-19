@@ -53,7 +53,7 @@ async function NewChannelConfigPage(props: {
   }
 
   return (
-    <div className="container max-w-4xl mx-auto">
+    <div className="container max-w-4xl">
       <BackButton />
       <AdminPageTitle
         icon={<SourceIcon iconSize={32} sourceType={ValidSources.Slack} />}

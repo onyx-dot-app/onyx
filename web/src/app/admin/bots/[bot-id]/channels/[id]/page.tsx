@@ -84,7 +84,7 @@ async function EditslackChannelConfigPage(props: {
   }
 
   return (
-    <div className="max-w-4xl container mx-auto">
+    <div className="max-w-4xl container">
       <InstantSSRAutoRefresh />
 
       <BackButton />

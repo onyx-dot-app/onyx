@@ -11,6 +11,8 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn, noProp } from "@/lib/utils";
 import type { IconProps } from "@opal/types";
 import { SvgChevronRight, SvgKey, SvgSettings, SvgSlash } from "@opal/icons";
+import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
+import { useRouter } from "next/navigation";
 
 export interface ActionItemProps {
   tool?: ToolSnapshot;
@@ -24,6 +26,7 @@ export interface ActionItemProps {
   hasNoConnectors?: boolean;
   toolAuthStatus?: ToolAuthStatus;
   onOAuthAuthenticate?: () => void;
+  onClose?: () => void;
 }
 
 export default function ActionLineItem({
@@ -38,13 +41,26 @@ export default function ActionLineItem({
   hasNoConnectors = false,
   toolAuthStatus,
   onOAuthAuthenticate,
+  onClose,
 }: ActionItemProps) {
+  const router = useRouter();
+  const { currentProjectId } = useProjectsContext();
+
   const Icon = tool ? getIconForAction(tool) : ProvidedIcon!;
-  const label = tool ? tool.display_name || tool.name : providedLabel!;
   const toolName = tool?.name || providedLabel || "";
 
+  let label = tool ? tool.display_name || tool.name : providedLabel!;
+  if (!!currentProjectId && tool?.in_code_tool_id === SEARCH_TOOL_ID) {
+    label = "Project Search";
+  }
+
   const isSearchToolWithNoConnectors =
-    tool?.in_code_tool_id === SEARCH_TOOL_ID && hasNoConnectors;
+    !currentProjectId &&
+    tool?.in_code_tool_id === SEARCH_TOOL_ID &&
+    hasNoConnectors;
+
+  const isSearchToolAndNotInProject =
+    tool?.in_code_tool_id === SEARCH_TOOL_ID && !currentProjectId;
 
   return (
     <SimpleTooltip tooltip={tool?.description} className="max-w-[30rem]">
@@ -52,11 +68,14 @@ export default function ActionLineItem({
         <LineItem
           onClick={() => {
             if (isSearchToolWithNoConnectors) return;
-            if (onToggle && disabled) onToggle();
+            if (disabled) onToggle();
             onForceToggle();
+            if (isSearchToolAndNotInProject && !isForced)
+              onSourceManagementOpen?.();
+            else onClose?.();
           }}
           selected={isForced}
-          strikethrough={disabled}
+          strikethrough={disabled || isSearchToolWithNoConnectors}
           icon={Icon}
           rightChildren={
             <div className="flex flex-row items-center gap-1">
@@ -92,23 +111,26 @@ export default function ActionLineItem({
                   tooltip={disabled ? "Enable" : "Disable"}
                 />
               )}
-
-              {tool && tool.in_code_tool_id === SEARCH_TOOL_ID && (
+              {isSearchToolAndNotInProject && (
                 <IconButton
                   icon={
                     isSearchToolWithNoConnectors ? SvgSettings : SvgChevronRight
                   }
                   onClick={noProp(() => {
                     if (isSearchToolWithNoConnectors)
-                      window.location.href = "/admin/add-connector";
+                      router.push("/admin/add-connector");
                     else onSourceManagementOpen?.();
                   })}
                   internal
                   className={cn(
                     isSearchToolWithNoConnectors &&
-                      "invisible grouop-hover/LineItem:visible"
+                      "invisible group-hover/LineItem:visible"
                   )}
-                  tooltip={isSearchToolWithNoConnectors ? "Settings" : "More"}
+                  tooltip={
+                    isSearchToolWithNoConnectors
+                      ? "Add Connectors"
+                      : "Configure Connectors"
+                  }
                 />
               )}
             </div>

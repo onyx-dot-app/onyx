@@ -486,7 +486,11 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
       )}
 
       <SidebarWrapper folded={folded} onFoldClick={onFoldClick}>
-        <SidebarBody footer={settingsButton} actionButton={newSessionButton}>
+        <SidebarBody
+          scrollKey="app-sidebar"
+          footer={settingsButton}
+          actionButton={newSessionButton}
+        >
           {/* When folded, show icons immediately without waiting for data */}
           {folded ? (
             <>

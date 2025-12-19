@@ -63,7 +63,7 @@ function Main() {
 
 const Page = () => {
   return (
-    <div className="container mx-auto">
+    <div className="container">
       <BackButton />
 
       <AdminPageTitle
