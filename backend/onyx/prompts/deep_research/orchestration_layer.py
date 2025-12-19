@@ -32,7 +32,7 @@ Focus on providing a thorough research of the user's query over being helpful.
 
 For context, the date is {current_datetime}.
 
-The research plan should be formatted as a numbered list of steps and have less than 7 individual steps.
+The research plan should be formatted as a numbered list of steps and have 6 or less individual steps.
 
 Each step should be a standalone exploration question or topic that can be researched independently but may build on previous steps.
 
