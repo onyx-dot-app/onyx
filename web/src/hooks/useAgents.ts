@@ -26,24 +26,13 @@ export function useAgents() {
   };
 }
 
-export function usePinnedAgents() {
-  // Pinned assistants come from the user context (fetched server-side via /me)
-  // There is no GET endpoint for /api/user/pinned-assistants, only PATCH
-  const { user, refreshUser } = useUser();
-
-  return {
-    pinnedAgentIds: user?.preferences?.pinned_assistants ?? [],
-    refresh: refreshUser,
-  };
-}
-
 /**
  * Hook that combines useAgents and usePinnedAgents to return full agent objects
  * with local state for optimistic drag-and-drop updates.
  */
 export function usePinnedAgentsWithDetails() {
+  const { user, refreshUser } = useUser();
   const { agents, isLoading: isLoadingAgents } = useAgents();
-  const { pinnedAgentIds, refresh: refreshUser } = usePinnedAgents();
 
   // Local state for optimistic updates during drag-and-drop
   const [localPinnedAgents, setLocalPinnedAgents] = useState<
@@ -54,7 +43,7 @@ export function usePinnedAgentsWithDetails() {
   const serverPinnedAgents = useMemo(() => {
     if (agents.length === 0) return [];
 
-    const pinned = pinnedAgentIds
+    const pinned = (user?.preferences.pinned_assistants ?? [])
       .map((id) => agents.find((agent) => agent.id === id))
       .filter((agent): agent is MinimalPersonaSnapshot => !!agent);
 
@@ -62,7 +51,7 @@ export function usePinnedAgentsWithDetails() {
     return pinned.length > 0
       ? pinned
       : agents.filter((agent) => agent.is_default_persona && agent.id !== 0);
-  }, [agents, pinnedAgentIds]);
+  }, [agents, user?.preferences.pinned_assistants]);
 
   // Sync server data → local state when server data changes
   useEffect(() => {
