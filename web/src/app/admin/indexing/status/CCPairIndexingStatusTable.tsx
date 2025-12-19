@@ -34,7 +34,6 @@ import { PageSelector } from "@/components/PageSelector";
 import { ConnectorStaggeredSkeleton } from "./ConnectorRowSkeleton";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgSettings } from "@opal/icons";
-import { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 
 // Helper to handle navigation with cmd/ctrl+click support
 // NOTE: using this rather than Next/Link (or similar) since shadcn
@@ -44,7 +43,7 @@ import { AppRouterInstance } from "next/dist/shared/lib/app-router-context.share
 function navigateWithModifier(
   e: React.MouseEvent,
   url: string,
-  router: AppRouterInstance
+  router: ReturnType<typeof useRouter>
 ) {
   if (e.metaKey || e.ctrlKey) {
     window.open(url, "_blank");
