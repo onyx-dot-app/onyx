@@ -32,11 +32,7 @@ import Settings from "@/sections/sidebar/Settings/Settings";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useProjects } from "@/lib/hooks/useProjects";
-import {
-  useAgents,
-  useCurrentAgent,
-  usePinnedAgentsWithDetails,
-} from "@/hooks/useAgents";
+import { useAgents, useCurrentAgent, usePinnedAgents } from "@/hooks/useAgents";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
 import ProjectFolderButton from "@/sections/sidebar/ProjectFolderButton";
 import CreateProjectModal from "@/components/modals/CreateProjectModal";
@@ -159,7 +155,7 @@ const MemoizedAppSidebarInner = memo(
       pinnedAgents,
       updatePinnedAgents,
       isLoading: isLoadingPinnedAgents,
-    } = usePinnedAgentsWithDetails();
+    } = usePinnedAgents();
 
     // Wait for ALL dynamic data before showing any sections
     const isLoadingDynamicContent =

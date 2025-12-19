@@ -30,7 +30,7 @@ export function useAgents() {
  * Hook that combines useAgents and usePinnedAgents to return full agent objects
  * with local state for optimistic drag-and-drop updates.
  */
-export function usePinnedAgentsWithDetails() {
+export function usePinnedAgents() {
   const { user, refreshUser } = useUser();
   const { agents, isLoading: isLoadingAgents } = useAgents();
 
