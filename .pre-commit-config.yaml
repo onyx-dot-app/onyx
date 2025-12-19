@@ -8,10 +8,6 @@ repos:
     # From: https://github.com/astral-sh/uv-pre-commit/pull/53/commits/d30b4298e4fb63ce8609e29acdbcf4c9018a483c
     rev: d30b4298e4fb63ce8609e29acdbcf4c9018a483c
     hooks:
-      - id: uv-run
-        name: Check lazy imports
-        args: ["--with=onyx-devtools", "ods", "check-lazy-imports"]
-        files: ^backend/(?!\.venv/).*\.py$
       - id: uv-sync
         args: ["--locked", "--all-extras"]
       - id: uv-lock
@@ -32,6 +28,10 @@ repos:
         name: uv-export model_server.txt
         args: ["--no-emit-project", "--no-default-groups", "--no-hashes", "--extra", "model_server", "-o", "backend/requirements/model_server.txt"]
         files: ^(pyproject\.toml|uv\.lock|backend/requirements/.*\.txt)$
+      - id: uv-run
+        name: Check lazy imports
+        args: ["--with=onyx-devtools", "ods", "check-lazy-imports"]
+        files: ^backend/(?!\.venv/).*\.py$
       # NOTE: This takes ~6s on a single, large module which is prohibitively slow.
       # - id: uv-run
       #   name: mypy
