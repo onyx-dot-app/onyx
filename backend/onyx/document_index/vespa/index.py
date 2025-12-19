@@ -15,9 +15,9 @@ from typing import cast
 from typing import List
 from uuid import UUID
 
-import httpx  # type: ignore
+import httpx
 import jinja2
-import requests  # type: ignore
+import requests
 from pydantic import BaseModel
 from retry import retry
 

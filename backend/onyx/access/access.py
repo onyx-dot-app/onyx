@@ -43,7 +43,7 @@ def get_access_for_document(
     versioned_get_access_for_document_fn = fetch_versioned_implementation(
         "onyx.access.access", "_get_access_for_document"
     )
-    return versioned_get_access_for_document_fn(document_id, db_session)  # type: ignore
+    return versioned_get_access_for_document_fn(document_id, db_session)
 
 
 def get_null_document_access() -> DocumentAccess:
@@ -93,9 +93,7 @@ def get_access_for_documents(
     versioned_get_access_for_documents_fn = fetch_versioned_implementation(
         "onyx.access.access", "_get_access_for_documents"
     )
-    return versioned_get_access_for_documents_fn(
-        document_ids, db_session
-    )  # type: ignore
+    return versioned_get_access_for_documents_fn(document_ids, db_session)
 
 
 def _get_acl_for_user(user: User | None, db_session: Session) -> set[str]:
@@ -113,7 +111,7 @@ def get_acl_for_user(user: User | None, db_session: Session | None = None) -> se
     versioned_acl_for_user_fn = fetch_versioned_implementation(
         "onyx.access.access", "_get_acl_for_user"
     )
-    return versioned_acl_for_user_fn(user, db_session)  # type: ignore
+    return versioned_acl_for_user_fn(user, db_session)
 
 
 def source_should_fetch_permissions_during_indexing(source: DocumentSource) -> bool:

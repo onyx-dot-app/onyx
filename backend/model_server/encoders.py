@@ -42,7 +42,7 @@ def get_embedding_model(
     Loads or returns a cached SentenceTransformer, sets max_seq_length, pins device,
     pre-warms rotary caches once, and wraps encode() with a lock to avoid cache races.
     """
-    from sentence_transformers import SentenceTransformer  # type: ignore
+    from sentence_transformers import SentenceTransformer
 
     def _prewarm_rope(st_model: "SentenceTransformer", target_len: int) -> None:
         """
@@ -91,7 +91,7 @@ def get_local_reranking_model(
     model_name: str,
 ) -> "CrossEncoder":
     global _RERANK_MODEL
-    from sentence_transformers import CrossEncoder  # type: ignore
+    from sentence_transformers import CrossEncoder
 
     if _RERANK_MODEL is None:
         logger.notice(f"Loading {model_name}")
@@ -195,7 +195,7 @@ async def local_rerank(query: str, docs: list[str], model_name: str) -> list[flo
     # Run CPU-bound reranking in a thread pool
     return await asyncio.get_event_loop().run_in_executor(
         None,
-        lambda: cross_encoder.predict([(query, doc) for doc in docs]).tolist(),  # type: ignore
+        lambda: cross_encoder.predict([(query, doc) for doc in docs]).tolist(),
     )
 
 

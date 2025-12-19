@@ -1,5 +1,5 @@
-from mistune import Markdown  # type: ignore
-from mistune import Renderer  # type: ignore
+from mistune import Markdown  # type: ignore[import-untyped]
+from mistune import Renderer
 
 
 def format_slack_message(message: str | None) -> str:

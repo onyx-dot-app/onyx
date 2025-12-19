@@ -70,7 +70,7 @@ class _FakeGraphClient:
 
 def _build_connector(drives: Sequence[_FakeDrive]) -> SharepointConnector:
     connector = SharepointConnector()
-    connector._graph_client = _FakeGraphClient(drives)  # type: ignore[assignment]
+    connector._graph_client = _FakeGraphClient(drives)
     return connector
 
 
@@ -131,7 +131,7 @@ def test_get_drive_items_for_drive_name_matches_map(
 
 def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -> None:
     connector = SharepointConnector()
-    connector._graph_client = object()  # type: ignore[assignment]
+    connector._graph_client = object()
     connector.include_site_pages = False
 
     captured_drive_names: list[str] = []
