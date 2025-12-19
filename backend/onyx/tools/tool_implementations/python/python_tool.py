@@ -15,6 +15,7 @@ from onyx.configs.constants import FileOrigin
 from onyx.file_store.utils import build_full_frontend_file_url
 from onyx.file_store.utils import get_default_file_store
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import Placement
 from onyx.server.query_and_chat.streaming_models import PythonToolDelta
 from onyx.server.query_and_chat.streaming_models import PythonToolStart
 from onyx.tools.models import LlmPythonExecutionResult
@@ -145,8 +146,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
         # Emit start event with the code
         self.emitter.emit(
             Packet(
-                turn_index=turn_index,
-                tab_index=tab_index,
+                placement=Placement(turn_index=turn_index, tab_index=tab_index),
                 obj=PythonToolStart(code=code),
             )
         )
@@ -253,8 +253,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
             # Emit delta with stdout/stderr and generated files
             self.emitter.emit(
                 Packet(
-                    turn_index=turn_index,
-                    tab_index=tab_index,
+                    placement=Placement(turn_index=turn_index, tab_index=tab_index),
                     obj=PythonToolDelta(
                         stdout=truncated_stdout,
                         stderr=truncated_stderr,
@@ -289,8 +288,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
             # Emit error delta
             self.emitter.emit(
                 Packet(
-                    turn_index=turn_index,
-                    tab_index=tab_index,
+                    placement=Placement(turn_index=turn_index, tab_index=tab_index),
                     obj=PythonToolDelta(
                         stdout="",
                         stderr=error_msg,

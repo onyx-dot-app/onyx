@@ -23,8 +23,7 @@ export const createToolPacket = (
   };
 
   return {
-    turn_index,
-    tab_index,
+    placement: { turn_index, tab_index },
     obj: {
       type: packetTypes[type],
       tool_name: `Tool ${turn_index + 1}`,
@@ -46,24 +45,21 @@ export const createInternalSearchToolGroup = (
 ): { turn_index: number; tab_index: number; packets: Packet[] } => {
   const packets: Packet[] = [
     {
-      turn_index,
-      tab_index,
+      placement: { turn_index, tab_index },
       obj: {
         type: PacketType.SEARCH_TOOL_START,
         is_internet_search: false,
       } as any,
     },
     {
-      turn_index,
-      tab_index,
+      placement: { turn_index, tab_index },
       obj: {
         type: PacketType.SEARCH_TOOL_QUERIES_DELTA,
         queries: ["example query"],
       } as any,
     },
     {
-      turn_index,
-      tab_index,
+      placement: { turn_index, tab_index },
       obj: {
         type: PacketType.SEARCH_TOOL_DOCUMENTS_DELTA,
         documents: [
@@ -75,8 +71,7 @@ export const createInternalSearchToolGroup = (
       } as any,
     },
     {
-      turn_index,
-      tab_index,
+      placement: { turn_index, tab_index },
       obj: {
         type: PacketType.SECTION_END,
       } as any,
@@ -113,24 +108,21 @@ export const createParallelToolGroups = (
         tab_index: i,
         packets: [
           {
-            turn_index,
-            tab_index: i,
+            placement: { turn_index, tab_index: i },
             obj: {
               type: PacketType.SEARCH_TOOL_START,
               is_internet_search: config.isInternet ?? false,
             } as any,
           },
           {
-            turn_index,
-            tab_index: i,
+            placement: { turn_index, tab_index: i },
             obj: {
               type: PacketType.SEARCH_TOOL_QUERIES_DELTA,
               queries: ["test query"],
             } as any,
           },
           {
-            turn_index,
-            tab_index: i,
+            placement: { turn_index, tab_index: i },
             obj: {
               type: PacketType.SEARCH_TOOL_DOCUMENTS_DELTA,
               documents: [
@@ -139,8 +131,7 @@ export const createParallelToolGroups = (
             } as any,
           },
           {
-            turn_index,
-            tab_index: i,
+            placement: { turn_index, tab_index: i },
             obj: {
               type: PacketType.SECTION_END,
             } as any,

@@ -9,6 +9,7 @@ from onyx.context.search.models import SearchDoc
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketException
+from onyx.server.query_and_chat.streaming_models import Placement
 from onyx.tools.models import ToolCallInfo
 from onyx.utils.threadpool_concurrency import run_in_background
 from onyx.utils.threadpool_concurrency import wait_on_background
@@ -131,7 +132,7 @@ def run_chat_llm_with_state_containers(
             # If execution fails, emit an exception packet
             emitter.emit(
                 Packet(
-                    turn_index=0,
+                    placement=Placement(turn_index=0),
                     obj=PacketException(type="error", exception=e),
                 )
             )

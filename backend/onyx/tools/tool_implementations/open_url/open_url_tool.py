@@ -13,6 +13,7 @@ from onyx.server.query_and_chat.streaming_models import OpenUrlDocuments
 from onyx.server.query_and_chat.streaming_models import OpenUrlStart
 from onyx.server.query_and_chat.streaming_models import OpenUrlUrls
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import Placement
 from onyx.tools.models import OpenURLToolOverrideKwargs
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
@@ -182,8 +183,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         """Emit start packet to signal tool has started."""
         self.emitter.emit(
             Packet(
-                turn_index=turn_index,
-                tab_index=tab_index,
+                placement=Placement(turn_index=turn_index, tab_index=tab_index),
                 obj=OpenUrlStart(),
             )
         )
@@ -211,8 +211,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
 
         self.emitter.emit(
             Packet(
-                turn_index=turn_index,
-                tab_index=tab_index,
+                placement=Placement(turn_index=turn_index, tab_index=tab_index),
                 obj=OpenUrlUrls(urls=urls),
             )
         )
@@ -248,8 +247,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         # Emit documents packet AFTER crawling completes
         self.emitter.emit(
             Packet(
-                turn_index=turn_index,
-                tab_index=tab_index,
+                placement=Placement(turn_index=turn_index, tab_index=tab_index),
                 obj=OpenUrlDocuments(documents=search_docs),
             )
         )

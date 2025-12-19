@@ -44,6 +44,7 @@ from onyx.server.query_and_chat.streaming_models import DeepResearchPlanDelta
 from onyx.server.query_and_chat.streaming_models import DeepResearchPlanStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import Placement
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.fake_tools.research_agent import run_research_agent_calls
 from onyx.tools.models import ToolCallInfo
@@ -199,7 +200,9 @@ def run_deep_research_llm_loop(
             # Mark this turn as a clarification question
             state_container.set_is_clarification(True)
 
-            emitter.emit(Packet(turn_index=0, obj=OverallStop(type="stop")))
+            emitter.emit(
+                Packet(placement=Placement(turn_index=0), obj=OverallStop(type="stop"))
+            )
 
             # If a clarification is asked, we need to end this turn and wait on user input
             return
@@ -245,14 +248,14 @@ def run_deep_research_llm_loop(
             if isinstance(packet.obj, AgentResponseStart):
                 emitter.emit(
                     Packet(
-                        turn_index=packet.turn_index,
+                        placement=Placement(turn_index=packet.placement.turn_index),
                         obj=DeepResearchPlanStart(),
                     )
                 )
             elif isinstance(packet.obj, AgentResponseDelta):
                 emitter.emit(
                     Packet(
-                        turn_index=packet.turn_index,
+                        placement=Placement(turn_index=packet.placement.turn_index),
                         obj=DeepResearchPlanDelta(content=packet.obj.content),
                     )
                 )
@@ -266,7 +269,7 @@ def run_deep_research_llm_loop(
             emitter.emit(
                 Packet(
                     # Marks the last turn end which should be the plan generation
-                    turn_index=orchestrator_start_turn_index - 1,
+                    placement=Placement(turn_index=orchestrator_start_turn_index - 1),
                     obj=SectionEnd(),
                 )
             )
