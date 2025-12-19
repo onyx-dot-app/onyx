@@ -14,6 +14,7 @@ plugins = "sqlalchemy.ext.mypy.plugin"
 mypy_path = "backend"
 explicit_package_bases = true
 disallow_untyped_defs = true
+warn_unused_ignores = true
 enable_error_code = ["possibly-undefined"]
 strict_equality = true
 exclude = [

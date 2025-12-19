@@ -2,7 +2,7 @@
 
 import React, { memo } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import { usePinnedAgentsWithDetails } from "@/hooks/useAgents";
+import { usePinnedAgents } from "@/hooks/useAgents";
 import { useAppRouter } from "@/hooks/appNavigation";
 import { cn, noProp } from "@/lib/utils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
@@ -51,7 +51,7 @@ interface AgentButtonProps {
 function AgentButtonInner({ agent }: AgentButtonProps) {
   const route = useAppRouter();
   const activeSidebarTab = useAppFocus();
-  const { pinnedAgents, togglePinnedAgent } = usePinnedAgentsWithDetails();
+  const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const pinned = pinnedAgents.some(
     (pinnedAgent) => pinnedAgent.id === agent.id
   );
@@ -64,9 +64,8 @@ function AgentButtonInner({ agent }: AgentButtonProps) {
           leftIcon={() => <AgentAvatar agent={agent} />}
           onClick={() => route({ agentId: agent.id })}
           active={
-            typeof activeSidebarTab === "object" &&
-            activeSidebarTab.type === "agent" &&
-            activeSidebarTab.id === String(agent.id)
+            activeSidebarTab.isAgent() &&
+            activeSidebarTab.getId() === String(agent.id)
           }
           rightChildren={
             <IconButton

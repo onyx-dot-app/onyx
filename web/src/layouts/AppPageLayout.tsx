@@ -7,7 +7,6 @@ import Button from "@/refresh-components/buttons/Button";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import { useMemo, useState, useEffect } from "react";
 import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";
-import { useChatPageLayout } from "@/app/chat/stores/useChatSessionStore";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
@@ -65,7 +64,6 @@ export default function AppPageLayout({
   const [searchTerm, setSearchTerm] = useState("");
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [popoverItems, setPopoverItems] = useState<React.ReactNode[]>([]);
-  const { showCenteredInput } = useChatPageLayout();
   const {
     projects,
     fetchProjects,
@@ -199,6 +197,8 @@ export default function AppPageLayout({
     }
   }, [showMoveOptions, filteredProjects]);
 
+  const { currentChatSessionId } = useChatSessions();
+
   return (
     <>
       {popup}
@@ -244,8 +244,9 @@ export default function AppPageLayout({
       )}
 
       <div className="flex flex-col h-full w-full">
-        {(isMobile || customHeaderContent || !showCenteredInput) && (
+        {(isMobile || customHeaderContent || currentChatSessionId) && (
           <header className="w-full flex flex-row justify-center items-center py-3 px-4 h-16">
+            {/* Left - contains the icon-button to fold the AppSidebar on mobile */}
             <div className="flex-1">
               <IconButton
                 icon={SvgSidebar}
@@ -254,39 +255,45 @@ export default function AppPageLayout({
                 internal
               />
             </div>
+
+            {/* Center - contains the custom-header-content */}
             <div className="flex-1 flex flex-col items-center">
               <Text text03>{customHeaderContent}</Text>
             </div>
-            <div className="flex-1 flex flex-row items-center justify-end px-1">
+
+            {/* Right - contains the share and more-options buttons */}
+            <div
+              className={cn(
+                "flex-1 flex flex-row items-center justify-end px-1",
+                !currentChatSessionId && "invisible"
+              )}
+            >
               <Button
                 leftIcon={SvgShare}
                 transient={showShareModal}
                 tertiary
                 onClick={() => setShowShareModal(true)}
-                className={cn(showCenteredInput && "invisible")}
               >
                 Share Chat
               </Button>
-              <div className={cn(showCenteredInput && "invisible")}>
-                <SimplePopover
-                  trigger={
-                    <IconButton
-                      icon={SvgMoreHorizontal}
-                      className="ml-2"
-                      transient={popoverOpen}
-                      tertiary
-                    />
-                  }
-                  onOpenChange={(state) => {
-                    setPopoverOpen(state);
-                    if (!state) setShowMoveOptions(false);
-                  }}
-                  side="bottom"
-                  align="end"
-                >
-                  <PopoverMenu>{popoverItems}</PopoverMenu>
-                </SimplePopover>
-              </div>
+              <SimplePopover
+                trigger={
+                  <IconButton
+                    icon={SvgMoreHorizontal}
+                    className="ml-2"
+                    transient={popoverOpen}
+                    tertiary
+                  />
+                }
+                onOpenChange={(state) => {
+                  setPopoverOpen(state);
+                  if (!state) setShowMoveOptions(false);
+                }}
+                side="bottom"
+                align="end"
+              >
+                <PopoverMenu>{popoverItems}</PopoverMenu>
+              </SimplePopover>
             </div>
           </header>
         )}
