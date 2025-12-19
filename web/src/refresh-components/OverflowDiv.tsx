@@ -10,8 +10,17 @@ export interface VerticalShadowScrollerProps
   disableMask?: boolean;
   backgroundColor?: string;
   height?: string;
-  // Unique key to identify this scroll container (required for scroll persistence)
-  scrollKey: string;
+  /**
+   * Unique identifier for this scroll container to enable scroll position persistence across navigation.
+   *
+   * When provided, the scroll position will be saved to a global Map and restored when the pathname changes
+   * (e.g., navigating between admin pages). This prevents the sidebar from jumping to the top when clicking links.
+   *
+   * If not provided, scroll position will NOT be saved/restored (opt-out of scroll persistence).
+   *
+   * @example scrollKey="admin-sidebar"
+   */
+  scrollKey?: string;
 }
 
 // Global map to store scroll positions across renders
@@ -29,13 +38,16 @@ export default function OverflowDiv({
   const scrollRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
 
-  // Save scroll position on every scroll event
+  // Save scroll position on every scroll event (only if scrollKey is provided)
   useEffect(() => {
+    if (!scrollKey) return; // Opt-out: no scroll persistence if scrollKey not provided
+
     const scrollElement = scrollRef.current;
     if (!scrollElement) return;
 
+    const key = scrollKey; // Capture for closure
     const handleScroll = () => {
-      scrollPositions.set(scrollKey, scrollElement.scrollTop);
+      scrollPositions.set(key, scrollElement.scrollTop);
     };
 
     scrollElement.addEventListener("scroll", handleScroll, { passive: true });
@@ -44,10 +56,13 @@ export default function OverflowDiv({
 
   // Restore scroll position immediately after pathname changes (before paint)
   useLayoutEffect(() => {
+    if (!scrollKey) return; // Opt-out: no scroll restoration if scrollKey not provided
+
     const scrollElement = scrollRef.current;
     if (!scrollElement) return;
 
-    const savedPosition = scrollPositions.get(scrollKey) || 0;
+    const key = scrollKey; // Capture for type safety
+    const savedPosition = scrollPositions.get(key) || 0;
     scrollElement.scrollTop = savedPosition;
   }, [pathname, scrollKey]);
 

@@ -7,7 +7,11 @@ export interface SidebarBodyProps {
   actionButton?: React.ReactNode;
   children?: React.ReactNode;
   footer?: React.ReactNode;
-  scrollKey: string;
+  /**
+   * Unique key to enable scroll position persistence across navigation.
+   * Pass this through from parent sidebar components (e.g., "admin-sidebar", "app-sidebar").
+   */
+  scrollKey?: string;
 }
 
 export default function SidebarBody({
