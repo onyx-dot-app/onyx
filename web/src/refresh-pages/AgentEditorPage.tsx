@@ -468,13 +468,13 @@ export default function AgentEditorPage({
                 <Settings.Header
                   icon={SvgSearch}
                   title={existingAgent ? "Edit Agent" : "Create Agent"}
-                  description=""
                   rightChildren={
                     <Button type="submit" disabled={isSubmitting}>
                       {existingAgent ? "Save" : "Create"}
                     </Button>
                   }
-                  renderBackButton
+                  backButton
+                  separator
                 />
 
                 {/* Agent Form Content */}

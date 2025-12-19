@@ -1,5 +1,5 @@
 import AgentsNavigationPage from "@/refresh-pages/AgentsNavigationPage";
-import { AppPageLayout } from "@/layouts/pages";
+import { AppPageLayout } from "@/layouts/app-pages";
 import { fetchHeaderDataSS } from "@/lib/headers/fetchHeaderDataSS";
 
 export default async function Page() {

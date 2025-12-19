@@ -417,7 +417,6 @@ export default function AgentsNavigationPage() {
         icon={SvgOnyxOctagon}
         title="Agents & Assistants"
         description="Customize AI behavior and knowledge for you and your team’s use cases."
-        className="bg-background-tint-01"
         rightChildren={
           <div data-testid="AgentsPage/new-agent-button">
             <Button href="/chat/agents/create" leftIcon={SvgPlus}>
@@ -630,7 +629,7 @@ export default function AgentsNavigationPage() {
       </Settings.Header>
 
       {/* Agents List */}
-      <Settings.Body className="flex flex-col gap-8">
+      <Settings.Body>
         {agentCount === 0 ? (
           <Text
             className="w-full h-full flex flex-col items-center justify-center py-12"
