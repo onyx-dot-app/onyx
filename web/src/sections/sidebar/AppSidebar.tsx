@@ -385,7 +385,7 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
               route({});
             }
           }}
-          active={activeSidebarTab === "new-session"}
+          active={activeSidebarTab.isNewSession()}
         >
           New Session
         </SidebarTab>
@@ -404,7 +404,7 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
           }
           href="/chat/agents"
           folded={folded}
-          active={activeSidebarTab === "more-agents"}
+          active={activeSidebarTab.isMoreAgents()}
           lowlight={!folded}
         >
           {visibleAgents.length === 0 ? "Explore Agents" : "More Agents"}

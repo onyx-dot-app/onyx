@@ -64,9 +64,8 @@ function AgentButtonInner({ agent }: AgentButtonProps) {
           leftIcon={() => <AgentAvatar agent={agent} />}
           onClick={() => route({ agentId: agent.id })}
           active={
-            typeof activeSidebarTab === "object" &&
-            activeSidebarTab.type === "agent" &&
-            activeSidebarTab.id === String(agent.id)
+            activeSidebarTab.isAgent() &&
+            activeSidebarTab.getId() === String(agent.id)
           }
           rightChildren={
             <IconButton
