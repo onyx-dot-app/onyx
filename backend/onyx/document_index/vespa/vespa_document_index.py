@@ -511,7 +511,7 @@ class VespaDocumentIndex(DocumentIndex):
                         http_client=httpx_client,
                         document_id=sanitized_doc_id,
                         previous_chunk_count=chunk_count,
-                        new_chunk_count=0,  # TODO: This makes no sense.
+                        new_chunk_count=0,  # WARNING: This semantically makes no sense and is misusing this function.
                     )
 
                     doc_chunk_ids = get_document_chunk_ids(
