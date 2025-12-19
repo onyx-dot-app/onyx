@@ -56,30 +56,15 @@ class GitHubManager:
                 )
                 return False
 
-            # Change visibility
-            repo.edit(private=(visibility == "private"))
+            # # Change visibility
+            # repo.edit(private=(visibility == "private"))
 
-            # For internal repositories, we need to set the visibility explicitly
-            if visibility == "internal":
-                # Note: Internal repositories are only available for GitHub Enterprise
-                # This might not work in all environments
-                try:
-                    repo.edit(visibility="internal")
-                except GithubException as e:
-                    logger.warning(f"Could not set repository to internal: {e}")
-                    return False
-            elif visibility == "public":
-                try:
-                    repo.edit(visibility="public")
-                except GithubException as e:
-                    logger.warning(f"Could not set repository to public: {e}")
-                    return False
-            elif visibility == "private":
-                try:
-                    repo.edit(visibility="private")
-                except GithubException as e:
-                    logger.warning(f"Could not set repository to private: {e}")
-                    return False
+            # Note: Internal repositories are only available for GitHub Enterprise
+            try:
+                repo.edit(visibility=visibility)
+            except GithubException as e:
+                logger.warning(f"Could not set repository to {visibility}: {e}")
+                return False
 
             logger.info(
                 f"Successfully changed {repo_owner}/{repo_name} visibility to {visibility}"
