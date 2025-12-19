@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { useTheme } from "next-themes";
 import { notifyExtensionOfThemeChange } from "@/lib/extension/utils";
 import {
   darkExtensionImages,
@@ -53,7 +54,8 @@ export function NRFPreferencesProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const [theme, setTheme] = useLocalStorageState<string>(
+  const { setTheme: setNextThemesTheme } = useTheme();
+  const [theme, setThemeState] = useLocalStorageState<string>(
     LocalStorageKeys.THEME,
     "dark"
   );
@@ -71,6 +73,18 @@ export function NRFPreferencesProvider({
     LocalStorageKeys.USE_ONYX_AS_NEW_TAB,
     true
   );
+
+  // Sync NRF theme with next-themes to enable Tailwind dark mode classes
+  // This ensures the HTML element gets the 'dark' class for Tailwind dark: classes to work
+  useEffect(() => {
+    setNextThemesTheme(theme);
+  }, [theme, setNextThemesTheme]);
+
+  // Wrapper function to update both local state and next-themes
+  const setTheme = (newTheme: string) => {
+    setThemeState(newTheme);
+    setNextThemesTheme(newTheme);
+  };
 
   useEffect(() => {
     if (theme === "dark") {
