@@ -364,6 +364,18 @@ def try_creating_docfetching_task(
             else OnyxCeleryQueues.CONNECTOR_DOC_FETCHING
         )
 
+        # Use higher priority for first-time indexing to ensure new connectors
+        # get processed before re-indexing of existing connectors
+        is_first_time_indexing = cc_pair.status in (
+            ConnectorCredentialPairStatus.SCHEDULED,
+            ConnectorCredentialPairStatus.INITIAL_INDEXING,
+        )
+        priority = (
+            OnyxCeleryPriority.HIGH
+            if is_first_time_indexing
+            else OnyxCeleryPriority.MEDIUM
+        )
+
         # Send the task to Celery
         result = celery_app.send_task(
             OnyxCeleryTask.CONNECTOR_DOC_FETCHING_TASK,
@@ -375,7 +387,7 @@ def try_creating_docfetching_task(
             ),
             queue=queue,
             task_id=custom_task_id,
-            priority=OnyxCeleryPriority.MEDIUM,
+            priority=priority,
         )
         if not result:
             raise RuntimeError("send_task for connector_doc_fetching_task failed.")
