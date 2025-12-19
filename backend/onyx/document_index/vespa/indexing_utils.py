@@ -1,5 +1,6 @@
 import concurrent.futures
 import json
+import random
 import time
 import uuid
 from abc import ABC
@@ -235,7 +236,9 @@ def _index_vespa_chunk(
             if e.response.status_code == HTTPStatus.TOO_MANY_REQUESTS:
                 if attempt < max_retries - 1:
                     # Calculate exponential backoff with jitter
-                    delay = min(base_delay * (2**attempt), max_delay)
+                    delay = min(
+                        base_delay * (2**attempt), max_delay
+                    ) * random.uniform(0.5, 1.0)
                     logger.warning(
                         f"Rate limited while indexing document '{document.id}' "
                         f"(attempt {attempt + 1}/{max_retries}). "
