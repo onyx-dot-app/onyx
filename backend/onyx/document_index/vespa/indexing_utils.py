@@ -60,6 +60,11 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+# Retry configuration constants
+INDEXING_MAX_RETRIES = 5
+INDEXING_BASE_DELAY = 1.0
+INDEXING_MAX_DELAY = 60.0
+
 
 @retry(tries=3, delay=1, backoff=2)
 def _does_doc_chunk_exist(
@@ -220,11 +225,7 @@ def _index_vespa_chunk(
     logger.debug(f'Indexing to URL "{vespa_url}"')
 
     # Retry logic with exponential backoff for rate limiting
-    max_retries = 5
-    base_delay = 1.0
-    max_delay = 60.0
-
-    for attempt in range(max_retries):
+    for attempt in range(INDEXING_MAX_RETRIES):
         try:
             res = http_client.post(
                 vespa_url, headers=json_header, json={"fields": vespa_document_fields}
@@ -234,25 +235,24 @@ def _index_vespa_chunk(
         except httpx.HTTPStatusError as e:
             # Handle 429 rate limiting specifically
             if e.response.status_code == HTTPStatus.TOO_MANY_REQUESTS:
-                if attempt < max_retries - 1:
+                if attempt < INDEXING_MAX_RETRIES - 1:
                     # Calculate exponential backoff with jitter
                     delay = min(
-                        base_delay * (2**attempt), max_delay
+                        INDEXING_BASE_DELAY * (2**attempt), INDEXING_MAX_DELAY
                     ) * random.uniform(0.5, 1.0)
                     logger.warning(
                         f"Rate limited while indexing document '{document.id}' "
-                        f"(attempt {attempt + 1}/{max_retries}). "
+                        f"(attempt {attempt + 1}/{INDEXING_MAX_RETRIES}). "
                         f"Vespa response: '{e.response.text}'. "
                         f"Backing off for {delay:.2f} seconds."
                     )
                     time.sleep(delay)
                     continue
                 else:
-                    logger.error(
-                        f"Failed to index document '{document.id}' after {max_retries} attempts "
-                        f"due to rate limiting. Vespa response: '{e.response.text}'"
-                    )
-                    raise
+                    raise RuntimeError(
+                        f"Failed to index document '{document.id}' after {INDEXING_MAX_RETRIES} attempts "
+                        f"due to rate limiting"
+                    ) from e
             elif e.response.status_code == HTTPStatus.INSUFFICIENT_STORAGE:
                 logger.error(
                     f"Failed to index document: '{document.id}'. Got response: '{e.response.text}'"
@@ -264,12 +264,24 @@ def _index_vespa_chunk(
                 )
                 raise
             else:
-                # For other HTTP errors, retry with shorter backoff
-                if attempt < max_retries - 1:
-                    delay = base_delay * (1.5**attempt)
+                # For other HTTP errors, check if retryable
+                if e.response.status_code in (
+                    HTTPStatus.BAD_REQUEST,
+                    HTTPStatus.UNAUTHORIZED,
+                    HTTPStatus.FORBIDDEN,
+                    HTTPStatus.NOT_FOUND,
+                ):
+                    # Non-retryable errors - fail immediately
+                    logger.error(
+                        f"Non-retryable HTTP {e.response.status_code} error for document '{document.id}'"
+                    )
+                    raise
+                # Retry other errors with shorter backoff
+                if attempt < INDEXING_MAX_RETRIES - 1:
+                    delay = INDEXING_BASE_DELAY * (1.5**attempt)
                     logger.warning(
                         f"HTTP error {e.response.status_code} while indexing document '{document.id}' "
-                        f"(attempt {attempt + 1}/{max_retries}). Retrying in {delay:.2f} seconds."
+                        f"(attempt {attempt + 1}/{INDEXING_MAX_RETRIES}). Retrying in {delay:.2f} seconds."
                     )
                     time.sleep(delay)
                     continue
@@ -280,11 +292,11 @@ def _index_vespa_chunk(
                     raise
         except Exception as e:
             # For non-HTTP errors, use simple retry logic
-            if attempt < max_retries - 1:
-                delay = base_delay * (1.5**attempt)
+            if attempt < INDEXING_MAX_RETRIES - 1:
+                delay = INDEXING_BASE_DELAY * (1.5**attempt)
                 logger.warning(
                     f"Error while indexing document '{document.id}' "
-                    f"(attempt {attempt + 1}/{max_retries}): {str(e)}. "
+                    f"(attempt {attempt + 1}/{INDEXING_MAX_RETRIES}): {str(e)}. "
                     f"Retrying in {delay:.2f} seconds."
                 )
                 time.sleep(delay)
