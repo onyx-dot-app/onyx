@@ -34,6 +34,19 @@ import { PageSelector } from "@/components/PageSelector";
 import { ConnectorStaggeredSkeleton } from "./ConnectorRowSkeleton";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgSettings } from "@opal/icons";
+
+// Helper to handle navigation with cmd/ctrl+click support
+function navigateWithModifier(
+  e: React.MouseEvent,
+  url: string,
+  fallback: () => void
+) {
+  if (e.metaKey || e.ctrlKey) {
+    window.open(url, "_blank");
+  } else {
+    fallback();
+  }
+}
 function isFederatedConnectorStatus(
   status: ConnectorIndexingStatusLite | FederatedConnectorStatus
 ) {
@@ -127,9 +140,10 @@ function ConnectorRow({
   const router = useRouter();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
-  const handleManageClick = (e: any) => {
-    e.stopPropagation();
-    router.push(`/admin/connector/${ccPairsIndexingStatus.cc_pair_id}`);
+  const connectorUrl = `/admin/connector/${ccPairsIndexingStatus.cc_pair_id}`;
+
+  const handleRowClick = (e: React.MouseEvent) => {
+    navigateWithModifier(e, connectorUrl, () => router.push(connectorUrl));
   };
 
   return (
@@ -141,9 +155,7 @@ function ConnectorRow({
               ? "invisible !h-0 !-mb-10 !border-none"
               : "!border border-border dark:border-neutral-700"
           }  w-full cursor-pointer relative `}
-      onClick={() => {
-        router.push(`/admin/connector/${ccPairsIndexingStatus.cc_pair_id}`);
-      }}
+      onClick={handleRowClick}
     >
       <TableCell className="">
         <p className="lg:w-[200px] xl:w-[400px] inline-block ellipsis truncate">
@@ -209,9 +221,10 @@ function FederatedConnectorRow({
   const router = useRouter();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
-  const handleManageClick = (e: any) => {
-    e.stopPropagation();
-    router.push(`/admin/federated/${federatedConnector.id}`);
+  const federatedUrl = `/admin/federated/${federatedConnector.id}`;
+
+  const handleRowClick = (e: React.MouseEvent) => {
+    navigateWithModifier(e, federatedUrl, () => router.push(federatedUrl));
   };
 
   return (
@@ -223,9 +236,7 @@ function FederatedConnectorRow({
               ? "invisible !h-0 !-mb-10 !border-none"
               : "!border border-border dark:border-neutral-700"
           }  w-full cursor-pointer relative `}
-      onClick={() => {
-        router.push(`/admin/federated/${federatedConnector.id}`);
-      }}
+      onClick={handleRowClick}
     >
       <TableCell className="">
         <p className="lg:w-[200px] xl:w-[400px] inline-block ellipsis truncate">
@@ -248,7 +259,12 @@ function FederatedConnectorRow({
         <IconButton
           icon={SvgSettings}
           tertiary
-          onClick={handleManageClick}
+          onClick={(e: React.MouseEvent) => {
+            e.stopPropagation();
+            navigateWithModifier(e, federatedUrl, () =>
+              router.push(federatedUrl)
+            );
+          }}
           tooltip="Manage Federated Connector"
         />
       </TableCell>
