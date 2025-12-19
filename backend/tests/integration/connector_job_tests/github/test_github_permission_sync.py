@@ -84,7 +84,7 @@ def test_github_private_repo_permission_sync(
             user_performing_action=admin_user,
             after=after,
             should_wait_for_group_sync=True,
-            timeout=float("inf"),
+            timeout=900,
         )
 
         # ACL-based verification
@@ -198,7 +198,7 @@ def test_github_public_repo_permission_sync(
         user_performing_action=admin_user,
         after=after,
         should_wait_for_group_sync=True,
-        timeout=float("inf"),
+        timeout=900,
     )
 
     # ACL-based verification
@@ -302,7 +302,7 @@ def test_github_internal_repo_permission_sync(
         user_performing_action=admin_user,
         after=after,
         should_wait_for_group_sync=True,
-        timeout=float("inf"),
+        timeout=900,
     )
 
     #  ACL-based verification

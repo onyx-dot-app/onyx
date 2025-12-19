@@ -143,7 +143,7 @@ def github_test_env_setup(
         cc_pair=github_cc_pair,
         after=before,
         user_performing_action=admin_user,
-        timeout=float("inf"),
+        timeout=900,
     )
 
     yield admin_user, test_user_1, test_user_2, github_credential, github_connector, github_cc_pair
