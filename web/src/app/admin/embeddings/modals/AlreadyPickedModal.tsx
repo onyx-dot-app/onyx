@@ -1,33 +1,30 @@
-import React from "react";
-import { Modal } from "@/components/Modal";
-import { Button } from "@/components/ui/button";
-import Text from "@/components/ui/text";
-
+import Modal from "@/refresh-components/Modal";
+import Button from "@/refresh-components/buttons/Button";
 import { CloudEmbeddingModel } from "../../../../components/embedding/interfaces";
+import { SvgCheck } from "@opal/icons";
 
-export function AlreadyPickedModal({
-  model,
-  onClose,
-}: {
+export interface AlreadyPickedModalProps {
   model: CloudEmbeddingModel;
   onClose: () => void;
-}) {
+}
+
+export default function AlreadyPickedModal({
+  model,
+  onClose,
+}: AlreadyPickedModalProps) {
   return (
-    <Modal
-      width="max-w-3xl"
-      title={`${model.model_name} already chosen`}
-      onOutsideClick={onClose}
-    >
-      <div className="mb-4">
-        <Text className="text-sm mb-2">
-          You can select a different one if you want!
-        </Text>
-        <div className="flex mt-8 justify-between">
-          <Button variant="submit" onClick={onClose}>
-            Close
-          </Button>
-        </div>
-      </div>
+    <Modal open onOpenChange={onClose}>
+      <Modal.Content small>
+        <Modal.Header
+          icon={SvgCheck}
+          title={`${model.model_name} already chosen`}
+          description="You can select a different one if you want!"
+          onClose={onClose}
+        />
+        <Modal.Footer>
+          <Button onClick={onClose}>Close</Button>
+        </Modal.Footer>
+      </Modal.Content>
     </Modal>
   );
 }

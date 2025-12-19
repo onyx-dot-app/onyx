@@ -9,13 +9,15 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Shortcut } from "@/app/chat/nrf/interfaces";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { Input } from "@/components/ui/input";
 import { PencilIcon, PlusIcon } from "lucide-react";
 import Image from "next/image";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
-import { Modal } from "../Modal";
+import Modal from "@/refresh-components/Modal";
 import { QuestionMarkIcon } from "../icons/icons";
+import Text from "@/refresh-components/texts/Text";
+import { SvgAlertCircle } from "@opal/icons";
 
 export const validateUrl = (input: string) => {
   try {
@@ -222,11 +224,7 @@ export const NewShortCutModal = ({
               {editingShortcut ? "Save Changes" : "Add Shortcut"}
             </Button>
             {editingShortcut && (
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={() => onDelete(editingShortcut)}
-              >
+              <Button danger onClick={() => onDelete(editingShortcut)}>
                 Delete
               </Button>
             )}
@@ -243,18 +241,23 @@ export const MaxShortcutsReachedModal = ({
   onClose: () => void;
 }) => {
   return (
-    <Modal
-      width="max-w-md"
-      title="Maximum Shortcuts Reached"
-      onOutsideClick={onClose}
-    >
-      <div className="flex flex-col gap-4">
-        <p className="text-left text-text-900">
-          You&apos;ve reached the maximum limit of 8 shortcuts. To add a new
-          shortcut, please remove an existing one.
-        </p>
-        <Button onClick={onClose}>Close</Button>
-      </div>
+    <Modal open onOpenChange={onClose}>
+      <Modal.Content small>
+        <Modal.Header
+          icon={SvgAlertCircle}
+          title="Maximum Shortcuts Reached"
+          onClose={onClose}
+        />
+        <Modal.Body>
+          <Text>
+            You&apos;ve reached the maximum limit of 8 shortcuts. To add a new
+            shortcut, please remove an existing one.
+          </Text>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button onClick={onClose}>Close</Button>
+        </Modal.Footer>
+      </Modal.Content>
     </Modal>
   );
 };

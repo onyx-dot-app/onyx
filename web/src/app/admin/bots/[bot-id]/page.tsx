@@ -6,10 +6,10 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { SlackChannelConfigsTable } from "./SlackChannelConfigsTable";
+import SlackChannelConfigsTable from "./SlackChannelConfigsTable";
 import { useSlackBot, useSlackChannelConfigsByBot } from "./hooks";
 import { ExistingSlackBotForm } from "../SlackBotUpdateForm";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 
 function SlackBotEditPage({
   params,
@@ -98,7 +98,7 @@ export default function Page({
   params: Promise<{ "bot-id": string }>;
 }) {
   return (
-    <div className="container mx-auto">
+    <div className="container">
       <SlackBotEditPage params={params} />
     </div>
   );

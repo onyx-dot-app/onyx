@@ -5,7 +5,6 @@ import { fetchSS } from "../utilsSS";
 import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
 import { ToolSnapshot } from "../tools/interfaces";
 import { fetchToolsSS } from "../tools/fetchTools";
-import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 export async function fetchAssistantEditorInfoSS(
   personaId?: number | string
 ): Promise<
@@ -22,10 +21,17 @@ export async function fetchAssistantEditorInfoSS(
     ]
   | [null, string]
 > {
+  // When editing an existing persona, fetch only the providers available to that persona
+  // When creating a new persona, fetch all providers
+  const llmProvidersUrl =
+    personaId !== undefined
+      ? `/llm/persona/${personaId}/providers`
+      : "/llm/provider";
+
   const tasks = [
     fetchSS("/manage/connector-status"),
     fetchSS("/manage/document-set"),
-    fetchSS("/llm/provider"),
+    fetchSS(llmProvidersUrl),
     // duplicate fetch, but shouldn't be too big of a deal
     // this page is not a high traffic page
     getCurrentUserSS(),
@@ -85,10 +91,6 @@ export async function fetchAssistantEditorInfoSS(
 
   if (personaId && personaResponse && !personaResponse.ok) {
     return [null, `Failed to fetch Persona - ${await personaResponse.text()}`];
-  }
-
-  for (const provider of llmProviders) {
-    provider.icon = getProviderIcon(provider.provider);
   }
 
   const existingPersona = personaResponse

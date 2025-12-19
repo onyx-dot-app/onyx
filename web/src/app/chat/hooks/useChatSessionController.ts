@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useState } from "react";
-import { ReadonlyURLSearchParams, useRouter } from "next/navigation";
+import { useEffect, useCallback, useState } from "react";
+import { ReadonlyURLSearchParams } from "next/navigation";
 import {
   nameChatSession,
   processRawChatHistory,
@@ -22,8 +22,6 @@ import {
   useChatSessionStore,
   useCurrentMessageHistory,
 } from "../stores/useChatSessionStore";
-import { getAvailableContextTokens } from "../services/lib";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { ProjectFile } from "../projects/projectsService";
 import { getSessionProjectTokenCount } from "../projects/projectsService";
 import { getProjectFilesForSession } from "../projects/projectsService";
@@ -42,18 +40,13 @@ interface UseChatSessionControllerProps {
   ) => void;
 
   // Refs
-  chatSessionIdRef: React.MutableRefObject<string | null>;
-  loadedIdSessionRef: React.MutableRefObject<string | null>;
-  textAreaRef: React.RefObject<HTMLTextAreaElement>;
-  scrollInitialized: React.MutableRefObject<boolean>;
-  isInitialLoad: React.MutableRefObject<boolean>;
-  submitOnLoadPerformed: React.MutableRefObject<boolean>;
-
-  // State
-  hasPerformedInitialScroll: boolean;
+  chatSessionIdRef: React.RefObject<string | null>;
+  loadedIdSessionRef: React.RefObject<string | null>;
+  textAreaRef: React.RefObject<HTMLTextAreaElement | null>;
+  isInitialLoad: React.RefObject<boolean>;
+  submitOnLoadPerformed: React.RefObject<boolean>;
 
   // Actions
-  clientScrollToBottom: (fast?: boolean) => void;
   refreshChatSessions: () => void;
   onSubmit: (params: {
     message: string;
@@ -74,11 +67,8 @@ export function useChatSessionController({
   chatSessionIdRef,
   loadedIdSessionRef,
   textAreaRef,
-  scrollInitialized,
   isInitialLoad,
   submitOnLoadPerformed,
-  hasPerformedInitialScroll,
-  clientScrollToBottom,
   refreshChatSessions,
   onSubmit,
 }: UseChatSessionControllerProps) {
@@ -98,8 +88,8 @@ export function useChatSessionController({
   const setCurrentSession = useChatSessionStore(
     (state) => state.setCurrentSession
   );
-  const updateHasPerformedInitialScroll = useChatSessionStore(
-    (state) => state.updateHasPerformedInitialScroll
+  const initializeSession = useChatSessionStore(
+    (state) => state.initializeSession
   );
   const updateCurrentChatSessionSharedStatus = useChatSessionStore(
     (state) => state.updateCurrentChatSessionSharedStatus
@@ -112,7 +102,7 @@ export function useChatSessionController({
       state.sessions.get(state.currentSessionId || "")?.chatState || "input"
   );
   const currentChatHistory = useCurrentMessageHistory();
-  const { setForcedToolIds } = useAgentsContext();
+  const chatSessions = useChatSessionStore((state) => state.sessions);
 
   // Fetch chat messages for the chat session
   useEffect(() => {
@@ -123,30 +113,24 @@ export function useChatSessionController({
 
     textAreaRef.current?.focus();
 
-    // Only clear things if we're going from one chat session to another
-    const isChatSessionSwitch = existingChatSessionId !== priorChatSessionId;
-    if (isChatSessionSwitch) {
-      // De-select documents
-      // Reset all filters
+    const isCreatingNewSession =
+      priorChatSessionId === null && existingChatSessionId !== null;
+    const isSwitchingBetweenSessions =
+      priorChatSessionId !== null &&
+      existingChatSessionId !== priorChatSessionId;
+
+    // Clear uploaded files on any session change (they're already in context)
+    if (isCreatingNewSession || isSwitchingBetweenSessions) {
+      setCurrentMessageFiles([]);
+    }
+
+    // Only reset filters/selections when switching between existing sessions
+    if (isSwitchingBetweenSessions) {
+      setSelectedDocuments([]);
       filterManager.setSelectedDocumentSets([]);
       filterManager.setSelectedSources([]);
       filterManager.setSelectedTags([]);
       filterManager.setTimeRange(null);
-
-      // Remove uploaded files
-      setCurrentMessageFiles([]);
-
-      // If switching from one chat to another, then need to scroll again
-      // If we're creating a brand new chat, then don't need to scroll
-      if (priorChatSessionId !== null) {
-        setSelectedDocuments([]);
-        if (existingChatSessionId) {
-          updateHasPerformedInitialScroll(existingChatSessionId, false);
-        }
-
-        // Clear forced tool ids if and only if we're switching to a new chat session
-        setForcedToolIds([]);
-      }
     }
 
     async function initialSessionFetch() {
@@ -188,6 +172,9 @@ export function useChatSessionController({
       // Ensure the current session is set to the actual session ID from the response
       setCurrentSession(chatSession.chat_session_id);
 
+      // Initialize session data including personaId
+      initializeSession(chatSession.chat_session_id, chatSession);
+
       const newMessageMap = processRawChatHistory(
         chatSession.messages,
         chatSession.packets
@@ -213,31 +200,6 @@ export function useChatSessionController({
 
         updateSessionAndMessageTree(chatSession.chat_session_id, newMessageMap);
         chatSessionIdRef.current = chatSession.chat_session_id;
-      }
-
-      // Go to bottom. If initial load, then do a scroll,
-      // otherwise just appear at the bottom
-      scrollInitialized.current = false;
-
-      if (!hasPerformedInitialScroll) {
-        if (isInitialLoad.current) {
-          if (chatSession.chat_session_id) {
-            updateHasPerformedInitialScroll(chatSession.chat_session_id, true);
-          }
-          isInitialLoad.current = false;
-        }
-        clientScrollToBottom();
-
-        setTimeout(() => {
-          if (chatSession.chat_session_id) {
-            updateHasPerformedInitialScroll(chatSession.chat_session_id, true);
-          }
-        }, 100);
-      } else if (isChatSessionSwitch) {
-        if (chatSession.chat_session_id) {
-          updateHasPerformedInitialScroll(chatSession.chat_session_id, true);
-        }
-        clientScrollToBottom(true);
       }
 
       setIsFetchingChatMessages(chatSession.chat_session_id, false);
@@ -307,7 +269,22 @@ export function useChatSessionController({
       !searchParams?.get(SEARCH_PARAM_NAMES.SKIP_RELOAD) ||
       currentChatHistory.length === 0
     ) {
-      initialSessionFetch();
+      const existingChatSession = existingChatSessionId
+        ? chatSessions.get(existingChatSessionId)
+        : null;
+
+      if (
+        !existingChatSession?.chatState ||
+        existingChatSession.chatState === "input"
+      ) {
+        initialSessionFetch();
+      } else {
+        // no need to fetch if the chat session is currently streaming (it would be )
+        // out of date).
+        // this means that the user kicked off a message, switched to a different
+        // chat, and then switched back.
+        setCurrentSession(existingChatSessionId);
+      }
     } else {
       // Remove SKIP_RELOAD param without triggering a page reload
       const currentSearchParams = new URLSearchParams(searchParams?.toString());

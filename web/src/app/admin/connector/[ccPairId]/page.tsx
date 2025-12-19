@@ -4,9 +4,10 @@ import { BackButton } from "@/components/BackButton";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { SourceIcon } from "@/components/SourceIcon";
-import { CCPairStatus } from "@/components/Status";
+import { CCPairStatus, PermissionSyncStatus } from "@/components/Status";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import CredentialSection from "@/components/credentials/CredentialSection";
+import Text from "@/refresh-components/texts/Text";
 import {
   updateConnectorCredentialPairName,
   updateConnectorCredentialPairProperty,
@@ -24,7 +25,7 @@ import {
 } from "./ConfigDisplay";
 import DeletionErrorStatus from "./DeletionErrorStatus";
 import { IndexAttemptsTable } from "./IndexAttemptsTable";
-
+import { InlineFileManagement } from "./InlineFileManagement";
 import { buildCCPairInfoUrl, triggerIndexing } from "./lib";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -57,13 +58,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DropdownMenuItemWithTooltip } from "@/components/ui/dropdown-menu-with-tooltip";
-import { FiSettings } from "react-icons/fi";
 import { timeAgo } from "@/lib/time";
 import { useStatusChange } from "./useStatusChange";
 import { useReIndexModal } from "./ReIndexModal";
 import Button from "@/refresh-components/buttons/Button";
-import SvgSettings from "@/icons/settings";
-
+import { SvgSettings } from "@opal/icons";
 // synchronize these validations with the SQLAlchemy connector class until we have a
 // centralized schema for both frontend and backend
 const RefreshFrequencySchema = Yup.object().shape({
@@ -446,11 +445,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
           {ccPair.is_editable_for_current_user && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button
-                  leftIcon={SvgSettings}
-                  className="flex items-center gap-x-1"
-                  secondary
-                >
+                <Button leftIcon={SvgSettings} secondary>
                   Manage
                 </Button>
               </DropdownMenuTrigger>
@@ -633,14 +628,33 @@ function Main({ ccPairId }: { ccPairId: number }) {
           </div>
 
           {ccPair.access_type === "sync" && (
-            <div className="w-[200px]">
-              <div className="text-sm font-medium mb-1">
-                Last Permission Synced
+            <>
+              <div className="w-[200px]">
+                {/* TODO: Remove className and switch to text03 once Text is fully integrated across this page */}
+                <Text className="text-sm font-medium mb-1">
+                  Permission Syncing
+                </Text>
+                {ccPair.permission_syncing ||
+                ccPair.last_permission_sync_attempt_status ? (
+                  <PermissionSyncStatus
+                    status={ccPair.last_permission_sync_attempt_status}
+                    errorMsg={ccPair.last_permission_sync_attempt_error_message}
+                  />
+                ) : (
+                  <PermissionSyncStatus status={null} />
+                )}
               </div>
-              <div className="text-sm text-text-default">
-                {timeAgo(ccPair.last_full_permission_sync) ?? "-"}
+
+              <div className="w-[200px]">
+                {/* TODO: Remove className and switch to text03 once Text is fully integrated across this page */}
+                <Text className="text-sm font-medium mb-1">Last Synced</Text>
+                <Text className="text-sm text-text-default">
+                  {ccPair.last_permission_sync_attempt_finished
+                    ? timeAgo(ccPair.last_permission_sync_attempt_finished)
+                    : timeAgo(ccPair.last_full_permission_sync) ?? "-"}
+                </Text>
               </div>
-            </div>
+            </>
           )}
         </div>
       </Card>
@@ -676,6 +690,17 @@ function Main({ ccPairId }: { ccPairId: number }) {
                   ccPair.connector.source
                 )}
               />
+
+              {/* Inline file management for file connectors */}
+              {ccPair.connector.source === "file" &&
+                ccPair.is_editable_for_current_user && (
+                  <div className="mt-6">
+                    <InlineFileManagement
+                      connectorId={ccPair.connector.id}
+                      onRefresh={refresh}
+                    />
+                  </div>
+                )}
             </Card>
           </>
         )}

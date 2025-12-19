@@ -25,6 +25,32 @@ class IndexingStatus(str, PyEnum):
         )
 
 
+class PermissionSyncStatus(str, PyEnum):
+    """Status enum for permission sync attempts"""
+
+    NOT_STARTED = "not_started"
+    IN_PROGRESS = "in_progress"
+    SUCCESS = "success"
+    CANCELED = "canceled"
+    FAILED = "failed"
+    COMPLETED_WITH_ERRORS = "completed_with_errors"
+
+    def is_terminal(self) -> bool:
+        terminal_states = {
+            PermissionSyncStatus.SUCCESS,
+            PermissionSyncStatus.COMPLETED_WITH_ERRORS,
+            PermissionSyncStatus.CANCELED,
+            PermissionSyncStatus.FAILED,
+        }
+        return self in terminal_states
+
+    def is_successful(self) -> bool:
+        return (
+            self == PermissionSyncStatus.SUCCESS
+            or self == PermissionSyncStatus.COMPLETED_WITH_ERRORS
+        )
+
+
 class IndexingMode(str, PyEnum):
     UPDATE = "update"
     REINDEX = "reindex"
@@ -60,6 +86,7 @@ class MCPAuthenticationType(str, PyEnum):
     NONE = "NONE"
     API_TOKEN = "API_TOKEN"
     OAUTH = "OAUTH"
+    PT_OAUTH = "PT_OAUTH"  # Pass-Through OAuth
 
 
 class MCPTransport(str, PyEnum):
@@ -73,6 +100,14 @@ class MCPTransport(str, PyEnum):
 class MCPAuthenticationPerformer(str, PyEnum):
     ADMIN = "ADMIN"
     PER_USER = "PER_USER"
+
+
+class MCPServerStatus(str, PyEnum):
+    CREATED = "CREATED"  # Server created, needs auth configuration
+    AWAITING_AUTH = "AWAITING_AUTH"  # Auth configured, pending user authentication
+    FETCHING_TOOLS = "FETCHING_TOOLS"  # Auth complete, fetching tools
+    CONNECTED = "CONNECTED"  # Fully configured and connected
+    DISCONNECTED = "DISCONNECTED"  # Server disconnected, but not deleted
 
 
 # Consistent with Celery task statuses
@@ -146,3 +181,16 @@ class UserFileStatus(str, PyEnum):
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELED = "CANCELED"
+    DELETING = "DELETING"
+
+
+class ThemePreference(str, PyEnum):
+    LIGHT = "light"
+    DARK = "dark"
+    SYSTEM = "system"
+
+
+class SwitchoverType(str, PyEnum):
+    REINDEX = "reindex"
+    ACTIVE_ONLY = "active_only"
+    INSTANT = "instant"

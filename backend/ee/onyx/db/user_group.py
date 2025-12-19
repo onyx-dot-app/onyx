@@ -8,6 +8,7 @@ from sqlalchemy import func
 from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy import update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from ee.onyx.server.user_group.models import SetCuratorRequest
@@ -362,14 +363,29 @@ def _check_user_group_is_modifiable(user_group: UserGroup) -> None:
 
 def _add_user__user_group_relationships__no_commit(
     db_session: Session, user_group_id: int, user_ids: list[UUID]
-) -> list[User__UserGroup]:
-    """NOTE: does not commit the transaction."""
-    relationships = [
-        User__UserGroup(user_id=user_id, user_group_id=user_group_id)
-        for user_id in user_ids
-    ]
-    db_session.add_all(relationships)
-    return relationships
+) -> None:
+    """NOTE: does not commit the transaction.
+
+    This function is idempotent - it will skip users who are already in the group
+    to avoid duplicate key violations during concurrent operations or re-syncs.
+    Uses ON CONFLICT DO NOTHING to keep inserts atomic under concurrency.
+    """
+    if not user_ids:
+        return
+
+    insert_stmt = (
+        insert(User__UserGroup)
+        .values(
+            [
+                {"user_id": user_id, "user_group_id": user_group_id}
+                for user_id in user_ids
+            ]
+        )
+        .on_conflict_do_nothing(
+            index_elements=[User__UserGroup.user_group_id, User__UserGroup.user_id]
+        )
+    )
+    db_session.execute(insert_stmt)
 
 
 def _add_user_group__cc_pair_relationships__no_commit(
@@ -581,6 +597,48 @@ def update_user_curator_relationship(
     db_session.commit()
 
 
+def add_users_to_user_group(
+    db_session: Session,
+    user: User | None,
+    user_group_id: int,
+    user_ids: list[UUID],
+) -> UserGroup:
+    db_user_group = fetch_user_group(db_session=db_session, user_group_id=user_group_id)
+    if db_user_group is None:
+        raise ValueError(f"UserGroup with id '{user_group_id}' not found")
+
+    missing_users = [
+        user_id for user_id in user_ids if fetch_user_by_id(db_session, user_id) is None
+    ]
+    if missing_users:
+        raise ValueError(
+            f"User(s) not found: {', '.join(str(user_id) for user_id in missing_users)}"
+        )
+
+    _check_user_group_is_modifiable(db_user_group)
+
+    current_user_ids = [user.id for user in db_user_group.users]
+    current_user_ids_set = set(current_user_ids)
+    new_user_ids = [
+        user_id for user_id in user_ids if user_id not in current_user_ids_set
+    ]
+
+    if not new_user_ids:
+        return db_user_group
+
+    user_group_update = UserGroupUpdate(
+        user_ids=current_user_ids + new_user_ids,
+        cc_pair_ids=[cc_pair.id for cc_pair in db_user_group.cc_pairs],
+    )
+
+    return update_user_group(
+        db_session=db_session,
+        user=user,
+        user_group_id=user_group_id,
+        user_group_update=user_group_update,
+    )
+
+
 def update_user_group(
     db_session: Session,
     user: User | None,
@@ -602,6 +660,17 @@ def update_user_group(
     updated_user_ids = set(user_group_update.user_ids)
     added_user_ids = list(updated_user_ids - current_user_ids)
     removed_user_ids = list(current_user_ids - updated_user_ids)
+
+    if added_user_ids:
+        missing_users = [
+            user_id
+            for user_id in added_user_ids
+            if fetch_user_by_id(db_session, user_id) is None
+        ]
+        if missing_users:
+            raise ValueError(
+                f"User(s) not found: {', '.join(str(user_id) for user_id in missing_users)}"
+            )
 
     # LEAVING THIS HERE FOR NOW FOR GIVING DIFFERENT ROLES
     # ACCESS TO DIFFERENT PERMISSIONS

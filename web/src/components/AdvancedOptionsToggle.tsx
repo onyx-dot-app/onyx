@@ -1,7 +1,6 @@
-import React from "react";
-import { Button } from "@/components/ui/button";
-import { FiChevronDown, FiChevronRight } from "react-icons/fi";
-
+import Button from "@/refresh-components/buttons/Button";
+import { cn } from "@/lib/utils";
+import { SvgChevronRight } from "@opal/icons";
 interface AdvancedOptionsToggleProps {
   showAdvancedOptions: boolean;
   setShowAdvancedOptions: (show: boolean) => void;
@@ -15,12 +14,14 @@ export function AdvancedOptionsToggle({
 }: AdvancedOptionsToggleProps) {
   return (
     <Button
-      type="button"
-      variant="link"
-      size="sm"
-      icon={showAdvancedOptions ? FiChevronDown : FiChevronRight}
+      internal
+      leftIcon={({ className }) => (
+        <SvgChevronRight
+          className={cn(className, showAdvancedOptions && "rotate-90")}
+        />
+      )}
       onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
-      className="text-xs mr-auto !p-0 text-text-950 hover:text-text-500"
+      className="mr-auto"
     >
       {title || "Advanced Options"}
     </Button>

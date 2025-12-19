@@ -3,21 +3,14 @@ import {
   FederatedConnectorDetail,
   FederatedConnectorConfig,
   federatedSourceToRegularSource,
-  ValidSources,
 } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
-import { X, Search, Settings } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { ErrorMessage } from "formik";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import Text from "@/refresh-components/texts/Text";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { SvgX } from "@opal/icons";
 
 interface FederatedConnectorSelectorProps {
   name: string;
@@ -29,188 +22,6 @@ interface FederatedConnectorSelectorProps {
   placeholder?: string;
   showError?: boolean;
 }
-
-interface EntityConfigDialogProps {
-  connectorId: number;
-  connectorName: string;
-  connectorSource: ValidSources | null;
-  currentEntities: Record<string, any>;
-  onSave: (entities: Record<string, any>) => void;
-  onClose: () => void;
-  isOpen: boolean;
-}
-
-const EntityConfigDialog = ({
-  connectorId,
-  connectorName,
-  connectorSource,
-  currentEntities,
-  onSave,
-  onClose,
-  isOpen,
-}: EntityConfigDialogProps) => {
-  const [entities, setEntities] =
-    useState<Record<string, any>>(currentEntities);
-  const [entitySchema, setEntitySchema] = useState<Record<string, any> | null>(
-    null
-  );
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (isOpen && connectorId) {
-      const fetchEntitySchema = async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
-          const response = await fetch(
-            `/api/federated/${connectorId}/entities`
-          );
-          if (!response.ok) {
-            throw new Error(
-              `Failed to fetch entity schema: ${response.statusText}`
-            );
-          }
-          const data = await response.json();
-          setEntitySchema(data.entities);
-        } catch (err) {
-          setError(
-            err instanceof Error ? err.message : "Failed to load entity schema"
-          );
-        } finally {
-          setIsLoading(false);
-        }
-      };
-      fetchEntitySchema();
-    }
-  }, [isOpen, connectorId]);
-
-  const handleSave = () => {
-    onSave(entities);
-    onClose();
-  };
-
-  const handleEntityChange = (key: string, value: any) => {
-    setEntities((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
-  };
-
-  if (!connectorSource) {
-    return null;
-  }
-
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <SourceIcon
-              sourceType={federatedSourceToRegularSource(connectorSource)}
-              iconSize={20}
-            />
-            Configure {connectorName}
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          {isLoading && (
-            <div className="text-center py-4">
-              <div className="animate-spin h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2"></div>
-              <p className="text-sm text-muted-foreground">
-                Loading configuration...
-              </p>
-            </div>
-          )}
-
-          {error && (
-            <div className="text-red-500 text-sm p-3 bg-red-50 rounded-md">
-              {error}
-            </div>
-          )}
-
-          {entitySchema && !isLoading && (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Configure which entities to include from this connector:
-              </p>
-
-              {Object.entries(entitySchema).map(
-                ([key, field]: [string, any]) => (
-                  <div key={key} className="space-y-2">
-                    <Label className="text-sm font-medium">
-                      {field.description || key}
-                      {field.required && (
-                        <span className="text-red-500 ml-1">*</span>
-                      )}
-                    </Label>
-
-                    {field.type === "list" ? (
-                      <div className="space-y-2">
-                        <Input
-                          type="text"
-                          placeholder={
-                            field.example || `Enter ${key} (comma-separated)`
-                          }
-                          value={
-                            Array.isArray(entities[key])
-                              ? entities[key].join(", ")
-                              : ""
-                          }
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            const list = value
-                              ? value
-                                  .split(",")
-                                  .map((item) => item.trim())
-                                  .filter(Boolean)
-                              : [];
-                            handleEntityChange(key, list);
-                          }}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          {field.description && field.description !== key
-                            ? field.description
-                            : `Enter ${key} separated by commas`}
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <Input
-                          type="text"
-                          placeholder={field.example || `Enter ${key}`}
-                          value={entities[key] || ""}
-                          onChange={(e) =>
-                            handleEntityChange(key, e.target.value)
-                          }
-                        />
-                        {field.description && field.description !== key && (
-                          <p className="text-xs text-muted-foreground">
-                            {field.description}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )
-              )}
-            </div>
-          )}
-
-          <div className="flex justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={isLoading}>
-              Save Configuration
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-};
 
 export const FederatedConnectorSelector = ({
   name,
@@ -224,19 +35,6 @@ export const FederatedConnectorSelector = ({
 }: FederatedConnectorSelectorProps) => {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [configDialogState, setConfigDialogState] = useState<{
-    isOpen: boolean;
-    connectorId: number | null;
-    connectorName: string;
-    connectorSource: ValidSources | null;
-    currentEntities: Record<string, any>;
-  }>({
-    isOpen: false,
-    connectorId: null,
-    connectorName: "",
-    connectorSource: null,
-    currentEntities: {},
-  });
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -298,36 +96,6 @@ export const FederatedConnectorSelector = ({
     );
   };
 
-  const openConfigDialog = (connectorId: number) => {
-    const connector = federatedConnectors.find((c) => c.id === connectorId);
-    const config = selectedConfigs.find(
-      (c) => c.federated_connector_id === connectorId
-    );
-
-    if (connector) {
-      setConfigDialogState({
-        isOpen: true,
-        connectorId,
-        connectorName: connector.name,
-        connectorSource: connector.source,
-        currentEntities: config?.entities || {},
-      });
-    }
-  };
-
-  const saveEntityConfig = (entities: Record<string, any>) => {
-    const updatedConfigs = selectedConfigs.map((config) => {
-      if (config.federated_connector_id === configDialogState.connectorId) {
-        return {
-          ...config,
-          entities,
-        };
-      }
-      return config;
-    });
-    onChange(updatedConfigs);
-  };
-
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -362,48 +130,41 @@ export const FederatedConnectorSelector = ({
     <div className="flex flex-col w-full space-y-2 mb-4">
       {label && <Label className="text-base font-medium">{label}</Label>}
 
-      <p className="text-xs text-neutral-500 dark:text-neutral-400">
+      <Text mainUiMuted text03>
         Documents from selected federated connectors will be searched in
         real-time during queries.
-      </p>
+      </Text>
       <div className="relative">
-        <div
-          className={`flex items-center border border-input rounded-md border-neutral-200 dark:border-neutral-700 ${
-            allConnectorsSelected ? "bg-neutral-50 dark:bg-neutral-800" : ""
-          } focus-within:ring-1 focus-within:ring-ring focus-within:border-neutral-400 dark:focus-within:border-neutral-500 transition-colors`}
-        >
-          <Search className="absolute left-3 h-4 w-4 text-neutral-500 dark:text-neutral-400" />
-          <input
-            ref={inputRef}
-            type="text"
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
+        <InputTypeIn
+          ref={inputRef}
+          leftSearchIcon
+          placeholder={effectivePlaceholder}
+          value={searchQuery}
+          disabled={isInputDisabled}
+          onChange={(e) => {
+            setSearchQuery(e.target.value);
+            setOpen(true);
+          }}
+          onKeyDown={handleKeyDown}
+          onFocus={() => {
+            if (!allConnectorsSelected) {
               setOpen(true);
-            }}
-            onFocus={() => {
-              if (!allConnectorsSelected) {
-                setOpen(true);
-              }
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder={effectivePlaceholder}
-            className={`h-9 w-full pl-9 pr-10 py-2 bg-transparent dark:bg-transparent text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50 ${
-              allConnectorsSelected
-                ? "text-neutral-500 dark:text-neutral-400"
-                : ""
-            }`}
-            disabled={isInputDisabled}
-          />
-        </div>
+            }
+          }}
+          className={
+            allConnectorsSelected
+              ? "rounded-12 bg-background-neutral-01"
+              : "rounded-12"
+          }
+        />
 
         {open && !allConnectorsSelected && (
           <div
             ref={dropdownRef}
-            className="absolute z-50 w-full mt-1 rounded-md border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 shadow-md default-scrollbar max-h-[300px] overflow-auto"
+            className="absolute z-50 w-full mt-1 rounded-12 border border-border-02 bg-background-neutral-00 shadow-md default-scrollbar max-h-[300px] overflow-auto"
           >
             {filteredUnselectedConnectors.length === 0 ? (
-              <div className="py-4 text-center text-xs text-neutral-500 dark:text-neutral-400">
+              <div className="py-4 text-center text-xs text-text-03">
                 {searchQuery
                   ? "No matching federated connectors found"
                   : "No more federated connectors available"}
@@ -413,7 +174,7 @@ export const FederatedConnectorSelector = ({
                 {filteredUnselectedConnectors.map((connector) => (
                   <div
                     key={connector.id}
-                    className="flex items-center justify-between py-2 px-3 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800 text-xs"
+                    className="flex items-center justify-between py-2 px-3 cursor-pointer hover:bg-background-neutral-01 text-xs"
                     onClick={() => selectConnector(connector.id)}
                   >
                     <div className="flex items-center truncate mr-2">
@@ -448,7 +209,7 @@ export const FederatedConnectorSelector = ({
               return (
                 <div
                   key={connector.id}
-                  className="flex items-center bg-white dark:bg-neutral-800 rounded-md border border-neutral-300 dark:border-neutral-700 transition-all px-2 py-1 max-w-full group text-xs"
+                  className="flex items-center bg-background-neutral-00 rounded-12 border border-border-02 transition-all px-2 py-1 max-w-full group text-xs"
                 >
                   <div className="flex items-center overflow-hidden">
                     <div className="mr-1 flex-shrink-0">
@@ -470,21 +231,14 @@ export const FederatedConnectorSelector = ({
                     )}
                   </div>
                   <div className="flex items-center ml-2 gap-1">
-                    <button
-                      className="flex-shrink-0 rounded-full w-4 h-4 flex items-center justify-center bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-600 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors"
-                      onClick={() => openConfigDialog(connector.id)}
-                      aria-label="Configure entities"
-                      title="Configure entities"
-                    >
-                      <Settings className="h-2.5 w-2.5" />
-                    </button>
-                    <button
-                      className="flex-shrink-0 rounded-full w-4 h-4 flex items-center justify-center bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-600 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors"
-                      onClick={() => removeConnector(connector.id)}
+                    <IconButton
+                      internal
+                      type="button"
                       aria-label="Remove connector"
-                    >
-                      <X className="h-2.5 w-2.5" />
-                    </button>
+                      tooltip="Remove connector"
+                      onClick={() => removeConnector(connector.id)}
+                      icon={SvgX}
+                    />
                   </div>
                 </div>
               );
@@ -492,28 +246,16 @@ export const FederatedConnectorSelector = ({
           </div>
         </div>
       ) : (
-        <div className="mt-3 p-3 border border-dashed border-neutral-300 dark:border-neutral-700 rounded-md bg-neutral-50 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 text-xs">
+        <div className="mt-3 p-3 border border-dashed border-border-02 rounded-12 bg-background-neutral-01 text-text-03 text-xs">
           No federated connectors selected. Search and select connectors above.
         </div>
       )}
-
-      <EntityConfigDialog
-        connectorId={configDialogState.connectorId!}
-        connectorName={configDialogState.connectorName}
-        connectorSource={configDialogState.connectorSource}
-        currentEntities={configDialogState.currentEntities}
-        onSave={saveEntityConfig}
-        onClose={() =>
-          setConfigDialogState((prev) => ({ ...prev, isOpen: false }))
-        }
-        isOpen={configDialogState.isOpen}
-      />
 
       {showError && (
         <ErrorMessage
           name={name}
           component="div"
-          className="text-red-500 dark:text-red-400 text-xs mt-1"
+          className="text-action-danger-05 text-xs mt-1"
         />
       )}
     </div>

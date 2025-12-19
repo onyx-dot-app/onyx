@@ -689,6 +689,16 @@ fi
 export HOST_PORT=$AVAILABLE_PORT
 print_success "Using port $AVAILABLE_PORT for nginx"
 
+# Determine if we're using the latest tag
+# Read IMAGE_TAG from .env file and remove any quotes or whitespace
+CURRENT_IMAGE_TAG=$(grep "^IMAGE_TAG=" "$ENV_FILE" | head -1 | cut -d'=' -f2 | tr -d ' "'"'"'')
+if [ "$CURRENT_IMAGE_TAG" = "latest" ]; then
+    USE_LATEST=true
+    print_info "Using 'latest' tag - will force pull and recreate containers"
+else
+    USE_LATEST=false
+fi
+
 # Pull Docker images with reduced output
 print_step "Pulling Docker images"
 print_info "This may take several minutes depending on your internet connection..."
@@ -706,7 +716,12 @@ fi
 print_step "Starting Onyx services"
 print_info "Launching containers..."
 echo ""
-(cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml up -d)
+if [ "$USE_LATEST" = true ]; then
+    print_info "Force pulling latest images and recreating containers..."
+    (cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml up -d --pull always --force-recreate)
+else
+    (cd onyx_data/deployment && $COMPOSE_CMD -f docker-compose.yml up -d)
+fi
 if [ $? -ne 0 ]; then
     print_error "Failed to start Onyx services"
     exit 1

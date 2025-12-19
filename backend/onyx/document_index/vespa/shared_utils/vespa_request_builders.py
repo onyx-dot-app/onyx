@@ -195,18 +195,18 @@ def build_vespa_filters(
     # Time filter
     filter_str += _build_time_filter(filters.time_cutoff)
 
-    # Knowledge Graph Filters
-    filter_str += _build_kg_filter(
-        kg_entities=filters.kg_entities,
-        kg_relationships=filters.kg_relationships,
-        kg_terms=filters.kg_terms,
-    )
+    # # Knowledge Graph Filters
+    # filter_str += _build_kg_filter(
+    #     kg_entities=filters.kg_entities,
+    #     kg_relationships=filters.kg_relationships,
+    #     kg_terms=filters.kg_terms,
+    # )
 
-    filter_str += _build_kg_source_filters(filters.kg_sources)
+    # filter_str += _build_kg_source_filters(filters.kg_sources)
 
-    filter_str += _build_kg_chunk_id_zero_only_filter(
-        filters.kg_chunk_id_zero_only or False
-    )
+    # filter_str += _build_kg_chunk_id_zero_only_filter(
+    #     filters.kg_chunk_id_zero_only or False
+    # )
 
     # Trim trailing " and "
     if remove_trailing_and and filter_str.endswith(" and "):

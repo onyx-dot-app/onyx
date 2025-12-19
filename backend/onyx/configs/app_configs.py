@@ -24,6 +24,12 @@ APP_PORT = 8080
 # prefix from requests directed towards the API server. In these cases, set this to `/api`
 APP_API_PREFIX = os.environ.get("API_PREFIX", "")
 
+# Whether to send user metadata (user_id/email and session_id) to the LLM provider.
+# Disabled by default.
+SEND_USER_METADATA_TO_LLM_PROVIDER = (
+    os.environ.get("SEND_USER_METADATA_TO_LLM_PROVIDER", "")
+).lower() == "true"
+
 #####
 # User Facing Features Configs
 #####
@@ -31,7 +37,6 @@ BLURB_SIZE = 128  # Number Encoder Tokens included in the chunk blurb
 GENERATIVE_MODEL_ACCESS_CHECK_FREQ = int(
     os.environ.get("GENERATIVE_MODEL_ACCESS_CHECK_FREQ") or 86400
 )  # 1 day
-DISABLE_GENERATIVE_AI = os.environ.get("DISABLE_GENERATIVE_AI", "").lower() == "true"
 
 # Controls whether users can use User Knowledge (personal documents) in assistants
 DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() == "true"
@@ -126,8 +131,28 @@ OAUTH_CLIENT_SECRET = (
     os.environ.get("OAUTH_CLIENT_SECRET", os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET"))
     or ""
 )
-# OpenID Connect configuration URL for Okta Profile Tool and other OIDC integrations
+# OpenID Connect configuration URL for OIDC integrations
 OPENID_CONFIG_URL = os.environ.get("OPENID_CONFIG_URL") or ""
+
+# Applicable for OIDC Auth, allows you to override the scopes that
+# are requested from the OIDC provider. Currently used when passing
+# over access tokens to tool calls and the tool needs more scopes
+OIDC_SCOPE_OVERRIDE: list[str] | None = None
+_OIDC_SCOPE_OVERRIDE = os.environ.get("OIDC_SCOPE_OVERRIDE")
+
+if _OIDC_SCOPE_OVERRIDE:
+    try:
+        OIDC_SCOPE_OVERRIDE = [
+            scope.strip() for scope in _OIDC_SCOPE_OVERRIDE.split(",")
+        ]
+    except Exception:
+        pass
+
+# Applicable for SAML Auth
+SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/onyx/configs/saml_config"
+
+# JWT Public Key URL for JWT token verification
+JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL", None)
 
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
 
@@ -349,10 +374,6 @@ except ValueError:
         CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT
     )
 
-CELERY_WORKER_KG_PROCESSING_CONCURRENCY = int(
-    os.environ.get("CELERY_WORKER_KG_PROCESSING_CONCURRENCY") or 4
-)
-
 CELERY_WORKER_PRIMARY_CONCURRENCY = int(
     os.environ.get("CELERY_WORKER_PRIMARY_CONCURRENCY") or 4
 )
@@ -360,18 +381,30 @@ CELERY_WORKER_PRIMARY_CONCURRENCY = int(
 CELERY_WORKER_PRIMARY_POOL_OVERFLOW = int(
     os.environ.get("CELERY_WORKER_PRIMARY_POOL_OVERFLOW") or 4
 )
-CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY_DEFAULT = 4
-try:
-    CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY = int(
-        os.environ.get(
-            "CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY",
-            CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY_DEFAULT,
-        )
-    )
-except ValueError:
-    CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY = (
-        CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY_DEFAULT
-    )
+
+# Consolidated background worker (light, docprocessing, docfetching, heavy, kg_processing, monitoring, user_file_processing)
+# separate workers' defaults: light=24, docprocessing=6, docfetching=1, heavy=4, kg=2, monitoring=1, user_file=2
+# Total would be 40, but we use a more conservative default of 20 for the consolidated worker
+CELERY_WORKER_BACKGROUND_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_BACKGROUND_CONCURRENCY") or 20
+)
+
+# Individual worker concurrency settings (used when USE_LIGHTWEIGHT_BACKGROUND_WORKER is False or on Kuberenetes deployments)
+CELERY_WORKER_HEAVY_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_HEAVY_CONCURRENCY") or 4
+)
+
+CELERY_WORKER_KG_PROCESSING_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_KG_PROCESSING_CONCURRENCY") or 2
+)
+
+CELERY_WORKER_MONITORING_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_MONITORING_CONCURRENCY") or 1
+)
+
+CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY") or 2
+)
 
 # The maximum number of tasks that can be queued up to sync to Vespa in a single pass
 VESPA_SYNC_MAX_TASKS = 8192
@@ -500,6 +533,10 @@ CONFLUENCE_TIMEZONE_OFFSET = float(
     os.environ.get("CONFLUENCE_TIMEZONE_OFFSET", get_current_tz_offset())
 )
 
+CONFLUENCE_USE_ONYX_USERS_FOR_GROUP_SYNC = (
+    os.environ.get("CONFLUENCE_USE_ONYX_USERS_FOR_GROUP_SYNC", "").lower() == "true"
+)
+
 GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD", 10 * 1024 * 1024)
 )
@@ -557,6 +594,12 @@ DASK_JOB_CLIENT_ENABLED = (
 EXPERIMENTAL_CHECKPOINTING_ENABLED = (
     os.environ.get("EXPERIMENTAL_CHECKPOINTING_ENABLED", "").lower() == "true"
 )
+
+
+# TestRail specific configs
+TESTRAIL_BASE_URL = os.environ.get("TESTRAIL_BASE_URL", "")
+TESTRAIL_USERNAME = os.environ.get("TESTRAIL_USERNAME", "")
+TESTRAIL_API_KEY = os.environ.get("TESTRAIL_API_KEY", "")
 
 LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE = (
     os.environ.get("LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE", "").lower()
@@ -664,11 +707,16 @@ MAX_TOKENS_FOR_FULL_INCLUSION = 4096
 #####
 # Tool Configs
 #####
-OKTA_PROFILE_TOOL_ENABLED = (
-    os.environ.get("OKTA_PROFILE_TOOL_ENABLED", "").lower() == "true"
+# Code Interpreter Service Configuration
+CODE_INTERPRETER_BASE_URL = os.environ.get("CODE_INTERPRETER_BASE_URL")
+
+CODE_INTERPRETER_DEFAULT_TIMEOUT_MS = int(
+    os.environ.get("CODE_INTERPRETER_DEFAULT_TIMEOUT_MS") or 60_000
 )
-# API token for SSWS auth to Okta Admin API. If set, Users API will be used to enrich profile.
-OKTA_API_TOKEN = os.environ.get("OKTA_API_TOKEN") or ""
+
+CODE_INTERPRETER_MAX_OUTPUT_LENGTH = int(
+    os.environ.get("CODE_INTERPRETER_MAX_OUTPUT_LENGTH") or 50_000
+)
 
 
 #####
@@ -707,13 +755,19 @@ DISABLE_TELEMETRY = os.environ.get("DISABLE_TELEMETRY", "").lower() == "true"
 #####
 # Braintrust Configuration
 #####
-# Enable Braintrust tracing for LangGraph/LangChain applications
-BRAINTRUST_ENABLED = os.environ.get("BRAINTRUST_ENABLED", "").lower() == "true"
 # Braintrust project name
 BRAINTRUST_PROJECT = os.environ.get("BRAINTRUST_PROJECT", "Onyx")
+# Braintrust API key - if provided, Braintrust tracing will be enabled
 BRAINTRUST_API_KEY = os.environ.get("BRAINTRUST_API_KEY") or ""
 # Maximum concurrency for Braintrust evaluations
 BRAINTRUST_MAX_CONCURRENCY = int(os.environ.get("BRAINTRUST_MAX_CONCURRENCY") or 5)
+
+#####
+# Langfuse Configuration
+#####
+# Langfuse API credentials - if provided, Langfuse tracing will be enabled
+LANGFUSE_SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY") or ""
+LANGFUSE_PUBLIC_KEY = os.environ.get("LANGFUSE_PUBLIC_KEY") or ""
 
 TOKEN_BUDGET_GLOBALLY_ENABLED = (
     os.environ.get("TOKEN_BUDGET_GLOBALLY_ENABLED", "").lower() == "true"
@@ -768,11 +822,19 @@ ENTERPRISE_EDITION_ENABLED = (
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() == "true"
 )
 
-# Azure DALL-E Configurations
-AZURE_DALLE_API_VERSION = os.environ.get("AZURE_DALLE_API_VERSION")
-AZURE_DALLE_API_KEY = os.environ.get("AZURE_DALLE_API_KEY")
-AZURE_DALLE_API_BASE = os.environ.get("AZURE_DALLE_API_BASE")
-AZURE_DALLE_DEPLOYMENT_NAME = os.environ.get("AZURE_DALLE_DEPLOYMENT_NAME")
+# Azure Image Configurations
+AZURE_IMAGE_API_VERSION = os.environ.get("AZURE_IMAGE_API_VERSION") or os.environ.get(
+    "AZURE_DALLE_API_VERSION"
+)
+AZURE_IMAGE_API_KEY = os.environ.get("AZURE_IMAGE_API_KEY") or os.environ.get(
+    "AZURE_DALLE_API_KEY"
+)
+AZURE_IMAGE_API_BASE = os.environ.get("AZURE_IMAGE_API_BASE") or os.environ.get(
+    "AZURE_DALLE_API_BASE"
+)
+AZURE_IMAGE_DEPLOYMENT_NAME = os.environ.get(
+    "AZURE_IMAGE_DEPLOYMENT_NAME"
+) or os.environ.get("AZURE_DALLE_DEPLOYMENT_NAME")
 
 # configurable image model
 IMAGE_MODEL_NAME = os.environ.get("IMAGE_MODEL_NAME", "gpt-image-1")
@@ -821,6 +883,21 @@ _API_KEY_HASH_ROUNDS_RAW = os.environ.get("API_KEY_HASH_ROUNDS")
 API_KEY_HASH_ROUNDS = (
     int(_API_KEY_HASH_ROUNDS_RAW) if _API_KEY_HASH_ROUNDS_RAW else None
 )
+
+#####
+# MCP Server Configs
+#####
+MCP_SERVER_ENABLED = os.environ.get("MCP_SERVER_ENABLED", "").lower() == "true"
+MCP_SERVER_PORT = int(os.environ.get("MCP_SERVER_PORT") or 8090)
+
+# CORS origins for MCP clients (comma-separated)
+# Local dev: "http://localhost:*"
+# Production: "https://trusted-client.com,https://another-client.com"
+MCP_SERVER_CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("MCP_SERVER_CORS_ORIGINS", "").split(",")
+    if origin.strip()
+]
 
 
 POD_NAME = os.environ.get("POD_NAME")
@@ -886,6 +963,11 @@ S3_VERIFY_SSL = os.environ.get("S3_VERIFY_SSL", "").lower() == "true"
 # S3/MinIO Access Keys
 S3_AWS_ACCESS_KEY_ID = os.environ.get("S3_AWS_ACCESS_KEY_ID")
 S3_AWS_SECRET_ACCESS_KEY = os.environ.get("S3_AWS_SECRET_ACCESS_KEY")
+
+# Should we force S3 local checksumming
+S3_GENERATE_LOCAL_CHECKSUM = (
+    os.environ.get("S3_GENERATE_LOCAL_CHECKSUM", "").lower() == "true"
+)
 
 # Forcing Vespa Language
 # English: en, German:de, etc. See: https://docs.vespa.ai/en/linguistics.html

@@ -1,8 +1,11 @@
 @import url("https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=DM+Mono:wght@400&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@400&display=swap");
 
-@import "figma/colors.css";
+@import "css/colors.css";
+@import "css/inputs.css";
+@import "css/line-item.css";
+@import "css/switch.css";
+@import "css/z-index.css";
 
 @tailwind base;
 @tailwind components;
@@ -19,24 +22,11 @@
     --border-radius-full: 64rem;
   }
 
-  /* SPACINGS + PADDINGS */
+  /* BACKDROP BLUR */
   :root {
-    --spacing-inline-mini: 0.12rem;
-    --spacing-inline: 0.25rem;
-    --spacing-interline-mini: 0.38rem;
-    --spacing-interline: 0.5rem;
-    --spacing-paragraph: 1rem;
-    --spacing-headline: 1.5rem;
-    --spacing-headline-large: 2rem;
-    --spacing-block: 2.5rem;
-    --spacing-section: 9rem;
-
-    --padding-button: 0.75rem;
-    --padding-content: 1.5rem;
-    --padding-block-end: 2rem;
-    --padding-body-main: 2rem;
-    --padding-section: 4.5rem;
-    --width-outer-shell: 90rem;
+    --backdrop-blur-01: 2px;
+    --backdrop-blur-02: 1px;
+    --backdrop-blur-03: 1px;
   }
 
   * {
@@ -81,9 +71,22 @@
     margin-bottom: 0.5em;
   }
 
+  .prose ol {
+    list-style-type: decimal;
+    padding-left: 1.5rem;
+    margin-left: 0;
+  }
+
+  .prose ul {
+    list-style-type: disc;
+    padding-left: 1.5rem;
+    margin-left: 0;
+  }
+
   .prose li {
     margin-top: 0.25em;
     margin-bottom: 0.25em;
+    display: list-item;
   }
 
   .prose hr {
@@ -115,6 +118,36 @@
     scrollbar-width: none;
     /* Firefox */
   }
+
+  /* SHADOWS */
+  .shadow-00 {
+    box-shadow: 0px 0px 2px 1px var(--shadow-01);
+  }
+  .shadow-01 {
+    box-shadow:
+      0px 2px 12px 0px var(--shadow-02),
+      0px 0px 4px 1px var(--shadow-02);
+  }
+  .shadow-02 {
+    box-shadow:
+      0px 2px 24px 0px var(--shadow-03),
+      0px 0px 12px 1px var(--shadow-03);
+  }
+
+  /* DEBUGGING UTILITIES
+  If you ever want to highlight a component for debugging purposes, just type in `className="dbg-red ..."`, and a red box should appear around it.
+  This helps with placing things properly on the screen and seeing how they look during active development.
+  */
+
+  .dbg-red {
+    border: 1px solid red;
+  }
+  .dbg-blue {
+    border: 1px solid blue;
+  }
+  .dbg-green {
+    border: 1px solid green;
+  }
 }
 
 /* TYPOGRAPHY SYSTEM - Imported from Figma Design System */
@@ -127,8 +160,6 @@
     "Segoe UI", Roboto, sans-serif;
   --font-dm-mono: "DM Mono", "SF Mono", Monaco, "Cascadia Code", "Roboto Mono",
     Consolas, "Courier New", monospace;
-  --font-sf-pro: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI",
-    Roboto, sans-serif;
 }
 
 /* HEADING STYLES */
@@ -278,7 +309,7 @@
 }
 
 .font-figure-keystroke {
-  font-family: var(--font-sf-pro);
+  font-family: var(--font-hanken-grotesk);
   font-size: 12px;
   font-weight: 400;
   line-height: 16px;
@@ -429,7 +460,7 @@ textarea {
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  animation: shimmerTransition 2.5s ease-out infinite;
+  animation: shimmerTransition 1.8s ease-out infinite;
 }
 
 .dark .loading-text {
@@ -476,91 +507,6 @@ textarea {
   overscroll-behavior-y: none;
 }
 
-/* CODE BLOCKS */
-
-.prose :where(pre):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
-  background-color: theme("colors.code-bg");
-  font-size: theme("fontSize.code-sm");
-  color: #fff;
-}
-
-pre[class*="language-"],
-code[class*="language-"] {
-  color: theme("colors.code-text");
-}
-
-/* Token styles */
-.code-line .token.comment,
-.code-line .token.prolog,
-.code-line .token.doctype,
-.code-line .token.cdata {
-  color: theme("colors.token-comment");
-}
-
-.code-line .token.punctuation,
-.code-line .token.operator,
-.code-line .token.entity,
-.code-line .token.url,
-.code-line .language-css .token.string,
-.code-line .style .token.string {
-  color: theme("colors.token-punctuation");
-}
-
-.code-line .token.property,
-.code-line .token.tag,
-.code-line .token.boolean,
-.code-line .token.number,
-.code-line .token.constant,
-.code-line .token.symbol,
-.code-line .token.deleted,
-.code-line .token.tag .token.punctuation {
-  color: theme("colors.token-property");
-}
-
-.code-line .token.selector,
-.code-line .token.attr-name,
-.code-line .token.string,
-.code-line .token.char,
-.code-line .token.builtin,
-.code-line .token.inserted,
-.code-line .token.attr-value,
-.code-line .token.attr-value .token.punctuation {
-  color: theme("colors.token-selector");
-}
-
-.code-line .token.atrule,
-.code-line .token.keyword {
-  color: theme("colors.token-atrule");
-}
-
-.code-line .token.function,
-.code-line .token.class-name {
-  color: theme("colors.token-function");
-}
-
-.code-line .token.regex,
-.code-line .token.important,
-.code-line .token.variable {
-  color: theme("colors.token-regex");
-}
-
-.code-line .token.important,
-.code-line .token.bold {
-  font-weight: theme("fontWeight.token-bold");
-}
-
-.code-line .token.italic {
-  font-style: theme("fontStyle.token-italic");
-}
-
-.code-line .token.entity {
-  cursor: help;
-}
-
-.code-line .token.attr-name {
-  color: theme("colors.token-attr-name");
-}
-
 /* CUSTOM ANIMATIONS */
 
 @keyframes fadeIn {
@@ -581,22 +527,4 @@ code[class*="language-"] {
 
 .container {
   margin-bottom: 1rem;
-}
-
-/* DEBUGGING UTILITIES
-
-If you ever want to highlight a component for debugging purposes, just type in `className="dbg-red ..."`, and a red box should appear around it.
-This helps with placing things properly on the screen and seeing how they look during active development.
-*/
-
-.dbg-red {
-  border: 1px solid red;
-}
-
-.dbg-blue {
-  border: 1px solid blue;
-}
-
-.dbg-green {
-  border: 1px solid green;
 }

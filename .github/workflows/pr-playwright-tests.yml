@@ -3,16 +3,20 @@ concurrency:
   group: Run-Playwright-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
   cancel-in-progress: true
 
-on: push
+on:
+  merge_group:
+  pull_request:
+    branches:
+      - main
+      - "release/**"
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
 
 env:
-  # AWS ECR Configuration
-  AWS_REGION: ${{ secrets.AWS_REGION || 'us-west-2' }}
-  ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
-  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_ECR }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_ECR }}
-  BUILDX_NO_DEFAULT_ATTESTATIONS: 1
-  
   # Test Environment Variables
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
@@ -23,184 +27,278 @@ env:
   SLACK_CLIENT_ID: ${{ secrets.SLACK_CLIENT_ID }}
   SLACK_CLIENT_SECRET: ${{ secrets.SLACK_CLIENT_SECRET }}
 
+  # for MCP Oauth tests
+  MCP_OAUTH_CLIENT_ID: ${{ secrets.MCP_OAUTH_CLIENT_ID }}
+  MCP_OAUTH_CLIENT_SECRET: ${{ secrets.MCP_OAUTH_CLIENT_SECRET }}
+  MCP_OAUTH_ISSUER: ${{ secrets.MCP_OAUTH_ISSUER }}
+  MCP_OAUTH_JWKS_URI: ${{ secrets.MCP_OAUTH_JWKS_URI }}
+  MCP_OAUTH_USERNAME: ${{ vars.MCP_OAUTH_USERNAME }}
+  MCP_OAUTH_PASSWORD: ${{ secrets.MCP_OAUTH_PASSWORD }}
+
+  # for MCP API Key tests
+  MCP_API_KEY: test-api-key-12345
+  MCP_API_KEY_TEST_PORT: 8005
+  MCP_API_KEY_TEST_URL: http://host.docker.internal:8005/mcp
+  MCP_API_KEY_SERVER_HOST: 0.0.0.0
+  MCP_API_KEY_SERVER_PUBLIC_HOST: host.docker.internal
+
   MOCK_LLM_RESPONSE: true
+  MCP_TEST_SERVER_PORT: 8004
+  MCP_TEST_SERVER_URL: http://host.docker.internal:8004/mcp
+  MCP_TEST_SERVER_PUBLIC_URL: http://host.docker.internal:8004/mcp
+  MCP_TEST_SERVER_BIND_HOST: 0.0.0.0
+  MCP_TEST_SERVER_PUBLIC_HOST: host.docker.internal
+  MCP_SERVER_HOST: 0.0.0.0
+  MCP_SERVER_PUBLIC_HOST: host.docker.internal
+  MCP_SERVER_PUBLIC_URL: http://host.docker.internal:8004/mcp
 
 jobs:
   build-web-image:
-    runs-on: blacksmith-8vcpu-ubuntu-2404-arm
+    runs-on: [runs-on, runner=4cpu-linux-arm64, "run-id=${{ github.run_id }}-build-web-image", "extras=ecr-cache"]
+    timeout-minutes: 45
     steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
       - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
-          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
+          persist-credentials: false
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+      - name: Format branch name for cache
+        id: format-branch
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ -n "${PR_NUMBER}" ]; then
+            CACHE_SUFFIX="${PR_NUMBER}"
+          else
+            # shellcheck disable=SC2001
+            CACHE_SUFFIX=$(echo "${REF_NAME}" | sed 's/[^A-Za-z0-9._-]/-/g')
+          fi
+          echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
-        uses: useblacksmith/setup-docker-builder@v1
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
 
-      - name: Build and push Web Docker image
-        uses: useblacksmith/build-push-action@v2
-        with:
-          context: ./web
-          file: ./web/Dockerfile
-          platforms: linux/arm64
-          tags: ${{ env.ECR_REGISTRY }}/integration-test-onyx-web-server:playwright-test-${{ github.run_id }}
-          provenance: false
-          sbom: false
-          push: true
-          outputs: type=registry
-          # no-cache: true
-
-  build-backend-image:
-    runs-on: blacksmith-8vcpu-ubuntu-2404-arm
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Set up Docker Buildx
-        uses: useblacksmith/setup-docker-builder@v1
-
-      - name: Build and push Backend Docker image
-        uses: useblacksmith/build-push-action@v2
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          platforms: linux/arm64
-          tags: ${{ env.ECR_REGISTRY }}/integration-test-onyx-backend:playwright-test-${{ github.run_id }}
-          provenance: false
-          sbom: false
-          push: true
-          outputs: type=registry
-          # no-cache: true
-
-  build-model-server-image:
-    runs-on: blacksmith-8vcpu-ubuntu-2404-arm
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Set up Docker Buildx
-        uses: useblacksmith/setup-docker-builder@v1
-
-      - name: Build and push Model Server Docker image
-        uses: useblacksmith/build-push-action@v2
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile.model_server
-          platforms: linux/arm64
-          tags: ${{ env.ECR_REGISTRY }}/integration-test-onyx-model-server:playwright-test-${{ github.run_id }}
-          provenance: false
-          sbom: false
-          push: true
-          outputs: type=registry
-          # no-cache: true
-
-  playwright-tests:
-    needs: [build-web-image, build-backend-image, build-model-server-image]
-    name: Playwright Tests
-    runs-on: blacksmith-8vcpu-ubuntu-2404-arm
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      # needed for pulling Vespa, Redis, Postgres, and Minio images
-      # otherwise, we hit the "Unauthenticated users" limit
+      # needed for pulling external images otherwise, we hit the "Unauthenticated users" limit
       # https://docs.docker.com/docker-hub/usage/
       - name: Login to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      - name: Pull Docker images
+      - name: Build and push Web Docker image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
+        with:
+          context: ./web
+          file: ./web/Dockerfile
+          platforms: linux/arm64
+          tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-${{ github.run_id }}
+          push: true
+          cache-from: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-${{ github.event.pull_request.head.sha || github.sha }}
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-${{ steps.format-branch.outputs.cache-suffix }}
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache
+            type=registry,ref=onyxdotapp/onyx-web-server:latest
+          cache-to: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-${{ github.event.pull_request.head.sha || github.sha }},mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache,mode=max
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+
+  build-backend-image:
+    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-build-backend-image", "extras=ecr-cache"]
+    timeout-minutes: 45
+    steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Format branch name for cache
+        id: format-branch
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          # Pull all images from ECR in parallel
-          echo "Pulling Docker images in parallel..."
-          (docker pull ${{ env.ECR_REGISTRY }}/integration-test-onyx-web-server:playwright-test-${{ github.run_id }}) &
-          (docker pull ${{ env.ECR_REGISTRY }}/integration-test-onyx-backend:playwright-test-${{ github.run_id }}) &
-          (docker pull ${{ env.ECR_REGISTRY }}/integration-test-onyx-model-server:playwright-test-${{ github.run_id }}) &
+          if [ -n "${PR_NUMBER}" ]; then
+            CACHE_SUFFIX="${PR_NUMBER}"
+          else
+            # shellcheck disable=SC2001
+            CACHE_SUFFIX=$(echo "${REF_NAME}" | sed 's/[^A-Za-z0-9._-]/-/g')
+          fi
+          echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
 
-          # Wait for all background jobs to complete
-          wait
-          echo "All Docker images pulled successfully"
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
 
-          # Re-tag with expected names for docker-compose
-          docker tag ${{ env.ECR_REGISTRY }}/integration-test-onyx-web-server:playwright-test-${{ github.run_id }} onyxdotapp/onyx-web-server:test
-          docker tag ${{ env.ECR_REGISTRY }}/integration-test-onyx-backend:playwright-test-${{ github.run_id }} onyxdotapp/onyx-backend:test
-          docker tag ${{ env.ECR_REGISTRY }}/integration-test-onyx-model-server:playwright-test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
+      # needed for pulling external images otherwise, we hit the "Unauthenticated users" limit
+      # https://docs.docker.com/docker-hub/usage/
+      - name: Login to Docker Hub
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Build and push Backend Docker image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          platforms: linux/arm64
+          tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-${{ github.run_id }}
+          push: true
+          cache-from: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ github.event.pull_request.head.sha || github.sha }}
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ steps.format-branch.outputs.cache-suffix }}
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache
+            type=registry,ref=onyxdotapp/onyx-backend:latest
+          cache-to: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ github.event.pull_request.head.sha || github.sha }},mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache,mode=max
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+
+  build-model-server-image:
+    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-build-model-server-image", "extras=ecr-cache"]
+    timeout-minutes: 45
+    steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Format branch name for cache
+        id: format-branch
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ -n "${PR_NUMBER}" ]; then
+            CACHE_SUFFIX="${PR_NUMBER}"
+          else
+            # shellcheck disable=SC2001
+            CACHE_SUFFIX=$(echo "${REF_NAME}" | sed 's/[^A-Za-z0-9._-]/-/g')
+          fi
+          echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
+
+      # needed for pulling external images otherwise, we hit the "Unauthenticated users" limit
+      # https://docs.docker.com/docker-hub/usage/
+      - name: Login to Docker Hub
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Build and push Model Server Docker image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.model_server
+          platforms: linux/arm64
+          tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-${{ github.run_id }}
+          push: true
+          cache-from: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ github.event.pull_request.head.sha || github.sha }}
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }}
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache
+            type=registry,ref=onyxdotapp/onyx-model-server:latest
+          cache-to: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ github.event.pull_request.head.sha || github.sha }},mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache,mode=max
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+
+  playwright-tests:
+    needs: [build-web-image, build-backend-image, build-model-server-image]
+    name: Playwright Tests (${{ matrix.project }})
+    runs-on:
+      - runs-on
+      - runner=8cpu-linux-arm64
+      - "run-id=${{ github.run_id }}-playwright-tests-${{ matrix.project }}"
+      - "extras=ecr-cache"
+      - volume=50gb
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [admin, no-auth, exclusive]
+    steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # ratchet:actions/setup-node@v4
         with:
           node-version: 22
+          cache: 'npm'
+          cache-dependency-path: ./web/package-lock.json
 
       - name: Install node dependencies
         working-directory: ./web
         run: npm ci
+
+      - name: Cache playwright cache
+        uses: runs-on/cache@50350ad4242587b6c8c2baa2e740b1bc11285ff4 # ratchet:runs-on/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-npm-${{ hashFiles('web/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-npm-
 
       - name: Install playwright browsers
         working-directory: ./web
         run: npx playwright install --with-deps
 
       - name: Create .env file for Docker Compose
+        env:
+          OPENAI_API_KEY_VALUE: ${{ env.OPENAI_API_KEY }}
+          EXA_API_KEY_VALUE: ${{ env.EXA_API_KEY }}
+          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           cat <<EOF > deployment/docker_compose/.env
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
           AUTH_TYPE=basic
-          GEN_AI_API_KEY=${{ env.OPENAI_API_KEY }}
-          EXA_API_KEY=${{ env.EXA_API_KEY }}
+          GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
+          EXA_API_KEY=${EXA_API_KEY_VALUE}
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
-          IMAGE_TAG=test
+          ONYX_BACKEND_IMAGE=${ECR_CACHE}:playwright-test-backend-${RUN_ID}
+          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:playwright-test-model-server-${RUN_ID}
+          ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}:playwright-test-web-${RUN_ID}
           EOF
+          if [ "${{ matrix.project }}" = "no-auth" ]; then
+            echo "PLAYWRIGHT_FORCE_EMPTY_LLM_PROVIDERS=true" >> deployment/docker_compose/.env
+          fi
+
+      # needed for pulling Vespa, Redis, Postgres, and Minio images
+      # otherwise, we hit the "Unauthenticated users" limit
+      # https://docs.docker.com/docker-hub/usage/
+      - name: Login to Docker Hub
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml up -d
         id: start_docker
 
       - name: Wait for service to be ready
@@ -215,15 +313,15 @@ jobs:
           while true; do
             current_time=$(date +%s)
             elapsed_time=$((current_time - start_time))
-            
+
             if [ $elapsed_time -ge $timeout ]; then
               echo "Timeout reached. Service did not become ready in 5 minutes."
               exit 1
             fi
-            
+
             # Use curl with error handling to ignore specific exit code 56
             response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health || echo "curl_error")
-            
+
             if [ "$response" = "200" ]; then
               echo "Service is ready!"
               break
@@ -232,45 +330,130 @@ jobs:
             else
               echo "Service not ready yet (HTTP status $response). Retrying in 5 seconds..."
             fi
-            
+
             sleep 5
           done
           echo "Finished waiting for service."
 
+      - name: Wait for MCP OAuth mock server
+        run: |
+          echo "Waiting for MCP OAuth mock server on port ${MCP_TEST_SERVER_PORT:-8004}..."
+          start_time=$(date +%s)
+          timeout=120
+
+          while true; do
+            current_time=$(date +%s)
+            elapsed_time=$((current_time - start_time))
+
+            if [ $elapsed_time -ge $timeout ]; then
+              echo "Timeout reached. MCP OAuth mock server did not become ready in ${timeout}s."
+              exit 1
+            fi
+
+            if curl -sf "http://localhost:${MCP_TEST_SERVER_PORT:-8004}/healthz" > /dev/null; then
+              echo "MCP OAuth mock server is ready!"
+              break
+            fi
+
+            sleep 3
+          done
+
+      - name: Wait for MCP API Key mock server
+        run: |
+          echo "Waiting for MCP API Key mock server on port ${MCP_API_KEY_TEST_PORT:-8005}..."
+          start_time=$(date +%s)
+          timeout=120
+
+          while true; do
+            current_time=$(date +%s)
+            elapsed_time=$((current_time - start_time))
+
+            if [ $elapsed_time -ge $timeout ]; then
+              echo "Timeout reached. MCP API Key mock server did not become ready in ${timeout}s."
+              exit 1
+            fi
+
+            if curl -sf "http://localhost:${MCP_API_KEY_TEST_PORT:-8005}/healthz" > /dev/null; then
+              echo "MCP API Key mock server is ready!"
+              break
+            fi
+
+            sleep 3
+          done
+
+      - name: Wait for web server to be ready
+        run: |
+          echo "Waiting for web server on port 3000..."
+          start_time=$(date +%s)
+          timeout=120
+
+          while true; do
+            current_time=$(date +%s)
+            elapsed_time=$((current_time - start_time))
+
+            if [ $elapsed_time -ge $timeout ]; then
+              echo "Timeout reached. Web server did not become ready in ${timeout}s."
+              exit 1
+            fi
+
+            if curl -sf "http://localhost:3000/api/health" > /dev/null 2>&1 || \
+               curl -sf "http://localhost:3000/" > /dev/null 2>&1; then
+              echo "Web server is ready!"
+              break
+            fi
+
+            echo "Web server not ready yet. Retrying in 3 seconds..."
+            sleep 3
+          done
+
       - name: Run Playwright tests
         working-directory: ./web
+        env:
+          PROJECT: ${{ matrix.project }}
         run: |
           # Create test-results directory to ensure it exists for artifact upload
           mkdir -p test-results
-          npx playwright test
+          if [ "${PROJECT}" = "no-auth" ]; then
+            export PLAYWRIGHT_FORCE_EMPTY_LLM_PROVIDERS=true
+          fi
+          npx playwright test --project ${PROJECT}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/upload-artifact@v4
         if: always()
         with:
-          # Includes test results and debug screenshots
-          name: playwright-test-results-${{ github.run_id }}
-          path: ./web/test-results
+          # Includes test results and trace.zip files
+          name: playwright-test-results-${{ matrix.project }}-${{ github.run_id }}
+          path: ./web/test-results/
           retention-days: 30
 
       # save before stopping the containers so the logs can be captured
       - name: Save Docker logs
         if: success() || failure()
+        env:
+          WORKSPACE: ${{ github.workspace }}
         run: |
           cd deployment/docker_compose
           docker compose logs > docker-compose.log
-          mv docker-compose.log ${{ github.workspace }}/docker-compose.log
+          mv docker-compose.log ${WORKSPACE}/docker-compose.log
 
       - name: Upload logs
         if: success() || failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/upload-artifact@v4
         with:
-          name: docker-logs
+          name: docker-logs-${{ matrix.project }}-${{ github.run_id }}
           path: ${{ github.workspace }}/docker-compose.log
 
-      - name: Stop Docker containers
-        run: |
-          cd deployment/docker_compose
-          docker compose down -v
+  playwright-required:
+    # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
+    runs-on: ubuntu-slim
+    timeout-minutes: 45
+    needs: [playwright-tests]
+    if: ${{ always() }}
+    steps:
+      - name: Check job status
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
+        run: exit 1
+
 
 # NOTE: Chromatic UI diff testing is currently disabled.
 # We are using Playwright for local and CI testing without visual regression checks.
@@ -289,12 +472,12 @@ jobs:
 #     ]
 #   steps:
 #     - name: Checkout code
-#       uses: actions/checkout@v4
+#       uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
 #       with:
 #         fetch-depth: 0
 
 #     - name: Setup node
-#       uses: actions/setup-node@v4
+#       uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # ratchet:actions/setup-node@v4
 #       with:
 #         node-version: 22
 
@@ -303,7 +486,7 @@ jobs:
 #       run: npm ci
 
 #     - name: Download Playwright test results
-#       uses: actions/download-artifact@v4
+#       uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # ratchet:actions/download-artifact@v4
 #       with:
 #         name: test-results
 #         path: ./web/test-results

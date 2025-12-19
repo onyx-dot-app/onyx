@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode, JSX } from "react";
 import { CompactDocumentCard, CompactQuestionCard } from "../DocumentDisplay";
 import { LoadedOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 import {
@@ -9,17 +9,15 @@ import {
 } from "@/components/ui/tooltip";
 import { openDocument } from "@/lib/search/utils";
 import { SubQuestionDetail } from "@/app/chat/interfaces";
-import { getFileIconFromFileNameAndLink } from "@/lib/assistantIconUtils";
 import { getSourceDisplayName } from "@/lib/sources";
 import { ValidSources } from "@/lib/types";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 
 const MAX_CITATION_TEXT_LENGTH = 40;
 
 export interface DocumentCardProps {
   document: LoadedOnyxDocument;
   updatePresentingDocument: (document: OnyxDocument) => void;
-  icon?: React.ReactNode;
   url?: string;
 }
 export interface QuestionCardProps {
@@ -63,15 +61,6 @@ export function Citation({
     return <>{children}</>;
   }
   const sourceType = document_info?.document?.source_type;
-  const icon = document_info?.document
-    ? getFileIconFromFileNameAndLink(
-        document_info.document.semantic_identifier || "",
-        sourceType === ValidSources.UserFile
-          ? ""
-          : document_info.document.link || ""
-      )
-    : null;
-
   const title = document_info?.document?.semantic_identifier;
   const citationText =
     (sourceType && sourceType != ValidSources.Web
@@ -96,25 +85,25 @@ export function Citation({
             className="inline-flex items-center cursor-pointer transition-all duration-200 ease-in-out ml-1"
           >
             <span
-              className="flex items-center justify-center p-spacing-inline h-4
-                         bg-background-tint-03 rounded-full
+              className="flex items-center justify-center p-1 h-4
+                         bg-background-tint-03 rounded-04
                          hover:bg-background-tint-04 shadow-sm"
               style={{ transform: "translateY(-10%)", lineHeight: "1" }}
             >
-              <Text figureSmallValue>{citationText}</Text>
+              <Text figureSmallValue as="span">
+                {citationText}
+              </Text>
             </span>
           </span>
         </TooltipTrigger>
         <TooltipContent
-          className="border border-neutral-300 hover:text-neutral-900 
-                     bg-neutral-100 dark:!bg-[#000] dark:border-neutral-700"
-          width="mb-2 max-w-lg"
+          className="bg-transparent p-0 shadow-none"
+          side="bottom"
+          align="start"
         >
           {document_info?.document ? (
             <CompactDocumentCard
               updatePresentingDocument={document_info.updatePresentingDocument}
-              url={document_info.url}
-              icon={icon}
               document={document_info.document}
             />
           ) : (

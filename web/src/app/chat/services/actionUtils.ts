@@ -1,11 +1,14 @@
-import { SvgProps } from "@/icons";
-import SvgCpu from "@/icons/cpu";
-import SvgGlobe from "@/icons/globe";
-import SvgImage from "@/icons/image";
-import SvgSearch from "@/icons/search";
-import SvgServer from "@/icons/server";
-import SvgUser from "@/icons/user";
+import { JSX } from "react";
+import type { IconProps } from "@opal/types";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
+import {
+  SvgCpu,
+  SvgGlobe,
+  SvgImage,
+  SvgLink,
+  SvgSearch,
+  SvgServer,
+} from "@opal/icons";
 
 // Helper functions to identify specific tools
 const isSearchTool = (tool: ToolSnapshot): boolean => {
@@ -37,21 +40,22 @@ const isKnowledgeGraphTool = (tool: ToolSnapshot): boolean => {
   );
 };
 
-const isOktaProfileTool = (tool: ToolSnapshot): boolean => {
+const isOpenUrlTool = (tool: ToolSnapshot): boolean => {
   return (
-    tool.in_code_tool_id === "OktaProfileTool" ||
-    tool.display_name?.toLowerCase().includes("okta profile")
+    tool.in_code_tool_id === "OpenURLTool" ||
+    tool.name === "open_url" ||
+    tool.display_name?.toLowerCase().includes("open url")
   );
 };
 
 export function getIconForAction(
   action: ToolSnapshot
-): (props: SvgProps) => JSX.Element {
+): (props: IconProps) => JSX.Element {
   if (isSearchTool(action)) return SvgSearch;
   if (isWebSearchTool(action)) return SvgGlobe;
   if (isImageGenerationTool(action)) return SvgImage;
   if (isKnowledgeGraphTool(action)) return SvgServer;
-  if (isOktaProfileTool(action)) return SvgUser;
+  if (isOpenUrlTool(action)) return SvgLink;
   return SvgCpu;
 }
 

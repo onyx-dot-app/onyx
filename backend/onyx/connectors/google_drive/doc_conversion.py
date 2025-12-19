@@ -29,14 +29,14 @@ from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
-from onyx.file_processing.extract_file_text import ALL_ACCEPTED_FILE_EXTENSIONS
 from onyx.file_processing.extract_file_text import docx_to_text_and_images
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.extract_file_text import pptx_to_text
 from onyx.file_processing.extract_file_text import read_pdf_file
 from onyx.file_processing.extract_file_text import xlsx_to_text
-from onyx.file_processing.file_validation import is_valid_image_type
+from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.file_processing.file_types import OnyxMimeTypes
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
@@ -50,6 +50,12 @@ logger = setup_logger()
 # represent smart chips (elements like dates and doc links).
 SMART_CHIP_CHAR = "\ue907"
 WEB_VIEW_LINK_KEY = "webViewLink"
+# Fallback templates for generating web links when Drive omits webViewLink.
+_FALLBACK_WEB_VIEW_LINK_TEMPLATES = {
+    GDriveMimeType.DOC.value: "https://docs.google.com/document/d/{}/view",
+    GDriveMimeType.SPREADSHEET.value: "https://docs.google.com/spreadsheets/d/{}/view",
+    GDriveMimeType.PPT.value: "https://docs.google.com/presentation/d/{}/view",
+}
 
 MAX_RETRIEVER_EMAILS = 20
 CHUNK_SIZE_BUFFER = 64  # extra bytes past the limit to read
@@ -79,7 +85,25 @@ class PermissionSyncContext(BaseModel):
 
 
 def onyx_document_id_from_drive_file(file: GoogleDriveFileType) -> str:
-    link = file[WEB_VIEW_LINK_KEY]
+    link = file.get(WEB_VIEW_LINK_KEY)
+    if not link:
+        file_id = file.get("id")
+        if not file_id:
+            raise KeyError(
+                f"Google Drive file missing both '{WEB_VIEW_LINK_KEY}' and 'id' fields."
+            )
+        mime_type = file.get("mimeType", "")
+        template = _FALLBACK_WEB_VIEW_LINK_TEMPLATES.get(mime_type)
+        if template is None:
+            link = f"https://drive.google.com/file/d/{file_id}/view"
+        else:
+            link = template.format(file_id)
+        logger.debug(
+            "Missing webViewLink for Google Drive file with id %s. "
+            "Falling back to constructed link %s",
+            file_id,
+            link,
+        )
     parsed_url = urlparse(link)
     parsed_url = parsed_url._replace(query="")  # remove query parameters
     spl_path = parsed_url.path.split("/")
@@ -88,14 +112,6 @@ def onyx_document_id_from_drive_file(file: GoogleDriveFileType) -> str:
         parsed_url = parsed_url._replace(path="/".join(spl_path))
     # Remove query parameters and reconstruct URL
     return urlunparse(parsed_url)
-
-
-def is_gdrive_image_mime_type(mime_type: str) -> bool:
-    """
-    Return True if the mime_type is a common image type in GDrive.
-    (e.g. 'image/png', 'image/jpeg')
-    """
-    return is_valid_image_type(mime_type)
 
 
 def download_request(
@@ -149,7 +165,7 @@ def _download_and_extract_sections_basic(
     def response_call() -> bytes:
         return download_request(service, file_id, size_threshold)
 
-    if is_gdrive_image_mime_type(mime_type):
+    if mime_type in OnyxMimeTypes.IMAGE_MIME_TYPES:
         # Skip images if not explicitly enabled
         if not allow_images:
             return []
@@ -236,7 +252,7 @@ def _download_and_extract_sections_basic(
 
     # Final attempt at extracting text
     file_ext = get_file_ext(file.get("name", ""))
-    if file_ext not in ALL_ACCEPTED_FILE_EXTENSIONS:
+    if file_ext not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
         logger.warning(f"Skipping file {file.get('name')} due to extension.")
         return []
 

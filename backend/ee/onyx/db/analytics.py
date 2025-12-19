@@ -73,6 +73,12 @@ def fetch_per_user_query_analytics(
             ChatSession.user_id,
         )
         .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
+        # Include chats that have no explicit feedback instead of dropping them
+        .join(
+            ChatMessageFeedback,
+            ChatMessageFeedback.chat_message_id == ChatMessage.id,
+            isouter=True,
+        )
         .where(
             ChatMessage.time_sent >= start,
         )
@@ -193,10 +199,7 @@ def fetch_persona_message_analytics(
             ChatMessage.chat_session_id == ChatSession.id,
         )
         .where(
-            or_(
-                ChatMessage.alternate_assistant_id == persona_id,
-                ChatSession.persona_id == persona_id,
-            ),
+            ChatSession.persona_id == persona_id,
             ChatMessage.time_sent >= start,
             ChatMessage.time_sent <= end,
             ChatMessage.message_type == MessageType.ASSISTANT,
@@ -225,10 +228,7 @@ def fetch_persona_unique_users(
             ChatMessage.chat_session_id == ChatSession.id,
         )
         .where(
-            or_(
-                ChatMessage.alternate_assistant_id == persona_id,
-                ChatSession.persona_id == persona_id,
-            ),
+            ChatSession.persona_id == persona_id,
             ChatMessage.time_sent >= start,
             ChatMessage.time_sent <= end,
             ChatMessage.message_type == MessageType.ASSISTANT,
@@ -259,10 +259,7 @@ def fetch_assistant_message_analytics(
             ChatMessage.chat_session_id == ChatSession.id,
         )
         .where(
-            or_(
-                ChatMessage.alternate_assistant_id == assistant_id,
-                ChatSession.persona_id == assistant_id,
-            ),
+            ChatSession.persona_id == assistant_id,
             ChatMessage.time_sent >= start,
             ChatMessage.time_sent <= end,
             ChatMessage.message_type == MessageType.ASSISTANT,
@@ -293,10 +290,7 @@ def fetch_assistant_unique_users(
             ChatMessage.chat_session_id == ChatSession.id,
         )
         .where(
-            or_(
-                ChatMessage.alternate_assistant_id == assistant_id,
-                ChatSession.persona_id == assistant_id,
-            ),
+            ChatSession.persona_id == assistant_id,
             ChatMessage.time_sent >= start,
             ChatMessage.time_sent <= end,
             ChatMessage.message_type == MessageType.ASSISTANT,
@@ -326,10 +320,7 @@ def fetch_assistant_unique_users_total(
             ChatMessage.chat_session_id == ChatSession.id,
         )
         .where(
-            or_(
-                ChatMessage.alternate_assistant_id == assistant_id,
-                ChatSession.persona_id == assistant_id,
-            ),
+            ChatSession.persona_id == assistant_id,
             ChatMessage.time_sent >= start,
             ChatMessage.time_sent <= end,
             ChatMessage.message_type == MessageType.ASSISTANT,

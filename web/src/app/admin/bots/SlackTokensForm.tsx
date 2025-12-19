@@ -5,8 +5,9 @@ import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { createSlackBot, updateSlackBot } from "./new/lib";
 import Button from "@/refresh-components/buttons/Button";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import { useEffect } from "react";
+import { DOCS_ADMINS_PATH } from "@/lib/constants";
 
 export const SlackTokensForm = ({
   isUpdate,
@@ -102,7 +103,7 @@ export const SlackTokensForm = ({
               Please refer to our{" "}
               <a
                 className="text-blue-500 hover:underline"
-                href="https://docs.onyx.app/admin/getting_started/slack_bot_setup"
+                href={`${DOCS_ADMINS_PATH}/getting_started/slack_bot_setup`}
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -129,6 +130,7 @@ export const SlackTokensForm = ({
           />
           <div className="flex justify-end w-full mt-4">
             <Button
+              type="submit"
               disabled={
                 isSubmitting ||
                 !values.bot_token ||

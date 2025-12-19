@@ -9,6 +9,7 @@ from onyx import __version__
 from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import user_needs_to_be_verified
 from onyx.configs.app_configs import AUTH_TYPE
+from onyx.configs.app_configs import PASSWORD_MIN_LENGTH
 from onyx.configs.constants import DEV_VERSION_PATTERN
 from onyx.configs.constants import STABLE_VERSION_PATTERN
 from onyx.server.manage.models import AllVersions
@@ -31,6 +32,7 @@ def get_auth_type() -> AuthTypeResponse:
         auth_type=AUTH_TYPE,
         requires_verification=user_needs_to_be_verified(),
         anonymous_user_enabled=anonymous_user_enabled(),
+        password_min_length=PASSWORD_MIN_LENGTH,
     )
 
 
@@ -123,18 +125,18 @@ def get_versions() -> AllVersions:
             onyx=latest_stable_version,
             relational_db="postgres:15.2-alpine",
             index="vespaengine/vespa:8.277.17",
-            nginx="nginx:1.23.4-alpine",
+            nginx="nginx:1.25.5-alpine",
         ),
         dev=ContainerVersions(
             onyx=latest_dev_version,
             relational_db="postgres:15.2-alpine",
             index="vespaengine/vespa:8.277.17",
-            nginx="nginx:1.23.4-alpine",
+            nginx="nginx:1.25.5-alpine",
         ),
         migration=ContainerVersions(
             onyx="airgapped-intfloat-nomic-migration",
             relational_db="postgres:15.2-alpine",
             index="vespaengine/vespa:8.277.17",
-            nginx="nginx:1.23.4-alpine",
+            nginx="nginx:1.25.5-alpine",
         ),
     )

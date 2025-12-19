@@ -39,7 +39,6 @@ class _FakeResponse:
         return None
 
 
-@pytest.mark.unit
 def test_zendesk_client_per_minute_rate_limiting(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

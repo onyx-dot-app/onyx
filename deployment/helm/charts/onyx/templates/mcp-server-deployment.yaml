@@ -1,0 +1,108 @@
+{{- if .Values.mcpServer.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "onyx.fullname" . }}-mcp-server
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    {{- with .Values.mcpServer.deploymentLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  replicas: {{ .Values.mcpServer.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "onyx.selectorLabels" . | nindent 6 }}
+      {{- if .Values.mcpServer.deploymentLabels }}
+      {{- toYaml .Values.mcpServer.deploymentLabels | nindent 6 }}
+      {{- end }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      {{- with .Values.mcpServer.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "onyx.labels" . | nindent 8 }}
+        {{- with .Values.mcpServer.deploymentLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.mcpServer.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "onyx.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.mcpServer.podSecurityContext | nindent 8 }}
+      {{- with .Values.mcpServer.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.mcpServer.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.mcpServer.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: mcp-server
+          securityContext:
+            {{- toYaml .Values.mcpServer.securityContext | nindent 12 }}
+          image: "{{ .Values.mcpServer.image.repository }}:{{ .Values.mcpServer.image.tag | default .Values.global.version }}"
+          imagePullPolicy: {{ .Values.global.pullPolicy }}
+          command: ["python", "onyx/mcp_server_main.py"]
+          ports:
+            - name: mcp-server-port
+              containerPort: {{ .Values.mcpServer.containerPorts.server }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: mcp-server-port
+            initialDelaySeconds: {{ .Values.mcpServer.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.mcpServer.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.mcpServer.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.mcpServer.livenessProbe.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: mcp-server-port
+            initialDelaySeconds: {{ .Values.mcpServer.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.mcpServer.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.mcpServer.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.mcpServer.readinessProbe.failureThreshold }}
+          resources:
+            {{- toYaml .Values.mcpServer.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.config.envConfigMapName }}
+          env:
+            - name: MCP_SERVER_ENABLED
+              value: "true"
+            - name: MCP_SERVER_PORT
+              value: "{{ .Values.mcpServer.containerPorts.server }}"
+            {{- if .Values.mcpServer.corsOrigins }}
+            - name: MCP_SERVER_CORS_ORIGINS
+              value: "{{ .Values.mcpServer.corsOrigins }}"
+            {{- end }}
+            # API server connection for authentication and proxying
+            - name: API_SERVER_BASE_URL
+              value: "http://{{ include "onyx.fullname" . }}-api-service:{{ .Values.api.service.servicePort }}"
+            {{- include "onyx.envSecrets" . | nindent 12 }}
+          {{- with .Values.mcpServer.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.mcpServer.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+

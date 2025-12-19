@@ -3,7 +3,7 @@ import { AlertIcon } from "@/components/icons/icons";
 import Link from "next/link";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import React from "react";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 
 interface SourceTileProps {
   sourceMetadata: SourceMetadata;

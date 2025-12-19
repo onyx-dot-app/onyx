@@ -15,19 +15,25 @@ on:
 permissions:
   actions: read
   contents: read
-  security-events: write
-  
+
 jobs:
   scan-licenses:
     # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on,runner=2cpu-linux-x64,"run-id=${{ github.run_id }}"]
+    runs-on: [runs-on,runner=2cpu-linux-x64,"run-id=${{ github.run_id }}-scan-licenses"]
+    timeout-minutes: 45
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
-        
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # ratchet:actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -35,7 +41,7 @@ jobs:
             backend/requirements/default.txt
             backend/requirements/dev.txt
             backend/requirements/model_server.txt
-      
+
       - name: Get explicit and transitive dependencies
         run: |
           python -m pip install --upgrade pip
@@ -43,28 +49,30 @@ jobs:
           pip install --retries 5 --timeout 30 -r backend/requirements/dev.txt
           pip install --retries 5 --timeout 30 -r backend/requirements/model_server.txt
           pip freeze > requirements-all.txt
-                    
+
       - name: Check python
         id: license_check_report
-        uses: pilosus/action-pip-license-checker@v2
+        uses: pilosus/action-pip-license-checker@e909b0226ff49d3235c99c4585bc617f49fff16a # ratchet:pilosus/action-pip-license-checker@v3
         with:
           requirements: 'requirements-all.txt'
           fail: 'Copyleft'
           exclude: '(?i)^(pylint|aio[-_]*).*'
-          
+
       - name: Print report
         if: always()
-        run: echo "${{ steps.license_check_report.outputs.report }}"
-      
+        env:
+          REPORT: ${{ steps.license_check_report.outputs.report }}
+        run: echo "$REPORT"
+
       - name: Install npm dependencies
         working-directory: ./web
         run: npm ci
 
         # be careful enabling the sarif and upload as it may spam the security tab
-        # with a huge amount of items. Work out the issues before enabling upload.       
+        # with a huge amount of items. Work out the issues before enabling upload.
 #       - name: Run Trivy vulnerability scanner in repo mode
 #         if: always()
-#         uses: aquasecurity/trivy-action@0.29.0
+#         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # ratchet:aquasecurity/trivy-action@0.33.1
 #         with:
 #           scan-type: fs
 #           scan-ref: .
@@ -73,7 +81,7 @@ jobs:
 #           severity: HIGH,CRITICAL
 # #           format: sarif
 # #           output: trivy-results.sarif
-# 
+#
 # #       - name: Upload Trivy scan results to GitHub Security tab
 # #         uses: github/codeql-action/upload-sarif@v3
 # #         with:
@@ -81,14 +89,15 @@ jobs:
 
   scan-trivy:
     # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on,runner=2cpu-linux-x64,"run-id=${{ github.run_id }}"]
-      
+    runs-on: [runs-on,runner=2cpu-linux-x64,"run-id=${{ github.run_id }}-scan-trivy"]
+    timeout-minutes: 45
+
     steps:
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
 
     - name: Login to Docker Hub
-      uses: docker/login-action@v3
+      uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
       with:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_TOKEN }}
@@ -98,7 +107,7 @@ jobs:
       run: docker pull onyxdotapp/onyx-backend:latest
 
     - name: Run Trivy vulnerability scanner on backend
-      uses: aquasecurity/trivy-action@0.29.0
+      uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # ratchet:aquasecurity/trivy-action@0.33.1
       env:
         TRIVY_DB_REPOSITORY: 'public.ecr.aws/aquasecurity/trivy-db:2'
         TRIVY_JAVA_DB_REPOSITORY: 'public.ecr.aws/aquasecurity/trivy-java-db:1'
@@ -112,9 +121,9 @@ jobs:
     # Web server
     - name: Pull web server docker image
       run: docker pull onyxdotapp/onyx-web-server:latest
-          
+
     - name: Run Trivy vulnerability scanner on web server
-      uses: aquasecurity/trivy-action@0.29.0
+      uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # ratchet:aquasecurity/trivy-action@0.33.1
       env:
         TRIVY_DB_REPOSITORY: 'public.ecr.aws/aquasecurity/trivy-db:2'
         TRIVY_JAVA_DB_REPOSITORY: 'public.ecr.aws/aquasecurity/trivy-java-db:1'
@@ -130,7 +139,7 @@ jobs:
       run: docker pull onyxdotapp/onyx-model-server:latest
 
     - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@0.29.0
+      uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # ratchet:aquasecurity/trivy-action@0.33.1
       env:
         TRIVY_DB_REPOSITORY: 'public.ecr.aws/aquasecurity/trivy-db:2'
         TRIVY_JAVA_DB_REPOSITORY: 'public.ecr.aws/aquasecurity/trivy-java-db:1'

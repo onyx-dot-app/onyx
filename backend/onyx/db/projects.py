@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from fastapi import UploadFile
 from pydantic import BaseModel
 from pydantic import ConfigDict
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.versioned_apps.client import app as client_app
@@ -30,8 +31,14 @@ class CategorizedFilesResult(BaseModel):
     user_files: list[UserFile]
     non_accepted_files: list[str]
     unsupported_files: list[str]
+    id_to_temp_id: dict[str, str]
     # Allow SQLAlchemy ORM models inside this result container
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
+def build_hashed_file_key(file: UploadFile) -> str:
+    name_prefix = (file.filename or "")[:50]
+    return f"{file.size}|{name_prefix}"
 
 
 def create_user_files(
@@ -40,6 +47,7 @@ def create_user_files(
     user: User | None,
     db_session: Session,
     link_url: str | None = None,
+    temp_id_map: dict[str, str] | None = None,
 ) -> CategorizedFilesResult:
 
     # Categorize the files
@@ -50,12 +58,17 @@ def create_user_files(
     user_files = []
     non_accepted_files = categorized_files.non_accepted
     unsupported_files = categorized_files.unsupported
-
+    id_to_temp_id: dict[str, str] = {}
     # Pair returned storage paths with the same set of acceptable files we uploaded
     for file_path, file in zip(
         upload_response.file_paths, categorized_files.acceptable
     ):
         new_id = uuid.uuid4()
+        new_temp_id = (
+            temp_id_map.get(build_hashed_file_key(file)) if temp_id_map else None
+        )
+        if new_temp_id is not None:
+            id_to_temp_id[str(new_id)] = new_temp_id
         new_file = UserFile(
             id=new_id,
             user_id=user.id if user else None,
@@ -85,6 +98,7 @@ def create_user_files(
         user_files=user_files,
         non_accepted_files=non_accepted_files,
         unsupported_files=unsupported_files,
+        id_to_temp_id=id_to_temp_id,
     )
 
 
@@ -92,6 +106,7 @@ def upload_files_to_user_files_with_indexing(
     files: List[UploadFile],
     project_id: int | None,
     user: User | None,
+    temp_id_map: dict[str, str] | None,
     db_session: Session,
 ) -> CategorizedFilesResult:
     # Validate project ownership if a project_id is provided
@@ -99,11 +114,17 @@ def upload_files_to_user_files_with_indexing(
         if not check_project_ownership(project_id, user.id, db_session):
             raise HTTPException(status_code=404, detail="Project not found")
 
-    categorized_files_result = create_user_files(files, project_id, user, db_session)
+    categorized_files_result = create_user_files(
+        files,
+        project_id,
+        user,
+        db_session,
+        temp_id_map=temp_id_map,
+    )
     user_files = categorized_files_result.user_files
     non_accepted_files = categorized_files_result.non_accepted_files
     unsupported_files = categorized_files_result.unsupported_files
-
+    id_to_temp_id = categorized_files_result.id_to_temp_id
     # Trigger per-file processing immediately for the current tenant
     tenant_id = get_current_tenant_id()
     if non_accepted_files:
@@ -127,12 +148,21 @@ def upload_files_to_user_files_with_indexing(
         user_files=user_files,
         non_accepted_files=non_accepted_files,
         unsupported_files=unsupported_files,
+        id_to_temp_id=id_to_temp_id,
     )
 
 
 def check_project_ownership(
     project_id: int, user_id: UUID | None, db_session: Session
 ) -> bool:
+    # In no-auth mode, all projects are accessible
+    if user_id is None:
+        # Verify project exists
+        return (
+            db_session.query(UserProject).filter(UserProject.id == project_id).first()
+            is not None
+        )
+
     return (
         db_session.query(UserProject)
         .filter(UserProject.id == project_id, UserProject.user_id == user_id)
@@ -175,3 +205,28 @@ def get_project_instructions(db_session: Session, project_id: int | None) -> str
         return instructions or None
     except Exception:
         return None
+
+
+def get_project_token_count(
+    project_id: int | None,
+    user_id: UUID | None,
+    db_session: Session,
+) -> int:
+    """Return sum of token_count for all user files in the given project.
+
+    If project_id is None, returns 0.
+    """
+    if project_id is None:
+        return 0
+
+    total_tokens = (
+        db_session.query(func.coalesce(func.sum(UserFile.token_count), 0))
+        .filter(
+            UserFile.user_id == user_id,
+            UserFile.projects.any(id=project_id),
+        )
+        .scalar()
+        or 0
+    )
+
+    return int(total_tokens)

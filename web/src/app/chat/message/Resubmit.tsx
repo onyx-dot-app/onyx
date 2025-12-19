@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle } from "lucide-react";
+import { ChevronDown, ChevronRight, Code } from "lucide-react";
 import Button from "@/refresh-components/buttons/Button";
+import { getErrorIcon, getErrorTitle } from "./errorHelpers";
 
 interface ResubmitProps {
   resubmit: () => void;
@@ -19,31 +21,62 @@ export const Resubmit: React.FC<ResubmitProps> = ({ resubmit }) => {
 
 export const ErrorBanner = ({
   error,
-  showStackTrace,
+  errorCode,
+  isRetryable = true,
+  details,
+  stackTrace,
   resubmit,
 }: {
   error: string;
-  showStackTrace?: () => void;
+  errorCode?: string;
+  isRetryable?: boolean;
+  details?: Record<string, any>;
+  stackTrace?: string | null;
   resubmit?: () => void;
 }) => {
+  const [isStackTraceExpanded, setIsStackTraceExpanded] = useState(false);
+
   return (
     <div className="text-red-700 mt-4 text-sm my-auto">
       <Alert variant="broken">
-        <AlertCircle className="h-4 w-4" />
-        <AlertTitle>Error</AlertTitle>
-        <AlertDescription className="flex  gap-x-2">
-          {error}
-          {showStackTrace && (
-            <span
-              className="text-red-600 hover:text-red-800 cursor-pointer underline"
-              onClick={showStackTrace}
-            >
-              Show stack trace
+        {getErrorIcon(errorCode)}
+        <AlertTitle>{getErrorTitle(errorCode)}</AlertTitle>
+        <AlertDescription className="flex flex-col gap-y-1">
+          <span>{error}</span>
+          {details?.model && (
+            <span className="text-xs text-muted-foreground">
+              Model: {details.model}
+              {details.provider && ` (${details.provider})`}
             </span>
+          )}
+          {details?.tool_name && (
+            <span className="text-xs text-muted-foreground">
+              Tool: {details.tool_name}
+            </span>
+          )}
+          {stackTrace && (
+            <div className="mt-2 border-t border-neutral-200 dark:border-neutral-700 pt-2">
+              <button
+                onClick={() => setIsStackTraceExpanded(!isStackTraceExpanded)}
+                className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 cursor-pointer"
+              >
+                {isStackTraceExpanded ? (
+                  <ChevronDown className="h-3 w-3" />
+                ) : (
+                  <ChevronRight className="h-3 w-3" />
+                )}
+                Stack trace
+              </button>
+              {isStackTraceExpanded && (
+                <pre className="mt-2 p-3 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-xs text-neutral-700 dark:text-neutral-300 overflow-auto max-h-48 whitespace-pre-wrap font-mono">
+                  {stackTrace}
+                </pre>
+              )}
+            </div>
           )}
         </AlertDescription>
       </Alert>
-      {resubmit && <Resubmit resubmit={resubmit} />}
+      {isRetryable && resubmit && <Resubmit resubmit={resubmit} />}
     </div>
   );
 };

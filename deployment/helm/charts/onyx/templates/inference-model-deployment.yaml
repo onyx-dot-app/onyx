@@ -9,6 +9,10 @@ metadata:
     {{- end }}
 spec:
   replicas: {{ .Values.inferenceCapability.replicaCount }}
+  {{- with .Values.inferenceCapability.strategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels:
       {{- range .Values.inferenceCapability.labels }}
@@ -29,6 +33,14 @@ spec:
       {{- end }}
       {{- with .Values.inferenceCapability.nodeSelector }}
       nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.inferenceCapability.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.inferenceCapability.tolerations }}
+      tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:

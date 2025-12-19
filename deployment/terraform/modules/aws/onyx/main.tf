@@ -49,18 +49,17 @@ module "postgres" {
   subnet_ids    = local.private_subnets
   ingress_cidrs = [local.vpc_cidr_block]
 
-  username         = var.postgres_username
-  password         = var.postgres_password
-  tags             = local.merged_tags
+  username            = var.postgres_username
+  password            = var.postgres_password
+  tags                = local.merged_tags
   enable_rds_iam_auth = var.enable_iam_auth
 }
 
 module "s3" {
-  source      = "../s3"
-  bucket_name = local.bucket_name
-  region      = var.region
-  vpc_id      = local.vpc_id
-  tags        = local.merged_tags
+  source             = "../s3"
+  bucket_name        = local.bucket_name
+  tags               = local.merged_tags
+  s3_vpc_endpoint_id = var.create_vpc ? module.vpc[0].s3_vpc_endpoint_id : var.s3_vpc_endpoint_id
 }
 
 module "eks" {
@@ -77,21 +76,21 @@ module "eks" {
   rds_db_connect_arn                 = var.rds_db_connect_arn
 
   # These variables must be defined in variables.tf or passed in via parent module
-  public_cluster_enabled  = var.public_cluster_enabled
-  private_cluster_enabled = var.private_cluster_enabled
+  public_cluster_enabled               = var.public_cluster_enabled
+  private_cluster_enabled              = var.private_cluster_enabled
   cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
 }
 
 module "waf" {
   source = "../waf"
-  
+
   name = local.name
   tags = local.merged_tags
-  
+
   # WAF configuration with sensible defaults
-  rate_limit_requests_per_5_minutes      = var.waf_rate_limit_requests_per_5_minutes
-  api_rate_limit_requests_per_5_minutes  = var.waf_api_rate_limit_requests_per_5_minutes
-  geo_restriction_countries              = var.waf_geo_restriction_countries
-  enable_logging                         = var.waf_enable_logging
-  log_retention_days                     = var.waf_log_retention_days
+  rate_limit_requests_per_5_minutes     = var.waf_rate_limit_requests_per_5_minutes
+  api_rate_limit_requests_per_5_minutes = var.waf_api_rate_limit_requests_per_5_minutes
+  geo_restriction_countries             = var.waf_geo_restriction_countries
+  enable_logging                        = var.waf_enable_logging
+  log_retention_days                    = var.waf_log_retention_days
 }

@@ -15,11 +15,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { CreditCard, ArrowFatUp } from "@phosphor-icons/react";
+import Button from "@/refresh-components/buttons/Button";
 import { SubscriptionSummary } from "./SubscriptionSummary";
 import { BillingAlerts } from "./BillingAlerts";
-
+import { SvgClipboard, SvgWallet } from "@opal/icons";
 export default function BillingInformationPage() {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
@@ -94,7 +93,7 @@ export default function BillingInformationPage() {
       <Card className="shadow-md">
         <CardHeader>
           <CardTitle className="text-2xl font-bold flex items-center">
-            <CreditCard className="mr-4 text-muted-foreground" size={24} />
+            <SvgWallet className="mr-4 text-muted-foreground h-6 w-6" />
             Subscription Details
           </CardTitle>
         </CardHeader>
@@ -114,8 +113,11 @@ export default function BillingInformationPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button onClick={handleManageSubscription} className="w-full">
-            <ArrowFatUp className="mr-2" size={16} />
+          <Button
+            onClick={handleManageSubscription}
+            className="w-full"
+            leftIcon={SvgClipboard}
+          >
             Manage Subscription
           </Button>
         </CardContent>

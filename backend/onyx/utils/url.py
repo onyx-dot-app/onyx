@@ -4,6 +4,34 @@ from urllib.parse import urlparse
 from urllib.parse import urlunparse
 
 
+def normalize_url(url: str) -> str:
+    """
+    Normalize a URL by removing query parameters and fragments.
+    This is used to create consistent cache keys for deduplication.
+
+    Args:
+        url: The original URL
+
+    Returns:
+        Normalized URL (scheme + netloc + path + params only)
+    """
+    parsed_url = urlparse(url)
+
+    # Reconstruct the URL without query string and fragment
+    normalized = urlunparse(
+        (
+            parsed_url.scheme,
+            parsed_url.netloc,
+            parsed_url.path,
+            parsed_url.params,
+            "",
+            "",
+        )
+    )
+
+    return normalized
+
+
 def add_url_params(url: str, params: dict) -> str:
     """
     Add parameters to a URL, handling existing parameters properly.

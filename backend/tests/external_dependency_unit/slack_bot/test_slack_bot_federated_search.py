@@ -1,18 +1,25 @@
 import os
+from typing import Any
+from unittest.mock import MagicMock
 from unittest.mock import Mock
 from unittest.mock import patch
 from uuid import uuid4
 
 # Set environment variables to disable model server for testing
+os.environ["DISABLE_MODEL_SERVER"] = "true"
 os.environ["MODEL_SERVER_HOST"] = "disabled"
 os.environ["MODEL_SERVER_PORT"] = "9000"
 
+from sqlalchemy import inspect
 from sqlalchemy.orm import Session
+from slack_sdk.errors import SlackApiError
 
 from onyx.configs.constants import FederatedConnectorSource
 from onyx.context.search.enums import RecencyBiasSetting
+from onyx.context.search.federated.slack_search import fetch_and_cache_channel_metadata
 from onyx.db.models import DocumentSet
 from onyx.db.models import FederatedConnector
+from onyx.db.models import FederatedConnector__DocumentSet
 from onyx.db.models import LLMProvider
 from onyx.db.models import Persona
 from onyx.db.models import Persona__DocumentSet
@@ -240,6 +247,17 @@ class TestSlackBotFederatedSearch:
         db_session.add(federated_connector)
         db_session.flush()
 
+        # Associate the federated connector with the persona's document sets
+        # This is required for Slack federated search to be enabled
+        for doc_set in persona.document_sets:
+            federated_doc_set_mapping = FederatedConnector__DocumentSet(
+                federated_connector_id=federated_connector.id,
+                document_set_id=doc_set.id,
+                entities={},  # Empty entities for test
+            )
+            db_session.add(federated_doc_set_mapping)
+        db_session.flush()
+
         unique_id = str(uuid4())[:8]
         slack_bot = SlackBot(
             name=f"Test Slack Bot {unique_id}",
@@ -337,6 +355,7 @@ class TestSlackBotFederatedSearch:
         self, mock_query_slack: Mock, channel_name: str
     ) -> None:
         """Setup query_slack mock to capture filtering parameters"""
+        from onyx.context.search.federated.slack_search import SlackQueryResult
 
         def mock_query_slack_capture_params(
             query_string: str,
@@ -346,14 +365,17 @@ class TestSlackBotFederatedSearch:
             allowed_private_channel: str | None = None,
             bot_token: str | None = None,
             include_dm: bool = False,
-        ) -> list:
+            entities: dict | None = None,
+            available_channels: list | None = None,
+            channel_metadata_dict: dict | None = None,
+        ) -> SlackQueryResult:
             self._captured_filtering_params = {
                 "allowed_private_channel": allowed_private_channel,
                 "include_dm": include_dm,
                 "channel_name": channel_name,
             }
 
-            return []
+            return SlackQueryResult(messages=[], filtered_channels=[])
 
         mock_query_slack.side_effect = mock_query_slack_capture_params
 
@@ -397,7 +419,6 @@ class TestSlackBotFederatedSearch:
             provider="openai",
             api_key=api_key,
             default_model_name="gpt-4o",
-            fast_default_model_name="gpt-4o-mini",
             is_default_provider=True,
             is_public=True,
         )
@@ -571,3 +592,247 @@ class TestSlackBotFederatedSearch:
 
         finally:
             self._teardown_common_mocks(patches)
+
+
+@patch("onyx.context.search.federated.slack_search.get_redis_client")
+@patch("onyx.context.search.federated.slack_search.WebClient")
+def test_missing_scope_resilience(
+    mock_web_client: Mock, mock_redis_client: Mock
+) -> None:
+    """Test that missing scopes are handled gracefully"""
+    # Setup mock Redis client
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = None  # Cache miss
+    mock_redis_client.return_value = mock_redis
+
+    # Setup mock Slack client that simulates missing_scope error
+    mock_client_instance = MagicMock()
+    mock_web_client.return_value = mock_client_instance
+
+    # Track which channel types were attempted
+    attempted_types: list[str] = []
+
+    def mock_conversations_list(types: str | None = None, **kwargs: Any) -> MagicMock:
+        if types:
+            attempted_types.append(types)
+
+        # First call: all types including mpim -> missing_scope error
+        if types and "mpim" in types:
+            error_response = {
+                "ok": False,
+                "error": "missing_scope",
+                "needed": "mpim:read",
+                "provided": "identify,channels:history,channels:read,groups:read,im:read,search:read",
+            }
+            raise SlackApiError("missing_scope", error_response)
+
+        # Second call: without mpim -> success
+        mock_response = MagicMock()
+        mock_response.validate.return_value = None
+        mock_response.data = {
+            "channels": [
+                {
+                    "id": "C1234567890",
+                    "name": "general",
+                    "is_channel": True,
+                    "is_private": False,
+                    "is_group": False,
+                    "is_mpim": False,
+                    "is_im": False,
+                    "is_member": True,
+                },
+                {
+                    "id": "D9876543210",
+                    "name": "",
+                    "is_channel": False,
+                    "is_private": False,
+                    "is_group": False,
+                    "is_mpim": False,
+                    "is_im": True,
+                    "is_member": True,
+                },
+            ],
+            "response_metadata": {},
+        }
+        return mock_response
+
+    mock_client_instance.conversations_list.side_effect = mock_conversations_list
+
+    # Call the function
+    result = fetch_and_cache_channel_metadata(
+        access_token="xoxp-test-token",
+        team_id="T1234567890",
+        include_private=True,
+    )
+
+    # Assertions
+    # Should have attempted twice: once with mpim, once without
+    assert len(attempted_types) == 2, f"Expected 2 attempts, got {len(attempted_types)}"
+    assert "mpim" in attempted_types[0], "First attempt should include mpim"
+    assert "mpim" not in attempted_types[1], "Second attempt should not include mpim"
+
+    # Should have successfully returned channels despite missing scope
+    assert len(result) == 2, f"Expected 2 channels, got {len(result)}"
+    assert "C1234567890" in result, "Should have public channel"
+    assert "D9876543210" in result, "Should have DM channel"
+
+    # Verify channel metadata structure
+    assert result["C1234567890"]["name"] == "general"
+    assert result["C1234567890"]["type"] == "public_channel"
+    assert result["D9876543210"]["type"] == "im"
+
+
+@patch("onyx.context.search.federated.slack_search.get_redis_client")
+@patch("onyx.context.search.federated.slack_search.WebClient")
+def test_multiple_missing_scopes_resilience(
+    mock_web_client: Mock, mock_redis_client: Mock
+) -> None:
+    """Test handling multiple missing scopes gracefully"""
+    # Setup mock Redis client
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = None  # Cache miss
+    mock_redis_client.return_value = mock_redis
+
+    # Setup mock Slack client
+    mock_client_instance = MagicMock()
+    mock_web_client.return_value = mock_client_instance
+
+    # Track attempts
+    attempted_types: list[str] = []
+
+    def mock_conversations_list(types: str | None = None, **kwargs: Any) -> MagicMock:
+        if types:
+            attempted_types.append(types)
+
+        # First: mpim missing
+        if types and "mpim" in types:
+            error_response = {
+                "ok": False,
+                "error": "missing_scope",
+                "needed": "mpim:read",
+                "provided": "identify,channels:history,channels:read,groups:read",
+            }
+            raise SlackApiError("missing_scope", error_response)
+
+        # Second: im missing
+        if types and "im" in types:
+            error_response = {
+                "ok": False,
+                "error": "missing_scope",
+                "needed": "im:read",
+                "provided": "identify,channels:history,channels:read,groups:read",
+            }
+            raise SlackApiError("missing_scope", error_response)
+
+        # Third: success with only public and private channels
+        mock_response = MagicMock()
+        mock_response.validate.return_value = None
+        mock_response.data = {
+            "channels": [
+                {
+                    "id": "C1234567890",
+                    "name": "general",
+                    "is_channel": True,
+                    "is_private": False,
+                    "is_group": False,
+                    "is_mpim": False,
+                    "is_im": False,
+                    "is_member": True,
+                }
+            ],
+            "response_metadata": {},
+        }
+        return mock_response
+
+    mock_client_instance.conversations_list.side_effect = mock_conversations_list
+
+    # Call the function
+    result = fetch_and_cache_channel_metadata(
+        access_token="xoxp-test-token",
+        team_id="T1234567890",
+        include_private=True,
+    )
+
+    # Should gracefully handle multiple missing scopes
+    assert len(attempted_types) == 3, f"Expected 3 attempts, got {len(attempted_types)}"
+    assert "mpim" in attempted_types[0], "First attempt should include mpim"
+    assert "mpim" not in attempted_types[1], "Second attempt should not include mpim"
+    assert "im" in attempted_types[1], "Second attempt should include im"
+    assert "im" not in attempted_types[2], "Third attempt should not include im"
+
+    # Should still return available channels
+    assert len(result) == 1, f"Expected 1 channel, got {len(result)}"
+    assert result["C1234567890"]["name"] == "general"
+
+
+def test_slack_channel_config_eager_loads_persona(db_session: Session) -> None:
+    """Test that fetch_slack_channel_config_for_channel_or_default eagerly loads persona.
+
+    This prevents lazy loading failures when the session context changes later
+    in the request handling flow (e.g., in handle_regular_answer).
+    """
+    from onyx.db.slack_channel_config import (
+        fetch_slack_channel_config_for_channel_or_default,
+    )
+
+    unique_id = str(uuid4())[:8]
+
+    # Create a persona (using same fields as _create_test_persona_with_slack_config)
+    persona = Persona(
+        name=f"test_eager_load_persona_{unique_id}",
+        description="Test persona for eager loading test",
+        chunks_above=0,
+        chunks_below=0,
+        llm_relevance_filter=True,
+        llm_filter_extraction=True,
+        recency_bias=RecencyBiasSetting.AUTO,
+        system_prompt="You are a helpful assistant.",
+        task_prompt="Answer the user's question.",
+    )
+    db_session.add(persona)
+    db_session.flush()
+
+    # Create a slack bot
+    slack_bot = SlackBot(
+        name=f"Test Bot {unique_id}",
+        bot_token=f"xoxb-test-{unique_id}",
+        app_token=f"xapp-test-{unique_id}",
+        enabled=True,
+    )
+    db_session.add(slack_bot)
+    db_session.flush()
+
+    # Create slack channel config with persona
+    channel_name = f"test-channel-{unique_id}"
+    slack_channel_config = SlackChannelConfig(
+        slack_bot_id=slack_bot.id,
+        persona_id=persona.id,
+        channel_config={"channel_name": channel_name, "disabled": False},
+        enable_auto_filters=False,
+        is_default=False,
+    )
+    db_session.add(slack_channel_config)
+    db_session.commit()
+
+    # Fetch the config using the function under test
+    fetched_config = fetch_slack_channel_config_for_channel_or_default(
+        db_session=db_session,
+        slack_bot_id=slack_bot.id,
+        channel_name=channel_name,
+    )
+
+    assert fetched_config is not None, "Should find the channel config"
+
+    # Check that persona relationship is already loaded (not pending lazy load)
+    insp = inspect(fetched_config)
+    assert insp is not None, "Should be able to inspect the config"
+    assert "persona" not in insp.unloaded, (
+        "Persona should be eagerly loaded, not pending lazy load. "
+        "This is required to prevent fallback to default persona when "
+        "session context changes in handle_regular_answer."
+    )
+
+    # Verify the persona is correct
+    assert fetched_config.persona is not None, "Persona should not be None"
+    assert fetched_config.persona.id == persona.id, "Should load the correct persona"
+    assert fetched_config.persona.name == persona.name

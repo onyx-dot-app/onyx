@@ -1,22 +1,20 @@
-"use client";
-import ErrorPageLayout from "./ErrorPageLayout";
+import Text from "@/refresh-components/texts/Text";
+import ErrorPageLayout from "@/components/errorPages/ErrorPageLayout";
 
 export default function CloudError() {
   return (
     <ErrorPageLayout>
-      <h1 className="text-2xl font-semibold mb-4 text-gray-800 dark:text-gray-200">
-        Maintenance in Progress
-      </h1>
-      <div className="space-y-4 text-gray-600 dark:text-gray-300">
-        <p>
-          Onyx is currently in a maintenance window. Please check back in a
-          couple of minutes.
-        </p>
-        <p>
-          We apologize for any inconvenience this may cause and appreciate your
-          patience.
-        </p>
-      </div>
+      <Text headingH2>Maintenance in Progress</Text>
+
+      <Text text03>
+        Onyx is currently in a maintenance window. Please check back in a couple
+        of minutes.
+      </Text>
+
+      <Text text03>
+        We apologize for any inconvenience this may cause and appreciate your
+        patience.
+      </Text>
     </ErrorPageLayout>
   );
 }

@@ -8,14 +8,17 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from onyx.auth.schemas import UserRole
+from onyx.configs.constants import MessageType
 from onyx.configs.constants import QAFeedbackType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.context.search.models import SavedSearchDoc
+from onyx.context.search.models import SearchDoc
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import DocumentSource
 from onyx.server.documents.models import IndexAttemptSnapshot
 from onyx.server.documents.models import IndexingStatus
 from onyx.server.documents.models import InputType
+from onyx.server.query_and_chat.streaming_models import GeneratedImage
 
 """
 These data models are used to represent the data on the testing side of things.
@@ -25,6 +28,18 @@ This means the flow is:
 3. Retrieve data from db
 4. Compare db data with testing model to verify
 """
+
+
+class DATestPAT(BaseModel):
+    """Personal Access Token model for testing."""
+
+    id: int
+    name: str
+    token: str | None = None  # Raw token - only present on initial creation
+    token_display: str
+    created_at: str
+    expires_at: str | None = None
+    last_used_at: str | None = None
 
 
 class DATestAPIKey(BaseModel):
@@ -104,6 +119,7 @@ class DATestLLMProvider(BaseModel):
     default_model_name: str
     is_public: bool
     groups: list[int]
+    personas: list[int]
     api_base: str | None = None
     api_version: str | None = None
 
@@ -148,6 +164,8 @@ class DATestChatMessage(BaseModel):
     chat_session_id: UUID
     parent_message_id: int | None
     message: str
+    message_type: MessageType | None = None
+    files: list | None = None
 
 
 class DATestChatSession(BaseModel):
@@ -171,15 +189,23 @@ class ToolResult(BaseModel):
 
     queries: list[str] = Field(default_factory=list)
     documents: list[SavedSearchDoc] = Field(default_factory=list)
+    images: list[GeneratedImage] = Field(default_factory=list)
+
+
+class ErrorResponse(BaseModel):
+    error: str
+    stack_trace: str
 
 
 class StreamedResponse(BaseModel):
-    full_message: str = ""
-    top_documents: list[SavedSearchDoc] | None = None
-    used_tools: list[ToolResult] = Field(default_factory=list)
+    full_message: str
+    assistant_message_id: int
+    top_documents: list[SearchDoc]
+    used_tools: list[ToolResult]
+    error: ErrorResponse | None = None
 
     # Track heartbeat packets for image generation and other tools
-    heartbeat_packets: list[dict[str, Any]] = Field(default_factory=list)
+    heartbeat_packets: list[dict[str, Any]]
 
 
 class DATestGatingType(str, Enum):

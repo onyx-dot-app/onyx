@@ -10,13 +10,12 @@ import {
   DropdownMenuTrigger,
   DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { AccessType, ValidStatuses } from "@/lib/types";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgFilter from "@/icons/filter";
-
+import { SvgFilter } from "@opal/icons";
 export interface FilterOptions {
   accessType: AccessType[] | null;
   docsCountFilter: {
@@ -129,7 +128,7 @@ export const FilterComponent = forwardRef<
     <div className="relative">
       <DropdownMenu open={isOpen} onOpenChange={handleOpenChange}>
         <DropdownMenuTrigger asChild>
-          <IconButton icon={SvgFilter} secondary active={isOpen} />
+          <IconButton icon={SvgFilter} secondary transient={isOpen} />
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="end"
@@ -239,9 +238,7 @@ export const FilterComponent = forwardRef<
             >
               <div className="flex gap-2">
                 <Button
-                  variant={docsOperator === ">" ? "default" : "outline"}
-                  size="sm"
-                  className="h-8 px-2"
+                  secondary={docsOperator !== ">"}
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -252,9 +249,7 @@ export const FilterComponent = forwardRef<
                   &gt;
                 </Button>
                 <Button
-                  variant={docsOperator === "<" ? "default" : "outline"}
-                  size="sm"
-                  className="h-8 px-2"
+                  secondary={docsOperator !== "<"}
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -265,9 +260,7 @@ export const FilterComponent = forwardRef<
                   &lt;
                 </Button>
                 <Button
-                  variant={docsOperator === "=" ? "default" : "outline"}
-                  size="sm"
-                  className="h-8 px-2"
+                  secondary={docsOperator !== "="}
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -289,9 +282,7 @@ export const FilterComponent = forwardRef<
             </div>
             <div className="px-2 py-1.5">
               <Button
-                size="sm"
-                className="w-full h-8"
-                disabled={false}
+                className="w-full"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();

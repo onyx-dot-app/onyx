@@ -2,9 +2,61 @@ import { WebResultIcon } from "@/components/WebResultIcon";
 import { SourceIcon } from "@/components/SourceIcon";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { ValidSources } from "@/lib/types";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, JSX } from "react";
 import { SearchResultIcon } from "@/components/SearchResultIcon";
-import { getFileIconFromFileNameAndLink } from "@/lib/assistantIconUtils";
+import {
+  FileOptionIcon,
+  PDFIcon,
+  TXTIcon,
+  DOCIcon,
+  HTMLIcon,
+  JSONIcon,
+  ImagesIcon,
+  XMLIcon,
+} from "@/components/icons/icons";
+
+export function getFileIconFromFileNameAndLink(
+  fileName: string,
+  linkUrl?: string | null
+) {
+  if (linkUrl) {
+    return <SearchResultIcon url={linkUrl} />;
+  }
+  const extension = fileName.split(".").pop()?.toLowerCase();
+  if (extension === "pdf") {
+    return <PDFIcon className="h-4 w-4 shrink-0" />;
+  } else if (extension === "txt") {
+    return <TXTIcon className="h-4 w-4 shrink-0" />;
+  } else if (extension === "doc" || extension === "docx") {
+    return <DOCIcon className="h-4 w-4 shrink-0" />;
+  } else if (extension === "html" || extension === "htm") {
+    return <HTMLIcon className="h-4 w-4 shrink-0" />;
+  } else if (extension === "json") {
+    return <JSONIcon className="h-4 w-4 shrink-0" />;
+  } else if (
+    ["jpg", "jpeg", "png", "gif", "svg", "webp"].includes(extension || "")
+  ) {
+    return <ImagesIcon className="h-4 w-4 shrink-0" />;
+  } else if (extension === "xml") {
+    return <XMLIcon className="h-4 w-4 shrink-0" />;
+  } else {
+    if (fileName.includes(".")) {
+      try {
+        // Check if fileName could be a valid domain when prefixed with https://
+        const url = new URL(`https://${fileName}`);
+        if (url.hostname === fileName) {
+          return <SearchResultIcon url={`https://${fileName}`} />;
+        }
+      } catch (e) {
+        // If URL construction fails, it's not a valid domain
+      }
+      return <FileOptionIcon className="h-4 w-4 shrink-0" />;
+    } else {
+      return <FileOptionIcon className="h-4 w-4 shrink-0" />;
+    }
+  }
+}
+
 // Minimal shape needed locally for file icon rendering
 type FileResponse = {
   id: number;

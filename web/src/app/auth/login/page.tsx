@@ -9,6 +9,7 @@ import {
 import { redirect } from "next/navigation";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import LoginPage from "./LoginPage";
+import { AuthType } from "@/lib/constants";
 
 export interface PageProps {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -36,7 +37,7 @@ export default async function Page(props: PageProps) {
   }
 
   // simply take the user to the home page if Auth is disabled
-  if (authTypeMetadata?.authType === "disabled") {
+  if (authTypeMetadata?.authType === AuthType.DISABLED) {
     return redirect("/chat");
   }
 
@@ -71,9 +72,20 @@ export default async function Page(props: PageProps) {
     return redirect(authUrl);
   }
 
+  const ssoLoginFooterContent =
+    authTypeMetadata &&
+    (authTypeMetadata.authType === AuthType.GOOGLE_OAUTH ||
+      authTypeMetadata.authType === AuthType.OIDC ||
+      authTypeMetadata.authType === AuthType.SAML) ? (
+      <>Need access? Reach out to your IT admin to get access.</>
+    ) : undefined;
+
   return (
     <div className="flex flex-col ">
-      <AuthFlowContainer authState="login">
+      <AuthFlowContainer
+        authState="login"
+        footerContent={ssoLoginFooterContent}
+      >
         <div className="absolute top-10x w-full">
           <HealthCheckBanner />
         </div>

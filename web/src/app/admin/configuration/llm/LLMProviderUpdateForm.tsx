@@ -1,8 +1,8 @@
 import ReactMarkdown from "react-markdown";
 import { LoadingAnimation } from "@/components/Loading";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
-import Text from "@/refresh-components/Text";
-import { Separator } from "@/components/ui/separator";
+import Text from "@/refresh-components/texts/Text";
+import Separator from "@/refresh-components/Separator";
 import Button from "@/refresh-components/buttons/Button";
 import { Form, Formik } from "formik";
 import type { FormikProps } from "formik";
@@ -14,19 +14,24 @@ import {
   FileUploadFormField,
 } from "@/components/Field";
 import { useEffect, useRef, useState } from "react";
-import { useSWRConfig } from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import {
   LLMProviderView,
   ModelConfiguration,
   WellKnownLLMProviderDescriptor,
 } from "./interfaces";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 import { dynamicProviderConfigs, fetchModels } from "./utils";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
+import {
+  isValidAzureTargetUri,
+  parseAzureTargetUri,
+} from "@/lib/azureTargetUri";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
-import SvgTrash from "@/icons/trash";
-
+import { AgentsMultiSelect } from "@/components/AgentsMultiSelect";
+import { SvgTrash } from "@opal/icons";
 function AutoFetchModelsOnEdit({
   llmProviderDescriptor,
   existingLlmProvider,
@@ -108,6 +113,16 @@ export function LLMProviderUpdateForm({
 }) {
   const { mutate } = useSWRConfig();
 
+  // Fetch agents for AgentsMultiSelect
+  const {
+    data: agents,
+    isLoading: agentsLoading,
+    error: agentsError,
+  } = useSWR<Array<{ id: number; name: string; description: string }>>(
+    "/api/persona",
+    errorHandlingFetcher
+  );
+
   const [isTesting, setIsTesting] = useState(false);
   const [testError, setTestError] = useState<string>("");
   const [isFetchingModels, setIsFetchingModels] = useState(false);
@@ -117,9 +132,16 @@ export function LLMProviderUpdateForm({
 
   // Helper function to get current model configurations
   const getCurrentModelConfigurations = (values: any): ModelConfiguration[] => {
-    return values.fetched_model_configurations?.length > 0
-      ? values.fetched_model_configurations
-      : llmProviderDescriptor.model_configurations;
+    // If user clicked "Fetch Available Models", use those
+    if ((values.fetched_model_configurations?.length ?? 0) > 0) {
+      return values.fetched_model_configurations;
+    }
+    // If editing an existing provider, use its models
+    if ((existingLlmProvider?.model_configurations?.length ?? 0) > 0) {
+      return existingLlmProvider?.model_configurations ?? [];
+    }
+    // Otherwise use the descriptor's default models
+    return llmProviderDescriptor.model_configurations;
   };
 
   // Define the initial values based on the provider's requirements
@@ -132,20 +154,19 @@ export function LLMProviderUpdateForm({
       llmProviderDescriptor.default_api_base ??
       "",
     api_version: existingLlmProvider?.api_version ?? "",
-    // For Azure OpenAI, combine api_base and api_version into target_uri
+    // For Azure OpenAI, combine api_base, deployment_name, and api_version into target_uri
     target_uri:
       llmProviderDescriptor.name === "azure" &&
       existingLlmProvider?.api_base &&
       existingLlmProvider?.api_version
-        ? `${existingLlmProvider.api_base}/openai/deployments/your-deployment?api-version=${existingLlmProvider.api_version}`
+        ? `${existingLlmProvider.api_base}/openai/deployments/${
+            existingLlmProvider.deployment_name || "your-deployment"
+          }/chat/completions?api-version=${existingLlmProvider.api_version}`
         : "",
     default_model_name:
       existingLlmProvider?.default_model_name ??
       (llmProviderDescriptor.default_model ||
         llmProviderDescriptor.model_configurations[0]?.name),
-    fast_default_model_name:
-      existingLlmProvider?.fast_default_model_name ??
-      (llmProviderDescriptor.default_fast_model || null),
     custom_config:
       existingLlmProvider?.custom_config ??
       llmProviderDescriptor.custom_config_keys?.reduce(
@@ -157,6 +178,7 @@ export function LLMProviderUpdateForm({
       ),
     is_public: existingLlmProvider?.is_public ?? true,
     groups: existingLlmProvider?.groups ?? [],
+    personas: existingLlmProvider?.personas ?? [],
     model_configurations: existingLlmProvider?.model_configurations ?? [],
     deployment_name: existingLlmProvider?.deployment_name,
 
@@ -201,24 +223,8 @@ export function LLMProviderUpdateForm({
             .required("Target URI is required")
             .test(
               "valid-target-uri",
-              "Target URI must be a valid URL with exactly one query parameter (api-version)",
-              (value) => {
-                if (!value) return false;
-                try {
-                  const url = new URL(value);
-                  const params = new URLSearchParams(url.search);
-                  const paramKeys = Array.from(params.keys());
-
-                  // Check if there's exactly one parameter and it's api-version
-                  return (
-                    paramKeys.length === 1 &&
-                    paramKeys[0] === "api-version" &&
-                    !!params.get("api-version")
-                  );
-                } catch {
-                  return false;
-                }
-              }
+              "Target URI must be a valid URL with api-version query parameter and either a deployment name in the path or /openai/responses",
+              (value) => (value ? isValidAzureTargetUri(value) : false)
             )
         : Yup.string(),
     ...(llmProviderDescriptor.custom_config_keys
@@ -240,14 +246,16 @@ export function LLMProviderUpdateForm({
           ),
         }
       : {}),
-    deployment_name: llmProviderDescriptor.deployment_name_required
-      ? Yup.string().required("Deployment Name is required")
-      : Yup.string().nullable(),
+    deployment_name:
+      llmProviderDescriptor.deployment_name_required &&
+      llmProviderDescriptor.name !== "azure"
+        ? Yup.string().required("Deployment Name is required")
+        : Yup.string().nullable(),
     default_model_name: Yup.string().required("Model name is required"),
-    fast_default_model_name: Yup.string().nullable(),
     // EE Only
     is_public: Yup.boolean().required(),
     groups: Yup.array().of(Yup.number()),
+    personas: Yup.array().of(Yup.number()),
     selected_model_names: Yup.array().of(Yup.string()),
     fetched_model_configurations: Yup.array(),
   });
@@ -271,20 +279,27 @@ export function LLMProviderUpdateForm({
         const {
           selected_model_names: visibleModels,
           model_configurations: modelConfigurations,
+          fetched_model_configurations,
           target_uri,
           _modelListUpdated,
           ...rest
         } = values;
 
-        // For Azure OpenAI, parse target_uri to extract api_base and api_version
+        // For Azure OpenAI, parse target_uri to extract api_base, api_version, and deployment_name
         let finalApiBase = rest.api_base;
         let finalApiVersion = rest.api_version;
+        let finalDeploymentName = rest.deployment_name;
 
         if (llmProviderDescriptor.name === "azure" && target_uri) {
           try {
-            const url = new URL(target_uri);
+            const { url, apiVersion, deploymentName } =
+              parseAzureTargetUri(target_uri);
             finalApiBase = url.origin; // Only use origin (protocol + hostname + port)
-            finalApiVersion = url.searchParams.get("api-version") || "";
+            finalApiVersion = apiVersion;
+
+            if (deploymentName) {
+              finalDeploymentName = deploymentName;
+            }
           } catch (error) {
             // This should not happen due to validation, but handle gracefully
             console.error("Failed to parse target_uri:", error);
@@ -292,19 +307,32 @@ export function LLMProviderUpdateForm({
         }
 
         // Create the final payload with proper typing
-        const finalValues = {
-          ...rest,
-          api_base: finalApiBase,
-          api_version: finalApiVersion,
-          api_key_changed: values.api_key !== initialValues.api_key,
-          model_configurations: getCurrentModelConfigurations(values).map(
+        // Filter out models that are not default, fast default, or visible
+        const filteredModelConfigurations = getCurrentModelConfigurations(
+          values
+        )
+          .map(
             (modelConfiguration): ModelConfiguration => ({
               name: modelConfiguration.name,
               is_visible: visibleModels.includes(modelConfiguration.name),
               max_input_tokens: modelConfiguration.max_input_tokens ?? null,
               supports_image_input: modelConfiguration.supports_image_input,
+              display_name: modelConfiguration.display_name,
             })
-          ),
+          )
+          .filter(
+            (modelConfiguration) =>
+              modelConfiguration.name === rest.default_model_name ||
+              modelConfiguration.is_visible
+          );
+
+        const finalValues = {
+          ...rest,
+          api_base: finalApiBase,
+          api_version: finalApiVersion,
+          deployment_name: finalDeploymentName,
+          api_key_changed: values.api_key !== initialValues.api_key,
+          model_configurations: filteredModelConfigurations,
         };
 
         // test the configuration
@@ -342,9 +370,6 @@ export function LLMProviderUpdateForm({
             body: JSON.stringify({
               provider: llmProviderDescriptor.name,
               ...finalValues,
-              fast_default_model_name:
-                finalValues.fast_default_model_name ||
-                finalValues.default_model_name,
             }),
           }
         );
@@ -450,8 +475,8 @@ export function LLMProviderUpdateForm({
                 small={firstTimeConfiguration}
                 name="target_uri"
                 label="Target URI"
-                placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
-                subtext="The complete Azure OpenAI endpoint URL including the API version as a query parameter"
+                placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview OR .../openai/responses?api-version=..."
+                subtext="The complete target URI for your deployment from the Azure AI portal."
               />
             ) : (
               <>
@@ -477,6 +502,13 @@ export function LLMProviderUpdateForm({
 
             {llmProviderDescriptor.custom_config_keys?.map(
               (customConfigKey) => {
+                // Hide Bedrock auth method field in this admin form
+                if (
+                  llmProviderDescriptor.name === "bedrock" &&
+                  customConfigKey.name === "BEDROCK_AUTH_METHOD"
+                ) {
+                  return null;
+                }
                 if (customConfigKey.key_type === "text_input") {
                   return (
                     <div key={customConfigKey.name}>
@@ -504,9 +536,40 @@ export function LLMProviderUpdateForm({
                       subtext={customConfigKey.description || undefined}
                     />
                   );
+                } else if (customConfigKey.key_type === "select") {
+                  const options =
+                    customConfigKey.options?.map((option) => ({
+                      name: option.label,
+                      value: option.value,
+                      description: option.description ?? undefined,
+                    })) ?? [];
+
+                  return (
+                    <div key={customConfigKey.name}>
+                      <SelectorFormField
+                        small={firstTimeConfiguration}
+                        name={`custom_config.${customConfigKey.name}`}
+                        label={customConfigKey.display_name}
+                        subtext={
+                          customConfigKey.description ? (
+                            <ReactMarkdown
+                              components={{ a: customLinkRenderer }}
+                            >
+                              {customConfigKey.description}
+                            </ReactMarkdown>
+                          ) : undefined
+                        }
+                        options={options}
+                        includeReset={!customConfigKey.is_required}
+                        defaultValue={
+                          customConfigKey.default_value || undefined
+                        }
+                      />
+                    </div>
+                  );
                 } else {
                   throw new Error(
-                    "Unreachable; there should only exist 2 options"
+                    `Unhandled custom config key type: ${customConfigKey.key_type}`
                   );
                 }
               }
@@ -581,39 +644,14 @@ export function LLMProviderUpdateForm({
                   />
                 )}
 
-                {llmProviderDescriptor.deployment_name_required && (
-                  <TextFormField
-                    name="deployment_name"
-                    label="Deployment Name"
-                    placeholder="Deployment Name"
-                  />
-                )}
-
-                {!llmProviderDescriptor.single_model_supported &&
-                  (currentModelConfigurations.length > 0 ? (
-                    <SelectorFormField
-                      name="fast_default_model_name"
-                      subtext="The model to use for lighter flows like `LLM Chunk Filter` for this provider. If not set, will use the Default Model configured above."
-                      label="[Optional] Fast Model"
-                      options={currentModelConfigurations.map(
-                        (modelConfiguration) => ({
-                          // don't clean up names here to give admins descriptive names / handle duplicates
-                          // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
-                          name: modelConfiguration.name,
-                          value: modelConfiguration.name,
-                        })
-                      )}
-                      includeDefault
-                      maxHeight="max-h-56"
-                    />
-                  ) : (
+                {llmProviderDescriptor.deployment_name_required &&
+                  llmProviderDescriptor.name !== "azure" && (
                     <TextFormField
-                      name="fast_default_model_name"
-                      subtext="The model to use for lighter flows like `LLM Chunk Filter` for this provider. If not set, will use the Default Model configured above."
-                      label="[Optional] Fast Model"
-                      placeholder="E.g. gpt-4"
+                      name="deployment_name"
+                      label="Deployment Name"
+                      placeholder="Deployment Name"
                     />
-                  ))}
+                  )}
 
                 <>
                   <Separator />
@@ -649,12 +687,27 @@ export function LLMProviderUpdateForm({
                           />
                         </div>
                       )}
-                      <IsPublicGroupSelector
-                        formikProps={formikProps}
-                        objectName="LLM Provider"
-                        publicToWhom="Users"
-                        enforceGroupSelection={true}
-                      />
+                      <Separator />
+                      <div className="flex flex-col gap-3">
+                        <Text headingH3>Access Controls</Text>
+                        <IsPublicGroupSelector
+                          formikProps={formikProps}
+                          objectName="LLM Provider"
+                          publicToWhom="Users"
+                          enforceGroupSelection={true}
+                          smallLabels={true}
+                        />
+                        <AgentsMultiSelect
+                          formikProps={formikProps}
+                          agents={agents}
+                          isLoading={agentsLoading}
+                          error={agentsError}
+                          label="Assistant Whitelist"
+                          subtext="Restrict this provider to specific assistants."
+                          disabled={formikProps.values.is_public}
+                          disabledMessage="This LLM Provider is public and available to all assistants."
+                        />
+                      </div>
                     </>
                   )}
                 </>
@@ -664,8 +717,8 @@ export function LLMProviderUpdateForm({
             {/* NOTE: this is above the test button to make sure it's visible */}
             {testError && <Text className="text-error mt-2">{testError}</Text>}
 
-            <div className="flex w-full mt-4 gap-spacing-interline">
-              <Button disabled={isTesting}>
+            <div className="flex w-full mt-4 gap-2">
+              <Button type="submit" disabled={isTesting}>
                 {isTesting ? (
                   <Text inverted>
                     <LoadingAnimation text="Testing" />
@@ -695,22 +748,24 @@ export function LLMProviderUpdateForm({
                     }
 
                     // If the deleted provider was the default, set the first remaining provider as default
-                    const remainingProvidersResponse = await fetch(
-                      LLM_PROVIDERS_ADMIN_URL
-                    );
-                    if (remainingProvidersResponse.ok) {
-                      const remainingProviders =
-                        await remainingProvidersResponse.json();
+                    if (existingLlmProvider.is_default_provider) {
+                      const remainingProvidersResponse = await fetch(
+                        LLM_PROVIDERS_ADMIN_URL
+                      );
+                      if (remainingProvidersResponse.ok) {
+                        const remainingProviders =
+                          await remainingProvidersResponse.json();
 
-                      if (remainingProviders.length > 0) {
-                        const setDefaultResponse = await fetch(
-                          `${LLM_PROVIDERS_ADMIN_URL}/${remainingProviders[0].id}/default`,
-                          {
-                            method: "POST",
+                        if (remainingProviders.length > 0) {
+                          const setDefaultResponse = await fetch(
+                            `${LLM_PROVIDERS_ADMIN_URL}/${remainingProviders[0].id}/default`,
+                            {
+                              method: "POST",
+                            }
+                          );
+                          if (!setDefaultResponse.ok) {
+                            console.error("Failed to set new default provider");
                           }
-                        );
-                        if (!setDefaultResponse.ok) {
-                          console.error("Failed to set new default provider");
                         }
                       }
                     }

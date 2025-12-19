@@ -5,9 +5,11 @@ import {
   Message,
   ChatSessionSharedStatus,
   BackendChatSession,
+  FeedbackType,
 } from "../interfaces";
 import {
   getLatestMessageChain,
+  getMessageByMessageId,
   MessageTreeState,
 } from "../services/messageTree";
 import { useMemo } from "react";
@@ -72,6 +74,15 @@ interface ChatSessionStore {
   ) => void;
   updateCanContinue: (sessionId: string, canContinue: boolean) => void;
   updateSubmittedMessage: (sessionId: string, message: string) => void;
+  updateMessageFeedback: (
+    sessionId: string,
+    messageId: number,
+    feedback: string | null
+  ) => void;
+  updateCurrentMessageFeedback: (
+    messageId: number,
+    feedback: string | null
+  ) => void;
   updateSelectedNodeForDocDisplay: (
     sessionId: string,
     selectedMessageForDocDisplay: number | null
@@ -276,6 +287,58 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
     get().updateSessionData(sessionId, { submittedMessage });
   },
 
+  updateMessageFeedback: (
+    sessionId: string,
+    messageId: number,
+    feedback: string | null
+  ) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) {
+        console.warn(`Session ${sessionId} not found`);
+        return state;
+      }
+
+      const message = getMessageByMessageId(session.messageTree, messageId);
+      if (!message) {
+        console.warn(`Message ${messageId} not found in session ${sessionId}`);
+        return state;
+      }
+
+      // Create new message object with updated feedback (immutable update)
+      const updatedMessage = {
+        ...message,
+        currentFeedback: feedback as FeedbackType | null,
+      };
+
+      // Create new messageTree Map with updated message
+      const newMessageTree = new Map(session.messageTree);
+      newMessageTree.set(message.nodeId, updatedMessage);
+
+      // Create new session object with new messageTree
+      const updatedSession = {
+        ...session,
+        messageTree: newMessageTree,
+        lastAccessed: new Date(),
+      };
+
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+
+      return { sessions: newSessions };
+    });
+  },
+
+  updateCurrentMessageFeedback: (
+    messageId: number,
+    feedback: string | null
+  ) => {
+    const { currentSessionId } = get();
+    if (currentSessionId) {
+      get().updateMessageFeedback(currentSessionId, messageId, feedback);
+    }
+  },
+
   updateSelectedNodeForDocDisplay: (
     sessionId: string,
     selectedMessageForDocDisplay: number | null
@@ -473,13 +536,6 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
   },
 }));
 
-// Custom hooks for accessing store data
-export const useCurrentSession = () =>
-  useChatSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    return currentSessionId ? sessions.get(currentSessionId) || null : null;
-  });
-
 export const useSession = (sessionId: string) =>
   useChatSessionStore((state) => state.sessions.get(sessionId) || null);
 
@@ -511,24 +567,6 @@ export const useCurrentChatState = () =>
     return currentSession?.chatState || "input";
   });
 
-export const useCurrentRegenerationState = () =>
-  useChatSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    const currentSession = currentSessionId
-      ? sessions.get(currentSessionId)
-      : null;
-    return currentSession?.regenerationState || null;
-  });
-
-export const useCanContinue = () =>
-  useChatSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    const currentSession = currentSessionId
-      ? sessions.get(currentSessionId)
-      : null;
-    return currentSession?.canContinue || false;
-  });
-
 export const useSubmittedMessage = () =>
   useChatSessionStore((state) => {
     const { currentSessionId, sessions } = state;
@@ -538,30 +576,34 @@ export const useSubmittedMessage = () =>
     return currentSession?.submittedMessage || "";
   });
 
-export const useRegenerationState = (sessionId: string) =>
-  useChatSessionStore((state) => {
-    const session = state.sessions.get(sessionId);
-    return session?.regenerationState || null;
-  });
+export interface ChatPageLayout {
+  messageHistory: Message[];
+  isFetchingChatMessages: boolean;
+  submittedMessage: string;
+  loadingError: string | null;
+  showCenteredInput: boolean;
+}
 
-export const useAbortController = (sessionId: string) =>
-  useChatSessionStore((state) => {
-    const session = state.sessions.get(sessionId);
-    return session?.abortController || null;
-  });
+export function useChatPageLayout(): ChatPageLayout {
+  const messageHistory = useCurrentMessageHistory();
+  const isFetchingChatMessages = useIsFetching();
+  const submittedMessage = useSubmittedMessage();
+  const loadingError = useLoadingError();
 
-export const useAbortControllers = () => {
-  const sessions = useChatSessionStore((state) => state.sessions);
-  return useMemo(() => {
-    const controllers = new Map<string, AbortController>();
-    sessions.forEach((session: ChatSessionData) => {
-      if (session.abortController) {
-        controllers.set(session.sessionId, session.abortController);
-      }
-    });
-    return controllers;
-  }, [sessions]);
-};
+  const showCenteredInput =
+    messageHistory.length === 0 &&
+    !isFetchingChatMessages &&
+    !loadingError &&
+    !submittedMessage;
+
+  return {
+    messageHistory,
+    isFetchingChatMessages,
+    submittedMessage,
+    loadingError,
+    showCenteredInput,
+  };
+}
 
 // Session-specific state hooks (previously global)
 export const useIsFetching = () =>
@@ -600,15 +642,6 @@ export const useIsReady = () =>
     return currentSession?.isReady ?? true;
   });
 
-export const useMaxTokens = () =>
-  useChatSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    const currentSession = currentSessionId
-      ? sessions.get(currentSessionId)
-      : null;
-    return currentSession?.maxTokens || 128_000;
-  });
-
 export const useHasPerformedInitialScroll = () =>
   useChatSessionStore((state) => {
     const { currentSessionId, sessions } = state;
@@ -634,17 +667,6 @@ export const useSelectedNodeForDocDisplay = () =>
       ? sessions.get(currentSessionId)
       : null;
     return currentSession?.selectedNodeIdForDocDisplay || null;
-  });
-
-export const useChatSessionSharedStatus = () =>
-  useChatSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    const currentSession = currentSessionId
-      ? sessions.get(currentSessionId)
-      : null;
-    return (
-      currentSession?.chatSessionSharedStatus || ChatSessionSharedStatus.Private
-    );
   });
 
 export const useHasSentLocalUserMessage = () =>

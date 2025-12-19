@@ -18,8 +18,7 @@ from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_processing.extract_file_text import get_file_ext
-from onyx.file_processing.extract_file_text import is_accepted_file_ext
-from onyx.file_processing.extract_file_text import OnyxExtensionType
+from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
@@ -90,7 +89,7 @@ def _process_file(
     # Get file extension and determine file type
     extension = get_file_ext(file_name)
 
-    if not is_accepted_file_ext(extension, OnyxExtensionType.All):
+    if extension not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
         logger.warning(
             f"Skipping file '{file_name}' with unrecognized extension '{extension}'"
         )
@@ -105,16 +104,13 @@ def _process_file(
     link = onyx_metadata.link
 
     # These metadata items are not settable by the user
-    source_type_str = metadata.get("connector_type")
-    source_type = (
-        DocumentSource(source_type_str) if source_type_str else DocumentSource.FILE
-    )
+    source_type = onyx_metadata.source_type or DocumentSource.FILE
 
     doc_id = f"FILE_CONNECTOR__{file_id}"
     title = metadata.get("title") or file_display_name
 
     # 1) If the file itself is an image, handle that scenario quickly
-    if extension in LoadConnector.IMAGE_EXTENSIONS:
+    if extension in OnyxFileExtensions.IMAGE_EXTENSIONS:
         # Read the image data
         image_data = file.read()
         if not image_data:
@@ -158,7 +154,7 @@ def _process_file(
         content_type=file_type,
     )
 
-    # Each file may have file-specific ONYX_METADATA https://docs.onyx.app/admin/connectors/official/file
+    # Each file may have file-specific ONYX_METADATA https://docs.onyx.app/admins/connectors/official/file
     # If so, we should add it to any metadata processed so far
     if extraction_result.metadata:
         logger.debug(

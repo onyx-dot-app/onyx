@@ -1,3 +1,4 @@
+import { validateInternalRedirect } from "@/lib/auth/redirectValidation";
 import { getDomain } from "@/lib/redirectSS";
 import { buildUrl } from "@/lib/utilsSS";
 import { NextRequest, NextResponse } from "next/server";
@@ -28,16 +29,21 @@ async function handleSamlCallback(
     },
   };
 
+  let relayState: string | null = null;
+
   // For POST requests, include form data
   if (method === "POST") {
-    fetchOptions.body = await request.formData();
+    const formData = await request.formData();
+    const relayStateValue = formData.get("RelayState");
+    relayState = typeof relayStateValue === "string" ? relayStateValue : null;
+    fetchOptions.body = formData;
   }
 
   // OneLogin python toolkit only supports HTTP-POST binding for SAMLResponse.
   // If the IdP returned SAMLResponse via query parameters (GET), convert to POST.
   if (method === "GET") {
     const samlResponse = request.nextUrl.searchParams.get("SAMLResponse");
-    const relayState = request.nextUrl.searchParams.get("RelayState");
+    relayState = request.nextUrl.searchParams.get("RelayState");
     if (samlResponse) {
       const formData = new FormData();
       formData.set("SAMLResponse", samlResponse);
@@ -61,8 +67,11 @@ async function handleSamlCallback(
     );
   }
 
+  const validatedRelayState = validateInternalRedirect(relayState);
+  const redirectDestination = validatedRelayState ?? "/";
+
   const redirectResponse = NextResponse.redirect(
-    new URL("/", getDomain(request)),
+    new URL(redirectDestination, getDomain(request)),
     SEE_OTHER_REDIRECT_STATUS
   );
   redirectResponse.headers.set("set-cookie", setCookieHeader);

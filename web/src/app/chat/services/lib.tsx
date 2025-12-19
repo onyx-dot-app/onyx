@@ -1,26 +1,19 @@
 import {
-  OnyxDocument,
   Filters,
   DocumentInfoPacket,
   StreamStopInfo,
 } from "@/lib/search/interfaces";
 import { handleSSEStream } from "@/lib/search/streamingUtils";
 import { ChatState, FeedbackType } from "@/app/chat/interfaces";
-import {
-  MutableRefObject,
-  RefObject,
-  useCallback,
-  useEffect,
-  useRef,
-} from "react";
+import { MutableRefObject, RefObject, useEffect, useRef } from "react";
 import {
   BackendMessage,
-  ChatSession,
   DocumentsResponse,
   FileDescriptor,
   FileChatDisplay,
   Message,
   MessageResponseIDInfo,
+  ResearchType,
   RetrievalType,
   StreamingError,
   ToolCallMetadata,
@@ -29,51 +22,9 @@ import {
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { ReadonlyURLSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "./searchParams";
-import { Settings } from "@/app/admin/settings/interfaces";
-import {
-  IMAGE_GENERATION_TOOL_ID,
-  WEB_SEARCH_TOOL_ID,
-} from "@/app/chat/components/tools/constants";
+import { WEB_SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import { Packet } from "./streamingModels";
-
-// Date range group constants
-export const DATE_RANGE_GROUPS = {
-  TODAY: "Today",
-  PREVIOUS_7_DAYS: "Previous 7 Days",
-  PREVIOUS_30_DAYS: "Previous 30 Days",
-  OVER_30_DAYS: "Over 30 Days",
-} as const;
-
-interface ChatRetentionInfo {
-  chatRetentionDays: number;
-  daysFromCreation: number;
-  daysUntilExpiration: number;
-  showRetentionWarning: boolean;
-}
-
-export function getChatRetentionInfo(
-  chatSession: ChatSession,
-  settings: Settings
-): ChatRetentionInfo {
-  // If `maximum_chat_retention_days` isn't set- never display retention warning.
-  const chatRetentionDays = settings.maximum_chat_retention_days || 10000;
-  const updatedDate = new Date(chatSession.time_updated);
-  const today = new Date();
-  const daysFromCreation = Math.ceil(
-    (today.getTime() - updatedDate.getTime()) / (1000 * 3600 * 24)
-  );
-  const daysUntilExpiration = chatRetentionDays - daysFromCreation;
-  const showRetentionWarning =
-    chatRetentionDays < 7 ? daysUntilExpiration < 2 : daysUntilExpiration < 7;
-
-  return {
-    chatRetentionDays,
-    daysFromCreation,
-    daysUntilExpiration,
-    showRetentionWarning,
-  };
-}
 
 export async function updateLlmOverrideForChatSession(
   chatSessionId: string,
@@ -137,20 +88,6 @@ export async function createChatSession(
   const chatSessionResponseJson = await createChatSessionResponse.json();
   return chatSessionResponseJson.chat_session_id;
 }
-
-export const isPacketType = (data: any): data is PacketType => {
-  return (
-    data.hasOwnProperty("answer_piece") ||
-    data.hasOwnProperty("top_documents") ||
-    data.hasOwnProperty("tool_name") ||
-    data.hasOwnProperty("file_ids") ||
-    data.hasOwnProperty("error") ||
-    data.hasOwnProperty("message_id") ||
-    data.hasOwnProperty("stop_reason") ||
-    data.hasOwnProperty("user_message_id") ||
-    data.hasOwnProperty("reserved_assistant_message_id")
-  );
-};
 
 export type PacketType =
   | ToolCallMetadata
@@ -317,6 +254,19 @@ export async function handleChatFeedback(
   return response;
 }
 
+export async function removeChatFeedback(messageId: number) {
+  const response = await fetch(
+    `/api/chat/remove-chat-message-feedback?chat_message_id=${messageId}`,
+    {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    }
+  );
+  return response;
+}
+
 export async function renameChatSession(
   chatSessionId: string,
   newName: string
@@ -367,121 +317,6 @@ export async function getAvailableContextTokens(
   return data?.available_tokens ?? 0;
 }
 
-export async function* simulateLLMResponse(input: string, delay: number = 30) {
-  // Split the input string into tokens. This is a simple example, and in real use case, tokenization can be more complex.
-  // Iterate over tokens and yield them one by one
-  const tokens = input.match(/.{1,3}|\n/g) || [];
-
-  for (const token of tokens) {
-    // In a real-world scenario, there might be a slight delay as tokens are being generated
-    await new Promise((resolve) => setTimeout(resolve, delay)); // 40ms delay to simulate response time
-
-    // Yielding each token
-    yield token;
-  }
-}
-
-export function getHumanAndAIMessageFromMessageNumber(
-  messageHistory: Message[],
-  messageId: number
-) {
-  let messageInd;
-  // -1 is special -> means use the last message
-  if (messageId === -1) {
-    messageInd = messageHistory.length - 1;
-  } else {
-    messageInd = messageHistory.findIndex(
-      (message) => message.messageId === messageId
-    );
-  }
-  if (messageInd !== -1) {
-    const matchingMessage = messageHistory[messageInd];
-    const pairedMessage =
-      matchingMessage && matchingMessage.type === "user"
-        ? messageHistory[messageInd + 1]
-        : messageHistory[messageInd - 1];
-
-    const humanMessage =
-      matchingMessage && matchingMessage.type === "user"
-        ? matchingMessage
-        : pairedMessage;
-    const aiMessage =
-      matchingMessage && matchingMessage.type === "user"
-        ? pairedMessage
-        : matchingMessage;
-
-    return {
-      humanMessage,
-      aiMessage,
-    };
-  } else {
-    return {
-      humanMessage: null,
-      aiMessage: null,
-    };
-  }
-}
-
-export function getCitedDocumentsFromMessage(message: Message) {
-  if (!message.citations || !message.documents) {
-    return [];
-  }
-
-  const documentsWithCitationKey: [string, OnyxDocument][] = [];
-  Object.entries(message.citations).forEach(([citationKey, documentDbId]) => {
-    const matchingDocument = message.documents!.find(
-      (document) => document.db_doc_id === documentDbId
-    );
-    if (matchingDocument) {
-      documentsWithCitationKey.push([citationKey, matchingDocument]);
-    }
-  });
-  return documentsWithCitationKey;
-}
-
-export function groupSessionsByDateRange(chatSessions: ChatSession[]) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0); // Set to start of today for accurate comparison
-
-  const groups: Record<string, ChatSession[]> = {
-    [DATE_RANGE_GROUPS.TODAY]: [],
-    [DATE_RANGE_GROUPS.PREVIOUS_7_DAYS]: [],
-    [DATE_RANGE_GROUPS.PREVIOUS_30_DAYS]: [],
-    [DATE_RANGE_GROUPS.OVER_30_DAYS]: [],
-  };
-
-  chatSessions.forEach((chatSession) => {
-    const chatSessionDate = new Date(chatSession.time_updated);
-
-    const diffTime = today.getTime() - chatSessionDate.getTime();
-    const diffDays = diffTime / (1000 * 3600 * 24); // Convert time difference to days
-
-    if (diffDays < 1) {
-      const groups_today = groups[DATE_RANGE_GROUPS.TODAY];
-      if (groups_today) {
-        groups_today.push(chatSession);
-      }
-    } else if (diffDays <= 7) {
-      const groups_7 = groups[DATE_RANGE_GROUPS.PREVIOUS_7_DAYS];
-      if (groups_7) {
-        groups_7.push(chatSession);
-      }
-    } else if (diffDays <= 30) {
-      const groups_30 = groups[DATE_RANGE_GROUPS.PREVIOUS_30_DAYS];
-      if (groups_30) {
-        groups_30.push(chatSession);
-      }
-    } else {
-      const groups_over_30 = groups[DATE_RANGE_GROUPS.OVER_30_DAYS];
-      if (groups_over_30) {
-        groups_over_30.push(chatSession);
-      }
-    }
-  });
-
-  return groups;
-}
-
 export function processRawChatHistory(
   rawMessages: BackendMessage[],
   packets: Packet[][]
@@ -491,14 +326,13 @@ export function processRawChatHistory(
 
   let assistantMessageInd = 0;
 
-  rawMessages.forEach((messageInfo, ind) => {
+  rawMessages.forEach((messageInfo, _ind) => {
     const packetsForMessage = packets[assistantMessageInd];
     if (messageInfo.message_type === "assistant") {
       assistantMessageInd++;
     }
 
-    const hasContextDocs =
-      (messageInfo?.context_docs?.top_documents || []).length > 0;
+    const hasContextDocs = (messageInfo?.context_docs || []).length > 0;
     let retrievalType;
     if (hasContextDocs) {
       if (messageInfo.rephrased_query) {
@@ -527,8 +361,9 @@ export function processRawChatHistory(
       ...(messageInfo.message_type === "assistant"
         ? {
             retrievalType: retrievalType,
+            researchType: messageInfo.research_type as ResearchType | undefined,
             query: messageInfo.rephrased_query,
-            documents: messageInfo?.context_docs?.top_documents || [],
+            documents: messageInfo?.context_docs || [],
             citations: messageInfo?.citations || {},
           }
         : {}),
@@ -538,6 +373,7 @@ export function processRawChatHistory(
       latestChildNodeId: messageInfo.latest_child_message,
       overridden_model: messageInfo.overridden_model,
       packets: packetsForMessage || [],
+      currentFeedback: messageInfo.current_feedback as FeedbackType | null,
     };
 
     messages.set(messageInfo.message_id, message);
@@ -564,30 +400,6 @@ export function processRawChatHistory(
   return messages;
 }
 
-export function checkAnyAssistantHasSearch(
-  messageHistory: Message[],
-  availableAssistants: MinimalPersonaSnapshot[],
-  livePersona: MinimalPersonaSnapshot
-): boolean {
-  const response =
-    messageHistory.some((message) => {
-      if (
-        message.type !== "assistant" ||
-        message.alternateAssistantID === null
-      ) {
-        return false;
-      }
-      const alternateAssistant = availableAssistants.find(
-        (assistant) => assistant.id === message.alternateAssistantID
-      );
-      return alternateAssistant
-        ? personaIncludesRetrieval(alternateAssistant)
-        : false;
-    }) || personaIncludesRetrieval(livePersona);
-
-  return response;
-}
-
 export function personaIncludesRetrieval(
   selectedPersona: MinimalPersonaSnapshot
 ) {
@@ -595,13 +407,6 @@ export function personaIncludesRetrieval(
     (tool) =>
       tool.in_code_tool_id &&
       [SEARCH_TOOL_ID, WEB_SEARCH_TOOL_ID].includes(tool.in_code_tool_id)
-  );
-}
-
-export function personaIncludesImage(selectedPersona: MinimalPersonaSnapshot) {
-  return selectedPersona.tools.some(
-    (tool) =>
-      tool.in_code_tool_id && tool.in_code_tool_id == IMAGE_GENERATION_TOOL_ID
   );
 }
 
@@ -685,9 +490,9 @@ export function useScrollonStream({
   enableAutoScroll,
 }: {
   chatState: ChatState;
-  scrollableDivRef: RefObject<HTMLDivElement>;
+  scrollableDivRef: RefObject<HTMLDivElement | null>;
   scrollDist: MutableRefObject<number>;
-  endDivRef: RefObject<HTMLDivElement>;
+  endDivRef: RefObject<HTMLDivElement | null>;
   debounceNumber: number;
   mobile?: boolean;
   enableAutoScroll?: boolean;

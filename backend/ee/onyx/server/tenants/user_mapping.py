@@ -249,6 +249,17 @@ def accept_user_invite(email: str, tenant_id: str) -> None:
             )
             raise
 
+    # Remove from invited users list since they've accepted
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+    try:
+        invited_users = get_invited_users()
+        if email in invited_users:
+            invited_users.remove(email)
+            write_invited_users(invited_users)
+            logger.info(f"Removed {email} from invited users list after acceptance")
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
 
 def deny_user_invite(email: str, tenant_id: str) -> None:
     """

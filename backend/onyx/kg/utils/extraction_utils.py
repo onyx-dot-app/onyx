@@ -1,7 +1,5 @@
 import json
 
-from langchain_core.messages import HumanMessage
-
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import OnyxCallTypes
 from onyx.configs.kg_configs import KG_METADATA_TRACKING_THRESHOLD
@@ -30,8 +28,8 @@ from onyx.kg.utils.formatting_utils import make_entity_id
 from onyx.kg.utils.formatting_utils import make_relationship_id
 from onyx.kg.utils.formatting_utils import make_relationship_type_id
 from onyx.kg.vespa.vespa_interactions import get_document_vespa_contents
-from onyx.llm.factory import get_default_llms
-from onyx.llm.utils import message_to_string
+from onyx.llm.factory import get_default_llm
+from onyx.llm.utils import llm_response_to_string
 from onyx.prompts.kg_prompts import CALL_CHUNK_PREPROCESSING_PROMPT
 from onyx.prompts.kg_prompts import CALL_DOCUMENT_CLASSIFICATION_PROMPT
 from onyx.prompts.kg_prompts import GENERAL_CHUNK_PREPROCESSING_PROMPT
@@ -417,15 +415,11 @@ def kg_classify_document(
     )
 
     # classify with LLM
-    primary_llm, _ = get_default_llms()
-    msg = [HumanMessage(content=prompt)]
+    llm = get_default_llm()
     try:
-        raw_classification_result = primary_llm.invoke(msg)
+        raw_classification_result = llm_response_to_string(llm.invoke(prompt))
         classification_result = (
-            message_to_string(raw_classification_result)
-            .replace("```json", "")
-            .replace("```", "")
-            .strip()
+            raw_classification_result.replace("```json", "").replace("```", "").strip()
         )
         # no json parsing here because of reasoning output
         classification_class = classification_result.split("CATEGORY:")[1].strip()
@@ -485,13 +479,11 @@ def kg_deep_extract_chunks(
     ).replace("---content---", llm_context)
 
     # extract with LLM
-    _, fast_llm = get_default_llms()
-    msg = [HumanMessage(content=prompt)]
+    llm = get_default_llm()
     try:
-        raw_extraction_result = fast_llm.invoke(msg)
+        raw_extraction_result = llm_response_to_string(llm.invoke(prompt))
         cleaned_response = (
-            message_to_string(raw_extraction_result)
-            .replace("{{", "{")
+            raw_extraction_result.replace("{{", "{")
             .replace("}}", "}")
             .replace("```json\n", "")
             .replace("\n```", "")

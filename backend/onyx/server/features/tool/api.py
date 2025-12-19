@@ -6,18 +6,22 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_admin_user
+from onyx.auth.schemas import UserRole
+from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.tools import create_tool__no_commit
 from onyx.db.tools import delete_tool__no_commit
 from onyx.db.tools import get_tool_by_id
 from onyx.db.tools import get_tools
+from onyx.db.tools import get_tools_by_ids
 from onyx.db.tools import update_tool
 from onyx.server.features.tool.models import CustomToolCreate
 from onyx.server.features.tool.models import CustomToolUpdate
 from onyx.server.features.tool.models import ToolSnapshot
+from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
@@ -48,11 +52,39 @@ def _validate_auth_settings(tool_data: CustomToolCreate | CustomToolUpdate) -> N
                 )
 
 
+def _get_editable_custom_tool(
+    tool_id: int, db_session: Session, user: User | None
+) -> Tool:
+    """Fetch a custom tool and ensure the caller has permission to edit it."""
+    try:
+        tool = get_tool_by_id(tool_id, db_session)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    if tool.in_code_tool_id is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Built-in tools cannot be modified through this endpoint.",
+        )
+
+    # Admins can always make changes; non-admins must own the tool.
+    if not user or user.role == UserRole.ADMIN:
+        return tool
+
+    if tool.user_id is None or tool.user_id != user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only modify actions that you created.",
+        )
+
+    return tool
+
+
 @admin_router.post("/custom")
 def create_custom_tool(
     tool_data: CustomToolCreate,
     db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_admin_user),
+    user: User | None = Depends(current_curator_or_admin_user),
 ) -> ToolSnapshot:
     _validate_tool_definition(tool_data.definition)
     _validate_auth_settings(tool_data)
@@ -64,6 +96,7 @@ def create_custom_tool(
         user_id=user.id if user else None,
         db_session=db_session,
         passthrough_auth=tool_data.passthrough_auth,
+        oauth_config_id=tool_data.oauth_config_id,
         enabled=True,
     )
     db_session.commit()
@@ -75,8 +108,9 @@ def update_custom_tool(
     tool_id: int,
     tool_data: CustomToolUpdate,
     db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_admin_user),
+    user: User | None = Depends(current_curator_or_admin_user),
 ) -> ToolSnapshot:
+    existing_tool = _get_editable_custom_tool(tool_id, db_session, user)
     if tool_data.definition:
         _validate_tool_definition(tool_data.definition)
     _validate_auth_settings(tool_data)
@@ -86,9 +120,10 @@ def update_custom_tool(
         description=tool_data.description,
         openapi_schema=tool_data.definition,
         custom_headers=tool_data.custom_headers,
-        user_id=user.id if user else None,
+        user_id=existing_tool.user_id,
         db_session=db_session,
         passthrough_auth=tool_data.passthrough_auth,
+        oauth_config_id=tool_data.oauth_config_id,
     )
     return ToolSnapshot.from_model(updated_tool)
 
@@ -97,8 +132,9 @@ def update_custom_tool(
 def delete_custom_tool(
     tool_id: int,
     db_session: Session = Depends(get_session),
-    _: User | None = Depends(current_admin_user),
+    user: User | None = Depends(current_curator_or_admin_user),
 ) -> None:
+    _ = _get_editable_custom_tool(tool_id, db_session, user)
     try:
         delete_tool__no_commit(tool_id, db_session)
     except ValueError as e:
@@ -107,6 +143,57 @@ def delete_custom_tool(
         # handles case where tool is still used by an Assistant
         raise HTTPException(status_code=400, detail=str(e))
     db_session.commit()
+
+
+class ToolStatusUpdateRequest(BaseModel):
+    tool_ids: list[int]
+    enabled: bool
+
+
+class ToolStatusUpdateResponse(BaseModel):
+    updated_count: int
+    tool_ids: list[int]
+
+
+@admin_router.patch("/status")
+def update_tools_status(
+    update_data: ToolStatusUpdateRequest,
+    db_session: Session = Depends(get_session),
+    user: User | None = Depends(current_curator_or_admin_user),
+) -> ToolStatusUpdateResponse:
+    """Enable or disable one or more tools.
+
+    Pass a single tool ID in the list to update one tool, or multiple IDs for
+    bulk updates.
+    """
+    if not update_data.tool_ids:
+        raise HTTPException(status_code=400, detail="No tool IDs provided")
+
+    tools = get_tools_by_ids(update_data.tool_ids, db_session)
+    tools_by_id = {tool.id: tool for tool in tools}
+
+    updated_tools = []
+    missing_tools = []
+
+    for tool_id in update_data.tool_ids:
+        tool = tools_by_id.get(tool_id)
+        if tool:
+            tool.enabled = update_data.enabled
+            updated_tools.append(tool_id)
+        else:
+            missing_tools.append(tool_id)
+
+    if missing_tools:
+        raise HTTPException(
+            status_code=404, detail=f"Tools with IDs {missing_tools} not found"
+        )
+
+    db_session.commit()
+
+    return ToolStatusUpdateResponse(
+        updated_count=len(updated_tools),
+        tool_ids=updated_tools,
+    )
 
 
 class ValidateToolRequest(BaseModel):
@@ -120,7 +207,7 @@ class ValidateToolResponse(BaseModel):
 @admin_router.post("/custom/validate")
 def validate_tool(
     tool_data: ValidateToolRequest,
-    _: User | None = Depends(current_admin_user),
+    _: User | None = Depends(current_curator_or_admin_user),
 ) -> ValidateToolResponse:
     _validate_tool_definition(tool_data.definition)
     method_specs = openapi_to_method_specs(tool_data.definition)
@@ -128,6 +215,23 @@ def validate_tool(
 
 
 """Endpoints for all"""
+
+
+@router.get("/openapi")
+def list_openapi_tools(
+    db_session: Session = Depends(get_session),
+    _: User | None = Depends(current_user),
+) -> list[ToolSnapshot]:
+    tools = get_tools(db_session, only_openapi=True)
+
+    openapi_tools: list[ToolSnapshot] = []
+    for tool in tools:
+        if not should_expose_tool_to_fe(tool):
+            continue
+
+        openapi_tools.append(ToolSnapshot.from_model(tool))
+
+    return openapi_tools
 
 
 @router.get("/{tool_id}")
@@ -148,10 +252,13 @@ def list_tools(
     db_session: Session = Depends(get_session),
     _: User | None = Depends(current_user),
 ) -> list[ToolSnapshot]:
-    tools = get_tools(db_session, only_enabled=True)
+    tools = get_tools(db_session, only_enabled=True, only_connected_mcp=True)
 
     filtered_tools: list[ToolSnapshot] = []
     for tool in tools:
+        if not should_expose_tool_to_fe(tool):
+            continue
+
         # Check if it's a built-in tool and if it's available
         if tool.in_code_tool_id:
             try:

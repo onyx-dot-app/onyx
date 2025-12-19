@@ -9,7 +9,7 @@ import Text from "@/components/ui/text";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import { usePopupFromQuery } from "@/components/popup/PopupFromQuery";
 import Button from "@/refresh-components/buttons/Button";
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, RefObject } from "react";
 import { FilterOptions } from "./FilterComponent";
 import { ValidSources } from "@/lib/types";
 import Cookies from "js-cookie";
@@ -169,7 +169,9 @@ function Main() {
         resetPagination={resetPagination}
         onClearFilters={handleClearFilters}
         hasActiveFilters={hasActiveFilters}
-        filterComponentRef={filterComponentRef}
+        filterComponentRef={
+          filterComponentRef as RefObject<{ resetFilters: () => void }>
+        }
       />
 
       {/* Table component */}
@@ -211,7 +213,7 @@ export default function Status() {
   });
 
   return (
-    <div className="mx-auto container">
+    <div className="container">
       {popup}
       <AdminPageTitle
         icon={<NotebookIcon size={32} />}

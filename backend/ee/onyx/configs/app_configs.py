@@ -1,26 +1,6 @@
 import json
 import os
 
-# Applicable for OIDC Auth
-OPENID_CONFIG_URL = os.environ.get("OPENID_CONFIG_URL", "")
-
-# Applicable for OIDC Auth, allows you to override the scopes that
-# are requested from the OIDC provider. Currently used when passing
-# over access tokens to tool calls and the tool needs more scopes
-OIDC_SCOPE_OVERRIDE: list[str] | None = None
-_OIDC_SCOPE_OVERRIDE = os.environ.get("OIDC_SCOPE_OVERRIDE")
-
-if _OIDC_SCOPE_OVERRIDE:
-    try:
-        OIDC_SCOPE_OVERRIDE = [
-            scope.strip() for scope in _OIDC_SCOPE_OVERRIDE.split(",")
-        ]
-    except Exception:
-        pass
-
-# Applicable for SAML Auth
-SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/ee/onyx/configs/saml_config"
-
 
 #####
 # Auto Permission Sync
@@ -60,6 +40,10 @@ CONFLUENCE_ANONYMOUS_ACCESS_IS_PUBLIC = (
 # In seconds, default is 30 minutes
 JIRA_PERMISSION_DOC_SYNC_FREQUENCY = int(
     os.environ.get("JIRA_PERMISSION_DOC_SYNC_FREQUENCY") or 30 * 60
+)
+# In seconds, default is 30 minutes
+JIRA_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("JIRA_PERMISSION_GROUP_SYNC_FREQUENCY") or 30 * 60
 )
 
 
@@ -143,6 +127,8 @@ SUPER_CLOUD_API_KEY = os.environ.get("SUPER_CLOUD_API_KEY", "api_key")
 # when the capture is called. These defaults prevent Posthog issues from breaking the Onyx app
 POSTHOG_API_KEY = os.environ.get("POSTHOG_API_KEY") or "FooBar"
 POSTHOG_HOST = os.environ.get("POSTHOG_HOST") or "https://us.i.posthog.com"
+
+MARKETING_POSTHOG_API_KEY = os.environ.get("MARKETING_POSTHOG_API_KEY")
 
 HUBSPOT_TRACKING_URL = os.environ.get("HUBSPOT_TRACKING_URL")
 

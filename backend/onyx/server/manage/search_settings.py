@@ -33,6 +33,7 @@ from onyx.server.manage.models import FullModelVersionResponse
 from onyx.server.models import IdReturn
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import ALT_INDEX_SUFFIX
+from shared_configs.configs import MULTI_TENANT
 
 router = APIRouter(prefix="/search-settings")
 logger = setup_logger()
@@ -49,6 +50,13 @@ def set_new_search_settings(
     """
     if search_settings_new.index_name:
         logger.warning("Index name was specified by request, this is not suggested")
+
+    # Disallow contextual RAG for cloud deployments
+    if MULTI_TENANT and search_settings_new.enable_contextual_rag:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Contextual RAG disabled in Onyx Cloud",
+        )
 
     # Validate cloud provider exists or create new LiteLLM provider
     if search_settings_new.provider_type is not None:
@@ -217,6 +225,13 @@ def update_saved_search_settings(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
+    # Disallow contextual RAG for cloud deployments
+    if MULTI_TENANT and search_settings.enable_contextual_rag:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Contextual RAG disabled in Onyx Cloud",
+        )
+
     update_current_search_settings(
         search_settings=search_settings, db_session=db_session
     )

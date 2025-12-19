@@ -10,14 +10,6 @@ EE_PUBLIC_ENDPOINT_SPECS = PUBLIC_ENDPOINT_SPECS + [
     ("/enterprise-settings/logo", {"GET"}),
     ("/enterprise-settings/logotype", {"GET"}),
     ("/enterprise-settings/custom-analytics-script", {"GET"}),
-    # oidc
-    ("/auth/oidc/authorize", {"GET"}),
-    ("/auth/oidc/callback", {"GET"}),
-    # saml
-    ("/auth/saml/authorize", {"GET"}),
-    ("/auth/saml/callback", {"POST"}),
-    ("/auth/saml/callback", {"GET"}),
-    ("/auth/saml/logout", {"POST"}),
 ]
 
 

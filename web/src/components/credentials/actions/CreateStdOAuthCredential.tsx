@@ -1,7 +1,6 @@
 import * as Yup from "yup";
 
-import React from "react";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { ValidSources } from "@/lib/types";
 import { TextFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";
@@ -76,9 +75,7 @@ export function CreateStdOAuthCredential({
             ))}
 
             <div className="flex w-full">
-              <Button type="submit" className="flex text-sm">
-                Create
-              </Button>
+              <Button type="submit">Create</Button>
             </div>
           </CardSection>
         </Form>

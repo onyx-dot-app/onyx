@@ -4,7 +4,6 @@ import { AdminPageTitle } from "@/components/admin/Title";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import Text from "@/components/ui/text";
 import { useState } from "react";
-import { FiGlobe, FiUser, FiUsers } from "react-icons/fi";
 import {
   insertGlobalTokenRateLimit,
   insertGroupTokenRateLimit,
@@ -14,11 +13,10 @@ import { Scope, TokenRateLimit } from "./types";
 import { GenericTokenRateLimitTable } from "./TokenRateLimitTables";
 import { mutate } from "swr";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { CreateRateLimitModal } from "./CreateRateLimitModal";
+import CreateRateLimitModal from "./CreateRateLimitModal";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
-import { ShieldIcon } from "@/components/icons/icons";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-
+import { SvgGlobe, SvgShield, SvgUser, SvgUsers } from "@opal/icons";
 const BASE_URL = "/api/admin/token-rate-limits";
 const GLOBAL_TOKEN_FETCH_URL = `${BASE_URL}/global`;
 const USER_TOKEN_FETCH_URL = `${BASE_URL}/users`;
@@ -149,15 +147,24 @@ function Main() {
         >
           <TabsList>
             <TabsTrigger value="0" className="flex items-center gap-2">
-              <FiGlobe />
+              <SvgGlobe
+                aria-hidden="true"
+                className="h-3.5 w-3.5 stroke-text-03 group-data-[state=active]:stroke-text-04 shrink-0"
+              />
               Global
             </TabsTrigger>
             <TabsTrigger value="1" className="flex items-center gap-2">
-              <FiUser />
+              <SvgUser
+                aria-hidden="true"
+                className="h-3.5 w-3.5 stroke-text-03 group-data-[state=active]:stroke-text-04 shrink-0"
+              />
               User
             </TabsTrigger>
             <TabsTrigger value="2" className="flex items-center gap-2">
-              <FiUsers />
+              <SvgUsers
+                aria-hidden="true"
+                className="h-3.5 w-3.5 stroke-text-03 group-data-[state=active]:stroke-text-04 shrink-0"
+              />
               User Groups
             </TabsTrigger>
           </TabsList>
@@ -218,11 +225,8 @@ function Main() {
 
 export default function Page() {
   return (
-    <div className="mx-auto container">
-      <AdminPageTitle
-        title="Token Rate Limits"
-        icon={<ShieldIcon size={32} />}
-      />
+    <div className="container">
+      <AdminPageTitle title="Token Rate Limits" icon={SvgShield} />
       <Main />
     </div>
   );

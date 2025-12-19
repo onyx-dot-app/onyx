@@ -9,8 +9,8 @@ import { useTimeRange } from "../lib";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { FiActivity } from "react-icons/fi";
 import UsageReports from "./UsageReports";
-import { Separator } from "@/components/ui/separator";
-import { useAdminPersonas } from "@/app/admin/assistants/hooks";
+import Separator from "@/refresh-components/Separator";
+import { useAdminPersonas } from "@/hooks/useAdminPersonas";
 
 export default function AnalyticsPage() {
   const [timeRange, setTimeRange] = useTimeRange();

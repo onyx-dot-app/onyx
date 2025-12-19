@@ -4,12 +4,14 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ee.onyx.db.user_group import add_users_to_user_group
 from ee.onyx.db.user_group import fetch_user_groups
 from ee.onyx.db.user_group import fetch_user_groups_for_user
 from ee.onyx.db.user_group import insert_user_group
 from ee.onyx.db.user_group import prepare_user_group_for_deletion
 from ee.onyx.db.user_group import update_user_curator_relationship
 from ee.onyx.db.user_group import update_user_group
+from ee.onyx.server.user_group.models import AddUsersToUserGroupRequest
 from ee.onyx.server.user_group.models import SetCuratorRequest
 from ee.onyx.server.user_group.models import UserGroup
 from ee.onyx.server.user_group.models import UserGroupCreate
@@ -73,6 +75,26 @@ def patch_user_group(
                 user=user,
                 user_group_id=user_group_id,
                 user_group_update=user_group_update,
+            )
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/admin/user-group/{user_group_id}/add-users")
+def add_users(
+    user_group_id: int,
+    add_users_request: AddUsersToUserGroupRequest,
+    user: User | None = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+) -> UserGroup:
+    try:
+        return UserGroup.from_model(
+            add_users_to_user_group(
+                db_session=db_session,
+                user=user,
+                user_group_id=user_group_id,
+                user_ids=add_users_request.user_ids,
             )
         )
     except ValueError as e:

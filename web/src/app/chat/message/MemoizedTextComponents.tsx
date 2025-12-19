@@ -4,15 +4,15 @@ import {
   DocumentCardProps,
 } from "@/components/search/results/Citation";
 import { LoadedOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
-import React, { memo } from "react";
+import React, { memo, JSX } from "react";
 import isEqual from "lodash/isEqual";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
-import { SubQuestionDetail } from "../interfaces";
+import { SubQuestionDetail, CitationMap } from "../interfaces";
 import { ValidSources } from "@/lib/types";
 import { ProjectFile } from "../projects/projectsService";
 import { BlinkingDot } from "./BlinkingDot";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 
 export const MemoizedAnchor = memo(
@@ -21,6 +21,7 @@ export const MemoizedAnchor = memo(
     subQuestions,
     openQuestion,
     userFiles,
+    citations,
     href,
     updatePresentingDocument,
     children,
@@ -29,6 +30,7 @@ export const MemoizedAnchor = memo(
     openQuestion?: (question: SubQuestionDetail) => void;
     docs?: OnyxDocument[] | null;
     userFiles?: ProjectFile[] | null;
+    citations?: CitationMap;
     updatePresentingDocument: (doc: OnyxDocument) => void;
     href?: string;
     children: React.ReactNode;
@@ -36,34 +38,6 @@ export const MemoizedAnchor = memo(
     const value = children?.toString();
     if (value?.startsWith("[") && value?.endsWith("]")) {
       const match = value.match(/\[(D|Q)?(\d+)\]/);
-      if (match) {
-        const match_item = match[2];
-        if (match_item !== undefined) {
-          const isUserFileCitation = userFiles?.length && userFiles.length > 0;
-          if (isUserFileCitation) {
-            const index = Math.min(
-              parseInt(match_item, 10) - 1,
-              userFiles?.length - 1
-            );
-            const associatedUserFile = userFiles?.[index];
-            if (!associatedUserFile) {
-              return <a href={children as string}>{children}</a>;
-            }
-          } else if (!isUserFileCitation) {
-            const index = parseInt(match_item, 10) - 1;
-            const associatedDoc = docs?.[index];
-            if (!associatedDoc) {
-              return <a href={children as string}>{children}</a>;
-            }
-          } else {
-            const index = parseInt(match_item, 10) - 1;
-            const associatedSubQuestion = subQuestions?.[index];
-            if (!associatedSubQuestion) {
-              return <a href={href || (children as string)}>{children}</a>;
-            }
-          }
-        }
-      }
 
       if (match) {
         const match_item = match[2];
@@ -71,12 +45,22 @@ export const MemoizedAnchor = memo(
           const isSubQuestion = match[1] === "Q";
           const isDocument = !isSubQuestion;
 
-          // Fix: parseInt now uses match[2], which is the numeric part
-          const index = parseInt(match_item, 10) - 1;
+          const citation_num = parseInt(match_item, 10);
 
-          const associatedDoc = isDocument ? docs?.[index] : null;
+          // Use citation map to find the correct document
+          // Citations map format: {citation_num: document_id}
+          // e.g., {1: "doc_abc", 2: "doc_xyz", 3: "doc_123"}
+          let associatedDoc: OnyxDocument | null = null;
+          if (isDocument && docs && citations) {
+            const document_id = citations[citation_num];
+            if (document_id) {
+              associatedDoc =
+                docs.find((d) => d.document_id === document_id) || null;
+            }
+          }
+
           const associatedSubQuestion = isSubQuestion
-            ? subQuestions?.[index]
+            ? subQuestions?.[citation_num - 1]
             : undefined;
 
           if (!associatedDoc && !associatedSubQuestion) {
@@ -153,7 +137,6 @@ export const MemoizedLink = memo(
       document && updatePresentingDocument
         ? {
             url: document.link,
-            icon: document.icon as unknown as React.ReactNode,
             document: document as LoadedOnyxDocument,
             updatePresentingDocument: updatePresentingDocument!,
           }

@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import Button from "@/refresh-components/buttons/Button";
 import { Callout } from "@/components/ui/callout";
@@ -7,18 +9,16 @@ import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { structureValue } from "@/lib/llm/utils";
 import { LlmDescriptor, useLlmManager } from "@/lib/hooks";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { cn } from "@/lib/utils";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { useSearchParams } from "next/navigation";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
 import { useChatSessionStore } from "@/app/chat/stores/useChatSessionStore";
-import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
-import SvgShare from "@/icons/share";
-import SvgCopy from "@/icons/copy";
+import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { copyAll } from "@/app/chat/message/copyingUtils";
+import { SvgCopy, SvgShare } from "@opal/icons";
+import { useChatSessionContext } from "@/contexts/ChatSessionContext";
 
 function buildShareLink(chatSessionId: string) {
   const baseUrl = `${window.location.protocol}//${window.location.host}`;
@@ -98,14 +98,12 @@ export default function ShareChatSessionModal({
   );
   const { popup, setPopup } = usePopup();
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
-  const { currentAgent } = useAgentsContext();
+  const { agentForCurrentChatSession } = useChatSessionContext();
   const searchParams = useSearchParams();
   const message = searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) || "";
-  const { llmProviders } = useChatContext();
   const llmManager = useLlmManager(
-    llmProviders,
     chatSession,
-    currentAgent || undefined
+    agentForCurrentChatSession || undefined
   );
   const updateCurrentChatSessionSharedStatus = useChatSessionStore(
     (state) => state.updateCurrentChatSessionSharedStatus
@@ -115,11 +113,11 @@ export default function ShareChatSessionModal({
     <>
       {popup}
 
-      <ConfirmationModal
+      <ConfirmationModalLayout
         icon={SvgShare}
         title="Share Chat"
         onClose={onClose}
-        submit={<Button>Share</Button>}
+        submit={<Button onClick={onClose}>Share</Button>}
       >
         {shareLink ? (
           <div>
@@ -172,7 +170,7 @@ export default function ShareChatSessionModal({
             </Button>
           </div>
         ) : (
-          <div className="flex flex-col gap-spacing-interline">
+          <div className="flex flex-col gap-2">
             <Callout type="warning" title="Warning">
               Please make sure that all content in this chat is safe to share
               with the whole team.
@@ -213,7 +211,7 @@ export default function ShareChatSessionModal({
         />
 
         {showAdvancedOptions && (
-          <div className="flex flex-col gap-spacing-interline">
+          <div className="flex flex-col gap-2">
             <Callout type="notice" title="Seed New Chat">
               Generate a link to a new chat session with the same settings as
               this chat (including the assistant and model).
@@ -224,7 +222,7 @@ export default function ShareChatSessionModal({
                 try {
                   const seedLink = await generateSeedLink(
                     message,
-                    currentAgent?.id,
+                    agentForCurrentChatSession?.id,
                     llmManager.currentLlm
                   );
                   if (!seedLink) {
@@ -251,7 +249,7 @@ export default function ShareChatSessionModal({
             </Button>
           </div>
         )}
-      </ConfirmationModal>
+      </ConfirmationModalLayout>
     </>
   );
 }

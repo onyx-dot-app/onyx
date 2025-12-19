@@ -7,7 +7,7 @@ import {
 import React, { useMemo, CSSProperties } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import rehypePrism from "rehype-prism-plus";
+import rehypeHighlight from "rehype-highlight";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
@@ -28,6 +28,10 @@ export default function MinimalMarkdown({
     () => ({
       a: MemoizedLink,
       p: MemoizedParagraph,
+      pre: ({ node, className, children }: any) => {
+        // Don't render the pre wrapper - CodeBlock handles its own wrapper
+        return <>{children}</>;
+      },
       code: ({ node, inline, className, children, ...props }: any) => {
         const codeText = extractCodeText(node, content, children);
         return (
@@ -45,7 +49,7 @@ export default function MinimalMarkdown({
       <ReactMarkdown
         className="prose dark:prose-invert max-w-full text-sm break-words"
         components={markdownComponents}
-        rehypePlugins={[[rehypePrism, { ignoreMissing: true }], rehypeKatex]}
+        rehypePlugins={[rehypeHighlight, rehypeKatex]}
         remarkPlugins={[
           remarkGfm,
           [remarkMath, { singleDollarTextMath: false }],

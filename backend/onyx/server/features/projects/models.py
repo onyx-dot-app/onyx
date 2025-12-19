@@ -14,6 +14,7 @@ from onyx.server.query_and_chat.models import ChatSessionDetails
 
 class UserFileSnapshot(BaseModel):
     id: UUID
+    temp_id: str | None = None  # Client-side temporary ID for optimistic updates
     name: str
     project_id: int | None = None
     user_id: UUID | None
@@ -27,9 +28,12 @@ class UserFileSnapshot(BaseModel):
     chunk_count: int | None
 
     @classmethod
-    def from_model(cls, model: UserFile) -> "UserFileSnapshot":
+    def from_model(
+        cls, model: UserFile, temp_id_map: dict[str, str] = {}
+    ) -> "UserFileSnapshot":
         return cls(
             id=model.id,
+            temp_id=temp_id_map.get(str(model.id)),
             name=model.name,
             project_id=None,
             user_id=model.user_id,
@@ -57,7 +61,7 @@ class CategorizedFilesSnapshot(BaseModel):
     def from_result(cls, result: CategorizedFilesResult) -> "CategorizedFilesSnapshot":
         return cls(
             user_files=[
-                UserFileSnapshot.from_model(user_file)
+                UserFileSnapshot.from_model(user_file, temp_id_map=result.id_to_temp_id)
                 for user_file in result.user_files
             ],
             non_accepted_files=result.non_accepted_files,

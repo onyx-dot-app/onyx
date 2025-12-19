@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 from datetime import timezone
 
@@ -7,6 +8,10 @@ from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.connector_job_tests.jira.conftest import JiraTestEnvSetupTuple
 
 
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="Jira permission sync is enterprise only",
+)
 @pytest.mark.xfail(reason="Needs to be tested for flakiness")
 def test_jira_permission_sync_full(
     reset: None,

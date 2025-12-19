@@ -1,9 +1,11 @@
+import { JSX } from "react";
+
 export function MetadataBadge({
   icon,
   value,
   flexNone,
 }: {
-  icon?: React.FC<{ size?: number; className?: string }>;
+  icon?: (props: { size?: number; className?: string }) => JSX.Element;
   value: string | JSX.Element;
   flexNone?: boolean;
 }) {

@@ -1,36 +1,34 @@
 import React, { useState } from "react";
-import { Modal } from "@/components/Modal";
-import { Button } from "@/components/ui/button";
-import Text from "@/components/ui/text";
+import Modal from "@/refresh-components/Modal";
+import Button from "@/refresh-components/buttons/Button";
+import Text from "@/refresh-components/texts/Text";
 import { Badge } from "@/components/ui/badge";
 import { AccessType } from "@/lib/types";
-import {
-  EditIcon,
-  NewChatIcon,
-  SwapIcon,
-  TrashIcon,
-} from "@/components/icons/icons";
+import { EditIcon, NewChatIcon, SwapIcon } from "@/components/icons/icons";
 import {
   ConfluenceCredentialJson,
   Credential,
 } from "@/lib/connectors/credentials";
 import { Connector } from "@/lib/connectors/connectors";
-
-const CredentialSelectionTable = ({
-  credentials,
-  editableCredentials,
-  onEditCredential,
-  onSelectCredential,
-  currentCredentialId,
-  onDeleteCredential,
-}: {
+import IconButton from "@/refresh-components/buttons/IconButton";
+import { SvgAlertTriangle, SvgTrash } from "@opal/icons";
+interface CredentialSelectionTableProps {
   credentials: Credential<any>[];
   editableCredentials: Credential<any>[];
   onSelectCredential: (credential: Credential<any> | null) => void;
   currentCredentialId?: number;
   onDeleteCredential: (credential: Credential<any>) => void;
   onEditCredential?: (credential: Credential<any>) => void;
-}) => {
+}
+
+function CredentialSelectionTable({
+  credentials,
+  editableCredentials,
+  onEditCredential,
+  onSelectCredential,
+  currentCredentialId,
+  onDeleteCredential,
+}: CredentialSelectionTableProps) {
   const [selectedCredentialId, setSelectedCredentialId] = useState<
     number | null
   >(null);
@@ -116,16 +114,14 @@ const CredentialSelectionTable = ({
                   <td className="p-2">
                     {new Date(credential.time_updated).toLocaleString()}
                   </td>
-                  <td className="pt-3 flex gap-x-2 content-center mt-auto">
-                    <button
-                      disabled={selected || !editable}
+                  <td className="p-2 flex gap-x-2 content-center mt-auto">
+                    <IconButton
                       onClick={async () => {
                         onDeleteCredential(credential);
                       }}
-                      className="disabled:opacity-20 enabled:cursor-pointer my-auto"
-                    >
-                      <TrashIcon />
-                    </button>
+                      disabled={selected || !editable}
+                      icon={SvgTrash}
+                    />
                     {onEditCredential && (
                       <button
                         disabled={!editable}
@@ -148,22 +144,9 @@ const CredentialSelectionTable = ({
       )}
     </div>
   );
-};
+}
 
-export default function ModifyCredential({
-  close,
-  showIfEmpty,
-  attachedConnector,
-  credentials,
-  editableCredentials,
-  defaultedCredential,
-  accessType,
-  onSwap,
-  onSwitch,
-  onEditCredential,
-  onDeleteCredential,
-  onCreateNew,
-}: {
+export interface ModifyCredentialProps {
   close?: () => void;
   showIfEmpty?: boolean;
   attachedConnector?: Connector<any>;
@@ -180,45 +163,62 @@ export default function ModifyCredential({
   onEditCredential?: (credential: Credential<ConfluenceCredentialJson>) => void;
   onDeleteCredential: (credential: Credential<any | null>) => void;
   onCreateNew?: () => void;
-}) {
+}
+
+export default function ModifyCredential({
+  close,
+  showIfEmpty,
+  attachedConnector,
+  credentials,
+  editableCredentials,
+  defaultedCredential,
+  accessType,
+  onSwap,
+  onSwitch,
+  onEditCredential,
+  onDeleteCredential,
+  onCreateNew,
+}: ModifyCredentialProps) {
   const [selectedCredential, setSelectedCredential] =
     useState<Credential<any> | null>(null);
   const [confirmDeletionCredential, setConfirmDeletionCredential] =
     useState<null | Credential<any>>(null);
 
-  if (!credentials || !editableCredentials) {
-    return <></>;
-  }
+  if (!credentials || !editableCredentials) return null;
 
   return (
     <>
       {confirmDeletionCredential != null && (
-        <Modal
-          onOutsideClick={() => setConfirmDeletionCredential(null)}
-          className="max-w-sm"
-        >
-          <>
-            <p className="text-lg mb-2">
-              Are you sure you want to delete this credential? You cannot delete
-              credentials that are linked to live connectors.
-            </p>
-            <div className="mt-6 flex gap-x-2 justify-end">
+        <Modal open onOpenChange={() => setConfirmDeletionCredential(null)}>
+          <Modal.Content small>
+            <Modal.Header
+              icon={SvgAlertTriangle}
+              title="Confirm Deletion"
+              onClose={() => setConfirmDeletionCredential(null)}
+            />
+            <Modal.Body>
+              <Text>
+                Are you sure you want to delete this credential? You cannot
+                delete credentials that are linked to live connectors.
+              </Text>
+            </Modal.Body>
+            <Modal.Footer className="p-4 gap-2 justify-end">
               <Button
                 onClick={async () => {
-                  await onDeleteCredential(confirmDeletionCredential);
+                  onDeleteCredential(confirmDeletionCredential);
                   setConfirmDeletionCredential(null);
                 }}
               >
                 Confirm
               </Button>
               <Button
-                variant="outline"
+                secondary
                 onClick={() => setConfirmDeletionCredential(null)}
               >
                 Cancel
               </Button>
-            </div>
-          </>
+            </Modal.Footer>
+          </Modal.Content>
         </Modal>
       )}
 
@@ -259,8 +259,8 @@ export default function ModifyCredential({
                 onClick={() => {
                   onCreateNew();
                 }}
-                className="bg-background-500 disabled:border-transparent 
-              transition-colors duration-150 ease-in disabled:bg-background-300 
+                className="bg-background-500 disabled:border-transparent
+              transition-colors duration-150 ease-in disabled:bg-background-300
               disabled:hover:bg-background-300 hover:bg-background-600 cursor-pointer"
               >
                 <div className="flex gap-x-2 items-center w-full border-none">
@@ -285,8 +285,8 @@ export default function ModifyCredential({
                   onSwitch(selectedCredential!);
                 }
               }}
-              className="bg-indigo-500 disabled:border-transparent 
-              transition-colors duration-150 ease-in disabled:bg-indigo-300 
+              className="bg-indigo-500 disabled:border-transparent
+              transition-colors duration-150 ease-in disabled:bg-indigo-300
               disabled:hover:bg-indigo-300 hover:bg-indigo-600 cursor-pointer"
             >
               <div className="flex gap-x-2 items-center w-full border-none">

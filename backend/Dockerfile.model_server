@@ -1,4 +1,42 @@
-FROM python:3.11.7-slim-bookworm
+# Base stage with dependencies
+FROM python:3.11.7-slim-bookworm AS base
+
+ENV DANSWER_RUNNING_IN_DOCKER="true" \
+    HF_HOME=/app/.cache/huggingface
+
+COPY --from=ghcr.io/astral-sh/uv:0.9.9 /uv /uvx /bin/
+
+RUN mkdir -p /app/.cache/huggingface
+
+COPY ./requirements/model_server.txt /tmp/requirements.txt
+RUN uv pip install --system --no-cache-dir --upgrade \
+        -r /tmp/requirements.txt && \
+    rm -rf ~/.cache/uv /tmp/*.txt
+
+# Stage for downloading tokenizers
+FROM base AS tokenizers
+RUN python -c "from transformers import AutoTokenizer; \
+AutoTokenizer.from_pretrained('distilbert-base-uncased'); \
+AutoTokenizer.from_pretrained('mixedbread-ai/mxbai-rerank-xsmall-v1');"
+
+# Stage for downloading Onyx models
+FROM base AS onyx-models
+RUN python -c "from huggingface_hub import snapshot_download; \
+snapshot_download(repo_id='onyx-dot-app/hybrid-intent-token-classifier'); \
+snapshot_download(repo_id='onyx-dot-app/information-content-model');"
+
+# Stage for downloading embedding and reranking models
+FROM base AS embedding-models
+RUN python -c "from huggingface_hub import snapshot_download; \
+snapshot_download('nomic-ai/nomic-embed-text-v1'); \
+snapshot_download('mixedbread-ai/mxbai-rerank-xsmall-v1');"
+
+# Initialize SentenceTransformer to cache the custom architecture
+RUN python -c "from sentence_transformers import SentenceTransformer; \
+SentenceTransformer(model_name_or_path='nomic-ai/nomic-embed-text-v1', trust_remote_code=True);"
+
+# Final stage - combine all downloads
+FROM base AS final
 
 LABEL com.danswer.maintainer="founders@onyx.app"
 LABEL com.danswer.description="This image is for the Onyx model server which runs all of the \
@@ -6,68 +44,19 @@ AI models for Onyx. This container and all the code is MIT Licensed and free for
 You can find it at https://hub.docker.com/r/onyx/onyx-model-server. For more details, \
 visit https://github.com/onyx-dot-app/onyx."
 
-# Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
-ARG ONYX_VERSION=0.0.0-dev
-ENV ONYX_VERSION=${ONYX_VERSION} \
-    DANSWER_RUNNING_IN_DOCKER="true" \
-    HF_HOME=/app/.cache/huggingface
-
-RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
-
 # Create non-root user for security best practices
-RUN mkdir -p /app && \
-    groupadd -g 1001 onyx && \
-    useradd -u 1001 -g onyx -m -s /bin/bash onyx  && \
-    chown -R onyx:onyx /app && \
+RUN groupadd -g 1001 onyx && \
+    useradd -u 1001 -g onyx -m -s /bin/bash onyx && \
     mkdir -p /var/log/onyx && \
     chmod 755 /var/log/onyx && \
     chown onyx:onyx /var/log/onyx
 
-# --- add toolchain needed for Rust/Python builds (fastuuid) ---
-ENV RUSTUP_HOME=/usr/local/rustup \
-    CARGO_HOME=/usr/local/cargo \
-    PATH=/usr/local/cargo/bin:$PATH
-
-RUN set -eux; \
-    apt-get update && apt-get install -y --no-install-recommends \
-        build-essential \
-        pkg-config \
-        curl \
-        ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
-    # Install latest stable Rust (supports Cargo.lock v4)
-    && curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable \
-    && rustc --version && cargo --version
-
-COPY ./requirements/model_server.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir --upgrade \
-        --retries 5 \
-        --timeout 30 \
-        -r /tmp/requirements.txt
-
-RUN apt-get remove -y --allow-remove-essential perl-base && \ 
-    apt-get autoremove -y
-
-# Pre-downloading models for setups with limited egress
-# Download tokenizers, distilbert for the Onyx model
-# Download model weights
-# Run Nomic to pull in the custom architecture and have it cached locally
-RUN python -c "from transformers import AutoTokenizer; \
-AutoTokenizer.from_pretrained('distilbert-base-uncased'); \
-AutoTokenizer.from_pretrained('mixedbread-ai/mxbai-rerank-xsmall-v1'); \
-from huggingface_hub import snapshot_download; \
-snapshot_download(repo_id='onyx-dot-app/hybrid-intent-token-classifier'); \
-snapshot_download(repo_id='onyx-dot-app/information-content-model'); \
-snapshot_download('nomic-ai/nomic-embed-text-v1'); \
-snapshot_download('mixedbread-ai/mxbai-rerank-xsmall-v1'); \
-from sentence_transformers import SentenceTransformer; \
-SentenceTransformer(model_name_or_path='nomic-ai/nomic-embed-text-v1', trust_remote_code=True);"
-
 # In case the user has volumes mounted to /app/.cache/huggingface that they've downloaded while
-# running Onyx, move the current contents of the cache folder to a temporary location to ensure 
+# running Onyx, move the current contents of the cache folder to a temporary location to ensure
 # it's preserved in order to combine with the user's cache contents
-RUN mv /app/.cache/huggingface /app/.cache/temp_huggingface && \
-    chown -R onyx:onyx /app
+COPY --chown=onyx:onyx --from=tokenizers /app/.cache/huggingface /app/.cache/temp_huggingface
+COPY --chown=onyx:onyx --from=onyx-models /app/.cache/huggingface /app/.cache/temp_huggingface
+COPY --chown=onyx:onyx --from=embedding-models /app/.cache/huggingface /app/.cache/temp_huggingface
 
 WORKDIR /app
 
@@ -85,5 +74,9 @@ COPY ./shared_configs /app/shared_configs
 COPY ./model_server /app/model_server
 
 ENV PYTHONPATH=/app
+
+# Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
+ARG ONYX_VERSION=0.0.0-dev
+ENV ONYX_VERSION=${ONYX_VERSION}
 
 CMD ["uvicorn", "model_server.main:app", "--host", "0.0.0.0", "--port", "9000"]

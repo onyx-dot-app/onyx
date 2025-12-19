@@ -15,9 +15,10 @@ class PageType(str, Enum):
 
 
 class ApplicationStatus(str, Enum):
-    PAYMENT_REMINDER = "payment_reminder"
-    GATED_ACCESS = "gated_access"
     ACTIVE = "active"
+    PAYMENT_REMINDER = "payment_reminder"
+    GRACE_PERIOD = "grace_period"
+    GATED_ACCESS = "gated_access"
 
 
 class Notification(BaseModel):
@@ -66,6 +67,9 @@ class Settings(BaseModel):
 
     # Connector settings
     show_extra_connectors: bool | None = True
+
+    # Default Assistant settings
+    disable_default_assistant: bool | None = False
 
 
 class UserSettings(Settings):

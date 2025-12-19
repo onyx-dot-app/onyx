@@ -1,4 +1,4 @@
-import { Message } from "../interfaces";
+import { FileDescriptor, Message } from "../interfaces";
 
 export const SYSTEM_MESSAGE_ID = -3;
 export const SYSTEM_NODE_ID = -3;
@@ -408,21 +408,24 @@ export function getLastSuccessfulMessageId(
   return null; // No successful message found
 }
 
-export const buildEmptyMessage = (
-  messageType: "user" | "assistant",
-  parentNodeId: number,
-  message?: string,
-  nodeIdOffset?: number
-): Message => {
+interface BuildEmptyMessageParams {
+  messageType: "user" | "assistant";
+  parentNodeId: number;
+  message?: string;
+  files?: FileDescriptor[];
+  nodeIdOffset?: number;
+}
+
+export const buildEmptyMessage = (params: BuildEmptyMessageParams): Message => {
   // use negative number to avoid conflicts with messageIds
-  const tempNodeId = -1 * Date.now() - (nodeIdOffset || 0);
+  const tempNodeId = -1 * Date.now() - (params.nodeIdOffset || 0);
   return {
     nodeId: tempNodeId,
-    message: message || "",
-    type: messageType,
-    files: [],
+    message: params.message || "",
+    type: params.messageType,
+    files: params.files || [],
     toolCall: null,
-    parentNodeId: parentNodeId,
+    parentNodeId: params.parentNodeId,
     packets: [],
   };
 };
@@ -430,6 +433,7 @@ export const buildEmptyMessage = (
 export const buildImmediateMessages = (
   parentNodeId: number,
   userInput: string,
+  files: FileDescriptor[],
   messageToResend?: Message
 ): {
   initialUserNode: Message;
@@ -437,13 +441,17 @@ export const buildImmediateMessages = (
 } => {
   const initialUserNode = messageToResend
     ? { ...messageToResend } // clone the message to avoid mutating the original
-    : buildEmptyMessage("user", parentNodeId, userInput);
-  const initialAssistantNode = buildEmptyMessage(
-    "assistant",
-    initialUserNode.nodeId,
-    undefined,
-    1
-  );
+    : buildEmptyMessage({
+        messageType: "user",
+        parentNodeId,
+        message: userInput,
+        files,
+      });
+  const initialAssistantNode = buildEmptyMessage({
+    messageType: "assistant",
+    parentNodeId: initialUserNode.nodeId,
+    nodeIdOffset: 1,
+  });
 
   initialUserNode.childrenNodeIds = initialUserNode.childrenNodeIds
     ? [...initialUserNode.childrenNodeIds, initialAssistantNode.nodeId]

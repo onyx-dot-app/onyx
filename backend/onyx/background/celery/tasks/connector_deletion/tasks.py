@@ -42,6 +42,12 @@ from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
 from onyx.db.index_attempt import delete_index_attempts
 from onyx.db.index_attempt import get_recent_attempts_for_cc_pair
+from onyx.db.permission_sync_attempt import (
+    delete_doc_permission_sync_attempts__no_commit,
+)
+from onyx.db.permission_sync_attempt import (
+    delete_external_group_permission_sync_attempts__no_commit,
+)
 from onyx.db.search_settings import get_all_search_settings
 from onyx.db.sync_record import cleanup_sync_records
 from onyx.db.sync_record import insert_sync_record
@@ -437,6 +443,16 @@ def monitor_connector_deletion_taskset(
             # clean up the rest of the related Postgres entities
             # index attempts
             delete_index_attempts(
+                db_session=db_session,
+                cc_pair_id=cc_pair_id,
+            )
+
+            # permission sync attempts
+            delete_doc_permission_sync_attempts__no_commit(
+                db_session=db_session,
+                cc_pair_id=cc_pair_id,
+            )
+            delete_external_group_permission_sync_attempts__no_commit(
                 db_session=db_session,
                 cc_pair_id=cc_pair_id,
             )

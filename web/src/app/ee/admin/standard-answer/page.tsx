@@ -1,12 +1,12 @@
 "use client";
 
 import { AdminPageTitle } from "@/components/admin/Title";
-import { ClipboardIcon, EditIcon, TrashIcon } from "@/components/icons/icons";
+import { ClipboardIcon, EditIcon } from "@/components/icons/icons";
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import { useStandardAnswers, useStandardAnswerCategories } from "./hooks";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import {
   Table,
   TableHead,
@@ -18,7 +18,7 @@ import {
 import Link from "next/link";
 import { StandardAnswer, StandardAnswerCategory } from "@/lib/types";
 import { MagnifyingGlass } from "@phosphor-icons/react";
-import { useState } from "react";
+import { useState, JSX } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { deleteStandardAnswer } from "./lib";
@@ -28,7 +28,8 @@ import { PageSelector } from "@/components/PageSelector";
 import Text from "@/components/ui/text";
 import { TableHeader } from "@/components/ui/table";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-
+import IconButton from "@/refresh-components/buttons/IconButton";
+import { SvgTrash } from "@opal/icons";
 const NUM_RESULTS_PER_PAGE = 10;
 
 type Displayable = JSX.Element | string;
@@ -140,13 +141,11 @@ const StandardAnswersTableRow = ({
         >
           {standardAnswer.answer}
         </ReactMarkdown>,
-        <div
+        <IconButton
           key={`delete-${standardAnswer.id}`}
-          className="cursor-pointer"
+          icon={SvgTrash}
           onClick={() => handleDelete(standardAnswer.id)}
-        >
-          <TrashIcon />
-        </div>,
+        />,
       ]}
     />
   );
@@ -429,7 +428,7 @@ const Main = () => {
 
 const Page = () => {
   return (
-    <div className="container mx-auto">
+    <div className="container">
       <AdminPageTitle
         icon={<ClipboardIcon size={32} />}
         title="Standard Answers"

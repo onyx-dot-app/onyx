@@ -6,11 +6,12 @@ import { TextFormField } from "@/components/Field";
 import { createUserGroup } from "./lib";
 import { UserEditor } from "./UserEditor";
 import { ConnectorEditor } from "./ConnectorEditor";
-import { Modal } from "@/components/Modal";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-
-interface UserGroupCreationFormProps {
+import Modal from "@/refresh-components/Modal";
+import Button from "@/refresh-components/buttons/Button";
+import Separator from "@/refresh-components/Separator";
+import Text from "@/refresh-components/texts/Text";
+import { SvgUsers } from "@opal/icons";
+export interface UserGroupCreationFormProps {
   onClose: () => void;
   setPopup: (popupSpec: PopupSpec | null) => void;
   users: User[];
@@ -18,13 +19,13 @@ interface UserGroupCreationFormProps {
   existingUserGroup?: UserGroup;
 }
 
-export const UserGroupCreationForm = ({
+export default function UserGroupCreationForm({
   onClose,
   setPopup,
   users,
   ccPairs,
   existingUserGroup,
-}: UserGroupCreationFormProps) => {
+}: UserGroupCreationFormProps) {
   const isUpdate = existingUserGroup !== undefined;
 
   // Filter out ccPairs that aren't access_type "private"
@@ -33,53 +34,54 @@ export const UserGroupCreationForm = ({
   );
 
   return (
-    <Modal className="w-fit" onOutsideClick={onClose}>
-      <>
-        <h2 className="text-xl font-bold flex">
-          {isUpdate ? "Update a User Group" : "Create a new User Group"}
-        </h2>
+    <Modal open onOpenChange={onClose}>
+      <Modal.Content medium>
+        <Modal.Header
+          icon={SvgUsers}
+          title={isUpdate ? "Update a User Group" : "Create a new User Group"}
+          onClose={onClose}
+        />
+        <Modal.Body>
+          <Separator />
 
-        <Separator />
-
-        <Formik
-          initialValues={{
-            name: existingUserGroup ? existingUserGroup.name : "",
-            user_ids: [] as string[],
-            cc_pair_ids: [] as number[],
-          }}
-          validationSchema={Yup.object().shape({
-            name: Yup.string().required("Please enter a name for the group"),
-            user_ids: Yup.array().of(Yup.string().required()),
-            cc_pair_ids: Yup.array().of(Yup.number().required()),
-          })}
-          onSubmit={async (values, formikHelpers) => {
-            formikHelpers.setSubmitting(true);
-            let response;
-            response = await createUserGroup(values);
-            formikHelpers.setSubmitting(false);
-            if (response.ok) {
-              setPopup({
-                message: isUpdate
-                  ? "Successfully updated user group!"
-                  : "Successfully created user group!",
-                type: "success",
-              });
-              onClose();
-            } else {
-              const responseJson = await response.json();
-              const errorMsg = responseJson.detail || responseJson.message;
-              setPopup({
-                message: isUpdate
-                  ? `Error updating user group - ${errorMsg}`
-                  : `Error creating user group - ${errorMsg}`,
-                type: "error",
-              });
-            }
-          }}
-        >
-          {({ isSubmitting, values, setFieldValue }) => (
-            <Form>
-              <div className="py-4">
+          <Formik
+            initialValues={{
+              name: existingUserGroup ? existingUserGroup.name : "",
+              user_ids: [] as string[],
+              cc_pair_ids: [] as number[],
+            }}
+            validationSchema={Yup.object().shape({
+              name: Yup.string().required("Please enter a name for the group"),
+              user_ids: Yup.array().of(Yup.string().required()),
+              cc_pair_ids: Yup.array().of(Yup.number().required()),
+            })}
+            onSubmit={async (values, formikHelpers) => {
+              formikHelpers.setSubmitting(true);
+              let response;
+              response = await createUserGroup(values);
+              formikHelpers.setSubmitting(false);
+              if (response.ok) {
+                setPopup({
+                  message: isUpdate
+                    ? "Successfully updated user group!"
+                    : "Successfully created user group!",
+                  type: "success",
+                });
+                onClose();
+              } else {
+                const responseJson = await response.json();
+                const errorMsg = responseJson.detail || responseJson.message;
+                setPopup({
+                  message: isUpdate
+                    ? `Error updating user group - ${errorMsg}`
+                    : `Error creating user group - ${errorMsg}`,
+                  type: "error",
+                });
+              }
+            }}
+          >
+            {({ isSubmitting, values, setFieldValue }) => (
+              <Form>
                 <TextFormField
                   name="name"
                   label="Name:"
@@ -90,13 +92,13 @@ export const UserGroupCreationForm = ({
 
                 <Separator />
 
-                <h2 className="mb-1 font-medium">
+                <Text className="font-medium">
                   Select which private connectors this group has access to:
-                </h2>
-                <p className="mb-3 text-xs">
+                </Text>
+                <Text text02>
                   All documents indexed by the selected connectors will be
                   visible to users in this group.
-                </p>
+                </Text>
 
                 <ConnectorEditor
                   allCCPairs={privateCcPairs}
@@ -108,13 +110,13 @@ export const UserGroupCreationForm = ({
 
                 <Separator />
 
-                <h2 className="mb-1 font-medium">
+                <Text className="font-medium">
                   Select which Users should be a part of this Group.
-                </h2>
-                <p className="mb-3 text-xs">
+                </Text>
+                <Text text02>
                   All selected users will be able to search through all
                   documents indexed by the selected connectors.
-                </p>
+                </Text>
                 <div className="mb-3 gap-2">
                   <UserEditor
                     selectedUserIds={values.user_ids}
@@ -128,19 +130,17 @@ export const UserGroupCreationForm = ({
                 <div className="flex">
                   <Button
                     type="submit"
-                    size="sm"
-                    variant="submit"
                     disabled={isSubmitting}
                     className="mx-auto w-64"
                   >
                     {isUpdate ? "Update!" : "Create!"}
                   </Button>
                 </div>
-              </div>
-            </Form>
-          )}
-        </Formik>
-      </>
+              </Form>
+            )}
+          </Formik>
+        </Modal.Body>
+      </Modal.Content>
     </Modal>
   );
-};
+}

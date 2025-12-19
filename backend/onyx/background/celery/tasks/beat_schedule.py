@@ -45,6 +45,15 @@ beat_task_templates: list[dict] = [
         },
     },
     {
+        "name": "check-for-user-file-delete",
+        "task": OnyxCeleryTask.CHECK_FOR_USER_FILE_DELETE,
+        "schedule": timedelta(seconds=20),
+        "options": {
+            "priority": OnyxCeleryPriority.MEDIUM,
+            "expires": BEAT_EXPIRES_DEFAULT,
+        },
+    },
+    {
         "name": "user-file-docid-migration",
         "task": OnyxCeleryTask.USER_FILE_DOCID_MIGRATION,
         "schedule": timedelta(minutes=10),

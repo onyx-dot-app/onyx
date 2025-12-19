@@ -1,15 +1,12 @@
 # Copy this file to .env in the .vscode folder
 # Fill in the <REPLACE THIS> values as needed, it is recommended to set the GEN_AI_API_KEY value to avoid having to set up an LLM in the UI
-# Also check out danswer/backend/scripts/restart_containers.sh for a script to restart the containers which Danswer relies on outside of VSCode/Cursor processes
+# Also check out onyx/backend/scripts/restart_containers.sh for a script to restart the containers which Onyx relies on outside of VSCode/Cursor processes
 
 # For local dev, often user Authentication is not needed
 AUTH_TYPE=disabled
 
-# Skip warm up for dev
-SKIP_WARM_UP=True
-
 # Always keep these on for Dev
-# Logs all model prompts to stdout
+# Logs model prompts, reasoning, and answer to stdout
 LOG_ONYX_MODEL_INTERACTIONS=True
 # More verbose logging
 LOG_LEVEL=debug
@@ -37,30 +34,15 @@ OPENAI_API_KEY=<REPLACE THIS>
 GEN_AI_MODEL_VERSION=gpt-4o
 FAST_GEN_AI_MODEL_VERSION=gpt-4o
 
-# For Danswer Slack Bot, overrides the UI values so no need to set this up via UI every time
-# Only needed if using DanswerBot
-#ONYX_BOT_SLACK_APP_TOKEN=<REPLACE THIS>
-#ONYX_BOT_SLACK_BOT_TOKEN=<REPLACE THIS>
-
 
 # Python stuff
 PYTHONPATH=../backend
 PYTHONUNBUFFERED=1
 
 
-# Internet Search
-EXA_API_KEY=<REPLACE THIS>
-
-
 # Enable the full set of Danswer Enterprise Edition features
 # NOTE: DO NOT ENABLE THIS UNLESS YOU HAVE A PAID ENTERPRISE LICENSE (or if you are using this for local testing/development)
 ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=False
-
-# Agent Search configs  # TODO: Remove give proper namings
-AGENT_RETRIEVAL_STATS=False   # Note: This setting will incur substantial re-ranking effort
-AGENT_RERANKING_STATS=True
-AGENT_MAX_QUERY_RETRIEVAL_RESULTS=20
-AGENT_RERANKING_MAX_QUERY_RETRIEVAL_RESULTS=20
 
 # S3 File Store Configuration (MinIO for local development)
 S3_ENDPOINT_URL=http://localhost:9004
@@ -76,3 +58,8 @@ LANGSMITH_TRACING="true"
 LANGSMITH_ENDPOINT="https://api.smith.langchain.com"
 LANGSMITH_API_KEY=<REPLACE_THIS>
 LANGSMITH_PROJECT=<REPLACE_THIS>
+
+# Local Confluence OAuth testing
+# OAUTH_CONFLUENCE_CLOUD_CLIENT_ID=<REPLACE_THIS>
+# OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET=<REPLACE_THIS>
+# NEXT_PUBLIC_TEST_ENV=True

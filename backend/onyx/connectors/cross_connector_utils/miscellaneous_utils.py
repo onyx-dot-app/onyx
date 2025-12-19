@@ -10,16 +10,20 @@ from urllib.parse import urlparse
 
 import requests
 from dateutil.parser import parse
+from dateutil.parser import ParserError
 
 from onyx.configs.app_configs import CONNECTOR_LOCALHOST_OVERRIDE
+from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import IGNORE_FOR_QA
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import OnyxMetadata
+from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import is_valid_email
 
 
 T = TypeVar("T")
 U = TypeVar("U")
+logger = setup_logger()
 
 
 def datetime_to_utc(dt: datetime) -> datetime:
@@ -31,22 +35,40 @@ def datetime_to_utc(dt: datetime) -> datetime:
 
 def time_str_to_utc(datetime_str: str) -> datetime:
     # Remove all timezone abbreviations in parentheses
-    datetime_str = re.sub(r"\([A-Z]+\)", "", datetime_str).strip()
+    normalized = re.sub(r"\([A-Z]+\)", "", datetime_str).strip()
 
     # Remove any remaining parentheses and their contents
-    datetime_str = re.sub(r"\(.*?\)", "", datetime_str).strip()
+    normalized = re.sub(r"\(.*?\)", "", normalized).strip()
 
-    try:
-        dt = parse(datetime_str)
-    except ValueError:
-        # Fix common format issues (e.g. "0000" => "+0000")
-        if "0000" in datetime_str:
-            datetime_str = datetime_str.replace(" 0000", " +0000")
-            dt = parse(datetime_str)
-        else:
-            raise
+    candidates: list[str] = [normalized]
 
-    return datetime_to_utc(dt)
+    # Some sources (e.g. Gmail) may prefix the value with labels like "Date:"
+    label_stripped = re.sub(
+        r"^\s*[A-Za-z][A-Za-z\s_-]*:\s*", "", normalized, count=1
+    ).strip()
+    if label_stripped and label_stripped != normalized:
+        candidates.append(label_stripped)
+
+    # Fix common format issues (e.g. "0000" => "+0000")
+    for candidate in list(candidates):
+        if " 0000" in candidate:
+            fixed = candidate.replace(" 0000", " +0000")
+            if fixed not in candidates:
+                candidates.append(fixed)
+
+    last_exception: Exception | None = None
+    for candidate in candidates:
+        try:
+            dt = parse(candidate)
+            return datetime_to_utc(dt)
+        except (ValueError, ParserError) as exc:
+            last_exception = exc
+
+    if last_exception is not None:
+        raise last_exception
+
+    # Fallback in case parsing failed without raising (should not happen)
+    raise ValueError(f"Unable to parse datetime string: {datetime_str}")
 
 
 def basic_expert_info_representation(info: BasicExpertInfo) -> str | None:
@@ -86,11 +108,33 @@ def get_metadata_keys_to_ignore() -> list[str]:
     return [IGNORE_FOR_QA]
 
 
+def _parse_document_source(connector_type: Any) -> DocumentSource | None:
+    if connector_type is None:
+        return None
+
+    if isinstance(connector_type, DocumentSource):
+        return connector_type
+
+    if not isinstance(connector_type, str):
+        logger.warning(f"Invalid connector_type type: {type(connector_type).__name__}")
+        return None
+
+    normalized = re.sub(r"[\s\-]+", "_", connector_type.strip().lower())
+    try:
+        return DocumentSource(normalized)
+    except ValueError:
+        logger.warning(
+            f"Invalid connector_type value: '{connector_type}' "
+            f"(normalized: '{normalized}')"
+        )
+        return None
+
+
 def process_onyx_metadata(
     metadata: dict[str, Any],
 ) -> tuple[OnyxMetadata, dict[str, Any]]:
     """
-    Users may set Onyx metadata and custom tags in text files. https://docs.onyx.app/admin/connectors/official/file
+    Users may set Onyx metadata and custom tags in text files. https://docs.onyx.app/admins/connectors/official/file
     Any unrecognized fields are treated as custom tags.
     """
     p_owner_names = metadata.get("primary_owners")
@@ -106,13 +150,14 @@ def process_onyx_metadata(
         if s_owner_names
         else None
     )
+    source_type = _parse_document_source(metadata.get("connector_type"))
 
     dt_str = metadata.get("doc_updated_at")
     doc_updated_at = time_str_to_utc(dt_str) if dt_str else None
 
     return (
         OnyxMetadata(
-            source_type=metadata.get("connector_type"),
+            source_type=source_type,
             link=metadata.get("link"),
             file_display_name=metadata.get("file_display_name"),
             title=metadata.get("title"),

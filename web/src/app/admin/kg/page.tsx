@@ -9,9 +9,9 @@ import {
   TextFormField,
 } from "@/components/Field";
 import { BrainIcon } from "@/components/icons/icons";
-import { Modal } from "@/components/Modal";
+import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
-import { SwitchField } from "@/components/ui/switch";
+import UnlabeledSwitchField from "@/refresh-components/formik-fields/UnlabeledSwitchField";
 import { Form, Formik, FormikState, useFormikContext } from "formik";
 import { useState } from "react";
 import * as Yup from "yup";
@@ -28,9 +28,9 @@ import Title from "@/components/ui/title";
 import { redirect } from "next/navigation";
 import { useIsKGExposed } from "@/app/admin/kg/utils";
 import KGEntityTypes from "@/app/admin/kg/KGEntityTypes";
-import Text from "@/refresh-components/Text";
-import SvgSettings from "@/icons/settings";
+import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
+import { SvgSettings } from "@opal/icons";
 
 function createDomainField(
   name: string,
@@ -174,12 +174,10 @@ function KGConfiguration({
                 label="Enabled"
                 subtext="Enable or disable Knowledge Graph."
               />
-              <SwitchField
+              <UnlabeledSwitchField
                 name="enabled"
-                className="flex flex-1"
                 onCheckedChange={(state) => {
-                  props.resetForm();
-                  props.setFieldValue("enabled", state);
+                  if (!state) props.resetForm();
                 }}
               />
             </div>
@@ -207,7 +205,9 @@ function KGConfiguration({
                 disabled={!props.values.enabled}
               />
             </div>
-            <Button disabled={!props.dirty}>Submit</Button>
+            <Button type="submit" disabled={!props.dirty}>
+              Submit
+            </Button>
           </div>
         </Form>
       )}
@@ -249,7 +249,7 @@ function Main() {
   return (
     <div className="flex flex-col py-4 gap-y-8">
       {popup}
-      <CardSection className="max-w-2xl shadow-01 rounded-08 flex flex-col gap-spacing-interline">
+      <CardSection className="max-w-2xl shadow-01 rounded-08 flex flex-col gap-2">
         <Text headingH2>Knowledge Graph Configuration (Private Beta)</Text>
         <div className="flex flex-col gap-y-6">
           <div>
@@ -259,7 +259,7 @@ function Main() {
               organized as entities and their relationships, enabling powerful
               queries like:
             </Text>
-            <div className="p-spacing-paragraph">
+            <div className="p-4">
               <Text text03>
                 - &quot;Summarize my last 3 calls with account XYZ&quot;
               </Text>
@@ -294,20 +294,25 @@ function Main() {
         </>
       )}
       {configureModalShown && (
-        <Modal
-          title="Configure Knowledge Graph"
-          onOutsideClick={() => setConfigureModalShown(false)}
-          className="overflow-y-scroll"
-        >
-          <KGConfiguration
-            kgConfig={kgConfig}
-            setPopup={setPopup}
-            onSubmitSuccess={async () => {
-              await configMutate();
-              setConfigureModalShown(false);
-            }}
-            entityTypesMutate={entityTypesMutate}
-          />
+        <Modal open onOpenChange={() => setConfigureModalShown(false)}>
+          <Modal.Content medium>
+            <Modal.Header
+              icon={SvgSettings}
+              title="Configure Knowledge Graph"
+              onClose={() => setConfigureModalShown(false)}
+            />
+            <Modal.Body>
+              <KGConfiguration
+                kgConfig={kgConfig}
+                setPopup={setPopup}
+                onSubmitSuccess={async () => {
+                  await configMutate();
+                  setConfigureModalShown(false);
+                }}
+                entityTypesMutate={entityTypesMutate}
+              />
+            </Modal.Body>
+          </Modal.Content>
         </Modal>
       )}
     </div>
@@ -326,7 +331,7 @@ export default function Page() {
   }
 
   return (
-    <div className="mx-auto container">
+    <div className="container">
       <AdminPageTitle
         title="Knowledge Graph"
         icon={<BrainIcon size={32} className="my-auto" />}

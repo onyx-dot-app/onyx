@@ -12,7 +12,12 @@ import React, {
   Dispatch,
   SetStateAction,
 } from "react";
-import type { CategorizedFiles, Project, ProjectFile } from "./projectsService";
+import type {
+  CategorizedFiles,
+  Project,
+  ProjectFile,
+  UserFileDeleteResult,
+} from "./projectsService";
 import {
   fetchProjects as svcFetchProjects,
   createProject as svcCreateProject,
@@ -30,20 +35,71 @@ import {
   getUserFileStatuses as svcGetUserFileStatuses,
   unlinkFileFromProject as svcUnlinkFileFromProject,
   linkFileToProject as svcLinkFileToProject,
+  UserFileStatus,
 } from "./projectsService";
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
+import { useAppRouter } from "@/hooks/appNavigation";
+import { ChatFileType } from "../interfaces";
+import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { useProjects } from "@/lib/hooks/useProjects";
 
 export type { Project, ProjectFile } from "./projectsService";
+
+// Helper to generate unique temp IDs
+const generateTempId = () => {
+  try {
+    return `temp_${crypto.randomUUID()}`;
+  } catch {
+    // Extremely unlikely fallback
+    return `temp_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+  }
+};
+
+// Create optimistic file from File object
+const createOptimisticFile = (
+  file: File,
+  projectId: number | null = null
+): ProjectFile => {
+  const tempId = generateTempId();
+  return {
+    id: tempId, // Use temp ID as the actual ID initially
+    file_id: tempId,
+    name: file.name,
+    project_id: projectId,
+    user_id: null,
+    created_at: new Date().toISOString(),
+    status: UserFileStatus.UPLOADING,
+    file_type: file.type,
+    last_accessed_at: new Date().toISOString(),
+    chat_file_type: ChatFileType.DOCUMENT,
+    token_count: null,
+    chunk_count: null,
+    temp_id: tempId, // Store temp_id for mapping later
+  };
+};
+
+function buildFileKey(file: File): string {
+  const namePrefix = (file.name ?? "").slice(0, 50);
+  return `${file.size}|${namePrefix}`;
+}
 
 interface ProjectsContextType {
   projects: Project[];
   recentFiles: ProjectFile[];
   currentProjectDetails: ProjectDetails | null;
   currentProjectId: number | null;
-  isLoading: boolean;
-  error: string | null;
   currentMessageFiles: ProjectFile[];
+  beginUpload: (
+    files: File[],
+    projectId?: number | null,
+    setPopup?: (popup: PopupSpec) => void,
+    onSuccess?: (uploaded: CategorizedFiles) => void,
+    onFailure?: (failedTempIds: string[]) => void
+  ) => Promise<ProjectFile[]>;
+  allRecentFiles: ProjectFile[];
+  allCurrentProjectFiles: ProjectFile[];
+  isLoadingProjectDetails: boolean;
   setCurrentMessageFiles: Dispatch<SetStateAction<ProjectFile[]>>;
   upsertInstructions: (instructions: string) => Promise<void>;
   fetchProjects: () => Promise<Project[]>;
@@ -58,12 +114,9 @@ interface ProjectsContextType {
   getFilesInProject: (projectId: number) => Promise<ProjectFile[]>;
   refreshCurrentProjectDetails: () => Promise<void>;
   refreshRecentFiles: () => Promise<void>;
-  deleteUserFile: (fileId: string) => Promise<void>;
+  deleteUserFile: (fileId: string) => Promise<UserFileDeleteResult>;
   unlinkFileFromProject: (projectId: number, fileId: string) => Promise<void>;
-  linkFileToProject?: (
-    projectId: number,
-    fileId: string
-  ) => Promise<ProjectFile>;
+  linkFileToProject?: (projectId: number, file: ProjectFile) => void;
   lastFailedFiles: ProjectFile[];
   clearLastFailedFiles: () => void;
 }
@@ -74,14 +127,13 @@ const ProjectsContext = createContext<ProjectsContextType | undefined>(
 
 interface ProjectsProviderProps {
   children: ReactNode;
-  initialProjects?: Project[];
 }
 
 export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
   children,
-  initialProjects = [],
 }) => {
-  const [projects, setProjects] = useState<Project[]>(initialProjects);
+  // Use SWR hook for projects list - no more SSR initial data
+  const { projects, refreshProjects } = useProjects();
   const [recentFiles, setRecentFiles] = useState<ProjectFile[]>([]);
   const [currentProjectDetails, setCurrentProjectDetails] =
     useState<ProjectDetails | null>(null);
@@ -90,8 +142,6 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
   const currentProjectId = currentProjectIdRaw
     ? Number.parseInt(currentProjectIdRaw)
     : null;
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
   const [currentMessageFiles, setCurrentMessageFiles] = useState<ProjectFile[]>(
     []
   );
@@ -101,29 +151,51 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
   const [trackedUploadIds, setTrackedUploadIds] = useState<Set<string>>(
     new Set()
   );
+  const [allRecentFiles, setAllRecentFiles] = useState<ProjectFile[]>([]);
+  const [allCurrentProjectFiles, setAllCurrentProjectFiles] = useState<
+    ProjectFile[]
+  >([]);
+  const [isLoadingProjectDetails, setIsLoadingProjectDetails] = useState(false);
+  const projectToUploadFilesMapRef = useRef<Map<number, ProjectFile[]>>(
+    new Map()
+  );
+  const route = useAppRouter();
 
+  // Use SWR's mutate to refresh projects - returns the new data
   const fetchProjects = useCallback(async (): Promise<Project[]> => {
-    setError(null);
     try {
-      const data: Project[] = await svcFetchProjects();
-      setProjects(data);
-      return data;
+      const result = await refreshProjects();
+      return result ?? [];
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to fetch projects";
-      setError(message);
       return [];
     }
-  }, []);
+  }, [refreshProjects]);
 
   // Load full details for current project
   const refreshCurrentProjectDetails = useCallback(async () => {
     if (currentProjectId) {
-      const details = await svcGetProjectDetails(currentProjectId);
-      await fetchProjects();
-      setCurrentProjectDetails(details);
+      setIsLoadingProjectDetails(true);
+      try {
+        const details = await svcGetProjectDetails(currentProjectId);
+        await fetchProjects();
+        setCurrentProjectDetails(details);
+        setAllCurrentProjectFiles(details.files || []);
+        if (projectToUploadFilesMapRef.current.has(currentProjectId)) {
+          setAllCurrentProjectFiles((prev) => [
+            ...prev,
+            ...(projectToUploadFilesMapRef.current.get(currentProjectId) || []),
+          ]);
+        }
+      } finally {
+        setIsLoadingProjectDetails(false);
+      }
     }
-  }, [fetchProjects, currentProjectId, setCurrentProjectDetails]);
+  }, [
+    fetchProjects,
+    currentProjectId,
+    setCurrentProjectDetails,
+    projectToUploadFilesMapRef,
+  ]);
 
   const upsertInstructions = useCallback(
     async (instructions: string) => {
@@ -138,36 +210,47 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
 
   const createProject = useCallback(
     async (name: string): Promise<Project> => {
-      setError(null);
       try {
         const project: Project = await svcCreateProject(name);
+        // Navigate to the newly created project's page
+        route({ projectId: project.id });
         // Refresh list to keep order consistent with backend
         await fetchProjects();
         return project;
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Failed to create project";
-        setError(message);
         throw err;
       }
     },
-    [fetchProjects]
+    [fetchProjects, route]
   );
 
   const renameProject = useCallback(
     async (projectId: number, name: string): Promise<Project> => {
-      setError(null);
+      // Optimistically update project details UI if this is the current project
+      if (currentProjectId === projectId) {
+        setCurrentProjectDetails((prev) =>
+          prev ? { ...prev, project: { ...prev.project, name } } : prev
+        );
+      }
+
       try {
         const updated = await svcRenameProject(projectId, name);
+        // Refresh to get canonical state from server (SWR handles projects list)
         await fetchProjects();
         if (currentProjectId === projectId) {
           await refreshCurrentProjectDetails();
         }
         return updated;
       } catch (err) {
+        // Refresh to restore on failure
+        await fetchProjects();
+        if (currentProjectId === projectId) {
+          await refreshCurrentProjectDetails();
+        }
         const message =
           err instanceof Error ? err.message : "Failed to rename project";
-        setError(message);
         throw err;
       }
     },
@@ -176,32 +259,29 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
 
   const deleteProject = useCallback(
     async (projectId: number): Promise<void> => {
-      setError(null);
       try {
         await svcDeleteProject(projectId);
         await fetchProjects();
         if (currentProjectId === projectId) {
           setCurrentProjectDetails(null);
+          setAllCurrentProjectFiles([]);
+          projectToUploadFilesMapRef.current.delete(projectId);
+          route();
         }
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Failed to delete project";
-        setError(message);
         throw err;
       }
     },
-    [fetchProjects, currentProjectId]
+    [fetchProjects, currentProjectId, projectToUploadFilesMapRef, route]
   );
 
   const getRecentFiles = useCallback(async (): Promise<ProjectFile[]> => {
-    setError(null);
     try {
       const data: ProjectFile[] = await svcGetRecentFiles();
       return data;
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to fetch recent files";
-      setError(message);
       return [];
     }
   }, []);
@@ -211,13 +291,189 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
     setRecentFiles(files);
   }, [getRecentFiles]);
 
+  const getTempIdMap = (files: File[], optimisticFiles: ProjectFile[]) => {
+    const tempIdMap = new Map<string, string>();
+    for (const f of files) {
+      const tempId = optimisticFiles.find((o) => o.name === f.name)?.temp_id;
+      if (tempId) {
+        tempIdMap.set(buildFileKey(f), tempId);
+      }
+    }
+    return tempIdMap;
+  };
+
+  const removeOptimisticFilesByTempIds = useCallback(
+    (optimisticTempIds: Set<string>, projectId?: number | null) => {
+      // Remove from recent optimistic list
+      setAllRecentFiles((prev) =>
+        prev.filter((f) => !f.temp_id || !optimisticTempIds.has(f.temp_id))
+      );
+
+      // Remove from current message files if present
+      setCurrentMessageFiles((prev) =>
+        prev.filter((f) => !f.temp_id || !optimisticTempIds.has(f.temp_id))
+      );
+
+      // Remove from project optimistic list
+      if (projectId) {
+        setAllCurrentProjectFiles((prev) =>
+          prev.filter((f) => !f.temp_id || !optimisticTempIds.has(f.temp_id))
+        );
+
+        // Clear the tracked optimistic files for this project
+        let projectIdToFiles: ProjectFile[] =
+          projectToUploadFilesMapRef.current.get(projectId) || [];
+        projectIdToFiles = projectIdToFiles.filter(
+          (f: ProjectFile) => !f.temp_id || !optimisticTempIds.has(f.temp_id)
+        );
+        projectToUploadFilesMapRef.current.set(projectId, projectIdToFiles);
+      }
+    },
+    [projectToUploadFilesMapRef]
+  );
+
+  const beginUpload = useCallback(
+    async (
+      files: File[],
+      projectId?: number | null,
+      setPopup?: (popup: PopupSpec) => void,
+      onSuccess?: (uploaded: CategorizedFiles) => void,
+      onFailure?: (failedTempIds: string[]) => void
+    ): Promise<ProjectFile[]> => {
+      const optimisticFiles = files.map((f) =>
+        createOptimisticFile(f, projectId)
+      );
+      const tempIdMap = getTempIdMap(files, optimisticFiles);
+      setAllRecentFiles((prev) => [...optimisticFiles, ...prev]);
+      if (projectId) {
+        setAllCurrentProjectFiles((prev) => [...optimisticFiles, ...prev]);
+        projectToUploadFilesMapRef.current.set(projectId, optimisticFiles);
+      }
+      svcUploadFiles(files, projectId, tempIdMap)
+        .then((uploaded) => {
+          const uploadedFiles = uploaded.user_files || [];
+          const tempIdToUploadedFileMap = new Map(
+            uploadedFiles.map((f) => [f.temp_id, f])
+          );
+
+          setAllRecentFiles((prev) =>
+            prev.map((f) => {
+              if (f.temp_id) {
+                const u = tempIdToUploadedFileMap.get(f.temp_id);
+                return u ? { ...f, ...u } : f;
+              }
+              return f;
+            })
+          );
+          setCurrentMessageFiles((prev) =>
+            prev.map((f) => {
+              if (f.temp_id) {
+                const u = tempIdToUploadedFileMap.get(f.temp_id);
+                return u ? { ...f, ...u } : f;
+              }
+              return f;
+            })
+          );
+          if (projectId) {
+            setAllCurrentProjectFiles((prev) =>
+              prev.map((f) => {
+                if (f.temp_id) {
+                  const u = tempIdToUploadedFileMap.get(f.temp_id);
+                  return u ? { ...f, ...u } : f;
+                }
+                return f;
+              })
+            );
+            projectToUploadFilesMapRef.current.set(projectId, []);
+          }
+          const unsupported = uploaded.unsupported_files || [];
+          const nonAccepted = uploaded.non_accepted_files || [];
+          if (unsupported.length > 0 || nonAccepted.length > 0) {
+            const detailsParts: string[] = [];
+            if (unsupported.length > 0) {
+              detailsParts.push(
+                `Unsupported file types: ${unsupported.join(", ")}`
+              );
+            }
+            if (nonAccepted.length > 0) {
+              const noun = nonAccepted.length === 1 ? "File" : "Files";
+              const verb = nonAccepted.length === 1 ? "exceeds" : "exceed";
+              detailsParts.push(
+                `${noun} ${verb} the 100k token limit: ${nonAccepted.join(
+                  ", "
+                )}`
+              );
+            }
+            setPopup?.({
+              type: "warning",
+              message: `Some files were not uploaded. ${detailsParts.join(
+                " | "
+              )}`,
+            });
+
+            const failedNameSet = new Set<string>([
+              ...unsupported,
+              ...nonAccepted,
+            ]);
+            const failedTempIds = Array.from(
+              new Set(
+                optimisticFiles
+                  .filter((f) => f.temp_id && failedNameSet.has(f.name))
+                  .map((f) => f.temp_id as string)
+              )
+            );
+            removeOptimisticFilesByTempIds(new Set(failedTempIds), projectId);
+            if (failedTempIds.length > 0) {
+              onFailure?.(failedTempIds);
+            }
+          }
+          if (uploadedFiles.length > 0) {
+            setTrackedUploadIds((prev) => {
+              const next = new Set(prev);
+              for (const f of uploadedFiles) next.add(f.id);
+              return next;
+            });
+          }
+          onSuccess?.(uploaded);
+        })
+        .catch((err) => {
+          // Roll back optimistic inserts on failure
+          const optimisticTempIds = new Set(
+            optimisticFiles
+              .map((f) => f.temp_id)
+              .filter((id): id is string => Boolean(id))
+          );
+
+          removeOptimisticFilesByTempIds(optimisticTempIds, projectId);
+
+          setPopup?.({
+            type: "error",
+            message: "Failed to upload files",
+          });
+
+          onFailure?.(Array.from(optimisticTempIds));
+        })
+        .finally(() => {
+          if (projectId && currentProjectId === projectId) {
+            refreshCurrentProjectDetails();
+          }
+          refreshRecentFiles();
+        });
+      return optimisticFiles;
+    },
+    [
+      currentProjectId,
+      refreshCurrentProjectDetails,
+      refreshRecentFiles,
+      removeOptimisticFilesByTempIds,
+    ]
+  );
+
   const uploadFiles = useCallback(
     async (
       files: File[],
       projectId?: number | null
     ): Promise<CategorizedFiles> => {
-      setIsLoading(true);
-      setError(null);
       try {
         const uploaded: CategorizedFiles = await svcUploadFiles(
           files,
@@ -238,15 +494,9 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
           await refreshCurrentProjectDetails();
         }
         await refreshRecentFiles();
-
         return uploaded;
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Failed to upload files";
-        setError(message);
         throw err;
-      } finally {
-        setIsLoading(false);
       }
     },
     [currentProjectId, refreshCurrentProjectDetails, refreshRecentFiles]
@@ -254,14 +504,12 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
 
   const getFilesInProject = useCallback(
     async (projectId: number): Promise<ProjectFile[]> => {
-      setError(null);
       try {
         const data: ProjectFile[] = await svcGetFilesInProject(projectId);
         return data;
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Failed to fetch project files";
-        setError(message);
         return [];
       }
     },
@@ -270,77 +518,32 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
 
   useEffect(() => {
     // Initial load - only fetch recent files since projects come from props
-    setIsLoading(true);
-    getRecentFiles()
-      .then((recent) => {
-        setRecentFiles(recent);
-      })
-      .catch(() => {
-        // errors captured in individual calls
-      })
-      .finally(() => setIsLoading(false));
+    getRecentFiles().then((recent) => {
+      setRecentFiles(recent);
+      setAllRecentFiles(recent);
+    });
   }, [getRecentFiles]);
+
+  useEffect(() => {
+    setAllRecentFiles((prev) =>
+      prev.map((f) => {
+        const newFile = recentFiles.find((f2) => f2.id === f.id);
+        return newFile ? { ...f, ...newFile } : f;
+      })
+    );
+  }, [recentFiles]);
+
+  // Clear project details when switching projects to show skeleton
+  useEffect(() => {
+    setCurrentProjectDetails(null);
+    setAllCurrentProjectFiles([]);
+  }, [currentProjectId]);
 
   useEffect(() => {
     if (currentProjectId) {
       refreshCurrentProjectDetails();
     }
   }, [currentProjectId, refreshCurrentProjectDetails]);
-
-  // Keep currentMessageFiles in sync with latest file statuses from backend (key by id)
-  useEffect(() => {
-    if (currentMessageFiles.length === 0) return;
-
-    const latestById = new Map<string, ProjectFile>();
-    // Prefer project files first, then recent files as fallback
-    (currentProjectDetails?.files || []).forEach((f) => {
-      latestById.set(f.id, f);
-    });
-    recentFiles.forEach((f) => {
-      const key = f.id;
-      if (!latestById.has(key)) {
-        latestById.set(key, f);
-      }
-    });
-
-    let changed = false;
-    const reconciled: ProjectFile[] = [];
-    const newlyFailed: ProjectFile[] = [];
-    for (const f of currentMessageFiles) {
-      const key = f.id;
-      const latest = latestById.get(key);
-      if (latest) {
-        const latestStatus = String(latest.status).toLowerCase();
-        // Drop files that have transitioned to failed
-        if (latestStatus === "failed") {
-          if (String(f.status).toLowerCase() !== "failed") {
-            newlyFailed.push(latest);
-          }
-          changed = true;
-          continue;
-        }
-        // Only mark changed if status or other fields differ
-        if (
-          latest.status !== f.status ||
-          latest.name !== f.name ||
-          latest.file_type !== f.file_type
-        ) {
-          changed = true;
-          reconciled.push({ ...f, ...latest } as ProjectFile);
-          continue;
-        }
-      }
-      reconciled.push(f);
-    }
-
-    if (newlyFailed.length > 0) {
-      setLastFailedFiles(newlyFailed);
-    }
-
-    if (changed || reconciled.length !== currentMessageFiles.length) {
-      setCurrentMessageFiles(reconciled);
-    }
-  }, [recentFiles, currentProjectDetails?.files]);
 
   // Targeted polling for tracked uploaded files only
   useEffect(() => {
@@ -498,9 +701,11 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       recentFiles,
       currentProjectDetails,
       currentProjectId,
-      isLoading,
-      error,
       currentMessageFiles,
+      allRecentFiles,
+      allCurrentProjectFiles,
+      isLoadingProjectDetails,
+      beginUpload,
       setCurrentMessageFiles,
       upsertInstructions,
       fetchProjects,
@@ -515,27 +720,53 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       lastFailedFiles,
       clearLastFailedFiles: () => setLastFailedFiles([]),
       deleteUserFile: async (fileId: string) => {
-        await svcDeleteUserFile(fileId);
-        // Refresh current project details and recent files to reflect deletion
-        if (currentProjectId) {
-          await refreshCurrentProjectDetails();
+        const result = await svcDeleteUserFile(fileId);
+        // If no associations, backend enqueues deletion and status moves to DELETING; refresh lists
+        if (!result.has_associations) {
+          if (currentProjectId) {
+            await refreshCurrentProjectDetails();
+          }
+          await refreshRecentFiles();
         }
-        await refreshRecentFiles();
+        return result;
       },
       unlinkFileFromProject: async (projectId: number, fileId: string) => {
-        await svcUnlinkFileFromProject(projectId, fileId);
-        if (currentProjectId === projectId) {
-          await refreshCurrentProjectDetails();
-        }
-        await refreshRecentFiles();
+        const file = allCurrentProjectFiles.find((f) => f.id === fileId);
+        if (!file) return;
+        setAllCurrentProjectFiles((prev) =>
+          prev.filter((f) => f.id !== file.id)
+        );
+        svcUnlinkFileFromProject(projectId, file.id).then(async (result) => {
+          if (result.ok) {
+            if (currentProjectId === projectId) {
+              await refreshCurrentProjectDetails();
+            }
+            await refreshRecentFiles();
+          } else {
+            if (currentProjectId === projectId) {
+              setAllCurrentProjectFiles((prev) => [file, ...prev]);
+            }
+          }
+        });
       },
-      linkFileToProject: async (projectId: number, fileId: string) => {
-        const file = await svcLinkFileToProject(projectId, fileId);
-        if (currentProjectId === projectId) {
-          await refreshCurrentProjectDetails();
-        }
-        await refreshRecentFiles();
-        return file;
+      linkFileToProject: async (projectId: number, file: ProjectFile) => {
+        const existing = allCurrentProjectFiles.find((f) => f.id === file.id);
+        if (existing) return;
+        setAllCurrentProjectFiles((prev) => [file, ...prev]);
+        svcLinkFileToProject(projectId, file.id).then(async (result) => {
+          if (result.ok) {
+            if (currentProjectId === projectId) {
+              await refreshCurrentProjectDetails();
+            }
+            await refreshRecentFiles();
+          } else {
+            if (currentProjectId === projectId) {
+              setAllCurrentProjectFiles((prev) =>
+                prev.filter((f) => f.id !== file.id)
+              );
+            }
+          }
+        });
       },
     }),
     [
@@ -543,9 +774,11 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       recentFiles,
       currentProjectDetails,
       currentProjectId,
-      isLoading,
-      error,
       currentMessageFiles,
+      allRecentFiles,
+      allCurrentProjectFiles,
+      isLoadingProjectDetails,
+      beginUpload,
       setCurrentMessageFiles,
       upsertInstructions,
       fetchProjects,

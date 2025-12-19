@@ -43,7 +43,7 @@ export function extractCodeText(
       if (!node) return "";
 
       if (React.isValidElement(node)) {
-        const children = node.props.children;
+        const children = (node.props as any).children;
         if (Array.isArray(children)) {
           return children.map(extractTextFromReactNode).join("");
         }
@@ -121,10 +121,10 @@ export const preprocessLaTeX = (content: string) => {
     (_, equation) => `$$${equation}$$`
   );
 
-  // Replace inline LaTeX delimiters \( \) with $$ $$
+  // Replace inline LaTeX delimiters \( \) with $ $
   const inlineProcessed = blockProcessed.replace(
     /\\\(([\s\S]*?)\\\)/g,
-    (_, equation) => `$$${equation}$$`
+    (_, equation) => `$${equation}$`
   );
 
   // Restore original dollar signs in code contexts

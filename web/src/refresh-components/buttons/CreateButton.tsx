@@ -1,23 +1,11 @@
 "use client";
 
 import Button, { ButtonProps } from "@/refresh-components/buttons/Button";
-import SvgPlusCircle from "@/icons/plus-circle";
-
-export default function CreateButton({
-  href,
-  onClick,
-  children,
-  ...props
-}: ButtonProps) {
+import { SvgPlusCircle } from "@opal/icons";
+export default function CreateButton({ children, ...props }: ButtonProps) {
   return (
-    <Button
-      secondary
-      onClick={onClick}
-      leftIcon={SvgPlusCircle}
-      href={href}
-      {...props}
-    >
-      {children || "Create"}
+    <Button secondary leftIcon={SvgPlusCircle} {...props}>
+      {children ?? "Create"}
     </Button>
   );
 }

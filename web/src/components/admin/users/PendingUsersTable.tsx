@@ -11,12 +11,12 @@ import CenteredPageSelector from "./CenteredPageSelector";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { InvitedUserSnapshot } from "@/lib/types";
 import { TableHeader } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { FetchError } from "@/lib/fetcher";
 import { CheckIcon } from "lucide-react";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
-
+import { SvgCheck } from "@opal/icons";
 const USERS_PER_PAGE = 10;
 
 interface Props {
@@ -69,13 +69,14 @@ const PendingUsersTable = ({
   }
 
   const handleAcceptRequest = async (email: string) => {
+    const normalizedEmail = email.toLowerCase();
     try {
       await fetch("/api/tenants/users/invite/approve", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: normalizedEmail }),
       });
       mutate();
       setUserToApprove(null);
@@ -118,11 +119,10 @@ const PendingUsersTable = ({
                 <TableCell>
                   <div className="flex justify-end">
                     <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setUserToApprove(user.email)}
+                      secondary
+                      onClick={() => setUserToApprove(user.email.toLowerCase())}
+                      leftIcon={SvgCheck}
                     >
-                      <CheckIcon className="h-4 w-4" />
                       Accept Join Request
                     </Button>
                   </div>

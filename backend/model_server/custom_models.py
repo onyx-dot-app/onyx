@@ -517,7 +517,7 @@ def run_analysis(intent_req: IntentRequest) -> tuple[bool, list[str]]:
     try:
         keywords = map_keywords(model_input.input_ids[0], tokenizer, keyword_preds)
     except Exception as e:
-        logger.error(
+        logger.warning(
             f"Failed to extract keywords for query: {intent_req.query} due to {e}"
         )
         # Fallback to keeping all words

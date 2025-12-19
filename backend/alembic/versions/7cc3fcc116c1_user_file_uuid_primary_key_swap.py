@@ -180,14 +180,162 @@ def downgrade() -> None:
     )
     logger.error("Only proceed if absolutely necessary and have backups.")
 
-    # The downgrade would need to:
-    # 1. Add back integer columns
-    # 2. Generate new sequential IDs
-    # 3. Update all foreign key references
-    # 4. Swap primary keys back
-    # This is complex and risky, so we raise an error instead
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
 
-    raise NotImplementedError(
-        "Downgrade of UUID primary key swap is not supported due to data loss risk. "
-        "Manual intervention with data backup/restore is required."
+    # Capture existing primary key definitions so we can restore them after swaps
+    persona_pk = inspector.get_pk_constraint("persona__user_file") or {}
+    persona_pk_name = persona_pk.get("name")
+    persona_pk_cols = persona_pk.get("constrained_columns") or []
+
+    project_pk = inspector.get_pk_constraint("project__user_file") or {}
+    project_pk_name = project_pk.get("name")
+    project_pk_cols = project_pk.get("constrained_columns") or []
+
+    # Drop foreign keys that reference the UUID primary key
+    op.drop_constraint(
+        "persona__user_file_user_file_id_fkey",
+        "persona__user_file",
+        type_="foreignkey",
+    )
+    op.drop_constraint(
+        "fk_project__user_file_user_file_id",
+        "project__user_file",
+        type_="foreignkey",
+    )
+
+    # Drop primary keys that rely on the UUID column so we can replace it
+    if persona_pk_name:
+        op.drop_constraint(persona_pk_name, "persona__user_file", type_="primary")
+    if project_pk_name:
+        op.drop_constraint(project_pk_name, "project__user_file", type_="primary")
+
+    # Rebuild integer IDs on user_file using a sequence-backed column
+    op.execute("CREATE SEQUENCE IF NOT EXISTS user_file_id_seq")
+    op.add_column(
+        "user_file",
+        sa.Column(
+            "id_int",
+            sa.Integer(),
+            server_default=sa.text("nextval('user_file_id_seq')"),
+            nullable=False,
+        ),
+    )
+    op.execute("ALTER SEQUENCE user_file_id_seq OWNED BY user_file.id_int")
+
+    # Prepare integer foreign key columns on referencing tables
+    op.add_column(
+        "persona__user_file",
+        sa.Column("user_file_id_int", sa.Integer(), nullable=True),
+    )
+    op.add_column(
+        "project__user_file",
+        sa.Column("user_file_id_int", sa.Integer(), nullable=True),
+    )
+
+    # Populate the new integer foreign key columns by mapping from the UUID IDs
+    op.execute(
+        """
+        UPDATE persona__user_file AS p
+        SET user_file_id_int = uf.id_int
+        FROM user_file AS uf
+        WHERE p.user_file_id = uf.id
+        """
+    )
+    op.execute(
+        """
+        UPDATE project__user_file AS p
+        SET user_file_id_int = uf.id_int
+        FROM user_file AS uf
+        WHERE p.user_file_id = uf.id
+        """
+    )
+
+    op.alter_column(
+        "persona__user_file",
+        "user_file_id_int",
+        existing_type=sa.Integer(),
+        nullable=False,
+    )
+    op.alter_column(
+        "project__user_file",
+        "user_file_id_int",
+        existing_type=sa.Integer(),
+        nullable=False,
+    )
+
+    # Remove the UUID foreign key columns and rename the integer replacements
+    op.drop_column("persona__user_file", "user_file_id")
+    op.alter_column(
+        "persona__user_file",
+        "user_file_id_int",
+        new_column_name="user_file_id",
+        existing_type=sa.Integer(),
+        nullable=False,
+    )
+
+    op.drop_column("project__user_file", "user_file_id")
+    op.alter_column(
+        "project__user_file",
+        "user_file_id_int",
+        new_column_name="user_file_id",
+        existing_type=sa.Integer(),
+        nullable=False,
+    )
+
+    # Swap the user_file primary key back to the integer column
+    op.drop_constraint("user_file_pkey", "user_file", type_="primary")
+    op.drop_column("user_file", "id")
+    op.alter_column(
+        "user_file",
+        "id_int",
+        new_column_name="id",
+        existing_type=sa.Integer(),
+    )
+    op.alter_column(
+        "user_file",
+        "id",
+        existing_type=sa.Integer(),
+        nullable=False,
+        server_default=sa.text("nextval('user_file_id_seq')"),
+    )
+    op.execute("ALTER SEQUENCE user_file_id_seq OWNED BY user_file.id")
+    op.execute(
+        """
+        SELECT setval(
+            'user_file_id_seq',
+            GREATEST(COALESCE(MAX(id), 1), 1),
+            MAX(id) IS NOT NULL
+        )
+        FROM user_file
+        """
+    )
+    op.create_primary_key("user_file_pkey", "user_file", ["id"])
+
+    # Restore primary keys on referencing tables
+    if persona_pk_cols:
+        op.create_primary_key(
+            "persona__user_file_pkey", "persona__user_file", persona_pk_cols
+        )
+    if project_pk_cols:
+        op.create_primary_key(
+            "project__user_file_pkey",
+            "project__user_file",
+            project_pk_cols,
+        )
+
+    # Recreate foreign keys pointing at the integer primary key
+    op.create_foreign_key(
+        "persona__user_file_user_file_id_fkey",
+        "persona__user_file",
+        "user_file",
+        ["user_file_id"],
+        ["id"],
+    )
+    op.create_foreign_key(
+        "fk_project__user_file_user_file_id",
+        "project__user_file",
+        "user_file",
+        ["user_file_id"],
+        ["id"],
     )

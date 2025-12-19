@@ -1,7 +1,8 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 .env.sentry-build-plugin
+
 # dependencies
-/node_modules
+node_modules
 /.pnp
 .pnp.js
 
@@ -43,3 +44,4 @@ next-env.d.ts
 
 # generated clients ... in particular, the API to the Onyx backend itself!
 /src/lib/generated
+.jest-cache

@@ -27,8 +27,6 @@ CT = TypeVar("CT", bound=ConnectorCheckpoint)
 
 class BaseConnector(abc.ABC, Generic[CT]):
     REDIS_KEY_PREFIX = "da_connector_data:"
-    # Common image file extensions supported across connectors
-    IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
     @abc.abstractmethod
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -191,7 +189,7 @@ class CredentialsProviderInterface(abc.ABC, Generic[T]):
 
     @abc.abstractmethod
     def is_dynamic(self) -> bool:
-        """If dynamic, the credentials may change during usage ... maening the client
+        """If dynamic, the credentials may change during usage ... meaning the client
         needs to use the locking features of the credentials provider to operate
         correctly.
 

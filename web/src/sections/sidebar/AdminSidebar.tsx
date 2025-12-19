@@ -1,16 +1,11 @@
 "use client";
 
-import React, { useContext } from "react";
 import { usePathname } from "next/navigation";
-import {
-  SettingsContext,
-  useSettingsContext,
-} from "@/components/settings/SettingsProvider";
+import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { CgArrowsExpandUpLeft } from "react-icons/cg";
-import Text from "@/refresh-components/Text";
-import { SidebarSection } from "@/sections/sidebar/components";
-import Settings from "@/sections/sidebar/Settings";
-import NavigationTab from "@/refresh-components/buttons/NavigationTab";
+import Text from "@/refresh-components/texts/Text";
+import SidebarSection from "@/sections/sidebar/SidebarSection";
+import Settings from "@/sections/sidebar/Settings/Settings";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import { useIsKGExposed } from "@/app/admin/kg/utils";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
@@ -20,29 +15,35 @@ import { MdOutlineCreditCard } from "react-icons/md";
 import {
   ClipboardIcon,
   NotebookIconSkeleton,
-  ConnectorIconSkeleton,
-  ThumbsUpIconSkeleton,
-  ToolIconSkeleton,
-  CpuIconSkeleton,
-  UsersIconSkeleton,
-  GroupsIconSkeleton,
-  KeyIconSkeleton,
-  ShieldIconSkeleton,
-  DatabaseIconSkeleton,
-  SettingsIconSkeleton,
   PaintingIconSkeleton,
-  ZoomInIconSkeleton,
   SlackIconSkeleton,
-  DocumentSetIconSkeleton,
-  AssistantsIconSkeleton,
-  SearchIcon,
-  DocumentIcon2,
   BrainIcon,
-  OnyxSparkleIcon,
 } from "@/components/icons/icons";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
-import { FiActivity, FiBarChart2 } from "react-icons/fi";
-
+import SidebarTab from "@/refresh-components/buttons/SidebarTab";
+import SidebarBody from "@/sections/sidebar/SidebarBody";
+import {
+  SvgActions,
+  SvgActivity,
+  SvgBarChart,
+  SvgCpu,
+  SvgFileText,
+  SvgFolder,
+  SvgGlobe,
+  SvgKey,
+  SvgOnyxLogo,
+  SvgOnyxOctagon,
+  SvgSearch,
+  SvgServer,
+  SvgSettings,
+  SvgShield,
+  SvgThumbsUp,
+  SvgUploadCloud,
+  SvgUser,
+  SvgUsers,
+  SvgZoomIn,
+} from "@opal/icons";
+import SvgMcp from "@opal/icons/mcp";
 const connectors_items = () => [
   {
     name: "Existing Connectors",
@@ -51,7 +52,7 @@ const connectors_items = () => [
   },
   {
     name: "Add Connector",
-    icon: ConnectorIconSkeleton,
+    icon: SvgUploadCloud,
     link: "/admin/add-connector",
   },
 ];
@@ -59,17 +60,17 @@ const connectors_items = () => [
 const document_management_items = () => [
   {
     name: "Document Sets",
-    icon: DocumentSetIconSkeleton,
+    icon: SvgFolder,
     link: "/admin/documents/sets",
   },
   {
     name: "Explorer",
-    icon: ZoomInIconSkeleton,
+    icon: SvgZoomIn,
     link: "/admin/documents/explorer",
   },
   {
     name: "Feedback",
-    icon: ThumbsUpIconSkeleton,
+    icon: SvgThumbsUp,
     link: "/admin/documents/feedback",
   },
 ];
@@ -81,25 +82,31 @@ const custom_assistants_items = (
   const items = [
     {
       name: "Assistants",
-      icon: AssistantsIconSkeleton,
+      icon: SvgOnyxOctagon,
       link: "/admin/assistants",
     },
   ];
 
   if (!isCurator) {
-    items.push(
-      {
-        name: "Slack Bots",
-        icon: SlackIconSkeleton,
-        link: "/admin/bots",
-      },
-      {
-        name: "Actions",
-        icon: ToolIconSkeleton,
-        link: "/admin/actions",
-      }
-    );
+    items.push({
+      name: "Slack Bots",
+      icon: SlackIconSkeleton,
+      link: "/admin/bots",
+    });
   }
+
+  items.push(
+    {
+      name: "MCP Actions",
+      icon: SvgMcp,
+      link: "/admin/actions/mcp",
+    },
+    {
+      name: "OpenAPI Actions",
+      icon: SvgActions,
+      link: "/admin/actions/open-api",
+    }
+  );
 
   if (enableEnterprise) {
     items.push({
@@ -139,7 +146,7 @@ const collections = (
           items: [
             {
               name: "Groups",
-              icon: GroupsIconSkeleton,
+              icon: SvgUsers,
               link: "/admin/groups",
             },
           ],
@@ -153,23 +160,32 @@ const collections = (
           items: [
             {
               name: "Default Assistant",
-              icon: OnyxSparkleIcon,
+              icon: SvgOnyxLogo,
               link: "/admin/configuration/default-assistant",
             },
             {
               name: "LLM",
-              icon: CpuIconSkeleton,
+              icon: SvgCpu,
               link: "/admin/configuration/llm",
             },
             {
-              error: settings?.settings.needs_reindexing,
-              name: "Search Settings",
-              icon: SearchIcon,
-              link: "/admin/configuration/search",
+              name: "Web Search",
+              icon: SvgGlobe,
+              link: "/admin/configuration/web-search",
             },
+            ...(!enableCloud
+              ? [
+                  {
+                    error: settings?.settings.needs_reindexing,
+                    name: "Search Settings",
+                    icon: SvgSearch,
+                    link: "/admin/configuration/search",
+                  },
+                ]
+              : []),
             {
               name: "Document Processing",
-              icon: DocumentIcon2,
+              icon: SvgFileText,
               link: "/admin/configuration/document-processing",
             },
             ...(kgExposed
@@ -188,26 +204,26 @@ const collections = (
           items: [
             {
               name: "Users",
-              icon: UsersIconSkeleton,
+              icon: SvgUser,
               link: "/admin/users",
             },
             ...(enableEnterprise
               ? [
                   {
                     name: "Groups",
-                    icon: GroupsIconSkeleton,
+                    icon: SvgUsers,
                     link: "/admin/groups",
                   },
                 ]
               : []),
             {
               name: "API Keys",
-              icon: KeyIconSkeleton,
+              icon: SvgKey,
               link: "/admin/api-key",
             },
             {
               name: "Token Rate Limits",
-              icon: ShieldIconSkeleton,
+              icon: SvgShield,
               link: "/admin/token-rate-limits",
             },
           ],
@@ -219,14 +235,14 @@ const collections = (
                 items: [
                   {
                     name: "Usage Statistics",
-                    icon: FiActivity,
+                    icon: SvgActivity,
                     link: "/admin/performance/usage",
                   },
                   ...(settings?.settings.query_history_type !== "disabled"
                     ? [
                         {
                           name: "Query History",
-                          icon: DatabaseIconSkeleton,
+                          icon: SvgServer,
                           link: "/admin/performance/query-history",
                         },
                       ]
@@ -235,7 +251,7 @@ const collections = (
                     ? [
                         {
                           name: "Custom Analytics",
-                          icon: FiBarChart2,
+                          icon: SvgBarChart,
                           link: "/admin/performance/custom-analytics",
                         },
                       ]
@@ -249,7 +265,7 @@ const collections = (
           items: [
             {
               name: "Workspace Settings",
-              icon: SettingsIconSkeleton,
+              icon: SvgSettings,
               link: "/admin/settings",
             },
             ...(enableEnterprise
@@ -292,16 +308,11 @@ export default function AdminSidebar({
   enableCloudSS,
   enableEnterpriseSS,
 }: AdminSidebarProps) {
-  const { kgExposed, isLoading: isKgExposedLoading } = useIsKGExposed();
-  const combinedSettings = useContext(SettingsContext);
-  const pathname = usePathname() ?? "";
+  const { kgExposed } = useIsKGExposed();
+  const pathname = usePathname();
   const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
   const { user } = useUser();
   const settings = useSettingsContext();
-
-  if (!combinedSettings || isKgExposedLoading) {
-    return null;
-  }
 
   const isCurator =
     user?.role === UserRole.CURATOR || user?.role === UserRole.GLOBAL_CURATOR;
@@ -317,43 +328,48 @@ export default function AdminSidebar({
 
   return (
     <SidebarWrapper>
-      <NavigationTab
-        icon={({ className }) => (
-          <CgArrowsExpandUpLeft className={className} size={16} />
-        )}
-        href="/chat"
+      <SidebarBody
+        scrollKey="admin-sidebar"
+        actionButton={
+          <SidebarTab
+            leftIcon={({ className }) => (
+              <CgArrowsExpandUpLeft className={className} size={16} />
+            )}
+            href="/chat"
+          >
+            Exit Admin
+          </SidebarTab>
+        }
+        footer={
+          <div className="flex flex-col gap-2">
+            {settings.webVersion && (
+              <Text text02 secondaryBody className="px-2">
+                {`Onyx version: ${settings.webVersion}`}
+              </Text>
+            )}
+            <Settings />
+          </div>
+        }
       >
-        Exit Admin
-      </NavigationTab>
-
-      <div className="flex flex-col flex-1 overflow-y-auto gap-padding-content">
         {items.map((collection, index) => (
           <SidebarSection key={index} title={collection.name}>
             <div className="flex flex-col w-full">
               {collection.items.map(({ link, icon: Icon, name }, index) => (
-                <NavigationTab
+                <SidebarTab
                   key={index}
                   href={link}
                   active={pathname.startsWith(link)}
-                  icon={({ className }) => (
+                  leftIcon={({ className }) => (
                     <Icon className={className} size={16} />
                   )}
                 >
                   {name}
-                </NavigationTab>
+                </SidebarTab>
               ))}
             </div>
           </SidebarSection>
         ))}
-      </div>
-      <div className="flex flex-col gap-spacing-interline">
-        {combinedSettings.webVersion && (
-          <Text text02 secondaryBody className="px-spacing-interline">
-            Onyx version: {combinedSettings.webVersion}
-          </Text>
-        )}
-        <Settings removeAdminPanelLink />
-      </div>
+      </SidebarBody>
     </SidebarWrapper>
   );
 }

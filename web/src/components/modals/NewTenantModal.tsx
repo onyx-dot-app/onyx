@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Dialog } from "@headlessui/react";
-import { Button } from "../ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { ArrowRight, X } from "lucide-react";
 import { logout } from "@/lib/user";
@@ -142,10 +142,9 @@ export default function NewTenantModal({
           <Dialog.Title className="text-xl font-semibold mb-4 flex items-center">
             {isInvite ? (
               <>
-                You have been invited to join {tenantInfo.number_of_users}
-                other teammate{tenantInfo.number_of_users === 1
-                  ? ""
-                  : "s"} of {APP_DOMAIN}.
+                You have been invited to join {tenantInfo.number_of_users} other
+                teammate{tenantInfo.number_of_users === 1 ? "" : "s"} of{" "}
+                {APP_DOMAIN}.
               </>
             ) : (
               <>
@@ -185,7 +184,7 @@ export default function NewTenantModal({
               {isInvite && (
                 <Button
                   onClick={handleRejectInvite}
-                  variant="outline"
+                  secondary
                   className="flex items-center flex-1"
                   disabled={isLoading}
                 >
@@ -199,7 +198,6 @@ export default function NewTenantModal({
               )}
 
               <Button
-                variant="agent"
                 onClick={handleJoinTenant}
                 className={`flex items-center justify-center ${
                   isInvite ? "flex-1" : "w-full"

@@ -11,7 +11,6 @@ from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.configs.constants import KV_SEARCH_SETTINGS
 from onyx.configs.embedding_configs import SUPPORTED_EMBEDDING_MODELS
 from onyx.configs.embedding_configs import SupportedEmbeddingModel
-from onyx.configs.model_configs import FAST_GEN_AI_MODEL_VERSION
 from onyx.configs.model_configs import GEN_AI_API_KEY
 from onyx.configs.model_configs import GEN_AI_MODEL_VERSION
 from onyx.context.search.models import SavedSearchSettings
@@ -43,7 +42,7 @@ from onyx.document_index.vespa.index import VespaIndex
 from onyx.indexing.models import IndexingSetting
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
-from onyx.llm.llm_provider_options import OPEN_AI_MODEL_NAMES
+from onyx.llm.llm_provider_options import get_openai_model_names
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder
 from onyx.natural_language_processing.search_nlp_models import warm_up_cross_encoder
@@ -295,7 +294,6 @@ def setup_postgres(db_session: Session) -> None:
         logger.notice("Setting up default OpenAI LLM for dev.")
 
         llm_model = GEN_AI_MODEL_VERSION or "gpt-4o-mini"
-        fast_model = FAST_GEN_AI_MODEL_VERSION or "gpt-4o-mini"
         model_req = LLMProviderUpsertRequest(
             name="DevEnvPresetOpenAI",
             provider="openai",
@@ -304,12 +302,11 @@ def setup_postgres(db_session: Session) -> None:
             api_version=None,
             custom_config=None,
             default_model_name=llm_model,
-            fast_default_model_name=fast_model,
             is_public=True,
             groups=[],
             model_configurations=[
                 ModelConfigurationUpsertRequest(name=name, is_visible=True)
-                for name in OPEN_AI_MODEL_NAMES
+                for name in get_openai_model_names()
             ],
             api_key_changed=True,
         )

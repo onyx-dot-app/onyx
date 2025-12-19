@@ -1,4 +1,5 @@
 import copy
+import json
 import os
 from collections.abc import Callable
 from collections.abc import Iterable
@@ -9,6 +10,7 @@ from datetime import timezone
 from typing import Any
 
 from jira import JIRA
+from jira.exceptions import JIRAError
 from jira.resources import Issue
 from more_itertools import chunked
 from typing_extensions import override
@@ -134,6 +136,80 @@ def _perform_jql_search(
         return _perform_jql_search_v2(jira_client, jql, start, max_results, fields)
 
 
+def _handle_jira_search_error(e: Exception, jql: str) -> None:
+    """Handle common Jira search errors and raise appropriate exceptions.
+
+    Args:
+        e: The exception raised by the Jira API
+        jql: The JQL query that caused the error
+
+    Raises:
+        ConnectorValidationError: For HTTP 400 errors (invalid JQL or project)
+        CredentialExpiredError: For HTTP 401 errors
+        InsufficientPermissionsError: For HTTP 403 errors
+        Exception: Re-raises the original exception for other error types
+    """
+    # Extract error information from the exception
+    error_text = ""
+    status_code = None
+
+    def _format_error_text(error_payload: Any) -> str:
+        error_messages = (
+            error_payload.get("errorMessages", [])
+            if isinstance(error_payload, dict)
+            else []
+        )
+        if error_messages:
+            return (
+                "; ".join(error_messages)
+                if isinstance(error_messages, list)
+                else str(error_messages)
+            )
+        return str(error_payload)
+
+    # Try to get status code and error text from JIRAError or requests response
+    if hasattr(e, "status_code"):
+        status_code = e.status_code
+        raw_text = getattr(e, "text", "")
+        if isinstance(raw_text, str):
+            try:
+                error_text = _format_error_text(json.loads(raw_text))
+            except Exception:
+                error_text = raw_text
+        else:
+            error_text = str(raw_text)
+    elif hasattr(e, "response") and e.response is not None:
+        status_code = e.response.status_code
+        # Try JSON first, fall back to text
+        try:
+            error_json = e.response.json()
+            error_text = _format_error_text(error_json)
+        except Exception:
+            error_text = e.response.text
+
+    # Handle specific status codes
+    if status_code == 400:
+        if "does not exist for the field 'project'" in error_text:
+            raise ConnectorValidationError(
+                f"The specified Jira project does not exist or you don't have access to it. "
+                f"JQL query: {jql}. Error: {error_text}"
+            )
+        raise ConnectorValidationError(
+            f"Invalid JQL query. JQL: {jql}. Error: {error_text}"
+        )
+    elif status_code == 401:
+        raise CredentialExpiredError(
+            "Jira credentials are expired or invalid (HTTP 401)."
+        )
+    elif status_code == 403:
+        raise InsufficientPermissionsError(
+            f"Insufficient permissions to execute JQL query. JQL: {jql}"
+        )
+
+    # Re-raise for other error types
+    raise e
+
+
 def enhanced_search_ids(
     jira_client: JIRA, jql: str, nextPageToken: str | None = None
 ) -> tuple[list[str], str | None]:
@@ -149,8 +225,15 @@ def enhanced_search_ids(
         "nextPageToken": nextPageToken,
         "fields": "id",
     }
-    response = jira_client._session.get(enhanced_search_path, params=params).json()
-    return [str(issue["id"]) for issue in response["issues"]], response.get(
+    try:
+        response = jira_client._session.get(enhanced_search_path, params=params)
+        response.raise_for_status()
+        response_json = response.json()
+    except Exception as e:
+        _handle_jira_search_error(e, jql)
+        raise  # Explicitly re-raise for type checker, should never reach here
+
+    return [str(issue["id"]) for issue in response_json["issues"]], response_json.get(
         "nextPageToken"
     )
 
@@ -232,12 +315,16 @@ def _perform_jql_search_v2(
         f"Fetching Jira issues with JQL: {jql}, "
         f"starting at {start}, max results: {max_results}"
     )
-    issues = jira_client.search_issues(
-        jql_str=jql,
-        startAt=start,
-        maxResults=max_results,
-        fields=fields,
-    )
+    try:
+        issues = jira_client.search_issues(
+            jql_str=jql,
+            startAt=start,
+            maxResults=max_results,
+            fields=fields,
+        )
+    except JIRAError as e:
+        _handle_jira_search_error(e, jql)
+        raise  # Explicitly re-raise for type checker, should never reach here
 
     for issue in issues:
         if isinstance(issue, Issue):
@@ -644,6 +731,7 @@ class JiraConnector(
                             jql=self.jql_query,
                             start=0,
                             max_results=1,
+                            all_issue_ids=[],
                         )
                     ),
                     None,

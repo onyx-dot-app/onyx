@@ -2,15 +2,20 @@ from unittest.mock import patch
 
 import litellm
 import pytest
-from langchain_core.messages import AIMessage
-from langchain_core.messages import AIMessageChunk
-from langchain_core.messages import HumanMessage
 from litellm.types.utils import ChatCompletionDeltaToolCall
 from litellm.types.utils import Delta
 from litellm.types.utils import Function as LiteLLMFunction
 
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
-from onyx.llm.chat_llm import DefaultMultiLLM
+from onyx.llm.chat_llm import LitellmLLM
+from onyx.llm.interfaces import LLMUserIdentity
+from onyx.llm.model_response import ModelResponse
+from onyx.llm.model_response import ModelResponseStream
+from onyx.llm.models import AssistantMessage
+from onyx.llm.models import FunctionCall
+from onyx.llm.models import LanguageModelInput
+from onyx.llm.models import ToolCall
+from onyx.llm.models import UserMessage
 from onyx.llm.utils import get_max_input_tokens
 
 
@@ -26,12 +31,95 @@ def _create_delta(
     return delta
 
 
+def _model_response_to_assistant_message(response: ModelResponse) -> AssistantMessage:
+    """Convert a ModelResponse to an AssistantMessage for testing."""
+    message = response.choice.message
+    tool_calls = None
+    if message.tool_calls:
+        tool_calls = [
+            ToolCall(
+                id=tc.id,
+                function=FunctionCall(
+                    name=tc.function.name or "",
+                    arguments=tc.function.arguments or "",
+                ),
+            )
+            for tc in message.tool_calls
+        ]
+    return AssistantMessage(
+        role="assistant",
+        content=message.content,
+        tool_calls=tool_calls,
+    )
+
+
+def _accumulate_stream_to_assistant_message(
+    stream_chunks: list[ModelResponseStream],
+) -> AssistantMessage:
+    """Accumulate streaming deltas into a final AssistantMessage for testing."""
+    accumulated_content = ""
+    tool_calls_map: dict[int, dict[str, str]] = {}
+
+    for chunk in stream_chunks:
+        delta = chunk.choice.delta
+
+        # Accumulate content
+        if delta.content:
+            accumulated_content += delta.content
+
+        # Accumulate tool calls
+        if delta.tool_calls:
+            for tool_call_delta in delta.tool_calls:
+                index = tool_call_delta.index
+
+                if index not in tool_calls_map:
+                    tool_calls_map[index] = {
+                        "id": "",
+                        "name": "",
+                        "arguments": "",
+                    }
+
+                if tool_call_delta.id:
+                    tool_calls_map[index]["id"] = tool_call_delta.id
+
+                if tool_call_delta.function:
+                    if tool_call_delta.function.name:
+                        tool_calls_map[index]["name"] = tool_call_delta.function.name
+                    if tool_call_delta.function.arguments:
+                        tool_calls_map[index][
+                            "arguments"
+                        ] += tool_call_delta.function.arguments
+
+    # Convert accumulated tool calls to ToolCall list, sorted by index
+    tool_calls = None
+    if tool_calls_map:
+        tool_calls = [
+            ToolCall(
+                type="function",
+                id=tc_data["id"],
+                function=FunctionCall(
+                    name=tc_data["name"],
+                    arguments=tc_data["arguments"],
+                ),
+            )
+            for index in sorted(tool_calls_map.keys())
+            for tc_data in [tool_calls_map[index]]
+            if tc_data["id"] and tc_data["name"]
+        ]
+
+    return AssistantMessage(
+        role="assistant",
+        content=accumulated_content if accumulated_content else None,
+        tool_calls=tool_calls,
+    )
+
+
 @pytest.fixture
-def default_multi_llm() -> DefaultMultiLLM:
+def default_multi_llm() -> LitellmLLM:
     model_provider = "openai"
     model_name = "gpt-3.5-turbo"
 
-    return DefaultMultiLLM(
+    return LitellmLLM(
         api_key="test_key",
         timeout=30,
         model_provider=model_provider,
@@ -43,7 +131,7 @@ def default_multi_llm() -> DefaultMultiLLM:
     )
 
 
-def test_multiple_tool_calls(default_multi_llm: DefaultMultiLLM) -> None:
+def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
     # Mock the litellm.completion function
     with patch("litellm.completion") as mock_completion:
         # Create a mock response with multiple tool calls using litellm objects
@@ -84,7 +172,9 @@ def test_multiple_tool_calls(default_multi_llm: DefaultMultiLLM) -> None:
         mock_completion.return_value = mock_response
 
         # Define input messages
-        messages = [HumanMessage(content="What's the weather and time in New York?")]
+        messages: LanguageModelInput = [
+            UserMessage(content="What's the weather and time in New York?")
+        ]
 
         # Define available tools
         tools = [
@@ -114,31 +204,36 @@ def test_multiple_tool_calls(default_multi_llm: DefaultMultiLLM) -> None:
             },
         ]
 
-        # Call the _invoke_implementation method
         result = default_multi_llm.invoke(messages, tools)
 
-        # Assert that the result is an AIMessage
-        assert isinstance(result, AIMessage)
+        # Assert that the result is a ModelResponse
+        assert isinstance(result, ModelResponse)
+
+        # Convert to AssistantMessage for easier assertion
+        assistant_msg = _model_response_to_assistant_message(result)
 
         # Assert that the content is None (as per the mock response)
-        assert result.content == ""
+        assert assistant_msg.content is None or assistant_msg.content == ""
 
         # Assert that there are two tool calls
-        assert len(result.tool_calls) == 2
+        assert assistant_msg.tool_calls is not None
+        assert len(assistant_msg.tool_calls) == 2
 
         # Assert the details of the first tool call
-        assert result.tool_calls[0]["id"] == "call_1"
-        assert result.tool_calls[0]["name"] == "get_weather"
-        assert result.tool_calls[0]["args"] == {"location": "New York"}
+        assert assistant_msg.tool_calls[0].id == "call_1"
+        assert assistant_msg.tool_calls[0].function.name == "get_weather"
+        assert (
+            assistant_msg.tool_calls[0].function.arguments == '{"location": "New York"}'
+        )
 
         # Assert the details of the second tool call
-        assert result.tool_calls[1]["id"] == "call_2"
-        assert result.tool_calls[1]["name"] == "get_time"
-        assert result.tool_calls[1]["args"] == {"timezone": "EST"}
+        assert assistant_msg.tool_calls[1].id == "call_2"
+        assert assistant_msg.tool_calls[1].function.name == "get_time"
+        assert assistant_msg.tool_calls[1].function.arguments == '{"timezone": "EST"}'
 
         # Verify that litellm.completion was called with the correct arguments
         mock_completion.assert_called_once_with(
-            model="openai/gpt-3.5-turbo",
+            model="openai/responses/gpt-3.5-turbo",
             api_key="test_key",
             base_url=None,
             api_version=None,
@@ -151,12 +246,12 @@ def test_multiple_tool_calls(default_multi_llm: DefaultMultiLLM) -> None:
             stream=False,
             temperature=0.0,  # Default value from GEN_AI_TEMPERATURE
             timeout=30,
-            parallel_tool_calls=False,
+            parallel_tool_calls=True,
             mock_response=MOCK_LLM_RESPONSE,
         )
 
 
-def test_multiple_tool_calls_streaming(default_multi_llm: DefaultMultiLLM) -> None:
+def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
     # Mock the litellm.completion function
     with patch("litellm.completion") as mock_completion:
         # Create a mock response with multiple tool calls using litellm objects
@@ -230,7 +325,9 @@ def test_multiple_tool_calls_streaming(default_multi_llm: DefaultMultiLLM) -> No
         mock_completion.return_value = mock_response
 
         # Define input messages and tools (same as in the non-streaming test)
-        messages = [HumanMessage(content="What's the weather and time in New York?")]
+        messages: LanguageModelInput = [
+            UserMessage(content="What's the weather and time in New York?")
+        ]
 
         tools = [
             {
@@ -265,25 +362,30 @@ def test_multiple_tool_calls_streaming(default_multi_llm: DefaultMultiLLM) -> No
         # Assert that we received the correct number of chunks
         assert len(stream_result) == 3
 
-        # Combine all chunks into a single AIMessage
-        combined_result: AIMessage = AIMessageChunk(content="")
+        # Assert that each chunk is a ModelResponseStream
         for chunk in stream_result:
-            combined_result += chunk  # type: ignore
+            assert isinstance(chunk, ModelResponseStream)
 
-        # Assert that the combined result matches our expectations
-        assert isinstance(combined_result, AIMessage)
-        assert combined_result.content == ""
-        assert len(combined_result.tool_calls) == 2
-        assert combined_result.tool_calls[0]["id"] == "call_1"
-        assert combined_result.tool_calls[0]["name"] == "get_weather"
-        assert combined_result.tool_calls[0]["args"] == {"location": "New York"}
-        assert combined_result.tool_calls[1]["id"] == "call_2"
-        assert combined_result.tool_calls[1]["name"] == "get_time"
-        assert combined_result.tool_calls[1]["args"] == {"timezone": "EST"}
+        # Accumulate the stream chunks into a final AssistantMessage
+        final_result = _accumulate_stream_to_assistant_message(stream_result)
+
+        # Assert that the final result matches our expectations
+        assert isinstance(final_result, AssistantMessage)
+        assert final_result.content is None or final_result.content == ""
+        assert final_result.tool_calls is not None
+        assert len(final_result.tool_calls) == 2
+        assert final_result.tool_calls[0].id == "call_1"
+        assert final_result.tool_calls[0].function.name == "get_weather"
+        assert (
+            final_result.tool_calls[0].function.arguments == '{"location": "New York"}'
+        )
+        assert final_result.tool_calls[1].id == "call_2"
+        assert final_result.tool_calls[1].function.name == "get_time"
+        assert final_result.tool_calls[1].function.arguments == '{"timezone": "EST"}'
 
         # Verify that litellm.completion was called with the correct arguments
         mock_completion.assert_called_once_with(
-            model="openai/gpt-3.5-turbo",
+            model="openai/responses/gpt-3.5-turbo",
             api_key="test_key",
             base_url=None,
             api_version=None,
@@ -296,6 +398,154 @@ def test_multiple_tool_calls_streaming(default_multi_llm: DefaultMultiLLM) -> No
             stream=True,
             temperature=0.0,  # Default value from GEN_AI_TEMPERATURE
             timeout=30,
-            parallel_tool_calls=False,
+            parallel_tool_calls=True,
             mock_response=MOCK_LLM_RESPONSE,
+            stream_options={"include_usage": True},
         )
+
+
+def test_user_identity_metadata_enabled(default_multi_llm: LitellmLLM) -> None:
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.chat_llm.SEND_USER_METADATA_TO_LLM_PROVIDER", True),
+    ):
+        mock_response = litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=litellm.Message(
+                        content="Hello",
+                        role="assistant",
+                    ),
+                )
+            ],
+            model="gpt-3.5-turbo",
+        )
+        mock_completion.return_value = mock_response
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        identity = LLMUserIdentity(user_id="user_123", session_id="session_abc")
+
+        default_multi_llm.invoke(messages, user_identity=identity)
+
+        mock_completion.assert_called_once()
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["user"] == "user_123"
+        assert kwargs["metadata"]["session_id"] == "session_abc"
+
+
+def test_user_identity_user_id_truncated_to_64_chars(
+    default_multi_llm: LitellmLLM,
+) -> None:
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.chat_llm.SEND_USER_METADATA_TO_LLM_PROVIDER", True),
+    ):
+        mock_response = litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=litellm.Message(
+                        content="Hello",
+                        role="assistant",
+                    ),
+                )
+            ],
+            model="gpt-3.5-turbo",
+        )
+        mock_completion.return_value = mock_response
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        long_user_id = "u" * 82
+        identity = LLMUserIdentity(user_id=long_user_id, session_id="session_abc")
+
+        default_multi_llm.invoke(messages, user_identity=identity)
+
+        mock_completion.assert_called_once()
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["user"] == long_user_id[:64]
+
+
+def test_user_identity_metadata_disabled_omits_identity(
+    default_multi_llm: LitellmLLM,
+) -> None:
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.chat_llm.SEND_USER_METADATA_TO_LLM_PROVIDER", False),
+    ):
+        mock_response = litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=litellm.Message(
+                        content="Hello",
+                        role="assistant",
+                    ),
+                )
+            ],
+            model="gpt-3.5-turbo",
+        )
+        mock_completion.return_value = mock_response
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        identity = LLMUserIdentity(user_id="user_123", session_id="session_abc")
+
+        default_multi_llm.invoke(messages, user_identity=identity)
+
+        mock_completion.assert_called_once()
+        kwargs = mock_completion.call_args.kwargs
+        assert "user" not in kwargs
+        assert "metadata" not in kwargs
+
+
+def test_existing_metadata_pass_through_when_identity_disabled() -> None:
+    model_provider = "openai"
+    model_name = "gpt-3.5-turbo"
+
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=model_provider,
+        model_name=model_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=model_provider,
+            model_name=model_name,
+        ),
+        model_kwargs={"metadata": {"foo": "bar"}},
+    )
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.chat_llm.SEND_USER_METADATA_TO_LLM_PROVIDER", False),
+    ):
+        mock_response = litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=litellm.Message(
+                        content="Hello",
+                        role="assistant",
+                    ),
+                )
+            ],
+            model="gpt-3.5-turbo",
+        )
+        mock_completion.return_value = mock_response
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        identity = LLMUserIdentity(user_id="user_123", session_id="session_abc")
+
+        llm.invoke(messages, user_identity=identity)
+
+        mock_completion.assert_called_once()
+        kwargs = mock_completion.call_args.kwargs
+        assert "user" not in kwargs
+        assert kwargs["metadata"]["foo"] == "bar"

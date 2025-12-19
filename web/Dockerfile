@@ -7,22 +7,22 @@ have a contract or agreement with DanswerAI, you are not permitted to use the En
 Edition features outside of personal development or testing purposes. Please reach out to \
 founders@onyx.app for more information. Please visit https://github.com/onyx-dot-app/onyx"
 
-# Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
-ARG ONYX_VERSION=0.0.0-dev
-ENV ONYX_VERSION=${ONYX_VERSION}
-RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
-
 # Step 1. Install dependencies + rebuild the source code only when needed
 FROM base AS builder
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# pull in source code / package.json / package-lock.json
-COPY . .
+# Copy package files first for better layer caching
+# This layer will be cached unless package.json or package-lock.json changes
+COPY package.json package-lock.json ./
+COPY lib/opal/package.json ./lib/opal/
 
 # Install dependencies
 RUN npm ci
+
+# pull in source code / package.json / package-lock.json
+COPY . .
 
 # needed to get the `standalone` dir we expect later
 ENV NEXT_PRIVATE_STANDALONE=true
@@ -65,7 +65,7 @@ ARG NEXT_PUBLIC_CLOUD_ENABLED
 ENV NEXT_PUBLIC_CLOUD_ENABLED=${NEXT_PUBLIC_CLOUD_ENABLED}
 
 ARG NEXT_PUBLIC_SENTRY_DSN
-ENV NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN} 
+ENV NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN}
 
 ARG NEXT_PUBLIC_GTM_ENABLED
 ENV NEXT_PUBLIC_GTM_ENABLED=${NEXT_PUBLIC_GTM_ENABLED}
@@ -94,8 +94,8 @@ WORKDIR /app
 # global modules may be outdated and trigger security scans.
 RUN rm -rf /usr/local/lib/node_modules
 
-# Not needed, set by compose 
-# ENV NODE_ENV production  
+# Not needed, set by compose
+# ENV NODE_ENV production
 
 # Disable automatic telemetry collection
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -148,7 +148,7 @@ ARG NEXT_PUBLIC_CLOUD_ENABLED
 ENV NEXT_PUBLIC_CLOUD_ENABLED=${NEXT_PUBLIC_CLOUD_ENABLED}
 
 ARG NEXT_PUBLIC_SENTRY_DSN
-ENV NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN} 
+ENV NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN}
 
 ARG NEXT_PUBLIC_GTM_ENABLED
 ENV NEXT_PUBLIC_GTM_ENABLED=${NEXT_PUBLIC_GTM_ENABLED}
@@ -162,8 +162,12 @@ ENV NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK=${NEXT_PUBLIC_INCLUDE_ERROR_POP
 ARG NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
 
-# Note: Don't expose ports here, Compose will handle that for us if necessary. 
-# If you want to run this without compose, specify the ports to 
+# Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
+ARG ONYX_VERSION=0.0.0-dev
+ENV ONYX_VERSION=${ONYX_VERSION}
+
+# Note: Don't expose ports here, Compose will handle that for us if necessary.
+# If you want to run this without compose, specify the ports to
 # expose via cli
 
 CMD ["node", "server.js"]

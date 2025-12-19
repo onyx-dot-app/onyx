@@ -1,0 +1,14 @@
+{
+  "name": "@onyx/opal",
+  "version": "0.0.1",
+  "exports": {
+    "./icons": {
+      "types": "./src/icons/index.ts",
+      "default": "./src/icons/index.ts"
+    },
+    "./types": {
+      "types": "./src/types.ts",
+      "default": "./src/types.ts"
+    }
+  }
+}

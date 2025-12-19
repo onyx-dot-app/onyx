@@ -13,6 +13,7 @@ from enum import Enum
 from typing import Any
 from typing import cast
 from urllib.parse import unquote
+from urllib.parse import urlsplit
 
 import msal  # type: ignore[import-untyped]
 import requests
@@ -54,10 +55,10 @@ from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.connectors.sharepoint.connector_utils import get_sharepoint_external_access
-from onyx.file_processing.extract_file_text import ACCEPTED_IMAGE_FILE_EXTENSIONS
 from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_processing.extract_file_text import get_file_ext
-from onyx.file_processing.file_validation import EXCLUDED_IMAGE_TYPES
+from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.file_processing.file_types import OnyxMimeTypes
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
@@ -65,6 +66,13 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 SLIM_BATCH_SIZE = 1000
 
+
+SHARED_DOCUMENTS_MAP = {
+    "Documents": "Shared Documents",
+    "Dokumente": "Freigegebene Dokumente",
+    "Documentos": "Documentos compartidos",
+}
+SHARED_DOCUMENTS_MAP_REVERSE = {v: k for k, v in SHARED_DOCUMENTS_MAP.items()}
 
 ASPX_EXTENSION = ".aspx"
 
@@ -318,7 +326,7 @@ def _convert_driveitem_to_document_with_permissions(
     try:
         item_json = driveitem.to_json()
         mime_type = item_json.get("file", {}).get("mimeType")
-        if not mime_type or mime_type in EXCLUDED_IMAGE_TYPES:
+        if not mime_type or mime_type in OnyxMimeTypes.EXCLUDED_IMAGE_TYPES:
             # NOTE: this function should be refactored to look like Drive doc_conversion.py pattern
             # for now, this skip must happen before we download the file
             # Similar to Google Drive, we'll just semi-silently skip excluded image types
@@ -378,14 +386,14 @@ def _convert_driveitem_to_document_with_permissions(
             return None
 
     sections: list[TextSection | ImageSection] = []
-    file_ext = driveitem.name.split(".")[-1]
+    file_ext = get_file_ext(driveitem.name)
 
     if not content_bytes:
         logger.warning(
             f"Zero-length content for '{driveitem.name}'. Skipping text/image extraction."
         )
-    elif "." + file_ext in ACCEPTED_IMAGE_FILE_EXTENSIONS:
-        # NOTE: this if should use is_valid_image_type instead with mime_type
+    elif file_ext in OnyxFileExtensions.IMAGE_EXTENSIONS:
+        # NOTE: this if should probably check mime_type instead
         image_section, _ = store_image_and_create_section(
             image_data=content_bytes,
             file_id=driveitem.id,
@@ -408,7 +416,7 @@ def _convert_driveitem_to_document_with_permissions(
 
             # The only mime type that would be returned by get_image_type_from_bytes that is in
             # EXCLUDED_IMAGE_TYPES is image/gif.
-            if mime_type in EXCLUDED_IMAGE_TYPES:
+            if mime_type in OnyxMimeTypes.EXCLUDED_IMAGE_TYPES:
                 logger.debug(
                     "Skipping embedded image of excluded type %s for %s",
                     mime_type,
@@ -719,45 +727,76 @@ class SharepointConnector(
         return self._graph_client
 
     @staticmethod
+    def _strip_share_link_tokens(path: str) -> list[str]:
+        # Share links often include a token prefix like /:f:/r/ or /:x:/r/.
+        segments = [segment for segment in path.split("/") if segment]
+        if segments and segments[0].startswith(":"):
+            segments = segments[1:]
+            if segments and segments[0] in {"r", "s", "g"}:
+                segments = segments[1:]
+        return segments
+
+    @staticmethod
+    def _normalize_sharepoint_url(url: str) -> tuple[str | None, list[str]]:
+        try:
+            parsed = urlsplit(url)
+        except ValueError:
+            logger.warning(f"Sharepoint URL '{url}' could not be parsed")
+            return None, []
+
+        if not parsed.scheme or not parsed.netloc:
+            logger.warning(
+                f"Sharepoint URL '{url}' is not a valid absolute URL (missing scheme or host)"
+            )
+            return None, []
+
+        path_segments = SharepointConnector._strip_share_link_tokens(parsed.path)
+        return f"{parsed.scheme}://{parsed.netloc}", path_segments
+
+    @staticmethod
     def _extract_site_and_drive_info(site_urls: list[str]) -> list[SiteDescriptor]:
         site_data_list = []
         for url in site_urls:
-            parts = url.strip().split("/")
+            base_url, parts = SharepointConnector._normalize_sharepoint_url(url.strip())
+            if base_url is None:
+                continue
 
+            lower_parts = [part.lower() for part in parts]
             site_type_index = None
-            if "sites" in parts:
-                site_type_index = parts.index("sites")
-            elif "teams" in parts:
-                site_type_index = parts.index("teams")
+            for site_token in ("sites", "teams"):
+                if site_token in lower_parts:
+                    site_type_index = lower_parts.index(site_token)
+                    break
 
-            if site_type_index is not None:
-                # Extract the base site URL (up to and including the site/team name)
-                site_url = "/".join(parts[: site_type_index + 2])
-                remaining_parts = parts[site_type_index + 2 :]
+            if site_type_index is None or len(parts) <= site_type_index + 1:
+                logger.warning(
+                    f"Site URL '{url}' is not a valid Sharepoint URL (must contain /sites/<name> or /teams/<name>)"
+                )
+                continue
 
-                # Extract drive name and folder path
-                if remaining_parts:
-                    drive_name = unquote(remaining_parts[0])
-                    folder_path = (
-                        "/".join(unquote(part) for part in remaining_parts[1:])
-                        if len(remaining_parts) > 1
-                        else None
-                    )
-                else:
-                    drive_name = None
-                    folder_path = None
+            site_path = parts[: site_type_index + 2]
+            remaining_parts = parts[site_type_index + 2 :]
+            site_url = f"{base_url}/" + "/".join(site_path)
 
-                site_data_list.append(
-                    SiteDescriptor(
-                        url=site_url,
-                        drive_name=drive_name,
-                        folder_path=folder_path,
-                    )
+            # Extract drive name and folder path
+            if remaining_parts:
+                drive_name = unquote(remaining_parts[0])
+                folder_path = (
+                    "/".join(unquote(part) for part in remaining_parts[1:])
+                    if len(remaining_parts) > 1
+                    else None
                 )
             else:
-                logger.warning(
-                    f"Site URL '{url}' is not a valid Sharepoint URL (must contain /sites/ or /teams/)"
+                drive_name = None
+                folder_path = None
+
+            site_data_list.append(
+                SiteDescriptor(
+                    url=site_url,
+                    drive_name=drive_name,
+                    folder_path=folder_path,
                 )
+            )
         return site_data_list
 
     def _get_drive_items_for_drive_name(
@@ -770,23 +809,30 @@ class SharepointConnector(
         try:
             site = self.graph_client.sites.get_by_url(site_descriptor.url)
             drives = site.drives.get().execute_query()
-            logger.debug(f"Found drives: {[drive.name for drive in drives]}")
+            logger.info(f"Found drives: {[drive.name for drive in drives]}")
 
             drives = [
                 drive
                 for drive in drives
                 if (drive.name and drive.name.lower() == drive_name.lower())
-                or (drive.name == "Documents" and drive_name == "Shared Documents")
+                or (
+                    drive.name in SHARED_DOCUMENTS_MAP
+                    and SHARED_DOCUMENTS_MAP[drive.name] == drive_name
+                )
             ]
             drive = drives[0] if len(drives) > 0 else None
             if drive is None:
                 logger.warning(f"Drive '{drive_name}' not found")
                 return []
+
+            logger.info(f"Found drive: {drive.name}")
             try:
                 root_folder = drive.root
                 if site_descriptor.folder_path:
                     for folder_part in site_descriptor.folder_path.split("/"):
                         root_folder = root_folder.get_by_path(folder_part)
+
+                logger.info(f"Found root folder: {root_folder.name}")
 
                 # TODO: consider ways to avoid materializing the entire list of files in memory
                 query = root_folder.get_files(
@@ -794,7 +840,7 @@ class SharepointConnector(
                     page_size=1000,
                 )
                 driveitems = query.execute_query()
-                logger.debug(f"Found {len(driveitems)} items in drive '{drive_name}'")
+                logger.info(f"Found {len(driveitems)} items in drive '{drive_name}'")
 
                 # Filter items based on folder path if specified
                 if site_descriptor.folder_path:
@@ -833,7 +879,7 @@ class SharepointConnector(
                         <= item.last_modified_datetime.replace(tzinfo=timezone.utc)
                         <= end
                     ]
-                    logger.debug(
+                    logger.info(
                         f"Found {len(driveitems)} items within time window in drive '{drive.name}'"
                     )
 
@@ -879,10 +925,12 @@ class SharepointConnector(
                     for drive in drives
                     if drive.name == site_descriptor.drive_name
                     or (
-                        drive.name == "Documents"
-                        and site_descriptor.drive_name == "Shared Documents"
+                        drive.name in SHARED_DOCUMENTS_MAP
+                        and SHARED_DOCUMENTS_MAP[drive.name]
+                        == site_descriptor.drive_name
                     )
-                ]
+                ]  # NOTE: right now we only support english, german and spanish drive names
+                # add to SHARED_DOCUMENTS_MAP if you want to support more languages
                 if not drives:
                     logger.warning(f"Drive '{site_descriptor.drive_name}' not found")
                     return []
@@ -908,9 +956,11 @@ class SharepointConnector(
                     )
 
                     # Use "Shared Documents" as the library name for the default "Documents" drive
+                    # NOTE: right now we only support english, german and spanish drive names
+                    # add to SHARED_DOCUMENTS_MAP if you want to support more languages
                     drive_name = (
-                        "Shared Documents"
-                        if drive.name == "Documents"
+                        SHARED_DOCUMENTS_MAP[drive.name]
+                        if drive.name in SHARED_DOCUMENTS_MAP
                         else cast(str, drive.name)
                     )
 
@@ -1420,6 +1470,9 @@ class SharepointConnector(
                 return checkpoint
 
             try:
+                logger.info(
+                    f"Fetching drive items for drive name: {current_drive_name}"
+                )
                 driveitems = self._get_drive_items_for_drive_name(
                     site_descriptor, current_drive_name, start_dt, end_dt
                 )
@@ -1446,16 +1499,20 @@ class SharepointConnector(
                 # Clear current drive and continue to next
                 checkpoint.current_drive_name = None
                 return checkpoint
-            current_drive_name = (
-                "Shared Documents"
-                if current_drive_name == "Documents"
-                else current_drive_name
+            current_drive_name = SHARED_DOCUMENTS_MAP.get(
+                current_drive_name, current_drive_name
             )
             for driveitem in driveitems:
                 driveitem_extension = get_file_ext(driveitem.name)
+                if driveitem_extension not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
+                    logger.warning(
+                        f"Skipping {driveitem.web_url} as it is not a supported file type"
+                    )
+                    continue
+
                 # Only yield empty documents if they are PDFs or images
                 should_yield_if_empty = (
-                    driveitem_extension in ACCEPTED_IMAGE_FILE_EXTENSIONS
+                    driveitem_extension in OnyxFileExtensions.IMAGE_EXTENSIONS
                     or driveitem_extension == ".pdf"
                 )
 
@@ -1476,6 +1533,10 @@ class SharepointConnector(
                                 TextSection(link=driveitem.web_url, text="")
                             ]
                             yield doc
+                        else:
+                            logger.warning(
+                                f"Skipping {driveitem.web_url} as it is empty and not a PDF or image"
+                            )
                 except Exception as e:
                     logger.warning(
                         f"Failed to process driveitem {driveitem.web_url}: {e}"

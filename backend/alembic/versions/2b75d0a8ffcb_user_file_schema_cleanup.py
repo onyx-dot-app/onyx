@@ -12,6 +12,7 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy import text
 import logging
+import fastapi_users_db_sqlalchemy
 
 logger = logging.getLogger("alembic.runtime.migration")
 
@@ -58,6 +59,9 @@ def upgrade() -> None:
         logger.info("Dropping chat_session.folder_id...")
 
         # Drop foreign key constraint first
+        op.execute(
+            "ALTER TABLE chat_session DROP CONSTRAINT IF EXISTS chat_session_chat_folder_fk"
+        )
         op.execute(
             "ALTER TABLE chat_session DROP CONSTRAINT IF EXISTS chat_session_folder_fk"
         )
@@ -172,20 +176,6 @@ def downgrade() -> None:
                 "user_file", sa.Column("folder_id", sa.Integer(), nullable=True)
             )
 
-    # Recreate chat_folder table
-    if "chat_folder" not in inspector.get_table_names():
-        op.create_table(
-            "chat_folder",
-            sa.Column("id", sa.Integer(), nullable=False),
-            sa.Column("user_id", sa.UUID(), nullable=False),
-            sa.Column("name", sa.String(), nullable=False),
-            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-            sa.PrimaryKeyConstraint("id"),
-            sa.ForeignKeyConstraint(
-                ["user_id"], ["user.id"], name="chat_folder_user_fk"
-            ),
-        )
-
     # Recreate persona__user_folder table
     if "persona__user_folder" not in inspector.get_table_names():
         op.create_table(
@@ -195,6 +185,26 @@ def downgrade() -> None:
             sa.PrimaryKeyConstraint("persona_id", "user_folder_id"),
             sa.ForeignKeyConstraint(["persona_id"], ["persona.id"]),
             sa.ForeignKeyConstraint(["user_folder_id"], ["user_project.id"]),
+        )
+
+    # Recreate chat_folder table and related structures
+    if "chat_folder" not in inspector.get_table_names():
+        op.create_table(
+            "chat_folder",
+            sa.Column("id", sa.Integer(), nullable=False),
+            sa.Column(
+                "user_id",
+                fastapi_users_db_sqlalchemy.generics.GUID(),
+                nullable=True,
+            ),
+            sa.Column("name", sa.String(), nullable=True),
+            sa.Column("display_priority", sa.Integer(), nullable=False),
+            sa.ForeignKeyConstraint(
+                ["user_id"],
+                ["user.id"],
+                name="chat_folder_user_id_fkey",
+            ),
+            sa.PrimaryKeyConstraint("id"),
         )
 
     # Add folder_id back to chat_session
@@ -208,7 +218,7 @@ def downgrade() -> None:
             # Add foreign key if chat_folder exists
             if "chat_folder" in inspector.get_table_names():
                 op.create_foreign_key(
-                    "chat_session_folder_fk",
+                    "chat_session_chat_folder_fk",
                     "chat_session",
                     "chat_folder",
                     ["folder_id"],

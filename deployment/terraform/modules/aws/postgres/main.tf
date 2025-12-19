@@ -44,5 +44,5 @@ resource "aws_db_instance" "this" {
   publicly_accessible    = false
   deletion_protection    = true
   storage_encrypted      = true
-  tags                   = var.tags 
+  tags                   = var.tags
 }

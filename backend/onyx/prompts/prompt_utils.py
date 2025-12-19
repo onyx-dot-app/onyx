@@ -1,20 +1,14 @@
-from collections.abc import Sequence
 from datetime import datetime
 from typing import cast
 
 from langchain_core.messages import BaseMessage
 
-from onyx.chat.models import LlmDoc
-from onyx.chat.models import PromptConfig
-from onyx.configs.chat_configs import LANGUAGE_HINT
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.models import InferenceChunk
-from onyx.db.models import Persona
 from onyx.prompts.chat_prompts import ADDITIONAL_INFO
-from onyx.prompts.chat_prompts import CITATION_REMINDER
+from onyx.prompts.chat_prompts import COMPANY_DESCRIPTION_BLOCK
+from onyx.prompts.chat_prompts import COMPANY_NAME_BLOCK
+from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
 from onyx.prompts.constants import CODE_BLOCK_PAT
-from onyx.prompts.direct_qa_prompts import COMPANY_DESCRIPTION_BLOCK
-from onyx.prompts.direct_qa_prompts import COMPANY_NAME_BLOCK
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 
@@ -23,15 +17,22 @@ logger = setup_logger()
 
 
 _DANSWER_DATETIME_REPLACEMENT_PAT = "[[CURRENT_DATETIME]]"
+_CITATION_GUIDANCE_REPLACEMENT_PAT = "[[CITATION_GUIDANCE]]"
 _BASIC_TIME_STR = "The current date is {datetime_info}."
 
 
 def get_current_llm_day_time(
-    include_day_of_week: bool = True, full_sentence: bool = True
+    include_day_of_week: bool = True,
+    full_sentence: bool = True,
+    include_hour_min: bool = False,
 ) -> str:
     current_datetime = datetime.now()
-    # Format looks like: "October 16, 2023 14:30"
-    formatted_datetime = current_datetime.strftime("%B %d, %Y %H:%M")
+    # Format looks like: "October 16, 2023 14:30" if include_hour_min, otherwise "October 16, 2023"
+    formatted_datetime = (
+        current_datetime.strftime("%B %d, %Y %H:%M")
+        if include_hour_min
+        else current_datetime.strftime("%B %d, %Y")
+    )
     day_of_week = current_datetime.strftime("%A")
     if full_sentence:
         return f"The current day and time is {day_of_week} {formatted_datetime}"
@@ -58,16 +59,49 @@ def replace_current_datetime_tag(
     )
 
 
-def build_date_time_string() -> str:
-    return ADDITIONAL_INFO.format(
-        datetime_info=_BASIC_TIME_STR.format(datetime_info=get_current_llm_day_time())
+def replace_citation_guidance_tag(
+    prompt_str: str,
+    *,
+    should_cite_documents: bool = False,
+    include_all_guidance: bool = False,
+) -> tuple[str, bool]:
+    """
+    Replace [[CITATION_GUIDANCE]] placeholder with citation guidance if needed.
+
+    Returns:
+        tuple[str, bool]: (prompt_with_replacement, should_append_fallback)
+        - prompt_with_replacement: The prompt with placeholder replaced (or unchanged if not present)
+        - should_append_fallback: True if citation guidance should be appended
+            (placeholder is not present and citations are needed)
+    """
+    placeholder_was_present = _CITATION_GUIDANCE_REPLACEMENT_PAT in prompt_str
+
+    if not placeholder_was_present:
+        # Placeholder not present - caller should append if citations are needed
+        should_append = (
+            should_cite_documents or include_all_guidance
+        ) and REQUIRE_CITATION_GUIDANCE not in prompt_str
+        return prompt_str, should_append
+
+    citation_guidance = (
+        REQUIRE_CITATION_GUIDANCE
+        if should_cite_documents or include_all_guidance
+        else ""
     )
+
+    replaced_prompt = prompt_str.replace(
+        _CITATION_GUIDANCE_REPLACEMENT_PAT,
+        citation_guidance,
+    )
+
+    return replaced_prompt, False
 
 
 def handle_onyx_date_awareness(
     prompt_str: str,
-    prompt_config: PromptConfig,
-    add_additional_info_if_no_tag: bool = False,
+    # We always replace the pattern [[CURRENT_DATETIME]] if it shows up
+    # but if it doesn't show up and the prompt is datetime aware, add it to the prompt at the end.
+    datetime_aware: bool = False,
 ) -> str:
     """
     If there is a [[CURRENT_DATETIME]] tag, replace it with the current date and time no matter what.
@@ -83,20 +117,28 @@ def handle_onyx_date_awareness(
     )
     if prompt_with_datetime != prompt_str:
         return prompt_with_datetime
-    any_tag_present = any(
-        _DANSWER_DATETIME_REPLACEMENT_PAT in text
-        for text in [prompt_str, prompt_config.system_prompt, prompt_config.task_prompt]
-    )
-    if add_additional_info_if_no_tag and not any_tag_present:
-        return prompt_str + build_date_time_string()
+
+    if datetime_aware:
+        return prompt_str + ADDITIONAL_INFO.format(
+            datetime_info=_BASIC_TIME_STR.format(
+                datetime_info=get_current_llm_day_time()
+            )
+        )
+
     return prompt_str
 
 
-def handle_company_awareness(prompt_str: str) -> str:
+def get_company_context() -> str | None:
+    prompt_str = None
     try:
         workspace_settings = load_settings()
         company_name = workspace_settings.company_name
         company_description = workspace_settings.company_description
+
+        if not company_name and not company_description:
+            return None
+
+        prompt_str = ""
         if company_name:
             prompt_str += COMPANY_NAME_BLOCK.format(company_name=company_name)
         if company_description:
@@ -106,19 +148,7 @@ def handle_company_awareness(prompt_str: str) -> str:
         return prompt_str
     except Exception as e:
         logger.error(f"Error handling company awareness: {e}")
-        return prompt_str
-
-
-def build_task_prompt_reminders(
-    prompt: Persona | PromptConfig,
-    use_language_hint: bool,
-    citation_str: str = CITATION_REMINDER,
-    language_hint_str: str = LANGUAGE_HINT,
-) -> str:
-    base_task = prompt.task_prompt or ""
-    citation_or_nothing = citation_str
-    language_hint_or_nothing = language_hint_str.lstrip() if use_language_hint else ""
-    return base_task + citation_or_nothing + language_hint_or_nothing
+        return None
 
 
 # Maps connector enum string to a more natural language representation for the LLM
@@ -163,25 +193,6 @@ def build_doc_context_str(
             context_str += f"Updated: {update_str}\n"
     context_str += f"{CODE_BLOCK_PAT.format(content.strip())}\n\n\n"
     return context_str
-
-
-def build_complete_context_str(
-    context_docs: Sequence[LlmDoc | InferenceChunk],
-    include_metadata: bool = True,
-) -> str:
-    context_str = ""
-    for ind, doc in enumerate(context_docs, start=1):
-        context_str += build_doc_context_str(
-            semantic_identifier=doc.semantic_identifier,
-            source_type=doc.source_type,
-            content=doc.content,
-            metadata_dict=doc.metadata,
-            updated_at=doc.updated_at,
-            ind=ind,
-            include_metadata=include_metadata,
-        )
-
-    return context_str.strip()
 
 
 _PER_MESSAGE_TOKEN_BUFFER = 7

@@ -1,0 +1,67 @@
+/* LineItem Button Variants */
+.line-item-button-main {
+  @apply bg-transparent hover:bg-background-tint-02;
+}
+
+.line-item-button-main-emphasized {
+  @apply bg-transparent hover:bg-background-tint-02;
+
+  &[data-selected="true"] {
+    @apply bg-action-link-01;
+  }
+}
+
+.line-item-button-strikethrough {
+  @apply bg-transparent hover:bg-background-tint-02;
+}
+
+.line-item-button-strikethrough-emphasized {
+  @apply bg-transparent hover:bg-background-tint-02;
+}
+
+.line-item-button-danger {
+  @apply bg-transparent hover:bg-background-tint-02;
+}
+
+.line-item-button-danger-emphasized {
+  @apply bg-transparent hover:bg-background-tint-02;
+
+  &[data-selected="true"] {
+    @apply bg-status-error-01;
+  }
+}
+
+/* LineItem Text Variants */
+.line-item-text-main {
+  color: var(--text-04) !important;
+
+  .group\/LineItem[data-selected="true"] & {
+    color: var(--action-link-05) !important;
+  }
+}
+
+.line-item-text-strikethrough {
+  color: var(--text-02) !important;
+  @apply line-through decoration-2 !important;
+}
+
+.line-item-text-danger {
+  color: var(--status-error-05) !important;
+}
+
+/* LineItem Icon Variants */
+.line-item-icon-main {
+  @apply stroke-text-03;
+
+  .group\/LineItem[data-selected="true"] & {
+    @apply stroke-action-link-05;
+  }
+}
+
+.line-item-icon-strikethrough {
+  @apply stroke-text-03;
+}
+
+.line-item-icon-danger {
+  @apply stroke-status-error-05;
+}

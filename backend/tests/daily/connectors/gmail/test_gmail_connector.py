@@ -1,11 +1,13 @@
 from collections.abc import Callable
 from typing import Any
+from typing import cast
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
 from onyx.connectors.gmail.connector import GmailConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import SlimDocument
+from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 
 
 _THREAD_1_START_TIME = 1730568700
@@ -103,8 +105,11 @@ def test_docs_retrieval(
     print("\n\nRunning test_docs_retrieval")
     connector = google_gmail_service_acct_connector_factory()
     retrieved_docs: list[Document] = []
-    for doc_batch in connector.poll_source(_THREAD_1_START_TIME, _THREAD_1_END_TIME):
-        retrieved_docs.extend(doc_batch)
+    for doc_batch in load_everything_from_checkpoint_connector(
+        connector, _THREAD_1_START_TIME, _THREAD_1_END_TIME
+    ):
+        assert all(isinstance(item, Document) for item in doc_batch.items)
+        retrieved_docs.extend(cast(list[Document], doc_batch.items))
 
     assert len(retrieved_docs) == 4
 

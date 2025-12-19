@@ -5,6 +5,9 @@ metadata:
   name: {{ include "onyx.fullname" . }}-celery-worker-user-file-processing
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
+    {{- with .Values.celery_worker_user_file_processing.deploymentLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 spec:
   {{- if not .Values.celery_worker_user_file_processing.autoscaling.enabled }}
   replicas: {{ .Values.celery_worker_user_file_processing.replicaCount }}
@@ -24,6 +27,9 @@ spec:
       {{- end }}
       labels:
         {{- include "onyx.labels" . | nindent 8 }}
+        {{- with .Values.celery_worker_user_file_processing.deploymentLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
         {{- with .Values.celery_worker_user_file_processing.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -37,6 +43,14 @@ spec:
         {{- toYaml .Values.celery_shared.podSecurityContext | nindent 8 }}
       {{- with .Values.celery_worker_user_file_processing.nodeSelector }}
       nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.celery_worker_user_file_processing.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.celery_worker_user_file_processing.tolerations }}
+      tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
@@ -54,7 +68,7 @@ spec:
               "--loglevel=INFO",
               "--hostname=user-file-processing@%n",
               "-Q",
-              "user_file_processing,user_file_project_sync",
+              "user_file_processing,user_file_project_sync,user_file_delete",
             ]
           resources:
             {{- toYaml .Values.celery_worker_user_file_processing.resources | nindent 12 }}
@@ -71,12 +85,27 @@ spec:
             {{ .Values.celery_shared.startupProbe | toYaml | nindent 12}}
           readinessProbe:
             {{ .Values.celery_shared.readinessProbe | toYaml | nindent 12}}
+            exec:
+              command:
+                - /bin/bash
+                - -c
+                - >
+                    python onyx/background/celery/celery_k8s_probe.py
+                    --probe readiness
+                    --filename /tmp/onyx_k8s_userfileprocessing_readiness.txt
           livenessProbe:
             {{ .Values.celery_shared.livenessProbe | toYaml | nindent 12}}
+            exec:
+              command:
+                - /bin/bash
+                - -c
+                - >
+                    python onyx/background/celery/celery_k8s_probe.py
+                    --probe liveness
+                    --filename /tmp/onyx_k8s_userfileprocessing_liveness.txt
       {{- with .Values.celery_worker_user_file_processing.volumes }}
       volumes:
         {{- toYaml . | nindent 8 }}
       {{- end }}
 {{- end }}
-
 

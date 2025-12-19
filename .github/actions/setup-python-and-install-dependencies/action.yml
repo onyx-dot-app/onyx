@@ -1,0 +1,72 @@
+name: "Setup Python and Install Dependencies"
+description: "Sets up Python with uv and installs deps"
+inputs:
+  requirements:
+    description: "Newline-separated list of requirement files to install (relative to repo root)"
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - name: Setup uv
+      uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # ratchet:astral-sh/setup-uv@v3
+      # TODO: Enable caching once there is a uv.lock file checked in.
+      # with:
+      #   enable-cache: true
+
+    - name: Compute requirements hash
+      id: req-hash
+      shell: bash
+      env:
+        REQUIREMENTS: ${{ inputs.requirements }}
+      run: |
+        # Hash the contents of the specified requirement files
+        hash=""
+        while IFS= read -r req; do
+          if [ -n "$req" ] && [ -f "$req" ]; then
+            hash="$hash$(sha256sum "$req")"
+          fi
+        done <<< "$REQUIREMENTS"
+        echo "hash=$(echo "$hash" | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+    - name: Cache uv cache directory
+      uses: runs-on/cache@50350ad4242587b6c8c2baa2e740b1bc11285ff4 # ratchet:runs-on/cache@v4
+      with:
+        path: ~/.cache/uv
+        key: ${{ runner.os }}-uv-${{ steps.req-hash.outputs.hash }}
+        restore-keys: |
+          ${{ runner.os }}-uv-
+
+    - name: Setup Python
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # ratchet:actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Create virtual environment
+      shell: bash
+      env:
+        VENV_DIR: ${{ runner.temp }}/venv
+      run: | # zizmor: ignore[github-env]
+        uv venv "$VENV_DIR"
+        # Validate path before adding to GITHUB_PATH to prevent code injection
+        if [ -d "$VENV_DIR/bin" ]; then
+          realpath "$VENV_DIR/bin" >> "$GITHUB_PATH"
+        else
+          echo "Error: $VENV_DIR/bin does not exist"
+          exit 1
+        fi
+
+    - name: Install Python dependencies with uv
+      shell: bash
+      env:
+        REQUIREMENTS: ${{ inputs.requirements }}
+      run: |
+        # Build the uv pip install command with each requirement file as array elements
+        cmd=("uv" "pip" "install")
+        while IFS= read -r req; do
+          # Skip empty lines
+          if [ -n "$req" ]; then
+            cmd+=("-r" "$req")
+          fi
+        done <<< "$REQUIREMENTS"
+        echo "Running: ${cmd[*]}"
+        "${cmd[@]}"

@@ -6,7 +6,6 @@ from datetime import timedelta
 from datetime import timezone
 from typing import cast
 
-import jwt
 from email_validator import EmailNotValidError
 from email_validator import EmailUndeliverableError
 from email_validator import validate_email
@@ -25,6 +24,7 @@ from onyx.auth.invited_users import get_invited_users
 from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.invited_users import write_invited_users
 from onyx.auth.noauth_user import fetch_no_auth_user
+from onyx.auth.noauth_user import set_no_auth_user_personalization
 from onyx.auth.noauth_user import set_no_auth_user_preferences
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import anonymous_user_enabled
@@ -56,10 +56,12 @@ from onyx.db.user_preferences import update_assistant_preferences
 from onyx.db.user_preferences import update_user_assistant_visibility
 from onyx.db.user_preferences import update_user_auto_scroll
 from onyx.db.user_preferences import update_user_default_model
+from onyx.db.user_preferences import update_user_personalization
 from onyx.db.user_preferences import update_user_pinned_assistants
 from onyx.db.user_preferences import update_user_role
 from onyx.db.user_preferences import update_user_shortcut_enabled
 from onyx.db.user_preferences import update_user_temperature_override_enabled
+from onyx.db.user_preferences import update_user_theme_preference
 from onyx.db.users import delete_user_from_db
 from onyx.db.users import get_all_users
 from onyx.db.users import get_page_of_filtered_users
@@ -72,8 +74,10 @@ from onyx.server.documents.models import PaginatedReturn
 from onyx.server.features.projects.models import UserFileSnapshot
 from onyx.server.manage.models import AllUsersResponse
 from onyx.server.manage.models import AutoScrollRequest
+from onyx.server.manage.models import PersonalizationUpdateRequest
 from onyx.server.manage.models import TenantInfo
 from onyx.server.manage.models import TenantSnapshot
+from onyx.server.manage.models import ThemePreferenceRequest
 from onyx.server.manage.models import UserByEmail
 from onyx.server.manage.models import UserInfo
 from onyx.server.manage.models import UserPreferences
@@ -199,10 +203,17 @@ def list_accepted_users(
 @router.get("/manage/users/invited")
 def list_invited_users(
     _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
 ) -> list[InvitedUserSnapshot]:
     invited_emails = get_invited_users()
 
-    return [InvitedUserSnapshot(email=email) for email in invited_emails]
+    # Filter out users who are already active in the system
+    active_user_emails = {user.email for user in get_all_users(db_session)}
+    filtered_invited_emails = [
+        email for email in invited_emails if email not in active_user_emails
+    ]
+
+    return [InvitedUserSnapshot(email=email) for email in filtered_invited_emails]
 
 
 @router.get("/manage/users")
@@ -227,6 +238,13 @@ def list_all_users(
     accepted_emails = {user.email for user in accepted_users}
     slack_users_emails = {user.email for user in slack_users}
     invited_emails = get_invited_users()
+
+    # Filter out users who are already active (either accepted or slack users)
+    all_active_emails = accepted_emails | slack_users_emails
+    invited_emails = [
+        email for email in invited_emails if email not in all_active_emails
+    ]
+
     if q:
         invited_emails = [
             email for email in invited_emails if re.search(r"{}".format(q), email, re.I)
@@ -357,7 +375,8 @@ def bulk_invite_users(
 
     try:
         for email in emails:
-            email_info = validate_email(email)
+            # Allow syntactically valid emails without DNS deliverability checks; tests use test domains
+            email_info = validate_email(email, check_deliverability=False)
             new_invited_emails.append(email_info.normalized)
 
     except (EmailUndeliverableError, EmailNotValidError) as e:
@@ -545,35 +564,6 @@ async def get_user_role(user: User = Depends(current_user)) -> UserRoleResponse:
     if user is None:
         raise ValueError("Invalid or missing user.")
     return UserRoleResponse(role=user.role)
-
-
-def get_current_auth_token_expiration_jwt(
-    user: User | None, request: Request
-) -> datetime | None:
-    if user is None:
-        return None
-
-    try:
-        # Get the JWT from the cookie
-        jwt_token = request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
-        if not jwt_token:
-            logger.error("No JWT token found in cookies")
-            return None
-
-        # Decode the JWT
-        decoded_token = jwt.decode(jwt_token, options={"verify_signature": False})
-
-        # Get the 'exp' (expiration) claim from the token
-        exp = decoded_token.get("exp")
-        if exp:
-            return datetime.fromtimestamp(exp)
-        else:
-            logger.error("No 'exp' claim found in JWT")
-            return None
-
-    except Exception as e:
-        logger.error(f"Error decoding JWT: {e}")
-        return None
 
 
 def get_current_auth_token_creation_redis(
@@ -774,6 +764,25 @@ def update_user_auto_scroll_api(
     update_user_auto_scroll(user.id, request.auto_scroll, db_session)
 
 
+@router.patch("/user/theme-preference")
+def update_user_theme_preference_api(
+    request: ThemePreferenceRequest,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    if user is None:
+        if AUTH_TYPE == AuthType.DISABLED:
+            store = get_kv_store()
+            no_auth_user = fetch_no_auth_user(store)
+            no_auth_user.preferences.theme_preference = request.theme_preference
+            set_no_auth_user_preferences(store, no_auth_user.preferences)
+            return
+        else:
+            raise RuntimeError("This should never happen")
+
+    update_user_theme_preference(user.id, request.theme_preference, db_session)
+
+
 @router.patch("/user/default-model")
 def update_user_default_model_api(
     request: ChosenDefaultModelRequest,
@@ -791,6 +800,55 @@ def update_user_default_model_api(
             raise RuntimeError("This should never happen")
 
     update_user_default_model(user.id, request.default_model, db_session)
+
+
+@router.patch("/user/personalization")
+def update_user_personalization_api(
+    request: PersonalizationUpdateRequest,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    if user is None:
+        if AUTH_TYPE == AuthType.DISABLED:
+            store = get_kv_store()
+            no_auth_user = fetch_no_auth_user(store)
+            personalization = no_auth_user.personalization
+
+            if request.name is not None:
+                personalization.name = request.name
+            if request.role is not None:
+                personalization.role = request.role
+            if request.use_memories is not None:
+                personalization.use_memories = request.use_memories
+            if request.memories is not None:
+                personalization.memories = request.memories
+
+            set_no_auth_user_personalization(store, personalization)
+            return
+        else:
+            raise RuntimeError("This should never happen")
+
+    new_name = request.name if request.name is not None else user.personal_name
+    new_role = request.role if request.role is not None else user.personal_role
+    current_use_memories = user.use_memories
+    new_use_memories = (
+        request.use_memories
+        if request.use_memories is not None
+        else current_use_memories
+    )
+    existing_memories = [memory.memory_text for memory in user.memories]
+    new_memories = (
+        request.memories if request.memories is not None else existing_memories
+    )
+
+    update_user_personalization(
+        user.id,
+        personal_name=new_name,
+        personal_role=new_role,
+        use_memories=new_use_memories,
+        memories=new_memories,
+        db_session=db_session,
+    )
 
 
 class ReorderPinnedAssistantsRequest(BaseModel):
@@ -945,6 +1003,7 @@ def get_recent_files(
         db_session.query(UserFile)
         .filter(UserFile.user_id == user_id)
         .filter(UserFile.status != UserFileStatus.FAILED)
+        .filter(UserFile.status != UserFileStatus.DELETING)
         .order_by(UserFile.last_accessed_at.desc())
         .all()
     )

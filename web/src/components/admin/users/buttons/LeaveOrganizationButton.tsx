@@ -2,7 +2,7 @@ import { type User } from "@/lib/types";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import userMutationFetcher from "@/lib/admin/users/userMutationFetcher";
 import useSWRMutation from "swr/mutation";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { useState } from "react";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { useRouter } from "next/navigation";
@@ -64,7 +64,7 @@ export const LeaveOrganizationButton = ({
         className={className}
         onClick={() => setShowLeaveModal(true)}
         disabled={isMutating}
-        variant="ghost"
+        internal
       >
         {children}
       </Button>

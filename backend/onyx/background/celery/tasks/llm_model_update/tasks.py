@@ -127,12 +127,6 @@ def check_for_llm_model_update(self: Task, *, tenant_id: str) -> bool | None:
                 f"available, setting to first model in list: {available_models[0]}"
             )
             default_provider.default_model_name = available_models[0]
-        if default_provider.fast_default_model_name not in available_models:
-            task_logger.info(
-                f"Fast default model {default_provider.fast_default_model_name} "
-                f"not available, setting to first model in list: {available_models[0]}"
-            )
-            default_provider.fast_default_model_name = available_models[0]
         db_session.commit()
 
         if added_models or removed_models:

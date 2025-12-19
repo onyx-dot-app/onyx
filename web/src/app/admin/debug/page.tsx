@@ -12,11 +12,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { Card } from "@/components/ui/card";
 import Text from "@/components/ui/text";
 import { Spinner } from "@/components/Spinner";
-
+import { SvgDownloadCloud } from "@opal/icons";
 function Main() {
   const [categories, setCategories] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -97,11 +97,9 @@ function Main() {
                     <TableCell>
                       <Button
                         onClick={() => handleDownload(category)}
-                        variant="outline"
-                        size="sm"
-                        className="flex items-center gap-2"
+                        secondary
+                        leftIcon={SvgDownloadCloud}
                       >
-                        <FiDownload className="h-4 w-4" />
                         Download Logs
                       </Button>
                     </TableCell>
@@ -118,7 +116,7 @@ function Main() {
 
 const Page = () => {
   return (
-    <div className="container mx-auto">
+    <div className="container">
       <AdminPageTitle icon={<FiDownload size={32} />} title="Debug Logs" />
       <Main />
     </div>

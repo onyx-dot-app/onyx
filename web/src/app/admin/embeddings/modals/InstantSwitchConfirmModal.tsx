@@ -1,37 +1,41 @@
-import { Modal } from "@/components/Modal";
-import { Button } from "@/components/ui/button";
-
-interface InstantSwitchConfirmModalProps {
+import Modal from "@/refresh-components/Modal";
+import Button from "@/refresh-components/buttons/Button";
+import Text from "@/refresh-components/texts/Text";
+import { SvgAlertTriangle } from "@opal/icons";
+export interface InstantSwitchConfirmModalProps {
   onClose: () => void;
   onConfirm: () => void;
 }
 
-export const InstantSwitchConfirmModal = ({
+export default function InstantSwitchConfirmModal({
   onClose,
   onConfirm,
-}: InstantSwitchConfirmModalProps) => {
+}: InstantSwitchConfirmModalProps) {
   return (
-    <Modal
-      onOutsideClick={onClose}
-      width="max-w-3xl"
-      title="Are you sure you want to do an instant switch?"
-    >
-      <>
-        <div>
-          Instant switching will immediately change the embedding model without
-          re-indexing. Searches will be over a partial set of documents
-          (starting with 0 documents) until re-indexing is complete.
-          <br />
-          <br />
-          <b>This is not reversible.</b>
-        </div>
-        <div className="flex mt-4 gap-x-2 justify-end">
+    <Modal open onOpenChange={onClose}>
+      <Modal.Content small>
+        <Modal.Header
+          icon={SvgAlertTriangle}
+          title="Are you sure you want to do an instant switch?"
+          onClose={onClose}
+        />
+        <Modal.Body>
+          <Text>
+            Instant switching will immediately change the embedding model
+            without re-indexing. Searches will be over a partial set of
+            documents (starting with 0 documents) until re-indexing is complete.
+          </Text>
+          <Text>
+            <strong>This is not reversible.</strong>
+          </Text>
+        </Modal.Body>
+        <Modal.Footer className="p-4 gap-2">
           <Button onClick={onConfirm}>Confirm</Button>
-          <Button variant="outline" onClick={onClose}>
+          <Button secondary onClick={onClose}>
             Cancel
           </Button>
-        </div>
-      </>
+        </Modal.Footer>
+      </Modal.Content>
     </Modal>
   );
-};
+}

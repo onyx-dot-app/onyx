@@ -19,14 +19,8 @@ import { localizeAndPrettify } from "@/lib/time";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
 import { InfoIcon } from "@/components/icons/icons";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { FaBarsProgress } from "react-icons/fa6";
-
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { SvgClock } from "@opal/icons";
 export interface IndexingAttemptsTableProps {
   ccPair: CCPairFullInfo;
   indexAttempts: IndexAttemptSnapshot[];
@@ -78,22 +72,15 @@ export function IndexAttemptsTable({
             <TableHead>Status</TableHead>
             <TableHead className="whitespace-nowrap">New Docs</TableHead>
             <TableHead>
-              <div className="w-fit whitespace-nowrap">
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="flex items-center">
-                        Total Docs
-                        <InfoIcon className="ml-1 w-4 h-4" />
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      Total number of documents replaced in the index during
-                      this indexing attempt
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
+              <SimpleTooltip
+                tooltip="Total number of documents replaced in the index during this indexing attempt"
+                side="top"
+              >
+                <span className="flex items-center">
+                  Total Docs
+                  <InfoIcon className="ml-1 w-4 h-4" />
+                </span>
+              </SimpleTooltip>
             </TableHead>
             <TableHead>Error Message</TableHead>
           </TableRow>
@@ -102,6 +89,14 @@ export function IndexAttemptsTable({
           {indexAttempts.map((indexAttempt) => {
             const docsPerMinute =
               getDocsProcessedPerMinute(indexAttempt)?.toFixed(2);
+            const isReindexInProgress =
+              indexAttempt.status === "in_progress" ||
+              indexAttempt.status === "not_started";
+            const reindexTooltip = `This index attempt ${
+              isReindexInProgress ? "is" : "was"
+            } a full re-index. All documents from the source ${
+              isReindexInProgress ? "are being" : "were"
+            } synced into the system.`;
             return (
               <TableRow key={indexAttempt.id}>
                 <TableCell>
@@ -142,28 +137,11 @@ export function IndexAttemptsTable({
                   <div className="flex items-center">
                     {indexAttempt.total_docs_indexed}
                     {indexAttempt.from_beginning && (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="cursor-help flex items-center">
-                              <FaBarsProgress className="ml-2 h-3.5 w-3.5" />
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            This index attempt{" "}
-                            {indexAttempt.status === "in_progress" ||
-                            indexAttempt.status === "not_started"
-                              ? "is"
-                              : "was"}{" "}
-                            a full re-index. All documents from the source{" "}
-                            {indexAttempt.status === "in_progress" ||
-                            indexAttempt.status === "not_started"
-                              ? "are being "
-                              : "were "}
-                            synced into the system.
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                      <SimpleTooltip side="top" tooltip={reindexTooltip}>
+                        <span className="cursor-help flex items-center">
+                          <SvgClock className="ml-2 h-3.5 w-3.5 stroke-current" />
+                        </span>
+                      </SimpleTooltip>
                     )}
                   </div>
                 </TableCell>

@@ -1,4 +1,5 @@
 "use client";
+
 import { ThreeDotsLoader } from "@/components/Loading";
 import { getDatesList } from "@/app/ee/admin/performance/lib";
 import { useEffect, useState, useMemo } from "react";
@@ -6,10 +7,10 @@ import {
   AdminDateRangeSelector,
   DateRange,
 } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
-import { AssistantIcon } from "@/components/assistants/AssistantIcon";
+import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { AreaChartDisplay } from "@/components/ui/areaChart";
+import { useAgentsContext } from "@/contexts/AgentsContext";
 
 type AssistantDailyUsageEntry = {
   date: string;
@@ -23,10 +24,14 @@ type AssistantStatsResponse = {
   total_unique_users: number;
 };
 
-export function AssistantStats({ assistantId }: { assistantId: number }) {
+export interface AssistantStatsProps {
+  assistantId: number;
+}
+
+export default function AssistantStats({ assistantId }: AssistantStatsProps) {
   const [assistantStats, setAssistantStats] =
     useState<AssistantStatsResponse | null>(null);
-  const { agents: assistants } = useAgentsContext();
+  const { agents } = useAgentsContext();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<DateRange>({
@@ -35,8 +40,8 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
   });
 
   const assistant = useMemo(() => {
-    return assistants.find((a) => a.id === assistantId);
-  }, [assistants, assistantId]);
+    return agents.find((a) => a.id === assistantId);
+  }, [agents, assistantId]);
 
   useEffect(() => {
     async function fetchStats() {
@@ -156,13 +161,7 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center space-x-4">
-                {assistant && (
-                  <AssistantIcon
-                    disableToolip
-                    size="large"
-                    assistant={assistant}
-                  />
-                )}
+                {assistant && <AgentAvatar agent={assistant} />}
                 <div>
                   <h3 className="text-lg font-normal">{assistant?.name}</h3>
                   <p className="text-sm text-text-500">

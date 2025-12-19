@@ -1,3 +1,4 @@
+import { JSX } from "react";
 import {
   AzureIcon,
   CohereIcon,
@@ -10,6 +11,8 @@ import {
   OpenSourceIcon,
   VoyageIconSVG,
 } from "@/components/icons/icons";
+import { SwitchoverType } from "@/app/admin/embeddings/interfaces";
+import { DOCS_ADMINS_PATH } from "@/lib/constants";
 
 export enum EmbeddingProvider {
   OPENAI = "openai",
@@ -54,7 +57,7 @@ export interface EmbeddingModelDescriptor {
   api_version?: string | null;
   deployment_name?: string | null;
   index_name: string | null;
-  background_reindex_enabled?: boolean;
+  switchover_type?: SwitchoverType;
 }
 
 export interface CloudEmbeddingModel extends EmbeddingModelDescriptor {
@@ -178,7 +181,7 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
     provider_type: EmbeddingProvider.COHERE,
     website: "https://cohere.ai",
     icon: CohereIcon,
-    docsLink: "https://docs.onyx.app/admin/advanced_configs/search_configs",
+    docsLink: `${DOCS_ADMINS_PATH}/advanced_configs/search_configs`,
     description:
       "AI company specializing in NLP models for various text-based tasks",
     apiLink: "https://dashboard.cohere.ai/api-keys",
@@ -220,7 +223,7 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
     icon: OpenAIISVG,
     description: "AI industry leader known for ChatGPT and DALL-E",
     apiLink: "https://platform.openai.com/api-keys",
-    docsLink: "https://docs.onyx.app/admin/advanced_configs/search_configs",
+    docsLink: `${DOCS_ADMINS_PATH}/advanced_configs/search_configs`,
     costslink: "https://openai.com/pricing",
     embedding_models: [
       {
@@ -258,7 +261,7 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
     provider_type: EmbeddingProvider.GOOGLE,
     website: "https://ai.google",
     icon: GoogleIcon,
-    docsLink: "https://docs.onyx.app/admin/advanced_configs/search_configs",
+    docsLink: `${DOCS_ADMINS_PATH}/advanced_configs/search_configs`,
     description:
       "Offers a wide range of AI services including language and vision models",
     apiLink: "https://console.cloud.google.com/apis/credentials",
@@ -297,7 +300,7 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
     website: "https://www.voyageai.com",
     icon: VoyageIconSVG,
     description: "Advanced NLP research startup born from Stanford AI Labs",
-    docsLink: "https://docs.onyx.app/admin/advanced_configs/search_configs",
+    docsLink: `${DOCS_ADMINS_PATH}/advanced_configs/search_configs`,
     apiLink: "https://www.voyageai.com/dashboard",
     costslink: "https://www.voyageai.com/pricing",
     embedding_models: [

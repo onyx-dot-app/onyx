@@ -30,6 +30,12 @@ from onyx.db.index_attempt import (
     delete_index_attempts,
     cancel_indexing_attempts_for_ccpair,
 )
+from onyx.db.permission_sync_attempt import (
+    delete_doc_permission_sync_attempts__no_commit,
+)
+from onyx.db.permission_sync_attempt import (
+    delete_external_group_permission_sync_attempts__no_commit,
+)
 from onyx.db.models import ConnectorCredentialPair
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.utils.logger import setup_logger
@@ -90,6 +96,16 @@ def _unsafe_deletion(
 
     # Delete index attempts
     delete_index_attempts(
+        db_session=db_session,
+        cc_pair_id=cc_pair.id,
+    )
+
+    # Delete permission sync attempts
+    delete_doc_permission_sync_attempts__no_commit(
+        db_session=db_session,
+        cc_pair_id=cc_pair.id,
+    )
+    delete_external_group_permission_sync_attempts__no_commit(
         db_session=db_session,
         cc_pair_id=cc_pair.id,
     )

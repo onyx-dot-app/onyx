@@ -68,6 +68,10 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.slab.connector",
         class_name="SlabConnector",
     ),
+    DocumentSource.CODA: ConnectorMapping(
+        module_path="onyx.connectors.coda.connector",
+        class_name="CodaConnector",
+    ),
     DocumentSource.NOTION: ConnectorMapping(
         module_path="onyx.connectors.notion.connector",
         class_name="NotionConnector",
@@ -203,6 +207,10 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.BITBUCKET: ConnectorMapping(
         module_path="onyx.connectors.bitbucket.connector",
         class_name="BitbucketConnector",
+    ),
+    DocumentSource.TESTRAIL: ConnectorMapping(
+        module_path="onyx.connectors.testrail.connector",
+        class_name="TestRailConnector",
     ),
     # just for integration tests
     DocumentSource.MOCK_CONNECTOR: ConnectorMapping(

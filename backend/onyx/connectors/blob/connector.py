@@ -7,6 +7,7 @@ from io import BytesIO
 from numbers import Integral
 from typing import Any
 from typing import Optional
+from urllib.parse import quote
 
 import boto3  # type: ignore
 from botocore.client import Config  # type: ignore
@@ -39,8 +40,7 @@ from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_processing.extract_file_text import get_file_ext
-from onyx.file_processing.extract_file_text import is_accepted_file_ext
-from onyx.file_processing.extract_file_text import OnyxExtensionType
+from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.utils.logger import setup_logger
 
@@ -58,19 +58,44 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         bucket_name: str,
         prefix: str = "",
         batch_size: int = INDEX_BATCH_SIZE,
+        european_residency: bool = False,
     ) -> None:
         self.bucket_type: BlobType = BlobType(bucket_type)
-        self.bucket_name = bucket_name
+        self.bucket_name = bucket_name.strip()
         self.prefix = prefix if not prefix or prefix.endswith("/") else prefix + "/"
         self.batch_size = batch_size
         self.s3_client: Optional[S3Client] = None
         self._allow_images: bool | None = None
         self.size_threshold: int | None = BLOB_STORAGE_SIZE_THRESHOLD
+        self.bucket_region: Optional[str] = None
+        self.european_residency: bool = european_residency
 
     def set_allow_images(self, allow_images: bool) -> None:
         """Set whether to process images in this connector."""
         logger.info(f"Setting allow_images to {allow_images}.")
         self._allow_images = allow_images
+
+    def _detect_bucket_region(self) -> None:
+        """Detect and cache the actual region of the S3 bucket using head_bucket."""
+        if self.s3_client is None:
+            logger.warning(
+                "S3 client not initialized. Skipping bucket region detection."
+            )
+            return
+
+        try:
+            response = self.s3_client.head_bucket(Bucket=self.bucket_name)
+            # The region is in the response headers as 'x-amz-bucket-region'
+            self.bucket_region = response.get("BucketRegion") or response.get(
+                "ResponseMetadata", {}
+            ).get("HTTPHeaders", {}).get("x-amz-bucket-region")
+
+            if self.bucket_region:
+                logger.debug(f"Detected bucket region: {self.bucket_region}")
+            else:
+                logger.warning("Bucket region not found in head_bucket response")
+        except Exception as e:
+            logger.warning(f"Failed to detect bucket region via head_bucket: {e}")
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Checks for boto3 credentials based on the bucket type.
@@ -99,9 +124,14 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 for key in ["r2_access_key_id", "r2_secret_access_key", "account_id"]
             ):
                 raise ConnectorMissingCredentialError("Cloudflare R2")
+
+            # Use EU endpoint if european_residency is enabled
+            subdomain = "eu." if self.european_residency else ""
+            endpoint_url = f"https://{credentials['account_id']}.{subdomain}r2.cloudflarestorage.com"
+
             self.s3_client = boto3.client(
                 "s3",
-                endpoint_url=f"https://{credentials['account_id']}.r2.cloudflarestorage.com",
+                endpoint_url=endpoint_url,
                 aws_access_key_id=credentials["r2_access_key_id"],
                 aws_secret_access_key=credentials["r2_secret_access_key"],
                 region_name="auto",
@@ -168,6 +198,10 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 self.s3_client = boto3.client("s3")
             else:
                 raise ConnectorValidationError("Invalid authentication method for S3. ")
+
+            # This is important for correct citation links
+            # NOTE: the client region actually doesn't matter for accessing the bucket
+            self._detect_bucket_region()
 
         elif self.bucket_type == BlobType.GOOGLE_CLOUD_STORAGE:
             if not all(
@@ -254,26 +288,37 @@ class BlobStorageConnector(LoadConnector, PollConnector):
     #     return url
 
     def _get_blob_link(self, key: str) -> str:
+        # NOTE: We store the object dashboard URL instead of the actual object URL
+        # This is because the actual object URL requires S3 client authentication
+        # Accessing through the browser will always return an unauthorized error
+
         if self.s3_client is None:
             raise ConnectorMissingCredentialError("Blob storage")
 
+        # URL encode the key to handle special characters, spaces, etc.
+        # safe='/' keeps forward slashes unencoded for proper path structure
+        encoded_key = quote(key, safe="/")
+
         if self.bucket_type == BlobType.R2:
             account_id = self.s3_client.meta.endpoint_url.split("//")[1].split(".")[0]
-            return f"https://{account_id}.r2.cloudflarestorage.com/{self.bucket_name}/{key}"
+            subdomain = "eu/" if self.european_residency else "default/"
+
+            return f"https://dash.cloudflare.com/{account_id}/r2/{subdomain}buckets/{self.bucket_name}/objects/{encoded_key}/details"
 
         elif self.bucket_type == BlobType.S3:
-            region = self.s3_client.meta.region_name
-            return f"https://{self.bucket_name}.s3.{region}.amazonaws.com/{key}"
+            region = self.bucket_region or self.s3_client.meta.region_name
+            return f"https://s3.console.aws.amazon.com/s3/object/{self.bucket_name}?region={region}&prefix={encoded_key}"
 
         elif self.bucket_type == BlobType.GOOGLE_CLOUD_STORAGE:
-            return f"https://storage.cloud.google.com/{self.bucket_name}/{key}"
+            return f"https://console.cloud.google.com/storage/browser/_details/{self.bucket_name}/{encoded_key}"
 
         elif self.bucket_type == BlobType.OCI_STORAGE:
             namespace = self.s3_client.meta.endpoint_url.split("//")[1].split(".")[0]
             region = self.s3_client.meta.region_name
-            return f"https://objectstorage.{region}.oraclecloud.com/n/{namespace}/b/{self.bucket_name}/o/{key}"
+            return f"https://objectstorage.{region}.oraclecloud.com/n/{namespace}/b/{self.bucket_name}/o/{encoded_key}"
 
         else:
+            # This should never happen!
             raise ValueError(f"Unsupported bucket type: {self.bucket_type}")
 
     @staticmethod
@@ -364,7 +409,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                     continue
 
                 # Handle image files
-                if is_accepted_file_ext(file_ext, OnyxExtensionType.Multimedia):
+                if file_ext in OnyxFileExtensions.IMAGE_EXTENSIONS:
                     if not self._allow_images:
                         logger.debug(
                             f"Skipping image file: {key} (image processing not enabled)"
@@ -422,6 +467,9 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                     link = onyx_metadata.link or link
                     primary_owners = onyx_metadata.primary_owners
                     secondary_owners = onyx_metadata.secondary_owners
+                    source_type = onyx_metadata.source_type or DocumentSource(
+                        self.bucket_type.value
+                    )
 
                     sections: list[TextSection | ImageSection] = []
                     if extraction_result.text_content.strip():
@@ -443,7 +491,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                                 if sections
                                 else [TextSection(link=link, text="")]
                             ),
-                            source=DocumentSource(self.bucket_type.value),
+                            source=source_type,
                             semantic_identifier=file_display_name,
                             doc_updated_at=time_updated,
                             metadata=custom_tags,

@@ -1,11 +1,11 @@
 "use client";
 
-import { Modal } from "@/components/Modal";
+import Modal from "@/refresh-components/Modal";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useState } from "react";
 import useSWR from "swr";
 import { Callout } from "@/components/ui/callout";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import Title from "@/components/ui/title";
 import Button from "@/refresh-components/buttons/Button";
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -15,6 +15,7 @@ import { LLMProviderUpdateForm } from "./LLMProviderUpdateForm";
 import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import { CustomLLMProviderUpdateForm } from "./CustomLLMProviderUpdateForm";
 import { ConfiguredLLMProviderDisplay } from "./ConfiguredLLMProviderDisplay";
+import { SvgSettings } from "@opal/icons";
 
 function LLMProviderUpdateModal({
   llmProviderDescriptor,
@@ -36,29 +37,32 @@ function LLMProviderUpdateModal({
     "Custom LLM Provider";
 
   return (
-    <Modal
-      title={`Setup ${providerName}`}
-      onOutsideClick={() => onClose()}
-      hideOverflow={true}
-    >
-      <div className="max-h-[70vh] overflow-y-auto px-4">
-        {llmProviderDescriptor ? (
-          <LLMProviderUpdateForm
-            llmProviderDescriptor={llmProviderDescriptor}
-            onClose={onClose}
-            existingLlmProvider={existingLlmProvider}
-            shouldMarkAsDefault={shouldMarkAsDefault}
-            setPopup={setPopup}
-          />
-        ) : (
-          <CustomLLMProviderUpdateForm
-            onClose={onClose}
-            existingLlmProvider={existingLlmProvider}
-            shouldMarkAsDefault={shouldMarkAsDefault}
-            setPopup={setPopup}
-          />
-        )}
-      </div>
+    <Modal open onOpenChange={onClose}>
+      <Modal.Content medium>
+        <Modal.Header
+          icon={SvgSettings}
+          title={`Setup ${providerName}`}
+          onClose={onClose}
+        />
+        <Modal.Body className="max-h-[70vh] overflow-y-auto">
+          {llmProviderDescriptor ? (
+            <LLMProviderUpdateForm
+              llmProviderDescriptor={llmProviderDescriptor}
+              onClose={onClose}
+              existingLlmProvider={existingLlmProvider}
+              shouldMarkAsDefault={shouldMarkAsDefault}
+              setPopup={setPopup}
+            />
+          ) : (
+            <CustomLLMProviderUpdateForm
+              onClose={onClose}
+              existingLlmProvider={existingLlmProvider}
+              shouldMarkAsDefault={shouldMarkAsDefault}
+              setPopup={setPopup}
+            />
+          )}
+        </Modal.Body>
+      </Modal.Content>
     </Modal>
   );
 }
@@ -106,20 +110,29 @@ function AddCustomLLMProvider({
   existingLlmProviders: LLMProviderView[];
 }) {
   const [formIsVisible, setFormIsVisible] = useState(false);
+  const { popup, setPopup } = usePopup();
 
   if (formIsVisible) {
     return (
-      <Modal
-        title={`Setup Custom LLM Provider`}
-        onOutsideClick={() => setFormIsVisible(false)}
-      >
-        <div className="max-h-[70vh] overflow-y-auto px-4">
-          <CustomLLMProviderUpdateForm
-            onClose={() => setFormIsVisible(false)}
-            shouldMarkAsDefault={existingLlmProviders.length === 0}
-          />
-        </div>
-      </Modal>
+      <>
+        {popup}
+        <Modal open onOpenChange={() => setFormIsVisible(false)}>
+          <Modal.Content medium>
+            <Modal.Header
+              icon={SvgSettings}
+              title="Setup Custom LLM Provider"
+              onClose={() => setFormIsVisible(false)}
+            />
+            <Modal.Body className="max-h-[70vh] overflow-y-auto">
+              <CustomLLMProviderUpdateForm
+                onClose={() => setFormIsVisible(false)}
+                shouldMarkAsDefault={existingLlmProviders.length === 0}
+                setPopup={setPopup}
+              />
+            </Modal.Body>
+          </Modal.Content>
+        </Modal>
+      </>
     );
   }
 

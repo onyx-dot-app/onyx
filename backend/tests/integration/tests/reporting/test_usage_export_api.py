@@ -1,9 +1,11 @@
+import csv
 import os
 import time
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from io import BytesIO
+from io import StringIO
 from zipfile import ZipFile
 
 import pytest
@@ -256,6 +258,48 @@ class TestUsageExportAPI:
             file_names = zip_file.namelist()
             assert "chat_messages.csv" in file_names
             assert "users.csv" in file_names
+
+            # Verify chat_messages.csv has the expected columns
+            with zip_file.open("chat_messages.csv") as csv_file:
+                csv_content = csv_file.read().decode("utf-8")
+                csv_reader = csv.DictReader(StringIO(csv_content))
+
+                # Check that all expected columns are present
+                expected_columns = {
+                    "session_id",
+                    "user_id",
+                    "flow_type",
+                    "time_sent",
+                    "assistant_name",
+                    "user_email",
+                    "number_of_tokens",
+                }
+                actual_columns = set(csv_reader.fieldnames or [])
+                assert (
+                    expected_columns == actual_columns
+                ), f"Expected columns {expected_columns}, but got {actual_columns}"
+
+                # Verify there's at least one row of data
+                rows = list(csv_reader)
+                assert len(rows) > 0, "Expected at least one message in the report"
+
+                # Verify the first row has non-empty values for all columns
+                first_row = rows[0]
+                for column in expected_columns:
+                    assert column in first_row, f"Column {column} not found in row"
+                    assert first_row[
+                        column
+                    ], f"Column {column} has empty value in first row"
+
+                # Verify specific new fields have appropriate values
+                assert first_row["assistant_name"], "assistant_name should not be empty"
+                assert first_row["user_email"], "user_email should not be empty"
+                assert first_row[
+                    "number_of_tokens"
+                ].isdigit(), "number_of_tokens should be a numeric value"
+                assert (
+                    int(first_row["number_of_tokens"]) >= 0
+                ), "number_of_tokens should be non-negative"
 
     def test_read_nonexistent_report(self, reset: None, admin_user: DATestUser) -> None:
         # Try to download a report that doesn't exist

@@ -3,10 +3,11 @@
 import { Label, SubLabel } from "@/components/Field";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { Callout } from "@/components/ui/callout";
 import Text from "@/components/ui/text";
 import { useContext, useState } from "react";
+import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 
 export function CustomAnalyticsUpdateForm() {
   const settings = useContext(SettingsContext);
@@ -70,18 +71,11 @@ export function CustomAnalyticsUpdateForm() {
             events in your analytics platform, try removing all extra whitespace
             before each line of JavaScript.
           </Text>
-          <textarea
-            className={`
-              border 
-              border-border 
-              rounded 
-              w-full 
-              py-2 
-              px-3 
-              mt-1
-              h-28`}
+          <InputTextArea
             value={newCustomAnalyticsScript}
-            onChange={(e) => setNewCustomAnalyticsScript(e.target.value)}
+            onChange={(event) =>
+              setNewCustomAnalyticsScript(event.target.value)
+            }
           />
         </div>
 
@@ -96,12 +90,12 @@ export function CustomAnalyticsUpdateForm() {
         </SubLabel>
         <input
           className={`
-            border 
-            border-border 
-            rounded 
-            w-full 
-            py-2 
-            px-3 
+            border
+            border-border
+            rounded
+            w-full
+            py-2
+            px-3
             mt-1`}
           type="password"
           value={secretKey}

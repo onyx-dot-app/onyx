@@ -2,7 +2,7 @@ import { User } from "@/lib/types";
 import { FiPlus, FiX } from "react-icons/fi";
 import { SearchMultiSelectDropdown } from "@/components/Dropdown";
 import { UsersIcon } from "@/components/icons/icons";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 
 interface UserEditorProps {
   selectedUserIds: string[];
@@ -36,13 +36,13 @@ export const UserEditor = ({
                 );
               }}
               className={`
-                  flex 
-                  rounded-lg 
-                  px-2 
-                  py-1 
-                  border 
-                  border-border 
-                  hover:bg-accent-background 
+                  flex
+                  rounded-lg
+                  px-2
+                  py-1
+                  border
+                  border-border
+                  hover:bg-accent-background
                   cursor-pointer`}
             >
               {selectedUser.email} <FiX className="ml-1 my-auto" />

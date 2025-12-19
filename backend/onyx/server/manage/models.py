@@ -14,6 +14,7 @@ from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import TRACK_EXTERNAL_IDP_EXPIRY
 from onyx.configs.constants import AuthType
 from onyx.context.search.models import SavedSearchSettings
+from onyx.db.enums import ThemePreference
 from onyx.db.models import AllowedAnswerFilters
 from onyx.db.models import ChannelConfig
 from onyx.db.models import SlackBot as SlackAppModel
@@ -42,6 +43,7 @@ class AuthTypeResponse(BaseModel):
     # users to have verified emails
     requires_verification: bool
     anonymous_user_enabled: bool | None = None
+    password_min_length: int
 
 
 class UserSpecificAssistantPreference(BaseModel):
@@ -62,9 +64,17 @@ class UserPreferences(BaseModel):
     # These will default to workspace settings on the frontend if not set
     auto_scroll: bool | None = None
     temperature_override_enabled: bool | None = None
+    theme_preference: ThemePreference | None = None
 
     # controls which tools are enabled for the user for a specific assistant
     assistant_specific_configs: UserSpecificAssistantPreferences | None = None
+
+
+class UserPersonalization(BaseModel):
+    name: str = ""
+    role: str = ""
+    use_memories: bool = True
+    memories: list[str] = Field(default_factory=list)
 
 
 class TenantSnapshot(BaseModel):
@@ -85,6 +95,7 @@ class UserInfo(BaseModel):
     is_verified: bool
     role: UserRole
     preferences: UserPreferences
+    personalization: UserPersonalization = Field(default_factory=UserPersonalization)
     oidc_expiry: datetime | None = None
     current_token_created_at: datetime | None = None
     current_token_expiry_length: int | None = None
@@ -124,6 +135,7 @@ class UserInfo(BaseModel):
                     visible_assistants=user.visible_assistants,
                     auto_scroll=user.auto_scroll,
                     temperature_override_enabled=user.temperature_override_enabled,
+                    theme_preference=user.theme_preference,
                     assistant_specific_configs=assistant_specific_configs,
                 )
             ),
@@ -138,6 +150,12 @@ class UserInfo(BaseModel):
             is_cloud_superuser=is_cloud_superuser,
             is_anonymous_user=is_anonymous_user,
             tenant_info=tenant_info,
+            personalization=UserPersonalization(
+                name=user.personal_name or "",
+                role=user.personal_role or "",
+                use_memories=user.use_memories,
+                memories=[memory.memory_text for memory in (user.memories or [])],
+            ),
         )
 
 
@@ -175,6 +193,17 @@ class HiddenUpdateRequest(BaseModel):
 
 class AutoScrollRequest(BaseModel):
     auto_scroll: bool | None
+
+
+class ThemePreferenceRequest(BaseModel):
+    theme_preference: ThemePreference
+
+
+class PersonalizationUpdateRequest(BaseModel):
+    name: str | None = None
+    role: str | None = None
+    use_memories: bool | None = None
+    memories: list[str] | None = None
 
 
 class SlackBotCreationRequest(BaseModel):

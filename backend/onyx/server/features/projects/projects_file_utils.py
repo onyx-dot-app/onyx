@@ -8,17 +8,20 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 
-from onyx.file_processing.extract_file_text import ACCEPTED_IMAGE_FILE_EXTENSIONS
-from onyx.file_processing.extract_file_text import ALL_ACCEPTED_FILE_EXTENSIONS
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
-from onyx.llm.factory import get_default_llms
+from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.llm.factory import get_default_llm
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import SKIP_USERFILE_THRESHOLD
+from shared_configs.configs import SKIP_USERFILE_THRESHOLD_TENANT_LIST
+from shared_configs.contextvars import get_current_tenant_id
 
 
 logger = setup_logger()
-FILE_TOKEN_COUNT_THRESHOLD = 50000
+FILE_TOKEN_COUNT_THRESHOLD = 100000
 UNKNOWN_FILENAME = "[unknown_file]"  # More descriptive than empty string
 
 
@@ -114,17 +117,36 @@ def categorize_uploaded_files(files: list[UploadFile]) -> CategorizedFiles:
 
     - Extracts text using extract_file_text for supported plain/document extensions.
     - Uses default tokenizer to compute token length.
-    - If token length > 50,000, marked as non_accepted.
+    - If token length > 100,000, marked as non_accepted (unless threshold skip is enabled).
     - If extension unsupported or text cannot be extracted, marked as unsupported.
     - Otherwise marked as acceptable.
     """
 
     results = CategorizedFiles()
-    llm, _ = get_default_llms()
+    llm = get_default_llm()
 
     tokenizer = get_tokenizer(
         model_name=llm.config.model_name, provider_type=llm.config.model_provider
     )
+
+    # Check if threshold checks should be skipped
+    skip_threshold = False
+
+    # Check global skip flag (works for both single-tenant and multi-tenant)
+    if SKIP_USERFILE_THRESHOLD:
+        skip_threshold = True
+        logger.info("Skipping userfile threshold check (global setting)")
+    # Check tenant-specific skip list (only applicable in multi-tenant)
+    elif MULTI_TENANT and SKIP_USERFILE_THRESHOLD_TENANT_LIST:
+        try:
+            current_tenant_id = get_current_tenant_id()
+            skip_threshold = current_tenant_id in SKIP_USERFILE_THRESHOLD_TENANT_LIST
+            if skip_threshold:
+                logger.info(
+                    f"Skipping userfile threshold check for tenant: {current_tenant_id}"
+                )
+        except RuntimeError as e:
+            logger.warning(f"Failed to get current tenant ID: {str(e)}")
 
     for upload in files:
         try:
@@ -132,7 +154,7 @@ def categorize_uploaded_files(files: list[UploadFile]) -> CategorizedFiles:
             extension = get_file_ext(filename)
 
             # If image, estimate tokens via dedicated method first
-            if extension in ACCEPTED_IMAGE_FILE_EXTENSIONS:
+            if extension in OnyxFileExtensions.IMAGE_EXTENSIONS:
                 try:
                     token_count = estimate_image_tokens_for_upload(upload)
                 except (UnidentifiedImageError, OSError) as e:
@@ -142,7 +164,7 @@ def categorize_uploaded_files(files: list[UploadFile]) -> CategorizedFiles:
                     results.unsupported.append(filename)
                     continue
 
-                if token_count > FILE_TOKEN_COUNT_THRESHOLD:
+                if not skip_threshold and token_count > FILE_TOKEN_COUNT_THRESHOLD:
                     results.non_accepted.append(filename)
                 else:
                     results.acceptable.append(upload)
@@ -150,10 +172,7 @@ def categorize_uploaded_files(files: list[UploadFile]) -> CategorizedFiles:
                 continue
 
             # Otherwise, handle as text/document: extract text and count tokens
-            if (
-                extension in ALL_ACCEPTED_FILE_EXTENSIONS
-                and extension not in ACCEPTED_IMAGE_FILE_EXTENSIONS
-            ):
+            elif extension in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
                 text_content = extract_file_text(
                     file=upload.file,
                     file_name=filename,
@@ -166,7 +185,7 @@ def categorize_uploaded_files(files: list[UploadFile]) -> CategorizedFiles:
                     continue
 
                 token_count = len(tokenizer.encode(text_content))
-                if token_count > FILE_TOKEN_COUNT_THRESHOLD:
+                if not skip_threshold and token_count > FILE_TOKEN_COUNT_THRESHOLD:
                     results.non_accepted.append(filename)
                 else:
                     results.acceptable.append(upload)

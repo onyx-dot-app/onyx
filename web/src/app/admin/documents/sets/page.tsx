@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/table";
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import { DocumentSetSummary } from "@/lib/types";
 import { useState } from "react";
 import { useDocumentSets } from "./hooks";
@@ -112,7 +112,7 @@ const EditRow = ({
 
   if (!isEditable) {
     return (
-      <div className="text-text-darkerfont-medium my-auto p-1">
+      <div className="text-text-darker font-medium my-auto p-1">
         {documentSet.name}
       </div>
     );
@@ -125,7 +125,7 @@ const EditRow = ({
           <TooltipTrigger asChild>
             <div
               className={`
-              text-text-darkerfont-medium my-auto p-1 hover:bg-accent-background flex items-center select-none
+              text-text-darker font-medium my-auto p-1 hover:bg-accent-background flex items-center select-none
               ${documentSet.is_up_to_date ? "cursor-pointer" : "cursor-default"}
             `}
               style={{ wordBreak: "normal", overflowWrap: "break-word" }}
@@ -429,7 +429,7 @@ const Main = () => {
 
 const Page = () => {
   return (
-    <div className="container mx-auto">
+    <div className="container">
       <AdminPageTitle icon={<BookmarkIcon size={32} />} title="Document Sets" />
 
       <Main />

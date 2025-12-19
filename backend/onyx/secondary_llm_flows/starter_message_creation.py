@@ -1,6 +1,5 @@
 import json
 from typing import Any
-from typing import cast
 from typing import List
 
 from sqlalchemy.orm import Session
@@ -8,7 +7,6 @@ from sqlalchemy.orm import Session
 from onyx.configs.chat_configs import NUM_PERSONA_PROMPT_GENERATION_CHUNKS
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
-from onyx.context.search.postprocessing.postprocessing import cleanup_chunks
 from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
@@ -17,7 +15,8 @@ from onyx.db.models import StarterMessage
 from onyx.db.models import User
 from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.factory import get_default_document_index
-from onyx.llm.factory import get_default_llms
+from onyx.llm.factory import get_default_llm
+from onyx.llm.utils import llm_response_to_string
 from onyx.prompts.starter_messages import format_persona_starter_message_prompt
 from onyx.prompts.starter_messages import PERSONA_CATEGORY_GENERATION_PROMPT
 from onyx.utils.logger import setup_logger
@@ -45,7 +44,7 @@ def get_random_chunks_from_doc_sets(
     chunks = document_index.random_retrieval(
         filters=filters, num_to_retrieve=NUM_PERSONA_PROMPT_GENERATION_CHUNKS
     )
-    return cleanup_chunks(chunks)
+    return chunks
 
 
 def parse_categories(content: str) -> List[str | None]:
@@ -75,7 +74,7 @@ def generate_start_message_prompts(
     categories: List[str | None],
     chunk_contents: str,
     supports_structured_output: bool,
-    fast_llm: Any,
+    llm: Any,
 ) -> List[FunctionCall]:
     """
     Generates the list of FunctionCall objects for starter message generation.
@@ -100,7 +99,7 @@ def generate_start_message_prompts(
 
         functions.append(
             FunctionCall(
-                fast_llm.invoke,
+                llm.invoke,
                 (start_message_generation_prompt,),
             )
         )
@@ -120,12 +119,12 @@ def generate_starter_messages(
     Generates starter messages by first obtaining categories and then generating messages for each category.
     On failure, returns an empty list (or list with processed starter messages if some messages are processed successfully).
     """
-    _, fast_llm = get_default_llms(temperature=0.5)
+    llm = get_default_llm(temperature=0.5)
 
     from litellm.utils import get_supported_openai_params
 
-    provider = fast_llm.config.model_provider
-    model = fast_llm.config.model_name
+    provider = llm.config.model_provider
+    model = llm.config.model_name
 
     params = get_supported_openai_params(model=model, custom_llm_provider=provider)
     supports_structured_output = (
@@ -143,8 +142,9 @@ def generate_starter_messages(
             num_categories=generation_count,
         )
 
-        category_response = fast_llm.invoke(category_generation_prompt)
-        categories = parse_categories(cast(str, category_response.content))
+        category_response = llm.invoke(category_generation_prompt)
+        response_content = llm_response_to_string(category_response)
+        categories = parse_categories(response_content)
 
         if not categories:
             logger.error("No categories were generated.")
@@ -179,7 +179,7 @@ def generate_starter_messages(
         categories,
         chunk_contents,
         supports_structured_output,
-        fast_llm,
+        llm,
     )
 
     # Run LLM calls in parallel

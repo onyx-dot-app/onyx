@@ -18,7 +18,7 @@ from onyx.db.engine.sql_engine import SqlEngine
 from onyx.evals.eval import run_eval
 from onyx.evals.models import EvalationAck
 from onyx.evals.models import EvalConfigurationOptions
-from onyx.evals.tracing import setup_braintrust
+from onyx.tracing.braintrust_tracing import setup_braintrust_if_creds_available
 
 
 def setup_session_factory() -> None:
@@ -56,7 +56,7 @@ def run_local(
         EvalationAck: The evaluation result
     """
     setup_session_factory()
-    setup_braintrust()
+    setup_braintrust_if_creds_available()
 
     if search_permissions_email is None:
         raise ValueError("search_permissions_email is required for local evaluation")

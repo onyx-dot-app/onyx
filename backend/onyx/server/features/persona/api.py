@@ -26,21 +26,27 @@ from onyx.db.persona import create_update_persona
 from onyx.db.persona import delete_persona_label
 from onyx.db.persona import get_assistant_labels
 from onyx.db.persona import get_minimal_persona_snapshots_for_user
+from onyx.db.persona import get_minimal_persona_snapshots_paginated
 from onyx.db.persona import get_persona_by_id
+from onyx.db.persona import get_persona_count_for_user
 from onyx.db.persona import get_persona_snapshots_for_user
+from onyx.db.persona import get_persona_snapshots_paginated
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import mark_persona_as_not_deleted
-from onyx.db.persona import update_all_personas_display_priority
 from onyx.db.persona import update_persona_is_default
 from onyx.db.persona import update_persona_label
 from onyx.db.persona import update_persona_public_status
 from onyx.db.persona import update_persona_shared_users
 from onyx.db.persona import update_persona_visibility
+from onyx.db.persona import update_personas_display_priority
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.secondary_llm_flows.starter_message_creation import (
     generate_starter_messages,
 )
+from onyx.server.documents.models import PaginatedReturn
+from onyx.server.features.persona.constants import ADMIN_AGENTS_RESOURCE
+from onyx.server.features.persona.constants import AGENTS_RESOURCE
 from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import GenerateStarterMessageRequest
 from onyx.server.features.persona.models import MinimalPersonaSnapshot
@@ -49,10 +55,11 @@ from onyx.server.features.persona.models import PersonaLabelResponse
 from onyx.server.features.persona.models import PersonaSharedNotificationData
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
+from onyx.server.manage.llm.api import get_valid_model_names_for_persona
 from onyx.server.models import DisplayPriorityRequest
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import create_milestone_and_report
+from onyx.utils.telemetry import mt_cloud_telemetry
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -76,6 +83,11 @@ def _validate_user_knowledge_enabled(
 
 admin_router = APIRouter(prefix="/admin/persona")
 basic_router = APIRouter(prefix="/persona")
+
+# NOTE: Users know this functionality as "agents", so we want to start moving
+# nomenclature of these REST resources to match that.
+admin_agents_router = APIRouter(prefix=ADMIN_AGENTS_RESOURCE)
+agents_router = APIRouter(prefix=AGENTS_RESOURCE)
 
 
 class IsVisibleRequest(BaseModel):
@@ -143,16 +155,22 @@ def patch_persona_default_status(
         raise HTTPException(status_code=403, detail=str(e))
 
 
-@admin_router.put("/display-priority")
-def patch_persona_display_priority(
+@admin_agents_router.patch("/display-priorities")
+def patch_agents_display_priorities(
     display_priority_request: DisplayPriorityRequest,
-    _: User | None = Depends(current_admin_user),
+    user: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_all_personas_display_priority(
-        display_priority_map=display_priority_request.display_priority_map,
-        db_session=db_session,
-    )
+    try:
+        update_personas_display_priority(
+            display_priority_map=display_priority_request.display_priority_map,
+            db_session=db_session,
+            user=user,
+            commit_db_txn=True,
+        )
+    except ValueError as e:
+        logger.exception("Failed to update agent display priorities.")
+        raise HTTPException(status_code=403, detail=str(e))
 
 
 @admin_router.get("")
@@ -167,6 +185,51 @@ def list_personas_admin(
         db_session=db_session,
         get_editable=get_editable,
         include_deleted=include_deleted,
+    )
+
+
+@admin_agents_router.get("")
+def get_agents_admin_paginated(
+    page_num: int = Query(0, ge=0, description="Page number (0-indexed)."),
+    page_size: int = Query(10, ge=1, le=1000, description="Items per page."),
+    user: User | None = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+    include_deleted: bool = Query(
+        False, description="If true, includes deleted personas."
+    ),
+    get_editable: bool = Query(
+        False, description="If true, only returns editable personas."
+    ),
+    include_default: bool = Query(
+        True, description="If true, includes builtin/default personas."
+    ),
+) -> PaginatedReturn[PersonaSnapshot]:
+    """Paginated endpoint for listing agents (formerly personas) (admin view).
+
+    Returns items for the requested page plus total count.
+    Agents are ordered by display_priority (ASC, nulls last) then by ID (ASC).
+    """
+    agents = get_persona_snapshots_paginated(
+        user=user,
+        db_session=db_session,
+        page_num=page_num,
+        page_size=page_size,
+        get_editable=get_editable,
+        include_default=include_default,
+        include_deleted=include_deleted,
+    )
+
+    total_count = get_persona_count_for_user(
+        user=user,
+        db_session=db_session,
+        get_editable=get_editable,
+        include_default=include_default,
+        include_deleted=include_deleted,
+    )
+
+    return PaginatedReturn(
+        items=agents,
+        total_items=total_count,
     )
 
 
@@ -219,12 +282,10 @@ def create_persona(
         user=user,
         db_session=db_session,
     )
-    create_milestone_and_report(
-        user=user,
-        distinct_id=tenant_id or "N/A",
-        event_type=MilestoneRecordType.CREATED_ASSISTANT,
-        properties=None,
-        db_session=db_session,
+    mt_cloud_telemetry(
+        tenant_id=tenant_id,
+        distinct_id=user.email if user else tenant_id,
+        event=MilestoneRecordType.CREATED_ASSISTANT,
     )
 
     return persona_snapshot
@@ -371,20 +432,79 @@ def list_personas(
     return personas
 
 
+@agents_router.get("")
+def get_agents_paginated(
+    page_num: int = Query(0, ge=0, description="Page number (0-indexed)."),
+    page_size: int = Query(10, ge=1, le=1000, description="Items per page."),
+    user: User | None = Depends(current_chat_accessible_user),
+    db_session: Session = Depends(get_session),
+    include_deleted: bool = Query(
+        False, description="If true, includes deleted personas."
+    ),
+    get_editable: bool = Query(
+        False, description="If true, only returns editable personas."
+    ),
+    include_default: bool = Query(
+        True, description="If true, includes builtin/default personas."
+    ),
+) -> PaginatedReturn[MinimalPersonaSnapshot]:
+    """Paginated endpoint for listing agents available to the user.
+
+    Returns items for the requested page plus total count.
+    Personas are ordered by display_priority (ASC, nulls last) then by ID (ASC).
+
+    NOTE: persona_ids filter is not supported with pagination. Use the
+    non-paginated endpoint if filtering by specific IDs is needed.
+    """
+    agents = get_minimal_persona_snapshots_paginated(
+        user=user,
+        db_session=db_session,
+        page_num=page_num,
+        page_size=page_size,
+        get_editable=get_editable,
+        include_default=include_default,
+        include_deleted=include_deleted,
+    )
+
+    total_count = get_persona_count_for_user(
+        user=user,
+        db_session=db_session,
+        get_editable=get_editable,
+        include_default=include_default,
+        include_deleted=include_deleted,
+    )
+
+    return PaginatedReturn(
+        items=agents,
+        total_items=total_count,
+    )
+
+
 @basic_router.get("/{persona_id}")
 def get_persona(
     persona_id: int,
     user: User | None = Depends(current_limited_user),
     db_session: Session = Depends(get_session),
 ) -> FullPersonaSnapshot:
-    return FullPersonaSnapshot.from_model(
-        get_persona_by_id(
-            persona_id=persona_id,
-            user=user,
-            db_session=db_session,
-            is_for_edit=False,
-        )
+    persona = get_persona_by_id(
+        persona_id=persona_id,
+        user=user,
+        db_session=db_session,
+        is_for_edit=False,
     )
+
+    # Validate and fix default model if it's no longer valid for this persona's restrictions
+    if persona.llm_model_version_override:
+        valid_models = get_valid_model_names_for_persona(persona_id, user, db_session)
+
+        # If current default model is not in the valid list, update to first valid or None
+        if persona.llm_model_version_override not in valid_models:
+            persona.llm_model_version_override = (
+                valid_models[0] if valid_models else None
+            )
+            db_session.commit()
+
+    return FullPersonaSnapshot.from_model(persona)
 
 
 @basic_router.post("/assistant-prompt-refresh")

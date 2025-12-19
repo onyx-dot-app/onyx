@@ -110,6 +110,8 @@ def test_tenant1_can_access_own_documents(reset_multitenant: None) -> None:
         user_performing_action=test_data["admin_user1"],
     )
 
+    assert response1.error is None, "Chat response should not have an error"
+
     # Assert that only the internal search tool was used
     assert all(
         tool.tool_name == ToolName.INTERNAL_SEARCH for tool in response1.used_tools
@@ -140,6 +142,8 @@ def test_tenant2_can_access_own_documents(reset_multitenant: None) -> None:
         message="What is in Tenant 2's documents? Run an internal search.",
         user_performing_action=test_data["admin_user2"],
     )
+
+    assert response2.error is None, "Chat response should not have an error"
 
     # Assert that the search tool was used
     assert all(
@@ -173,6 +177,8 @@ def test_tenant1_cannot_access_tenant2_documents(reset_multitenant: None) -> Non
         user_performing_action=test_data["admin_user1"],
     )
 
+    assert response_cross.error is None, "Chat response should not have an error"
+
     # Assert that the search tool was used
     assert all(
         tool.tool_name == ToolName.INTERNAL_SEARCH for tool in response_cross.used_tools
@@ -197,6 +203,8 @@ def test_tenant2_cannot_access_tenant1_documents(reset_multitenant: None) -> Non
         message="What is in Tenant 1's documents? Run an internal search.",
         user_performing_action=test_data["admin_user2"],
     )
+
+    assert response_cross2.error is None, "Chat response should not have an error"
 
     # Assert that the search tool was used
     assert all(
@@ -223,6 +231,7 @@ def test_multi_tenant_access_control(reset_multitenant: None) -> None:
         message="What is in Tenant 1's documents? Run an internal search.",
         user_performing_action=test_data["admin_user1"],
     )
+    assert response1.error is None, "Chat response should not have an error"
     assert all(
         tool.tool_name == ToolName.INTERNAL_SEARCH for tool in response1.used_tools
     )
@@ -236,6 +245,7 @@ def test_multi_tenant_access_control(reset_multitenant: None) -> None:
         message="What is in Tenant 2's documents? Run an internal search.",
         user_performing_action=test_data["admin_user2"],
     )
+    assert response2.error is None, "Chat response should not have an error"
     assert all(
         tool.tool_name == ToolName.INTERNAL_SEARCH for tool in response2.used_tools
     )
@@ -244,11 +254,15 @@ def test_multi_tenant_access_control(reset_multitenant: None) -> None:
     assert not response_doc_ids.intersection(test_data["tenant1_doc_ids"])
 
     # User 1 tries to access Tenant 2's documents and fails
+    user1_second_chat_session = ChatSessionManager.create(
+        user_performing_action=test_data["admin_user1"]
+    )
     response_cross = ChatSessionManager.send_message(
-        chat_session_id=test_data["chat_session1"].id,
+        chat_session_id=user1_second_chat_session.id,
         message="What is in Tenant 2's documents? Run an internal search.",
         user_performing_action=test_data["admin_user1"],
     )
+    assert response_cross.error is None, "Chat response should not have an error"
     assert all(
         tool.tool_name == ToolName.INTERNAL_SEARCH for tool in response_cross.used_tools
     )
@@ -258,11 +272,15 @@ def test_multi_tenant_access_control(reset_multitenant: None) -> None:
     assert not response_doc_ids.intersection(test_data["tenant2_doc_ids"])
 
     # User 2 tries to access Tenant 1's documents and fails
+    user2_second_chat_session = ChatSessionManager.create(
+        user_performing_action=test_data["admin_user2"]
+    )
     response_cross2 = ChatSessionManager.send_message(
-        chat_session_id=test_data["chat_session2"].id,
+        chat_session_id=user2_second_chat_session.id,
         message="What is in Tenant 1's documents? Run an internal search.",
         user_performing_action=test_data["admin_user2"],
     )
+    assert response_cross2.error is None, "Chat response should not have an error"
     assert all(
         tool.tool_name == ToolName.INTERNAL_SEARCH
         for tool in response_cross2.used_tools

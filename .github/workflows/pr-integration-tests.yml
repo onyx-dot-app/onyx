@@ -9,18 +9,19 @@ on:
     branches:
       - main
       - "release/**"
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
 
 env:
-  # Private Registry Configuration
-  PRIVATE_REGISTRY: experimental-registry.blacksmith.sh:5000
-  PRIVATE_REGISTRY_USERNAME: ${{ secrets.PRIVATE_REGISTRY_USERNAME }}
-  PRIVATE_REGISTRY_PASSWORD: ${{ secrets.PRIVATE_REGISTRY_PASSWORD }}
-
   # Test Environment Variables
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-  CONFLUENCE_TEST_SPACE_URL: ${{ secrets.CONFLUENCE_TEST_SPACE_URL }}
-  CONFLUENCE_USER_NAME: ${{ secrets.CONFLUENCE_USER_NAME }}
+  CONFLUENCE_TEST_SPACE_URL: ${{ vars.CONFLUENCE_TEST_SPACE_URL }}
+  CONFLUENCE_USER_NAME: ${{ vars.CONFLUENCE_USER_NAME }}
   CONFLUENCE_ACCESS_TOKEN: ${{ secrets.CONFLUENCE_ACCESS_TOKEN }}
   CONFLUENCE_ACCESS_TOKEN_SCOPED: ${{ secrets.CONFLUENCE_ACCESS_TOKEN_SCOPED }}
   JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
@@ -31,15 +32,25 @@ env:
   PERM_SYNC_SHAREPOINT_PRIVATE_KEY: ${{ secrets.PERM_SYNC_SHAREPOINT_PRIVATE_KEY }}
   PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD: ${{ secrets.PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD }}
   PERM_SYNC_SHAREPOINT_DIRECTORY_ID: ${{ secrets.PERM_SYNC_SHAREPOINT_DIRECTORY_ID }}
+  EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
+  GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN: ${{ secrets.ONYX_GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN }}
+  GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN_CLASSIC: ${{ secrets.ONYX_GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN_CLASSIC }}
+  GITHUB_ADMIN_EMAIL: ${{ secrets.ONYX_GITHUB_ADMIN_EMAIL }}
+  GITHUB_TEST_USER_1_EMAIL: ${{ secrets.ONYX_GITHUB_TEST_USER_1_EMAIL }}
+  GITHUB_TEST_USER_2_EMAIL: ${{ secrets.ONYX_GITHUB_TEST_USER_2_EMAIL }}
 
 jobs:
   discover-test-dirs:
-    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+    # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
+    runs-on: ubuntu-slim
+    timeout-minutes: 45
     outputs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Discover test directories
         id: set-matrix
@@ -61,141 +72,174 @@ jobs:
           all_dirs="[${all_dirs%,}]"
           echo "test-dirs=$all_dirs" >> $GITHUB_OUTPUT
 
-  prepare-build:
-    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: |
-            backend/requirements/default.txt
-            backend/requirements/dev.txt
-
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install --retries 5 --timeout 30 -r backend/requirements/default.txt
-          pip install --retries 5 --timeout 30 -r backend/requirements/dev.txt
-
-      - name: Generate OpenAPI schema
-        working-directory: ./backend
-        env:
-          PYTHONPATH: "."
-        run: |
-          python scripts/onyx_openapi_schema.py --filename generated/openapi.json
-
-      - name: Generate OpenAPI Python client
-        working-directory: ./backend
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}/backend/generated:/local" \
-            openapitools/openapi-generator-cli generate \
-            -i /local/openapi.json \
-            -g python \
-            -o /local/onyx_openapi_client \
-            --package-name onyx_openapi_client \
-            --skip-validate-spec \
-            --openapi-normalizer "SIMPLIFY_ONEOF_ANYOF=true,SET_OAS3_NULLABLE=true"
-
-      - name: Upload OpenAPI artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: openapi-artifacts
-          path: backend/generated/
 
   build-backend-image:
-    runs-on: blacksmith-16vcpu-ubuntu-2404-arm
+    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-build-backend-image", "extras=ecr-cache"]
+    timeout-minutes: 45
     steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Login to Private Registry
-        uses: docker/login-action@v3
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
-          registry: ${{ env.PRIVATE_REGISTRY }}
-          username: ${{ env.PRIVATE_REGISTRY_USERNAME }}
-          password: ${{ env.PRIVATE_REGISTRY_PASSWORD }}
+          persist-credentials: false
+
+      - name: Format branch name for cache
+        id: format-branch
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ -n "${PR_NUMBER}" ]; then
+            CACHE_SUFFIX="${PR_NUMBER}"
+          else
+            # shellcheck disable=SC2001
+            CACHE_SUFFIX=$(echo "${REF_NAME}" | sed 's/[^A-Za-z0-9._-]/-/g')
+          fi
+          echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
-        uses: useblacksmith/setup-docker-builder@v1
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
+
+      # needed for pulling Vespa, Redis, Postgres, and Minio images
+      # otherwise, we hit the "Unauthenticated users" limit
+      # https://docs.docker.com/docker-hub/usage/
+      - name: Login to Docker Hub
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Build and push Backend Docker image
-        uses: useblacksmith/build-push-action@v2
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
         with:
           context: ./backend
           file: ./backend/Dockerfile
-          platforms: linux/arm64
-          tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}
           push: true
-          outputs: type=registry
-          no-cache: true
+          tags: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }}
+          cache-from: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ github.event.pull_request.head.sha || github.sha }}
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ steps.format-branch.outputs.cache-suffix }}
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache
+            type=registry,ref=onyxdotapp/onyx-backend:latest
+          cache-to: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ github.event.pull_request.head.sha || github.sha }},mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache,mode=max
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+
 
   build-model-server-image:
-    runs-on: blacksmith-16vcpu-ubuntu-2404-arm
+    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-build-model-server-image", "extras=ecr-cache"]
+    timeout-minutes: 45
     steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Login to Private Registry
-        uses: docker/login-action@v3
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
-          registry: ${{ env.PRIVATE_REGISTRY }}
-          username: ${{ env.PRIVATE_REGISTRY_USERNAME }}
-          password: ${{ env.PRIVATE_REGISTRY_PASSWORD }}
+          persist-credentials: false
+
+      - name: Format branch name for cache
+        id: format-branch
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ -n "${PR_NUMBER}" ]; then
+            CACHE_SUFFIX="${PR_NUMBER}"
+          else
+            # shellcheck disable=SC2001
+            CACHE_SUFFIX=$(echo "${REF_NAME}" | sed 's/[^A-Za-z0-9._-]/-/g')
+          fi
+          echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
-        uses: useblacksmith/setup-docker-builder@v1
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
+
+      # needed for pulling Vespa, Redis, Postgres, and Minio images
+      # otherwise, we hit the "Unauthenticated users" limit
+      # https://docs.docker.com/docker-hub/usage/
+      - name: Login to Docker Hub
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Build and push Model Server Docker image
-        uses: useblacksmith/build-push-action@v2
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
         with:
           context: ./backend
           file: ./backend/Dockerfile.model_server
-          platforms: linux/arm64
-          tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}
           push: true
-          outputs: type=registry
-          provenance: false
-          no-cache: true
+          tags: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }}
+          cache-from: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ github.event.pull_request.head.sha || github.sha }}
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }}
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache
+            type=registry,ref=onyxdotapp/onyx-model-server:latest
+          cache-to: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ github.event.pull_request.head.sha || github.sha }},mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache,mode=max
+
 
   build-integration-image:
-    needs: prepare-build
-    runs-on: blacksmith-16vcpu-ubuntu-2404-arm
+    runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}-build-integration-image", "extras=ecr-cache"]
+    timeout-minutes: 45
     steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Login to Private Registry
-        uses: docker/login-action@v3
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
-          registry: ${{ env.PRIVATE_REGISTRY }}
-          username: ${{ env.PRIVATE_REGISTRY_USERNAME }}
-          password: ${{ env.PRIVATE_REGISTRY_PASSWORD }}
-
-      - name: Download OpenAPI artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: openapi-artifacts
-          path: backend/generated/
+          persist-credentials: false
 
       - name: Set up Docker Buildx
-        uses: useblacksmith/setup-docker-builder@v1
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
 
-      - name: Build and push integration test Docker image
-        uses: useblacksmith/build-push-action@v2
+      # needed for pulling openapitools/openapi-generator-cli
+      # otherwise, we hit the "Unauthenticated users" limit
+      # https://docs.docker.com/docker-hub/usage/
+      - name: Login to Docker Hub
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
         with:
-          context: ./backend
-          file: ./backend/tests/integration/Dockerfile
-          platforms: linux/arm64
-          tags: ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}
-          push: true
-          outputs: type=registry
-          no-cache: true
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Format branch name for cache
+        id: format-branch
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ -n "${PR_NUMBER}" ]; then
+            CACHE_SUFFIX="${PR_NUMBER}"
+          else
+            # shellcheck disable=SC2001
+            CACHE_SUFFIX=$(echo "${REF_NAME}" | sed 's/[^A-Za-z0-9._-]/-/g')
+          fi
+          echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
+
+      - name: Build and push integration test image with Docker Bake
+        env:
+          INTEGRATION_REPOSITORY: ${{ env.RUNS_ON_ECR_CACHE }}
+          TAG: integration-test-${{ github.run_id }}
+          CACHE_SUFFIX: ${{ steps.format-branch.outputs.cache-suffix }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          cd backend && docker buildx bake --push \
+            --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${HEAD_SHA} \
+            --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${CACHE_SUFFIX} \
+            --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache \
+            --set backend.cache-from=type=registry,ref=onyxdotapp/onyx-backend:latest \
+            --set backend.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${HEAD_SHA},mode=max \
+            --set backend.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${CACHE_SUFFIX},mode=max \
+            --set backend.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache,mode=max \
+            --set integration.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache-${HEAD_SHA} \
+            --set integration.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache-${CACHE_SUFFIX} \
+            --set integration.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache \
+            --set integration.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache-${HEAD_SHA},mode=max \
+            --set integration.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache-${CACHE_SUFFIX},mode=max \
+            --set integration.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache,mode=max \
+            integration
 
   integration-tests:
     needs:
@@ -205,7 +249,12 @@ jobs:
         build-model-server-image,
         build-integration-image,
       ]
-    runs-on: blacksmith-8vcpu-ubuntu-2404-arm
+    runs-on:
+      - runs-on
+      - runner=4cpu-linux-arm64
+      - ${{ format('run-id={0}-integration-tests-job-{1}', github.run_id, strategy['job-index']) }}
+      - extras=ecr-cache
+    timeout-minutes: 45
 
     strategy:
       fail-fast: false
@@ -213,57 +262,45 @@ jobs:
         test-dir: ${{ fromJson(needs.discover-test-dirs.outputs.test-dirs) }}
 
     steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Login to Private Registry
-        uses: docker/login-action@v3
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
-          registry: ${{ env.PRIVATE_REGISTRY }}
-          username: ${{ env.PRIVATE_REGISTRY_USERNAME }}
-          password: ${{ env.PRIVATE_REGISTRY_PASSWORD }}
+          persist-credentials: false
 
       # needed for pulling Vespa, Redis, Postgres, and Minio images
       # otherwise, we hit the "Unauthenticated users" limit
       # https://docs.docker.com/docker-hub/usage/
       - name: Login to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      - name: Pull Docker images
-        run: |
-          # Pull all images from registry in parallel
-          echo "Pulling Docker images in parallel..."
-          # Pull images from private registry
-          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}) &
-          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}) &
-          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}) &
-
-          # Wait for all background jobs to complete
-          wait
-          echo "All Docker images pulled successfully"
-
-          # Re-tag to remove registry prefix for docker-compose
-          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }} onyxdotapp/onyx-backend:test
-          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
-          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }} onyxdotapp/onyx-integration:test
-
       # NOTE: Use pre-ping/null pool to reduce flakiness due to dropped connections
       # NOTE: don't need web server for integration tests
+      - name: Create .env file for Docker Compose
+        env:
+          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          cat <<EOF > deployment/docker_compose/.env
+          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
+          AUTH_TYPE=basic
+          POSTGRES_POOL_PRE_PING=true
+          POSTGRES_USE_NULL_POOL=true
+          REQUIRE_EMAIL_VERIFICATION=false
+          DISABLE_TELEMETRY=true
+          ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID}
+          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID}
+          INTEGRATION_TESTS_MODE=true
+          CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS=0.001
+          MCP_SERVER_ENABLED=true
+          EOF
+
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
-          AUTH_TYPE=basic \
-          POSTGRES_POOL_PRE_PING=true \
-          POSTGRES_USE_NULL_POOL=true \
-          REQUIRE_EMAIL_VERIFICATION=false \
-          DISABLE_TELEMETRY=true \
-          IMAGE_TAG=test \
-          INTEGRATION_TESTS_MODE=true \
-          CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS=0.001 \
           docker compose -f docker-compose.yml -f docker-compose.dev.yml up \
             relational_db \
             index \
@@ -272,43 +309,56 @@ jobs:
             api_server \
             inference_model_server \
             indexing_model_server \
+            mcp_server \
             background \
             -d
         id: start_docker
 
-      - name: Wait for service to be ready
+      - name: Wait for services to be ready
         run: |
           echo "Starting wait-for-service script..."
 
-          docker logs -f onyx-api_server-1 &
+          wait_for_service() {
+            local url=$1
+            local label=$2
+            local timeout=${3:-300}  # default 5 minutes
+            local start_time
+            start_time=$(date +%s)
 
-          start_time=$(date +%s)
-          timeout=300  # 5 minutes in seconds
+            while true; do
+              local current_time
+              current_time=$(date +%s)
+              local elapsed_time=$((current_time - start_time))
 
-          while true; do
-            current_time=$(date +%s)
-            elapsed_time=$((current_time - start_time))
-            
-            if [ $elapsed_time -ge $timeout ]; then
-              echo "Timeout reached. Service did not become ready in 5 minutes."
-              exit 1
-            fi
-            
-            # Use curl with error handling to ignore specific exit code 56
-            response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health || echo "curl_error")
-            
-            if [ "$response" = "200" ]; then
-              echo "Service is ready!"
-              break
-            elif [ "$response" = "curl_error" ]; then
-              echo "Curl encountered an error, possibly exit code 56. Continuing to retry..."
-            else
-              echo "Service not ready yet (HTTP status $response). Retrying in 5 seconds..."
-            fi
-            
-            sleep 5
-          done
-          echo "Finished waiting for service."
+              if [ $elapsed_time -ge $timeout ]; then
+                echo "Timeout reached. ${label} did not become ready in $timeout seconds."
+                exit 1
+              fi
+
+              local response
+              response=$(curl -s -o /dev/null -w "%{http_code}" "$url" || echo "curl_error")
+
+              if [ "$response" = "200" ]; then
+                echo "${label} is ready!"
+                break
+              elif [ "$response" = "curl_error" ]; then
+                echo "Curl encountered an error while checking ${label}. Retrying in 5 seconds..."
+              else
+                echo "${label} not ready yet (HTTP status $response). Retrying in 5 seconds..."
+              fi
+
+              sleep 5
+            done
+          }
+
+          wait_for_service "http://localhost:8080/health" "API server"
+          test_dir="${{ matrix.test-dir.path }}"
+          if [ "$test_dir" = "tests/mcp" ]; then
+            wait_for_service "http://localhost:8090/health" "MCP server"
+          else
+            echo "Skipping MCP server wait for non-MCP suite: $test_dir"
+          fi
+          echo "Finished waiting for services."
 
       - name: Start Mock Services
         run: |
@@ -317,7 +367,7 @@ jobs:
             -p mock-it-services-stack up -d
 
       - name: Run Integration Tests for ${{ matrix.test-dir.name }}
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
         with:
           timeout_minutes: 20
           max_attempts: 3
@@ -337,7 +387,10 @@ jobs:
               -e VESPA_HOST=index \
               -e REDIS_HOST=cache \
               -e API_SERVER_HOST=api_server \
+              -e MCP_SERVER_HOST=mcp_server \
+              -e MCP_SERVER_PORT=8090 \
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
+              -e EXA_API_KEY=${EXA_API_KEY} \
               -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
               -e CONFLUENCE_TEST_SPACE_URL=${CONFLUENCE_TEST_SPACE_URL} \
               -e CONFLUENCE_USER_NAME=${CONFLUENCE_USER_NAME} \
@@ -351,10 +404,15 @@ jobs:
               -e PERM_SYNC_SHAREPOINT_PRIVATE_KEY="${PERM_SYNC_SHAREPOINT_PRIVATE_KEY}" \
               -e PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD=${PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD} \
               -e PERM_SYNC_SHAREPOINT_DIRECTORY_ID=${PERM_SYNC_SHAREPOINT_DIRECTORY_ID} \
+              -e GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN=${GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN} \
+              -e GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN_CLASSIC=${GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN_CLASSIC} \
+              -e GITHUB_ADMIN_EMAIL=${GITHUB_ADMIN_EMAIL} \
+              -e GITHUB_TEST_USER_1_EMAIL=${GITHUB_TEST_USER_1_EMAIL} \
+              -e GITHUB_TEST_USER_2_EMAIL=${GITHUB_TEST_USER_2_EMAIL} \
               -e TEST_WEB_HOSTNAME=test-runner \
               -e MOCK_CONNECTOR_SERVER_HOST=mock_connector_server \
               -e MOCK_CONNECTOR_SERVER_PORT=8001 \
-              onyxdotapp/onyx-integration:test \
+              ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }} \
               /app/tests/integration/${{ matrix.test-dir.path }}
 
       # ------------------------------------------------------------
@@ -373,17 +431,11 @@ jobs:
 
       - name: Upload logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/upload-artifact@v4
         with:
           name: docker-all-logs-${{ matrix.test-dir.name }}
           path: ${{ github.workspace }}/docker-compose.log
       # ------------------------------------------------------------
-
-      - name: Stop Docker containers
-        if: always()
-        run: |
-          cd deployment/docker_compose
-          docker compose down -v
 
 
   multitenant-tests:
@@ -393,36 +445,26 @@ jobs:
         build-model-server-image,
         build-integration-image,
       ]
-    runs-on: blacksmith-8vcpu-ubuntu-2404-arm
+    runs-on: [runs-on, runner=8cpu-linux-arm64, "run-id=${{ github.run_id }}-multitenant-tests", "extras=ecr-cache"]
+    timeout-minutes: 45
 
     steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Login to Private Registry
-        uses: docker/login-action@v3
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
-          registry: ${{ env.PRIVATE_REGISTRY }}
-          username: ${{ env.PRIVATE_REGISTRY_USERNAME }}
-          password: ${{ env.PRIVATE_REGISTRY_PASSWORD }}
+          persist-credentials: false
 
       - name: Login to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      - name: Pull Docker images
-        run: |
-          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }}) &
-          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }}) &
-          (docker pull --platform linux/arm64 ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }}) &
-          wait
-          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-backend:test-${{ github.run_id }} onyxdotapp/onyx-backend:test
-          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-model-server:test-${{ github.run_id }} onyxdotapp/onyx-model-server:test
-          docker tag ${{ env.PRIVATE_REGISTRY }}/integration-test-onyx-integration:test-${{ github.run_id }} onyxdotapp/onyx-integration:test
-
       - name: Start Docker containers for multi-tenant tests
+        env:
+          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           cd deployment/docker_compose
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
@@ -430,8 +472,10 @@ jobs:
           AUTH_TYPE=cloud \
           REQUIRE_EMAIL_VERIFICATION=false \
           DISABLE_TELEMETRY=true \
-          IMAGE_TAG=test \
+          ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID} \
+          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID} \
           DEV_MODE=true \
+          MCP_SERVER_ENABLED=true \
           docker compose -f docker-compose.multitenant-dev.yml up \
             relational_db \
             index \
@@ -440,6 +484,7 @@ jobs:
             api_server \
             inference_model_server \
             indexing_model_server \
+            mcp_server \
             background \
             -d
         id: start_docker_multi_tenant
@@ -471,6 +516,9 @@ jobs:
           echo "Finished waiting for service."
 
       - name: Run Multi-Tenant Integration Tests
+        env:
+          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           echo "Running multi-tenant integration tests..."
           docker run --rm --network onyx_default \
@@ -485,7 +533,10 @@ jobs:
             -e VESPA_HOST=index \
             -e REDIS_HOST=cache \
             -e API_SERVER_HOST=api_server \
+            -e MCP_SERVER_HOST=mcp_server \
+            -e MCP_SERVER_PORT=8090 \
             -e OPENAI_API_KEY=${OPENAI_API_KEY} \
+            -e EXA_API_KEY=${EXA_API_KEY} \
             -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
             -e TEST_WEB_HOSTNAME=test-runner \
             -e AUTH_TYPE=cloud \
@@ -493,9 +544,8 @@ jobs:
             -e SKIP_RESET=true \
             -e REQUIRE_EMAIL_VERIFICATION=false \
             -e DISABLE_TELEMETRY=true \
-            -e IMAGE_TAG=test \
             -e DEV_MODE=true \
-            onyxdotapp/onyx-integration:test \
+            ${ECR_CACHE}:integration-test-${RUN_ID} \
             /app/tests/integration/multitenant_tests
 
       - name: Dump API server logs (multi-tenant)
@@ -512,7 +562,7 @@ jobs:
 
       - name: Upload logs (multi-tenant)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/upload-artifact@v4
         with:
           name: docker-all-logs-multitenant
           path: ${{ github.workspace }}/docker-compose-multitenant.log
@@ -523,18 +573,13 @@ jobs:
           cd deployment/docker_compose
           docker compose -f docker-compose.multitenant-dev.yml down -v
 
-  required: 
-    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+  required:
+    # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
+    runs-on: ubuntu-slim
+    timeout-minutes: 45
     needs: [integration-tests, multitenant-tests]
     if: ${{ always() }}
     steps:
-      - uses: actions/github-script@v7
-        with:
-          script: |
-            const needs = ${{ toJSON(needs) }};
-            const failed = Object.values(needs).some(n => n.result !== 'success');
-            if (failed) {
-              core.setFailed('One or more upstream jobs failed or were cancelled.');
-            } else {
-              core.notice('All required jobs succeeded.');
-            }
+      - name: Check job status
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
+        run: exit 1

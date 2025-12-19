@@ -12,6 +12,12 @@ export type UserSpecificAssistantPreferences = Record<
   UserSpecificAssistantPreference
 >;
 
+export enum ThemePreference {
+  LIGHT = "light",
+  DARK = "dark",
+  SYSTEM = "system",
+}
+
 interface UserPreferences {
   chosen_assistants: number[] | null;
   visible_assistants: number[];
@@ -22,6 +28,14 @@ interface UserPreferences {
   auto_scroll: boolean;
   shortcut_enabled: boolean;
   temperature_override_enabled: boolean;
+  theme_preference: ThemePreference | null;
+}
+
+export interface UserPersonalization {
+  name: string;
+  role: string;
+  memories: string[];
+  use_memories: boolean;
 }
 
 export enum UserRole {
@@ -75,6 +89,7 @@ export interface User {
   // functionality
   password_configured?: boolean;
   tenant_info?: TenantInfo | null;
+  personalization?: UserPersonalization;
 }
 
 export interface TenantInfo {
@@ -226,6 +241,7 @@ export interface FederatedConnectorDetail {
   source: ValidSources.FederatedSlack;
   name: string;
   credentials: Record<string, any>;
+  config: Record<string, any>;
   oauth_token_exists: boolean;
   oauth_token_expires_at: string | null;
   document_sets: Array<{
@@ -448,6 +464,7 @@ export enum ValidSources {
   Jira = "jira",
   Productboard = "productboard",
   Slab = "slab",
+  Coda = "coda",
   Notion = "notion",
   Guru = "guru",
   Gong = "gong",
@@ -487,6 +504,7 @@ export enum ValidSources {
   DrupalWiki = "drupal_wiki",
   Imap = "imap",
   Bitbucket = "bitbucket",
+  TestRail = "testrail",
 
   // Federated Connectors
   FederatedSlack = "federated_slack",
@@ -542,13 +560,28 @@ export interface CredentialFieldSpec {
   secret: boolean;
 }
 
+export interface ConfigurationFieldSpec {
+  type: string;
+  description: string;
+  required: boolean;
+  default?: any;
+  example?: any;
+  secret: boolean;
+  hidden_when?: Record<string, any>;
+}
+
 export interface CredentialSchemaResponse {
   credentials: Record<string, CredentialFieldSpec>;
+}
+
+export interface ConfigurationSchemaResponse {
+  configuration: Record<string, ConfigurationFieldSpec>;
 }
 
 export interface FederatedConnectorCreateRequest {
   source: string;
   credentials: Record<string, any>;
+  config?: Record<string, any>;
 }
 
 export interface FederatedConnectorCreateResponse {

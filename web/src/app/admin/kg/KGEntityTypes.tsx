@@ -1,6 +1,6 @@
+import { useEffect, useState } from "react";
 import { SourceIcon } from "@/components/SourceIcon";
-import React, { useEffect, useState } from "react";
-import { Switch } from "@/components/ui/switch";
+import Switch from "@/refresh-components/inputs/Switch";
 import Link from "next/link";
 import { EntityType, SourceAndEntityTypeView } from "@/app/admin/kg/interfaces";
 import CollapsibleCard from "@/components/CollapsibleCard";
@@ -8,7 +8,7 @@ import { ValidSources } from "@/lib/types";
 import { FaCircleQuestion } from "react-icons/fa6";
 import { CheckmarkIcon } from "@/components/icons/icons";
 import Button from "@/refresh-components/buttons/Button";
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { cn } from "@/lib/utils";
 

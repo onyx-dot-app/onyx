@@ -21,7 +21,6 @@ GEN_AI_API_KEY_STORAGE_KEY = "genai_api_key"
 PUBLIC_DOC_PAT = "PUBLIC"
 ID_SEPARATOR = ":;:"
 DEFAULT_BOOST = 0
-SESSION_KEY = "session"
 
 # Cookies
 FASTAPI_USERS_AUTH_COOKIE_NAME = (
@@ -72,12 +71,13 @@ POSTGRES_CELERY_APP_NAME = "celery"
 POSTGRES_CELERY_BEAT_APP_NAME = "celery_beat"
 POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME = "celery_worker_primary"
 POSTGRES_CELERY_WORKER_LIGHT_APP_NAME = "celery_worker_light"
-POSTGRES_CELERY_WORKER_HEAVY_APP_NAME = "celery_worker_heavy"
 POSTGRES_CELERY_WORKER_DOCPROCESSING_APP_NAME = "celery_worker_docprocessing"
 POSTGRES_CELERY_WORKER_DOCFETCHING_APP_NAME = "celery_worker_docfetching"
-POSTGRES_CELERY_WORKER_MONITORING_APP_NAME = "celery_worker_monitoring"
 POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME = "celery_worker_indexing_child"
+POSTGRES_CELERY_WORKER_BACKGROUND_APP_NAME = "celery_worker_background"
+POSTGRES_CELERY_WORKER_HEAVY_APP_NAME = "celery_worker_heavy"
 POSTGRES_CELERY_WORKER_KG_PROCESSING_APP_NAME = "celery_worker_kg_processing"
+POSTGRES_CELERY_WORKER_MONITORING_APP_NAME = "celery_worker_monitoring"
 POSTGRES_CELERY_WORKER_USER_FILE_PROCESSING_APP_NAME = (
     "celery_worker_user_file_processing"
 )
@@ -97,6 +97,7 @@ KV_UNSTRUCTURED_API_KEY = "unstructured_api_key"
 KV_USER_STORE_KEY = "INVITED_USERS"
 KV_PENDING_USERS_KEY = "PENDING_USERS"
 KV_NO_AUTH_USER_PREFERENCES_KEY = "no_auth_user_preferences"
+KV_NO_AUTH_USER_PERSONALIZATION_KEY = "no_auth_user_personalization"
 KV_CRED_KEY = "credential_id_{}"
 KV_GMAIL_CRED_KEY = "gmail_app_credential"
 KV_GMAIL_SERVICE_ACCOUNT_KEY = "gmail_service_account_key"
@@ -176,6 +177,7 @@ class DocumentSource(str, Enum):
     SLAB = "slab"
     PRODUCTBOARD = "productboard"
     FILE = "file"
+    CODA = "coda"
     NOTION = "notion"
     ZULIP = "zulip"
     LINEAR = "linear"
@@ -211,6 +213,7 @@ class DocumentSource(str, Enum):
 
     IMAP = "imap"
     BITBUCKET = "bitbucket"
+    TESTRAIL = "testrail"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
@@ -294,6 +297,15 @@ class MessageType(str, Enum):
     SYSTEM = "system"  # SystemMessage
     USER = "user"  # HumanMessage
     ASSISTANT = "assistant"  # AIMessage
+    TOOL_CALL = "tool_call"
+    TOOL_CALL_RESPONSE = "tool_call_response"
+
+
+class ChatMessageSimpleType(str, Enum):
+    USER = "user"
+    ASSISTANT = "assistant"
+    TOOL_CALL = "tool_call"
+    FILE_TEXT = "file_text"
 
 
 class TokenRateLimitScope(str, Enum):
@@ -321,7 +333,6 @@ class FileType(str, Enum):
 class MilestoneRecordType(str, Enum):
     TENANT_CREATED = "tenant_created"
     USER_SIGNED_UP = "user_signed_up"
-    MULTIPLE_USERS = "multiple_users"
     VISITED_ADMIN_PAGE = "visited_admin_page"
     CREATED_CONNECTOR = "created_connector"
     CONNECTOR_SUCCEEDED = "connector_succeeded"
@@ -360,6 +371,7 @@ class OnyxCeleryQueues:
     # User file processing queue
     USER_FILE_PROCESSING = "user_file_processing"
     USER_FILE_PROJECT_SYNC = "user_file_project_sync"
+    USER_FILE_DELETE = "user_file_delete"
     # Document processing pipeline queue
     DOCPROCESSING = "docprocessing"
     CONNECTOR_DOC_FETCHING = "connector_doc_fetching"
@@ -412,6 +424,8 @@ class OnyxRedisLocks:
     USER_FILE_PROCESSING_LOCK_PREFIX = "da_lock:user_file_processing"
     USER_FILE_PROJECT_SYNC_BEAT_LOCK = "da_lock:check_user_file_project_sync_beat"
     USER_FILE_PROJECT_SYNC_LOCK_PREFIX = "da_lock:user_file_project_sync"
+    USER_FILE_DELETE_BEAT_LOCK = "da_lock:check_user_file_delete_beat"
+    USER_FILE_DELETE_LOCK_PREFIX = "da_lock:user_file_delete"
     USER_FILE_DOCID_MIGRATION_LOCK = "da_lock:user_file_docid_migration"
 
 
@@ -485,6 +499,8 @@ class OnyxCeleryTask:
     PROCESS_SINGLE_USER_FILE = "process_single_user_file"
     CHECK_FOR_USER_FILE_PROJECT_SYNC = "check_for_user_file_project_sync"
     PROCESS_SINGLE_USER_FILE_PROJECT_SYNC = "process_single_user_file_project_sync"
+    CHECK_FOR_USER_FILE_DELETE = "check_for_user_file_delete"
+    DELETE_SINGLE_USER_FILE = "delete_single_user_file"
 
     # Connector checkpoint cleanup
     CHECK_FOR_CHECKPOINT_CLEANUP = "check_for_checkpoint_cleanup"
@@ -581,6 +597,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.SLAB: "slab data",
     DocumentSource.PRODUCTBOARD: "productboard data (boards, etc.)",
     DocumentSource.FILE: "files",
+    DocumentSource.CODA: "coda - team workspace with docs, tables, and pages",
     DocumentSource.NOTION: "notion data - a workspace that combines note-taking, \
 project management, and collaboration tools into a single, customizable platform",
     DocumentSource.ZULIP: "zulip data",
@@ -614,4 +631,5 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.HIGHSPOT: "highspot - CRM data",
     DocumentSource.DRUPAL_WIKI: "drupal wiki - knowledge base content",
     DocumentSource.IMAP: "imap - email data",
+    DocumentSource.TESTRAIL: "testrail - test case management tool for QA processes",
 }

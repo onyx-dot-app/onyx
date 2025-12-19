@@ -1,4 +1,6 @@
 from base64 import urlsafe_b64decode
+from collections.abc import Callable
+from collections.abc import Iterator
 from typing import Any
 from typing import cast
 from typing import Dict
@@ -13,9 +15,14 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.google_utils.google_auth import get_google_creds
 from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
+from onyx.connectors.google_utils.google_utils import (
+    execute_paginated_retrieval_with_max_pages,
+)
 from onyx.connectors.google_utils.google_utils import execute_single_retrieval
+from onyx.connectors.google_utils.google_utils import PAGE_TOKEN_KEY
 from onyx.connectors.google_utils.resources import get_admin_service
 from onyx.connectors.google_utils.resources import get_gmail_service
+from onyx.connectors.google_utils.resources import GmailService
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
 )
@@ -23,14 +30,16 @@ from onyx.connectors.google_utils.shared_constants import MISSING_SCOPES_ERROR_S
 from onyx.connectors.google_utils.shared_constants import ONYX_SCOPE_INSTRUCTIONS
 from onyx.connectors.google_utils.shared_constants import SLIM_BATCH_SIZE
 from onyx.connectors.google_utils.shared_constants import USER_FIELDS
-from onyx.connectors.interfaces import GenerateDocumentsOutput
+from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
+from onyx.connectors.interfaces import CheckpointOutput
+from onyx.connectors.interfaces import ConnectorFailure
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import BasicExpertInfo
+from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import Document
+from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
@@ -57,6 +66,10 @@ EMAIL_FIELDS = [
     "from",
     "to",
 ]
+
+MAX_MESSAGE_BODY_BYTES = 10 * 1024 * 1024  # 10MB cap to keep large threads safe
+
+PAGES_PER_CHECKPOINT = 1
 
 add_retries = retry_builder(tries=50, max_delay=30)
 
@@ -120,20 +133,60 @@ def _get_owners_from_emails(emails: dict[str, str | None]) -> list[BasicExpertIn
 
 
 def _get_message_body(payload: dict[str, Any]) -> str:
-    parts = payload.get("parts", [])
-    message_body = ""
-    for part in parts:
+    """
+    Gmail threads can contain large inline parts (including attachments
+    transmitted as base64). Only decode text/plain parts and skip anything
+    that breaches the safety threshold to protect against OOMs.
+    """
+
+    message_body_chunks: list[str] = []
+    stack = [payload]
+
+    while stack:
+        part = stack.pop()
+        if not part:
+            continue
+
+        children = part.get("parts", [])
+        stack.extend(reversed(children))
+
         mime_type = part.get("mimeType")
-        body = part.get("body")
-        if mime_type == "text/plain" and body:
-            data = body.get("data", "")
+        if mime_type != "text/plain":
+            continue
+
+        body = part.get("body", {})
+        data = body.get("data", "")
+
+        if not data:
+            continue
+
+        # base64 inflates storage by ~4/3; work with decoded size estimate
+        approx_decoded_size = (len(data) * 3) // 4
+        if approx_decoded_size > MAX_MESSAGE_BODY_BYTES:
+            logger.warning(
+                "Skipping oversized Gmail message part (%s bytes > %s limit)",
+                approx_decoded_size,
+                MAX_MESSAGE_BODY_BYTES,
+            )
+            continue
+
+        try:
             text = urlsafe_b64decode(data).decode()
-            message_body += text
-    return message_body
+        except (ValueError, UnicodeDecodeError) as error:
+            logger.warning("Failed to decode Gmail message part: %s", error)
+            continue
+
+        message_body_chunks.append(text)
+
+    return "".join(message_body_chunks)
+
+
+def _build_document_link(thread_id: str) -> str:
+    return f"https://mail.google.com/mail/u/0/#inbox/{thread_id}"
 
 
 def message_to_section(message: Dict[str, Any]) -> tuple[TextSection, dict[str, str]]:
-    link = f"https://mail.google.com/mail/u/0/#inbox/{message['id']}"
+    link = _build_document_link(message["id"])
 
     payload = message.get("payload", {})
     headers = payload.get("headers", [])
@@ -213,6 +266,8 @@ def thread_to_document(
     if not semantic_identifier:
         semantic_identifier = "(no subject)"
 
+    # NOTE: we're choosing to unconditionally include perm sync info
+    # (external_access) as it doesn't cost much space
     return Document(
         id=id,
         semantic_identifier=semantic_identifier,
@@ -232,7 +287,59 @@ def thread_to_document(
     )
 
 
-class GmailConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync):
+def _full_thread_from_id(
+    thread_id: str,
+    user_email: str,
+    gmail_service: GmailService,
+) -> Document | ConnectorFailure | None:
+    try:
+        thread = next(
+            execute_single_retrieval(
+                retrieval_function=gmail_service.users().threads().get,
+                list_key=None,
+                userId=user_email,
+                fields=THREAD_FIELDS,
+                id=thread_id,
+                continue_on_404_or_403=True,
+            ),
+            None,
+        )
+        if thread is None:
+            raise ValueError(f"Thread {thread_id} not found")
+        return thread_to_document(thread, user_email)
+    except Exception as e:
+        return ConnectorFailure(
+            failed_document=DocumentFailure(
+                document_id=thread_id, document_link=_build_document_link(thread_id)
+            ),
+            failure_message=f"Failed to retrieve thread {thread_id}",
+            exception=e,
+        )
+
+
+def _slim_thread_from_id(
+    thread_id: str,
+    user_email: str,
+    gmail_service: GmailService,
+) -> SlimDocument:
+    return SlimDocument(
+        id=thread_id,
+        external_access=ExternalAccess(
+            external_user_emails={user_email},
+            external_user_group_ids=set(),
+            is_public=False,
+        ),
+    )
+
+
+class GmailCheckpoint(ConnectorCheckpoint):
+    user_emails: list[str] = []  # stack of user emails to process
+    page_token: str | None = None
+
+
+class GmailConnector(
+    SlimConnectorWithPermSync, CheckpointedConnectorWithPermSync[GmailCheckpoint]
+):
     def __init__(self, batch_size: int = INDEX_BATCH_SIZE) -> None:
         self.batch_size = batch_size
 
@@ -308,79 +415,39 @@ class GmailConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync):
                 return [self.primary_admin_email]
             raise
 
-        except Exception:
-            raise
-
-    def _fetch_threads(
+    def _fetch_threads_impl(
         self,
-        time_range_start: SecondsSinceUnixEpoch | None = None,
-        time_range_end: SecondsSinceUnixEpoch | None = None,
-    ) -> GenerateDocumentsOutput:
-        query = _build_time_range_query(time_range_start, time_range_end)
-        doc_batch = []
-        for user_email in self._get_all_user_emails():
-            gmail_service = get_gmail_service(self.creds, user_email)
-            try:
-                for thread in execute_paginated_retrieval(
-                    retrieval_function=gmail_service.users().threads().list,
-                    list_key="threads",
-                    userId=user_email,
-                    fields=THREAD_LIST_FIELDS,
-                    q=query,
-                    continue_on_404_or_403=True,
-                ):
-                    full_threads = execute_single_retrieval(
-                        retrieval_function=gmail_service.users().threads().get,
-                        list_key=None,
-                        userId=user_email,
-                        fields=THREAD_FIELDS,
-                        id=thread["id"],
-                        continue_on_404_or_403=True,
-                    )
-                    # full_threads is an iterator containing a single thread
-                    # so we need to convert it to a list and grab the first element
-                    full_thread = list(full_threads)[0]
-                    doc = thread_to_document(full_thread, user_email)
-                    if doc is None:
-                        continue
-
-                    doc_batch.append(doc)
-                    if len(doc_batch) > self.batch_size:
-                        yield doc_batch
-                        doc_batch = []
-            except HttpError as e:
-                if _is_mail_service_disabled_error(e):
-                    logger.warning(
-                        "Skipping Gmail sync for %s because the mailbox is disabled.",
-                        user_email,
-                    )
-                    continue
-                raise
-
-        if doc_batch:
-            yield doc_batch
-
-    def _fetch_slim_threads(
-        self,
+        user_email: str,
         time_range_start: SecondsSinceUnixEpoch | None = None,
         time_range_end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
-    ) -> GenerateSlimDocumentOutput:
+        page_token: str | None = None,
+        set_page_token: Callable[[str | None], None] = lambda x: None,
+        is_slim: bool = False,
+    ) -> Iterator[Document | ConnectorFailure] | GenerateSlimDocumentOutput:
         query = _build_time_range_query(time_range_start, time_range_end)
-        doc_batch = []
-        for user_email in self._get_all_user_emails():
-            logger.info(f"Fetching slim threads for user: {user_email}")
-            gmail_service = get_gmail_service(self.creds, user_email)
-            try:
-                for thread in execute_paginated_retrieval(
-                    retrieval_function=gmail_service.users().threads().list,
-                    list_key="threads",
-                    userId=user_email,
-                    fields=THREAD_LIST_FIELDS,
-                    q=query,
-                    continue_on_404_or_403=True,
-                ):
-                    doc_batch.append(
+        slim_doc_batch: list[SlimDocument] = []
+        logger.info(
+            f"Fetching {'slim' if is_slim else 'full'} threads for user: {user_email}"
+        )
+        gmail_service = get_gmail_service(self.creds, user_email)
+        try:
+            for thread in execute_paginated_retrieval_with_max_pages(
+                max_num_pages=PAGES_PER_CHECKPOINT,
+                retrieval_function=gmail_service.users().threads().list,
+                list_key="threads",
+                userId=user_email,
+                fields=THREAD_LIST_FIELDS,
+                q=query,
+                continue_on_404_or_403=True,
+                **({PAGE_TOKEN_KEY: page_token} if page_token else {}),
+            ):
+                # if a page token is returned, set it and leave the function
+                if isinstance(thread, str):
+                    set_page_token(thread)
+                    return
+                if is_slim:
+                    slim_doc_batch.append(
                         SlimDocument(
                             id=thread["id"],
                             external_access=ExternalAccess(
@@ -390,46 +457,141 @@ class GmailConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync):
                             ),
                         )
                     )
-                    if len(doc_batch) > SLIM_BATCH_SIZE:
-                        yield doc_batch
-                        doc_batch = []
-
-                        if callback:
-                            if callback.should_stop():
-                                raise RuntimeError(
-                                    "retrieve_all_slim_docs_perm_sync: Stop signal detected"
-                                )
-
-                            callback.progress("retrieve_all_slim_docs_perm_sync", 1)
-            except HttpError as e:
-                if _is_mail_service_disabled_error(e):
-                    logger.warning(
-                        "Skipping slim Gmail sync for %s because the mailbox is disabled.",
-                        user_email,
+                    if len(slim_doc_batch) >= SLIM_BATCH_SIZE:
+                        yield slim_doc_batch
+                        slim_doc_batch = []
+                else:
+                    result = _full_thread_from_id(
+                        thread["id"], user_email, gmail_service
                     )
-                    continue
-                raise
+                    if result is not None:
+                        yield result
+                if callback:
+                    tag = (
+                        "retrieve_all_slim_docs_perm_sync"
+                        if is_slim
+                        else "gmail_retrieve_all_docs"
+                    )
+                    if callback.should_stop():
+                        raise RuntimeError(f"{tag}: Stop signal detected")
 
-        if doc_batch:
-            yield doc_batch
+                    callback.progress(tag, 1)
+            if slim_doc_batch:
+                yield slim_doc_batch
 
-    def load_from_state(self) -> GenerateDocumentsOutput:
+            # done with user
+            set_page_token(None)
+        except HttpError as e:
+            if _is_mail_service_disabled_error(e):
+                logger.warning(
+                    "Skipping Gmail sync for %s because the mailbox is disabled.",
+                    user_email,
+                )
+                return
+            raise
+
+    def _fetch_threads(
+        self,
+        user_email: str,
+        page_token: str | None = None,
+        set_page_token: Callable[[str | None], None] = lambda x: None,
+        time_range_start: SecondsSinceUnixEpoch | None = None,
+        time_range_end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> Iterator[Document | ConnectorFailure]:
+        yield from cast(
+            Iterator[Document | ConnectorFailure],
+            self._fetch_threads_impl(
+                user_email,
+                time_range_start,
+                time_range_end,
+                callback,
+                page_token,
+                set_page_token,
+                False,
+            ),
+        )
+
+    def _fetch_slim_threads(
+        self,
+        user_email: str,
+        page_token: str | None = None,
+        set_page_token: Callable[[str | None], None] = lambda x: None,
+        time_range_start: SecondsSinceUnixEpoch | None = None,
+        time_range_end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        yield from cast(
+            GenerateSlimDocumentOutput,
+            self._fetch_threads_impl(
+                user_email,
+                time_range_start,
+                time_range_end,
+                callback,
+                page_token,
+                set_page_token,
+                True,
+            ),
+        )
+
+    def _load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: GmailCheckpoint,
+    ) -> CheckpointOutput[GmailCheckpoint]:
+        if not checkpoint.user_emails:
+            checkpoint.user_emails = self._get_all_user_emails()
         try:
-            yield from self._fetch_threads()
+
+            def set_page_token(page_token: str | None) -> None:
+                checkpoint.page_token = page_token
+
+            yield from self._fetch_threads(
+                checkpoint.user_emails[-1],
+                checkpoint.page_token,
+                set_page_token,
+                start,
+                end,
+                callback=None,
+            )
+            if checkpoint.page_token is None:
+                # we're done with this user
+                checkpoint.user_emails.pop()
+
+            if len(checkpoint.user_emails) == 0:
+                checkpoint.has_more = False
+            return checkpoint
         except Exception as e:
             if MISSING_SCOPES_ERROR_STR in str(e):
                 raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
             raise e
 
-    def poll_source(
-        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
-    ) -> GenerateDocumentsOutput:
-        try:
-            yield from self._fetch_threads(start, end)
-        except Exception as e:
-            if MISSING_SCOPES_ERROR_STR in str(e):
-                raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
-            raise e
+    def load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: GmailCheckpoint,
+    ) -> CheckpointOutput[GmailCheckpoint]:
+        return self._load_from_checkpoint(
+            start=start,
+            end=end,
+            checkpoint=checkpoint,
+        )
+
+    def load_from_checkpoint_with_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: GmailCheckpoint,
+    ) -> CheckpointOutput[GmailCheckpoint]:
+        # NOTE: we're choosing to unconditionally include perm sync info
+        # (external_access) as it doesn't cost much space
+        return self._load_from_checkpoint(
+            start=start,
+            end=end,
+            checkpoint=checkpoint,
+        )
 
     def retrieve_all_slim_docs_perm_sync(
         self,
@@ -438,11 +600,30 @@ class GmailConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync):
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         try:
-            yield from self._fetch_slim_threads(start, end, callback=callback)
+            pt_dict: dict[str, str | None] = {PAGE_TOKEN_KEY: None}
+
+            def set_page_token(page_token: str | None) -> None:
+                pt_dict[PAGE_TOKEN_KEY] = page_token
+
+            for user_email in self._get_all_user_emails():
+                yield from self._fetch_slim_threads(
+                    user_email,
+                    pt_dict[PAGE_TOKEN_KEY],
+                    set_page_token,
+                    start,
+                    end,
+                    callback=callback,
+                )
         except Exception as e:
             if MISSING_SCOPES_ERROR_STR in str(e):
                 raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
             raise e
+
+    def build_dummy_checkpoint(self) -> GmailCheckpoint:
+        return GmailCheckpoint(has_more=True)
+
+    def validate_checkpoint_json(self, checkpoint_json: str) -> GmailCheckpoint:
+        return GmailCheckpoint.model_validate_json(checkpoint_json)
 
 
 if __name__ == "__main__":

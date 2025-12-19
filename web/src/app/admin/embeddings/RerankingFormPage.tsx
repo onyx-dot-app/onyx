@@ -20,10 +20,11 @@ import {
   LiteLLMIcon,
   MixedBreadIcon,
 } from "@/components/icons/icons";
-import { Modal } from "@/components/Modal";
-import { Button } from "@/components/ui/button";
+import Modal from "@/refresh-components/Modal";
+import Button from "@/refresh-components/buttons/Button";
 import { TextFormField } from "@/components/Field";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { SvgAlertTriangle, SvgKey } from "@opal/icons";
 
 interface RerankingDetailsFormProps {
   setRerankingDetails: Dispatch<SetStateAction<RerankingDetails>>;
@@ -319,114 +320,136 @@ const RerankingDetailsForm = forwardRef<
 
                 {showGpuWarningModalModel && (
                   <Modal
-                    onOutsideClick={() => setShowGpuWarningModalModel(null)}
-                    width="w-[500px] flex flex-col"
-                    title="GPU Not Enabled"
+                    open
+                    onOpenChange={() => setShowGpuWarningModalModel(null)}
                   >
-                    <>
-                      <p className="text-error font-semibold">Warning:</p>
-                      <p>
-                        Local reranking models require significant computational
-                        resources and may perform slowly without GPU
-                        acceleration. Consider switching to GPU-enabled
-                        infrastructure or using a cloud-based alternative for
-                        better performance.
-                      </p>
-                      <div className="flex justify-end">
+                    <Modal.Content small>
+                      <Modal.Header
+                        icon={SvgAlertTriangle}
+                        title="GPU Not Enabled"
+                        onClose={() => setShowGpuWarningModalModel(null)}
+                      />
+                      <Modal.Body>
+                        <p className="text-error font-semibold">Warning:</p>
+                        <p>
+                          Local reranking models require significant
+                          computational resources and may perform slowly without
+                          GPU acceleration. Consider switching to GPU-enabled
+                          infrastructure or using a cloud-based alternative for
+                          better performance.
+                        </p>
+                      </Modal.Body>
+                      <Modal.Footer className="p-4 flex justify-end">
                         <Button
                           onClick={() => setShowGpuWarningModalModel(null)}
-                          variant="submit"
                         >
                           Understood
                         </Button>
-                      </div>
-                    </>
+                      </Modal.Footer>
+                    </Modal.Content>
                   </Modal>
                 )}
+
                 {showLiteLLMConfigurationModal && (
                   <Modal
-                    onOutsideClick={() => {
+                    open
+                    onOpenChange={() => {
                       resetForm();
                       setShowLiteLLMConfigurationModal(false);
                     }}
-                    width="w-[800px]"
-                    title="API Key Configuration"
                   >
-                    <div className="w-full  flex flex-col gap-y-4 px-4">
-                      <TextFormField
-                        subtext="Set the URL at which your LiteLLM Proxy is hosted"
-                        placeholder={values.rerank_api_url || undefined}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                          const value = e.target.value;
-                          setRerankingDetails({
-                            ...values,
-                            rerank_api_url: value,
-                          });
-                          setFieldValue("rerank_api_url", value);
+                    <Modal.Content medium>
+                      <Modal.Header
+                        icon={SvgKey}
+                        title="API Key Configuration"
+                        onClose={() => {
+                          resetForm();
+                          setShowLiteLLMConfigurationModal(false);
                         }}
-                        type="text"
-                        label="LiteLLM Proxy  URL"
-                        name="rerank_api_url"
                       />
+                      <Modal.Body>
+                        <div className="w-full flex flex-col gap-y-4">
+                          <TextFormField
+                            subtext="Set the URL at which your LiteLLM Proxy is hosted"
+                            placeholder={values.rerank_api_url || undefined}
+                            onChange={(
+                              e: React.ChangeEvent<HTMLInputElement>
+                            ) => {
+                              const value = e.target.value;
+                              setRerankingDetails({
+                                ...values,
+                                rerank_api_url: value,
+                              });
+                              setFieldValue("rerank_api_url", value);
+                            }}
+                            type="text"
+                            label="LiteLLM Proxy  URL"
+                            name="rerank_api_url"
+                          />
 
-                      <TextFormField
-                        subtext="Set the key to access your LiteLLM Proxy"
-                        placeholder={
-                          values.rerank_api_key
-                            ? "*".repeat(values.rerank_api_key.length)
-                            : undefined
-                        }
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                          const value = e.target.value;
-                          setRerankingDetails({
-                            ...values,
-                            rerank_api_key: value,
-                          });
-                          setFieldValue("rerank_api_key", value);
-                        }}
-                        type="password"
-                        label="LiteLLM Proxy Key"
-                        name="rerank_api_key"
-                        optional
-                      />
+                          <TextFormField
+                            subtext="Set the key to access your LiteLLM Proxy"
+                            placeholder={
+                              values.rerank_api_key
+                                ? "*".repeat(values.rerank_api_key.length)
+                                : undefined
+                            }
+                            onChange={(
+                              e: React.ChangeEvent<HTMLInputElement>
+                            ) => {
+                              const value = e.target.value;
+                              setRerankingDetails({
+                                ...values,
+                                rerank_api_key: value,
+                              });
+                              setFieldValue("rerank_api_key", value);
+                            }}
+                            type="password"
+                            label="LiteLLM Proxy Key"
+                            name="rerank_api_key"
+                            optional
+                          />
 
-                      <TextFormField
-                        subtext="Set the model name to use for LiteLLM Proxy"
-                        placeholder={
-                          values.rerank_model_name
-                            ? "*".repeat(values.rerank_model_name.length)
-                            : undefined
-                        }
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                          const value = e.target.value;
-                          setRerankingDetails({
-                            ...values,
-                            rerank_model_name: value,
-                          });
-                          setFieldValue("rerank_model_name", value);
-                        }}
-                        label="LiteLLM Model Name"
-                        name="rerank_model_name"
-                        optional
-                      />
-
-                      <div className="flex w-full justify-end mt-4">
+                          <TextFormField
+                            subtext="Set the model name to use for LiteLLM Proxy"
+                            placeholder={
+                              values.rerank_model_name
+                                ? "*".repeat(values.rerank_model_name.length)
+                                : undefined
+                            }
+                            onChange={(
+                              e: React.ChangeEvent<HTMLInputElement>
+                            ) => {
+                              const value = e.target.value;
+                              setRerankingDetails({
+                                ...values,
+                                rerank_model_name: value,
+                              });
+                              setFieldValue("rerank_model_name", value);
+                            }}
+                            label="LiteLLM Model Name"
+                            name="rerank_model_name"
+                            optional
+                          />
+                        </div>
+                      </Modal.Body>
+                      <Modal.Footer className="p-4 flex w-full justify-end">
                         <Button
                           onClick={() => {
                             setShowLiteLLMConfigurationModal(false);
                           }}
-                          variant="submit"
                         >
                           Update
                         </Button>
-                      </div>
-                    </div>
+                      </Modal.Footer>
+                    </Modal.Content>
                   </Modal>
                 )}
 
                 {isApiKeyModalOpen && (
                   <Modal
-                    onOutsideClick={() => {
+                    open
+                    onOpenChange={() => {
                       Object.keys(originalRerankingDetails).forEach((key) => {
                         setFieldValue(
                           key,
@@ -438,45 +461,64 @@ const RerankingDetailsForm = forwardRef<
 
                       setIsApiKeyModalOpen(false);
                     }}
-                    width="w-[800px]"
-                    title="API Key Configuration"
                   >
-                    <div className="w-full px-4">
-                      <TextFormField
-                        placeholder={
-                          values.rerank_api_key
-                            ? "*".repeat(values.rerank_api_key.length)
-                            : values.rerank_provider_type ===
-                                RerankerProvider.BEDROCK
-                              ? "aws_ACCESSKEY_SECRETKEY_REGION"
-                              : "Enter your API key"
-                        }
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                          const value = e.target.value;
-                          setRerankingDetails({
-                            ...values,
-                            rerank_api_key: value,
-                          });
-                          setFieldValue("rerank_api_key", value);
+                    <Modal.Content medium>
+                      <Modal.Header
+                        icon={SvgKey}
+                        title="API Key Configuration"
+                        onClose={() => {
+                          Object.keys(originalRerankingDetails).forEach(
+                            (key) => {
+                              setFieldValue(
+                                key,
+                                originalRerankingDetails[
+                                  key as keyof RerankingDetails
+                                ]
+                              );
+                            }
+                          );
+
+                          setIsApiKeyModalOpen(false);
                         }}
-                        type="password"
-                        label={
-                          values.rerank_provider_type ===
-                          RerankerProvider.BEDROCK
-                            ? "AWS Credentials in format: aws_ACCESSKEY_SECRETKEY_REGION"
-                            : "Cohere API Key"
-                        }
-                        name="rerank_api_key"
                       />
-                      <div className="flex w-full justify-end mt-4">
-                        <Button
-                          onClick={() => setIsApiKeyModalOpen(false)}
-                          variant="submit"
-                        >
+                      <Modal.Body>
+                        <div className="w-full">
+                          <TextFormField
+                            placeholder={
+                              values.rerank_api_key
+                                ? "*".repeat(values.rerank_api_key.length)
+                                : values.rerank_provider_type ===
+                                    RerankerProvider.BEDROCK
+                                  ? "aws_ACCESSKEY_SECRETKEY_REGION"
+                                  : "Enter your API key"
+                            }
+                            onChange={(
+                              e: React.ChangeEvent<HTMLInputElement>
+                            ) => {
+                              const value = e.target.value;
+                              setRerankingDetails({
+                                ...values,
+                                rerank_api_key: value,
+                              });
+                              setFieldValue("rerank_api_key", value);
+                            }}
+                            type="password"
+                            label={
+                              values.rerank_provider_type ===
+                              RerankerProvider.BEDROCK
+                                ? "AWS Credentials in format: aws_ACCESSKEY_SECRETKEY_REGION"
+                                : "Cohere API Key"
+                            }
+                            name="rerank_api_key"
+                          />
+                        </div>
+                      </Modal.Body>
+                      <Modal.Footer className="p-4 flex w-full justify-end">
+                        <Button onClick={() => setIsApiKeyModalOpen(false)}>
                           Update
                         </Button>
-                      </div>
-                    </div>
+                      </Modal.Footer>
+                    </Modal.Content>
                   </Modal>
                 )}
               </Form>
@@ -487,6 +529,6 @@ const RerankingDetailsForm = forwardRef<
     );
   }
 );
-
 RerankingDetailsForm.displayName = "RerankingDetailsForm";
+
 export default RerankingDetailsForm;

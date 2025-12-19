@@ -1,8 +1,7 @@
 import { ThreeDotsLoader } from "@/components/Loading";
-import { Modal } from "@/components/Modal";
+import Modal from "@/refresh-components/Modal";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import {
-  ConnectorIndexingStatus,
   ConnectorIndexingStatusLite,
   ConnectorIndexingStatusLiteResponse,
   FailedConnectorIndexingStatus,
@@ -10,7 +9,7 @@ import {
 } from "@/lib/types";
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
-import { Button } from "@/components/ui/button";
+import Button from "@/refresh-components/buttons/Button";
 import { useMemo, useState } from "react";
 import useSWR, { mutate } from "swr";
 import { ReindexingProgressTable } from "../../../../components/embedding/ReindexingProgressTable";
@@ -23,6 +22,8 @@ import { Connector } from "@/lib/connectors/connectors";
 import { FailedReIndexAttempts } from "@/components/embedding/FailedReIndexAttempts";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
+import { SvgX } from "@opal/icons";
+import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
 
 export default function UpgradingPage({
   futureEmbeddingModel,
@@ -91,8 +92,21 @@ export default function UpgradingPage({
       .filter((status) => status.cc_pair_id !== undefined);
   }, [connectorIndexingStatuses]);
 
+  const visibleReindexingStatus = useMemo(() => {
+    const statuses = ongoingReIndexingStatus || [];
+
+    if (futureEmbeddingModel.switchover_type === "active_only") {
+      return statuses.filter(
+        (status) =>
+          status.cc_pair_status !== ConnectorCredentialPairStatus.PAUSED
+      );
+    }
+
+    return statuses;
+  }, [futureEmbeddingModel.switchover_type, ongoingReIndexingStatus]);
+
   const sortedReindexingProgress = useMemo(() => {
-    return [...(ongoingReIndexingStatus || [])].sort((a, b) => {
+    return [...(visibleReindexingStatus || [])].sort((a, b) => {
       const statusComparison =
         statusOrder[a.last_status || "not_started"] -
         statusOrder[b.last_status || "not_started"];
@@ -103,7 +117,9 @@ export default function UpgradingPage({
 
       return (a.cc_pair_id || 0) - (b.cc_pair_id || 0);
     });
-  }, [ongoingReIndexingStatus, statusOrder]);
+  }, [visibleReindexingStatus, statusOrder]);
+
+  const hasVisibleReindexingProgress = sortedReindexingProgress.length > 0;
 
   if (isLoadingConnectors || isLoadingOngoingReIndexingStatus) {
     return <ThreeDotsLoader />;
@@ -113,22 +129,26 @@ export default function UpgradingPage({
     <>
       {popup}
       {isCancelling && (
-        <Modal
-          onOutsideClick={() => setIsCancelling(false)}
-          title="Cancel Embedding Model Switch"
-        >
-          <div>
-            <div>
-              Are you sure you want to cancel? Cancelling will revert to the
-              previous model and all progress will be lost.
-            </div>
-            <div className="mt-12 gap-x-2 w-full justify-end flex">
+        <Modal open onOpenChange={() => setIsCancelling(false)}>
+          <Modal.Content small>
+            <Modal.Header
+              icon={SvgX}
+              title="Cancel Embedding Model Switch"
+              onClose={() => setIsCancelling(false)}
+            />
+            <Modal.Body>
+              <div>
+                Are you sure you want to cancel? Cancelling will revert to the
+                previous model and all progress will be lost.
+              </div>
+            </Modal.Body>
+            <Modal.Footer className="p-4 flex gap-x-2 w-full justify-end">
               <Button onClick={onCancel}>Confirm</Button>
-              <Button onClick={() => setIsCancelling(false)} variant="outline">
+              <Button onClick={() => setIsCancelling(false)} secondary>
                 Cancel
               </Button>
-            </div>
-          </div>
+            </Modal.Footer>
+          </Modal.Content>
         </Modal>
       )}
 
@@ -142,7 +162,7 @@ export default function UpgradingPage({
             </div>
 
             <Button
-              variant="destructive"
+              danger
               className="mt-4"
               onClick={() => setIsCancelling(true)}
             >
@@ -150,35 +170,7 @@ export default function UpgradingPage({
             </Button>
 
             {connectors && connectors.length > 0 ? (
-              futureEmbeddingModel.background_reindex_enabled ? (
-                <>
-                  {failedIndexingStatus && failedIndexingStatus.length > 0 && (
-                    <FailedReIndexAttempts
-                      failedIndexingStatuses={failedIndexingStatus}
-                      setPopup={setPopup}
-                    />
-                  )}
-
-                  <Text className="my-4">
-                    The table below shows the re-indexing progress of all
-                    existing connectors. Once all connectors have been
-                    re-indexed successfully, the new model will be used for all
-                    search queries. Until then, we will use the old model so
-                    that no downtime is necessary during this transition.
-                    <br />
-                    Note: User file re-indexing progress is not shown. You will
-                    see this page until all user files are re-indexed!
-                  </Text>
-
-                  {sortedReindexingProgress ? (
-                    <ReindexingProgressTable
-                      reindexingProgress={sortedReindexingProgress}
-                    />
-                  ) : (
-                    <ErrorCallout errorTitle="Failed to fetch re-indexing progress" />
-                  )}
-                </>
-              ) : (
+              futureEmbeddingModel.switchover_type === "instant" ? (
                 <div className="mt-8">
                   <h3 className="text-lg font-semibold mb-2">
                     Switching Embedding Models
@@ -192,6 +184,65 @@ export default function UpgradingPage({
                     The new model will be active soon.
                   </p>
                 </div>
+              ) : (
+                <>
+                  {failedIndexingStatus && failedIndexingStatus.length > 0 && (
+                    <FailedReIndexAttempts
+                      failedIndexingStatuses={failedIndexingStatus}
+                      setPopup={setPopup}
+                    />
+                  )}
+
+                  <Text className="my-4">
+                    {futureEmbeddingModel.switchover_type === "active_only" ? (
+                      <>
+                        The table below shows the re-indexing progress of active
+                        (non-paused) connectors. Once all active connectors have
+                        been re-indexed successfully, the new model will be used
+                        for all search queries. Paused connectors will continue
+                        to be indexed in the background but won&apos;t block the
+                        switchover. Until then, we will use the old model so
+                        that no downtime is necessary during this transition.
+                        <br />
+                        Note: User file re-indexing progress is not shown. You
+                        will see this page until all active connectors are
+                        re-indexed!
+                      </>
+                    ) : (
+                      <>
+                        The table below shows the re-indexing progress of all
+                        existing connectors. Once all connectors have been
+                        re-indexed successfully, the new model will be used for
+                        all search queries. Until then, we will use the old
+                        model so that no downtime is necessary during this
+                        transition.
+                        <br />
+                        Note: User file re-indexing progress is not shown. You
+                        will see this page until all user files are re-indexed!
+                      </>
+                    )}
+                  </Text>
+
+                  {sortedReindexingProgress ? (
+                    <>
+                      {futureEmbeddingModel.switchover_type === "active_only" &&
+                        !hasVisibleReindexingProgress && (
+                          <Text className="text-text-700 mt-4">
+                            All connectors are currently paused, so none are
+                            blocking the switchover. Paused connectors will keep
+                            re-indexing in the background.
+                          </Text>
+                        )}
+                      {hasVisibleReindexingProgress && (
+                        <ReindexingProgressTable
+                          reindexingProgress={sortedReindexingProgress}
+                        />
+                      )}
+                    </>
+                  ) : (
+                    <ErrorCallout errorTitle="Failed to fetch re-indexing progress" />
+                  )}
+                </>
               )
             ) : (
               <div className="mt-8 p-6 bg-background-100 border border-border-strong rounded-lg max-w-2xl">

@@ -1,58 +1,49 @@
-import json
 import os
 import traceback
 from collections.abc import Iterator
-from collections.abc import Sequence
 from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
 from typing import Union
 
-from httpx import RemoteProtocolError
-from langchain.schema.language_model import LanguageModelInput
-from langchain_core.messages import AIMessage
-from langchain_core.messages import AIMessageChunk
 from langchain_core.messages import BaseMessage
-from langchain_core.messages import BaseMessageChunk
-from langchain_core.messages import ChatMessage
-from langchain_core.messages import ChatMessageChunk
-from langchain_core.messages import FunctionMessage
-from langchain_core.messages import FunctionMessageChunk
-from langchain_core.messages import HumanMessage
-from langchain_core.messages import HumanMessageChunk
-from langchain_core.messages import SystemMessage
-from langchain_core.messages import SystemMessageChunk
-from langchain_core.messages.tool import ToolCallChunk
-from langchain_core.messages.tool import ToolMessage
-from langchain_core.prompt_values import PromptValue
 
-from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
+from onyx.configs.app_configs import SEND_USER_METADATA_TO_LLM_PROVIDER
 from onyx.configs.chat_configs import QA_TIMEOUT
-from onyx.configs.model_configs import (
-    DISABLE_LITELLM_STREAMING,
-)
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
+from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
+from onyx.llm.interfaces import LLMUserIdentity
+from onyx.llm.interfaces import ReasoningEffort
 from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.llm.llm_provider_options import AZURE_PROVIDER_NAME
+from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
+from onyx.llm.llm_provider_options import VERTEX_CREDENTIALS_FILE_KWARG
+from onyx.llm.llm_provider_options import VERTEX_LOCATION_KWARG
+from onyx.llm.model_response import ModelResponse
+from onyx.llm.model_response import ModelResponseStream
+from onyx.llm.models import CLAUDE_REASONING_BUDGET_TOKENS
+from onyx.llm.models import OPENAI_REASONING_EFFORT
+from onyx.llm.utils import is_true_openai_model
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.utils import mask_string
 from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
+from onyx.utils.special_types import JSON_ro
 
 logger = setup_logger()
 
 if TYPE_CHECKING:
-    from litellm import ModelResponse, CustomStreamWrapper, Message
+    from litellm import CustomStreamWrapper
 
 
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
-VERTEX_CREDENTIALS_FILE_KWARG = "vertex_credentials"
-VERTEX_LOCATION_KWARG = "vertex_location"
 LEGACY_MAX_TOKENS_KWARG = "max_tokens"
 STANDARD_MAX_TOKENS_KWARG = "max_completion_tokens"
+MAX_LITELLM_USER_ID_LENGTH = 64
 
 
 class LLMTimeoutError(Exception):
@@ -67,183 +58,33 @@ class LLMRateLimitError(Exception):
     """
 
 
-def _base_msg_to_role(msg: BaseMessage) -> str:
-    if isinstance(msg, HumanMessage) or isinstance(msg, HumanMessageChunk):
-        return "user"
-    if isinstance(msg, AIMessage) or isinstance(msg, AIMessageChunk):
-        return "assistant"
-    if isinstance(msg, SystemMessage) or isinstance(msg, SystemMessageChunk):
-        return "system"
-    if isinstance(msg, FunctionMessage) or isinstance(msg, FunctionMessageChunk):
-        return "function"
-    return "unknown"
+def _prompt_to_dicts(prompt: LanguageModelInput) -> list[dict[str, Any]]:
+    """Convert Pydantic message models to dictionaries for LiteLLM.
 
-
-def _convert_litellm_message_to_langchain_message(
-    litellm_message: "Message",
-) -> BaseMessage:
-    from onyx.llm.litellm_singleton import litellm
-
-    # Extracting the basic attributes from the litellm message
-    content = litellm_message.content or ""
-    role = litellm_message.role
-
-    # Handling function calls and tool calls if present
-    tool_calls = (
-        cast(
-            list[litellm.ChatCompletionMessageToolCall],
-            litellm_message.tool_calls,
-        )
-        if hasattr(litellm_message, "tool_calls")
-        else []
-    )
-
-    # Create the appropriate langchain message based on the role
-    if role == "user":
-        return HumanMessage(content=content)
-    elif role == "assistant":
-        return AIMessage(
-            content=content,
-            tool_calls=(
-                [
-                    {
-                        "name": tool_call.function.name or "",
-                        "args": json.loads(tool_call.function.arguments),
-                        "id": tool_call.id,
-                    }
-                    for tool_call in tool_calls
-                ]
-                if tool_calls
-                else []
-            ),
-        )
-    elif role == "system":
-        return SystemMessage(content=content)
-    else:
-        raise ValueError(f"Unknown role type received: {role}")
-
-
-def _convert_message_to_dict(message: BaseMessage) -> dict:
-    """Adapted from langchain_community.chat_models.litellm._convert_message_to_dict"""
-    if isinstance(message, ChatMessage):
-        message_dict = {"role": message.role, "content": message.content}
-    elif isinstance(message, HumanMessage):
-        message_dict = {"role": "user", "content": message.content}
-    elif isinstance(message, AIMessage):
-        message_dict = {"role": "assistant", "content": message.content}
-        if message.tool_calls:
-            message_dict["tool_calls"] = [
-                {
-                    "id": tool_call.get("id"),
-                    "function": {
-                        "name": tool_call["name"],
-                        "arguments": json.dumps(tool_call["args"]),
-                    },
-                    "type": "function",
-                    "index": tool_call.get("index", 0),
-                }
-                for tool_call in message.tool_calls
-            ]
-        if "function_call" in message.additional_kwargs:
-            message_dict["function_call"] = message.additional_kwargs["function_call"]
-    elif isinstance(message, SystemMessage):
-        message_dict = {"role": "system", "content": message.content}
-    elif isinstance(message, FunctionMessage):
-        message_dict = {
-            "role": "function",
-            "content": message.content,
-            "name": message.name,
-        }
-    elif isinstance(message, ToolMessage):
-        message_dict = {
-            "tool_call_id": message.tool_call_id,
-            "role": "tool",
-            "name": message.name or "",
-            "content": message.content,
-        }
-    else:
-        raise ValueError(f"Got unknown type {message}")
-    if "name" in message.additional_kwargs:
-        message_dict["name"] = message.additional_kwargs["name"]
-    return message_dict
-
-
-def _convert_delta_to_message_chunk(
-    _dict: dict[str, Any],
-    curr_msg: BaseMessage | None,
-    stop_reason: str | None = None,
-) -> BaseMessageChunk:
-    from litellm.utils import ChatCompletionDeltaToolCall
-
-    """Adapted from langchain_community.chat_models.litellm._convert_delta_to_message_chunk"""
-    role = _dict.get("role") or (_base_msg_to_role(curr_msg) if curr_msg else "unknown")
-    content = _dict.get("content") or ""
-    additional_kwargs = {}
-    if _dict.get("function_call"):
-        additional_kwargs.update({"function_call": dict(_dict["function_call"])})
-    tool_calls = cast(list[ChatCompletionDeltaToolCall] | None, _dict.get("tool_calls"))
-
-    if role == "user":
-        return HumanMessageChunk(content=content)
-    # NOTE: if tool calls are present, then it's an assistant.
-    # In Ollama, the role will be None for tool-calls
-    elif role == "assistant" or tool_calls:
-        if tool_calls:
-            tool_call = tool_calls[0]
-            tool_name = tool_call.function.name or (curr_msg and curr_msg.name) or ""
-            idx = tool_call.index
-
-            tool_call_chunk = ToolCallChunk(
-                name=tool_name,
-                id=tool_call.id,
-                args=tool_call.function.arguments,
-                index=idx,
-            )
-
-            return AIMessageChunk(
-                content=content,
-                tool_call_chunks=[tool_call_chunk],
-                additional_kwargs={
-                    "usage_metadata": {"stop": stop_reason},
-                    **additional_kwargs,
-                },
-            )
-
-        return AIMessageChunk(
-            content=content,
-            additional_kwargs={
-                "usage_metadata": {"stop": stop_reason},
-                **additional_kwargs,
-            },
-        )
-    elif role == "system":
-        return SystemMessageChunk(content=content)
-    elif role == "function":
-        return FunctionMessageChunk(content=content, name=_dict["name"])
-    elif role:
-        return ChatMessageChunk(content=content, role=role)
-
-    raise ValueError(f"Unknown role: {role}")
-
-
-def _prompt_to_dict(
-    prompt: LanguageModelInput,
-) -> Sequence[str | list[str] | dict[str, Any] | tuple[str, str]]:
-    # NOTE: this must go first, since it is also a Sequence
+    LiteLLM expects messages to be dictionaries (with .get() method),
+    not Pydantic models. This function serializes the messages.
+    """
     if isinstance(prompt, str):
-        return [_convert_message_to_dict(HumanMessage(content=prompt))]
-
-    if isinstance(prompt, (list, Sequence)):
-        return [
-            _convert_message_to_dict(msg) if isinstance(msg, BaseMessage) else msg
-            for msg in prompt
-        ]
-
-    if isinstance(prompt, PromptValue):
-        return [_convert_message_to_dict(message) for message in prompt.to_messages()]
+        return [{"role": "user", "content": prompt}]
+    return [msg.model_dump(exclude_none=True) for msg in prompt]
 
 
-class DefaultMultiLLM(LLM):
+def _prompt_as_json(prompt: LanguageModelInput) -> JSON_ro:
+    return cast(JSON_ro, _prompt_to_dicts(prompt))
+
+
+def _truncate_litellm_user_id(user_id: str) -> str:
+    if len(user_id) <= MAX_LITELLM_USER_ID_LENGTH:
+        return user_id
+    logger.warning(
+        "LLM user id exceeds %d chars (len=%d); truncating for provider compatibility.",
+        MAX_LITELLM_USER_ID_LENGTH,
+        len(user_id),
+    )
+    return user_id[:MAX_LITELLM_USER_ID_LENGTH]
+
+
+class LitellmLLM(LLM):
     """Uses Litellm library to allow easy configuration to use a multitude of LLMs
     See https://python.langchain.com/docs/integrations/chat/litellm"""
 
@@ -306,9 +147,15 @@ class DefaultMultiLLM(LLM):
                         model_kwargs[k] = v
                         continue
 
-                # for all values, set them as env variables
-                os.environ[k] = v
-
+                # If there are any empty or null values,
+                # they MUST NOT be set in the env
+                if v is not None and v.strip():
+                    os.environ[k] = v
+                else:
+                    os.environ.pop(k, None)
+        # This is needed for Ollama to do proper function calling
+        if model_provider == OLLAMA_PROVIDER_NAME and api_base is not None:
+            os.environ["OLLAMA_API_BASE"] = api_base
         if extra_headers:
             model_kwargs.update({"extra_headers": extra_headers})
         if extra_body:
@@ -334,46 +181,57 @@ class DefaultMultiLLM(LLM):
             dump["credentials_file"] = mask_string(credentials_file)
         return dump
 
-    def log_model_configs(self) -> None:
-        logger.debug(f"Config: {self._safe_model_config()}")
-
-    def _record_call(self, prompt: LanguageModelInput) -> None:
-        if self._long_term_logger:
-            self._long_term_logger.record(
-                {"prompt": _prompt_to_dict(prompt), "model": self._safe_model_config()},
-                category=_LLM_PROMPT_LONG_TERM_LOG_CATEGORY,
-            )
-
-    def _record_result(
-        self, prompt: LanguageModelInput, model_output: BaseMessage
+    def _record_call(
+        self,
+        prompt: LanguageModelInput,
     ) -> None:
         if self._long_term_logger:
+            prompt_json = _prompt_as_json(prompt)
             self._long_term_logger.record(
                 {
-                    "prompt": _prompt_to_dict(prompt),
-                    "content": model_output.content,
-                    "tool_calls": (
-                        model_output.tool_calls
-                        if hasattr(model_output, "tool_calls")
-                        else []
-                    ),
-                    "model": self._safe_model_config(),
+                    "prompt": prompt_json,
+                    "model": cast(JSON_ro, self._safe_model_config()),
                 },
                 category=_LLM_PROMPT_LONG_TERM_LOG_CATEGORY,
             )
 
-    def _record_error(self, prompt: LanguageModelInput, error: Exception) -> None:
+    def _record_result(
+        self,
+        prompt: LanguageModelInput,
+        model_output: BaseMessage,
+    ) -> None:
         if self._long_term_logger:
+            prompt_json = _prompt_as_json(prompt)
+            tool_calls = (
+                model_output.tool_calls if hasattr(model_output, "tool_calls") else []
+            )
             self._long_term_logger.record(
                 {
-                    "prompt": _prompt_to_dict(prompt),
+                    "prompt": prompt_json,
+                    "content": model_output.content,
+                    "tool_calls": cast(JSON_ro, tool_calls),
+                    "model": cast(JSON_ro, self._safe_model_config()),
+                },
+                category=_LLM_PROMPT_LONG_TERM_LOG_CATEGORY,
+            )
+
+    def _record_error(
+        self,
+        prompt: LanguageModelInput,
+        error: Exception,
+    ) -> None:
+        if self._long_term_logger:
+            prompt_json = _prompt_as_json(prompt)
+            self._long_term_logger.record(
+                {
+                    "prompt": prompt_json,
                     "error": str(error),
                     "traceback": "".join(
                         traceback.format_exception(
                             type(error), error, error.__traceback__
                         )
                     ),
-                    "model": self._safe_model_config(),
+                    "model": cast(JSON_ro, self._safe_model_config()),
                 },
                 category=_LLM_PROMPT_LONG_TERM_LOG_CATEGORY,
             )
@@ -384,23 +242,62 @@ class DefaultMultiLLM(LLM):
         tools: list[dict] | None,
         tool_choice: ToolChoiceOptions | None,
         stream: bool,
+        parallel_tool_calls: bool,
+        reasoning_effort: ReasoningEffort | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
+        user_identity: LLMUserIdentity | None = None,
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
-        # litellm doesn't accept LangChain BaseMessage objects, so we need to convert them
-        # to a dict representation
-        processed_prompt = _prompt_to_dict(prompt)
-        self._record_call(processed_prompt)
+        self._record_call(prompt)
         from onyx.llm.litellm_singleton import litellm
         from litellm.exceptions import Timeout, RateLimitError
 
+        is_reasoning = model_is_reasoning_model(
+            self.config.model_name, self.config.model_provider
+        )
+
+        # Needed to get reasoning tokens from the model
+        # NOTE: OpenAI Responses API is disabled for parallel tool calls because LiteLLM's transformation layer
+        # doesn't properly pass parallel_tool_calls to the API, causing the model to
+        # always return sequential tool calls. For this reason parallel tool calls won't work with OpenAI models
+        if (
+            is_true_openai_model(self.config.model_provider, self.config.model_name)
+            or self.config.model_provider == AZURE_PROVIDER_NAME
+        ):
+            model_provider = f"{self.config.model_provider}/responses"
+        else:
+            model_provider = self.config.model_provider
+
+        completion_kwargs: dict[str, Any] = self._model_kwargs
+        if SEND_USER_METADATA_TO_LLM_PROVIDER and user_identity:
+            completion_kwargs = dict(self._model_kwargs)
+
+            if user_identity.user_id:
+                completion_kwargs["user"] = _truncate_litellm_user_id(
+                    user_identity.user_id
+                )
+
+            if user_identity.session_id:
+                existing_metadata = completion_kwargs.get("metadata")
+                metadata: dict[str, Any] | None
+                if existing_metadata is None:
+                    metadata = {}
+                elif isinstance(existing_metadata, dict):
+                    metadata = dict(existing_metadata)
+                else:
+                    metadata = None
+
+                if metadata is not None:
+                    metadata["session_id"] = user_identity.session_id
+                    completion_kwargs["metadata"] = metadata
+
         try:
-            return litellm.completion(
+            response = litellm.completion(
                 mock_response=MOCK_LLM_RESPONSE,
                 # model choice
                 # model="openai/gpt-4",
-                model=f"{self.config.model_provider}/{self.config.deployment_name or self.config.model_name}",
+                model=f"{model_provider}/{self.config.deployment_name or self.config.model_name}",
                 # NOTE: have to pass in None instead of empty string for these
                 # otherwise litellm can have some issues with bedrock
                 api_key=self._api_key or None,
@@ -408,57 +305,54 @@ class DefaultMultiLLM(LLM):
                 api_version=self._api_version or None,
                 custom_llm_provider=self._custom_llm_provider or None,
                 # actual input
-                messages=processed_prompt,
+                messages=_prompt_to_dicts(prompt),
                 tools=tools,
                 tool_choice=tool_choice if tools else None,
                 # streaming choice
                 stream=stream,
                 # model params
-                temperature=(
-                    1
-                    if self.config.model_name in ["gpt-5", "gpt-5-mini", "gpt-5-nano"]
-                    else self._temperature
-                ),
+                temperature=(1 if is_reasoning else self._temperature),
                 timeout=timeout_override or self._timeout,
-                # For now, we don't support parallel tool calls
-                # NOTE: we can't pass this in if tools are not specified
+                **({"stream_options": {"include_usage": True}} if stream else {}),
+                # NOTE: we can't pass parallel_tool_calls if tools are not specified
                 # or else OpenAI throws an error
+                **({"parallel_tool_calls": parallel_tool_calls} if tools else {}),
+                # Anthropic Claude uses `thinking` with budget_tokens for extended thinking
+                # This applies to Claude models on any provider (anthropic, vertex_ai, bedrock)
                 **(
-                    {"parallel_tool_calls": False}
-                    if tools
-                    and self.config.model_name
-                    not in [
-                        "o3-mini",
-                        "o3-preview",
-                        "o1",
-                        "o1-preview",
-                        "o1-mini",
-                        "o1-mini-2024-09-12",
-                        "o3-mini-2025-01-31",
-                    ]
+                    {
+                        "thinking": {
+                            "type": "enabled",
+                            "budget_tokens": CLAUDE_REASONING_BUDGET_TOKENS[
+                                reasoning_effort
+                            ],
+                        }
+                    }
+                    if reasoning_effort
+                    and reasoning_effort != ReasoningEffort.OFF
+                    and is_reasoning
+                    and "claude" in self.config.model_name.lower()
                     else {}
-                ),  # TODO: remove once LITELLM has patched
+                ),
+                # OpenAI and other providers use reasoning_effort
+                # (litellm maps this to thinking_level for Gemini 3 models)
                 **(
-                    {"reasoning_effort": "minimal"}
-                    if self.config.model_name
-                    in [
-                        "gpt-5",
-                        "gpt-5-mini",
-                        "gpt-5-nano",
-                    ]
+                    {"reasoning_effort": OPENAI_REASONING_EFFORT[reasoning_effort]}
+                    if is_reasoning and "claude" not in self.config.model_name.lower()
                     else {}
-                ),  # TODO: remove once LITELLM has better support/we change API
+                ),
                 **(
                     {"response_format": structured_response_format}
                     if structured_response_format
                     else {}
                 ),
                 **({self._max_token_param: max_tokens} if max_tokens else {}),
-                **self._model_kwargs,
+                **completion_kwargs,
             )
+            return response
         except Exception as e:
 
-            self._record_error(processed_prompt, e)
+            self._record_error(prompt, e)
             # for break pointing
             if isinstance(e, Timeout):
                 raise LLMTimeoutError(e)
@@ -488,7 +382,7 @@ class DefaultMultiLLM(LLM):
             max_input_tokens=self._max_input_tokens,
         )
 
-    def _invoke_implementation(
+    def invoke(
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
@@ -496,14 +390,15 @@ class DefaultMultiLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-    ) -> BaseMessage:
-        from litellm import ModelResponse
+        reasoning_effort: ReasoningEffort | None = None,
+        user_identity: LLMUserIdentity | None = None,
+    ) -> ModelResponse:
+        from litellm import ModelResponse as LiteLLMModelResponse
 
-        if LOG_ONYX_MODEL_INTERACTIONS:
-            self.log_model_configs()
+        from onyx.llm.model_response import from_litellm_model_response
 
         response = cast(
-            ModelResponse,
+            LiteLLMModelResponse,
             self._completion(
                 prompt=prompt,
                 tools=tools,
@@ -512,18 +407,15 @@ class DefaultMultiLLM(LLM):
                 structured_response_format=structured_response_format,
                 timeout_override=timeout_override,
                 max_tokens=max_tokens,
+                parallel_tool_calls=True,
+                reasoning_effort=reasoning_effort,
+                user_identity=user_identity,
             ),
         )
-        choice = response.choices[0]
-        if hasattr(choice, "message"):
-            output = _convert_litellm_message_to_langchain_message(choice.message)
-            if output:
-                self._record_result(prompt, output)
-            return output
-        else:
-            raise ValueError("Unexpected response choice type")
 
-    def _stream_implementation(
+        return from_litellm_model_response(response)
+
+    def stream(
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
@@ -531,26 +423,14 @@ class DefaultMultiLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-    ) -> Iterator[BaseMessage]:
-        from litellm import CustomStreamWrapper
+        reasoning_effort: ReasoningEffort | None = None,
+        user_identity: LLMUserIdentity | None = None,
+    ) -> Iterator[ModelResponseStream]:
+        from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
+        from onyx.llm.model_response import from_litellm_model_response_stream
 
-        if LOG_ONYX_MODEL_INTERACTIONS:
-            self.log_model_configs()
-
-        if DISABLE_LITELLM_STREAMING:
-            yield self.invoke(
-                prompt,
-                tools,
-                tool_choice,
-                structured_response_format,
-                timeout_override,
-                max_tokens,
-            )
-            return
-
-        output = None
         response = cast(
-            CustomStreamWrapper,
+            LiteLLMCustomStreamWrapper,
             self._completion(
                 prompt=prompt,
                 tools=tools,
@@ -559,53 +439,11 @@ class DefaultMultiLLM(LLM):
                 structured_response_format=structured_response_format,
                 timeout_override=timeout_override,
                 max_tokens=max_tokens,
+                parallel_tool_calls=True,
+                reasoning_effort=reasoning_effort,
+                user_identity=user_identity,
             ),
         )
-        try:
-            for part in response:
-                if not part["choices"]:
-                    continue
 
-                choice = part["choices"][0]
-                message_chunk = _convert_delta_to_message_chunk(
-                    choice["delta"],
-                    output,
-                    stop_reason=choice["finish_reason"],
-                )
-
-                if output is None:
-                    output = message_chunk
-                else:
-                    output += message_chunk
-
-                yield message_chunk
-
-        except RemoteProtocolError:
-            raise RuntimeError(
-                "The AI model failed partway through generation, please try again."
-            )
-
-        if output:
-            self._record_result(prompt, output)
-
-        if LOG_ONYX_MODEL_INTERACTIONS and output:
-            content = output.content or ""
-            if isinstance(output, AIMessage):
-                if content:
-                    log_msg = content
-                elif output.tool_calls:
-                    log_msg = "Tool Calls: " + str(
-                        [
-                            {
-                                key: value
-                                for key, value in tool_call.items()
-                                if key != "index"
-                            }
-                            for tool_call in output.tool_calls
-                        ]
-                    )
-                else:
-                    log_msg = ""
-                logger.debug(f"Raw Model Output:\n{log_msg}")
-            else:
-                logger.debug(f"Raw Model Output:\n{content}")
+        for chunk in response:
+            yield from_litellm_model_response_stream(chunk)

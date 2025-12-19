@@ -9,6 +9,8 @@ import {
 import { StreamStopInfo } from "@/lib/search/interfaces";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePostHog } from "posthog-js/react";
+import { stopChatSession } from "../chat_search/utils";
 import {
   getLastSuccessfulMessageId,
   getLatestMessageChain,
@@ -31,6 +33,7 @@ import {
   Message,
   MessageResponseIDInfo,
   RegenerationState,
+  ResearchType,
   RetrievalType,
   StreamingError,
   ToolCallMetadata,
@@ -55,28 +58,20 @@ import {
   useRouter,
   useSearchParams,
 } from "next/navigation";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
-import Prism from "prismjs";
+import { useChatSessionContext } from "@/contexts/ChatSessionContext";
 import {
   useChatSessionStore,
   useCurrentMessageTree,
   useCurrentChatState,
   useCurrentMessageHistory,
 } from "../stores/useChatSessionStore";
-import {
-  Packet,
-  CitationDelta,
-  MessageStart,
-  PacketType,
-} from "../services/streamingModels";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
-import { Klee_One } from "next/font/google";
+import { Packet, MessageStart, PacketType } from "../services/streamingModels";
+import useAgentPreferences from "@/hooks/useAgentPreferences";
 import { ProjectFile, useProjectsContext } from "../projects/ProjectsContext";
-import { CategorizedFiles, UserFileStatus } from "../projects/projectsService";
 import { useAppParams } from "@/hooks/appNavigation";
+import { projectFilesToFileDescriptors } from "../services/fileUtils";
+import { useActionsContext } from "@/contexts/ActionsContext";
 
-const TEMP_USER_MESSAGE_ID = -1;
-const TEMP_ASSISTANT_MESSAGE_ID = -2;
 const SYSTEM_MESSAGE_ID = -3;
 
 export interface OnSubmitProps {
@@ -94,7 +89,6 @@ export interface OnSubmitProps {
   isSeededChat?: boolean;
   modelOverride?: LlmDescriptor;
   regenerationRequest?: RegenerationRequest | null;
-  overrideFileDescriptors?: FileDescriptor[];
 }
 
 interface RegenerationRequest {
@@ -112,10 +106,6 @@ interface UseChatControllerProps {
   selectedDocuments: OnyxDocument[];
   searchParams: ReadonlyURLSearchParams;
   setPopup: (popup: PopupSpec) => void;
-
-  // scroll/focus related stuff
-  clientScrollToBottom: (fast?: boolean) => void;
-
   resetInputBar: () => void;
   setSelectedAssistantFromId: (assistantId: number | null) => void;
 }
@@ -127,10 +117,6 @@ export function useChatController({
   liveAssistant,
   existingChatSessionId,
   selectedDocuments,
-
-  // scroll/focus related stuff
-  clientScrollToBottom,
-
   setPopup,
   resetInputBar,
   setSelectedAssistantFromId,
@@ -139,11 +125,12 @@ export function useChatController({
   const router = useRouter();
   const searchParams = useSearchParams();
   const params = useAppParams();
-  const { refreshChatSessions, llmProviders } = useChatContext();
-  const { agentPreferences: assistantPreferences, forcedToolIds } =
-    useAgentsContext();
-  const { fetchProjects, uploadFiles, setCurrentMessageFiles } =
+  const { refreshChatSessions } = useChatSessionContext();
+  const { agentPreferences } = useAgentPreferences();
+  const { forcedToolIds } = useActionsContext();
+  const { fetchProjects, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
+  const posthog = usePostHog();
 
   // Use selectors to access only the specific fields we need
   const currentSessionId = useChatSessionStore(
@@ -192,7 +179,7 @@ export function useChatController({
   const navigatingAway = useRef(false);
 
   // Local state that doesn't need to be in the store
-  const [maxTokens, setMaxTokens] = useState<number>(4096);
+  const [_maxTokens, setMaxTokens] = useState<number>(4096);
 
   // Sync store state changes
   useEffect(() => {
@@ -237,17 +224,66 @@ export function useChatController({
     setCurrentSession(newSessionId);
   };
 
+  const handleNewSessionNavigation = (chatSessionId: string) => {
+    // Build URL with skip-reload parameter
+    const newUrl = buildChatUrl(
+      searchParams,
+      chatSessionId,
+      null,
+      false,
+      true // skipReload
+    );
+
+    // Navigate immediately if still on chat page
+    if (pathname === "/chat" && !navigatingAway.current) {
+      router.push(newUrl, { scroll: false });
+    }
+
+    // Refresh sidebar so chat appears (will show as "New Chat" initially)
+    // Will be updated again after naming completes
+    refreshChatSessions();
+    fetchProjects();
+  };
+
+  const handleNewSessionNaming = async (chatSessionId: string) => {
+    // Wait 200ms before naming (gives backend time to process)
+    // There is some delay here since we might get a "finished" response from the backend
+    // before the ChatSession is written to the database.
+    // TODO: remove this delay once we have a way to know when the ChatSession
+    // is written to the database.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    try {
+      // Name chat based on AI response
+      const response = await nameChatSession(chatSessionId);
+
+      if (!response.ok) {
+        console.error("Failed to name chat session, status:", response.status);
+        // Still refresh to show the unnamed chat in sidebar
+        refreshChatSessions();
+        fetchProjects();
+        return;
+      }
+    } catch (error) {
+      console.error("Failed to name chat session:", error);
+    } finally {
+      // Refresh sidebar to show new name
+      await refreshChatSessions();
+      await fetchProjects();
+    }
+  };
+
   const upsertToCompleteMessageTree = ({
     messages,
-    completeMessageTreeOverride,
     chatSessionId,
+    completeMessageTreeOverride,
     makeLatestChildMessage = false,
   }: {
     messages: Message[];
+    chatSessionId: string;
     // if calling this function repeatedly with short delay, stay may not update in time
     // and result in weird behavipr
     completeMessageTreeOverride?: MessageTreeState | null;
-    chatSessionId?: string;
     oldIds?: number[] | null;
     makeLatestChildMessage?: boolean;
   }) => {
@@ -264,58 +300,75 @@ export function useChatController({
       makeLatestChildMessage
     );
 
-    const sessionId = chatSessionId || getCurrentSessionId();
-    updateSessionMessageTree(sessionId, newCompleteMessageTree);
+    updateSessionMessageTree(chatSessionId, newCompleteMessageTree);
 
-    return {
-      sessionId,
-      messageTree: newCompleteMessageTree,
-    };
+    return newCompleteMessageTree;
   };
 
-  const stopGenerating = useCallback(() => {
+  const stopGenerating = useCallback(async () => {
     const currentSession = getCurrentSessionId();
-    abortSession(currentSession);
-
     const lastMessage = currentMessageHistory[currentMessageHistory.length - 1];
-    if (
-      lastMessage &&
-      lastMessage.type === "assistant" &&
-      lastMessage.toolCall &&
-      lastMessage.toolCall.tool_result === undefined
-    ) {
-      const newMessageTree = new Map(currentMessageTree);
-      const updatedMessage = { ...lastMessage, toolCall: null };
-      newMessageTree.set(lastMessage.nodeId, updatedMessage);
-      updateSessionMessageTree(currentSession, newMessageTree);
+
+    // Check if the current message uses agent search (any non-null research type)
+    const isDeepResearch = lastMessage?.researchType === ResearchType.Deep;
+    const isSimpleAgentFrameworkDisabled =
+      posthog.isFeatureEnabled("disable-simple-agent-framework") ?? false;
+
+    // Always call the backend stop endpoint unless feature flag is enabled to disable it
+    if (!isSimpleAgentFrameworkDisabled) {
+      try {
+        await stopChatSession(currentSession);
+      } catch (error) {
+        console.error("Failed to stop chat session:", error);
+        // Continue with UI cleanup even if backend call fails
+      }
     }
 
-    // Ensure UI reflects a STOP event by appending a STOP packet to the
-    // currently streaming assistant message if one exists and doesn't already
-    // contain a STOP. This makes AIMessage behave as if a STOP packet arrived.
-    if (lastMessage && lastMessage.type === "assistant") {
-      const packets = lastMessage.packets || [];
-      const hasStop = packets.some((p) => p.obj.type === PacketType.STOP);
-      if (!hasStop) {
-        const maxInd =
-          packets.length > 0 ? Math.max(...packets.map((p) => p.ind)) : 0;
-        const stopPacket: Packet = {
-          ind: maxInd + 1,
-          obj: { type: PacketType.STOP },
-        } as Packet;
+    // Only do the subsequent cleanup if the message was agent search or feature flag is enabled to disable it
+    if (isDeepResearch || isSimpleAgentFrameworkDisabled) {
+      abortSession(currentSession);
 
+      if (
+        lastMessage &&
+        lastMessage.type === "assistant" &&
+        lastMessage.toolCall &&
+        lastMessage.toolCall.tool_result === undefined
+      ) {
         const newMessageTree = new Map(currentMessageTree);
-        const updatedMessage = {
-          ...lastMessage,
-          packets: [...packets, stopPacket],
-        } as Message;
+        const updatedMessage = { ...lastMessage, toolCall: null };
         newMessageTree.set(lastMessage.nodeId, updatedMessage);
         updateSessionMessageTree(currentSession, newMessageTree);
+      }
+
+      // Ensure UI reflects a STOP event by appending a STOP packet to the
+      // currently streaming assistant message if one exists and doesn't already
+      // contain a STOP. This makes AIMessage behave as if a STOP packet arrived.
+      if (lastMessage && lastMessage.type === "assistant") {
+        const packets = lastMessage.packets || [];
+        const hasStop = packets.some((p) => p.obj.type === PacketType.STOP);
+        if (!hasStop) {
+          const maxTurnIndex =
+            packets.length > 0
+              ? Math.max(...packets.map((p) => p.turn_index))
+              : 0;
+          const stopPacket: Packet = {
+            turn_index: maxTurnIndex + 1,
+            obj: { type: PacketType.STOP },
+          } as Packet;
+
+          const newMessageTree = new Map(currentMessageTree);
+          const updatedMessage = {
+            ...lastMessage,
+            packets: [...packets, stopPacket],
+          } as Message;
+          newMessageTree.set(lastMessage.nodeId, updatedMessage);
+          updateSessionMessageTree(currentSession, newMessageTree);
+        }
       }
     }
 
     updateChatStateAction(currentSession, "input");
-  }, [currentMessageHistory, currentMessageTree]);
+  }, [currentMessageHistory, currentMessageTree, posthog]);
 
   const onSubmit = useCallback(
     async ({
@@ -328,7 +381,6 @@ export function useChatController({
       isSeededChat,
       modelOverride,
       regenerationRequest,
-      overrideFileDescriptors,
     }: OnSubmitProps) => {
       const projectId = params(SEARCH_PARAM_NAMES.PROJECT_ID);
       {
@@ -425,8 +477,6 @@ export function useChatController({
         return;
       }
 
-      clientScrollToBottom();
-
       let currChatSessionId: string;
       const isNewSession = existingChatSessionId === null;
 
@@ -461,6 +511,11 @@ export function useChatController({
 
       // mark the session as the current session
       updateStatesWithNewSessionId(currChatSessionId);
+
+      // Navigate immediately for new sessions (before streaming starts)
+      if (isNewSession) {
+        handleNewSessionNavigation(currChatSessionId);
+      }
 
       // set the ability to cancel the request
       const controller = new AbortController();
@@ -526,12 +581,11 @@ export function useChatController({
       if (regenerationRequest) {
         // For regeneration: keep the existing user message, only create new assistant
         initialUserNode = regenerationRequest.parentMessage;
-        initialAssistantNode = buildEmptyMessage(
-          "assistant",
-          initialUserNode.nodeId,
-          undefined,
-          1
-        );
+        initialAssistantNode = buildEmptyMessage({
+          messageType: "assistant",
+          parentNodeId: initialUserNode.nodeId,
+          nodeIdOffset: 1,
+        });
       } else {
         // For new messages or editing: create/update user message and assistant
         const parentNodeIdForMessage = messageToResend
@@ -540,6 +594,7 @@ export function useChatController({
         const result = buildImmediateMessages(
           parentNodeIdForMessage,
           currMessage,
+          projectFilesToFileDescriptors(currentMessageFiles),
           messageToResend
         );
         initialUserNode = result.initialUserNode;
@@ -550,13 +605,12 @@ export function useChatController({
       const messagesToUpsert = regenerationRequest
         ? [initialAssistantNode] // Only upsert the new assistant for regeneration
         : [initialUserNode, initialAssistantNode]; // Upsert both for normal/edit flow
-      const newMessageDetails = upsertToCompleteMessageTree({
+      currentMessageTreeLocal = upsertToCompleteMessageTree({
         messages: messagesToUpsert,
         completeMessageTreeOverride: currentMessageTreeLocal,
         chatSessionId: frozenSessionId,
       });
       resetInputBar();
-      currentMessageTreeLocal = newMessageDetails.messageTree;
 
       let answer = "";
 
@@ -571,10 +625,13 @@ export function useChatController({
       let aiMessageImages: FileDescriptor[] | null = null;
       let error: string | null = null;
       let stackTrace: string | null = null;
+      let errorCode: string | null = null;
+      let isRetryable: boolean = true;
+      let errorDetails: Record<string, any> | null = null;
 
       let finalMessage: BackendMessage | null = null;
       let toolCall: ToolCallMetadata | null = null;
-      let files: FileDescriptor[] = [];
+      let files = projectFilesToFileDescriptors(currentMessageFiles);
       let packets: Packet[] = [];
 
       let newUserMessageId: number | null = null;
@@ -585,7 +642,7 @@ export function useChatController({
           currentMessageTreeLocal
         );
         const disabledToolIds = liveAssistant
-          ? assistantPreferences?.[liveAssistant?.id]?.disabled_tool_ids
+          ? agentPreferences?.[liveAssistant?.id]?.disabled_tool_ids
           : undefined;
 
         const stack = new CurrentMessageFIFO();
@@ -593,7 +650,7 @@ export function useChatController({
           signal: controller.signal,
           message: currMessage,
           alternateAssistantId: liveAssistant?.id,
-          fileDescriptors: overrideFileDescriptors,
+          fileDescriptors: projectFilesToFileDescriptors(currentMessageFiles),
           parentMessageId: (() => {
             const parentId =
               regenerationRequest?.parentMessage.messageId ||
@@ -702,14 +759,18 @@ export function useChatController({
               Object.hasOwn(packet, "error") &&
               (packet as any).error != null
             ) {
-              setUncaughtError(
-                frozenSessionId,
-                (packet as StreamingError).error
-              );
+              const streamingError = packet as StreamingError;
+              error = streamingError.error;
+              stackTrace = streamingError.stack_trace || null;
+              errorCode = streamingError.error_code || null;
+              isRetryable = streamingError.is_retryable ?? true;
+              errorDetails = streamingError.details || null;
+
+              setUncaughtError(frozenSessionId, streamingError.error);
               updateChatStateAction(frozenSessionId, "input");
               updateSubmittedMessage(getCurrentSessionId(), "");
 
-              throw new Error((packet as StreamingError).error);
+              throw new Error(streamingError.error);
             } else if (Object.hasOwn(packet, "message_id")) {
               finalMessage = packet as BackendMessage;
             } else if (Object.hasOwn(packet, "stop_reason")) {
@@ -724,16 +785,18 @@ export function useChatController({
               // Check if the packet contains document information
               const packetObj = (packet as Packet).obj;
 
-              if (packetObj.type === "citation_delta") {
-                const citationDelta = packetObj as CitationDelta;
-                if (citationDelta.citations) {
-                  citations = Object.fromEntries(
-                    citationDelta.citations.map((c) => [
-                      c.document_id,
-                      c.citation_num,
-                    ])
-                  );
-                }
+              if (packetObj.type === "citation_info") {
+                // Individual citation packet from backend streaming
+                const citationInfo = packetObj as {
+                  type: "citation_info";
+                  citation_number: number;
+                  document_id: string;
+                };
+                // Incrementally build citations map
+                citations = {
+                  ...(citations || {}),
+                  [citationInfo.citation_number]: citationInfo.document_id,
+                };
               } else if (packetObj.type === "message_start") {
                 const messageStart = packetObj as MessageStart;
                 if (messageStart.final_documents) {
@@ -753,7 +816,7 @@ export function useChatController({
             parentMessage =
               parentMessage || currentMessageTreeLocal?.get(SYSTEM_NODE_ID)!;
 
-            const newMessageDetails = upsertToCompleteMessageTree({
+            currentMessageTreeLocal = upsertToCompleteMessageTree({
               messages: [
                 {
                   ...initialUserNode,
@@ -781,13 +844,12 @@ export function useChatController({
               completeMessageTreeOverride: currentMessageTreeLocal,
               chatSessionId: frozenSessionId!,
             });
-            currentMessageTreeLocal = newMessageDetails.messageTree;
           }
         }
       } catch (e: any) {
         console.log("Error:", e);
         const errorMsg = e.message;
-        const newMessageDetails = upsertToCompleteMessageTree({
+        currentMessageTreeLocal = upsertToCompleteMessageTree({
           messages: [
             {
               nodeId: initialUserNode.nodeId,
@@ -811,44 +873,23 @@ export function useChatController({
               toolCall: null,
               parentNodeId: initialUserNode.nodeId,
               packets: [],
+              stackTrace: stackTrace,
+              errorCode: errorCode,
+              isRetryable: isRetryable,
+              errorDetails: errorDetails,
             },
           ],
           completeMessageTreeOverride: currentMessageTreeLocal,
+          chatSessionId: frozenSessionId,
         });
-        currentMessageTreeLocal = newMessageDetails.messageTree;
       }
 
       resetRegenerationState(frozenSessionId);
       updateChatStateAction(frozenSessionId, "input");
 
-      if (isNewSession) {
-        if (!searchParamBasedChatSessionName) {
-          await new Promise((resolve) => setTimeout(resolve, 200));
-          await nameChatSession(currChatSessionId);
-          refreshChatSessions();
-          fetchProjects();
-        }
-
-        // NOTE: don't switch pages if the user has navigated away from the chat
-        if (
-          currChatSessionId === frozenSessionId ||
-          existingChatSessionId === null
-        ) {
-          const newUrl = buildChatUrl(
-            searchParams,
-            currChatSessionId,
-            null,
-            false,
-            true
-          );
-          // newUrl is like /chat?chatId=10
-          // current page is like /chat
-
-          if (pathname == "/chat" && !navigatingAway.current) {
-            router.push(newUrl, { scroll: false });
-            fetchProjects();
-          }
-        }
+      // Name the chat now that we have AI response (navigation already happened before streaming)
+      if (isNewSession && !searchParamBasedChatSessionName) {
+        handleNewSessionNaming(currChatSessionId);
       }
     },
     [
@@ -866,17 +907,15 @@ export function useChatController({
       selectedDocuments,
       searchParams,
       setPopup,
-      clientScrollToBottom,
       resetInputBar,
       setSelectedAssistantFromId,
       updateSelectedNodeForDocDisplay,
       currentMessageTree,
       currentChatState,
-      llmProviders,
       // Ensure latest forced tools are used when submitting
       forcedToolIds,
       // Keep tool preference-derived values fresh
-      assistantPreferences,
+      agentPreferences,
       fetchProjects,
     ]
   );
@@ -884,11 +923,14 @@ export function useChatController({
   const handleMessageSpecificFileUpload = useCallback(
     async (acceptedFiles: File[]) => {
       const [_, llmModel] = getFinalLLM(
-        llmProviders,
+        llmManager.llmProviders || [],
         liveAssistant || null,
         llmManager.currentLlm
       );
-      const llmAcceptsImages = modelSupportsImageInput(llmProviders, llmModel);
+      const llmAcceptsImages = modelSupportsImageInput(
+        llmManager.llmProviders || [],
+        llmModel
+      );
 
       const imageFiles = acceptedFiles.filter((file) =>
         file.type.startsWith("image/")
@@ -902,73 +944,16 @@ export function useChatController({
         });
         return;
       }
-
       updateChatStateAction(getCurrentSessionId(), "uploading");
-
-      try {
-        //this is to show files in the INPUT BAR immediately
-        const tempProjectFiles: ProjectFile[] = Array.from(acceptedFiles).map(
-          (file) => ({
-            id: file.name,
-            file_id: file.name,
-            name: file.name,
-            project_id: null,
-            user_id: null,
-            created_at: new Date().toISOString(),
-            status: UserFileStatus.UPLOADING,
-            file_type: file.type,
-            last_accessed_at: new Date().toISOString(),
-            chat_file_type: ChatFileType.DOCUMENT,
-            token_count: null,
-            chunk_count: null,
-          })
-        );
-        setCurrentMessageFiles((prev) => [...prev, ...tempProjectFiles]);
-
-        const uploadedMessageFiles: CategorizedFiles = await uploadFiles(
-          Array.from(acceptedFiles)
-        );
-        //remove the temp files
-        setCurrentMessageFiles((prev) =>
-          prev.filter(
-            (file) =>
-              !tempProjectFiles.some((tempFile) => tempFile.id === file.id)
-          )
-        );
-        setCurrentMessageFiles((prev) => [
-          ...prev,
-          ...uploadedMessageFiles.user_files,
-        ]);
-
-        // Show toast if any files were rejected or unsupported
-        const unsupported = uploadedMessageFiles.unsupported_files || [];
-        const nonAccepted = uploadedMessageFiles.non_accepted_files || [];
-        if (unsupported.length > 0 || nonAccepted.length > 0) {
-          const detailsParts: string[] = [];
-          if (unsupported.length > 0) {
-            detailsParts.push(`Unsupported: ${unsupported.join(", ")}`);
-          }
-          if (nonAccepted.length > 0) {
-            detailsParts.push(`Not accepted: ${nonAccepted.join(", ")}`);
-          }
-
-          setPopup({
-            type: "warning",
-            message: `Some files were not uploaded. ${detailsParts.join(
-              " | "
-            )}`,
-          });
-        }
-      } catch (error) {
-        setPopup({
-          type: "error",
-          message: "Failed to upload file",
-        });
-      }
-
+      const uploadedMessageFiles = await beginUpload(
+        Array.from(acceptedFiles),
+        null,
+        setPopup
+      );
+      setCurrentMessageFiles((prev) => [...prev, ...uploadedMessageFiles]);
       updateChatStateAction(getCurrentSessionId(), "input");
     },
-    [llmProviders, liveAssistant, llmManager, forcedToolIds]
+    [liveAssistant, llmManager, forcedToolIds]
   );
 
   useEffect(() => {
@@ -1038,6 +1023,8 @@ export function useChatController({
 
   // fetch # of allowed document tokens for the selected Persona
   useEffect(() => {
+    if (!liveAssistant?.id) return; // avoid calling with undefined persona id
+
     async function fetchMaxTokens() {
       const response = await fetch(
         `/api/chat/max-selected-document-tokens?persona_id=${liveAssistant?.id}`
@@ -1064,9 +1051,8 @@ export function useChatController({
     llmManager.updateImageFilesPresent(imageFileInMessageHistory);
   }, [imageFileInMessageHistory]);
 
-  // highlight code blocks and set isReady once that's done
+  // set isReady once component is mounted
   useEffect(() => {
-    Prism.highlightAll();
     const currentSessionId = getCurrentSessionId();
     if (currentSessionId) {
       setIsReady(currentSessionId, true);

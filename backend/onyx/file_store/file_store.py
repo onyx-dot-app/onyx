@@ -1,3 +1,4 @@
+import hashlib
 import tempfile
 import uuid
 from abc import ABC
@@ -6,6 +7,8 @@ from io import BytesIO
 from typing import Any
 from typing import cast
 from typing import IO
+from typing import NotRequired
+from typing import TypedDict
 
 import boto3
 import puremagic
@@ -20,6 +23,7 @@ from onyx.configs.app_configs import S3_AWS_SECRET_ACCESS_KEY
 from onyx.configs.app_configs import S3_ENDPOINT_URL
 from onyx.configs.app_configs import S3_FILE_STORE_BUCKET_NAME
 from onyx.configs.app_configs import S3_FILE_STORE_PREFIX
+from onyx.configs.app_configs import S3_GENERATE_LOCAL_CHECKSUM
 from onyx.configs.app_configs import S3_VERIFY_SSL
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -37,6 +41,10 @@ from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+
+class S3PutKwargs(TypedDict):
+    ChecksumSHA256: NotRequired[str]
 
 
 class FileStore(ABC):
@@ -116,6 +124,15 @@ class FileStore(ABC):
     def read_file_record(self, file_id: str) -> FileStoreModel:
         """
         Read the file record by the ID
+        """
+
+    @abstractmethod
+    def get_file_size(
+        self, file_id: str, db_session: Session | None = None
+    ) -> int | None:
+        """
+        Get the size of a file in bytes.
+        Optionally provide a db_session for database access.
         """
 
     @abstractmethod
@@ -320,20 +337,36 @@ class S3BackedFileStore(FileStore):
         bucket_name = self._get_bucket_name()
         s3_key = self._get_s3_key(file_id)
 
+        hash256 = ""
+        sha256_hash = hashlib.sha256()
+        kwargs: S3PutKwargs = {}
+
+        # FIX: Optimize checksum generation to avoid creating extra copies in memory
         # Read content from IO object
         if hasattr(content, "read"):
             file_content = content.read()
+            if S3_GENERATE_LOCAL_CHECKSUM:
+                # FIX: Don't convert to string first (creates unnecessary copy)
+                # Work directly with bytes
+                if isinstance(file_content, bytes):
+                    sha256_hash.update(file_content)
+                else:
+                    sha256_hash.update(str(file_content).encode())
+                hash256 = sha256_hash.hexdigest()
+                kwargs["ChecksumSHA256"] = hash256
             if hasattr(content, "seek"):
                 content.seek(0)  # Reset position for potential re-reads
         else:
             file_content = content
 
         # Upload to S3
+
         s3_client.put_object(
             Bucket=bucket_name,
             Key=s3_key,
             Body=file_content,
             ContentType=file_type,
+            **kwargs,
         )
 
         with get_session_with_current_tenant_if_none(db_session) as db_session:
@@ -373,15 +406,20 @@ class S3BackedFileStore(FileStore):
             logger.error(f"Failed to read file {file_id} from S3")
             raise
 
-        file_content = response["Body"].read()
-
+        # FIX: Stream file content instead of loading entire file into memory
+        # This prevents OOM issues with large files (500MB+ PDFs, etc.)
         if use_tempfile:
-            # Always open in binary mode for temp files since we're writing bytes
-            temp_file = tempfile.NamedTemporaryFile(mode="w+b", delete=False)
-            temp_file.write(file_content)
+            # Stream directly to temp file to avoid holding entire file in memory
+            temp_file = tempfile.NamedTemporaryFile(mode="w+b", delete=True)
+            # Stream in 8MB chunks to reduce memory footprint
+            for chunk in response["Body"].iter_chunks(chunk_size=8 * 1024 * 1024):
+                temp_file.write(chunk)
             temp_file.seek(0)
             return temp_file
         else:
+            # For BytesIO, we still need to read into memory (legacy behavior)
+            # but at least we're not creating duplicate copies
+            file_content = response["Body"].read()
             return BytesIO(file_content)
 
     def read_file_record(
@@ -392,6 +430,27 @@ class S3BackedFileStore(FileStore):
                 file_id=file_id, db_session=db_session
             )
         return file_record
+
+    def get_file_size(
+        self, file_id: str, db_session: Session | None = None
+    ) -> int | None:
+        """
+        Get the size of a file in bytes by querying S3 metadata.
+        """
+        try:
+            with get_session_with_current_tenant_if_none(db_session) as db_session:
+                file_record = get_filerecord_by_file_id(
+                    file_id=file_id, db_session=db_session
+                )
+
+            s3_client = self._get_s3_client()
+            response = s3_client.head_object(
+                Bucket=file_record.bucket_name, Key=file_record.object_key
+            )
+            return response.get("ContentLength")
+        except Exception as e:
+            logger.warning(f"Error getting file size for {file_id}: {e}")
+            return None
 
     def delete_file(self, file_id: str, db_session: Session | None = None) -> None:
         with get_session_with_current_tenant_if_none(db_session) as db_session:
@@ -411,9 +470,20 @@ class S3BackedFileStore(FileStore):
 
                 # Delete from external storage
                 s3_client = self._get_s3_client()
-                s3_client.delete_object(
-                    Bucket=file_record.bucket_name, Key=file_record.object_key
-                )
+                try:
+                    s3_client.delete_object(
+                        Bucket=file_record.bucket_name, Key=file_record.object_key
+                    )
+                except ClientError as e:
+                    # If the object doesn't exist in file store, treat it as success
+                    # since the end goal (object not existing) is achieved
+                    if e.response.get("Error", {}).get("Code") == "NoSuchKey":
+                        logger.warning(
+                            f"delete_file: File {file_id} not found in file store (key: {file_record.object_key}), "
+                            "cleaning up database record."
+                        )
+                    else:
+                        raise
 
                 # Delete metadata from database
                 delete_filerecord_by_file_id(file_id=file_id, db_session=db_session)

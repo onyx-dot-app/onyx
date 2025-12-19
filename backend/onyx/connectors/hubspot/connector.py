@@ -26,7 +26,6 @@ from onyx.utils.logger import setup_logger
 HUBSPOT_BASE_URL = "https://app.hubspot.com"
 HUBSPOT_API_URL = "https://api.hubapi.com/integrations/v1/me"
 
-# Available HubSpot object types
 AVAILABLE_OBJECT_TYPES = {"tickets", "companies", "deals", "contacts"}
 
 HUBSPOT_PAGE_SIZE = 100
@@ -426,7 +425,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
             title = ticket.properties.get("subject") or f"Ticket {ticket.id}"
             link = self._get_object_url("tickets", ticket.id)
-            content_text = ticket.properties.get("content", "")
+            content_text = ticket.properties.get("content") or ""
 
             # Main ticket section
             sections = [TextSection(link=link, text=content_text)]

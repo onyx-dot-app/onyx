@@ -2,14 +2,14 @@
 
 import { OnSubmitProps } from "@/app/chat/hooks/useChatController";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
 import { cn } from "@/lib/utils";
+import { useAgentsContext } from "@/contexts/AgentsContext";
 
-interface SuggestionsProps {
+export interface SuggestionsProps {
   onSubmit: (props: OnSubmitProps) => void;
 }
 
-export function Suggestions({ onSubmit }: SuggestionsProps) {
+export default function Suggestions({ onSubmit }: SuggestionsProps) {
   const { currentAgent } = useAgentsContext();
 
   if (
@@ -28,9 +28,7 @@ export function Suggestions({ onSubmit }: SuggestionsProps) {
   };
 
   return (
-    <div
-      className={cn("flex flex-col w-full p-spacing-inline gap-spacing-inline")}
-    >
+    <div className={cn("flex flex-col w-full p-1 gap-1")}>
       {currentAgent.starter_messages.map(({ message }, index) => (
         <LineItem key={index} onClick={() => handleSuggestionClick(message)}>
           {message}

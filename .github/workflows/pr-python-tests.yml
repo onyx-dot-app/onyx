@@ -1,4 +1,7 @@
 name: Python Unit Tests
+concurrency:
+  group: Python-Unit-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
+  cancel-in-progress: true
 
 on:
   merge_group:
@@ -6,39 +9,41 @@ on:
     branches:
       - main
       - 'release/**'
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
 
 jobs:
   backend-check:
     # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on,runner=8cpu-linux-x64,"run-id=${{ github.run_id }}"]
+    runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}-backend-check"]
+    timeout-minutes: 45
+
 
     env:
       PYTHONPATH: ./backend
       REDIS_CLOUD_PYTEST_PASSWORD: ${{ secrets.REDIS_CLOUD_PYTEST_PASSWORD }}
-      SF_USERNAME: ${{ secrets.SF_USERNAME }}
-      SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
-      SF_SECURITY_TOKEN: ${{ secrets.SF_SECURITY_TOKEN }}
-      
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      DISABLE_TELEMETRY: "true"
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
+    steps:
+    - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
+    - name: Checkout code
+      uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
       with:
-        python-version: '3.11'
-        cache: 'pip'
-        cache-dependency-path: |
+        persist-credentials: false
+
+    - name: Setup Python and Install Dependencies
+      uses: ./.github/actions/setup-python-and-install-dependencies
+      with:
+        requirements: |
           backend/requirements/default.txt
           backend/requirements/dev.txt
           backend/requirements/model_server.txt
-
-    - name: Install Dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install --retries 5 --timeout 30 -r backend/requirements/default.txt
-        pip install --retries 5 --timeout 30 -r backend/requirements/dev.txt
-        pip install --retries 5 --timeout 30 -r backend/requirements/model_server.txt
+          backend/requirements/ee.txt
 
     - name: Run Tests
       shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"

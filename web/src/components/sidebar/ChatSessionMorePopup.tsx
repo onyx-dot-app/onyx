@@ -14,19 +14,16 @@ import {
   PopoverMenu,
 } from "@/components/ui/popover";
 import { FiMoreHorizontal } from "react-icons/fi";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import { useChatSessionContext } from "@/contexts/ChatSessionContext";
 import { useCallback, useState, useMemo } from "react";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
 // PopoverMenu already imported above
-import NavigationTab from "@/refresh-components/buttons/NavigationTab";
-import SvgShare from "@/icons/share";
-import SvgFolderIn from "@/icons/folder-in";
-import SvgTrash from "@/icons/trash";
-import SvgFolder from "@/icons/folder";
 import { cn, noProp } from "@/lib/utils";
-import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
+import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Button from "@/refresh-components/buttons/Button";
-import { PopoverSearchInput } from "@/sections/sidebar/AppSidebar";
+import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
+import LineItem from "@/refresh-components/buttons/LineItem";
+import { SvgFolder, SvgFolderIn, SvgShare, SvgTrash } from "@opal/icons";
 // Constants
 const DEFAULT_PERSONA_ID = 0;
 const LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY = "onyx:hideMoveCustomAgentModal";
@@ -60,7 +57,7 @@ export function ChatSessionMorePopup({
 }: ChatSessionMorePopupProps) {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const { refreshChatSessions } = useChatContext();
+  const { refreshChatSessions } = useChatSessionContext();
   const { fetchProjects, projects } = useProjectsContext();
 
   const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
@@ -145,23 +142,23 @@ export function ChatSessionMorePopup({
     if (!showMoveOptions) {
       return [
         showShareModal && (
-          <NavigationTab
+          <LineItem
             key="share"
             icon={SvgShare}
             onClick={noProp(() => showShareModal(chatSession))}
           >
             Share
-          </NavigationTab>
+          </LineItem>
         ),
-        <NavigationTab
+        <LineItem
           key="move"
           icon={SvgFolderIn}
           onClick={noProp(() => setShowMoveOptions(true))}
         >
           Move to Project
-        </NavigationTab>,
+        </LineItem>,
         projectId && (
-          <NavigationTab
+          <LineItem
             key="remove"
             icon={SvgFolder}
             onClick={noProp(() => handleRemoveChatSessionFromProject())}
@@ -169,17 +166,17 @@ export function ChatSessionMorePopup({
             {`Remove from ${
               projects.find((p) => p.id === projectId)?.name ?? "Project"
             }`}
-          </NavigationTab>
+          </LineItem>
         ),
         null,
-        <NavigationTab
+        <LineItem
           key="delete"
           icon={SvgTrash}
           onClick={noProp(() => setIsDeleteModalOpen(true))}
           danger
         >
           Delete
-        </NavigationTab>,
+        </LineItem>,
       ];
     }
     return [
@@ -191,7 +188,7 @@ export function ChatSessionMorePopup({
       ...filteredProjects
         .filter((candidate) => candidate.id !== projectId)
         .map((target) => (
-          <NavigationTab
+          <LineItem
             key={target.id}
             icon={SvgFolder}
             onClick={noProp(() =>
@@ -199,7 +196,7 @@ export function ChatSessionMorePopup({
             )}
           >
             {target.name}
-          </NavigationTab>
+          </LineItem>
         )),
     ];
   }, [
@@ -249,7 +246,7 @@ export function ChatSessionMorePopup({
         </Popover>
       </div>
       {isDeleteModalOpen && (
-        <ConfirmationModal
+        <ConfirmationModalLayout
           title="Delete Chat"
           icon={SvgTrash}
           onClose={() => setIsDeleteModalOpen(false)}
@@ -261,7 +258,7 @@ export function ChatSessionMorePopup({
         >
           Are you sure you want to delete this chat? This action cannot be
           undone.
-        </ConfirmationModal>
+        </ConfirmationModalLayout>
       )}
 
       {showMoveCustomAgentModal && (

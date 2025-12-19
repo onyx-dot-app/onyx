@@ -1,50 +1,27 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
-from typing import cast
 
-from sqlalchemy.orm import Session
-
-from onyx.agents.agent_search.dr.enums import ResearchType
-from onyx.agents.agent_search.dr.sub_agents.image_generation.models import (
-    GeneratedImage,
-)
-from onyx.configs.constants import MessageType
 from onyx.context.search.models import SavedSearchDoc
-from onyx.db.chat import get_db_search_doc_by_document_id
-from onyx.db.chat import get_db_search_doc_by_id
-from onyx.db.chat import translate_db_search_doc_to_server_search_doc
-from onyx.db.models import ChatMessage
-from onyx.db.tools import get_tool_by_id
-from onyx.server.query_and_chat.streaming_models import CitationDelta
+from onyx.context.search.models import SearchDoc
+from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
+from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.server.query_and_chat.streaming_models import CitationStart
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
-from onyx.server.query_and_chat.streaming_models import EndStepPacketList
-from onyx.server.query_and_chat.streaming_models import ImageGenerationToolDelta
+from onyx.server.query_and_chat.streaming_models import GeneratedImage
+from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
-from onyx.server.query_and_chat.streaming_models import MessageDelta
-from onyx.server.query_and_chat.streaming_models import MessageStart
-from onyx.server.query_and_chat.streaming_models import OverallStop
+from onyx.server.query_and_chat.streaming_models import OpenUrlDocuments
+from onyx.server.query_and_chat.streaming_models import OpenUrlStart
+from onyx.server.query_and_chat.streaming_models import OpenUrlUrls
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
-from onyx.server.query_and_chat.streaming_models import SearchToolDelta
+from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
+from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
-from onyx.tools.tool_implementations.images.image_generation_tool import (
-    ImageGenerationTool,
-)
-from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
-    KnowledgeGraphTool,
-)
-from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
-    OktaProfileTool,
-)
-from onyx.tools.tool_implementations.search.search_tool import SearchTool
-from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 
 
 _CANNOT_SHOW_STEP_RESULTS_STR = "[Cannot display step results]"
@@ -78,17 +55,16 @@ def _replace_d_citations_with_links(
 def create_message_packets(
     message_text: str,
     final_documents: list[SavedSearchDoc] | None,
-    step_nr: int,
+    turn_index: int,
     is_legacy_agentic: bool = False,
 ) -> list[Packet]:
     packets: list[Packet] = []
 
     packets.append(
         Packet(
-            ind=step_nr,
-            obj=MessageStart(
-                content="",
-                final_documents=final_documents,
+            turn_index=turn_index,
+            obj=AgentResponseStart(
+                final_documents=SearchDoc.from_saved_search_docs(final_documents or []),
             ),
         )
     )
@@ -107,8 +83,8 @@ def create_message_packets(
 
     packets.append(
         Packet(
-            ind=step_nr,
-            obj=MessageDelta(
+            turn_index=turn_index,
+            obj=AgentResponseDelta(
                 content=adjusted_message_text,
             ),
         ),
@@ -116,10 +92,8 @@ def create_message_packets(
 
     packets.append(
         Packet(
-            ind=step_nr,
-            obj=SectionEnd(
-                type="section_end",
-            ),
+            turn_index=turn_index,
+            obj=SectionEnd(),
         )
     )
 
@@ -127,60 +101,63 @@ def create_message_packets(
 
 
 def create_citation_packets(
-    citation_info_list: list[CitationInfo], step_nr: int
+    citation_info_list: list[CitationInfo], turn_index: int
 ) -> list[Packet]:
     packets: list[Packet] = []
 
-    packets.append(Packet(ind=step_nr, obj=CitationStart()))
+    # Emit each citation as a separate CitationInfo packet
+    for citation_info in citation_info_list:
+        packets.append(
+            Packet(
+                turn_index=turn_index,
+                obj=citation_info,
+            )
+        )
 
-    packets.append(
-        Packet(
-            ind=step_nr,
-            obj=CitationDelta(
-                citations=citation_info_list,
-            ),
-        ),
-    )
-
-    packets.append(Packet(ind=step_nr, obj=SectionEnd(type="section_end")))
+    packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
 
     return packets
 
 
-def create_reasoning_packets(reasoning_text: str, step_nr: int) -> list[Packet]:
+def create_reasoning_packets(reasoning_text: str, turn_index: int) -> list[Packet]:
     packets: list[Packet] = []
 
-    packets.append(Packet(ind=step_nr, obj=ReasoningStart()))
+    packets.append(Packet(turn_index=turn_index, obj=ReasoningStart()))
 
     packets.append(
         Packet(
-            ind=step_nr,
+            turn_index=turn_index,
             obj=ReasoningDelta(
                 reasoning=reasoning_text,
             ),
         ),
     )
 
-    packets.append(Packet(ind=step_nr, obj=SectionEnd(type="section_end")))
+    packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
 
     return packets
 
 
 def create_image_generation_packets(
-    images: list[GeneratedImage], step_nr: int
+    images: list[GeneratedImage], turn_index: int
 ) -> list[Packet]:
     packets: list[Packet] = []
 
-    packets.append(Packet(ind=step_nr, obj=ImageGenerationToolStart()))
+    packets.append(
+        Packet(
+            turn_index=turn_index,
+            obj=ImageGenerationToolStart(),
+        )
+    )
 
     packets.append(
         Packet(
-            ind=step_nr,
-            obj=ImageGenerationToolDelta(images=images),
+            turn_index=turn_index,
+            obj=ImageGenerationFinal(images=images),
         ),
     )
 
-    packets.append(Packet(ind=step_nr, obj=SectionEnd(type="section_end")))
+    packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
 
     return packets
 
@@ -188,17 +165,22 @@ def create_image_generation_packets(
 def create_custom_tool_packets(
     tool_name: str,
     response_type: str,
-    step_nr: int,
+    turn_index: int,
     data: dict | list | str | int | float | bool | None = None,
     file_ids: list[str] | None = None,
 ) -> list[Packet]:
     packets: list[Packet] = []
 
-    packets.append(Packet(ind=step_nr, obj=CustomToolStart(tool_name=tool_name)))
+    packets.append(
+        Packet(
+            turn_index=turn_index,
+            obj=CustomToolStart(tool_name=tool_name),
+        )
+    )
 
     packets.append(
         Packet(
-            ind=step_nr,
+            turn_index=turn_index,
             obj=CustomToolDelta(
                 tool_name=tool_name,
                 response_type=response_type,
@@ -208,8 +190,41 @@ def create_custom_tool_packets(
         ),
     )
 
-    packets.append(Packet(ind=step_nr, obj=SectionEnd(type="section_end")))
+    packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
 
+    return packets
+
+
+def create_fetch_packets(
+    fetch_docs: list[SavedSearchDoc],
+    urls: list[str],
+    turn_index: int,
+) -> list[Packet]:
+    packets: list[Packet] = []
+    # Emit start packet
+    packets.append(
+        Packet(
+            turn_index=turn_index,
+            obj=OpenUrlStart(),
+        )
+    )
+    # Emit URLs packet
+    packets.append(
+        Packet(
+            turn_index=turn_index,
+            obj=OpenUrlUrls(urls=urls),
+        )
+    )
+    # Emit documents packet
+    packets.append(
+        Packet(
+            turn_index=turn_index,
+            obj=OpenUrlDocuments(
+                documents=SearchDoc.from_saved_search_docs(fetch_docs)
+            ),
+        )
+    )
+    packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
     return packets
 
 
@@ -217,230 +232,39 @@ def create_search_packets(
     search_queries: list[str],
     saved_search_docs: list[SavedSearchDoc],
     is_internet_search: bool,
-    step_nr: int,
+    turn_index: int,
 ) -> list[Packet]:
     packets: list[Packet] = []
 
     packets.append(
         Packet(
-            ind=step_nr,
+            turn_index=turn_index,
             obj=SearchToolStart(
                 is_internet_search=is_internet_search,
             ),
         )
     )
 
-    packets.append(
-        Packet(
-            ind=step_nr,
-            obj=SearchToolDelta(
-                queries=search_queries,
-                documents=saved_search_docs,
+    # Emit queries if present
+    if search_queries:
+        packets.append(
+            Packet(
+                turn_index=turn_index,
+                obj=SearchToolQueriesDelta(queries=search_queries),
             ),
-        ),
-    )
+        )
 
-    packets.append(Packet(ind=step_nr, obj=SectionEnd()))
+    # Emit documents if present
+    if saved_search_docs:
+        packets.append(
+            Packet(
+                turn_index=turn_index,
+                obj=SearchToolDocumentsDelta(
+                    documents=SearchDoc.from_saved_search_docs(saved_search_docs)
+                ),
+            ),
+        )
+
+    packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
 
     return packets
-
-
-def translate_db_message_to_packets(
-    chat_message: ChatMessage,
-    db_session: Session,
-    remove_doc_content: bool = False,
-    start_step_nr: int = 1,
-) -> EndStepPacketList:
-    step_nr = start_step_nr
-    packet_list: list[Packet] = []
-
-    if chat_message.message_type == MessageType.ASSISTANT:
-        citations = chat_message.citations
-
-        citation_info_list: list[CitationInfo] = []
-        if citations:
-            for citation_num, search_doc_id in citations.items():
-                search_doc = get_db_search_doc_by_id(search_doc_id, db_session)
-                if search_doc:
-                    citation_info_list.append(
-                        CitationInfo(
-                            citation_num=citation_num,
-                            document_id=search_doc.document_id,
-                        )
-                    )
-        elif chat_message.search_docs:
-            for i, search_doc in enumerate(chat_message.search_docs):
-                citation_info_list.append(
-                    CitationInfo(
-                        citation_num=i,
-                        document_id=search_doc.document_id,
-                    )
-                )
-
-        research_iterations = []
-        if chat_message.research_type in [
-            ResearchType.THOUGHTFUL,
-            ResearchType.DEEP,
-            ResearchType.LEGACY_AGENTIC,
-        ]:
-            research_iterations = sorted(
-                chat_message.research_iterations, key=lambda x: x.iteration_nr
-            )
-            for research_iteration in research_iterations:
-                if research_iteration.iteration_nr > 1 and research_iteration.reasoning:
-                    packet_list.extend(
-                        create_reasoning_packets(research_iteration.reasoning, step_nr)
-                    )
-                    step_nr += 1
-
-                if research_iteration.purpose:
-                    packet_list.extend(
-                        create_reasoning_packets(research_iteration.purpose, step_nr)
-                    )
-                    step_nr += 1
-
-                sub_steps = research_iteration.sub_steps
-                tasks: list[str] = []
-                tool_call_ids: list[int | None] = []
-                cited_docs: list[SavedSearchDoc] = []
-
-                for sub_step in sub_steps:
-                    tasks.append(sub_step.sub_step_instructions or "")
-                    tool_call_ids.append(sub_step.sub_step_tool_id)
-
-                    sub_step_cited_docs = sub_step.cited_doc_results
-                    if isinstance(sub_step_cited_docs, list):
-                        sub_step_saved_search_docs: list[SavedSearchDoc] = []
-                        for doc_data in sub_step_cited_docs:
-                            doc_data["db_doc_id"] = 1
-                            doc_data["boost"] = 1
-                            doc_data["hidden"] = False
-                            doc_data["chunk_ind"] = 0
-
-                            if (
-                                doc_data["updated_at"] is None
-                                or doc_data["updated_at"] == "None"
-                            ):
-                                doc_data["updated_at"] = datetime.now()
-
-                            sub_step_saved_search_docs.append(
-                                SavedSearchDoc.from_dict(doc_data)
-                                if isinstance(doc_data, dict)
-                                else doc_data
-                            )
-
-                        cited_docs.extend(sub_step_saved_search_docs)
-                    else:
-                        packet_list.extend(
-                            create_reasoning_packets(
-                                _CANNOT_SHOW_STEP_RESULTS_STR, step_nr
-                            )
-                        )
-                    step_nr += 1
-
-                if len(set(tool_call_ids)) > 1:
-                    packet_list.extend(
-                        create_reasoning_packets(_CANNOT_SHOW_STEP_RESULTS_STR, step_nr)
-                    )
-                    step_nr += 1
-
-                elif len(sub_steps) == 0:
-                    # no sub steps, no tool calls. But iteration can have reasoning or purpose
-                    continue
-
-                else:
-                    tool_id = tool_call_ids[0]
-                    if not tool_id:
-                        raise ValueError("Tool ID is required")
-                    tool = get_tool_by_id(tool_id, db_session)
-                    tool_name = tool.name
-
-                    if tool_name in [SearchTool.__name__, KnowledgeGraphTool.__name__]:
-                        cited_docs = cast(list[SavedSearchDoc], cited_docs)
-                        packet_list.extend(
-                            create_search_packets(tasks, cited_docs, False, step_nr)
-                        )
-                        step_nr += 1
-
-                    elif tool_name == WebSearchTool.__name__:
-                        cited_docs = cast(list[SavedSearchDoc], cited_docs)
-                        packet_list.extend(
-                            create_search_packets(tasks, cited_docs, True, step_nr)
-                        )
-                        step_nr += 1
-
-                    elif tool_name == ImageGenerationTool.__name__:
-                        if sub_step.generated_images is None:
-                            raise ValueError("No generated images found")
-
-                        packet_list.extend(
-                            create_image_generation_packets(
-                                sub_step.generated_images.images, step_nr
-                            )
-                        )
-                        step_nr += 1
-
-                    elif tool_name == OktaProfileTool.__name__:
-                        packet_list.extend(
-                            create_custom_tool_packets(
-                                tool_name=tool_name,
-                                response_type="text",
-                                step_nr=step_nr,
-                                data=sub_step.sub_answer,
-                            )
-                        )
-                        step_nr += 1
-
-                    else:
-                        packet_list.extend(
-                            create_custom_tool_packets(
-                                tool_name=tool_name,
-                                response_type="text",
-                                step_nr=step_nr,
-                                data=sub_step.sub_answer,
-                            )
-                        )
-                        step_nr += 1
-
-        if chat_message.message:
-            packet_list.extend(
-                create_message_packets(
-                    message_text=chat_message.message,
-                    final_documents=[
-                        translate_db_search_doc_to_server_search_doc(doc)
-                        for doc in chat_message.search_docs
-                    ],
-                    step_nr=step_nr,
-                    is_legacy_agentic=chat_message.research_type
-                    == ResearchType.LEGACY_AGENTIC,
-                )
-            )
-            step_nr += 1
-
-        if len(citation_info_list) > 0 and len(research_iterations) == 0:
-            saved_search_docs: list[SavedSearchDoc] = []
-            for citation_info in citation_info_list:
-                cited_doc = get_db_search_doc_by_document_id(
-                    citation_info.document_id, db_session
-                )
-                if cited_doc:
-                    saved_search_docs.append(
-                        translate_db_search_doc_to_server_search_doc(cited_doc)
-                    )
-
-            packet_list.extend(
-                create_search_packets([], saved_search_docs, False, step_nr)
-            )
-
-            step_nr += 1
-
-        packet_list.extend(create_citation_packets(citation_info_list, step_nr))
-
-        step_nr += 1
-
-    packet_list.append(Packet(ind=step_nr, obj=OverallStop()))
-
-    return EndStepPacketList(
-        end_step_nr=step_nr,
-        packet_list=packet_list,
-    )

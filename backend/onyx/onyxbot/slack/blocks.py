@@ -16,12 +16,11 @@ from slack_sdk.models.blocks.basic_components import MarkdownTextObject
 from slack_sdk.models.blocks.block_elements import ImageElement
 
 from onyx.chat.models import ChatBasicResponse
-from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import SearchFeedbackType
 from onyx.configs.onyxbot_configs import ONYX_BOT_NUM_DOCS_TO_DISPLAY
-from onyx.context.search.models import SavedSearchDoc
+from onyx.context.search.models import SearchDoc
 from onyx.db.chat import get_chat_session_by_message_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ChannelConfig
@@ -251,13 +250,11 @@ def get_restate_blocks(
 
 
 def _build_documents_blocks(
-    documents: list[SavedSearchDoc],
+    documents: list[SearchDoc],
     message_id: int | None,
     num_docs_to_display: int = ONYX_BOT_NUM_DOCS_TO_DISPLAY,
 ) -> list[Block]:
-    header_text = (
-        "Retrieved Documents" if DISABLE_GENERATIVE_AI else "Reference Documents"
-    )
+    header_text = "Reference Documents"
     seen_docs_identifiers = set()
     section_blocks: list[Block] = [HeaderBlock(text=header_text)]
     included_docs = 0
@@ -310,7 +307,7 @@ def _build_documents_blocks(
 
 
 def _build_sources_blocks(
-    cited_documents: list[tuple[int, SavedSearchDoc]],
+    cited_documents: list[tuple[int, SearchDoc]],
     num_docs_to_display: int = ONYX_BOT_NUM_DOCS_TO_DISPLAY,
 ) -> list[Block]:
     if not cited_documents:
@@ -403,51 +400,25 @@ def _build_citations_blocks(
     answer: ChatBasicResponse,
 ) -> list[Block]:
     top_docs = answer.top_documents
-    citations = answer.cited_documents or {}
-    cited_docs = []
-    for citation_num, document_id in citations.items():
+    citations = answer.citation_info or []
+    cited_docs: list[tuple[int, SearchDoc]] = []
+    for citation_info in citations:
         matching_doc = next(
-            (d for d in top_docs if d.document_id == document_id),
+            (d for d in top_docs if d.document_id == citation_info.document_id),
             None,
         )
         if matching_doc:
-            cited_docs.append((citation_num, matching_doc))
+            cited_docs.append((citation_info.citation_number, matching_doc))
 
     cited_docs.sort()
     citations_block = _build_sources_blocks(cited_documents=cited_docs)
     return citations_block
 
 
-def _build_answer_blocks(
-    answer: ChatBasicResponse, fallback_answer: str
-) -> list[SectionBlock]:
-    if not answer.answer:
-        answer_blocks = [SectionBlock(text=fallback_answer)]
-    else:
-        # replaces markdown links with slack format links
-        formatted_answer = format_slack_message(answer.answer)
-        answer_processed = decode_escapes(
-            remove_slack_text_interactions(formatted_answer)
-        )
-        answer_blocks = [
-            SectionBlock(text=text) for text in _split_text(answer_processed)
-        ]
-    return answer_blocks
-
-
-def _build_qa_response_blocks(
+def _build_main_response_blocks(
     answer: ChatBasicResponse,
 ) -> list[Block]:
-    top_documents = answer.top_documents
-    if not top_documents:
-        # This should not happen, even with no docs retrieved, there is still info returned
-        raise RuntimeError("Failed to retrieve docs, cannot answer question.")
-
-    if DISABLE_GENERATIVE_AI:
-        return []
-
-    filter_block: Block | None = None
-    # TODO: add back in
+    # TODO: add back in later when auto-filtering is implemented
     # if (
     #     retrieval_info.applied_time_cutoff
     #     or retrieval_info.recency_bias_multiplier > 1
@@ -474,19 +445,12 @@ def _build_qa_response_blocks(
 
     #     filter_block = SectionBlock(text=f"_{filter_text}_")
 
-    answer_blocks = _build_answer_blocks(
-        answer=answer,
-        fallback_answer="Sorry, I was unable to find an answer, but I did find some potentially relevant docs 🤓",
-    )
+    # replaces markdown links with slack format links
+    formatted_answer = format_slack_message(answer.answer)
+    answer_processed = decode_escapes(remove_slack_text_interactions(formatted_answer))
+    answer_blocks = [SectionBlock(text=text) for text in _split_text(answer_processed)]
 
-    response_blocks: list[Block] = []
-
-    if filter_block is not None:
-        response_blocks.append(filter_block)
-
-    response_blocks.extend(answer_blocks)
-
-    return response_blocks
+    return cast(list[Block], answer_blocks)
 
 
 def _build_continue_in_web_ui_block(
@@ -563,11 +527,9 @@ def build_slack_response_blocks(
     answer: ChatBasicResponse,
     message_info: SlackMessageInfo,
     channel_conf: ChannelConfig | None,
-    use_citations: bool,
     feedback_reminder_id: str | None,
     skip_ai_feedback: bool = False,
     offer_ephemeral_publication: bool = False,
-    expecting_search_result: bool = False,
     skip_restated_question: bool = False,
 ) -> list[Block]:
     """
@@ -582,19 +544,7 @@ def build_slack_response_blocks(
     else:
         restate_question_block = []
 
-    if expecting_search_result:
-        answer_blocks = _build_qa_response_blocks(
-            answer=answer,
-        )
-
-    else:
-        answer_blocks = cast(
-            list[Block],
-            _build_answer_blocks(
-                answer=answer,
-                fallback_answer="Sorry, I was unable to generate an answer.",
-            ),
-        )
+    answer_blocks = _build_main_response_blocks(answer)
 
     web_follow_up_block = []
     if channel_conf and channel_conf.get("show_continue_in_web_ui"):
@@ -643,7 +593,7 @@ def build_slack_response_blocks(
 
     citations_blocks = []
     document_blocks = []
-    if use_citations and answer.cited_documents:
+    if answer.citation_info:
         citations_blocks = _build_citations_blocks(answer)
     else:
         document_blocks = _priority_ordered_documents_blocks(answer)

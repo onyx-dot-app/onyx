@@ -5,6 +5,9 @@ metadata:
   name: {{ include "onyx.fullname" . }}-api-server
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
+    {{- with .Values.api.deploymentLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 spec:
   {{- if not .Values.api.autoscaling.enabled }}
   replicas: {{ .Values.api.replicaCount }}
@@ -19,11 +22,18 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- $pgIntoChecksum := include "onyx.pgInto.checksumAnnotation" . }}
+        {{- if $pgIntoChecksum }}
+        {{- $pgIntoChecksum | nindent 8 }}
+        {{- end }}
       {{- with .Values.api.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
         {{- include "onyx.labels" . | nindent 8 }}
+        {{- with .Values.api.deploymentLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
         {{- with .Values.api.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -37,6 +47,14 @@ spec:
         {{- toYaml .Values.api.podSecurityContext | nindent 8 }}
       {{- with .Values.api.nodeSelector }}
       nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.tolerations }}
+      tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
@@ -63,12 +81,12 @@ spec:
                 name: {{ .Values.config.envConfigMapName }}
           env:
             {{- include "onyx.envSecrets" . | nindent 12}}
-          {{- with .Values.api.volumeMounts }}
-          volumeMounts:
-            {{- toYaml . | nindent 12 }}
+          {{- $apiVolumeMounts := include "onyx.renderVolumeMounts" (dict "ctx" . "volumeMounts" .Values.api.volumeMounts) }}
+          {{- if $apiVolumeMounts }}
+          {{- $apiVolumeMounts | nindent 10 }}
           {{- end }}
-      {{- with .Values.api.volumes }}
-      volumes:
-        {{- toYaml . | nindent 8 }}
+      {{- $apiVolumes := include "onyx.renderVolumes" (dict "ctx" . "volumes" .Values.api.volumes) }}
+      {{- if $apiVolumes }}
+      {{- $apiVolumes | nindent 6 }}
       {{- end }}
 {{- end }}

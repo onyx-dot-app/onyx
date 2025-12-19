@@ -1,9 +1,9 @@
 "use client";
 
-import Text from "@/refresh-components/Text";
+import Text from "@/refresh-components/texts/Text";
 import { Persona } from "./interfaces";
 import { useRouter } from "next/navigation";
-import { CustomCheckbox } from "@/components/CustomCheckbox";
+import Checkbox from "@/refresh-components/inputs/Checkbox";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useState, useMemo, useEffect } from "react";
 import { UniqueIdentifier } from "@dnd-kit/core";
@@ -17,10 +17,9 @@ import {
 import { FiEdit2 } from "react-icons/fi";
 import { useUser } from "@/components/user/UserProvider";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgTrash from "@/icons/trash";
-import ConfirmationModal from "@/refresh-components/modals/ConfirmationModal";
-import SvgAlertCircle from "@/icons/alert-circle";
+import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Button from "@/refresh-components/buttons/Button";
+import { SvgAlertCircle, SvgTrash } from "@opal/icons";
 
 function PersonaTypeDisplay({ persona }: { persona: Persona }) {
   if (persona.builtin_persona) {
@@ -45,9 +44,13 @@ function PersonaTypeDisplay({ persona }: { persona: Persona }) {
 export function PersonasTable({
   personas,
   refreshPersonas,
+  currentPage,
+  pageSize,
 }: {
   personas: Persona[];
   refreshPersonas: () => void;
+  currentPage: number;
+  pageSize: number;
 }) {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
@@ -83,13 +86,17 @@ export function PersonasTable({
 
     setFinalPersonas(reorderedPersonas);
 
+    // Calculate display_priority based on current page.
+    // Page 1 (items 0-9): priorities 0-9
+    // Page 2 (items 10-19): priorities 10-19, etc.
+    const pageStartIndex = (currentPage - 1) * pageSize;
     const displayPriorityMap = new Map<UniqueIdentifier, number>();
     orderedPersonaIds.forEach((personaId, ind) => {
-      displayPriorityMap.set(personaId, ind);
+      displayPriorityMap.set(personaId, pageStartIndex + ind);
     });
 
-    const response = await fetch("/api/admin/persona/display-priority", {
-      method: "PUT",
+    const response = await fetch("/api/admin/agents/display-priorities", {
+      method: "PATCH",
       headers: {
         "Content-Type": "application/json",
       },
@@ -169,14 +176,14 @@ export function PersonasTable({
     <div>
       {popup}
       {deleteModalOpen && personaToDelete && (
-        <ConfirmationModal
+        <ConfirmationModalLayout
           icon={SvgAlertCircle}
           title="Delete Assistant"
           onClose={closeDeleteModal}
           submit={<Button onClick={handleDeletePersona}>Delete</Button>}
         >
           {`Are you sure you want to delete ${personaToDelete.name}?`}
-        </ConfirmationModal>
+        </ConfirmationModalLayout>
       )}
       {defaultModalOpen &&
         personaToToggleDefault &&
@@ -185,7 +192,7 @@ export function PersonasTable({
 
           const title = isDefault
             ? "Remove Featured Assistant"
-            : "Set Featurd Assistant";
+            : "Set Featured Assistant";
           const buttonText = isDefault ? "Remove Feature" : "Set as Featured";
           const text = isDefault
             ? `Are you sure you want to remove the featured status of ${personaToToggleDefault.name}?`
@@ -195,7 +202,7 @@ export function PersonasTable({
             : `Setting "${personaToToggleDefault.name}" as a featured assistant will make it public and visible to all users. This action cannot be undone.`;
 
           return (
-            <ConfirmationModal
+            <ConfirmationModalLayout
               icon={SvgAlertCircle}
               title={title}
               onClose={closeDefaultModal}
@@ -203,11 +210,11 @@ export function PersonasTable({
                 <Button onClick={handleToggleDefault}>{buttonText}</Button>
               }
             >
-              <div className="flex flex-col gap-spacing-interline">
+              <div className="flex flex-col gap-2">
                 <Text>{text}</Text>
                 <Text text03>{additionalText}</Text>
               </div>
-            </ConfirmationModal>
+            </ConfirmationModalLayout>
           );
         })()}
 
@@ -255,7 +262,9 @@ export function PersonasTable({
                 onClick={() => {
                   openDefaultModal(persona);
                 }}
-                className={`px-1 py-0.5 rounded flex hover:bg-accent-background-hovered cursor-pointer select-none w-fit`}
+                className={`
+                  px-1 py-0.5 rounded flex hover:bg-accent-background-hovered cursor-pointer select-none w-fit items-center gap-2
+                  `}
               >
                 <div className="my-auto flex-none w-22">
                   {!persona.is_default_persona ? (
@@ -264,9 +273,7 @@ export function PersonasTable({
                     "Featured"
                   )}
                 </div>
-                <div className="ml-1 my-auto">
-                  <CustomCheckbox checked={persona.is_default_persona} />
-                </div>
+                <Checkbox checked={persona.is_default_persona} />
               </div>,
               <div
                 key="is_visible"
@@ -284,18 +291,18 @@ export function PersonasTable({
                     });
                   }
                 }}
-                className={`px-1 py-0.5 rounded flex hover:bg-accent-background-hovered cursor-pointer select-none w-fit`}
+                className={`
+                  px-1 py-0.5 rounded flex hover:bg-accent-background-hovered cursor-pointer select-none w-fit items-center gap-2
+                  `}
               >
-                <div className="my-auto w-12">
+                <div className="my-auto w-fit">
                   {!persona.is_visible ? (
                     <div className="text-error">Hidden</div>
                   ) : (
                     "Visible"
                   )}
                 </div>
-                <div className="ml-1 my-auto">
-                  <CustomCheckbox checked={persona.is_visible} />
-                </div>
+                <Checkbox checked={persona.is_visible} />
               </div>,
               <div key="edit" className="flex">
                 <div className="mr-auto my-auto">

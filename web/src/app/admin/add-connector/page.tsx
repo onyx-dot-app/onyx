@@ -1,11 +1,8 @@
 "use client";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { ConnectorIcon } from "@/components/icons/icons";
 import { SourceCategory, SourceMetadata } from "@/lib/search/interfaces";
 import { listSourceMetadata } from "@/lib/sources";
-import Title from "@/components/ui/title";
 import Button from "@/refresh-components/buttons/Button";
-import Link from "next/link";
 import {
   useCallback,
   useContext,
@@ -34,8 +31,8 @@ import { Credential } from "@/lib/connectors/credentials";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import SourceTile from "@/components/SourceTile";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import Text from "@/refresh-components/Text";
-
+import Text from "@/refresh-components/texts/Text";
+import { SvgUploadCloud } from "@opal/icons";
 function SourceTileTooltipWrapper({
   sourceMetadata,
   preSelect,
@@ -118,17 +115,17 @@ function SourceTileTooltipWrapper({
         </TooltipTrigger>
         <TooltipContent side="top" className="max-w-sm">
           {existingFederatedConnector && !hasExistingSlackCredentials ? (
-            <Text inverted secondaryBody>
+            <Text textLight05 secondaryBody>
               <strong>Federated connector already configured.</strong> Click to
               edit the existing connector.
             </Text>
           ) : hasExistingSlackCredentials ? (
-            <Text inverted secondaryBody>
+            <Text textLight05 secondaryBody>
               <strong>Existing Slack credentials found.</strong> Click to manage
               the traditional Slack connector.
             </Text>
           ) : sourceMetadata.federated ? (
-            <Text inverted secondaryBody>
+            <Text textLight05 secondaryBody>
               {sourceMetadata.federatedTooltip ? (
                 sourceMetadata.federatedTooltip
               ) : (
@@ -270,9 +267,9 @@ export default function Page() {
   };
 
   return (
-    <div className="mx-auto container">
+    <div className="container">
       <AdminPageTitle
-        icon={<ConnectorIcon size={32} />}
+        icon={SvgUploadCloud}
         title="Add Connector"
         farRightElement={
           <Button href="/admin/indexing/status" primary>
