@@ -8,7 +8,7 @@ import torch.nn as nn
 
 
 if TYPE_CHECKING:
-    from transformers import DistilBertConfig  # type: ignore
+    from transformers import DistilBertConfig
 
 
 class HybridClassifier(nn.Module):
@@ -34,7 +34,7 @@ class HybridClassifier(nn.Module):
         query_ids: torch.Tensor,
         query_mask: torch.Tensor,
     ) -> dict[str, torch.Tensor]:
-        outputs = self.distilbert(input_ids=query_ids, attention_mask=query_mask)  # type: ignore
+        outputs = self.distilbert(input_ids=query_ids, attention_mask=query_mask)
         sequence_output = outputs.last_hidden_state
 
         # Intent classification on the CLS token
@@ -102,7 +102,7 @@ class ConnectorClassifier(nn.Module):
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        hidden_states = self.distilbert(  # type: ignore
+        hidden_states = self.distilbert(
             input_ids=input_ids, attention_mask=attention_mask
         ).last_hidden_state
 

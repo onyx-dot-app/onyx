@@ -338,9 +338,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
                 user_created = False
                 try:
-                    user = await super().create(
-                        user_create, safe=safe, request=request
-                    )  # type: ignore
+                    user = await super().create(user_create, safe=safe, request=request)
                     user_created = True
                 except IntegrityError as error:
                     # Race condition: another request created the same user after the
@@ -604,10 +602,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             # this is needed if an organization goes from `TRACK_EXTERNAL_IDP_EXPIRY=true` to `false`
             # otherwise, the oidc expiry will always be old, and the user will never be able to login
-            if (
-                user.oidc_expiry is not None  # type: ignore
-                and not TRACK_EXTERNAL_IDP_EXPIRY
-            ):
+            if user.oidc_expiry is not None and not TRACK_EXTERNAL_IDP_EXPIRY:
                 await self.user_db.update(user, {"oidc_expiry": None})
                 user.oidc_expiry = None  # type: ignore
             remove_user_from_invited_users(user.email)
@@ -1178,7 +1173,7 @@ async def _sync_jwt_oidc_expiry(
             return
 
         await user_manager.user_db.update(user, {"oidc_expiry": oidc_expiry})
-        user.oidc_expiry = oidc_expiry  # type: ignore
+        user.oidc_expiry = oidc_expiry
         return
 
     if user.oidc_expiry is not None:

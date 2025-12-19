@@ -4,9 +4,9 @@ from datetime import datetime
 from datetime import timezone
 from http import HTTPStatus
 
-from office365.graph_client import GraphClient  # type: ignore
-from office365.teams.channels.channel import Channel  # type: ignore
-from office365.teams.channels.channel import ConversationMember  # type: ignore
+from office365.graph_client import GraphClient  # type: ignore[import-untyped]
+from office365.teams.channels.channel import Channel  # type: ignore[import-untyped]
+from office365.teams.channels.channel import ConversationMember
 
 from onyx.access.models import ExternalAccess
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch

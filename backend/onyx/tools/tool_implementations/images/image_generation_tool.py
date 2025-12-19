@@ -132,7 +132,7 @@ class ImageGenerationTool(Tool[None]):
     def _generate_image(
         self, prompt: str, shape: ImageShape
     ) -> tuple[ImageGenerationResponse, Any]:
-        from litellm import image_generation  # type: ignore
+        from litellm import image_generation
 
         if shape == ImageShape.LANDSCAPE:
             if "gpt-image-1" in self.model:
