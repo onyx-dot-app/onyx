@@ -629,22 +629,49 @@ class SlackRateLimitError(Exception):
     """Raised when Slack API returns a rate limit error (429)."""
 
 
-def _get_thread_context_or_raise_on_rate_limit(
-    message: SlackMessage, access_token: str, team_id: str | None = None
-) -> str:
-    """
-    Fetch thread context for a message, raising SlackRateLimitError on 429.
+class ThreadContextResult:
+    """Result wrapper for thread context fetch that captures error type."""
 
-    This allows batch processing to detect rate limits and stop early.
-    Other errors return the original message text (graceful degradation).
+    __slots__ = ("text", "is_rate_limited", "is_error")
+
+    def __init__(
+        self, text: str, is_rate_limited: bool = False, is_error: bool = False
+    ):
+        self.text = text
+        self.is_rate_limited = is_rate_limited
+        self.is_error = is_error
+
+    @classmethod
+    def success(cls, text: str) -> "ThreadContextResult":
+        return cls(text)
+
+    @classmethod
+    def rate_limited(cls, original_text: str) -> "ThreadContextResult":
+        return cls(original_text, is_rate_limited=True)
+
+    @classmethod
+    def error(cls, original_text: str) -> "ThreadContextResult":
+        return cls(original_text, is_error=True)
+
+
+def _fetch_thread_context(
+    message: SlackMessage, access_token: str, team_id: str | None = None
+) -> ThreadContextResult:
+    """
+    Fetch thread context for a message, returning a result object.
+
+    Returns ThreadContextResult with:
+    - success: enriched thread text
+    - rate_limited: original text + flag indicating we should stop
+    - error: original text for other failures (graceful degradation)
     """
     channel_id = message.channel_id
     thread_id = message.thread_id
     message_id = message.message_id
 
-    # If not a thread, return original text
+    # If not a thread, return original text as success
     if thread_id is None:
-        return message.text
+        return ThreadContextResult.success(message.text)
 
     slack_client = WebClient(token=access_token, timeout=30)
     try:
@@ -660,16 +687,35 @@ def _get_thread_context_or_raise_on_rate_limit(
             logger.warning(
                 f"Slack rate limit hit while fetching thread context for {channel_id}/{thread_id}"
             )
-            raise SlackRateLimitError("Slack API rate limited") from e
-        # For other errors, log and return original text
+            return ThreadContextResult.rate_limited(message.text)
+        # For other Slack errors, log and return original text
         logger.error(f"Slack API error in thread context fetch: {e}")
-        return message.text
+        return ThreadContextResult.error(message.text)
+    except Exception as e:
+        # Network errors, timeouts, etc - treat as recoverable error
+        logger.error(f"Unexpected error in thread context fetch: {e}")
+        return ThreadContextResult.error(message.text)
 
     # If empty response or single message (not a thread), return original text
     if len(messages) <= 1:
-        return message.text
+        return ThreadContextResult.success(message.text)
 
     # Build thread text from thread starter + context window around matched message
+    thread_text = _build_thread_text(
+        messages, message_id, thread_id, access_token, team_id, slack_client
+    )
+    return ThreadContextResult.success(thread_text)
+
+
+def _build_thread_text(
+    messages: list[dict[str, Any]],
+    message_id: str,
+    thread_id: str,
+    access_token: str,
+    team_id: str | None,
+    slack_client: WebClient,
+) -> str:
+    """Build the thread text from messages."""
     msg_text = messages[0].get("text", "")
     msg_sender = messages[0].get("user", "")
     thread_text = f"<@{msg_sender}>: {msg_text}"
@@ -748,11 +794,11 @@ def fetch_thread_contexts_with_rate_limit_handling(
     max_messages: int | None = MAX_SLACK_THREAD_CONTEXT_MESSAGES,
 ) -> list[str]:
     """
-    Fetch thread contexts in controlled batches, stopping on any failure.
+    Fetch thread contexts in controlled batches, stopping on rate limit.
 
-    This function uses "best effort" failure detection - any task failure (rate limit,
-    network error, etc.) will stop further batches. Successful results within a batch
-    are preserved even if other tasks in the same batch fail.
+    Distinguishes between error types:
+    - Rate limit (429): Stop processing further batches
+    - Other errors: Continue processing (graceful degradation)
 
     Args:
         slack_messages: Messages to fetch thread context for (should be sorted by relevance)
@@ -763,13 +809,13 @@ def fetch_thread_contexts_with_rate_limit_handling(
 
     Returns:
         List of thread texts, one per input message.
-        Messages beyond max_messages or after failure get their original text.
+        Messages beyond max_messages or after rate limit get their original text.
     """
     if not slack_messages:
         return []
 
     # Limit how many messages we fetch thread context for (if max_messages is set)
-    if max_messages is not None and max_messages < len(slack_messages):
+    if max_messages and max_messages < len(slack_messages):
         messages_for_context = slack_messages[:max_messages]
         messages_without_context = slack_messages[max_messages:]
     else:
@@ -797,34 +843,40 @@ def fetch_thread_contexts_with_rate_limit_handling(
 
         batch = messages_for_context[i : i + batch_size]
 
-        # Use allow_failures=True to preserve partial results when rate limited
-        batch_results = run_functions_tuples_in_parallel(
-            [
-                (
-                    _get_thread_context_or_raise_on_rate_limit,
-                    (msg, access_token, team_id),
-                )
-                for msg in batch
-            ],
-            allow_failures=True,
-            max_workers=batch_size,
+        # _fetch_thread_context returns ThreadContextResult (never raises)
+        # allow_failures=True is a safety net for any unexpected exceptions
+        batch_results: list[ThreadContextResult | None] = (
+            run_functions_tuples_in_parallel(
+                [
+                    (
+                        _fetch_thread_context,
+                        (msg, access_token, team_id),
+                    )
+                    for msg in batch
+                ],
+                allow_failures=True,
+                max_workers=batch_size,
+            )
         )
 
-        # Check results - None indicates failure (rate limit or other error)
-        # Preserve successful results, use original text for failures
+        # Process results - ThreadContextResult tells us exactly what happened
         for j, result in enumerate(batch_results):
             if result is None:
-                # Task failed - use original text and check if rate limited
+                # Unexpected exception (shouldn't happen) - use original text, stop
+                logger.error(f"Unexpected None result for message {j} in batch")
                 results.append(batch[j].text)
-                # We can't distinguish rate limit from other errors with allow_failures=True,
-                # but any failure mid-batch suggests we should stop to avoid further issues
+                rate_limited = True
+            elif result.is_rate_limited:
+                # Rate limit hit - use original text, stop further batches
+                results.append(result.text)
                 rate_limited = True
             else:
-                results.append(result)
+                # Success or recoverable error - use the text (enriched or original)
+                results.append(result.text)
 
         if rate_limited:
             logger.warning(
-                f"Failure detected at batch {i // batch_size + 1}, "
+                f"Rate limit detected at batch {i // batch_size + 1}, "
                 f"stopping further thread context fetches"
             )
 

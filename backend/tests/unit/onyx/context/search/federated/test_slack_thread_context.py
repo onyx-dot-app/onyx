@@ -8,13 +8,12 @@ import pytest
 from slack_sdk.errors import SlackApiError
 
 from onyx.context.search.federated.models import SlackMessage
-from onyx.context.search.federated.slack_search import (
-    _get_thread_context_or_raise_on_rate_limit,
-)
+from onyx.context.search.federated.slack_search import _fetch_thread_context
 from onyx.context.search.federated.slack_search import (
     fetch_thread_contexts_with_rate_limit_handling,
 )
 from onyx.context.search.federated.slack_search import SlackRateLimitError
+from onyx.context.search.federated.slack_search import ThreadContextResult
 
 
 def _create_mock_message(
@@ -49,22 +48,49 @@ class TestSlackRateLimitError:
             raise SlackRateLimitError("Rate limited")
 
 
-class TestGetThreadContextOrRaiseOnRateLimit:
-    """Test _get_thread_context_or_raise_on_rate_limit function."""
+class TestThreadContextResult:
+    """Test ThreadContextResult class."""
 
-    def test_non_thread_message_returns_original_text(self) -> None:
-        """Test that non-thread messages return their original text."""
+    def test_success_result(self) -> None:
+        """Test creating a success result."""
+        result = ThreadContextResult.success("enriched text")
+        assert result.text == "enriched text"
+        assert not result.is_rate_limited
+        assert not result.is_error
+
+    def test_rate_limited_result(self) -> None:
+        """Test creating a rate limited result."""
+        result = ThreadContextResult.rate_limited("original text")
+        assert result.text == "original text"
+        assert result.is_rate_limited
+        assert not result.is_error
+
+    def test_error_result(self) -> None:
+        """Test creating an error result."""
+        result = ThreadContextResult.error("original text")
+        assert result.text == "original text"
+        assert not result.is_rate_limited
+        assert result.is_error
+
+
+class TestFetchThreadContext:
+    """Test _fetch_thread_context function."""
+
+    def test_non_thread_message_returns_success(self) -> None:
+        """Test that non-thread messages return success with original text."""
         message = _create_mock_message(thread_id=None, text="original text")
 
-        result = _get_thread_context_or_raise_on_rate_limit(
-            message, "xoxp-token", "T12345"
-        )
+        result = _fetch_thread_context(message, "xoxp-token", "T12345")
 
-        assert result == "original text"
+        assert result.text == "original text"
+        assert not result.is_rate_limited
+        assert not result.is_error
 
     @patch("onyx.context.search.federated.slack_search.WebClient")
-    def test_rate_limit_raises_exception(self, mock_webclient_class: MagicMock) -> None:
-        """Test that 429 rate limit raises SlackRateLimitError."""
+    def test_rate_limit_returns_rate_limited_result(
+        self, mock_webclient_class: MagicMock
+    ) -> None:
+        """Test that 429 rate limit returns rate_limited result."""
         message = _create_mock_message(text="original text")
 
         # Create mock response with 429 status
@@ -78,14 +104,17 @@ class TestGetThreadContextOrRaiseOnRateLimit:
         )
         mock_webclient_class.return_value = mock_client
 
-        with pytest.raises(SlackRateLimitError):
-            _get_thread_context_or_raise_on_rate_limit(message, "xoxp-token", "T12345")
+        result = _fetch_thread_context(message, "xoxp-token", "T12345")
+
+        assert result.text == "original text"
+        assert result.is_rate_limited
+        assert not result.is_error
 
     @patch("onyx.context.search.federated.slack_search.WebClient")
-    def test_other_api_error_returns_original_text(
+    def test_other_api_error_returns_error_result(
         self, mock_webclient_class: MagicMock
     ) -> None:
-        """Test that non-rate-limit API errors return original text."""
+        """Test that non-rate-limit API errors return error result."""
         message = _create_mock_message(text="original text")
 
         # Create mock response with non-429 error
@@ -98,18 +127,35 @@ class TestGetThreadContextOrRaiseOnRateLimit:
         )
         mock_webclient_class.return_value = mock_client
 
-        result = _get_thread_context_or_raise_on_rate_limit(
-            message, "xoxp-token", "T12345"
-        )
+        result = _fetch_thread_context(message, "xoxp-token", "T12345")
 
-        assert result == "original text"
+        assert result.text == "original text"
+        assert not result.is_rate_limited
+        assert result.is_error
+
+    @patch("onyx.context.search.federated.slack_search.WebClient")
+    def test_unexpected_exception_returns_error_result(
+        self, mock_webclient_class: MagicMock
+    ) -> None:
+        """Test that unexpected exceptions return error result."""
+        message = _create_mock_message(text="original text")
+
+        mock_client = MagicMock()
+        mock_client.conversations_replies.side_effect = RuntimeError("Network error")
+        mock_webclient_class.return_value = mock_client
+
+        result = _fetch_thread_context(message, "xoxp-token", "T12345")
+
+        assert result.text == "original text"
+        assert not result.is_rate_limited
+        assert result.is_error
 
     @patch("onyx.context.search.federated.slack_search.batch_get_user_profiles")
     @patch("onyx.context.search.federated.slack_search.WebClient")
     def test_successful_thread_fetch_returns_context(
         self, mock_webclient_class: MagicMock, mock_batch_profiles: MagicMock
     ) -> None:
-        """Test that successful thread fetch returns thread context."""
+        """Test that successful thread fetch returns enriched context."""
         message = _create_mock_message(
             message_id="1234567890.123456",
             thread_id="1234567890.000000",
@@ -140,14 +186,14 @@ class TestGetThreadContextOrRaiseOnRateLimit:
         mock_client.conversations_replies.return_value = mock_response
         mock_webclient_class.return_value = mock_client
 
-        result = _get_thread_context_or_raise_on_rate_limit(
-            message, "xoxp-token", "T12345"
-        )
+        result = _fetch_thread_context(message, "xoxp-token", "T12345")
 
         # Should contain thread starter and replies with resolved usernames
-        assert "Thread starter message" in result
-        assert "Reply" in result
-        assert "User One" in result
+        assert "Thread starter message" in result.text
+        assert "Reply" in result.text
+        assert "User One" in result.text
+        assert not result.is_rate_limited
+        assert not result.is_error
 
 
 class TestFetchThreadContextsWithRateLimitHandling:
@@ -163,24 +209,24 @@ class TestFetchThreadContextsWithRateLimitHandling:
 
         assert result == []
 
-    @patch(
-        "onyx.context.search.federated.slack_search._get_thread_context_or_raise_on_rate_limit"
-    )
+    @patch("onyx.context.search.federated.slack_search._fetch_thread_context")
     @patch(
         "onyx.context.search.federated.slack_search.run_functions_tuples_in_parallel"
     )
     def test_batch_processing_respects_batch_size(
         self,
         mock_parallel: MagicMock,
-        mock_get_context: MagicMock,
+        mock_fetch_context: MagicMock,
     ) -> None:
         """Test that messages are processed in batches of specified size."""
         messages = [
             _create_mock_message(message_id=f"123456789{i}.000000") for i in range(7)
         ]
 
-        # Mock parallel execution to return enriched text
-        mock_parallel.return_value = ["enriched"] * 3  # batch_size=3
+        # Mock parallel execution to return ThreadContextResult objects
+        mock_parallel.return_value = [
+            ThreadContextResult.success("enriched") for _ in range(3)
+        ]
 
         fetch_thread_contexts_with_rate_limit_handling(
             slack_messages=messages,
@@ -193,16 +239,14 @@ class TestFetchThreadContextsWithRateLimitHandling:
         # Should have called parallel execution 3 times (7 messages / 3 batch = 3 batches)
         assert mock_parallel.call_count == 3
 
-    @patch(
-        "onyx.context.search.federated.slack_search._get_thread_context_or_raise_on_rate_limit"
-    )
+    @patch("onyx.context.search.federated.slack_search._fetch_thread_context")
     @patch(
         "onyx.context.search.federated.slack_search.run_functions_tuples_in_parallel"
     )
     def test_rate_limit_stops_further_batches(
         self,
         mock_parallel: MagicMock,
-        mock_get_context: MagicMock,
+        mock_fetch_context: MagicMock,
     ) -> None:
         """Test that rate limiting stops processing of subsequent batches."""
         messages = [
@@ -210,14 +254,16 @@ class TestFetchThreadContextsWithRateLimitHandling:
             for i in range(6)
         ]
 
-        # First batch succeeds, second batch has partial failure (one succeeds, one fails)
-        # With allow_failures=True, failures become None in the result list
+        # First batch succeeds, second batch has one success and one rate limit
         mock_parallel.side_effect = [
-            ["enriched0", "enriched1"],  # First batch succeeds
             [
-                "enriched2",
-                None,
-            ],  # Second batch: first succeeds, second fails (rate limit)
+                ThreadContextResult.success("enriched0"),
+                ThreadContextResult.success("enriched1"),
+            ],
+            [
+                ThreadContextResult.success("enriched2"),
+                ThreadContextResult.rate_limited("msg3"),  # Rate limit hit
+            ],
         ]
 
         result = fetch_thread_contexts_with_rate_limit_handling(
@@ -233,30 +279,73 @@ class TestFetchThreadContextsWithRateLimitHandling:
         # First 2 should be enriched
         assert result[0] == "enriched0"
         assert result[1] == "enriched1"
-        # Second batch: first enriched (preserved!), second failed so original text
+        # Second batch: first enriched (preserved!), second rate limited (original text)
         assert result[2] == "enriched2"
         assert result[3] == "msg3"
         # Last 2 (skipped due to rate limit) should be original text
         assert result[4] == "msg4"
         assert result[5] == "msg5"
 
-        # Should only call parallel twice (stopped after failure detected)
+        # Should only call parallel twice (stopped after rate limit detected)
+        assert mock_parallel.call_count == 2
+
+    @patch("onyx.context.search.federated.slack_search._fetch_thread_context")
+    @patch(
+        "onyx.context.search.federated.slack_search.run_functions_tuples_in_parallel"
+    )
+    def test_other_errors_dont_stop_processing(
+        self,
+        mock_parallel: MagicMock,
+        mock_fetch_context: MagicMock,
+    ) -> None:
+        """Test that non-rate-limit errors don't stop batch processing."""
+        messages = [
+            _create_mock_message(message_id=f"123456789{i}.000000", text=f"msg{i}")
+            for i in range(4)
+        ]
+
+        # First batch has an error (not rate limit), second batch succeeds
+        mock_parallel.side_effect = [
+            [
+                ThreadContextResult.success("enriched0"),
+                ThreadContextResult.error("msg1"),  # Error but NOT rate limit
+            ],
+            [
+                ThreadContextResult.success("enriched2"),
+                ThreadContextResult.success("enriched3"),
+            ],
+        ]
+
+        result = fetch_thread_contexts_with_rate_limit_handling(
+            slack_messages=messages,
+            access_token="xoxp-token",
+            team_id="T12345",
+            batch_size=2,
+            max_messages=None,
+        )
+
+        # Should have 4 results total
+        assert len(result) == 4
+        assert result[0] == "enriched0"
+        assert result[1] == "msg1"  # Error returns original text
+        assert result[2] == "enriched2"
+        assert result[3] == "enriched3"
+
+        # Should have called both batches (errors don't stop processing)
         assert mock_parallel.call_count == 2
 
 
 class TestMaxMessagesLimit:
     """Test max_messages parameter limiting thread context fetches."""
 
-    @patch(
-        "onyx.context.search.federated.slack_search._get_thread_context_or_raise_on_rate_limit"
-    )
+    @patch("onyx.context.search.federated.slack_search._fetch_thread_context")
     @patch(
         "onyx.context.search.federated.slack_search.run_functions_tuples_in_parallel"
     )
     def test_max_messages_limits_context_fetches(
         self,
         mock_parallel: MagicMock,
-        mock_get_context: MagicMock,
+        mock_fetch_context: MagicMock,
     ) -> None:
         """Test that only top N messages get thread context when max_messages is set."""
         messages = [
@@ -264,8 +353,12 @@ class TestMaxMessagesLimit:
             for i in range(10)
         ]
 
-        # Mock parallel to return enriched text for messages that are fetched
-        mock_parallel.return_value = ["enriched0", "enriched1", "enriched2"]
+        # Mock parallel to return ThreadContextResult for messages that are fetched
+        mock_parallel.return_value = [
+            ThreadContextResult.success("enriched0"),
+            ThreadContextResult.success("enriched1"),
+            ThreadContextResult.success("enriched2"),
+        ]
 
         result = fetch_thread_contexts_with_rate_limit_handling(
             slack_messages=messages,
@@ -288,16 +381,14 @@ class TestMaxMessagesLimit:
         # Should only call parallel once (3 messages with batch_size=5 = 1 batch)
         assert mock_parallel.call_count == 1
 
-    @patch(
-        "onyx.context.search.federated.slack_search._get_thread_context_or_raise_on_rate_limit"
-    )
+    @patch("onyx.context.search.federated.slack_search._fetch_thread_context")
     @patch(
         "onyx.context.search.federated.slack_search.run_functions_tuples_in_parallel"
     )
     def test_max_messages_none_fetches_all(
         self,
         mock_parallel: MagicMock,
-        mock_get_context: MagicMock,
+        mock_fetch_context: MagicMock,
     ) -> None:
         """Test that max_messages=None fetches context for all messages."""
         messages = [
@@ -305,7 +396,9 @@ class TestMaxMessagesLimit:
             for i in range(5)
         ]
 
-        mock_parallel.return_value = [f"enriched{i}" for i in range(5)]
+        mock_parallel.return_value = [
+            ThreadContextResult.success(f"enriched{i}") for i in range(5)
+        ]
 
         result = fetch_thread_contexts_with_rate_limit_handling(
             slack_messages=messages,
@@ -320,16 +413,14 @@ class TestMaxMessagesLimit:
         for i in range(5):
             assert result[i] == f"enriched{i}"
 
-    @patch(
-        "onyx.context.search.federated.slack_search._get_thread_context_or_raise_on_rate_limit"
-    )
+    @patch("onyx.context.search.federated.slack_search._fetch_thread_context")
     @patch(
         "onyx.context.search.federated.slack_search.run_functions_tuples_in_parallel"
     )
     def test_max_messages_greater_than_total_fetches_all(
         self,
         mock_parallel: MagicMock,
-        mock_get_context: MagicMock,
+        mock_fetch_context: MagicMock,
     ) -> None:
         """Test that max_messages > total messages fetches all."""
         messages = [
@@ -337,7 +428,11 @@ class TestMaxMessagesLimit:
             for i in range(3)
         ]
 
-        mock_parallel.return_value = ["enriched0", "enriched1", "enriched2"]
+        mock_parallel.return_value = [
+            ThreadContextResult.success("enriched0"),
+            ThreadContextResult.success("enriched1"),
+            ThreadContextResult.success("enriched2"),
+        ]
 
         result = fetch_thread_contexts_with_rate_limit_handling(
             slack_messages=messages,
