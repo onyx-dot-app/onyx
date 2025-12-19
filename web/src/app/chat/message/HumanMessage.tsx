@@ -43,7 +43,7 @@ function FileDisplay({ files, alignBubble }: FileDisplayProps) {
           id="onyx-file"
           className={cn("mt-2 auto", alignBubble && "ml-auto")}
         >
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col items-end gap-2">
             {textFiles.map((file) => (
               <Attachment key={file.id} fileName={file.name || file.id} />
             ))}
@@ -56,7 +56,7 @@ function FileDisplay({ files, alignBubble }: FileDisplayProps) {
           id="onyx-image"
           className={cn("mt-2 auto", alignBubble && "ml-auto")}
         >
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col items-end gap-2">
             {imageFiles.map((file) => (
               <InMessageImage key={file.id} fileId={file.id} />
             ))}
@@ -66,7 +66,7 @@ function FileDisplay({ files, alignBubble }: FileDisplayProps) {
 
       {csvFiles.length > 0 && (
         <div className={cn("mt-2 auto", alignBubble && "ml-auto")}>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col items-end gap-2">
             {csvFiles.map((file) => {
               return (
                 <div key={file.id} className="w-fit">
@@ -164,7 +164,6 @@ interface HumanMessageProps {
   // Content and display
   content: string;
   files?: FileDescriptor[];
-  shared?: boolean;
 
   // Message navigation
   messageId?: number | null;
@@ -186,7 +185,6 @@ export default function HumanMessage({
   otherMessagesCanSwitchTo,
   onEdit,
   onMessageSelection,
-  shared,
   stopGenerating = () => null,
   disableSwitchingForStreaming = false,
 }: HumanMessageProps) {
@@ -232,12 +230,7 @@ export default function HumanMessage({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div
-        className={cn(
-          "text-user-text max-w-[790px] md:px-4",
-          shared ? "w-full" : "w-[90%]"
-        )}
-      >
+      <div className={cn("text-user-text max-w-[790px] px-4 w-full")}>
         <FileDisplay alignBubble files={files || []} />
         <div className="flex flex-wrap justify-end break-words">
           {isEditing ? (

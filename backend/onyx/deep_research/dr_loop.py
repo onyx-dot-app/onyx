@@ -16,8 +16,10 @@ from onyx.chat.llm_step import run_llm_step_pkt_generator
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import LlmStepResult
 from onyx.configs.constants import MessageType
+from onyx.db.tools import get_tool_by_name
 from onyx.deep_research.dr_mock_tools import get_clarification_tool_definitions
 from onyx.deep_research.dr_mock_tools import get_orchestrator_tools
+from onyx.deep_research.dr_mock_tools import RESEARCH_AGENT_DB_NAME
 from onyx.deep_research.dr_mock_tools import RESEARCH_AGENT_TOOL_NAME
 from onyx.deep_research.dr_mock_tools import THINK_TOOL_RESPONSE_MESSAGE
 from onyx.deep_research.dr_mock_tools import THINK_TOOL_RESPONSE_TOKEN_COUNT
@@ -41,6 +43,7 @@ from onyx.server.query_and_chat.streaming_models import DeepResearchPlanDelta
 from onyx.server.query_and_chat.streaming_models import DeepResearchPlanStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.fake_tools.research_agent import run_research_agent_calls
 from onyx.tools.models import ToolCallInfo
 from onyx.tools.models import ToolCallKickoff
@@ -106,7 +109,7 @@ def generate_final_report(
         tool_choice=ToolChoiceOptions.NONE,
         llm=llm,
         turn_index=999,  # TODO
-        citation_processor=DynamicCitationProcessor(),
+        citation_processor=None,
         state_container=state_container,
         reasoning_effort=ReasoningEffort.LOW,
         final_documents=None,
@@ -151,6 +154,7 @@ def run_deep_research_llm_loop(
     # Filter tools to only allow web search, internal search, and open URL
     allowed_tool_names = {SearchTool.NAME, WebSearchTool.NAME, OpenURLTool.NAME}
     allowed_tools = [tool for tool in tools if tool.name in allowed_tool_names]
+    orchestrator_start_turn_index = 0
 
     #########################################################
     # CLARIFICATION STEP (optional)
@@ -184,7 +188,7 @@ def run_deep_research_llm_loop(
             turn_index=0,
             # No citations in this step, it should just pass through all
             # tokens directly so initialized as an empty citation processor
-            citation_processor=DynamicCitationProcessor(),
+            citation_processor=None,
             state_container=state_container,
             final_documents=None,
             user_identity=user_identity,
@@ -226,9 +230,7 @@ def run_deep_research_llm_loop(
         tool_choice=ToolChoiceOptions.NONE,
         llm=llm,
         turn_index=0,
-        # No citations in this step, it should just pass through all
-        # tokens directly so initialized as an empty citation processor
-        citation_processor=DynamicCitationProcessor(),
+        citation_processor=None,
         state_container=state_container,
         final_documents=None,
         user_identity=user_identity,
@@ -238,6 +240,7 @@ def run_deep_research_llm_loop(
         try:
             packet = next(research_plan_generator)
             # Translate AgentResponseStart/Delta packets to DeepResearchPlanStart/Delta
+            # The LLM response from this prompt is the research plan
             if isinstance(packet.obj, AgentResponseStart):
                 emitter.emit(
                     Packet(
@@ -256,7 +259,16 @@ def run_deep_research_llm_loop(
                 # Pass through other packet types (e.g., ReasoningStart, ReasoningDelta, etc.)
                 emitter.emit(packet)
         except StopIteration as e:
-            llm_step_result, _ = e.value
+            llm_step_result, orchestrator_start_turn_index = e.value
+            # TODO: All that is done with the plan is for streaming to the frontend and informing the flow
+            # Currently not saved. It would have to be saved as a ToolCall for a new tool type.
+            emitter.emit(
+                Packet(
+                    # Marks the last turn end which should be the plan generation
+                    turn_index=orchestrator_start_turn_index - 1,
+                    obj=SectionEnd(),
+                )
+            )
             break
     llm_step_result = cast(LlmStepResult, llm_step_result)
 
@@ -328,7 +340,7 @@ def run_deep_research_llm_loop(
             ),
             tool_choice=ToolChoiceOptions.REQUIRED,
             llm=llm,
-            turn_index=cycle + reasoning_cycles,
+            turn_index=orchestrator_start_turn_index + cycle + reasoning_cycles,
             # No citations in this step, it should just pass through all
             # tokens directly so initialized as an empty citation processor
             citation_processor=DynamicCitationProcessor(),
@@ -433,14 +445,16 @@ def run_deep_research_llm_loop(
                 user_identity=user_identity,
             )
 
-            for research_result in research_results:
+            for tab_index, research_result in enumerate(research_results):
                 tool_call_info = ToolCallInfo(
                     parent_tool_call_id=None,
-                    turn_index=cycle + reasoning_cycles,
-                    tab_index=0,
+                    turn_index=orchestrator_start_turn_index + cycle + reasoning_cycles,
+                    tab_index=tab_index,
                     tool_name=tool_call.tool_name,
                     tool_call_id=tool_call.tool_call_id,
-                    tool_id=999,  # TODO
+                    tool_id=get_tool_by_name(
+                        tool_name=RESEARCH_AGENT_DB_NAME, db_session=db_session
+                    ).id,
                     reasoning_tokens=most_recent_reasoning,
                     tool_call_arguments=tool_call.tool_args,
                     tool_call_response=research_result.intermediate_report,
