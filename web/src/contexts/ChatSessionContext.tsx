@@ -35,6 +35,11 @@ interface ChatSessionContextValue {
    *
    * This is different than the `currentAgent` provided by the `AgentsContext` because this agent is pulled from the *chat-session*.
    * The `currentAgent` provided by `AgentsContext` is from the URL.
+   *
+   * When there is no current chat session (e.g., new session), this falls back to the agent from `AppFocus`:
+   * - If `AppFocus` is an agent object, uses that agent's ID
+   * - If `AppFocus` is "new-session", uses the DEFAULT_ASSISTANT_ID
+   * - Otherwise, returns null
    */
   agentForCurrentChatSession: MinimalPersonaSnapshot | null;
 

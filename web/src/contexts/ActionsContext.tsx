@@ -123,7 +123,6 @@ export function ActionsProvider({ children }: ActionsProviderProps) {
             delete updated[toolId];
           }
         });
-        console.log({ agentForCurrentChatSession });
         return updated;
       });
     } else {
