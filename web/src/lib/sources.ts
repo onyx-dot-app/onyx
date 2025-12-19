@@ -305,7 +305,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     icon: DrupalWikiIcon,
     displayName: "Drupal Wiki",
     category: SourceCategory.Wiki,
-    docs: "https://docs.onyx.app/connectors/drupal_wiki",
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/drupal_wiki`,
   },
   imap: {
     icon: EmailIcon,
