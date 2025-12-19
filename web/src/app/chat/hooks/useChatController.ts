@@ -58,7 +58,7 @@ import {
   useRouter,
   useSearchParams,
 } from "next/navigation";
-import { useChatSessionContext } from "@/contexts/ChatSessionContext";
+import useChatSessions from "@/hooks/useChatSessions";
 import {
   useChatSessionStore,
   useCurrentMessageTree,
@@ -66,11 +66,11 @@ import {
   useCurrentMessageHistory,
 } from "../stores/useChatSessionStore";
 import { Packet, MessageStart, PacketType } from "../services/streamingModels";
-import useAgentPreferences from "@/hooks/useAgentPreferences";
+import { useAssistantPreferences } from "@/app/chat/hooks/useAssistantPreferences";
+import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile, useProjectsContext } from "../projects/ProjectsContext";
 import { useAppParams } from "@/hooks/appNavigation";
 import { projectFilesToFileDescriptors } from "../services/fileUtils";
-import { useActionsContext } from "@/contexts/ActionsContext";
 
 const SYSTEM_MESSAGE_ID = -3;
 
@@ -125,10 +125,10 @@ export function useChatController({
   const router = useRouter();
   const searchParams = useSearchParams();
   const params = useAppParams();
-  const { refreshChatSessions } = useChatSessionContext();
-  const { agentPreferences } = useAgentPreferences();
-  const { forcedToolIds } = useActionsContext();
-  const { fetchProjects, setCurrentMessageFiles, beginUpload } =
+  const { refreshChatSessions } = useChatSessions();
+  const { assistantPreferences } = useAssistantPreferences();
+  const { forcedToolIds } = useForcedTools();
+  const { fetchProjects, uploadFiles, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
   const posthog = usePostHog();
 
@@ -642,7 +642,7 @@ export function useChatController({
           currentMessageTreeLocal
         );
         const disabledToolIds = liveAssistant
-          ? agentPreferences?.[liveAssistant?.id]?.disabled_tool_ids
+          ? assistantPreferences?.[liveAssistant?.id]?.disabled_tool_ids
           : undefined;
 
         const stack = new CurrentMessageFIFO();
@@ -915,7 +915,7 @@ export function useChatController({
       // Ensure latest forced tools are used when submitting
       forcedToolIds,
       // Keep tool preference-derived values fresh
-      agentPreferences,
+      assistantPreferences,
       fetchProjects,
     ]
   );

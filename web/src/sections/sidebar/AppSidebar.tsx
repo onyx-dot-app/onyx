@@ -30,8 +30,9 @@ import {
 } from "@dnd-kit/modifiers";
 import Settings from "@/sections/sidebar/Settings/Settings";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
-import { useChatSessionContext } from "@/contexts/ChatSessionContext";
+import useChatSessions from "@/hooks/useChatSessions";
 import { useProjects } from "@/lib/hooks/useProjects";
+import { useAgents, usePinnedAgentsWithDetails } from "@/hooks/useAgents";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
 import ProjectFolderButton from "@/sections/sidebar/ProjectFolderButton";
 import CreateProjectModal from "@/components/modals/CreateProjectModal";
@@ -65,7 +66,6 @@ import {
   SvgOnyxOctagon,
   SvgSettings,
 } from "@opal/icons";
-import { useAgentsContext } from "@/contexts/AgentsContext";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -142,22 +142,25 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
     chatSessions,
     refreshChatSessions,
     isLoading: isLoadingChatSessions,
-  } = useChatSessionContext();
+  } = useChatSessions();
   const {
     projects,
     refreshProjects,
     isLoading: isLoadingProjects,
   } = useProjects();
+  const { agents, isLoading: isLoadingAgents } = useAgents();
   const {
-    agents,
     pinnedAgents,
     updatePinnedAgents,
-    isLoading: isLoadingAgents,
-  } = useAgentsContext();
+    isLoading: isLoadingPinnedAgents,
+  } = usePinnedAgentsWithDetails();
 
   // Wait for ALL dynamic data before showing any sections
   const isLoadingDynamicContent =
-    isLoadingChatSessions || isLoadingProjects || isLoadingAgents;
+    isLoadingChatSessions ||
+    isLoadingProjects ||
+    isLoadingAgents ||
+    isLoadingPinnedAgents;
 
   // Still need some context for stateful operations
   const { refreshCurrentProjectDetails, currentProjectId } =
@@ -238,7 +241,7 @@ function AppSidebarInner({ folded, onFoldClick }: AppSidebarInnerProps) {
         newPinnedAgents = arrayMove(visibleAgents, activeIndex, overIndex);
       }
 
-      updatePinnedAgents(newPinnedAgents.map((agent) => agent.id));
+      updatePinnedAgents(newPinnedAgents);
     },
     [
       visibleAgentIds,

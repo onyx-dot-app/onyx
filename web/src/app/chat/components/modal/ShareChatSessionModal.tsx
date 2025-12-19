@@ -12,13 +12,13 @@ import { LlmDescriptor, useLlmManager } from "@/lib/hooks";
 import Separator from "@/refresh-components/Separator";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { cn } from "@/lib/utils";
+import { useCurrentAgent } from "@/hooks/useAgents";
 import { useSearchParams } from "next/navigation";
 import { useChatSessionStore } from "@/app/chat/stores/useChatSessionStore";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { copyAll } from "@/app/chat/message/copyingUtils";
 import { SvgCopy, SvgShare } from "@opal/icons";
-import { useChatSessionContext } from "@/contexts/ChatSessionContext";
 
 function buildShareLink(chatSessionId: string) {
   const baseUrl = `${window.location.protocol}//${window.location.host}`;
@@ -98,13 +98,10 @@ export default function ShareChatSessionModal({
   );
   const { popup, setPopup } = usePopup();
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
-  const { agentForCurrentChatSession } = useChatSessionContext();
+  const currentAgent = useCurrentAgent();
   const searchParams = useSearchParams();
   const message = searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) || "";
-  const llmManager = useLlmManager(
-    chatSession,
-    agentForCurrentChatSession || undefined
-  );
+  const llmManager = useLlmManager(chatSession, currentAgent || undefined);
   const updateCurrentChatSessionSharedStatus = useChatSessionStore(
     (state) => state.updateCurrentChatSessionSharedStatus
   );
@@ -222,7 +219,7 @@ export default function ShareChatSessionModal({
                 try {
                   const seedLink = await generateSeedLink(
                     message,
-                    agentForCurrentChatSession?.id,
+                    currentAgent?.id,
                     llmManager.currentLlm
                   );
                   if (!seedLink) {
