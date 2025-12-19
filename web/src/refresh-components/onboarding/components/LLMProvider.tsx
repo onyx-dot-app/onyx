@@ -14,7 +14,7 @@ import {
   SvgServer,
   SvgSettings,
 } from "@opal/icons";
-import { ProviderIcon } from "@/components/icons/icons";
+import { ProviderIcon } from "@/app/admin/configuration/llm/utils";
 
 export interface LLMProviderProps {
   title: string;

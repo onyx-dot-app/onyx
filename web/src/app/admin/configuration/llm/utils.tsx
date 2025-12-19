@@ -106,6 +106,26 @@ export const getProviderIcon = (
   return CPUIcon;
 };
 
+// ============================================================================
+// LLM PROVIDER ICON COMPONENT
+// ============================================================================
+const defaultTailwindCSS = "my-auto flex flex-shrink-0 text-default";
+
+export interface ProviderIconProps extends IconProps {
+  provider: string;
+  modelName?: string;
+}
+
+export const ProviderIcon = ({
+  provider,
+  modelName,
+  size = 16,
+  className = defaultTailwindCSS,
+}: ProviderIconProps) => {
+  const Icon = getProviderIcon(provider, modelName);
+  return <Icon size={size} className={className} />;
+};
+
 export const isAnthropic = (provider: string, modelName: string) =>
   provider === "anthropic" || modelName.toLowerCase().includes("claude");
 
