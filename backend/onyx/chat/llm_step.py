@@ -353,8 +353,7 @@ def run_llm_step_pkt_generator(
     # The second return value is for the turn index because reasoning counts on the frontend as a turn
     # TODO this is maybe ok but does not align well with the backend logic too well
     llm_msg_history = translate_history_to_llm_format(history)
-
-    has_reasoned = False
+    has_reasoned = 0
 
     # Uncomment the line below to log the entire message history to the console
     if LOG_ONYX_MODEL_INTERACTIONS:
@@ -432,12 +431,12 @@ def run_llm_step_pkt_generator(
                         turn_index=turn_index,
                         obj=ReasoningDone(),
                     )
-                    has_reasoned = True
+                    has_reasoned = 1
                     reasoning_start = False
 
                 if not answer_start:
                     yield Packet(
-                        turn_index=turn_index,
+                        turn_index=turn_index + has_reasoned,
                         obj=AgentResponseStart(
                             final_documents=final_documents,
                         ),
@@ -450,12 +449,12 @@ def run_llm_step_pkt_generator(
                         # Save answer incrementally to state container
                         state_container.set_answer_tokens(accumulated_answer)
                         yield Packet(
-                            turn_index=turn_index,
+                            turn_index=turn_index + has_reasoned,
                             obj=AgentResponseDelta(content=result),
                         )
                     elif isinstance(result, CitationInfo):
                         yield Packet(
-                            turn_index=turn_index,
+                            turn_index=turn_index + has_reasoned,
                             obj=result,
                         )
 
@@ -465,7 +464,7 @@ def run_llm_step_pkt_generator(
                         turn_index=turn_index,
                         obj=ReasoningDone(),
                     )
-                    has_reasoned = True
+                    has_reasoned = 1
                     reasoning_start = False
 
                 for tool_call_delta in delta.tool_calls:
@@ -478,7 +477,9 @@ def run_llm_step_pkt_generator(
                 for tool_call_delta in flush_delta.tool_calls:
                     _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
 
-        tool_calls = _extract_tool_call_kickoffs(id_to_tool_call_map, turn_index)
+        tool_calls = _extract_tool_call_kickoffs(
+            id_to_tool_call_map, turn_index + has_reasoned
+        )
         if tool_calls:
             tool_calls_list: list[ToolCall] = [
                 ToolCall(
@@ -511,7 +512,7 @@ def run_llm_step_pkt_generator(
             turn_index=turn_index,
             obj=ReasoningDone(),
         )
-        has_reasoned = True
+        has_reasoned = 1
 
     # Flush any remaining content from citation processor
     if citation_processor:
@@ -521,12 +522,12 @@ def run_llm_step_pkt_generator(
                 # Save answer incrementally to state container
                 state_container.set_answer_tokens(accumulated_answer)
                 yield Packet(
-                    turn_index=turn_index,
+                    turn_index=turn_index + has_reasoned,
                     obj=AgentResponseDelta(content=result),
                 )
             elif isinstance(result, CitationInfo):
                 yield Packet(
-                    turn_index=turn_index,
+                    turn_index=turn_index + has_reasoned,
                     obj=result,
                 )
 
@@ -551,7 +552,7 @@ def run_llm_step_pkt_generator(
             answer=accumulated_answer if accumulated_answer else None,
             tool_calls=tool_calls if tool_calls else None,
         ),
-        has_reasoned,
+        bool(has_reasoned),
     )
 
 
