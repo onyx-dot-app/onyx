@@ -14,6 +14,8 @@ import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { useAgentsContext } from "@/contexts/AgentsContext";
+import useAppFocus from "@/hooks/useAppFocus";
+import { DEFAULT_ASSISTANT_ID } from "@/lib/constants";
 
 interface ChatSessionsResponse {
   sessions: ChatSession[];
@@ -77,12 +79,22 @@ export function ChatSessionProvider({ children }: ChatSessionProviderProps) {
   );
 
   const { agents } = useAgentsContext();
+  const appFocus = useAppFocus();
 
   const agentForCurrentChatSession = useMemo(() => {
-    if (!currentChatSession) return null;
-    return (
-      agents.find((agent) => agent.id === currentChatSession.persona_id) ?? null
-    );
+    let agentIdToFind: number;
+
+    if (!currentChatSession) {
+      // This is could be a new chat-session. We should look at the AppFocus to see what we're looking at currently.
+      if (typeof appFocus === "object" && appFocus.type === "agent") {
+        agentIdToFind = Number.parseInt(appFocus.id);
+      } else if (appFocus === "new-session") {
+        agentIdToFind = DEFAULT_ASSISTANT_ID;
+      } else return null;
+    } else {
+      agentIdToFind = currentChatSession.persona_id;
+    }
+    return agents.find((agent) => agent.id === agentIdToFind) ?? null;
   }, [agents, currentChatSession]);
 
   return (
