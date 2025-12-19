@@ -125,7 +125,7 @@ class TestDocfetchingTaskPriorityWithRealObjects:
         ],
     )
     @patch(
-        "onyx.background.celery.tasks.docprocessing.utils.IndexingCoordination.try_create_index_attempt"
+        "onyx.background.celery.tasks.docfetching.task_creation_utils.IndexingCoordination.try_create_index_attempt"
     )
     def test_priority_based_on_last_successful_index_time(
         self,
@@ -202,7 +202,7 @@ class TestDocfetchingTaskPriorityWithRealObjects:
         )
 
     @patch(
-        "onyx.background.celery.tasks.docprocessing.utils.IndexingCoordination.try_create_index_attempt"
+        "onyx.background.celery.tasks.docfetching.task_creation_utils.IndexingCoordination.try_create_index_attempt"
     )
     def test_no_task_created_when_deleting(
         self,
@@ -246,7 +246,7 @@ class TestDocfetchingTaskPriorityWithRealObjects:
         mock_try_create_index_attempt.assert_not_called()
 
     @patch(
-        "onyx.background.celery.tasks.docprocessing.utils.IndexingCoordination.try_create_index_attempt"
+        "onyx.background.celery.tasks.docfetching.task_creation_utils.IndexingCoordination.try_create_index_attempt"
     )
     def test_redis_lock_prevents_concurrent_task_creation(
         self,
@@ -316,7 +316,7 @@ class TestDocfetchingTaskPriorityWithRealObjects:
                 lock.release()
 
     @patch(
-        "onyx.background.celery.tasks.docprocessing.utils.IndexingCoordination.try_create_index_attempt"
+        "onyx.background.celery.tasks.docfetching.task_creation_utils.IndexingCoordination.try_create_index_attempt"
     )
     def test_lock_released_after_successful_task_creation(
         self,
@@ -384,7 +384,7 @@ class TestDocfetchingTaskPriorityWithRealObjects:
         mock_celery_app.send_task.assert_called_once()
 
     @patch(
-        "onyx.background.celery.tasks.docprocessing.utils.IndexingCoordination.try_create_index_attempt"
+        "onyx.background.celery.tasks.docfetching.task_creation_utils.IndexingCoordination.try_create_index_attempt"
     )
     def test_user_file_connector_uses_correct_queue(
         self,
