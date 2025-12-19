@@ -23,8 +23,7 @@ export interface VerticalShadowScrollerProps
   scrollKey?: string;
 }
 
-// Global map to store scroll positions across renders
-const scrollPositions = new Map<string, number>();
+const SCROLL_POSITION_PREFIX = "onyx-scroll-";
 
 export default function OverflowDiv({
   disableMask,
@@ -45,9 +44,9 @@ export default function OverflowDiv({
     const scrollElement = scrollRef.current;
     if (!scrollElement) return;
 
-    const key = scrollKey; // Capture for closure
+    const storageKey = `${SCROLL_POSITION_PREFIX}${scrollKey}`;
     const handleScroll = () => {
-      scrollPositions.set(key, scrollElement.scrollTop);
+      sessionStorage.setItem(storageKey, scrollElement.scrollTop.toString());
     };
 
     scrollElement.addEventListener("scroll", handleScroll, { passive: true });
@@ -61,8 +60,11 @@ export default function OverflowDiv({
     const scrollElement = scrollRef.current;
     if (!scrollElement) return;
 
-    const key = scrollKey; // Capture for type safety
-    const savedPosition = scrollPositions.get(key) || 0;
+    const storageKey = `${SCROLL_POSITION_PREFIX}${scrollKey}`;
+    const savedPosition = parseInt(
+      sessionStorage.getItem(storageKey) || "0",
+      10
+    );
     scrollElement.scrollTop = savedPosition;
   }, [pathname, scrollKey]);
 

@@ -11,7 +11,7 @@ export interface SidebarBodyProps {
    * Unique key to enable scroll position persistence across navigation.
    * Pass this through from parent sidebar components (e.g., "admin-sidebar", "app-sidebar").
    */
-  scrollKey?: string;
+  scrollKey: string;
 }
 
 export default function SidebarBody({
