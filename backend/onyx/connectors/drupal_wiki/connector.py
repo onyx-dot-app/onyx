@@ -119,8 +119,8 @@ class DrupalWikiConnector(
         self.allow_images = allow_images
 
         # Will be set by load_credentials
-        self.headers: dict[str, str] | None
-        self._api_token: str | None
+        self.headers: dict[str, str] | None = None
+        self._api_token: str | None = None
 
     def set_allow_images(self, value: bool) -> None:
         logger.info(f"Setting allow_images to {value}.")
@@ -510,8 +510,12 @@ class DrupalWikiConnector(
             Document object or ConnectorFailure.
         """
         try:
-            # Extract text from HTML
-            text_content = parse_html_page_basic(page.body)
+            # Extract text from HTML, handle None body
+            text_content = parse_html_page_basic(page.body or "")
+
+            # Ensure text_content is a string, not None
+            if text_content is None:
+                text_content = ""
 
             # Create document URL
             page_url = build_drupal_wiki_document_id(self.base_url, page.id)
@@ -603,6 +607,19 @@ class DrupalWikiConnector(
         Returns:
             Generator yielding documents and the updated checkpoint.
         """
+        # Ensure page_ids is not None
+        if checkpoint.page_ids is None:
+            checkpoint.page_ids = []
+
+        # Initialize page_ids from self.pages if not already set
+        if not checkpoint.page_ids and self.pages:
+            logger.info(f"Initializing page_ids from self.pages: {self.pages}")
+            checkpoint.page_ids = [int(page_id.strip()) for page_id in self.pages]
+
+        # Ensure spaces is not None
+        if checkpoint.spaces is None:
+            checkpoint.spaces = []
+
         while checkpoint.current_page_id_index < len(checkpoint.page_ids):
             page_id = checkpoint.page_ids[checkpoint.current_page_id_index]
             logger.info(f"Processing page ID: {page_id}")
