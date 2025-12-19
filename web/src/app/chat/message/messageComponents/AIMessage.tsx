@@ -442,7 +442,7 @@ export default function AIMessage({
       <div
         // for e2e tests
         data-testid={displayComplete ? "onyx-ai-message" : undefined}
-        className="py-5 relative flex"
+        className="md:py-5 relative flex"
       >
         <div className="mx-auto w-[min(50rem,100%)] px-4 max-w-message-max">
           <div className="flex items-start">
