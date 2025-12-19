@@ -6,7 +6,6 @@ from typing import cast
 from pydantic import BaseModel
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
-from sqlalchemy.orm import sessionmaker
 from typing_extensions import override
 
 from onyx.chat.emitter import Emitter
@@ -19,6 +18,7 @@ from onyx.context.search.preprocessing.access_filters import (
 )
 from onyx.context.search.utils import convert_inference_sections_to_search_docs
 from onyx.context.search.utils import inference_section_from_chunks
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Document
 from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentIndex
@@ -197,7 +197,6 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         """
         super().__init__(emitter=emitter)
         self._id = tool_id
-        self._session_factory = sessionmaker(bind=db_session.get_bind())
         self._document_index = document_index
         self._user = user
         self._project_id = project_id
@@ -229,9 +228,6 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
     @property
     def display_name(self) -> str:
         return self.DISPLAY_NAME
-
-    def _get_thread_safe_session(self) -> Session:
-        return self._session_factory()
 
     @override
     @classmethod
@@ -319,8 +315,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             f"OpenURL tool called with {len(urls)} URLs and {len(document_identifiers)} document identifiers"
         )
 
-        db_session = self._get_thread_safe_session()
-        try:
+        with get_session_with_current_tenant() as db_session:
             doc_id_requests = self._build_requests_from_identifiers(
                 document_identifiers
             )
@@ -342,8 +337,6 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             logger.info(f"Total unique document requests: {len(all_requests)}")
 
             all_results = self._retrieve_indexed_documents(all_requests, db_session)
-        finally:
-            db_session.close()
 
         crawl_urls = _dedupe_preserve_order(urls_to_crawl)
         if crawl_urls:
