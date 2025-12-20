@@ -93,7 +93,7 @@ def generate_intermediate_report(
         tool_definitions=[],
         tool_choice=ToolChoiceOptions.NONE,
         llm=llm,
-        turn_index=999,  # TODO
+        placement=Placement(turn_index=999),  # TODO
         citation_processor=DynamicCitationProcessor(),
         state_container=state_container,
         reasoning_effort=ReasoningEffort.LOW,
@@ -234,7 +234,7 @@ def run_research_agent_call(
             + research_agent_tools,
             tool_choice=ToolChoiceOptions.REQUIRED,
             llm=llm,
-            turn_index=llm_cycle_count + reasoning_cycles,
+            placement=Placement(turn_index=llm_cycle_count + reasoning_cycles),
             citation_processor=DynamicCitationProcessor(),
             state_container=state_container,
             reasoning_effort=ReasoningEffort.LOW,
