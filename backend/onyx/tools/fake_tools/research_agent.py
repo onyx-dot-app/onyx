@@ -25,12 +25,12 @@ from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.models import ToolChoiceOptions
-from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
 from onyx.prompts.deep_research.dr_tool_prompts import OPEN_URLS_TOOL_DESCRIPTION
 from onyx.prompts.deep_research.dr_tool_prompts import (
     OPEN_URLS_TOOL_DESCRIPTION_REASONING,
 )
 from onyx.prompts.deep_research.dr_tool_prompts import WEB_SEARCH_TOOL_DESCRIPTION
+from onyx.prompts.deep_research.research_agent import OPEN_URL_REMINDER_REASEARCH_AGENT
 from onyx.prompts.deep_research.research_agent import RESEARCH_AGENT_PROMPT
 from onyx.prompts.deep_research.research_agent import RESEARCH_AGENT_PROMPT_REASONING
 from onyx.prompts.deep_research.research_agent import RESEARCH_REPORT_PROMPT
@@ -248,7 +248,7 @@ def run_research_agent_call(
             current_cycle_count=research_cycle_count,
             optional_internal_search_tool_description=internal_search_tip,
             optional_web_search_tool_description=web_search_tip,
-            optional_open_urls_tool_description=open_urls_tip,
+            optional_open_url_tool_description=open_urls_tip,
         )
 
         system_prompt = ChatMessageSimple(
@@ -259,8 +259,8 @@ def run_research_agent_call(
 
         if just_ran_web_search:
             reminder_message = ChatMessageSimple(
-                message=OPEN_URL_REMINDER,
-                token_count=token_counter(OPEN_URL_REMINDER),
+                message=OPEN_URL_REMINDER_REASEARCH_AGENT,
+                token_count=100,
                 message_type=MessageType.USER,
             )
         else:

@@ -106,7 +106,7 @@ def _run_single_tool(
             logger.error(f"Error running tool {tool.name}: {e}")
             tool_response = ToolResponse(
                 rich_response=None,
-                llm_facing_response=str(e),
+                llm_facing_response="Tool execution failed with: " + str(e),
             )
             _error_tracing.attach_error_to_current_span(
                 SpanError(
