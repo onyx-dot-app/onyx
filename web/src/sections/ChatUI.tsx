@@ -98,7 +98,7 @@ const ChatUI = React.forwardRef(
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const endDivRef = useRef<HTMLDivElement>(null);
     const scrollDist = useRef<number>(0);
-    const hasScrolledOnLoad = useRef(false);
+    const scrolledForSession = useRef<string | null>(null);
     const [aboveHorizon, setAboveHorizon] = useState(false);
     const debounceNumber = 100;
 
@@ -179,22 +179,17 @@ const ChatUI = React.forwardRef(
       enableAutoScroll: user?.preferences.auto_scroll,
     });
 
-    // Scroll to bottom only on initial chat load
+    // Scroll to bottom once per chat session when messages are loaded
     useEffect(() => {
       if (!scrollContainerRef.current) return;
-      if (hasScrolledOnLoad.current) return;
+      if (scrolledForSession.current === currentChatSessionId) return;
 
       if (messages.length > 0) {
         scrollContainerRef.current.scrollTop =
           scrollContainerRef.current.scrollHeight;
-        hasScrolledOnLoad.current = true;
+        scrolledForSession.current = currentChatSessionId;
       }
-    }, [messages]);
-
-    // Reset scroll flag when switching chat sessions
-    useEffect(() => {
-      hasScrolledOnLoad.current = false;
-    }, [currentChatSessionId]);
+    }, [messages, currentChatSessionId]);
 
     if (!liveAssistant) return <div className="flex-1" />;
 
