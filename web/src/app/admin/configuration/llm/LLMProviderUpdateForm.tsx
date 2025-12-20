@@ -667,7 +667,10 @@ export function LLMProviderUpdateForm({
               <>
                 {formikProps.values.is_auto_mode ? (
                   // Auto mode: Read-only model display using recommended configurations
-                  <div className="flex flex-col gap-3">
+                  <div
+                    key="auto-mode"
+                    className="flex flex-col gap-3 animate-fadeIn"
+                  >
                     {llmProviderDescriptor.model_configurations.length > 0 && (
                       <div className="flex flex-col gap-2">
                         {llmProviderDescriptor.model_configurations
@@ -740,7 +743,7 @@ export function LLMProviderUpdateForm({
                   </div>
                 ) : (
                   // Manual mode: Full model configuration
-                  <>
+                  <div key="manual-mode" className="animate-fadeIn">
                     {isFetchingModels && dynamicConfig ? (
                       <div>
                         <label className="block font-medium text-base">
@@ -777,7 +780,7 @@ export function LLMProviderUpdateForm({
                         placeholder="E.g. gpt-4"
                       />
                     )}
-                  </>
+                  </div>
                 )}
 
                 {llmProviderDescriptor.deployment_name_required &&
