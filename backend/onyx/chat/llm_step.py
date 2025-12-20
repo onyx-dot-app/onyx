@@ -403,6 +403,7 @@ def run_llm_step_pkt_generator(
     custom_token_processor: (
         Callable[[Delta | None, Any], tuple[Delta | None, Any]] | None
     ) = None,
+    max_tokens: int | None = None,
 ) -> Generator[Packet, None, tuple[LlmStepResult, bool]]:
     """Run an LLM step and stream the response as packets.
     NOTE: DO NOT TOUCH THIS FUNCTION BEFORE ASKING YUHONG, this is very finicky and
@@ -487,6 +488,7 @@ def run_llm_step_pkt_generator(
             tools=tool_definitions,
             tool_choice=tool_choice,
             structured_response_format=None,  # TODO
+            max_tokens=max_tokens,
             reasoning_effort=reasoning_effort,
             user_identity=user_identity,
         ):
@@ -731,6 +733,7 @@ def run_llm_step(
     custom_token_processor: (
         Callable[[Delta | None, Any], tuple[Delta | None, Any]] | None
     ) = None,
+    max_tokens: int | None = None,
 ) -> tuple[LlmStepResult, bool]:
     """Wrapper around run_llm_step_pkt_generator that consumes packets and emits them.
 
@@ -749,6 +752,7 @@ def run_llm_step(
         final_documents=final_documents,
         user_identity=user_identity,
         custom_token_processor=custom_token_processor,
+        max_tokens=max_tokens,
     )
 
     while True:

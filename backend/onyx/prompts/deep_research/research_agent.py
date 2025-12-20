@@ -58,7 +58,7 @@ USER_REPORT_QUERY = """
 Please write me a comprehensive report on the research topic given the context above. As a reminder, the original topic was:
 {research_topic}
 
-Remember to include as much information as possible and as faithful to the original sources as possible. \
+Remember to include AS MUCH INFORMATION AS POSSIBLE and as faithful to the original sources as possible. \
 Keep it free of formatting and focus on the facts only. Be sure to include all context for each fact to avoid misinterpretation or misattribution.
 
 CRITICAL - BE EXTREMELY THOROUGH AND COMPREHENSIVE, YOUR RESPONSE SHOULD BE SEVERAL PAGES LONG.

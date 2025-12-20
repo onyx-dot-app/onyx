@@ -62,6 +62,8 @@ logger = setup_logger()
 
 
 RESEARCH_CYCLE_CAP = 3
+# May be good to experiment with this, empirically reports of around 5,000 tokens are pretty good.
+MAX_INTERMEDIATE_REPORT_LENGTH_TOKENS = 7000
 
 
 def generate_intermediate_report(
@@ -107,6 +109,7 @@ def generate_intermediate_report(
         reasoning_effort=ReasoningEffort.LOW,
         final_documents=None,
         user_identity=user_identity,
+        max_tokens=MAX_INTERMEDIATE_REPORT_LENGTH_TOKENS,
     )
 
     while True:

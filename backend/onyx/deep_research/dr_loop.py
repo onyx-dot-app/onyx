@@ -80,6 +80,7 @@ def generate_final_report(
     token_counter: Callable[[str], int],
     state_container: ChatStateContainer,
     emitter: Emitter,
+    turn_index: int,
     user_identity: LLMUserIdentity | None,
 ) -> None:
     final_report_prompt = FINAL_REPORT_PROMPT.format(
@@ -110,7 +111,7 @@ def generate_final_report(
         tool_definitions=[],
         tool_choice=ToolChoiceOptions.NONE,
         llm=llm,
-        placement=Placement(turn_index=999),  # TODO
+        placement=Placement(turn_index=turn_index),
         citation_processor=None,
         state_container=state_container,
         reasoning_effort=ReasoningEffort.LOW,
@@ -142,7 +143,7 @@ def run_deep_research_llm_loop(
 
     # An approximate limit. In extreme cases it may still fail but this should allow deep research
     # to work in most cases.
-    if llm.config.max_input_tokens < 25000:
+    if llm.config.max_input_tokens < 50000:
         raise RuntimeError(
             "Cannot run Deep Research with an LLM that has less than 25,000 max input tokens"
         )
@@ -156,7 +157,7 @@ def run_deep_research_llm_loop(
     # Filter tools to only allow web search, internal search, and open URL
     allowed_tool_names = {SearchTool.NAME, WebSearchTool.NAME, OpenURLTool.NAME}
     allowed_tools = [tool for tool in tools if tool.name in allowed_tool_names]
-    orchestrator_start_turn_index = 0
+    orchestrator_start_turn_index = 1
 
     #########################################################
     # CLARIFICATION STEP (optional)
@@ -375,6 +376,7 @@ def run_deep_research_llm_loop(
                 token_counter=token_counter,
                 state_container=state_container,
                 emitter=emitter,
+                turn_index=orchestrator_start_turn_index + cycle + reasoning_cycles,
                 user_identity=user_identity,
             )
             break
@@ -389,6 +391,7 @@ def run_deep_research_llm_loop(
                 token_counter=token_counter,
                 state_container=state_container,
                 emitter=emitter,
+                turn_index=special_tool_calls.generate_report_tool_call.placement.turn_index,
                 user_identity=user_identity,
             )
             break
@@ -439,6 +442,7 @@ def run_deep_research_llm_loop(
                     token_counter=token_counter,
                     state_container=state_container,
                     emitter=emitter,
+                    turn_index=orchestrator_start_turn_index + cycle + reasoning_cycles,
                     user_identity=user_identity,
                 )
                 break
