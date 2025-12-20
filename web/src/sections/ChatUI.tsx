@@ -255,7 +255,7 @@ const ChatUI = React.forwardRef(
                 return (
                   <div
                     key={`error-${message.nodeId}`}
-                    className="max-w-message-max mx-auto"
+                    className="max-w-[min(50rem,100%)] mx-auto p-4"
                   >
                     <ErrorBanner
                       resubmit={handleResubmitLastMessage}
@@ -314,7 +314,7 @@ const ChatUI = React.forwardRef(
           {(((error !== null || loadError !== null) &&
             messages[messages.length - 1]?.type === "user") ||
             messages[messages.length - 1]?.type === "error") && (
-            <div className="max-w-message-max mx-auto">
+            <div className="max-w-[min(50rem,100%)] mx-auto p-4">
               <ErrorBanner
                 resubmit={handleResubmitLastMessage}
                 error={error || loadError || ""}
