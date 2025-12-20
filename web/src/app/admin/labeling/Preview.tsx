@@ -1,9 +1,47 @@
 "use client";
 
+import React from "react";
+import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { cn } from "@/lib/utils";
 import { OnyxIcon } from "@/components/icons/icons";
+import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
+
+const previewMarkdownComponents = {
+  p: ({ children }) => (
+    <Text as="p" text03 figureSmallValue className="!my-0 text-center">
+      {children}
+    </Text>
+  ),
+  a: ({ href, className, children, ...rest }) => (
+    <a
+      href={href}
+      {...rest}
+      className={cn(className, "underline underline-offset-2")}
+    >
+      <Text as="span" text03 figureSmallValue>
+        {children}
+      </Text>
+    </a>
+  ),
+} satisfies Partial<Components>;
+
+const PreviewMinimalMarkdown = React.memo(function PreviewMinimalMarkdown({
+  content,
+  className,
+}: {
+  content: string;
+  className?: string;
+}) {
+  return (
+    <MinimalMarkdown
+      content={content}
+      className={className}
+      components={previewMarkdownComponents}
+    />
+  );
+});
 
 export type PreviewHighlightTarget =
   | "sidebar"
@@ -119,13 +157,10 @@ function PreviewStart({
                 highlightTarget === "chat_footer" && "bg-highlight-match"
               )}
             >
-              <Text
-                secondaryBody
-                text03
-                className="max-w-full whitespace-normal break-words text-center"
-              >
-                {chat_footer_content}
-              </Text>
+              <PreviewMinimalMarkdown
+                content={chat_footer_content}
+                className={cn("max-w-full text-center origin-center")}
+              />
             </div>
           </div>
         </div>
@@ -155,7 +190,7 @@ function PreviewChat({
             )}
           >
             <Text
-              secondaryBody
+              figureSmallLabel
               text03
               className="max-w-full whitespace-normal break-words text-center"
             >
@@ -194,13 +229,10 @@ function PreviewChat({
               highlightTarget === "chat_footer" && "bg-highlight-match"
             )}
           >
-            <Text
-              secondaryBody
-              text03
-              className="max-w-full whitespace-normal break-words text-center"
-            >
-              {chat_footer_content}
-            </Text>
+            <PreviewMinimalMarkdown
+              content={chat_footer_content}
+              className={cn("max-w-full text-center origin-center")}
+            />
           </div>
         </div>
       </div>
