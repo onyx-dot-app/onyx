@@ -254,6 +254,11 @@ def bulk_fetch_issues(
     payload["fields"] = fields.split(",") if fields else ["*all"]
 
     try:
+        #ref issue: https://www.mail-archive.com/debian-bugs-dist@lists.debian.org/msg2073419.html since "urllib3==2.6.1" JIRA pulls fails for some documents with :
+        # requests.exceptions.ContentDecodingError: ('Received response with content-encoding: br, but failed to decode it.', error("brotli: decoder process called with data when 'can_accept_more_data()' is False"))
+        jira_client._session.headers.update({
+            'Accept-Encoding': 'gzip, deflate'  # Exclude 'br' (brotli)
+        })
         response = jira_client._session.post(bulk_fetch_path, json=payload).json()
     except Exception as e:
         logger.error(f"Error fetching issues: {e}")
