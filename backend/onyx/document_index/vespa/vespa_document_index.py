@@ -558,7 +558,7 @@ class VespaDocumentIndex(DocumentIndex):
                             new_doc_id=old_doc_id_to_new_doc_id.get(doc_id, None),
                         )
 
-                    LOGGER.info(
+                    logger.info(
                         f"Updated {len(doc_chunk_ids)} chunks for document {doc_id}."
                     )
 
