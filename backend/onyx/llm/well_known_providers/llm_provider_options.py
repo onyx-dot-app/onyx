@@ -1,158 +1,63 @@
-from enum import Enum
-
-from pydantic import BaseModel
+import json
+import pathlib
 
 from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
 from onyx.llm.utils import model_supports_image_input
+from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
+from onyx.llm.well_known_providers.auto_update_service import (
+    fetch_llm_recommendations_from_github,
+)
+from onyx.llm.well_known_providers.constants import ANTHROPIC_PROVIDER_NAME
+from onyx.llm.well_known_providers.constants import AZURE_PROVIDER_NAME
+from onyx.llm.well_known_providers.constants import BEDROCK_PROVIDER_NAME
+from onyx.llm.well_known_providers.constants import BEDROCK_REGION_OPTIONS
+from onyx.llm.well_known_providers.constants import OLLAMA_API_KEY_CONFIG_KEY
+from onyx.llm.well_known_providers.constants import OLLAMA_PROVIDER_NAME
+from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
+from onyx.llm.well_known_providers.constants import OPENROUTER_PROVIDER_NAME
+from onyx.llm.well_known_providers.constants import VERTEX_CREDENTIALS_FILE_KWARG
+from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
+from onyx.llm.well_known_providers.constants import VERTEXAI_PROVIDER_NAME
+from onyx.llm.well_known_providers.models import CustomConfigKey
+from onyx.llm.well_known_providers.models import CustomConfigKeyType
+from onyx.llm.well_known_providers.models import CustomConfigOption
+from onyx.llm.well_known_providers.models import WellKnownLLMProviderDescriptor
 from onyx.server.manage.llm.models import ModelConfigurationView
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
-class CustomConfigKeyType(Enum):
-    # used for configuration values that require manual input
-    # i.e., textual API keys (e.g., "abcd1234")
-    TEXT_INPUT = "text_input"
+def _get_provider_to_models_map() -> dict[str, list[str]]:
+    """Lazy-load provider model mappings to avoid importing litellm at module level.
 
-    # used for configuration values that require a file to be selected/drag-and-dropped
-    # i.e., file based credentials (e.g., "/path/to/credentials/file.json")
-    FILE_INPUT = "file_input"
-
-    # used for configuration values that require a selection from predefined options
-    SELECT = "select"
-
-
-class CustomConfigOption(BaseModel):
-    label: str
-    value: str
-    description: str | None = None
+    Dynamic providers (Bedrock, Ollama, OpenRouter) return empty lists here
+    because their models are fetched directly from the source API, which is
+    more up-to-date than LiteLLM's static lists.
+    """
+    return {
+        OPENAI_PROVIDER_NAME: get_openai_model_names(),
+        BEDROCK_PROVIDER_NAME: [],  # Dynamic - fetched from AWS API
+        ANTHROPIC_PROVIDER_NAME: get_anthropic_model_names(),
+        VERTEXAI_PROVIDER_NAME: get_vertexai_model_names(),
+        OLLAMA_PROVIDER_NAME: [],  # Dynamic - fetched from Ollama API
+        OPENROUTER_PROVIDER_NAME: [],  # Dynamic - fetched from OpenRouter API
+    }
 
 
-class CustomConfigKey(BaseModel):
-    name: str
-    display_name: str
-    description: str | None = None
-    is_required: bool = True
-    is_secret: bool = False
-    key_type: CustomConfigKeyType = CustomConfigKeyType.TEXT_INPUT
-    default_value: str | None = None
-    options: list[CustomConfigOption] | None = None
+def _get_reccomendations() -> LLMRecommendations:
+    """Get the recommendations from the GitHub config."""
+    recommendations_from_github = fetch_llm_recommendations_from_github()
+    if recommendations_from_github:
+        return recommendations_from_github
 
+    # Fall back to json bundled with code
+    json_path = pathlib.Path(__file__).parent / "recommended-models.json"
+    with open(json_path, "r") as f:
+        json_config = json.load(f)
 
-class WellKnownLLMProviderDescriptor(BaseModel):
-    name: str
-    display_name: str
-    title: str
-    api_key_required: bool
-    api_base_required: bool
-    api_version_required: bool
-    custom_config_keys: list[CustomConfigKey] | None = None
-    model_configurations: list[ModelConfigurationView]
-    default_model: str | None = None
-    default_api_base: str | None = None
-    # set for providers like Azure, which require a deployment name.
-    deployment_name_required: bool = False
-    # set for providers like Azure, which support a single model per deployment.
-    single_model_supported: bool = False
-
-
-OPENAI_PROVIDER_NAME = "openai"
-# Curated list of OpenAI models to show by default in the UI
-OPENAI_VISIBLE_MODEL_NAMES = {
-    "gpt-5",
-    "gpt-5-mini",
-    "o1",
-    "o3-mini",
-    "gpt-4o",
-    "gpt-4o-mini",
-}
-
-BEDROCK_PROVIDER_NAME = "bedrock"
-BEDROCK_DEFAULT_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0"
-
-
-def _fallback_bedrock_regions() -> list[str]:
-    # Fall back to a conservative set of well-known Bedrock regions if boto3 data isn't available.
-    return [
-        "us-east-1",
-        "us-east-2",
-        "us-gov-east-1",
-        "us-gov-west-1",
-        "us-west-2",
-        "ap-northeast-1",
-        "ap-south-1",
-        "ap-southeast-1",
-        "ap-southeast-2",
-        "ap-east-1",
-        "ca-central-1",
-        "eu-central-1",
-        "eu-west-2",
-    ]
-
-
-def _build_bedrock_region_options() -> list[CustomConfigOption]:
-    try:
-        import boto3
-
-        session = boto3.session.Session()
-        regions: set[str] = set()
-        # Include both commercial and GovCloud partitions so GovCloud users can select their region.
-        for partition_name in ("aws", "aws-us-gov"):
-            try:
-                regions.update(
-                    session.get_available_regions(
-                        "bedrock", partition_name=partition_name
-                    )
-                )
-                regions.update(
-                    session.get_available_regions(
-                        "bedrock-runtime", partition_name=partition_name
-                    )
-                )
-            except Exception:
-                continue
-        if not regions:
-            raise ValueError("No Bedrock regions returned from boto3")
-        sorted_regions = sorted(regions)
-    except Exception:
-        sorted_regions = _fallback_bedrock_regions()
-
-    return [CustomConfigOption(label=region, value=region) for region in sorted_regions]
-
-
-BEDROCK_REGION_OPTIONS = _build_bedrock_region_options()
-
-OLLAMA_PROVIDER_NAME = "ollama_chat"
-OLLAMA_API_KEY_CONFIG_KEY = "OLLAMA_API_KEY"
-
-# OpenRouter
-OPENROUTER_PROVIDER_NAME = "openrouter"
-
-ANTHROPIC_PROVIDER_NAME = "anthropic"
-# Models to exclude from Anthropic's model list (deprecated or duplicates)
-_IGNORABLE_ANTHROPIC_MODELS = {
-    "claude-2",
-    "claude-instant-1",
-    "anthropic/claude-3-5-sonnet-20241022",
-}
-# Curated list of Anthropic models to show by default in the UI
-ANTHROPIC_VISIBLE_MODEL_NAMES = {
-    "claude-opus-4-5",
-    "claude-sonnet-4-5",
-    "claude-haiku-4-5",
-}
-
-AZURE_PROVIDER_NAME = "azure"
-
-
-VERTEXAI_PROVIDER_NAME = "vertex_ai"
-VERTEX_CREDENTIALS_FILE_KWARG = "vertex_credentials"
-VERTEX_LOCATION_KWARG = "vertex_location"
-VERTEXAI_DEFAULT_MODEL = "gemini-2.5-flash"
-# Curated list of Vertex AI models to show by default in the UI
-VERTEXAI_VISIBLE_MODEL_NAMES = {
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-2.5-pro",
-}
+    recommendations_from_json = LLMRecommendations.model_validate(json_config)
+    return recommendations_from_json
 
 
 def is_obsolete_model(model_name: str, provider: str) -> bool:
@@ -196,23 +101,6 @@ def is_obsolete_model(model_name: str, provider: str) -> bool:
             return True
 
     return False
-
-
-def _get_provider_to_models_map() -> dict[str, list[str]]:
-    """Lazy-load provider model mappings to avoid importing litellm at module level.
-
-    Dynamic providers (Bedrock, Ollama, OpenRouter) return empty lists here
-    because their models are fetched directly from the source API, which is
-    more up-to-date than LiteLLM's static lists.
-    """
-    return {
-        OPENAI_PROVIDER_NAME: get_openai_model_names(),
-        BEDROCK_PROVIDER_NAME: [],  # Dynamic - fetched from AWS API
-        ANTHROPIC_PROVIDER_NAME: get_anthropic_model_names(),
-        VERTEXAI_PROVIDER_NAME: get_vertexai_model_names(),
-        OLLAMA_PROVIDER_NAME: [],  # Dynamic - fetched from Ollama API
-        OPENROUTER_PROVIDER_NAME: [],  # Dynamic - fetched from OpenRouter API
-    }
 
 
 def get_openai_model_names() -> list[str]:
@@ -261,6 +149,13 @@ def get_openai_model_names() -> list[str]:
 def get_anthropic_model_names() -> list[str]:
     """Get Anthropic model names dynamically from litellm."""
     import litellm
+
+    # Models to exclude from Anthropic's model list (deprecated or duplicates)
+    _IGNORABLE_ANTHROPIC_MODELS = {
+        "claude-2",
+        "claude-instant-1",
+        "anthropic/claude-3-5-sonnet-20241022",
+    }
 
     return sorted(
         [
@@ -332,7 +227,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             model_configurations=fetch_model_configurations_for_provider(
                 OPENAI_PROVIDER_NAME
             ),
-            default_model="gpt-4o",
+            default_model=fetch_default_model_for_provider(OPENAI_PROVIDER_NAME),
         ),
         WellKnownLLMProviderDescriptor(
             name=OLLAMA_PROVIDER_NAME,
@@ -353,6 +248,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             model_configurations=fetch_model_configurations_for_provider(
                 OLLAMA_PROVIDER_NAME
             ),
+            # we don't know what models are available, so we can't pre-fetch a default
             default_model=None,
             default_api_base="http://127.0.0.1:11434",
         ),
@@ -367,7 +263,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             model_configurations=fetch_model_configurations_for_provider(
                 ANTHROPIC_PROVIDER_NAME
             ),
-            default_model="claude-sonnet-4-5-20250929",
+            default_model=fetch_default_model_for_provider(ANTHROPIC_PROVIDER_NAME),
         ),
         WellKnownLLMProviderDescriptor(
             name=AZURE_PROVIDER_NAME,
@@ -449,6 +345,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             model_configurations=fetch_model_configurations_for_provider(
                 BEDROCK_PROVIDER_NAME
             ),
+            # we don't know what models are available, so we can't pre-fetch a default
             default_model=None,
         ),
         WellKnownLLMProviderDescriptor(
@@ -481,7 +378,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                     default_value="us-east1",
                 ),
             ],
-            default_model=VERTEXAI_DEFAULT_MODEL,
+            default_model=fetch_default_model_for_provider(VERTEXAI_PROVIDER_NAME),
         ),
         WellKnownLLMProviderDescriptor(
             name=OPENROUTER_PROVIDER_NAME,
@@ -494,7 +391,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             model_configurations=fetch_model_configurations_for_provider(
                 OPENROUTER_PROVIDER_NAME
             ),
-            default_model=None,
+            default_model=fetch_default_model_for_provider(OPENROUTER_PROVIDER_NAME),
             default_api_base="https://openrouter.ai/api/v1",
         ),
     ]
@@ -521,40 +418,29 @@ def fetch_visible_model_names_for_provider_as_set(
     return fetch_model_names_for_provider_as_set(provider_name)
 
 
-# Display names for Onyx-supported LLM providers (used in admin UI provider selection).
-# These override PROVIDER_DISPLAY_NAMES for Onyx-specific branding.
-_ONYX_PROVIDER_DISPLAY_NAMES: dict[str, str] = {
-    OPENAI_PROVIDER_NAME: "ChatGPT (OpenAI)",
-    OLLAMA_PROVIDER_NAME: "Ollama",
-    ANTHROPIC_PROVIDER_NAME: "Claude (Anthropic)",
-    AZURE_PROVIDER_NAME: "Azure OpenAI",
-    BEDROCK_PROVIDER_NAME: "Amazon Bedrock",
-    VERTEXAI_PROVIDER_NAME: "Google Vertex AI",
-    OPENROUTER_PROVIDER_NAME: "OpenRouter",
-}
-
-
 def get_provider_display_name(provider_name: str) -> str:
     """Get human-friendly display name for an Onyx-supported provider.
 
     First checks Onyx-specific display names, then falls back to
     PROVIDER_DISPLAY_NAMES from constants.
     """
+    # Display names for Onyx-supported LLM providers (used in admin UI provider selection).
+    # These override PROVIDER_DISPLAY_NAMES for Onyx-specific branding.
+    _ONYX_PROVIDER_DISPLAY_NAMES: dict[str, str] = {
+        OPENAI_PROVIDER_NAME: "ChatGPT (OpenAI)",
+        OLLAMA_PROVIDER_NAME: "Ollama",
+        ANTHROPIC_PROVIDER_NAME: "Claude (Anthropic)",
+        AZURE_PROVIDER_NAME: "Azure OpenAI",
+        BEDROCK_PROVIDER_NAME: "Amazon Bedrock",
+        VERTEXAI_PROVIDER_NAME: "Google Vertex AI",
+        OPENROUTER_PROVIDER_NAME: "OpenRouter",
+    }
+
     if provider_name in _ONYX_PROVIDER_DISPLAY_NAMES:
         return _ONYX_PROVIDER_DISPLAY_NAMES[provider_name]
     return PROVIDER_DISPLAY_NAMES.get(
         provider_name.lower(), provider_name.replace("_", " ").title()
     )
-
-
-def _get_visible_models_for_provider(provider_name: str) -> set[str]:
-    """Get the set of models that should be visible by default for a provider."""
-    _PROVIDER_TO_VISIBLE_MODELS: dict[str, set[str]] = {
-        OPENAI_PROVIDER_NAME: OPENAI_VISIBLE_MODEL_NAMES,
-        ANTHROPIC_PROVIDER_NAME: ANTHROPIC_VISIBLE_MODEL_NAMES,
-        VERTEXAI_PROVIDER_NAME: VERTEXAI_VISIBLE_MODEL_NAMES,
-    }
-    return _PROVIDER_TO_VISIBLE_MODELS.get(provider_name, set())
 
 
 def fetch_model_configurations_for_provider(
@@ -570,7 +456,9 @@ def fetch_model_configurations_for_provider(
     """
     from onyx.llm.utils import get_max_input_tokens
 
-    visible_models = _get_visible_models_for_provider(provider_name)
+    llm_recommendations = _get_reccomendations()
+    visible_models = llm_recommendations.get_visible_models(provider_name)
+    visible_model_names = {model.name for model in visible_models}
     configs = []
     for model_name in fetch_models_for_provider(provider_name):
         max_input_tokens = get_max_input_tokens(
@@ -581,7 +469,7 @@ def fetch_model_configurations_for_provider(
         configs.append(
             ModelConfigurationView(
                 name=model_name,
-                is_visible=model_name in visible_models,
+                is_visible=model_name in visible_model_names,
                 max_input_tokens=max_input_tokens,
                 supports_image_input=model_supports_image_input(
                     model_name=model_name,
@@ -590,3 +478,14 @@ def fetch_model_configurations_for_provider(
             )
         )
     return configs
+
+
+def fetch_default_model_for_provider(provider_name: str) -> str | None:
+    """Fetch the default model for a provider.
+
+    First checks the GitHub-hosted recommended-models.json config (via fetch_github_config),
+    then falls back to hardcoded defaults if unavailable.
+    """
+    llm_recommendations = _get_reccomendations()
+    default_model = llm_recommendations.get_default_model(provider_name)
+    return default_model.name if default_model else None

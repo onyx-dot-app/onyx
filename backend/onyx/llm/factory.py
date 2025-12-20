@@ -17,12 +17,12 @@ from onyx.db.models import User
 from onyx.llm.chat_llm import LitellmLLM
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.llm_provider_options import OLLAMA_API_KEY_CONFIG_KEY
-from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
-from onyx.llm.llm_provider_options import OPENROUTER_PROVIDER_NAME
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import get_max_input_tokens_from_llm_provider
 from onyx.llm.utils import model_supports_image_input
+from onyx.llm.well_known_providers.llm_provider_options import OLLAMA_API_KEY_CONFIG_KEY
+from onyx.llm.well_known_providers.llm_provider_options import OLLAMA_PROVIDER_NAME
+from onyx.llm.well_known_providers.llm_provider_options import OPENROUTER_PROVIDER_NAME
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.headers import build_llm_extra_headers

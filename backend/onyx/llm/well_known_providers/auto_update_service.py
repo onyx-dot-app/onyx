@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import AUTO_LLM_CONFIG_URL
 from onyx.db.llm import fetch_auto_mode_providers
 from onyx.db.llm import sync_auto_mode_models
-from onyx.llm.auto_update_models import GitHubLLMConfig
+from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 
@@ -53,7 +53,9 @@ def _set_cached_last_updated_at(updated_at: datetime) -> None:
         logger.warning(f"Failed to set cached last_updated_at in Redis: {e}")
 
 
-def fetch_github_config() -> GitHubLLMConfig | None:
+def fetch_llm_recommendations_from_github(
+    timeout: float = 30.0,
+) -> LLMRecommendations | None:
     """Fetch LLM configuration from GitHub.
 
     Returns:
@@ -64,14 +66,14 @@ def fetch_github_config() -> GitHubLLMConfig | None:
         return None
 
     try:
-        with httpx.Client(timeout=30.0) as client:
+        with httpx.Client(timeout=timeout) as client:
             response = client.get(AUTO_LLM_CONFIG_URL)
             response.raise_for_status()
 
             data = response.json()
-            return GitHubLLMConfig.model_validate(data)
+            return LLMRecommendations.model_validate(data)
     except httpx.HTTPError as e:
-        logger.warning(f"Failed to fetch LLM config from GitHub: {e}")
+        logger.error(f"Failed to fetch LLM config from GitHub: {e}")
         return None
     except Exception as e:
         logger.error(f"Error parsing LLM config: {e}")
@@ -80,7 +82,7 @@ def fetch_github_config() -> GitHubLLMConfig | None:
 
 def sync_llm_models_from_github(
     db_session: Session,
-    config: GitHubLLMConfig,
+    config: LLMRecommendations,
     force: bool = False,
 ) -> dict[str, int]:
     """Sync models from GitHub config to database for all Auto mode providers.
@@ -124,13 +126,11 @@ def sync_llm_models_from_github(
             )
             continue
 
-        github_provider_config = config.providers[provider_type]
-
         # Sync models - this replaces the model list entirely for Auto mode
         changes = sync_auto_mode_models(
             db_session=db_session,
             provider=provider,
-            github_config=github_provider_config,
+            llm_reccomendations=config,
         )
 
         if changes > 0:

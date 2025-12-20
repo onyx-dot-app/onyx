@@ -156,13 +156,15 @@ def check_for_auto_llm_updates(self: Task, *, tenant_id: str) -> bool | None:
 
     try:
         # Import here to avoid circular imports
-        from onyx.llm.auto_update_service import (
-            fetch_github_config,
+        from onyx.llm.well_known_providers.auto_update_service import (
+            fetch_llm_recommendations_from_github,
+        )
+        from onyx.llm.well_known_providers.auto_update_service import (
             sync_llm_models_from_github,
         )
 
         # Fetch config from GitHub
-        config = fetch_github_config()
+        config = fetch_llm_recommendations_from_github()
 
         if not config:
             task_logger.warning("Failed to fetch GitHub config")

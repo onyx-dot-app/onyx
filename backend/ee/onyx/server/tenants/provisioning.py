@@ -37,10 +37,10 @@ from onyx.db.models import AvailableTenant
 from onyx.db.models import IndexModelStatus
 from onyx.db.models import SearchSettings
 from onyx.db.models import UserTenantMapping
-from onyx.llm.llm_provider_options import ANTHROPIC_PROVIDER_NAME
-from onyx.llm.llm_provider_options import get_anthropic_model_names
-from onyx.llm.llm_provider_options import get_openai_model_names
-from onyx.llm.llm_provider_options import OPENAI_PROVIDER_NAME
+from onyx.llm.well_known_providers.llm_provider_options import ANTHROPIC_PROVIDER_NAME
+from onyx.llm.well_known_providers.llm_provider_options import get_anthropic_model_names
+from onyx.llm.well_known_providers.llm_provider_options import get_openai_model_names
+from onyx.llm.well_known_providers.llm_provider_options import OPENAI_PROVIDER_NAME
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest

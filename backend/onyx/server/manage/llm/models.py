@@ -64,7 +64,9 @@ class LLMProviderDescriptor(BaseModel):
         cls,
         llm_provider_model: "LLMProviderModel",
     ) -> "LLMProviderDescriptor":
-        from onyx.llm.llm_provider_options import get_provider_display_name
+        from onyx.llm.well_known_providers.llm_provider_options import (
+            get_provider_display_name,
+        )
 
         provider = llm_provider_model.provider
 

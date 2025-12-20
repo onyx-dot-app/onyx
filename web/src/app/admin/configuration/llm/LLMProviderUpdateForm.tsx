@@ -310,27 +310,50 @@ export function LLMProviderUpdateForm({
         }
 
         // Create the final payload with proper typing
-        // Filter out models that are not default, fast default, or visible
-        const filteredModelConfigurations = getCurrentModelConfigurations(
-          values
-        )
-          .map(
-            (modelConfiguration): ModelConfiguration => ({
-              name: modelConfiguration.name,
-              is_visible: visibleModels.includes(modelConfiguration.name),
-              max_input_tokens: modelConfiguration.max_input_tokens ?? null,
-              supports_image_input: modelConfiguration.supports_image_input,
-              display_name: modelConfiguration.display_name,
-            })
-          )
-          .filter(
-            (modelConfiguration) =>
-              modelConfiguration.name === rest.default_model_name ||
-              modelConfiguration.is_visible
-          );
+        // In auto mode, use the recommended configurations from the descriptor
+        // In manual mode, filter based on user selections
+        let filteredModelConfigurations: ModelConfiguration[];
+        let finalDefaultModelName = rest.default_model_name;
+
+        if (values.is_auto_mode) {
+          // Auto mode: use recommended models from descriptor
+          filteredModelConfigurations =
+            llmProviderDescriptor.model_configurations
+              .filter((m) => m.is_visible)
+              .map(
+                (modelConfiguration): ModelConfiguration => ({
+                  name: modelConfiguration.name,
+                  is_visible: true,
+                  max_input_tokens: modelConfiguration.max_input_tokens ?? null,
+                  supports_image_input: modelConfiguration.supports_image_input,
+                  display_name: modelConfiguration.display_name,
+                })
+              );
+          // Use recommended default model
+          finalDefaultModelName =
+            llmProviderDescriptor.default_model || rest.default_model_name;
+        } else {
+          // Manual mode: filter based on user selections
+          filteredModelConfigurations = getCurrentModelConfigurations(values)
+            .map(
+              (modelConfiguration): ModelConfiguration => ({
+                name: modelConfiguration.name,
+                is_visible: visibleModels.includes(modelConfiguration.name),
+                max_input_tokens: modelConfiguration.max_input_tokens ?? null,
+                supports_image_input: modelConfiguration.supports_image_input,
+                display_name: modelConfiguration.display_name,
+              })
+            )
+            .filter(
+              (modelConfiguration) =>
+                modelConfiguration.name === rest.default_model_name ||
+                modelConfiguration.is_visible
+            );
+        }
 
         const finalValues = {
           ...rest,
+          default_model_name: finalDefaultModelName,
           api_base: finalApiBase,
           api_version: finalApiVersion,
           deployment_name: finalDeploymentName,
@@ -579,7 +602,7 @@ export function LLMProviderUpdateForm({
             )}
             {/* Auto Mode Toggle */}
             {!firstTimeConfiguration && (
-              <div className="flex flex-col gap-3 py-4">
+              <div className="flex flex-col gap-3 pt-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <Text className="font-medium">Auto-update</Text>
@@ -660,52 +683,76 @@ export function LLMProviderUpdateForm({
 
             {!firstTimeConfiguration && (
               <>
-                <Separator />
-
                 {formikProps.values.is_auto_mode ? (
-                  // Auto mode: Read-only model display
-                  <div className="space-y-4">
-                    <Text className="font-medium">Available Models</Text>
-                    <Text className="text-sm text-text-02">
-                      Models are automatically managed by Onyx. The default
-                      model and visible models will be set based on Onyx&apos;s
-                      recommended configuration.
-                    </Text>
-
-                    {currentModelConfigurations.length > 0 && (
-                      <div className="space-y-2">
-                        {currentModelConfigurations
+                  // Auto mode: Read-only model display using recommended configurations
+                  <div className="flex flex-col gap-3">
+                    {llmProviderDescriptor.model_configurations.length > 0 && (
+                      <div className="flex flex-col gap-2">
+                        {llmProviderDescriptor.model_configurations
                           .filter((m) => m.is_visible)
-                          .map((model) => (
-                            <div
-                              key={model.name}
-                              className="flex items-center justify-between p-3 border border-border-01 rounded-md bg-background-neutral-01"
-                            >
-                              <div>
-                                <span className="font-medium text-text-01">
-                                  {model.display_name || model.name}
-                                </span>
-                                {model.display_name && (
-                                  <span className="text-sm text-text-02 ml-2">
-                                    ({model.name})
-                                  </span>
+                          .sort((a, b) => {
+                            const aIsDefault =
+                              a.name === llmProviderDescriptor.default_model;
+                            const bIsDefault =
+                              b.name === llmProviderDescriptor.default_model;
+                            if (aIsDefault && !bIsDefault) return -1;
+                            if (!aIsDefault && bIsDefault) return 1;
+                            return 0;
+                          })
+                          .map((model) => {
+                            const isDefault =
+                              llmProviderDescriptor.default_model ===
+                              model.name;
+
+                            return (
+                              <div
+                                key={model.name}
+                                className={`flex items-center justify-between gap-3 rounded-16 border p-1 bg-background-neutral-00 dark:bg-background-neutral-00 ${
+                                  isDefault
+                                    ? "border-action-link-05"
+                                    : "border-border-01"
+                                }`}
+                              >
+                                <div className="flex flex-1 items-center gap-2 px-2 py-1">
+                                  <div
+                                    className={`size-2 shrink-0 rounded-full ${
+                                      isDefault
+                                        ? "bg-action-link-05"
+                                        : "bg-background-neutral-03"
+                                    }`}
+                                  />
+                                  <div className="flex flex-col gap-0.5">
+                                    <Text mainUiAction text05>
+                                      {model.display_name || model.name}
+                                    </Text>
+                                    {model.display_name && (
+                                      <Text secondaryBody text03>
+                                        {model.name}
+                                      </Text>
+                                    )}
+                                  </div>
+                                </div>
+                                {isDefault && (
+                                  <div className="flex items-center justify-end pr-2">
+                                    <Text
+                                      secondaryBody
+                                      className="text-action-text-link-05"
+                                    >
+                                      Default
+                                    </Text>
+                                  </div>
                                 )}
                               </div>
-                              {formikProps.values.default_model_name ===
-                                model.name && (
-                                <span className="px-3 py-1 rounded text-sm bg-status-success-01 text-status-text-success-05">
-                                  Default
-                                </span>
-                              )}
-                            </div>
-                          ))}
+                            );
+                          })}
                       </div>
                     )}
 
-                    {currentModelConfigurations.length === 0 && (
-                      <Text className="text-sm text-text-02 italic">
-                        Models will be configured automatically when the
-                        provider is enabled.
+                    {llmProviderDescriptor.model_configurations.length ===
+                      0 && (
+                      <Text secondaryBody text03 className="italic">
+                        Models will be configured automatically when a key is
+                        provided.
                       </Text>
                     )}
                   </div>
@@ -748,7 +795,6 @@ export function LLMProviderUpdateForm({
                   )}
 
                 <>
-                  <Separator />
                   <AdvancedOptionsToggle
                     showAdvancedOptions={showAdvancedOptions}
                     setShowAdvancedOptions={setShowAdvancedOptions}
@@ -758,32 +804,35 @@ export function LLMProviderUpdateForm({
                       {/* Display Models - only shown in Manual mode */}
                       {!formikProps.values.is_auto_mode &&
                         currentModelConfigurations.length > 0 && (
-                          <div className="w-full">
-                            <MultiSelectField
-                              selectedInitially={
-                                formikProps.values.selected_model_names ?? []
-                              }
-                              name="selected_model_names"
-                              label="Display Models"
-                              subtext="Select the models to make available to users. Unselected models will not be available."
-                              options={currentModelConfigurations.map(
-                                (modelConfiguration) => ({
-                                  value: modelConfiguration.name,
-                                  // don't clean up names here to give admins descriptive names / handle duplicates
-                                  // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
-                                  label: modelConfiguration.name,
-                                })
-                              )}
-                              onChange={(selected) =>
-                                formikProps.setFieldValue(
-                                  "selected_model_names",
-                                  selected
-                                )
-                              }
-                            />
-                          </div>
+                          <>
+                            <div className="w-full">
+                              <MultiSelectField
+                                selectedInitially={
+                                  formikProps.values.selected_model_names ?? []
+                                }
+                                name="selected_model_names"
+                                label="Display Models"
+                                subtext="Select the models to make available to users. Unselected models will not be available."
+                                options={currentModelConfigurations.map(
+                                  (modelConfiguration) => ({
+                                    value: modelConfiguration.name,
+                                    // don't clean up names here to give admins descriptive names / handle duplicates
+                                    // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
+                                    label: modelConfiguration.name,
+                                  })
+                                )}
+                                onChange={(selected) =>
+                                  formikProps.setFieldValue(
+                                    "selected_model_names",
+                                    selected
+                                  )
+                                }
+                              />
+                            </div>
+                            <Separator />
+                          </>
                         )}
-                      <Separator />
+
                       <div className="flex flex-col gap-3">
                         <Text headingH3>Access Controls</Text>
                         <IsPublicGroupSelector

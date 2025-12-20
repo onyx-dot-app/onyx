@@ -1,5 +1,3 @@
-from typing import TYPE_CHECKING
-
 from sqlalchemy import delete
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
@@ -18,14 +16,12 @@ from onyx.db.models import Tool as ToolModel
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.llm.utils import model_supports_image_input
+from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.server.manage.embedding.models import CloudEmbeddingProvider
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
 from shared_configs.enums import EmbeddingProvider
-
-if TYPE_CHECKING:
-    from onyx.llm.auto_update_models import GitHubProviderConfig
 
 
 def update_group_llm_provider_relationships__no_commit(
@@ -559,7 +555,7 @@ def fetch_auto_mode_providers(db_session: Session) -> list[LLMProviderModel]:
 def sync_auto_mode_models(
     db_session: Session,
     provider: LLMProviderModel,
-    github_config: "GitHubProviderConfig",
+    llm_reccomendations: LLMRecommendations,
 ) -> int:
     """Sync models from GitHub config to a provider in Auto mode.
 
@@ -578,19 +574,14 @@ def sync_auto_mode_models(
     Returns:
         The number of changes made.
     """
-    from onyx.llm.auto_update_models import GitHubProviderConfig
-
-    # Type check for the import
-    if not isinstance(github_config, GitHubProviderConfig):
-        raise TypeError(f"Expected GitHubProviderConfig, got {type(github_config)}")
-
     changes = 0
 
     # Build the list of all visible models from the config
     # All models in the config are visible (default + additional_visible_models)
-    all_github_models = [github_config.default_model] + list(
-        github_config.additional_visible_models
-    )
+    recommended_visible_models = llm_reccomendations.get_visible_models(provider.name)
+    recommended_visible_model_names = [
+        model.name for model in recommended_visible_models
+    ]
 
     # Get existing models
     existing_models: dict[str, ModelConfiguration] = {
@@ -602,23 +593,21 @@ def sync_auto_mode_models(
         ).all()
     }
 
-    github_model_names = {m.name for m in all_github_models}
-
     # Remove models that are no longer in GitHub config
     for model_name, model in existing_models.items():
-        if model_name not in github_model_names:
+        if model_name not in recommended_visible_model_names:
             db_session.delete(model)
             changes += 1
 
     # Add or update models from GitHub config
-    for github_model in all_github_models:
-        if github_model.name in existing_models:
+    for model_config in recommended_visible_models:
+        if model_config.name in existing_models:
             # Update existing model
-            existing = existing_models[github_model.name]
+            existing = existing_models[model_config.name]
             # Check each field for changes
             updated = False
-            if existing.display_name != github_model.display_name:
-                existing.display_name = github_model.display_name
+            if existing.display_name != model_config.display_name:
+                existing.display_name = model_config.display_name
                 updated = True
             # All models in the config are visible
             if not existing.is_visible:
@@ -630,17 +619,17 @@ def sync_auto_mode_models(
             # Add new model - all models from GitHub config are visible
             new_model = ModelConfiguration(
                 llm_provider_id=provider.id,
-                name=github_model.name,
-                display_name=github_model.display_name,
+                name=model_config.name,
+                display_name=model_config.display_name,
                 is_visible=True,
             )
             db_session.add(new_model)
             changes += 1
 
     # In Auto mode, default model is always set from GitHub config
-    default_model_name = github_config.default_model.name
-    if provider.default_model_name != default_model_name:
-        provider.default_model_name = default_model_name
+    default_model = llm_reccomendations.get_default_model(provider.name)
+    if default_model and provider.default_model_name != default_model.name:
+        provider.default_model_name = default_model.name
         changes += 1
 
     db_session.commit()

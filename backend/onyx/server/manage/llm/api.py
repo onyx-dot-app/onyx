@@ -34,12 +34,19 @@ from onyx.db.persona import user_can_access_persona
 from onyx.llm.factory import get_default_llm
 from onyx.llm.factory import get_llm
 from onyx.llm.factory import get_max_input_tokens_from_llm_provider
-from onyx.llm.llm_provider_options import fetch_available_well_known_llms
-from onyx.llm.llm_provider_options import WellKnownLLMProviderDescriptor
 from onyx.llm.utils import get_bedrock_token_limit
 from onyx.llm.utils import get_llm_contextual_cost
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.utils import test_llm
+from onyx.llm.well_known_providers.auto_update_service import (
+    fetch_llm_recommendations_from_github,
+)
+from onyx.llm.well_known_providers.llm_provider_options import (
+    fetch_available_well_known_llms,
+)
+from onyx.llm.well_known_providers.llm_provider_options import (
+    WellKnownLLMProviderDescriptor,
+)
 from onyx.server.manage.llm.models import BedrockFinalModelResponse
 from onyx.server.manage.llm.models import BedrockModelsRequest
 from onyx.server.manage.llm.models import LLMCost
@@ -248,9 +255,8 @@ def put_llm_provider(
         # If newly enabling Auto mode, sync models immediately from GitHub config
         if transitioning_to_auto_mode:
             from onyx.db.llm import sync_auto_mode_models
-            from onyx.llm.auto_update_service import fetch_github_config
 
-            config = fetch_github_config()
+            config = fetch_llm_recommendations_from_github()
             if config and llm_provider_upsert_request.provider in config.providers:
                 # Refetch the provider to get the updated model
                 updated_provider = fetch_existing_llm_provider(
@@ -260,7 +266,7 @@ def put_llm_provider(
                     sync_auto_mode_models(
                         db_session,
                         updated_provider,
-                        config.providers[llm_provider_upsert_request.provider],
+                        config,
                     )
                     # Refresh result with synced models
                     result = LLMProviderView.from_model(updated_provider)
@@ -315,9 +321,7 @@ def get_auto_config(
     Returns the available models and default configurations for each
     supported provider type when using Auto mode.
     """
-    from onyx.llm.auto_update_service import fetch_github_config
-
-    config = fetch_github_config()
+    config = fetch_llm_recommendations_from_github()
     if not config:
         raise HTTPException(
             status_code=502,

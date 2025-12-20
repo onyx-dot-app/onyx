@@ -1,7 +1,7 @@
 import pytest
 
-from onyx.llm.llm_provider_options import ANTHROPIC_PROVIDER_NAME
-from onyx.llm.llm_provider_options import BEDROCK_PROVIDER_NAME
+from onyx.llm.well_known_providers.llm_provider_options import ANTHROPIC_PROVIDER_NAME
+from onyx.llm.well_known_providers.llm_provider_options import BEDROCK_PROVIDER_NAME
 from onyx.tools.utils import explicit_tool_calling_supported
 
 

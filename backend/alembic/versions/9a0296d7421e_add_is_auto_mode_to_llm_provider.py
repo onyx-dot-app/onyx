@@ -1,7 +1,7 @@
 """add_is_auto_mode_to_llm_provider
 
 Revision ID: 9a0296d7421e
-Revises: b8c9d0e1f2a3
+Revises: c1d2e3f4a5b6
 Create Date: 2025-12-17 18:14:29.620981
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "9a0296d7421e"
-down_revision = "b8c9d0e1f2a3"
+down_revision = "c1d2e3f4a5b6"
 branch_labels = None
 depends_on = None
 
