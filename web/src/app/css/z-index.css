@@ -4,9 +4,6 @@
   --z-content: 1;
   --z-sticky: 10;
 
-  /* Floating buttons */
-  --z-floating-scroll-down-button: 500;
-
   /* Interactive overlays */
   --z-modal-overlay: 900;
   --z-modal: 1000;
@@ -24,11 +21,6 @@
 }
 .z-sticky {
   z-index: var(--z-sticky);
-}
-
-/* Floating buttons */
-.z-floating-scroll-down-button {
-  z-index: var(--z-floating-scroll-down-button);
 }
 
 /* Interactive overlays */

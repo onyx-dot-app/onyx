@@ -189,7 +189,7 @@ const ChatUI = React.forwardRef(
     return (
       <div className="flex flex-col flex-1 w-full relative overflow-hidden">
         {aboveHorizon && (
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 z-floating-scroll-down-button">
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 z-sticky">
             <IconButton icon={SvgChevronDown} onClick={scrollToBottom} />
 
             <Spacer />
