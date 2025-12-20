@@ -305,7 +305,6 @@ def run_research_agent_call(
                 placement=Placement(
                     turn_index=turn_index,
                     tab_index=tab_index,
-                    sub_turn_index=llm_cycle_count + reasoning_cycles,
                 ),
                 citation_processor=None,
                 state_container=None,
