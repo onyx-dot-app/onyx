@@ -45,37 +45,16 @@ import {
   PopoverMenu,
 } from "@/components/ui/popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import {
-  SvgImage,
-  SvgOnyxOctagon,
-  SvgSearch,
-  SvgTwoLineSmall,
-} from "@opal/icons";
-import { IconProps } from "@opal/types";
+import { SvgImage, SvgOnyxOctagon } from "@opal/icons";
+import CustomAgentAvatar, {
+  iconMap,
+} from "@/refresh-components/avatars/CustomAgentAvatar";
+import InputAvatar from "@/refresh-components/inputs/InputAvatar";
+import IconButton from "@/refresh-components/buttons/IconButton";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
 }
-
-function iconOnyxOctagonWrapper(
-  Icon: React.FunctionComponent<IconProps>,
-  className: string
-) {
-  return (
-    <div className="relative h-8 w-8 flex flex-col items-center justify-center">
-      <SvgOnyxOctagon className="absolute inset-0 h-8 w-8 stroke-text-04" />
-      <Icon className={cn("h-4 w-4", className)} />
-    </div>
-  );
-}
-
-const iconOptions = [
-  iconOnyxOctagonWrapper(SvgTwoLineSmall, "h-8 w-8 stroke-text-04"),
-  iconOnyxOctagonWrapper(SvgSearch, "stroke-green-500"),
-  iconOnyxOctagonWrapper(SvgSearch, "stroke-green-500"),
-  iconOnyxOctagonWrapper(SvgSearch, "stroke-green-500"),
-  iconOnyxOctagonWrapper(SvgSearch, "stroke-green-500"),
-];
 
 function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
   const { values, setFieldValue } = useFormikContext<{
@@ -87,14 +66,14 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
   >(null);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [selectedIconIndex, setSelectedIconIndex] = useState<number | null>(0);
+  const [selectedIconName, setSelectedIconName] = useState<string | null>(null);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     // Clear selected icon when uploading an image
-    setSelectedIconIndex(null);
+    setSelectedIconName(null);
 
     // Show preview immediately
     const reader = new FileReader();
@@ -134,8 +113,15 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
         ? buildImgUrl(existingAgent.uploaded_image_id)
         : undefined;
 
+  function handleIconClick(iconName: string | null) {
+    setSelectedIconName(iconName);
+    setFieldValue("uploaded_image_id", null);
+    setUploadedImagePreview(null);
+    setPopoverOpen(false);
+  }
+
   return (
-    <div className="relative group/InputAvatarWrapper">
+    <>
       <input
         ref={fileInputRef}
         type="file"
@@ -144,26 +130,28 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
         className="hidden"
       />
 
-      {/*<Avatar className="h-[7.5rem] w-[7.5rem]">
-        {imageSrc && <AvatarImage src={imageSrc} alt="Agent avatar" />}
-        <AvatarFallback className="border bg-background-neutral-00">
-          {selectedIconIndex !== null && iconOptions[selectedIconIndex]}
-        </AvatarFallback>
-      </Avatar>*/}
-
       <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
         <PopoverTrigger asChild>
-          <Button
-            className="absolute bottom-0 left-1/2 -translate-x-1/2 h-[1.75rem] mb-2 invisible group-hover/InputAvatarWrapper:visible"
-            secondary
-          >
-            Edit
-          </Button>
+          <InputAvatar className="group/InputAvatar relative flex flex-col items-center justify-center h-[7.5rem] w-[7.5rem]">
+            {/* We take the `InputAvatar`'s height/width (in REM) and multiply it by 16 (the REM -> px conversion factor). */}
+            <CustomAgentAvatar
+              size={imageSrc ? 7.5 * 16 : 40}
+              src={imageSrc}
+              iconName={selectedIconName ?? undefined}
+            />
+            <Button
+              className="absolute bottom-0 left-1/2 -translate-x-1/2 h-[1.75rem] mb-2 invisible group-hover/InputAvatar:visible"
+              secondary
+            >
+              Edit
+            </Button>
+          </InputAvatar>
         </PopoverTrigger>
         <PopoverContent>
           <PopoverMenu medium>
             {[
               <LineItem
+                key="upload-image"
                 icon={SvgImage}
                 onClick={() => fileInputRef.current?.click()}
                 emphasized
@@ -171,26 +159,25 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
                 Upload Image
               </LineItem>,
               null,
-              <div className="grid grid-cols-4 gap-1">
-                {iconOptions.map((icon, index) => (
-                  <Button
-                    key={index}
-                    onClick={() => {
-                      setSelectedIconIndex(index);
-                      setFieldValue("uploaded_image_id", null);
-                      setUploadedImagePreview(null);
-                      setPopoverOpen(false);
-                    }}
-                  >
-                    {icon}
-                  </Button>
+              <div className="grid grid-cols-4 gap-0">
+                <IconButton
+                  key="default-icon"
+                  icon={() => <CustomAgentAvatar />}
+                  onClick={() => handleIconClick(null)}
+                />
+                {Object.keys(iconMap).map((iconName) => (
+                  <IconButton
+                    key={iconName}
+                    onClick={() => handleIconClick(iconName)}
+                    icon={() => <CustomAgentAvatar iconName={iconName} />}
+                  />
                 ))}
               </div>,
             ]}
           </PopoverMenu>
         </PopoverContent>
       </Popover>
-    </div>
+    </>
   );
 }
 
@@ -467,7 +454,7 @@ export default function AgentEditorPage({
             <Form className="h-full w-full">
               <Settings.Root>
                 <Settings.Header
-                  icon={SvgSearch}
+                  icon={SvgOnyxOctagon}
                   title={existingAgent ? "Edit Agent" : "Create Agent"}
                   rightChildren={
                     <Button type="submit" disabled={isSubmitting}>
@@ -726,7 +713,7 @@ export default function AgentEditorPage({
                       <Separator noPadding className="py-1" />
 
                       {/* MCP tools here */}
-                      <div className="h-[2rem] w-full dbg-red" />
+                      <div className="h-[2rem] w-full" />
                     </Section>
                   </SimpleCollapsible>
 

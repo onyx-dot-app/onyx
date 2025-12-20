@@ -7,7 +7,7 @@ import useSWR, { preload } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { checkUserIsNoAuthUser, logout } from "@/lib/user";
 import { useUser } from "@/components/user/UserProvider";
-import { Avatar } from "@/components/ui/avatar";
+import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import Text from "@/refresh-components/texts/Text";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import {
@@ -195,7 +195,7 @@ export default function Settings({ folded }: SettingsProps) {
           <div id="onyx-user-dropdown">
             <SidebarTab
               leftIcon={({ className }) => (
-                <Avatar
+                <InputAvatar
                   className={cn(
                     "flex items-center justify-center bg-background-neutral-inverted-00",
                     className,
@@ -205,7 +205,7 @@ export default function Settings({ folded }: SettingsProps) {
                   <Text inverted secondaryBody>
                     {displayName[0]?.toUpperCase()}
                   </Text>
-                </Avatar>
+                </InputAvatar>
               )}
               active={!!popupState}
               folded={folded}

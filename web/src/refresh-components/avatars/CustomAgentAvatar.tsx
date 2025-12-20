@@ -18,11 +18,24 @@ interface IconConfig {
   className?: string;
 }
 
-const iconMap: Record<string, IconConfig> = {
+export const iconMap: Record<string, IconConfig> = {
   search: { Icon: SvgSearch, className: "stroke-green-500" },
   check: { Icon: SvgCheck, className: "stroke-green-500" },
   code: { Icon: SvgCode, className: "stroke-orange-500" },
 };
+
+export function asdf(a: keyof typeof iconMap, size?: number): React.ReactNode {
+  const iconConfig = iconMap[a];
+  if (!iconConfig) return null;
+
+  const { Icon } = iconConfig;
+
+  return (
+    <SvgOctagonWrapper size={(size = DEFAULT_AGENT_AVATAR_SIZE_PX)}>
+      <Icon />
+    </SvgOctagonWrapper>
+  );
+}
 
 interface SvgOctagonWrapperProps {
   size: number;
