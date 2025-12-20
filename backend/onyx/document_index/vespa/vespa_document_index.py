@@ -54,11 +54,11 @@ from onyx.utils.logger import setup_logger
 from shared_configs.model_server_models import Embedding
 
 
-LOGGER = setup_logger()
+logger = setup_logger()
 # Set the logging level to WARNING to ignore INFO and DEBUG logs from httpx. By
 # default it emits INFO-level logs for every request.
-HTTPX_LOGGER = logging.getLogger("httpx")
-HTTPX_LOGGER.setLevel(logging.WARNING)
+httpx_logger = logging.getLogger("httpx")
+httpx_logger.setLevel(logging.WARNING)
 
 
 class TenantState(BaseModel):
@@ -324,7 +324,7 @@ def _update_single_chunk(
         )
         resp.raise_for_status()
     except httpx.HTTPStatusError as e:
-        LOGGER.error(
+        logger.error(
             f"Failed to update doc chunk {doc_chunk_id} (doc_id={doc_id}). "
             f"Code: {e.response.status_code}. Details: {e.response.text}"
         )
@@ -565,9 +565,9 @@ class VespaDocumentIndex(DocumentIndex):
             f"hybrid_search_{query_type.value}_base_{len(query_embedding)}"
         )
 
-        LOGGER.info(f"Selected ranking profile: {ranking_profile}")
+        logger.info(f"Selected ranking profile: {ranking_profile}")
 
-        LOGGER.debug(f"Query YQL: {yql}")
+        logger.debug(f"Query YQL: {yql}")
 
         # In this interface we do not pass in hybrid alpha. Tracing the codepath
         # of the legacy Vespa interface, it so happens that KEYWORD always
