@@ -33,7 +33,7 @@ import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import { AgentsMultiSelect } from "@/components/AgentsMultiSelect";
 import { SvgTrash } from "@opal/icons";
 
-function AutoFetchModelsOnEdit({
+function AutoFetchModels({
   llmProviderDescriptor,
   existingLlmProvider,
   values,
@@ -53,7 +53,8 @@ function AutoFetchModelsOnEdit({
   const hasAutoFetchedRef = useRef(false);
 
   useEffect(() => {
-    if (!existingLlmProvider) {
+    // Skip auto-fetch in auto mode since we use descriptor's recommended models
+    if (values.is_auto_mode) {
       return;
     }
 
@@ -329,9 +330,20 @@ export function LLMProviderUpdateForm({
                   display_name: modelConfiguration.display_name,
                 })
               );
-          // Use recommended default model
-          finalDefaultModelName =
-            llmProviderDescriptor.default_model || rest.default_model_name;
+
+          // Determine default model: prefer descriptor's default if visible, otherwise first visible model
+          const visibleModelNames = new Set(
+            filteredModelConfigurations.map((m) => m.name)
+          );
+          if (
+            llmProviderDescriptor.default_model &&
+            visibleModelNames.has(llmProviderDescriptor.default_model)
+          ) {
+            finalDefaultModelName = llmProviderDescriptor.default_model;
+          } else if (filteredModelConfigurations.length > 0) {
+            finalDefaultModelName = filteredModelConfigurations[0]?.name ?? "";
+          }
+          // else keep the existing finalDefaultModelName (rest.default_model_name)
         } else {
           // Manual mode: filter based on user selections
           filteredModelConfigurations = getCurrentModelConfigurations(values)
@@ -467,7 +479,7 @@ export function LLMProviderUpdateForm({
 
         return (
           <Form className="gap-y-4 items-stretch mt-6">
-            <AutoFetchModelsOnEdit
+            <AutoFetchModels
               llmProviderDescriptor={llmProviderDescriptor}
               existingLlmProvider={existingLlmProvider}
               values={formikProps.values}
@@ -600,86 +612,56 @@ export function LLMProviderUpdateForm({
                 }
               }
             )}
-            {/* Auto Mode Toggle */}
-            {!firstTimeConfiguration && (
-              <div className="flex flex-col gap-3 pt-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Text className="font-medium">Auto-update</Text>
-                    <Text className="text-sm text-text-02">
-                      Update the available models automatically when new models
-                      are released.
-                    </Text>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={formikProps.values.is_auto_mode}
-                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                      formikProps.values.is_auto_mode
-                        ? "bg-action-link-05"
-                        : "bg-background-neutral-03"
-                    }`}
-                    onClick={() =>
-                      formikProps.setFieldValue(
-                        "is_auto_mode",
-                        !formikProps.values.is_auto_mode
-                      )
-                    }
-                  >
-                    <span
-                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+            {/* Auto Mode Toggle - only show if provider has recommended models */}
+            {!firstTimeConfiguration &&
+              llmProviderDescriptor.model_configurations.some(
+                (m) => m.is_visible
+              ) && (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="block font-medium text-base">
+                        Auto-update
+                      </label>
+                      <span className="block text-sm text-text-03">
+                        Update the available models automatically when new
+                        models are released.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={formikProps.values.is_auto_mode}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
                         formikProps.values.is_auto_mode
-                          ? "translate-x-5"
-                          : "translate-x-0"
+                          ? "bg-action-link-05"
+                          : "bg-background-neutral-03"
                       }`}
-                    />
-                  </button>
+                      onClick={() =>
+                        formikProps.setFieldValue(
+                          "is_auto_mode",
+                          !formikProps.values.is_auto_mode
+                        )
+                      }
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          formikProps.values.is_auto_mode
+                            ? "translate-x-5"
+                            : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Fetch models button - automatically shows for supported providers (disabled in Auto mode) */}
-            {dynamicConfig && !formikProps.values.is_auto_mode && (
-              <div className="flex flex-col gap-2">
-                <Button
-                  onClick={() =>
-                    fetchModels(
-                      llmProviderDescriptor,
-                      existingLlmProvider,
-                      formikProps.values,
-                      formikProps.setFieldValue,
-                      setIsFetchingModels,
-                      setFetchModelsError,
-                      setPopup
-                    )
-                  }
-                  disabled={
-                    isFetchingModels ||
-                    dynamicConfig.isDisabled(formikProps.values)
-                  }
-                  className="w-fit"
-                >
-                  {isFetchingModels ? (
-                    <Text>
-                      <LoadingAnimation text="Fetching models" />
-                    </Text>
-                  ) : (
-                    "Fetch Available Models"
-                  )}
-                </Button>
-
-                {fetchModelsError && (
-                  <Text className="text-red-600 text-sm">
-                    {fetchModelsError}
-                  </Text>
-                )}
-
-                <Text className="text-sm text-gray-600">
-                  Retrieve the latest available models for this provider.
-                </Text>
-              </div>
-            )}
+            {/* Show error state for auto-fetching models */}
+            {dynamicConfig &&
+              !formikProps.values.is_auto_mode &&
+              fetchModelsError && (
+                <Text className="text-red-600 text-sm">{fetchModelsError}</Text>
+              )}
 
             {!firstTimeConfiguration && (
               <>
@@ -759,7 +741,20 @@ export function LLMProviderUpdateForm({
                 ) : (
                   // Manual mode: Full model configuration
                   <>
-                    {currentModelConfigurations.length > 0 ? (
+                    {isFetchingModels && dynamicConfig ? (
+                      <div>
+                        <label className="block font-medium text-base">
+                          Default Model
+                        </label>
+                        <span className="block text-sm text-text-03 mb-2">
+                          The model to use by default for this provider unless
+                          otherwise specified.
+                        </span>
+                        <div className="mt-2 flex items-center p-3 border border-border-01 rounded-lg bg-background-neutral-00">
+                          <div className="h-5 w-5 animate-spin rounded-full border-2 border-border-03 border-t-action-link-05" />
+                        </div>
+                      </div>
+                    ) : currentModelConfigurations.length > 0 ? (
                       <SelectorFormField
                         name="default_model_name"
                         subtext="The model to use by default for this provider unless otherwise specified."
