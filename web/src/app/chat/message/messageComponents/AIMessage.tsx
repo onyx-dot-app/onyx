@@ -446,6 +446,7 @@ export default function AIMessage({
         <div className="mx-auto w-[min(50rem,100%)] px-4 max-w-message-max">
           <div className="flex items-start">
             <AgentAvatar agent={chatState.assistant} size={24} />
+            {/* w-full ensures the MultiToolRenderer non-expanded state takes up the full width */}
             <div className="max-w-message-max break-words pl-4 w-full">
               <div
                 ref={markdownRef}
