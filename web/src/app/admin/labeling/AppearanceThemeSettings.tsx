@@ -44,6 +44,7 @@ interface AppearanceThemeSettingsProps {
     custom_lower_disclaimer_content: number;
     custom_popup_header: number;
     custom_popup_content: number;
+    consent_screen_prompt: number;
   };
 }
 
@@ -66,8 +67,12 @@ export const AppearanceThemeSettings = forwardRef<
   const lowerDisclaimerInputRef = useRef<HTMLTextAreaElement>(null);
   const noticeHeaderInputRef = useRef<HTMLInputElement>(null);
   const noticeContentInputRef = useRef<HTMLTextAreaElement>(null);
+  const consentPromptTextAreaRef = useRef<HTMLTextAreaElement>(null);
   const prevShowFirstVisitNoticeRef = useRef<boolean>(
     Boolean(values.show_first_visit_notice)
+  );
+  const prevEnableConsentScreenRef = useRef<boolean>(
+    Boolean(values.enable_consent_screen)
   );
   const [focusedPreviewTarget, setFocusedPreviewTarget] =
     useState<PreviewHighlightTarget | null>(null);
@@ -102,6 +107,7 @@ export const AppearanceThemeSettings = forwardRef<
         },
         { name: "custom_popup_header", ref: noticeHeaderInputRef },
         { name: "custom_popup_content", ref: noticeContentInputRef },
+        { name: "consent_screen_prompt", ref: consentPromptTextAreaRef },
       ];
       console.log("errors", errors);
       for (const field of fieldRefs) {
@@ -132,6 +138,20 @@ export const AppearanceThemeSettings = forwardRef<
     prevShowFirstVisitNoticeRef.current = next;
   }, [values.show_first_visit_notice]);
 
+  useEffect(() => {
+    const prev = prevEnableConsentScreenRef.current;
+    const next = Boolean(values.enable_consent_screen);
+
+    // When enabling the toggle, autofocus the "Notice Consent Prompt" input.
+    if (!prev && next) {
+      requestAnimationFrame(() => {
+        consentPromptTextAreaRef.current?.focus();
+      });
+    }
+
+    prevEnableConsentScreenRef.current = next;
+  }, [values.enable_consent_screen]);
+
   const handleLogoEdit = () => {
     fileInputRef.current?.click();
   };
@@ -161,6 +181,22 @@ export const AppearanceThemeSettings = forwardRef<
     }
     return undefined;
   };
+
+  // Determine which tabs should be enabled
+  const hasLogo = Boolean(selectedLogo || values.use_custom_logo);
+  const hasApplicationName = Boolean(values.application_name?.trim());
+
+  // Auto-switch to logo_and_name if current selection becomes invalid
+  useEffect(() => {
+    if (values.logo_display_style === "logo_only" && !hasLogo) {
+      setFieldValue("logo_display_style", "logo_and_name");
+    } else if (
+      values.logo_display_style === "name_only" &&
+      !hasApplicationName
+    ) {
+      setFieldValue("logo_display_style", "logo_and_name");
+    }
+  }, [hasLogo, hasApplicationName, values.logo_display_style, setFieldValue]);
 
   return (
     <div className="flex flex-col gap-4 w-full">
@@ -225,7 +261,12 @@ export const AppearanceThemeSettings = forwardRef<
                   </TabsTrigger>
                   <TabsTrigger
                     value="logo_only"
-                    tooltip="Show only your application logo."
+                    disabled={!hasLogo}
+                    tooltip={
+                      hasLogo
+                        ? "Show only your application logo."
+                        : "Upload a logo to enable this option."
+                    }
                     tooltipSide="top"
                     {...getPreviewHandlers("sidebar")}
                   >
@@ -233,7 +274,12 @@ export const AppearanceThemeSettings = forwardRef<
                   </TabsTrigger>
                   <TabsTrigger
                     value="name_only"
-                    tooltip="Add a custom application name to display"
+                    disabled={!hasApplicationName}
+                    tooltip={
+                      hasApplicationName
+                        ? "Show only your application name."
+                        : "Enter an application name to enable this option."
+                    }
                     tooltipSide="top"
                     {...getPreviewHandlers("sidebar")}
                   >
@@ -243,7 +289,8 @@ export const AppearanceThemeSettings = forwardRef<
               </Tabs>
             </FormField.Control>
             <FormField.Description>
-              Choose what to display at the top of the sidebar.
+              Choose what to display at the top of the sidebar. Options become
+              available once you add a logo or application name.
             </FormField.Description>
           </FormField>
         </div>
@@ -397,6 +444,7 @@ export const AppearanceThemeSettings = forwardRef<
           <>
             <FormField state={errors.custom_popup_header ? "error" : "idle"}>
               <FormField.Label
+                required
                 rightAction={
                   <CharacterCount
                     value={values.custom_popup_header}
@@ -424,6 +472,7 @@ export const AppearanceThemeSettings = forwardRef<
 
             <FormField state={errors.custom_popup_content ? "error" : "idle"}>
               <FormField.Label
+                required
                 rightAction={
                   <CharacterCount
                     value={values.custom_popup_content}
@@ -467,6 +516,39 @@ export const AppearanceThemeSettings = forwardRef<
                 accessing the application.
               </FormField.Description>
             </FormField>
+
+            {values.enable_consent_screen && (
+              <FormField
+                state={errors.consent_screen_prompt ? "error" : "idle"}
+              >
+                <FormField.Label
+                  required
+                  rightAction={
+                    <CharacterCount
+                      value={values.consent_screen_prompt}
+                      limit={charLimits.consent_screen_prompt}
+                    />
+                  }
+                >
+                  Notice Consent Prompt
+                </FormField.Label>
+                <FormField.Control asChild>
+                  <InputTextArea
+                    ref={consentPromptTextAreaRef}
+                    rows={3}
+                    placeholder="Add markdown content"
+                    error={!!errors.consent_screen_prompt}
+                    value={values.consent_screen_prompt}
+                    onChange={(e) => {
+                      setFieldValue("consent_screen_prompt", e.target.value);
+                    }}
+                  />
+                </FormField.Control>
+                <FormField.Message
+                  messages={{ error: errors.consent_screen_prompt as string }}
+                />
+              </FormField>
+            )}
           </>
         )}
       </div>

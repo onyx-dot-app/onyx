@@ -21,6 +21,7 @@ const CHAR_LIMITS = {
   custom_lower_disclaimer_content: 200,
   custom_popup_header: 100,
   custom_popup_content: 500,
+  consent_screen_prompt: 200,
 };
 
 export default function LabelingPage() {
@@ -90,14 +91,32 @@ export default function LabelingPage() {
         CHAR_LIMITS.custom_popup_header,
         `Maximum ${CHAR_LIMITS.custom_popup_header} characters`
       )
-      .nullable(),
+      .when("show_first_visit_notice", {
+        is: true,
+        then: (schema) => schema.required("Notice Header is required"),
+        otherwise: (schema) => schema.nullable(),
+      }),
     custom_popup_content: Yup.string()
       .max(
         CHAR_LIMITS.custom_popup_content,
         `Maximum ${CHAR_LIMITS.custom_popup_content} characters`
       )
-      .nullable(),
+      .when("show_first_visit_notice", {
+        is: true,
+        then: (schema) => schema.required("Notice Content is required"),
+        otherwise: (schema) => schema.nullable(),
+      }),
     enable_consent_screen: Yup.boolean().nullable(),
+    consent_screen_prompt: Yup.string()
+      .max(
+        CHAR_LIMITS.consent_screen_prompt,
+        `Maximum ${CHAR_LIMITS.consent_screen_prompt} characters`
+      )
+      .when("enable_consent_screen", {
+        is: true,
+        then: (schema) => schema.required("Notice Consent Prompt is required"),
+        otherwise: (schema) => schema.nullable(),
+      }),
   });
 
   return (
@@ -118,9 +137,10 @@ export default function LabelingPage() {
         custom_popup_content: enterpriseSettings?.custom_popup_content || "",
         enable_consent_screen:
           enterpriseSettings?.enable_consent_screen || false,
+        consent_screen_prompt: enterpriseSettings?.consent_screen_prompt || "",
       }}
       validationSchema={validationSchema}
-      validateOnChange={true}
+      validateOnChange={false}
       onSubmit={async (values, formikHelpers) => {
         console.log("values", values);
 
@@ -159,6 +179,7 @@ export default function LabelingPage() {
           custom_popup_content: values.custom_popup_content || null,
           show_first_visit_notice: values.show_first_visit_notice || null,
           enable_consent_screen: values.enable_consent_screen || null,
+          consent_screen_prompt: values.consent_screen_prompt || null,
         });
 
         formikHelpers.setSubmitting(false);

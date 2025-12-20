@@ -56,6 +56,7 @@ export const FormFieldLabel: React.FC<LabelProps> = ({
   leftIcon,
   rightIcon,
   optional,
+  required,
   rightAction,
   className,
   children,
@@ -77,6 +78,11 @@ export const FormFieldLabel: React.FC<LabelProps> = ({
       {optional ? (
         <Text text03 mainUiMuted className="mx-0.5">
           {"(Optional)"}
+        </Text>
+      ) : null}
+      {required ? (
+        <Text text03 mainUiMuted className="mx-0.5">
+          {"(Required)"}
         </Text>
       ) : null}
       {rightIcon && <span className="flex items-center">{rightIcon}</span>}

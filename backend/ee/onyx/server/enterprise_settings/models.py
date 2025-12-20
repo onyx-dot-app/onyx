@@ -45,6 +45,7 @@ class EnterpriseSettings(BaseModel):
     custom_popup_header: str | None = None
     custom_popup_content: str | None = None
     enable_consent_screen: bool | None = None
+    consent_screen_prompt: str | None = None
     show_first_visit_notice: bool | None = None
     custom_greeting_message: str | None = None
 
