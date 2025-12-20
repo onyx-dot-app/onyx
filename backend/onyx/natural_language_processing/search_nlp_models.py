@@ -338,7 +338,13 @@ class CloudEmbedding:
                 for embedding in batch_embeddings
             ]
         finally:
-            await client.aio.aclose()
+            # Ensure client is closed with a timeout to prevent hanging on stuck sessions
+            try:
+                await asyncio.wait_for(client.aio.aclose(), timeout=5.0)
+            except asyncio.TimeoutError:
+                logger.warning("Google GenAI client aclose() timed out after 5s")
+            except Exception as e:
+                logger.warning(f"Error closing Google GenAI client: {e}")
 
     async def _embed_litellm_proxy(
         self, texts: list[str], model_name: str | None
