@@ -60,6 +60,7 @@ function shouldShowSearchStep2(packets: Packet[]): boolean {
   return searchState.hasResults || searchState.isComplete;
 }
 
+// w-full ensures content takes full width within the flex container hierarchy
 function ToolItemRow({
   icon,
   content,
@@ -74,7 +75,6 @@ function ToolItemRow({
   isLoading?: boolean;
 }) {
   return (
-    // w-full ensures content takes full width within the flex container hierarchy
     <div className="relative w-full">
       {!isLastItem && (
         <div
@@ -382,6 +382,7 @@ function ParallelToolTabs({
 }
 
 // Shared component for expanded tool rendering
+// w-full ensures content takes full width within the flex container hierarchy
 function ExpandedToolItem({
   icon,
   content,
@@ -408,7 +409,6 @@ function ExpandedToolItem({
   );
 
   return (
-    // w-full ensures content takes full width within the flex container hierarchy
     <div className="relative w-full">
       {/* Connector line */}
       {!isLastItem && (
