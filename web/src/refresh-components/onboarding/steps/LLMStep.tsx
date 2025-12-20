@@ -10,7 +10,7 @@ import LLMConnectionModal, {
 } from "@/refresh-components/onboarding/components/LLMConnectionModal";
 import { cn } from "@/lib/utils";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import { ProviderIcon } from "@/app/admin/configuration/llm/utils";
+import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 import { SvgCheckCircle, SvgCpu, SvgExternalLink } from "@opal/icons";
 
 type LLMStepProps = {

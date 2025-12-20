@@ -1,6 +1,5 @@
 import { JSX } from "react";
 import {
-  defaultTailwindCSS,
   AnthropicIcon,
   AmazonIcon,
   AzureIcon,
@@ -105,24 +104,6 @@ export const getProviderIcon = (
 
   // Fallback to CPU icon if no matches
   return CPUIcon;
-};
-
-// ============================================================================
-// LLM PROVIDER ICON COMPONENT
-// ============================================================================
-export interface ProviderIconProps extends IconProps {
-  provider: string;
-  modelName?: string;
-}
-
-export const ProviderIcon = ({
-  provider,
-  modelName,
-  size = 16,
-  className = defaultTailwindCSS,
-}: ProviderIconProps) => {
-  const Icon = getProviderIcon(provider, modelName);
-  return <Icon size={size} className={className} />;
 };
 
 export const isAnthropic = (provider: string, modelName: string) =>
