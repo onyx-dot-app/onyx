@@ -444,7 +444,7 @@ def run_llm_loop(
                 tool_definitions=[tool.tool_definition() for tool in final_tools],
                 tool_choice=tool_choice,
                 llm=llm,
-                turn_index=llm_cycle_count + reasoning_cycles,
+                placement=Placement(turn_index=llm_cycle_count + reasoning_cycles),
                 citation_processor=citation_processor,
                 state_container=state_container,
                 # The rich docs representation is passed in so that when yielding the answer, it can also

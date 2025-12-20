@@ -110,7 +110,7 @@ def generate_final_report(
         tool_definitions=[],
         tool_choice=ToolChoiceOptions.NONE,
         llm=llm,
-        turn_index=999,  # TODO
+        placement=Placement(turn_index=999),  # TODO
         citation_processor=None,
         state_container=state_container,
         reasoning_effort=ReasoningEffort.LOW,
@@ -187,7 +187,7 @@ def run_deep_research_llm_loop(
             tool_definitions=get_clarification_tool_definitions(),
             tool_choice=ToolChoiceOptions.AUTO,
             llm=llm,
-            turn_index=0,
+            placement=Placement(turn_index=0),
             # No citations in this step, it should just pass through all
             # tokens directly so initialized as an empty citation processor
             citation_processor=None,
@@ -233,7 +233,7 @@ def run_deep_research_llm_loop(
         tool_definitions=[],
         tool_choice=ToolChoiceOptions.NONE,
         llm=llm,
-        turn_index=0,
+        placement=Placement(turn_index=0),
         citation_processor=None,
         state_container=state_container,
         final_documents=None,
@@ -248,14 +248,14 @@ def run_deep_research_llm_loop(
             if isinstance(packet.obj, AgentResponseStart):
                 emitter.emit(
                     Packet(
-                        placement=Placement(turn_index=packet.placement.turn_index),
+                        placement=packet.placement,
                         obj=DeepResearchPlanStart(),
                     )
                 )
             elif isinstance(packet.obj, AgentResponseDelta):
                 emitter.emit(
                     Packet(
-                        placement=Placement(turn_index=packet.placement.turn_index),
+                        placement=packet.placement,
                         obj=DeepResearchPlanDelta(content=packet.obj.content),
                     )
                 )
@@ -344,7 +344,9 @@ def run_deep_research_llm_loop(
             ),
             tool_choice=ToolChoiceOptions.REQUIRED,
             llm=llm,
-            turn_index=orchestrator_start_turn_index + cycle + reasoning_cycles,
+            placement=Placement(
+                turn_index=orchestrator_start_turn_index + cycle + reasoning_cycles
+            ),
             # No citations in this step, it should just pass through all
             # tokens directly so initialized as an empty citation processor
             citation_processor=DynamicCitationProcessor(),
@@ -364,6 +366,8 @@ def run_deep_research_llm_loop(
             )
 
         if not tool_calls:
+            # Basically hope that this is an infrequent occurence and hopefully multiple research
+            # cycles have already ran
             logger.warning("No tool calls found, this should not happen.")
             generate_final_report(
                 history=simple_chat_history,
