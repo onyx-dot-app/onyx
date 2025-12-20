@@ -10,7 +10,7 @@ from ragas import evaluate  # type: ignore[import-not-found]
 from ragas import EvaluationDataset
 from ragas import SingleTurnSample
 from ragas.dataset_schema import EvaluationResult  # type: ignore[import-not-found]
-from ragas.metrics import FactualCorrectness
+from ragas.metrics import FactualCorrectness  # type: ignore[import-not-found]
 from ragas.metrics import Faithfulness
 from ragas.metrics import ResponseRelevancy
 from sqlalchemy.orm import Session
