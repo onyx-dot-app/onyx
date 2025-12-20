@@ -14,15 +14,14 @@ from onyx.configs.app_configs import CODE_INTERPRETER_MAX_OUTPUT_LENGTH
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.utils import build_full_frontend_file_url
 from onyx.file_store.utils import get_default_file_store
-from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PythonToolDelta
 from onyx.server.query_and_chat.streaming_models import PythonToolStart
-from onyx.tools.interface import Tool
 from onyx.tools.models import LlmPythonExecutionResult
 from onyx.tools.models import PythonExecutionFile
 from onyx.tools.models import PythonToolOverrideKwargs
 from onyx.tools.models import ToolResponse
+from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
 )
@@ -115,7 +114,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
             },
         }
 
-    def emit_start(self, placement: Placement) -> None:
+    def emit_start(self, turn_index: int, tab_index: int) -> None:
         """Emit start packet for this tool. Code will be emitted in run() method."""
         # Note: PythonToolStart requires code, but we don't have it in emit_start
         # The code is available in run() method via llm_kwargs
@@ -123,7 +122,8 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
 
     def run(
         self,
-        placement: Placement,
+        turn_index: int,
+        tab_index: int,
         override_kwargs: PythonToolOverrideKwargs,
         **llm_kwargs: Any,
     ) -> ToolResponse:
@@ -131,7 +131,8 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
         Execute Python code in the Code Interpreter service.
 
         Args:
-            placement: The placement info (turn_index and tab_index) for this tool call.
+            turn_index: The turn index for this tool execution
+            tab_index: The tab index for parallel tool calls
             override_kwargs: Contains chat_files to stage for execution
             **llm_kwargs: Contains 'code' parameter from LLM
 
@@ -144,7 +145,8 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
         # Emit start event with the code
         self.emitter.emit(
             Packet(
-                placement=placement,
+                turn_index=turn_index,
+                tab_index=tab_index,
                 obj=PythonToolStart(code=code),
             )
         )
@@ -251,7 +253,8 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
             # Emit delta with stdout/stderr and generated files
             self.emitter.emit(
                 Packet(
-                    placement=placement,
+                    turn_index=turn_index,
+                    tab_index=tab_index,
                     obj=PythonToolDelta(
                         stdout=truncated_stdout,
                         stderr=truncated_stderr,
@@ -286,7 +289,8 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
             # Emit error delta
             self.emitter.emit(
                 Packet(
-                    placement=placement,
+                    turn_index=turn_index,
+                    tab_index=tab_index,
                     obj=PythonToolDelta(
                         stdout="",
                         stderr=error_msg,

@@ -208,7 +208,7 @@ def _as_utc_nano(dt: datetime) -> int:
 def _get_span_name(obj: Span[Any]) -> str:
     if hasattr(data := obj.span_data, "name") and isinstance(name := data.name, str):
         return name
-    return obj.span_data.type
+    return obj.span_data.type  # type: ignore[no-any-return]
 
 
 def _get_span_kind(obj: SpanData) -> str:

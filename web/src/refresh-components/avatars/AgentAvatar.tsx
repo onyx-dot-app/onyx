@@ -38,7 +38,7 @@ export default function AgentAvatar({
         />
       </div>
     ) : (
-      <OnyxIcon size={size} className="shrink-0" />
+      <OnyxIcon size={size} className="" />
     );
   }
 

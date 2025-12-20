@@ -10,17 +10,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
-import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import Dropzone from "react-dropzone";
 import ChatInputBar from "@/app/chat/components/input/ChatInputBar";
-import useChatSessions from "@/hooks/useChatSessions";
 import { useCCPairs } from "@/lib/hooks/useCCPairs";
 import { useTags } from "@/lib/hooks/useTags";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
-import { useAgents } from "@/hooks/useAgents";
 import { ChatPopup } from "@/app/chat/components/ChatPopup";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
@@ -41,7 +38,7 @@ import { useDeepResearchToggle } from "@/app/chat/hooks/useDeepResearchToggle";
 import { useIsDefaultAgent } from "@/app/chat/hooks/useIsDefaultAgent";
 import {
   useChatSessionStore,
-  useCurrentMessageHistory,
+  useChatPageLayout,
 } from "@/app/chat/stores/useChatSessionStore";
 import {
   useCurrentChatState,
@@ -68,6 +65,8 @@ import { HeaderData } from "@/lib/headers/fetchHeaderDataSS";
 import { SvgFileText } from "@opal/icons";
 import Spacer from "@/refresh-components/Spacer";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
+import { useAgentsContext } from "@/contexts/AgentsContext";
+import { useChatSessionContext } from "@/contexts/ChatSessionContext";
 
 export interface ChatPageProps {
   firstMessage?: string;
@@ -97,7 +96,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
 
   // Use SWR hooks for data fetching
   const { refreshChatSessions, currentChatSession, currentChatSessionId } =
-    useChatSessions();
+    useChatSessionContext();
   const { ccPairs } = useCCPairs();
   const { tags } = useTags();
   const { documentSets } = useDocumentSets();
@@ -110,12 +109,6 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
     clearLastFailedFiles,
   } = useProjectsContext();
 
-  // When changing from project chat to main chat (or vice-versa), clear forced tools
-  const { setForcedToolIds } = useForcedTools();
-  useEffect(() => {
-    setForcedToolIds([]);
-  }, [currentProjectId, setForcedToolIds]);
-
   // handle redirect if chat page is disabled
   // NOTE: this must be done here, in a client component since
   // settings are passed in via Context and therefore aren't
@@ -124,7 +117,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
 
   const isInitialLoad = useRef(true);
 
-  const { agents, isLoading: isLoadingAgents } = useAgents();
+  const { agents, isLoading: isLoadingAgents } = useAgentsContext();
 
   // Also fetch federated connectors for the sources list
   const { data: federatedConnectorsData } = useFederatedConnectors();
@@ -344,7 +337,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
   const updateCurrentDocumentSidebarVisible = useChatSessionStore(
     (state) => state.updateCurrentDocumentSidebarVisible
   );
-  const messageHistory = useCurrentMessageHistory();
+  const { messageHistory } = useChatPageLayout();
 
   const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
     useChatController({
@@ -672,7 +665,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
               {/* ChatInputBar container */}
               <div
                 ref={inputRef}
-                className="max-w-[50rem] w-full pointer-events-auto z-sticky flex flex-col px-4 md:px-0 justify-center items-center"
+                className="max-w-[50rem] w-full pointer-events-auto z-sticky flex flex-col px-4 justify-center items-center"
               >
                 {(showOnboarding ||
                   (user?.role !== UserRole.ADMIN &&

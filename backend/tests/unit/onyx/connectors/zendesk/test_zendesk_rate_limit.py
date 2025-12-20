@@ -17,10 +17,10 @@ class _FakeTime:
     def __init__(self) -> None:
         self._t = 0.0
 
-    def monotonic(self) -> float:
+    def monotonic(self) -> float:  # type: ignore[override]
         return self._t
 
-    def sleep(self, seconds: float) -> None:
+    def sleep(self, seconds: float) -> None:  # type: ignore[override]
         # advance time without real waiting
         self._t += float(seconds)
 

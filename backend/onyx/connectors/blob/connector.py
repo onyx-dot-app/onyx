@@ -9,14 +9,14 @@ from typing import Any
 from typing import Optional
 from urllib.parse import quote
 
-import boto3
-from botocore.client import Config
+import boto3  # type: ignore
+from botocore.client import Config  # type: ignore
 from botocore.credentials import RefreshableCredentials
 from botocore.exceptions import ClientError
 from botocore.exceptions import NoCredentialsError
 from botocore.exceptions import PartialCredentialsError
 from botocore.session import get_session
-from mypy_boto3_s3 import S3Client
+from mypy_boto3_s3 import S3Client  # type: ignore
 
 from onyx.configs.app_configs import BLOB_STORAGE_SIZE_THRESHOLD
 from onyx.configs.app_configs import INDEX_BATCH_SIZE

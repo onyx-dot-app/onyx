@@ -81,6 +81,7 @@ export default function SharedChatDisplay({
               if (message.type === "user") {
                 return (
                   <HumanMessage
+                    shared
                     key={message.messageId}
                     content={message.message}
                     files={message.files}

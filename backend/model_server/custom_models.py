@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from fastapi import APIRouter
-from huggingface_hub import snapshot_download
+from huggingface_hub import snapshot_download  # type: ignore
 
 from model_server.constants import INFORMATION_CONTENT_MODEL_WARM_UP_STRING
 from model_server.constants import MODEL_WARM_UP_STRING
@@ -36,8 +36,8 @@ from shared_configs.model_server_models import IntentRequest
 from shared_configs.model_server_models import IntentResponse
 
 if TYPE_CHECKING:
-    from setfit import SetFitModel  # type: ignore[import-untyped]
-    from transformers import PreTrainedTokenizer, BatchEncoding
+    from setfit import SetFitModel  # type: ignore
+    from transformers import PreTrainedTokenizer, BatchEncoding  # type: ignore
 
 
 logger = setup_logger()

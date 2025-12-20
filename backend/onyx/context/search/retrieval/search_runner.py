@@ -118,7 +118,6 @@ def combine_retrieval_results(
     return sorted_chunks
 
 
-# TODO: This is unused code.
 @log_function_time(print_only=True)
 def doc_index_retrieval(
     query: SearchQuery,
@@ -349,7 +348,6 @@ def retrieve_chunks(
         list(query.filters.source_type) if query.filters.source_type else None,
         query.filters.document_set,
         slack_context,
-        query.filters.user_file_ids,
     )
     federated_sources = set(
         federated_retrieval_info.source.to_non_federated_source()
@@ -477,7 +475,6 @@ def search_chunks(
         source_types=list(source_filters) if source_filters else None,
         document_set_names=query_request.filters.document_set,
         slack_context=slack_context,
-        user_file_ids=query_request.filters.user_file_ids,
     )
 
     federated_sources = set(

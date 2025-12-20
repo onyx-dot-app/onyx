@@ -118,6 +118,6 @@ def fetch_document_sets(
             .all()
         )
 
-        document_set_with_cc_pairs.append((document_set, cc_pairs))
+        document_set_with_cc_pairs.append((document_set, cc_pairs))  # type: ignore
 
     return document_set_with_cc_pairs

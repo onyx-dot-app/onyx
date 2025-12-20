@@ -32,7 +32,6 @@ import {
   SvgChevronRight,
   SvgRefreshCw,
 } from "@opal/icons";
-import { IconProps } from "@/components/icons/icons";
 
 interface LLMOption {
   name: string;
@@ -174,7 +173,7 @@ export default function LLMPopover({
       {
         displayName: string;
         options: LLMOption[];
-        Icon: React.FunctionComponent<IconProps>;
+        icon: { provider: string; modelName?: string };
       }
     >();
 
@@ -192,6 +191,7 @@ export default function LLMPopover({
       if (!groups.has(groupKey)) {
         // Build display name
         let displayName: string;
+        let iconProvider: string;
 
         if (isAggregator && option.vendor) {
           // Flattened format: "Amazon Bedrock/Anthropic"
@@ -201,12 +201,14 @@ export default function LLMPopover({
         } else {
           displayName = option.providerDisplayName;
         }
+        // Always use the top-level provider icon (e.g., AWS for Bedrock)
+        iconProvider = provider;
 
         groups.set(groupKey, {
           displayName,
           options: [],
-          // Get the icon component - use provider for the icon lookup
-          Icon: getProviderIcon(provider),
+          // Don't pass modelName for group icon - we want the provider icon (e.g., AWS for Bedrock)
+          icon: { provider: iconProvider },
         });
       }
 
@@ -224,7 +226,7 @@ export default function LLMPopover({
         key,
         displayName: group.displayName,
         options: group.options,
-        Icon: group.Icon,
+        icon: group.icon,
       };
     });
   }, [filteredOptions]);
@@ -457,7 +459,10 @@ export default function LLMPopover({
                               <AccordionTrigger className="flex items-center rounded-08 hover:no-underline hover:bg-background-tint-02 group [&>svg]:hidden w-full py-1 px-1.5">
                                 <div className="flex items-center gap-1 shrink-0">
                                   <div className="flex items-center justify-center size-5 shrink-0">
-                                    <group.Icon size={16} />
+                                    {getProviderIcon(
+                                      group.icon.provider,
+                                      group.icon.modelName
+                                    )({ size: 16 })}
                                   </div>
                                   <Text
                                     secondaryBody

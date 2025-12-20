@@ -30,8 +30,8 @@ from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
-from onyx.tools.interface import Tool
 from onyx.tools.models import DynamicSchemaInfo
+from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
 )

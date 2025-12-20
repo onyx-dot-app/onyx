@@ -10,8 +10,8 @@ from typing import cast
 from typing import ClassVar
 
 import pywikibot.time  # type: ignore[import-untyped]
-from pywikibot import pagegenerators
-from pywikibot import textlib
+from pywikibot import pagegenerators  # type: ignore[import-untyped]
+from pywikibot import textlib  # type: ignore[import-untyped]
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource

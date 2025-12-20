@@ -14,17 +14,16 @@ from onyx.chat.emitter import Emitter
 from onyx.chat.emitter import get_default_emitter
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.tools.interface import Tool
 from onyx.tools.models import CHAT_SESSION_ID_PLACEHOLDER
 from onyx.tools.models import CustomToolCallSummary
 from onyx.tools.models import CustomToolUserFileSnapshot
 from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.models import MESSAGE_ID_PLACEHOLDER
 from onyx.tools.models import ToolResponse
+from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
@@ -134,17 +133,19 @@ class CustomTool(Tool[None]):
 
     """Actual execution of the tool"""
 
-    def emit_start(self, placement: Placement) -> None:
+    def emit_start(self, turn_index: int, tab_index: int) -> None:
         self.emitter.emit(
             Packet(
-                placement=placement,
+                turn_index=turn_index,
+                tab_index=tab_index,
                 obj=CustomToolStart(tool_name=self._name),
             )
         )
 
     def run(
         self,
-        placement: Placement,
+        turn_index: int,
+        tab_index: int,
         override_kwargs: None = None,
         **llm_kwargs: Any,
     ) -> ToolResponse:
@@ -211,7 +212,8 @@ class CustomTool(Tool[None]):
         # Emit CustomToolDelta packet
         self.emitter.emit(
             Packet(
-                placement=placement,
+                turn_index=turn_index,
+                tab_index=tab_index,
                 obj=CustomToolDelta(
                     tool_name=self._name,
                     response_type=response_type,

@@ -13,10 +13,10 @@ from threading import Lock
 from threading import Semaphore
 from typing import cast
 
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt  # type: ignore
 import requests
 from dotenv import load_dotenv
-from matplotlib.patches import Patch
+from matplotlib.patches import Patch  # type: ignore
 from pydantic import ValidationError
 from requests.exceptions import RequestException
 from retry import retry
@@ -464,7 +464,7 @@ class SearchAnswerAnalyzer:
             # extract documents from the QA response
             if result.docs:
                 top_documents = [
-                    SavedSearchDoc.from_search_doc(doc)
+                    SavedSearchDoc.from_search_doc(doc)  # type: ignore[arg-type]
                     for doc in result.docs.top_documents
                 ]
                 return OneshotQAResult(

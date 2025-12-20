@@ -45,7 +45,9 @@ class PgRedisKVStore(KeyValueStore):
                 obj.value = plain_val
                 obj.encrypted_value = encrypted_val
             else:
-                obj = KVStore(key=key, value=plain_val, encrypted_value=encrypted_val)
+                obj = KVStore(
+                    key=key, value=plain_val, encrypted_value=encrypted_val
+                )  # type: ignore
                 db_session.query(KVStore).filter_by(key=key).delete()  # just in case
                 db_session.add(obj)
             db_session.commit()
@@ -95,7 +97,7 @@ class PgRedisKVStore(KeyValueStore):
             logger.error(f"Failed to delete value from Redis for key '{key}': {str(e)}")
 
         with get_session_with_current_tenant() as db_session:
-            result = db_session.query(KVStore).filter_by(key=key).delete()
+            result = db_session.query(KVStore).filter_by(key=key).delete()  # type: ignore
             if result == 0:
                 raise KvKeyNotFoundError
             db_session.commit()

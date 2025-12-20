@@ -34,7 +34,7 @@ class BraintrustEvalProvider(EvalProvider):
                 eval_data = [EvalCase(input=item["input"]) for item in data]
         Eval(
             name=BRAINTRUST_PROJECT,
-            data=eval_data,
+            data=eval_data,  # type: ignore[arg-type]
             task=task,
             scores=[],
             metadata={**configuration.model_dump()},

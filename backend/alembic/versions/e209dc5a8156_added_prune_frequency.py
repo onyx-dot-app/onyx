@@ -11,8 +11,8 @@ import sqlalchemy as sa
 
 revision = "e209dc5a8156"
 down_revision = "48d14957fe80"
-branch_labels = None
-depends_on = None
+branch_labels = None  # type: ignore
+depends_on = None  # type: ignore
 
 
 def upgrade() -> None:

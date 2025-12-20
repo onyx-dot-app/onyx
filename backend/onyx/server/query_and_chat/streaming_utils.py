@@ -4,7 +4,6 @@ import re
 
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc
-from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
@@ -63,7 +62,7 @@ def create_message_packets(
 
     packets.append(
         Packet(
-            placement=Placement(turn_index=turn_index),
+            turn_index=turn_index,
             obj=AgentResponseStart(
                 final_documents=SearchDoc.from_saved_search_docs(final_documents or []),
             ),
@@ -84,7 +83,7 @@ def create_message_packets(
 
     packets.append(
         Packet(
-            placement=Placement(turn_index=turn_index),
+            turn_index=turn_index,
             obj=AgentResponseDelta(
                 content=adjusted_message_text,
             ),
@@ -93,7 +92,7 @@ def create_message_packets(
 
     packets.append(
         Packet(
-            placement=Placement(turn_index=turn_index),
+            turn_index=turn_index,
             obj=SectionEnd(),
         )
     )
@@ -110,12 +109,12 @@ def create_citation_packets(
     for citation_info in citation_info_list:
         packets.append(
             Packet(
-                placement=Placement(turn_index=turn_index),
+                turn_index=turn_index,
                 obj=citation_info,
             )
         )
 
-    packets.append(Packet(placement=Placement(turn_index=turn_index), obj=SectionEnd()))
+    packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
 
     return packets
 
@@ -123,20 +122,18 @@ def create_citation_packets(
 def create_reasoning_packets(reasoning_text: str, turn_index: int) -> list[Packet]:
     packets: list[Packet] = []
 
-    packets.append(
-        Packet(placement=Placement(turn_index=turn_index), obj=ReasoningStart())
-    )
+    packets.append(Packet(turn_index=turn_index, obj=ReasoningStart()))
 
     packets.append(
         Packet(
-            placement=Placement(turn_index=turn_index),
+            turn_index=turn_index,
             obj=ReasoningDelta(
                 reasoning=reasoning_text,
             ),
         ),
     )
 
-    packets.append(Packet(placement=Placement(turn_index=turn_index), obj=SectionEnd()))
+    packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
 
     return packets
 
@@ -148,19 +145,19 @@ def create_image_generation_packets(
 
     packets.append(
         Packet(
-            placement=Placement(turn_index=turn_index),
+            turn_index=turn_index,
             obj=ImageGenerationToolStart(),
         )
     )
 
     packets.append(
         Packet(
-            placement=Placement(turn_index=turn_index),
+            turn_index=turn_index,
             obj=ImageGenerationFinal(images=images),
         ),
     )
 
-    packets.append(Packet(placement=Placement(turn_index=turn_index), obj=SectionEnd()))
+    packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
 
     return packets
 
@@ -176,14 +173,14 @@ def create_custom_tool_packets(
 
     packets.append(
         Packet(
-            placement=Placement(turn_index=turn_index),
+            turn_index=turn_index,
             obj=CustomToolStart(tool_name=tool_name),
         )
     )
 
     packets.append(
         Packet(
-            placement=Placement(turn_index=turn_index),
+            turn_index=turn_index,
             obj=CustomToolDelta(
                 tool_name=tool_name,
                 response_type=response_type,
@@ -193,7 +190,7 @@ def create_custom_tool_packets(
         ),
     )
 
-    packets.append(Packet(placement=Placement(turn_index=turn_index), obj=SectionEnd()))
+    packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
 
     return packets
 
@@ -207,27 +204,27 @@ def create_fetch_packets(
     # Emit start packet
     packets.append(
         Packet(
-            placement=Placement(turn_index=turn_index),
+            turn_index=turn_index,
             obj=OpenUrlStart(),
         )
     )
     # Emit URLs packet
     packets.append(
         Packet(
-            placement=Placement(turn_index=turn_index),
+            turn_index=turn_index,
             obj=OpenUrlUrls(urls=urls),
         )
     )
     # Emit documents packet
     packets.append(
         Packet(
-            placement=Placement(turn_index=turn_index),
+            turn_index=turn_index,
             obj=OpenUrlDocuments(
                 documents=SearchDoc.from_saved_search_docs(fetch_docs)
             ),
         )
     )
-    packets.append(Packet(placement=Placement(turn_index=turn_index), obj=SectionEnd()))
+    packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
     return packets
 
 
@@ -241,7 +238,7 @@ def create_search_packets(
 
     packets.append(
         Packet(
-            placement=Placement(turn_index=turn_index),
+            turn_index=turn_index,
             obj=SearchToolStart(
                 is_internet_search=is_internet_search,
             ),
@@ -252,7 +249,7 @@ def create_search_packets(
     if search_queries:
         packets.append(
             Packet(
-                placement=Placement(turn_index=turn_index),
+                turn_index=turn_index,
                 obj=SearchToolQueriesDelta(queries=search_queries),
             ),
         )
@@ -261,13 +258,13 @@ def create_search_packets(
     if saved_search_docs:
         packets.append(
             Packet(
-                placement=Placement(turn_index=turn_index),
+                turn_index=turn_index,
                 obj=SearchToolDocumentsDelta(
                     documents=SearchDoc.from_saved_search_docs(saved_search_docs)
                 ),
             ),
         )
 
-    packets.append(Packet(placement=Placement(turn_index=turn_index), obj=SectionEnd()))
+    packets.append(Packet(turn_index=turn_index, obj=SectionEnd()))
 
     return packets

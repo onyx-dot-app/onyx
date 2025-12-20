@@ -50,10 +50,10 @@ from onyx.indexing.models import IndexChunk
 from onyx.indexing.models import IndexingBatchAdapter
 from onyx.indexing.models import UpdatableChunkData
 from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_backoff
+from onyx.llm.chat_llm import LLMRateLimitError
 from onyx.llm.factory import get_default_llm_with_vision
 from onyx.llm.factory import get_llm_for_contextual_rag
 from onyx.llm.interfaces import LLM
-from onyx.llm.multi_llm import LLMRateLimitError
 from onyx.llm.utils import llm_response_to_string
 from onyx.llm.utils import MAX_CONTEXT_TOKENS
 from onyx.natural_language_processing.search_nlp_models import (

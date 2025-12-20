@@ -58,7 +58,7 @@ import {
   useRouter,
   useSearchParams,
 } from "next/navigation";
-import useChatSessions from "@/hooks/useChatSessions";
+import { useChatSessionContext } from "@/contexts/ChatSessionContext";
 import {
   useChatSessionStore,
   useCurrentMessageTree,
@@ -66,11 +66,11 @@ import {
   useCurrentMessageHistory,
 } from "../stores/useChatSessionStore";
 import { Packet, MessageStart, PacketType } from "../services/streamingModels";
-import { useAssistantPreferences } from "@/app/chat/hooks/useAssistantPreferences";
-import { useForcedTools } from "@/lib/hooks/useForcedTools";
+import useAgentPreferences from "@/hooks/useAgentPreferences";
 import { ProjectFile, useProjectsContext } from "../projects/ProjectsContext";
 import { useAppParams } from "@/hooks/appNavigation";
 import { projectFilesToFileDescriptors } from "../services/fileUtils";
+import { useActionsContext } from "@/contexts/ActionsContext";
 
 const SYSTEM_MESSAGE_ID = -3;
 
@@ -125,10 +125,10 @@ export function useChatController({
   const router = useRouter();
   const searchParams = useSearchParams();
   const params = useAppParams();
-  const { refreshChatSessions } = useChatSessions();
-  const { assistantPreferences } = useAssistantPreferences();
-  const { forcedToolIds } = useForcedTools();
-  const { fetchProjects, uploadFiles, setCurrentMessageFiles, beginUpload } =
+  const { refreshChatSessions } = useChatSessionContext();
+  const { agentPreferences } = useAgentPreferences();
+  const { forcedToolIds } = useActionsContext();
+  const { fetchProjects, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
   const posthog = usePostHog();
 
@@ -349,10 +349,10 @@ export function useChatController({
         if (!hasStop) {
           const maxTurnIndex =
             packets.length > 0
-              ? Math.max(...packets.map((p) => p.placement.turn_index))
+              ? Math.max(...packets.map((p) => p.turn_index))
               : 0;
           const stopPacket: Packet = {
-            placement: { turn_index: maxTurnIndex + 1 },
+            turn_index: maxTurnIndex + 1,
             obj: { type: PacketType.STOP },
           } as Packet;
 
@@ -642,7 +642,7 @@ export function useChatController({
           currentMessageTreeLocal
         );
         const disabledToolIds = liveAssistant
-          ? assistantPreferences?.[liveAssistant?.id]?.disabled_tool_ids
+          ? agentPreferences?.[liveAssistant?.id]?.disabled_tool_ids
           : undefined;
 
         const stack = new CurrentMessageFIFO();
@@ -915,7 +915,7 @@ export function useChatController({
       // Ensure latest forced tools are used when submitting
       forcedToolIds,
       // Keep tool preference-derived values fresh
-      assistantPreferences,
+      agentPreferences,
       fetchProjects,
     ]
   );

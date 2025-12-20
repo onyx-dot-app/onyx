@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useState } from "react";
-import { ReadonlyURLSearchParams, useRouter } from "next/navigation";
+import { useEffect, useCallback, useState } from "react";
+import { ReadonlyURLSearchParams } from "next/navigation";
 import {
   nameChatSession,
   processRawChatHistory,
@@ -22,8 +22,6 @@ import {
   useChatSessionStore,
   useCurrentMessageHistory,
 } from "../stores/useChatSessionStore";
-import { getAvailableContextTokens } from "../services/lib";
-import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile } from "../projects/projectsService";
 import { getSessionProjectTokenCount } from "../projects/projectsService";
 import { getProjectFilesForSession } from "../projects/projectsService";
@@ -105,7 +103,6 @@ export function useChatSessionController({
   );
   const currentChatHistory = useCurrentMessageHistory();
   const chatSessions = useChatSessionStore((state) => state.sessions);
-  const { setForcedToolIds } = useForcedTools();
 
   // Fetch chat messages for the chat session
   useEffect(() => {
@@ -116,20 +113,11 @@ export function useChatSessionController({
 
     textAreaRef.current?.focus();
 
-    const isCreatingNewSession =
-      priorChatSessionId === null && existingChatSessionId !== null;
-    const isSwitchingBetweenSessions =
-      priorChatSessionId !== null &&
-      existingChatSessionId !== priorChatSessionId;
-
-    // Clear uploaded files on any session change (they're already in context)
-    if (isCreatingNewSession || isSwitchingBetweenSessions) {
-      setCurrentMessageFiles([]);
-    }
-
-    // Only reset filters/selections when switching between existing sessions
-    if (isSwitchingBetweenSessions) {
-      setSelectedDocuments([]);
+    // Only clear things if we're going from one chat session to another
+    const isChatSessionSwitch = existingChatSessionId !== priorChatSessionId;
+    if (isChatSessionSwitch) {
+      // De-select documents
+      // Reset all filters
       filterManager.setSelectedDocumentSets([]);
       filterManager.setSelectedSources([]);
       filterManager.setSelectedTags([]);
@@ -142,9 +130,6 @@ export function useChatSessionController({
       // If we're creating a brand new chat, then don't need to scroll
       if (priorChatSessionId !== null) {
         setSelectedDocuments([]);
-
-        // Clear forced tool ids if and only if we're switching to a new chat session
-        setForcedToolIds([]);
       }
     }
 

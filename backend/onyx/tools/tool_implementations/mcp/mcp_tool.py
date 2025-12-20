@@ -6,13 +6,12 @@ from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import MCPTransport
 from onyx.db.models import MCPConnectionConfig
 from onyx.db.models import MCPServer
-from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.tools.interface import Tool
 from onyx.tools.models import CustomToolCallSummary
 from onyx.tools.models import ToolResponse
+from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.mcp.mcp_client import call_mcp_tool
 from onyx.utils.logger import setup_logger
 
@@ -88,17 +87,19 @@ class MCPTool(Tool[None]):
             },
         }
 
-    def emit_start(self, placement: Placement) -> None:
+    def emit_start(self, turn_index: int, tab_index: int) -> None:
         self.emitter.emit(
             Packet(
-                placement=placement,
+                turn_index=turn_index,
+                tab_index=tab_index,
                 obj=CustomToolStart(tool_name=self._name),
             )
         )
 
     def run(
         self,
-        placement: Placement,
+        turn_index: int,
+        tab_index: int,
         override_kwargs: None = None,
         **llm_kwargs: Any,
     ) -> ToolResponse:
@@ -145,7 +146,8 @@ class MCPTool(Tool[None]):
                 # Emit CustomToolDelta packet
                 self.emitter.emit(
                     Packet(
-                        placement=placement,
+                        turn_index=turn_index,
+                        tab_index=tab_index,
                         obj=CustomToolDelta(
                             tool_name=self._name,
                             response_type="json",
@@ -180,7 +182,8 @@ class MCPTool(Tool[None]):
             # Emit CustomToolDelta packet
             self.emitter.emit(
                 Packet(
-                    placement=placement,
+                    turn_index=turn_index,
+                    tab_index=tab_index,
                     obj=CustomToolDelta(
                         tool_name=self._name,
                         response_type="json",
@@ -234,7 +237,8 @@ class MCPTool(Tool[None]):
             # Emit CustomToolDelta packet
             self.emitter.emit(
                 Packet(
-                    placement=placement,
+                    turn_index=turn_index,
+                    tab_index=tab_index,
                     obj=CustomToolDelta(
                         tool_name=self._name,
                         response_type="json",

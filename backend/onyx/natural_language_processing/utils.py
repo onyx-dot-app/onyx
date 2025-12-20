@@ -3,8 +3,8 @@ from abc import ABC
 from abc import abstractmethod
 from copy import copy
 
-from tokenizers import Encoding  # type: ignore[import-untyped]
-from tokenizers import Tokenizer
+from tokenizers import Encoding  # type: ignore
+from tokenizers import Tokenizer  # type: ignore
 
 from onyx.configs.model_configs import DOCUMENT_ENCODER_MODEL
 from onyx.context.search.models import InferenceChunk

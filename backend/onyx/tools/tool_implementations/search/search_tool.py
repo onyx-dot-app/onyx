@@ -64,14 +64,13 @@ from onyx.secondary_llm_flows.document_filter import select_chunks_for_relevance
 from onyx.secondary_llm_flows.document_filter import select_sections_for_expansion
 from onyx.secondary_llm_flows.query_expansion import keyword_query_expansion
 from onyx.secondary_llm_flows.query_expansion import semantic_query_rephrase
-from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
-from onyx.tools.interface import Tool
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import ToolResponse
+from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.search.constants import (
     KEYWORD_QUERY_HYBRID_ALPHA,
 )
@@ -303,19 +302,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
     @classmethod
     def is_available(cls, db_session: Session) -> bool:
-        """Check if search tool is available.
-
-        The search tool is available if ANY of the following exist:
-        - Regular connectors (team knowledge)
-        - Federated connectors (e.g., Slack)
-        - User files (User Knowledge mode)
-        """
-        from onyx.db.connector import check_user_files_exist
-
-        return (
-            check_connectors_exist(db_session)
-            or check_federated_connectors_exist(db_session)
-            or check_user_files_exist(db_session)
+        """Check if search tool is available by verifying connectors exist."""
+        return check_connectors_exist(db_session) or check_federated_connectors_exist(
+            db_session
         )
 
     @property
@@ -356,10 +345,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             },
         }
 
-    def emit_start(self, placement: Placement) -> None:
+    def emit_start(self, turn_index: int, tab_index: int) -> None:
         self.emitter.emit(
             Packet(
-                placement=placement,
+                turn_index=turn_index,
+                tab_index=tab_index,
                 obj=SearchToolStart(),
             )
         )
@@ -367,7 +357,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
     @log_function_time(print_only=True)
     def run(
         self,
-        placement: Placement,
+        turn_index: int,
+        tab_index: int,
         override_kwargs: SearchToolOverrideKwargs,
         **llm_kwargs: Any,
     ) -> ToolResponse:
@@ -487,7 +478,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             # Emit the queries early so the UI can display them immediately
             self.emitter.emit(
                 Packet(
-                    placement=placement,
+                    turn_index=turn_index,
+                    tab_index=tab_index,
                     obj=SearchToolQueriesDelta(
                         queries=all_queries,
                     ),
@@ -595,7 +587,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
             self.emitter.emit(
                 Packet(
-                    placement=placement,
+                    turn_index=turn_index,
+                    tab_index=tab_index,
                     obj=SearchToolDocumentsDelta(
                         documents=final_ui_docs,
                     ),

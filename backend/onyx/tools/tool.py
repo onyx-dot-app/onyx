@@ -3,13 +3,15 @@ from __future__ import annotations
 import abc
 from typing import Any
 from typing import Generic
+from typing import TYPE_CHECKING
 from typing import TypeVar
 
-from sqlalchemy.orm import Session
-
 from onyx.chat.emitter import Emitter
-from onyx.server.query_and_chat.placement import Placement
-from onyx.tools.models import ToolResponse
+
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+    from onyx.tools.models import ToolResponse
 
 
 TOverride = TypeVar("TOverride")
@@ -71,7 +73,7 @@ class Tool(abc.ABC, Generic[TOverride]):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def emit_start(self, placement: Placement) -> None:
+    def emit_start(self, turn_index: int, tab_index: int) -> None:
         """
         Emit the start packet for this tool. Each tool implementation should
         emit its specific start packet type.
@@ -85,7 +87,11 @@ class Tool(abc.ABC, Generic[TOverride]):
     @abc.abstractmethod
     def run(
         self,
-        placement: Placement,
+        # The run must know its turn because the "Tool" may actually be more of an "Agent" which can call
+        # other tools and must pass in this information potentially deeper down.
+        turn_index: int,
+        # Tab index for parallel tool calls (default 0 for single tool calls)
+        tab_index: int,
         # Specific tool override arguments that are not provided by the LLM
         # For example when calling the internal search tool, the original user query is passed along too (but not by the LLM)
         override_kwargs: TOverride,

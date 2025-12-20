@@ -40,21 +40,6 @@ def check_connectors_exist(db_session: Session) -> bool:
     return result.scalar() or False
 
 
-def check_user_files_exist(db_session: Session) -> bool:
-    """Check if any user files exist in the system.
-
-    This is used to determine if the search tool should be available
-    when there are no regular connectors but there are user files
-    (User Knowledge mode).
-    """
-    from onyx.db.models import UserFile
-    from onyx.db.enums import UserFileStatus
-
-    stmt = select(exists(UserFile).where(UserFile.status == UserFileStatus.COMPLETED))
-    result = db_session.execute(stmt)
-    return result.scalar() or False
-
-
 def fetch_connectors(
     db_session: Session,
     sources: list[DocumentSource] | None = None,

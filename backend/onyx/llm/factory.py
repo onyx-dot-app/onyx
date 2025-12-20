@@ -14,12 +14,12 @@ from onyx.db.llm import fetch_llm_provider_view
 from onyx.db.llm import fetch_user_group_ids
 from onyx.db.models import Persona
 from onyx.db.models import User
+from onyx.llm.chat_llm import LitellmLLM
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.llm_provider_options import OLLAMA_API_KEY_CONFIG_KEY
 from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
 from onyx.llm.llm_provider_options import OPENROUTER_PROVIDER_NAME
-from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import get_max_input_tokens_from_llm_provider
 from onyx.llm.utils import model_supports_image_input

@@ -455,21 +455,24 @@ describe("MultiToolRenderer - Parallel Tools", () => {
         tab_index: 0,
         packets: [
           {
-            placement: { turn_index: 0, tab_index: 0 },
+            turn_index: 0,
+            tab_index: 0,
             obj: {
               type: "search_tool_start",
               is_internet_search: false,
             },
           },
           {
-            placement: { turn_index: 0, tab_index: 0 },
+            turn_index: 0,
+            tab_index: 0,
             obj: {
               type: "search_tool_queries_delta",
               queries: ["test query"],
             },
           },
           {
-            placement: { turn_index: 0, tab_index: 0 },
+            turn_index: 0,
+            tab_index: 0,
             obj: {
               type: "search_tool_documents_delta",
               documents: [
@@ -478,7 +481,8 @@ describe("MultiToolRenderer - Parallel Tools", () => {
             },
           },
           {
-            placement: { turn_index: 0, tab_index: 0 },
+            turn_index: 0,
+            tab_index: 0,
             obj: {
               type: "section_end",
             },
@@ -490,21 +494,24 @@ describe("MultiToolRenderer - Parallel Tools", () => {
         tab_index: 1,
         packets: [
           {
-            placement: { turn_index: 0, tab_index: 1 },
+            turn_index: 0,
+            tab_index: 1,
             obj: {
               type: "search_tool_start",
               is_internet_search: true,
             },
           },
           {
-            placement: { turn_index: 0, tab_index: 1 },
+            turn_index: 0,
+            tab_index: 1,
             obj: {
               type: "search_tool_queries_delta",
               queries: ["web query"],
             },
           },
           {
-            placement: { turn_index: 0, tab_index: 1 },
+            turn_index: 0,
+            tab_index: 1,
             obj: {
               type: "search_tool_documents_delta",
               documents: [
@@ -513,7 +520,8 @@ describe("MultiToolRenderer - Parallel Tools", () => {
             },
           },
           {
-            placement: { turn_index: 0, tab_index: 1 },
+            turn_index: 0,
+            tab_index: 1,
             obj: {
               type: "section_end",
             },
@@ -544,13 +552,11 @@ describe("MultiToolRenderer - Parallel Tools", () => {
         tab_index: 0,
         packets: [
           {
-            placement: { turn_index: 0, tab_index: 0 },
+            turn_index: 0,
+            tab_index: 0,
             obj: { type: "search_tool_start", is_internet_search: false },
           },
-          {
-            placement: { turn_index: 0, tab_index: 0 },
-            obj: { type: "section_end" },
-          },
+          { turn_index: 0, tab_index: 0, obj: { type: "section_end" } },
         ],
       },
       {
@@ -558,13 +564,11 @@ describe("MultiToolRenderer - Parallel Tools", () => {
         tab_index: 1,
         packets: [
           {
-            placement: { turn_index: 0, tab_index: 1 },
+            turn_index: 0,
+            tab_index: 1,
             obj: { type: "search_tool_start", is_internet_search: true },
           },
-          {
-            placement: { turn_index: 0, tab_index: 1 },
-            obj: { type: "section_end" },
-          },
+          { turn_index: 0, tab_index: 1, obj: { type: "section_end" } },
         ],
       },
     ];
@@ -593,13 +597,11 @@ describe("MultiToolRenderer - Parallel Tools", () => {
         tab_index: 0,
         packets: [
           {
-            placement: { turn_index: 0, tab_index: 0 },
+            turn_index: 0,
+            tab_index: 0,
             obj: { type: "search_tool_start", is_internet_search: false },
           },
-          {
-            placement: { turn_index: 0, tab_index: 0 },
-            obj: { type: "section_end" },
-          },
+          { turn_index: 0, tab_index: 0, obj: { type: "section_end" } },
         ],
       },
       {
@@ -607,13 +609,11 @@ describe("MultiToolRenderer - Parallel Tools", () => {
         tab_index: 1,
         packets: [
           {
-            placement: { turn_index: 0, tab_index: 1 },
+            turn_index: 0,
+            tab_index: 1,
             obj: { type: "search_tool_start", is_internet_search: true },
           },
-          {
-            placement: { turn_index: 0, tab_index: 1 },
-            obj: { type: "section_end" },
-          },
+          { turn_index: 0, tab_index: 1, obj: { type: "section_end" } },
         ],
       },
     ];
@@ -645,17 +645,16 @@ describe("MultiToolRenderer - Parallel Tools", () => {
         tab_index: 0,
         packets: [
           {
-            placement: { turn_index: 0, tab_index: 0 },
+            turn_index: 0,
+            tab_index: 0,
             obj: { type: "search_tool_start", is_internet_search: false },
           },
           {
-            placement: { turn_index: 0, tab_index: 0 },
+            turn_index: 0,
+            tab_index: 0,
             obj: { type: "search_tool_queries_delta", queries: ["test"] },
           },
-          {
-            placement: { turn_index: 0, tab_index: 0 },
-            obj: { type: "section_end" },
-          },
+          { turn_index: 0, tab_index: 0, obj: { type: "section_end" } },
         ],
       },
       {
@@ -663,13 +662,11 @@ describe("MultiToolRenderer - Parallel Tools", () => {
         tab_index: 1,
         packets: [
           {
-            placement: { turn_index: 0, tab_index: 1 },
+            turn_index: 0,
+            tab_index: 1,
             obj: { type: "search_tool_start", is_internet_search: true },
           },
-          {
-            placement: { turn_index: 0, tab_index: 1 },
-            obj: { type: "section_end" },
-          },
+          { turn_index: 0, tab_index: 1, obj: { type: "section_end" } },
         ],
       },
     ];
@@ -698,13 +695,11 @@ describe("MultiToolRenderer - Parallel Tools", () => {
         tab_index: 0,
         packets: [
           {
-            placement: { turn_index: 0, tab_index: 0 },
+            turn_index: 0,
+            tab_index: 0,
             obj: { type: "search_tool_start", is_internet_search: false },
           },
-          {
-            placement: { turn_index: 0, tab_index: 0 },
-            obj: { type: "section_end" },
-          },
+          { turn_index: 0, tab_index: 0, obj: { type: "section_end" } },
         ],
       },
       {
@@ -712,13 +707,11 @@ describe("MultiToolRenderer - Parallel Tools", () => {
         tab_index: 1,
         packets: [
           {
-            placement: { turn_index: 0, tab_index: 1 },
+            turn_index: 0,
+            tab_index: 1,
             obj: { type: "search_tool_start", is_internet_search: true },
           },
-          {
-            placement: { turn_index: 0, tab_index: 1 },
-            obj: { type: "section_end" },
-          },
+          { turn_index: 0, tab_index: 1, obj: { type: "section_end" } },
         ],
       },
     ];
@@ -774,13 +767,11 @@ describe("MultiToolRenderer - Parallel Tools", () => {
         tab_index: 0,
         packets: [
           {
-            placement: { turn_index: 0, tab_index: 0 },
+            turn_index: 0,
+            tab_index: 0,
             obj: { type: "search_tool_start", is_internet_search: false },
           },
-          {
-            placement: { turn_index: 0, tab_index: 0 },
-            obj: { type: "section_end" },
-          },
+          { turn_index: 0, tab_index: 0, obj: { type: "section_end" } },
         ],
       },
       {
@@ -788,13 +779,11 @@ describe("MultiToolRenderer - Parallel Tools", () => {
         tab_index: 1,
         packets: [
           {
-            placement: { turn_index: 0, tab_index: 1 },
+            turn_index: 0,
+            tab_index: 1,
             obj: { type: "search_tool_start", is_internet_search: true },
           },
-          {
-            placement: { turn_index: 0, tab_index: 1 },
-            obj: { type: "section_end" },
-          },
+          { turn_index: 0, tab_index: 1, obj: { type: "section_end" } },
         ],
       },
     ];

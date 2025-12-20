@@ -5,8 +5,8 @@ from typing import Any
 from typing import cast
 from typing import Dict
 
-from google.oauth2.credentials import Credentials as OAuthCredentials
-from google.oauth2.service_account import Credentials as ServiceAccountCredentials
+from google.oauth2.credentials import Credentials as OAuthCredentials  # type: ignore
+from google.oauth2.service_account import Credentials as ServiceAccountCredentials  # type: ignore
 from googleapiclient.errors import HttpError  # type: ignore
 
 from onyx.access.models import ExternalAccess

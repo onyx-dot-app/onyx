@@ -2,7 +2,7 @@
 
 import React, { useState, memo, useMemo, useEffect } from "react";
 import { useDraggable } from "@dnd-kit/core";
-import useChatSessions from "@/hooks/useChatSessions";
+import { useChatSessionContext } from "@/contexts/ChatSessionContext";
 import { deleteChatSession, renameChatSession } from "@/app/chat/services/lib";
 import { ChatSession } from "@/app/chat/interfaces";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -115,8 +115,9 @@ const ChatButton = memo(
     const activeSidebarTab = useAppFocus();
     const active = useMemo(
       () =>
-        activeSidebarTab.isChat() &&
-        activeSidebarTab.getId() === chatSession.id,
+        typeof activeSidebarTab === "object" &&
+        activeSidebarTab.type === "chat" &&
+        activeSidebarTab.id === chatSession.id,
       [activeSidebarTab, chatSession.id]
     );
     const mounted = useOnMount();
@@ -130,7 +131,7 @@ const ChatButton = memo(
     const [showShareModal, setShowShareModal] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [popoverItems, setPopoverItems] = useState<React.ReactNode[]>([]);
-    const { refreshChatSessions } = useChatSessions();
+    const { refreshChatSessions } = useChatSessionContext();
     const {
       refreshCurrentProjectDetails,
       projects,

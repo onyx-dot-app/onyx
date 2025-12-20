@@ -1,11 +1,11 @@
 from collections.abc import Callable
 from typing import Any
 
-from google.auth.exceptions import RefreshError
-from google.oauth2.credentials import Credentials as OAuthCredentials
-from google.oauth2.service_account import Credentials as ServiceAccountCredentials
-from googleapiclient.discovery import build  # type: ignore[import-untyped]
-from googleapiclient.discovery import Resource
+from google.auth.exceptions import RefreshError  # type: ignore
+from google.oauth2.credentials import Credentials as OAuthCredentials  # type: ignore
+from google.oauth2.service_account import Credentials as ServiceAccountCredentials  # type: ignore
+from googleapiclient.discovery import build  # type: ignore
+from googleapiclient.discovery import Resource  # type: ignore
 
 from onyx.utils.logger import setup_logger
 

@@ -16,7 +16,7 @@ from fastapi import Query
 from fastapi import Request
 from fastapi import Response
 from fastapi import UploadFile
-from google.oauth2.credentials import Credentials
+from google.oauth2.credentials import Credentials  # type: ignore
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 

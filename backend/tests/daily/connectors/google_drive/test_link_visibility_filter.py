@@ -36,7 +36,7 @@ def _prepare_connector(exclude: bool) -> GoogleDriveConnector:
         exclude_domain_link_only=exclude,
     )
     connector._creds = object()  # type: ignore[assignment]
-    connector._primary_admin_email = "admin@example.com"
+    connector._primary_admin_email = "admin@example.com"  # type: ignore[attr-defined]
     return connector
 
 

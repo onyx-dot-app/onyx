@@ -74,20 +74,20 @@ class BraintrustTracingProcessor(TracingProcessor):
 
         current_context = braintrust.current_span()
         if current_context != NOOP_SPAN:
-            self._spans[trace.trace_id] = current_context.start_span(
+            self._spans[trace.trace_id] = current_context.start_span(  # type: ignore[assignment]
                 name=trace.name,
                 span_attributes={"type": "task", "name": trace.name},
                 metadata=metadata,
             )
         elif self._logger is not None:
-            self._spans[trace.trace_id] = self._logger.start_span(
+            self._spans[trace.trace_id] = self._logger.start_span(  # type: ignore[assignment]
                 span_attributes={"type": "task", "name": trace.name},
                 span_id=trace.trace_id,
                 root_span_id=trace.trace_id,
                 metadata=metadata,
             )
         else:
-            self._spans[trace.trace_id] = braintrust.start_span(
+            self._spans[trace.trace_id] = braintrust.start_span(  # type: ignore[assignment]
                 id=trace.trace_id,
                 span_attributes={"type": "task", "name": trace.name},
                 metadata=metadata,

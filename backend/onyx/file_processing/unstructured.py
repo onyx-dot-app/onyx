@@ -36,7 +36,7 @@ def delete_unstructured_api_key() -> None:
 def _sdk_partition_request(
     file: IO[Any], file_name: str, **kwargs: Any
 ) -> "operations.PartitionRequest":
-    from unstructured_client.models import operations
+    from unstructured_client.models import operations  # type: ignore
     from unstructured_client.models import shared
 
     file.seek(0, 0)
@@ -62,7 +62,7 @@ def unstructured_to_text(file: IO[Any], file_name: str) -> str:
 
     unstructured_client = UnstructuredClient(api_key_auth=get_unstructured_api_key())
 
-    response = unstructured_client.general.partition(req)
+    response = unstructured_client.general.partition(req)  # type: ignore
     elements = dict_to_elements(response.elements)
 
     if response.status_code != 200:

@@ -2,7 +2,6 @@
 
 import React, { memo } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import { usePinnedAgents } from "@/hooks/useAgents";
 import { useAppRouter } from "@/hooks/appNavigation";
 import { cn, noProp } from "@/lib/utils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
@@ -13,6 +12,7 @@ import useAppFocus from "@/hooks/useAppFocus";
 import useOnMount from "@/hooks/useOnMount";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { SvgPin, SvgX } from "@opal/icons";
+import { useAgentsContext } from "@/contexts/AgentsContext";
 
 interface SortableItemProps {
   id: number;
@@ -51,7 +51,7 @@ interface AgentButtonProps {
 function AgentButtonInner({ agent }: AgentButtonProps) {
   const route = useAppRouter();
   const activeSidebarTab = useAppFocus();
-  const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
+  const { pinnedAgents, togglePinnedAgent } = useAgentsContext();
   const pinned = pinnedAgents.some(
     (pinnedAgent) => pinnedAgent.id === agent.id
   );
@@ -64,14 +64,15 @@ function AgentButtonInner({ agent }: AgentButtonProps) {
           leftIcon={() => <AgentAvatar agent={agent} />}
           onClick={() => route({ agentId: agent.id })}
           active={
-            activeSidebarTab.isAgent() &&
-            activeSidebarTab.getId() === String(agent.id)
+            typeof activeSidebarTab === "object" &&
+            activeSidebarTab.type === "agent" &&
+            activeSidebarTab.id === String(agent.id)
           }
           rightChildren={
             <IconButton
               icon={pinned ? SvgX : SvgPin}
               internal
-              onClick={noProp(() => togglePinnedAgent(agent, !pinned))}
+              onClick={noProp(() => togglePinnedAgent(agent.id, !pinned))}
               className={cn("hidden group-hover/SidebarTab:flex")}
               tooltip={pinned ? "Unpin Agent" : "Pin Agent"}
             />

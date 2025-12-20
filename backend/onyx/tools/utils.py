@@ -9,7 +9,7 @@ from onyx.db.models import LLMProvider
 from onyx.llm.utils import find_model_obj
 from onyx.llm.utils import get_model_map
 from onyx.natural_language_processing.utils import BaseTokenizer
-from onyx.tools.interface import Tool
+from onyx.tools.tool import Tool
 
 
 def explicit_tool_calling_supported(model_provider: str, model_name: str) -> bool:

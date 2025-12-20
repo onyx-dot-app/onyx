@@ -1,5 +1,6 @@
 import React, { memo, useCallback, useState } from "react";
 import Text from "@/refresh-components/texts/Text";
+import type { IconProps } from "@opal/types";
 import Truncated from "@/refresh-components/texts/Truncated";
 import LLMConnectionIcons from "@/refresh-components/onboarding/components/LLMConnectionIcons";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
@@ -14,12 +15,11 @@ import {
   SvgServer,
   SvgSettings,
 } from "@opal/icons";
-import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 
 export interface LLMProviderProps {
   title: string;
   subtitle: string;
-  providerName?: string;
+  icon?: React.FunctionComponent<IconProps>;
   llmDescriptor?: WellKnownLLMProviderDescriptor;
   disabled?: boolean;
   isConnected?: boolean;
@@ -33,7 +33,7 @@ export interface LLMProviderProps {
 function LLMProviderInner({
   title,
   subtitle,
-  providerName,
+  icon: Icon,
   llmDescriptor,
   disabled,
   isConnected,
@@ -53,8 +53,8 @@ function LLMProviderInner({
     }
 
     // If not connected, open the modal
-    const iconNode = providerName ? (
-      <ProviderIcon provider={providerName} size={24} />
+    const iconNode = Icon ? (
+      <Icon className="w-6 h-6" />
     ) : (
       <SvgServer className="w-6 h-6 stroke-text-04" />
     );
@@ -72,7 +72,7 @@ function LLMProviderInner({
       onOpenModal();
     }
   }, [
-    providerName,
+    Icon,
     llmDescriptor,
     title,
     onboardingState,
@@ -110,8 +110,8 @@ function LLMProviderInner({
     >
       <div className="flex items-center gap-1 p-1 flex-1 min-w-0">
         <div className="flex items-start h-full pt-0.5">
-          {providerName ? (
-            <ProviderIcon provider={providerName} size={16} className="" />
+          {Icon ? (
+            <Icon className="w-4 h-4" />
           ) : (
             <SvgServer className="w-4 h-4 stroke-text-04" />
           )}

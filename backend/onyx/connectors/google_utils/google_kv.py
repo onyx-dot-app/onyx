@@ -4,7 +4,7 @@ from urllib.parse import parse_qs
 from urllib.parse import ParseResult
 from urllib.parse import urlparse
 
-from google.oauth2.credentials import Credentials as OAuthCredentials
+from google.oauth2.credentials import Credentials as OAuthCredentials  # type: ignore
 from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore
 from sqlalchemy.orm import Session
 
@@ -179,7 +179,7 @@ def get_auth_url(credential_id: int, source: DocumentSource) -> str:
 
     get_kv_store().store(
         KV_CRED_KEY.format(credential_id), params.get("state", [None])[0], encrypt=True
-    )
+    )  # type: ignore
     return str(auth_url)
 
 

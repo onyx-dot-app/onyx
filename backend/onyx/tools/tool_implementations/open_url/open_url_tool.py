@@ -9,14 +9,13 @@ from onyx.chat.emitter import Emitter
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import SearchDocsResponse
 from onyx.context.search.utils import convert_inference_sections_to_search_docs
-from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import OpenUrlDocuments
 from onyx.server.query_and_chat.streaming_models import OpenUrlStart
 from onyx.server.query_and_chat.streaming_models import OpenUrlUrls
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.tools.interface import Tool
 from onyx.tools.models import OpenURLToolOverrideKwargs
 from onyx.tools.models import ToolResponse
+from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.open_url.models import WebContentProvider
 from onyx.tools.tool_implementations.web_search.providers import (
     get_default_content_provider,
@@ -179,25 +178,28 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             },
         }
 
-    def emit_start(self, placement: Placement) -> None:
+    def emit_start(self, turn_index: int, tab_index: int) -> None:
         """Emit start packet to signal tool has started."""
         self.emitter.emit(
             Packet(
-                placement=placement,
+                turn_index=turn_index,
+                tab_index=tab_index,
                 obj=OpenUrlStart(),
             )
         )
 
     def run(
         self,
-        placement: Placement,
+        turn_index: int,
+        tab_index: int,
         override_kwargs: OpenURLToolOverrideKwargs,
         **llm_kwargs: Any,
     ) -> ToolResponse:
         """Execute the open URL tool to fetch content from the specified URLs.
 
         Args:
-            placement: The placement info (turn_index and tab_index) for this tool call.
+            turn_index: The current turn index in the conversation.
+            tab_index: The tab index for parallel tool calls.
             override_kwargs: Override arguments including starting citation number
                 and existing citation_mapping to reuse citations for already-cited URLs.
             **llm_kwargs: Arguments provided by the LLM, including the 'urls' field.
@@ -209,7 +211,8 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
 
         self.emitter.emit(
             Packet(
-                placement=placement,
+                turn_index=turn_index,
+                tab_index=tab_index,
                 obj=OpenUrlUrls(urls=urls),
             )
         )
@@ -245,7 +248,8 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         # Emit documents packet AFTER crawling completes
         self.emitter.emit(
             Packet(
-                placement=placement,
+                turn_index=turn_index,
+                tab_index=tab_index,
                 obj=OpenUrlDocuments(documents=search_docs),
             )
         )

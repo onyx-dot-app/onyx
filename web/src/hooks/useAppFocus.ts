@@ -8,42 +8,10 @@
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { usePathname, useSearchParams } from "next/navigation";
 
-export type AppFocusType =
+export type AppFocus =
   | { type: "agent" | "project" | "chat"; id: string }
   | "new-session"
   | "more-agents";
-
-export class AppFocus {
-  constructor(public value: AppFocusType) {}
-
-  isAgent(): boolean {
-    return typeof this.value === "object" && this.value.type === "agent";
-  }
-
-  isProject(): boolean {
-    return typeof this.value === "object" && this.value.type === "project";
-  }
-
-  isChat(): boolean {
-    return typeof this.value === "object" && this.value.type === "chat";
-  }
-
-  isNewSession(): boolean {
-    return this.value === "new-session";
-  }
-
-  isMoreAgents(): boolean {
-    return this.value === "more-agents";
-  }
-
-  getId(): string | null {
-    return typeof this.value === "object" ? this.value.id : null;
-  }
-
-  getType(): "agent" | "project" | "chat" | "new-session" | "more-agents" {
-    return typeof this.value === "object" ? this.value.type : this.value;
-  }
-}
 
 export default function useAppFocus(): AppFocus {
   const pathname = usePathname();
@@ -51,19 +19,19 @@ export default function useAppFocus(): AppFocus {
 
   // Check if we're on the agents page
   if (pathname === "/chat/agents") {
-    return new AppFocus("more-agents");
+    return "more-agents";
   }
 
   // Check search params for chat, agent, or project
   const chatId = searchParams.get(SEARCH_PARAM_NAMES.CHAT_ID);
-  if (chatId) return new AppFocus({ type: "chat", id: chatId });
+  if (chatId) return { type: "chat", id: chatId };
 
   const agentId = searchParams.get(SEARCH_PARAM_NAMES.PERSONA_ID);
-  if (agentId) return new AppFocus({ type: "agent", id: agentId });
+  if (agentId) return { type: "agent", id: agentId };
 
   const projectId = searchParams.get(SEARCH_PARAM_NAMES.PROJECT_ID);
-  if (projectId) return new AppFocus({ type: "project", id: projectId });
+  if (projectId) return { type: "project", id: projectId };
 
   // No search params means we're on a new session
-  return new AppFocus("new-session");
+  return "new-session";
 }
