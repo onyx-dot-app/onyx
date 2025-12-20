@@ -60,6 +60,7 @@ function shouldShowSearchStep2(packets: Packet[]): boolean {
   return searchState.hasResults || searchState.isComplete;
 }
 
+// w-full ensures content takes full width within the flex container hierarchy
 function ToolItemRow({
   icon,
   content,
@@ -74,7 +75,7 @@ function ToolItemRow({
   isLoading?: boolean;
 }) {
   return (
-    <div className="relative">
+    <div className="relative w-full">
       {!isLastItem && (
         <div
           className="absolute w-px bg-background-tint-04 z-0"
@@ -381,6 +382,7 @@ function ParallelToolTabs({
 }
 
 // Shared component for expanded tool rendering
+// w-full ensures content takes full width within the flex container hierarchy
 function ExpandedToolItem({
   icon,
   content,
@@ -407,7 +409,7 @@ function ExpandedToolItem({
   );
 
   return (
-    <div className="relative">
+    <div className="relative w-full">
       {/* Connector line */}
       {!isLastItem && (
         <div
@@ -689,11 +691,14 @@ export default function MultiToolRenderer({
         });
       });
 
+    // Note: w-full must be applied consistently through the container hierarchy
+    // to ensure reasoning and tool content takes the full available width.
+    // Without explicit w-full on each container, content may shrink to fit.
     return (
-      <div className="mb-4 relative border border-border-medium rounded-lg p-4 shadow">
+      <div className="mb-4 relative border border-border-medium rounded-lg p-4 shadow w-full">
         {/* Timeline content */}
-        <div className="relative">
-          <div className="flex flex-col">
+        <div className="relative w-full">
+          <div className="flex flex-col w-full">
             {visibleTurnGroups.map((turnGroup, turnGroupIndex) => {
               const isLastTurnGroup =
                 turnGroupIndex === visibleTurnGroups.length - 1;
@@ -716,7 +721,7 @@ export default function MultiToolRenderer({
               // Single tool in this turn - render as timeline item
               const turnItems = turnGroup.items;
               return (
-                <div key={`turn-${turnGroup.turnIndex}`}>
+                <div key={`turn-${turnGroup.turnIndex}`} className="w-full">
                   {turnItems.map((item, index) => {
                     const isLastItem =
                       isLastTurnGroup && index === turnItems.length - 1;
@@ -739,7 +744,7 @@ export default function MultiToolRenderer({
                     const isLoading = !isItemComplete && !shouldStopShimmering;
 
                     return (
-                      <div key={item.key}>
+                      <div key={item.key} className="w-full">
                         {renderDisplayItem(
                           item,
                           index,
@@ -769,8 +774,10 @@ export default function MultiToolRenderer({
   }
 
   // If complete, show summary with toggle and render each turn group independently
+  // Note: w-full must be applied consistently through the container hierarchy
+  // to ensure reasoning and tool content takes the full available width.
   return (
-    <div className="pb-1">
+    <div className="pb-1 w-full">
       {/* Summary header - clickable */}
       <div
         className="flex flex-row w-fit items-center group/StepsButton select-none"
@@ -790,7 +797,7 @@ export default function MultiToolRenderer({
       {/* Expanded content */}
       <div
         className={cn(
-          "transition-all duration-300 ease-in-out overflow-hidden",
+          "transition-all duration-300 ease-in-out overflow-hidden w-full",
           isExpanded
             ? "max-h-[1000px] overflow-y-auto opacity-100"
             : "max-h-0 opacity-0"
@@ -798,11 +805,11 @@ export default function MultiToolRenderer({
       >
         <div
           className={cn(
-            "p-4 transition-transform duration-300 ease-in-out",
+            "p-4 transition-transform duration-300 ease-in-out w-full",
             isExpanded ? "transform translate-y-0" : "transform"
           )}
         >
-          <div className="flex flex-col">
+          <div className="flex flex-col w-full">
             {turnGroups.map((turnGroup, turnGroupIndex) => {
               const isLastTurnGroup = turnGroupIndex === turnGroups.length - 1;
 
@@ -831,14 +838,14 @@ export default function MultiToolRenderer({
               // Single tool in this turn - render sequentially
               const turnItems = turnGroup.items;
               return (
-                <div key={`turn-${turnGroup.turnIndex}`}>
+                <div key={`turn-${turnGroup.turnIndex}`} className="w-full">
                   {turnItems.map((item, index) => {
                     // Don't mark as last item if there are more turns or Done node follows
                     const isLastItemInTurn = index === turnItems.length - 1;
                     const isLastItem = isLastTurnGroup && isLastItemInTurn;
 
                     return (
-                      <div key={item.key}>
+                      <div key={item.key} className="w-full">
                         {renderDisplayItem(
                           item,
                           index,
