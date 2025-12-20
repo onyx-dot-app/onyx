@@ -24,6 +24,9 @@ from onyx.agents.agent_search.exploration_2.enums import ResearchAnswerPurpose
 from onyx.agents.agent_search.exploration_2.models import OrchestrationClarificationInfo
 from onyx.agents.agent_search.exploration_2.models import OrchestrationPlan
 from onyx.agents.agent_search.exploration_2.models import OrchestratorTool
+from onyx.agents.agent_search.exploration_2.nodes.dr_sa2_query_dependent_context_explorer import (
+    get_query_dependent_context,
+)
 from onyx.agents.agent_search.exploration_2.states import MainState
 from onyx.agents.agent_search.exploration_2.states import OrchestrationSetup
 from onyx.agents.agent_search.exploration_2.utils import get_chat_history_string
@@ -235,20 +238,42 @@ Articulate the questions in a bullet form.""",
         )
 
     if use_context_explorer:
-        available_tools[DRPath.CONTEXT_EXPLORER.value] = OrchestratorTool(
-            tool_id=104,
-            name=DRPath.CONTEXT_EXPLORER.value,
-            llm_path=DRPath.CONTEXT_EXPLORER.value,
-            path=DRPath.CONTEXT_EXPLORER,
-            description="""This tool allows you to aquire more context from a 'memory' that has information about \
-the user, their \
-company, and search- and reasoning strategies. If you think that the question implicitly relates to something the user \
-expects you to know to answer the question, you should use this tool to aquire more context. Also, if you believe that \
-answering the question may require non-trivial search- or reasoning strategies, you should use this tool to see whether \
-relevant lessons have been learned in the past.""",
-            metadata={},
-            cost=0.0,
-            tool_object=None,
+        available_tools[DRPath.QUERY_INDEPENDENT_CONTEXT_EXPLORER.value] = (
+            OrchestratorTool(
+                tool_id=104,
+                name=DRPath.QUERY_INDEPENDENT_CONTEXT_EXPLORER.value,
+                llm_path=DRPath.QUERY_INDEPENDENT_CONTEXT_EXPLORER.value,
+                path=DRPath.QUERY_INDEPENDENT_CONTEXT_EXPLORER,
+                description="""This tool allows you to aquire more context from a 'memory' that has information about \
+the user and their \
+company. If you think that the question implicitly relates to something the user \
+expects you to know about them or their company in order to answer the question, you should use this tool to aquire the \
+necessary context. Common - but not exclusive(!) - signals may be a 'I', 'we', 'our', etc. in the question. (In fact, if these \
+signals are present, you should use this tool even if you think you have all the information you need to answer the question.) \
+Use this tool if you think it can help TO PROVIDE CONTEXT or INSTRUCTIONS FOR THE user question, but do NOT use \
+this tool to find actual answer information; it is just for providing context and instructions!""",
+                metadata={},
+                cost=0.0,
+                tool_object=None,
+            )
+        )
+
+        available_tools[DRPath.QUERY_DEPENDENT_CONTEXT_EXPLORER.value] = (
+            OrchestratorTool(
+                tool_id=105,
+                name=DRPath.QUERY_DEPENDENT_CONTEXT_EXPLORER.value,
+                llm_path=DRPath.QUERY_DEPENDENT_CONTEXT_EXPLORER.value,
+                path=DRPath.QUERY_DEPENDENT_CONTEXT_EXPLORER,
+                description="""This tool allows you to aquire more context from a 'memory' that has information about \
+how similar queries were answered in the past. If you think that the question may be somewhat complex \
+and using experiences and learnings from similar queries may help to answer the question, you should use this tool.
+Use this tool if you think LEARNINGS and INSTRUCTIONS based on previous, similar queries may be useful to \
+think through the answer process for the user's question/request, but do NOT use this tool to find actual answer \
+information; it is just for providing context and instructions!""",
+                metadata={},
+                cost=0.0,
+                tool_object=None,
+            )
         )
 
     return available_tools
@@ -484,10 +509,6 @@ def opener(
 
     original_question = graph_config.inputs.prompt_builder.raw_user_query
 
-    graph_config.tooling.force_use_tool
-
-    graph_config.persistence.message_id
-
     # Perform a commit to ensure the message_id is set and saved
     db_session.commit()
 
@@ -602,11 +623,17 @@ def opener(
         )
         logger.info(f"User: {user.email}")
 
+    dynamic_learnings_string = ""
+    cheat_sheet_string = ""
+
     if (
         original_cheat_sheet_context
         and _EXPLORATION_TEST_USE_DC
         and not _EXPLORATION_TEST_USE_CONTEXT_EXPLORER
     ):
+        dynamic_learnings_string = get_query_dependent_context(
+            db_session, user, original_question
+        )
         cheat_sheet_string = f"""\n\nHere is additional context learned that may inform the \
 process (plan generation if applicable, reasoning, tool calls, etc.):\n{str(original_cheat_sheet_context)}\n###\n\n"""
     elif original_cheat_sheet_context and _EXPLORATION_TEST_USE_CONTEXT_EXPLORER:
@@ -646,6 +673,10 @@ hold relevant information to provide context for the user question:\n\n###\n"
         .replace(
             "---cheat_sheet_string---",
             cheat_sheet_string,
+        )
+        .replace(
+            "---dynamic_learnings---",
+            dynamic_learnings_string,
         )
         .replace("---plan_instruction_insertion---", plan_instruction_insertion)
     )
@@ -723,6 +754,7 @@ Note:
         uploaded_image_context=uploaded_image_context,
         message_history_for_continuation=message_history_for_continuation,
         original_cheat_sheet_context=original_cheat_sheet_context,
+        dynamic_learnings_string=dynamic_learnings_string,
         use_clarifier=_EXPLORATION_TEST_USE_CALRIFIER,
         use_context_explorer=_EXPLORATION_TEST_USE_CONTEXT_EXPLORER,
         use_thinking=_EXPLORATION_TEST_USE_THINKING,

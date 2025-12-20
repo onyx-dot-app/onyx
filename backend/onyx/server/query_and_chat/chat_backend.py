@@ -18,6 +18,9 @@ from pydantic import BaseModel
 from redis.client import Redis
 from sqlalchemy.orm import Session
 
+from onyx.agents.agent_search.exploration_2.supporting_functions import (
+    extract_insights_for_chat_message,
+)
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_user
 from onyx.chat.chat_utils import create_chat_chain
@@ -92,6 +95,7 @@ from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
+from shared_configs.configs import EXPLORATION_TEST_TYPE
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -528,6 +532,16 @@ def create_chat_feedback(
         user_id=user_id,
         db_session=db_session,
     )
+
+    if EXPLORATION_TEST_TYPE:
+        extract_insights_for_chat_message(
+            is_positive=feedback.is_positive,
+            feedback_text=feedback.feedback_text,
+            predefined_feedback=feedback.predefined_feedback,
+            chat_message_id=feedback.chat_message_id,
+            user_id=user_id,
+            db_session=db_session,
+        )
 
 
 @router.delete("/remove-chat-message-feedback")

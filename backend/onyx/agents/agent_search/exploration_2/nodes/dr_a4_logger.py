@@ -15,6 +15,9 @@ from onyx.agents.agent_search.exploration_2.states import MainState
 from onyx.agents.agent_search.exploration_2.sub_agents.image_generation.models import (
     GeneratedImageFullResult,
 )
+from onyx.agents.agent_search.exploration_2.supporting_functions import (
+    extract_insights_for_chat_message,
+)
 from onyx.agents.agent_search.exploration_2.utils import aggregate_context
 from onyx.agents.agent_search.exploration_2.utils import (
     convert_inference_sections_to_search_docs,
@@ -179,6 +182,7 @@ def save_iteration(
             iteration_sub_step_nr=iteration_answer.parallelization_nr,
             sub_step_instructions=iteration_answer.question,
             sub_step_tool_id=iteration_answer.tool_id,
+            sub_step_tool_name=iteration_answer.tool,
             sub_answer=iteration_answer.answer,
             reasoning=iteration_answer.reasoning,
             claims=iteration_answer.claims,
@@ -212,6 +216,11 @@ def save_new_cs(
 
     with get_session_with_current_tenant() as temp_db_session:
 
+        if (
+            not graph_config.tooling.search_tool
+            or not graph_config.tooling.search_tool.user
+        ):
+            raise ValueError("User is required for saving new cheat sheet")
         user = fetch_user_by_id(
             temp_db_session, graph_config.tooling.search_tool.user.id
         )
@@ -241,9 +250,18 @@ def logging(
     # (right now, answers from each step are concatenated onto each other)
     # Also, add missing fields once usage in UI is clear.
 
-    state.use_dc
+    _EXPLORATION_TEST_USE_DC = state.use_dc
 
-    state.current_step_nr
+    graph_config = cast(GraphConfig, config["metadata"]["config"])
+
+    user = (
+        graph_config.tooling.search_tool.user
+        if graph_config.tooling.search_tool
+        else None
+    )
+    chat_message_id = graph_config.persistence.message_id
+    db_session = graph_config.persistence.db_session
+
     new_base_knowledge = state.extended_base_knowledge
     consolidated_knowledge_updates = state.consolidated_updates
 
@@ -307,6 +325,18 @@ def logging(
             is_internet_marker_dict,
             num_tokens,
             new_cheat_sheet_context=new_knowledge,
+        )
+
+    if _EXPLORATION_TEST_USE_DC:
+        if not user:
+            raise ValueError("User is required for closer")
+        _ = extract_insights_for_chat_message(
+            is_positive=None,
+            feedback_text=None,
+            predefined_feedback=None,
+            chat_message_id=chat_message_id,
+            user_id=user.id,
+            db_session=db_session,
         )
 
     return LoggerUpdate(

@@ -11,7 +11,6 @@ from onyx.agents.agent_search.exploration_2.dr_experimentation_prompts import (
     ORCHESTRATOR_PROMPT_TEMPLATE,
 )
 from onyx.agents.agent_search.exploration_2.enums import DRPath
-from onyx.agents.agent_search.exploration_2.enums import ResearchType
 from onyx.agents.agent_search.exploration_2.models import IterationAnswer
 from onyx.agents.agent_search.exploration_2.states import IterationInstructions
 from onyx.agents.agent_search.exploration_2.states import MainState
@@ -33,16 +32,16 @@ _SEARCH_TOOL = {
         "name": "search_tool",
         "description": """The search tool's functionality is described in the system prompt. \
 Use it if you think you have one or  more questions that you believe are \
-suitable for the search tool.  Make sure that the question has the sufficient context to be answered. \
+suitable for the search tool.  Make sure that each question has the sufficient context to be answered. \
 If available, use information from the memory that may be available \
 in the conversation history to provide sharper/better context to the questions you want to have done \
 a search for. As an example, if \
 the original question refers to 'availability products', and the memory extraction has an \
-explicit list of products that enhance availability, you probably want to include the product list in the \
-question to the search tool. \
+explicit list of products that enhance availability, you probably want to use the product list to construct \
+the questions for the search tool. \
 Or, if should a question refer to 'typical customers' and the memory extraction contains characteristics \
 of typical customers, you probably want \
-to include those characteristics in the question to the search tool. """,
+to use those characteristics for the question generation for the search tool. """,
         "parameters": {
             "type": "object",
             "properties": {
@@ -51,7 +50,7 @@ to include those characteristics in the question to the search tool. """,
                     "description": "The list of questions to be asked of the search tool.",
                     "items": {
                         "type": "string",
-                        "description": "The question to be asked of the search tool",
+                        "description": "The individual question to be asked of the search tool",
                     },
                 },
             },
@@ -101,18 +100,43 @@ information or make checks.",
     },
 }
 
-_CONTEXT_EXPLORER_TOOL = {
+_QUERY_INDEPENDENT_CONTEXT_EXPLORER_TOOL = {
     "type": "function",
     "function": {
-        "name": "context_explorer_tool",
-        "description": """This tool can be used to aquire more context from a 'memory' that has \
+        "name": "query_independent_context_explorer_tool",
+        "description": """This tool can be used to acquire more context from a 'memory' that has \
 information about the user, their \
-company, and search- and reasoning strategies. If you think that the question implicitly relates to something the user \
-expects you to know to answer the question, you should use this tool to aquire more context. Also, if you believe that \
-answering the question may require non-trivial search- or reasoning strategies, you should use this tool to see whether \
-relevant lessons have been learned in the past.
-Only use this tool though if you think it can REALLY help TO PROVIDE CONTEXT or INSTRUCTIONS FOR THE user question! Do \
-NOT USE IT to find information, that is what the Search Tool is for.""",
+company. If you think that the question implicitly relates to something the user \
+expects you to know about them or their company in order to answer the question, you should use this tool to acquire the \
+necessary context. Common - but not exclusive(!) - signals may be a 'I', 'we', 'our', etc. in the question. (In fact, if these \
+signals are present, you should use this tool even if you think you have all the information you need to answer the question.) \
+Use this tool though if you think it can help TO PROVIDE CONTEXT or INSTRUCTIONS FOR THE user question, but do NOT use \
+this tool to find actual answer information; it is just for providing context and instructions!""",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "request": {
+                    "type": "string",
+                    "description": "A brief summary of what you want to learn from the memory.",
+                },
+            },
+        },
+    },
+}
+
+_QUERY_DEPENDENT_CONTEXT_EXPLORER_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "query_dependent_context_explorer_tool",
+        "description": """This tool can be used to aquire more context from a 'memory' that has \
+information about how similar queries were answered in the past. If you think that the question may be somewhat complex \
+and using experiences and learnings from similar queries may help to answer the question, you should use this tool.
+Only use this tool though if you think LEARNINGS and INSTRUCTIONS based on previous, similar queries may be useful to \
+answer the user's question/request. NEVER use this tool to find actual answer information and facts for the user's \
+question/request; \
+this is what the non-context and non-thinking tools are for. This tool is just for providing context and instructions \
+to guide \
+the answer process, not providing actual answer information and facts!""",
         "parameters": {
             "type": "object",
             "properties": {
@@ -173,7 +197,6 @@ def orchestrator(
     node_start_time = datetime.now()
 
     _EXPLORATION_TEST_USE_CALRIFIER = state.use_clarifier
-    state.use_dc
     _EXPLORATION_TEST_USE_THINKING = state.use_thinking
     _EXPLORATION_TEST_USE_CONTEXT_EXPLORER = state.use_context_explorer
 
@@ -196,9 +219,7 @@ def orchestrator(
         last_iteration_responses = [
             x
             for x in state.iteration_responses
-            if x.iteration_nr == iteration_nr
-            and x.tool != DRPath.CLARIFIER.value
-            and x.tool != DRPath.THINKING.value
+            if x.iteration_nr == iteration_nr and x.tool != DRPath.CLARIFIER.value
         ]
         if last_iteration_responses:
             response_wrapper = f"For the previous iteration {iteration_nr}, here are the tool calls I decided to execute, \
@@ -213,7 +234,6 @@ def orchestrator(
     iteration_nr += 1
     current_step_nr = state.current_step_nr
 
-    ResearchType.DEEP
     remaining_time_budget = state.remaining_time_budget
 
     next_tool_name = None
@@ -249,13 +269,6 @@ def orchestrator(
             ],
         )
 
-    # no early exit forced. Continue.
-
-    state.available_tools or {}
-
-    state.uploaded_test_context or ""
-    state.uploaded_image_context or []
-
     # default to closer
     query_list = ["Answer the question with the information you have."]
 
@@ -272,7 +285,9 @@ def orchestrator(
 
     if (
         num_search_iterations > 0
-        and previous_tool_call_name != DRPath.CONTEXT_EXPLORER.value
+        and previous_tool_call_name != DRPath.QUERY_INDEPENDENT_CONTEXT_EXPLORER.value
+        and previous_tool_call_name != DRPath.QUERY_DEPENDENT_CONTEXT_EXPLORER.value
+        and previous_tool_call_name != DRPath.THINKING.value
         and DRPath.INTERNAL_SEARCH.value in state.tools_used
     ):
         tools.append(_CLOSER_TOOL)  # only hgo to closer after at least one search
@@ -292,11 +307,26 @@ def orchestrator(
     if (
         _EXPLORATION_TEST_USE_CONTEXT_EXPLORER
         and num_search_iterations <= 2
-        and DRPath.CONTEXT_EXPLORER.value not in state.tools_used
+        and DRPath.QUERY_INDEPENDENT_CONTEXT_EXPLORER.value not in state.tools_used
     ):
-        tools.append(_CONTEXT_EXPLORER_TOOL)
+        tools.append(_QUERY_INDEPENDENT_CONTEXT_EXPLORER_TOOL)
+
+    if (
+        _EXPLORATION_TEST_USE_CONTEXT_EXPLORER
+        and num_search_iterations <= 2
+        and DRPath.QUERY_DEPENDENT_CONTEXT_EXPLORER.value not in state.tools_used
+    ):
+        tools.append(_QUERY_DEPENDENT_CONTEXT_EXPLORER_TOOL)
 
     in_orchestration_iteration_answers: list[IterationAnswer] = []
+
+    iteration_available_tools_for_thinking_string = ""
+    for tool in tools:
+        if tool["function"]["name"] != "thinking_tool":
+            iteration_available_tools_for_thinking_string += (
+                f"{tool['function']['name']}: {tool['function']['description']}\n\n"
+            )
+
     if remaining_time_budget > 0:
 
         orchestrator_action: AIMessage = invoke_llm_raw(
@@ -314,34 +344,15 @@ def orchestrator(
                     query_list = tool_call["args"]["request"]
                     next_tool_name = DRPath.INTERNAL_SEARCH.value
                     num_search_iterations += 1
-                elif tool_call["name"] == "context_explorer_tool":
+                elif tool_call["name"] == "query_independent_context_explorer_tool":
                     reasoning_result = tool_call["args"]["request"]
-                    next_tool_name = DRPath.CONTEXT_EXPLORER.value
+                    next_tool_name = DRPath.QUERY_INDEPENDENT_CONTEXT_EXPLORER.value
+                elif tool_call["name"] == "query_dependent_context_explorer_tool":
+                    reasoning_result = tool_call["args"]["request"]
+                    next_tool_name = DRPath.QUERY_DEPENDENT_CONTEXT_EXPLORER.value
                 elif tool_call["name"] == "thinking_tool":
                     reasoning_result = tool_call["args"]["request"]
-                    next_tool_name = (
-                        DRPath.THINKING.value
-                    )  # note: thinking already done. Will return to Orchestrator.
-                    message_history_for_continuation.append(
-                        AIMessage(content=reasoning_result)
-                    )
-                    new_messages_for_continuation.append(
-                        AIMessage(content=reasoning_result)
-                    )
-
-                    in_orchestration_iteration_answers.append(
-                        IterationAnswer(
-                            tool=DRPath.THINKING.value,
-                            tool_id=102,
-                            iteration_nr=iteration_nr,
-                            parallelization_nr=0,
-                            question="",
-                            cited_documents={},
-                            answer=reasoning_result,
-                            reasoning=reasoning_result,
-                        )
-                    )
-
+                    next_tool_name = DRPath.THINKING.value
                 elif tool_call["name"] == "closer_tool":
                     reasoning_result = "Time to wrap up."
                     next_tool_name = DRPath.CLOSER.value
@@ -398,6 +409,7 @@ def orchestrator(
             )
         ],
         message_history_for_continuation=new_messages_for_continuation,
-        iteration_responses=in_orchestration_iteration_answers,
+        iteration_responses=[],
         num_search_iterations=num_search_iterations,
+        iteration_available_tools_for_thinking_string=iteration_available_tools_for_thinking_string,
     )

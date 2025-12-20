@@ -31,5 +31,7 @@ class DRPath(str, Enum):
     CLOSER = "Closer"
     THINKING = "Thinking"
     LOGGER = "Logger"
-    CONTEXT_EXPLORER = "Context Explorer"
+    # CONTEXT_EXPLORER = "Context Explorer"
+    QUERY_INDEPENDENT_CONTEXT_EXPLORER = "Query Independent Context Explorer"
+    QUERY_DEPENDENT_CONTEXT_EXPLORER = "Query Dependent Context Explorer"
     END = "End"

@@ -208,7 +208,8 @@ def construct_tools(
 
         if db_tool_model.in_code_tool_id:
             tool_cls = get_built_in_tool_by_id(db_tool_model.in_code_tool_id)
-
+            if not tool_cls:
+                continue
             try:
                 tool_is_available = tool_cls.is_available(db_session)
             except Exception:

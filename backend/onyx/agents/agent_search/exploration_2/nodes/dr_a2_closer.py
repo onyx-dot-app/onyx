@@ -7,12 +7,9 @@ from langgraph.types import StreamWriter
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.exploration_2.constants import MAX_CHAT_HISTORY_MESSAGES
-from onyx.agents.agent_search.exploration_2.constants import MAX_NUM_CLOSER_SUGGESTIONS
-from onyx.agents.agent_search.exploration_2.enums import DRPath
 from onyx.agents.agent_search.exploration_2.enums import ResearchAnswerPurpose
 from onyx.agents.agent_search.exploration_2.enums import ResearchType
 from onyx.agents.agent_search.exploration_2.models import AggregatedDRContext
-from onyx.agents.agent_search.exploration_2.models import TestInfoCompleteResponse
 from onyx.agents.agent_search.exploration_2.states import FinalUpdate
 from onyx.agents.agent_search.exploration_2.states import MainState
 from onyx.agents.agent_search.exploration_2.states import OrchestrationUpdate
@@ -27,7 +24,6 @@ from onyx.agents.agent_search.exploration_2.utils import get_chat_history_string
 from onyx.agents.agent_search.exploration_2.utils import get_prompt_question
 from onyx.agents.agent_search.exploration_2.utils import parse_plan_to_dict
 from onyx.agents.agent_search.models import GraphConfig
-from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
 from onyx.agents.agent_search.shared_graph_utils.llm import stream_llm_answer
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
@@ -47,7 +43,6 @@ from onyx.llm.utils import check_number_of_tokens
 from onyx.prompts.chat_prompts import PROJECT_INSTRUCTIONS_SEPARATOR
 from onyx.prompts.dr_prompts import FINAL_ANSWER_PROMPT_W_SUB_ANSWERS
 from onyx.prompts.dr_prompts import FINAL_ANSWER_PROMPT_WITHOUT_SUB_ANSWERS
-from onyx.prompts.dr_prompts import TEST_INFO_COMPLETE_PROMPT
 from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationStart
 from onyx.server.query_and_chat.streaming_models import MessageStart
@@ -220,12 +215,6 @@ def closer(
     # (right now, answers from each step are concatenated onto each other)
     # Also, add missing fields once usage in UI is clear.
 
-    state.use_clarifier
-    state.use_plan
-    state.use_plan_updates
-    state.use_corpus_history
-    state.use_thinking
-
     current_step_nr = state.current_step_nr
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
@@ -263,51 +252,7 @@ def closer(
     iteration_responses_wo_docs_string = aggregated_context_wo_docs.context
     all_cited_documents = aggregated_context_w_docs.cited_documents
 
-    num_closer_suggestions = state.num_closer_suggestions
-
-    if (
-        num_closer_suggestions < MAX_NUM_CLOSER_SUGGESTIONS
-        and research_type == ResearchType.DEEP
-    ):
-        test_info_complete_prompt = TEST_INFO_COMPLETE_PROMPT.build(
-            base_question=prompt_question,
-            questions_answers_claims=iteration_responses_wo_docs_string,
-            chat_history_string=chat_history_string,
-            high_level_plan=(
-                state.plan_of_record.plan
-                if state.plan_of_record
-                else "No plan available"
-            ),
-        )
-
-        test_info_complete_json = invoke_llm_json(
-            llm=graph_config.tooling.primary_llm,
-            prompt=create_question_prompt(
-                assistant_system_prompt,
-                test_info_complete_prompt + (assistant_task_prompt or ""),
-            ),
-            schema=TestInfoCompleteResponse,
-            timeout_override=TF_DR_TIMEOUT_LONG,
-            # max_tokens=1000,
-        )
-
-        if test_info_complete_json.complete:
-            pass
-
-        else:
-            return OrchestrationUpdate(
-                tools_used=[DRPath.ORCHESTRATOR.value],
-                query_list=[],
-                log_messages=[
-                    get_langgraph_node_log_string(
-                        graph_component="main",
-                        node_name="closer",
-                        node_start_time=node_start_time,
-                    )
-                ],
-                gaps=test_info_complete_json.gaps,
-                num_closer_suggestions=num_closer_suggestions + 1,
-            )
+    state.num_closer_suggestions
 
     retrieved_search_docs = convert_inference_sections_to_search_docs(
         all_cited_documents
@@ -358,6 +303,19 @@ def closer(
         chat_history_string=chat_history_string,
         uploaded_context=uploaded_context,
     )
+
+    # EXPLORATION CHANGE FOR ANSWER PROMPT
+
+    cheat_sheet_context = state.original_cheat_sheet_context
+
+    cheat_sheet_string = ""
+    if cheat_sheet_context:
+        answer_style_preferences = cheat_sheet_context.get("answer_preferences", {})
+        if answer_style_preferences:
+            cheat_sheet_string += f"""\n\n###\nHere is additional context learned that may inform the \
+answer process (particularly focus on answer style or formatting components):\n{str(answer_style_preferences)}\n###\n\n"""
+
+    assistant_system_prompt += cheat_sheet_string
 
     if graph_config.inputs.project_instructions:
         assistant_system_prompt = (

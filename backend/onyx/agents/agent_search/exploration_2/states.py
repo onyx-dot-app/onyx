@@ -42,6 +42,7 @@ class OrchestrationUpdate(LoggerUpdate):
     ] = []
     iteration_responses: Annotated[list[IterationAnswer], add] = []
     num_search_iterations: int = 0
+    iteration_available_tools_for_thinking_string: str = ""
 
 
 class CSUpdate(BaseModel):
@@ -77,6 +78,7 @@ class OrchestrationSetup(OrchestrationUpdate):
     message_history_for_continuation: Annotated[
         list[SystemMessage | HumanMessage | AIMessage], add
     ] = []
+    dynamic_learnings_string: str | None = None
     original_cheat_sheet_context: Dict[str, Any] | None = None
     use_clarifier: bool = False
     use_thinking: bool = False

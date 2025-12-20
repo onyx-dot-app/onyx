@@ -51,7 +51,11 @@ the sufficient context. Note that you can refer to the base knowledge to fill in
 missing from the question.
 
 Also, \
-The {INTERNAL_SEARCH} tool DOES support parallel calls of up to {MAX_DR_PARALLEL_SEARCH} queries.
+the {INTERNAL_SEARCH} tool DOES support parallel calls of up to {MAX_DR_PARALLEL_SEARCH} queries. So \
+rather a call to this tool should be written as a list of up to {MAX_DR_PARALLEL_SEARCH} search queries, \
+where each query is focussed on a specific aspect of the question. For example, rather than \
+asking ['which PRs and Support tickets are addressed by jira 123?'], ', you should ask \
+['which PRs are addressed by jira 123?', 'which Support tickets are addressed by jira 123?']. \
 """
 
 TOOL_DESCRIPTION[
@@ -728,9 +732,12 @@ answer the question. Please cite the document sources inline in format [[1]][[7]
 is essential that the document NUMBERS are in the brackets, not any titles.>",
    "claims": "<a list of short claims discussed in the documents as they pertain to the query and/or \
 the original question. These will later be used for follow-up questions and verifications. Note that \
-these may not actually be in the succinct answer above. Note also that each claim \
+these may not actually be in the succinct answer above. Note also that i) each claim \
 should include ONE fact that contains enough context to be verified/questioned by a different system \
-without the need for going back to these documents for additional context. Also here, please cite the \
+without the need for going back to these documents for additional context, and ii) a claim \
+should not include pronouns like 'it', 'they', 'them', etc., but proper nouns like 'Nike', 'Puma', \
+'Adidas buyers', etc.
+Also here, please cite the \
 document sources inline in format [[1]][[7]], etc., where it is essential that the document NUMBERS are \
 in the brackets, not any titles. So this should have format like \
 [<claim 1>, <claim 2>, <claim 3>, ...], each with citations.>"

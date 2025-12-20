@@ -194,6 +194,8 @@ def list_tools(
         if tool.in_code_tool_id:
             try:
                 tool_cls = get_built_in_tool_by_id(tool.in_code_tool_id)
+                if not tool_cls:
+                    continue
                 if not tool_cls.is_available(db_session):
                     continue
             except KeyError:

@@ -37,7 +37,6 @@ def is_reducer(
         update for update in branch_updates if update.iteration_nr == current_iteration
     ]
 
-    [update.question for update in new_updates]
     doc_lists = [list(update.cited_documents.values()) for update in new_updates]
 
     doc_list = []

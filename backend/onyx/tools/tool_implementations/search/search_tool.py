@@ -81,7 +81,7 @@ team, process, etc.
 - Keyword Queries: queries that are heavily keyword based are often internal document search queries.
 - Ambiguity: questions about something that is not widely known or understood.
 Between internal and web search, think about if the user's query is likely better answered by team internal sources or online \
-web pages. If very ambiguious, prioritize internal search or call both tools.
+web pages. If very ambiguous, prioritize internal search or call both tools.
 """
 
 

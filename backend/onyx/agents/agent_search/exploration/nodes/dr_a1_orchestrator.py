@@ -131,13 +131,15 @@ _CLARIFIER_TOOL = {
     "function": {
         "name": "clarifier_tool",
         "description": "This tool is used if you need to have clarification on something IMPORTANT from \
-the user. This can pertain to the original question or something you found out during the process so far.",
+the user. This can pertain to the original question or something you found out during the process \
+so far.",
         "parameters": {
             "type": "object",
             "properties": {
                 "request": {
                     "type": "string",
-                    "description": "The questions you would like to provide to the clarification tool, so that \
+                    "description": "The questions you would like to provide to the clarification \
+tool, so that \
 the user can be contacted.",
                 },
             },
@@ -201,7 +203,8 @@ def orchestrator(
             and x.tool != DRPath.THINKING.value
         ]
         if last_iteration_responses:
-            response_wrapper = f"For the previous iteration {iteration_nr}, here are the tool calls I decided to execute, \
+            response_wrapper = f"For the previous iteration {iteration_nr}, here are the tool calls \
+    I decided to execute, \
     the questions and tasks posed, and responses:\n\n"
             for last_iteration_response in last_iteration_responses:
                 response_wrapper += f"{last_iteration_response.tool}: {last_iteration_response.question}\n"

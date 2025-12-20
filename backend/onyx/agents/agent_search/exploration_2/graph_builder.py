@@ -2,9 +2,6 @@ from langgraph.graph import END
 from langgraph.graph import START
 from langgraph.graph import StateGraph
 
-from onyx.agents.agent_search.exploration_2.conditional_edges import (
-    cs_update_consolidator_router,
-)
 from onyx.agents.agent_search.exploration_2.conditional_edges import decision_router
 from onyx.agents.agent_search.exploration_2.enums import DRPath
 from onyx.agents.agent_search.exploration_2.nodes.dr_a0_opener import opener
@@ -16,8 +13,11 @@ from onyx.agents.agent_search.exploration_2.nodes.dr_a3b_cs_update_consolidator 
     cs_update_consolidator,
 )
 from onyx.agents.agent_search.exploration_2.nodes.dr_a4_logger import logging
-from onyx.agents.agent_search.exploration_2.nodes.dr_sa1_context_explorer import (
-    context_explorer,
+from onyx.agents.agent_search.exploration_2.nodes.dr_sa1_query_independent_context_explorer import (
+    query_independent_context_explorer,
+)
+from onyx.agents.agent_search.exploration_2.nodes.dr_sa2_query_dependent_context_explorer import (
+    query_dependent_context_explorer,
 )
 from onyx.agents.agent_search.exploration_2.states import MainInput
 from onyx.agents.agent_search.exploration_2.states import MainState
@@ -39,6 +39,7 @@ from onyx.agents.agent_search.exploration_2.sub_agents.kg_search.dr_kg_search_gr
 from onyx.agents.agent_search.exploration_2.sub_agents.web_search.dr_ws_graph_builder import (
     dr_ws_graph_builder,
 )
+from onyx.agents.agent_search.exploration_2.tools.dr_sa3_thinking import thinking
 
 # from onyx.agents.agent_search.exploration_2.sub_agents.basic_search.dr_basic_search_2_act import search
 
@@ -56,6 +57,8 @@ def exploration_graph_builder() -> StateGraph:
     graph.add_node(DRPath.CLARIFIER, clarifier)
 
     graph.add_node(DRPath.ORCHESTRATOR, orchestrator)
+
+    graph.add_node(DRPath.THINKING, thinking)
 
     basic_search_graph = dr_basic_search_graph_builder().compile()
     graph.add_node(DRPath.INTERNAL_SEARCH, basic_search_graph)
@@ -75,7 +78,12 @@ def exploration_graph_builder() -> StateGraph:
     generic_internal_tool_graph = dr_generic_internal_tool_graph_builder().compile()
     graph.add_node(DRPath.GENERIC_INTERNAL_TOOL, generic_internal_tool_graph)
 
-    graph.add_node(DRPath.CONTEXT_EXPLORER, context_explorer)
+    graph.add_node(
+        DRPath.QUERY_INDEPENDENT_CONTEXT_EXPLORER, query_independent_context_explorer
+    )
+    graph.add_node(
+        DRPath.QUERY_DEPENDENT_CONTEXT_EXPLORER, query_dependent_context_explorer
+    )
 
     graph.add_node(DRPath.CLOSER, closer)
     graph.add_node("cs_changes", cs_changes)
@@ -95,13 +103,19 @@ def exploration_graph_builder() -> StateGraph:
     graph.add_edge(start_key=DRPath.WEB_SEARCH, end_key=DRPath.ORCHESTRATOR)
     graph.add_edge(start_key=DRPath.IMAGE_GENERATION, end_key=DRPath.ORCHESTRATOR)
     graph.add_edge(start_key=DRPath.GENERIC_TOOL, end_key=DRPath.ORCHESTRATOR)
-    graph.add_edge(start_key=DRPath.CONTEXT_EXPLORER, end_key=DRPath.ORCHESTRATOR)
+    graph.add_edge(start_key=DRPath.THINKING, end_key=DRPath.ORCHESTRATOR)
+    graph.add_edge(
+        start_key=DRPath.QUERY_INDEPENDENT_CONTEXT_EXPLORER, end_key=DRPath.ORCHESTRATOR
+    )
+    graph.add_edge(
+        start_key=DRPath.QUERY_DEPENDENT_CONTEXT_EXPLORER, end_key=DRPath.ORCHESTRATOR
+    )
     graph.add_edge(start_key=DRPath.GENERIC_INTERNAL_TOOL, end_key=DRPath.ORCHESTRATOR)
     graph.add_edge(start_key=DRPath.CLARIFIER, end_key=DRPath.LOGGER)
 
-    graph.add_edge(DRPath.CLOSER, "cs_changes")
-    graph.add_conditional_edges("cs_changes", cs_update_consolidator_router)
-    graph.add_edge(start_key="cs_consolidator", end_key=DRPath.LOGGER)
+    graph.add_edge(DRPath.CLOSER, DRPath.LOGGER)
+    # graph.add_conditional_edges("cs_changes", cs_update_consolidator_router)
+    # graph.add_edge(start_key="cs_changes", end_key=DRPath.LOGGER)
 
     graph.add_edge(start_key=DRPath.LOGGER, end_key=END)
 

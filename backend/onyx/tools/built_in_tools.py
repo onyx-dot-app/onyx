@@ -33,5 +33,7 @@ def get_built_in_tool_ids() -> list[str]:
     return list(BUILT_IN_TOOL_MAP.keys())
 
 
-def get_built_in_tool_by_id(in_code_tool_id: str) -> Type[BUILT_IN_TOOL_TYPES]:
+def get_built_in_tool_by_id(in_code_tool_id: str) -> Type[BUILT_IN_TOOL_TYPES] | None:
+    if in_code_tool_id not in BUILT_IN_TOOL_MAP:
+        return None
     return BUILT_IN_TOOL_MAP[in_code_tool_id]

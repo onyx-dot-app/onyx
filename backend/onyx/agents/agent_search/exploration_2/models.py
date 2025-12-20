@@ -145,3 +145,14 @@ class ExtractionResponse(BaseModel):
     company: list[Dict[str, str]]
     search_strategy: list[Dict[str, str]]
     reasoning_strategy: list[Dict[str, str]]
+
+
+class QueryDependentContextExtractionResponse(BaseModel):
+    reasoning: str
+    query_dependent_learnings: list[str]
+    query_independent_learnings: Dict[str, str]
+
+
+class QueryIndependentLearningConsolidationResponse(BaseModel):
+    user: Dict[str, list[str]] = {}
+    company: Dict[str, list[str]] = {}

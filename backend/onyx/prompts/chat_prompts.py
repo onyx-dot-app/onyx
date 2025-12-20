@@ -45,7 +45,7 @@ For queries that are short phrases, ambiguous/unclear, or keyword heavy, priorit
 
 INTERNAL_SEARCH_VS_WEB_SEARCH_GUIDANCE = """
 Between internal and web search, think about if the user's query is likely better answered by team internal sources or online web pages. \
-If very ambiguious, prioritize internal search or call both tools.
+If very ambiguous, prioritize internal search or call both tools.
 """.strip()
 
 # ruff: noqa: E501, W605 start

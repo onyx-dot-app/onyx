@@ -527,6 +527,17 @@ class ChatMessage__StandardAnswer(Base):
     )
 
 
+class QueryDependentLearning__ChatMessage(Base):
+    __tablename__ = "query_dependent_learning__chat_message"
+
+    learning_id: Mapped[int] = mapped_column(
+        ForeignKey("query_dependent_learnings.id", ondelete="CASCADE"), primary_key=True
+    )
+    chat_message_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE"), primary_key=True
+    )
+
+
 """
 Documents/Indexing Tables
 """
@@ -2261,6 +2272,9 @@ class ChatMessage(Base):
     research_answer_purpose: Mapped[ResearchAnswerPurpose] = mapped_column(
         Enum(ResearchAnswerPurpose, native_enum=False), nullable=True
     )
+    query_embeddings: Mapped[list[float] | None] = mapped_column(
+        postgresql.ARRAY(Float), nullable=True
+    )
 
 
 class AgentSubQuestion(Base):
@@ -3639,6 +3653,7 @@ class ResearchAgentIterationSubStep(Base):
     sub_step_tool_id: Mapped[int | None] = mapped_column(
         ForeignKey("tool.id", ondelete="SET NULL"), nullable=True
     )
+    sub_step_tool_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # for all step-types
     reasoning: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -3969,6 +3984,29 @@ class TemporaryUserCheatSheetContext(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     # user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"))
     context: Mapped[dict[str, Any]] = mapped_column(postgresql.JSONB())
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class QueryDependentLearnings(Base):
+    __tablename__ = "query_dependent_learnings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"))
+    insight_text: Mapped[str] = mapped_column(String)
+    insight_type: Mapped[str] = mapped_column(String)
+
+    # Relationship to chat messages through junction table
+    chat_messages: Mapped[list["ChatMessage"]] = relationship(
+        "ChatMessage",
+        secondary="query_dependent_learning__chat_message",
+        lazy="selectin",
+    )
+
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
