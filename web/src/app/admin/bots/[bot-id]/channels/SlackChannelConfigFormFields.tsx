@@ -20,6 +20,7 @@ import { RadioGroup } from "@/components/ui/radio-group";
 import { RadioGroupItemField } from "@/components/ui/RadioGroupItemField";
 import { AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import {
   Tooltip,
   TooltipContent,
@@ -385,7 +386,7 @@ export function SlackChannelConfigFormFields({
                       <button
                         type="button"
                         onClick={() =>
-                          router.push(`/admin/assistants/${persona.id}`)
+                          router.push(`/assistants/edit/${persona.id}` as Route)
                         }
                         key={persona.id}
                         className="p-2 bg-background-100 cursor-pointer rounded-md flex items-center gap-2"
