@@ -85,7 +85,7 @@ if [ "$SHUTDOWN_MODE" = true ]; then
     echo ""
     echo -e "${BLUE}${BOLD}=== Shutting down Onyx ===${NC}"
     echo ""
-    
+
     if [ -d "onyx_data/deployment" ]; then
         print_info "Stopping Onyx containers..."
 
@@ -115,7 +115,7 @@ if [ "$SHUTDOWN_MODE" = true ]; then
     else
         print_warning "Onyx data directory not found. Nothing to shutdown."
     fi
-    
+
     echo ""
     print_success "Onyx shutdown complete!"
     exit 0
@@ -133,14 +133,14 @@ if [ "$DELETE_DATA_MODE" = true ]; then
     echo ""
     read -p "Are you sure you want to continue? Type 'DELETE' to confirm: " -r
     echo ""
-    
+
     if [ "$REPLY" != "DELETE" ]; then
         print_info "Operation cancelled."
         exit 0
     fi
-    
+
     print_info "Removing Onyx containers and volumes..."
-    
+
     if [ -d "onyx_data/deployment" ]; then
         # Check if docker-compose.yml exists
         if [ -f "onyx_data/deployment/docker-compose.yml" ]; then
@@ -163,7 +163,7 @@ if [ "$DELETE_DATA_MODE" = true ]; then
             fi
         fi
     fi
-    
+
     print_info "Removing data directories..."
     if [ -d "onyx_data" ]; then
         rm -rf onyx_data
@@ -171,7 +171,7 @@ if [ "$DELETE_DATA_MODE" = true ]; then
     else
         print_warning "No onyx_data directory found"
     fi
-    
+
     echo ""
     print_success "All Onyx data has been permanently deleted!"
     exit 0
@@ -229,11 +229,22 @@ print_success "Docker $DOCKER_VERSION is installed"
 if docker compose version &> /dev/null; then
     COMPOSE_VERSION=$(docker compose version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
     COMPOSE_CMD="docker compose"
-    print_success "Docker Compose $COMPOSE_VERSION is installed (plugin)"
+    if [ -z "$COMPOSE_VERSION" ]; then
+        # Handle non-standard versions like "dev" - assume recent enough
+        COMPOSE_VERSION="dev"
+        print_success "Docker Compose (dev build) is installed (plugin)"
+    else
+        print_success "Docker Compose $COMPOSE_VERSION is installed (plugin)"
+    fi
 elif command -v docker-compose &> /dev/null; then
     COMPOSE_VERSION=$(docker-compose --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
     COMPOSE_CMD="docker-compose"
-    print_success "Docker Compose $COMPOSE_VERSION is installed (standalone)"
+    if [ -z "$COMPOSE_VERSION" ]; then
+        COMPOSE_VERSION="dev"
+        print_success "Docker Compose (dev build) is installed (standalone)"
+    else
+        print_success "Docker Compose $COMPOSE_VERSION is installed (standalone)"
+    fi
 else
     print_error "Docker Compose is not installed. Please install Docker Compose first."
     echo "Visit: https://docs.docker.com/compose/install/"
@@ -390,7 +401,8 @@ if curl -fsSL -o "$COMPOSE_FILE" "${GITHUB_RAW_URL}/docker-compose.yml" 2>/dev/n
     print_success "Docker Compose file downloaded successfully"
 
     # Check if Docker Compose version is older than 2.24.0 and show warning
-    if version_compare "$COMPOSE_VERSION" "2.24.0"; then
+    # Skip check for dev builds (assume they're recent enough)
+    if [ "$COMPOSE_VERSION" != "dev" ] && version_compare "$COMPOSE_VERSION" "2.24.0"; then
         print_warning "Docker Compose version $COMPOSE_VERSION is older than 2.24.0"
         echo ""
         print_warning "The docker-compose.yml file uses the newer env_file format that requires Docker Compose 2.24.0 or later."
@@ -516,7 +528,7 @@ if [ -f "$ENV_FILE" ]; then
     echo ""
     read -p "Choose an option [default: restart]: " -r
     echo ""
-    
+
     if [ "$REPLY" = "update" ]; then
         print_info "Update selected. Which tag would you like to deploy?"
         echo ""
@@ -525,14 +537,14 @@ if [ -f "$ENV_FILE" ]; then
         echo ""
         read -p "Enter tag [default: latest]: " -r VERSION
         echo ""
-        
+
         if [ -z "$VERSION" ]; then
             VERSION="latest"
             print_info "Selected: Latest version"
         else
             print_info "Selected: $VERSION"
         fi
-        
+
         # Update .env file with new version
         print_info "Updating configuration for version $VERSION..."
         if grep -q "^IMAGE_TAG=" "$ENV_FILE"; then
@@ -551,7 +563,7 @@ if [ -f "$ENV_FILE" ]; then
 else
     print_info "No existing .env file found. Setting up new deployment..."
     echo ""
-    
+
     # Ask for version
     print_info "Which tag would you like to deploy?"
     echo ""
@@ -560,14 +572,14 @@ else
     echo ""
     read -p "Enter tag [default: latest]: " -r VERSION
     echo ""
-    
+
     if [ -z "$VERSION" ]; then
         VERSION="latest"
         print_info "Selected: Latest tag"
     else
         print_info "Selected: $VERSION"
     fi
-    
+
     # Ask for authentication schema
     echo ""
     print_info "Which authentication schema would you like to set up?"
@@ -577,7 +589,7 @@ else
     echo ""
     read -p "Choose an option (1-2) [default 1]: " -r AUTH_CHOICE
     echo ""
-    
+
     case "${AUTH_CHOICE:-1}" in
         1)
             AUTH_SCHEMA="basic"
@@ -592,16 +604,16 @@ else
             print_info "Invalid choice, using basic authentication"
             ;;
     esac
-    
+
     # Create .env file from template
     print_info "Creating .env file with your selections..."
     cp "$ENV_TEMPLATE" "$ENV_FILE"
-    
+
     # Update IMAGE_TAG with selected version
     print_info "Setting IMAGE_TAG to $VERSION..."
     sed -i.bak "s/^IMAGE_TAG=.*/IMAGE_TAG=$VERSION/" "$ENV_FILE"
     print_success "IMAGE_TAG set to $VERSION"
-    
+
     # Configure authentication settings based on selection
     if [ "$AUTH_SCHEMA" = "disabled" ]; then
         # Disable authentication in .env file
@@ -612,7 +624,7 @@ else
         sed -i.bak 's/^AUTH_TYPE=.*/AUTH_TYPE=basic/' "$ENV_FILE" 2>/dev/null || true
         print_success "Basic authentication enabled in configuration"
     fi
-    
+
     print_success ".env file created with your preferences"
     echo ""
     print_info "IMPORTANT: The .env file has been configured with your selections."
