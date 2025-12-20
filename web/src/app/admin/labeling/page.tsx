@@ -122,23 +122,7 @@ export default function LabelingPage() {
       validationSchema={validationSchema}
       validateOnChange={true}
       onSubmit={async (values, formikHelpers) => {
-        // Validate form before submission
-        const errors = await formikHelpers.validateForm();
-        if (Object.keys(errors).length > 0) {
-          // Set errors and touched state to show validation errors
-          formikHelpers.setErrors(errors);
-          formikHelpers.setTouched(
-            Object.keys(errors).reduce(
-              (acc, key) => ({ ...acc, [key]: true }),
-              {}
-            )
-          );
-          // Focus on the first field with an error
-          appearanceSettingsRef.current?.focusFirstError(errors);
-          return;
-        }
-
-        formikHelpers.setSubmitting(true);
+        console.log("values", values);
 
         // Handle logo upload if a new logo was selected
         if (selectedLogo) {
@@ -180,7 +164,15 @@ export default function LabelingPage() {
         formikHelpers.setSubmitting(false);
       }}
     >
-      {({ isSubmitting, dirty, values }) => {
+      {({
+        isSubmitting,
+        dirty,
+        values,
+        validateForm,
+        setErrors,
+        setTouched,
+        submitForm,
+      }) => {
         // Only count selectedLogo as a change if logo will be displayed
         const logoWillBeDisplayed =
           values.logo_display_style === "logo_only" ||
@@ -195,8 +187,17 @@ export default function LabelingPage() {
               icon={SvgPaintBrush}
               rightChildren={
                 <Button
-                  type="submit"
+                  type="button"
                   disabled={isSubmitting || (!dirty && !hasLogoChange)}
+                  onClick={async () => {
+                    const errors = await validateForm();
+                    if (Object.keys(errors).length > 0) {
+                      setErrors(errors);
+                      appearanceSettingsRef.current?.focusFirstError(errors);
+                      return;
+                    }
+                    await submitForm();
+                  }}
                 >
                   {isSubmitting ? "Applying..." : "Apply Changes"}
                 </Button>

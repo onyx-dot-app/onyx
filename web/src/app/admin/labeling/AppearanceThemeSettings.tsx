@@ -103,7 +103,7 @@ export const AppearanceThemeSettings = forwardRef<
         { name: "custom_popup_header", ref: noticeHeaderInputRef },
         { name: "custom_popup_content", ref: noticeContentInputRef },
       ];
-
+      console.log("errors", errors);
       for (const field of fieldRefs) {
         if (errors[field.name] && field.ref.current) {
           field.ref.current.focus();
