@@ -178,11 +178,14 @@ const ChatUI = React.forwardRef(
       enableAutoScroll: user?.preferences.auto_scroll,
     });
 
+    // Scroll to bottom when messages change (e.g., loading a chat session)
+    // Note: useScrollonStream handles streaming scroll; this handles initial load
     useEffect(() => {
       if (!scrollContainerRef.current) return;
+      if (!user?.preferences.auto_scroll) return;
       scrollContainerRef.current.scrollTop =
         scrollContainerRef.current.scrollHeight;
-    }, [messages]);
+    }, [messages, user?.preferences.auto_scroll]);
 
     if (!liveAssistant) return <div className="flex-1" />;
 
