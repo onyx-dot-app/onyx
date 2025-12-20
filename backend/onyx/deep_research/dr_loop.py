@@ -444,6 +444,7 @@ def run_deep_research_llm_loop(
                 break
 
             research_results = run_research_agent_calls(
+                # The tool calls here contain the placement information
                 research_agent_calls=research_agent_calls,
                 tools=allowed_tools,
                 emitter=emitter,

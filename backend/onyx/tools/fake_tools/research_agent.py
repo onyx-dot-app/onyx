@@ -93,7 +93,7 @@ def generate_intermediate_report(
         tool_definitions=[],
         tool_choice=ToolChoiceOptions.NONE,
         llm=llm,
-        placement=Placement(turn_index=999),  # TODO
+        placement=placement,
         citation_processor=DynamicCitationProcessor(),
         state_container=state_container,
         reasoning_effort=ReasoningEffort.LOW,
@@ -127,7 +127,7 @@ def run_research_agent_call(
     token_counter: Callable[[str], int],
     user_identity: LLMUserIdentity | None,
 ) -> ResearchAgentCallResult:
-    cycle_count = 0
+    research_cycle_count = 0
     llm_cycle_count = 0
     current_tools = tools
     gathered_documents: list[SearchDoc] | None = None
@@ -155,8 +155,8 @@ def run_research_agent_call(
     msg_history: list[ChatMessageSimple] = [initial_user_message]
 
     citation_mapping: dict[int, str] = {}
-    while cycle_count <= RESEARCH_CYCLE_CAP:
-        if cycle_count == RESEARCH_CYCLE_CAP:
+    while research_cycle_count <= RESEARCH_CYCLE_CAP:
+        if research_cycle_count == RESEARCH_CYCLE_CAP:
             # For the last cycle, do not use any more searches, only reason or generate a report
             current_tools = [
                 tool
@@ -194,7 +194,7 @@ def run_research_agent_call(
         system_prompt_str = system_prompt_template.format(
             available_tools=tools_description,
             current_datetime=get_current_llm_day_time(full_sentence=False),
-            current_cycle_count=cycle_count,
+            current_cycle_count=research_cycle_count,
             optional_internal_search_tool_description=internal_search_tip,
             optional_web_search_tool_description=web_search_tip,
             optional_open_urls_tool_description=open_urls_tip,
@@ -234,7 +234,11 @@ def run_research_agent_call(
             + research_agent_tools,
             tool_choice=ToolChoiceOptions.REQUIRED,
             llm=llm,
-            placement=Placement(turn_index=llm_cycle_count + reasoning_cycles),
+            placement=Placement(
+                turn_index=turn_index,
+                tab_index=tab_index,
+                sub_turn_index=llm_cycle_count + reasoning_cycles,
+            ),
             citation_processor=DynamicCitationProcessor(),
             state_container=state_container,
             reasoning_effort=ReasoningEffort.LOW,
@@ -249,6 +253,13 @@ def run_research_agent_call(
 
         just_ran_web_search = False
 
+        if any(
+            tool_call.tool_name in {SearchTool.NAME, WebSearchTool.NAME}
+            for tool_call in tool_calls
+        ):
+            # Only the search actions increment the cycle for the max cycle count
+            research_cycle_count += 1
+
         special_tool_calls = check_special_tool_calls(tool_calls=tool_calls)
         if special_tool_calls.generate_report_tool_call:
             final_report = generate_intermediate_report(
@@ -260,8 +271,10 @@ def run_research_agent_call(
                 state_container=state_container,
                 emitter=emitter,
                 placement=Placement(
-                    turn_index=turn_index, tab_index=tab_index, sub_turn_index=0
-                ),  # TODO
+                    turn_index=turn_index,
+                    tab_index=tab_index,
+                    sub_turn_index=llm_cycle_count + reasoning_cycles,
+                ),
             )
             return ResearchAgentCallResult(
                 intermediate_report=final_report, search_docs=[]
@@ -391,8 +404,10 @@ def run_research_agent_call(
         state_container=state_container,
         emitter=emitter,
         placement=Placement(
-            turn_index=turn_index, tab_index=tab_index, sub_turn_index=0
-        ),  # TODO
+            turn_index=turn_index,
+            tab_index=tab_index,
+            sub_turn_index=llm_cycle_count + reasoning_cycles,
+        ),
     )
     return ResearchAgentCallResult(intermediate_report=final_report, search_docs=[])
 
