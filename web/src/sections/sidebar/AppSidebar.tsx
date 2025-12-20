@@ -40,7 +40,6 @@ import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatMod
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import { removeChatSessionFromProject } from "@/app/chat/projects/projectsService";
 import type { Project } from "@/app/chat/projects/projectsService";
-import { useAppRouter } from "@/hooks/appNavigation";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -133,7 +132,6 @@ interface AppSidebarInnerProps {
 
 const MemoizedAppSidebarInner = memo(
   ({ folded, onFoldClick }: AppSidebarInnerProps) => {
-    const route = useAppRouter();
     const searchParams = useSearchParams();
     const combinedSettings = useSettingsContext();
     const { popup, setPopup } = usePopup();
@@ -358,32 +356,24 @@ const MemoizedAppSidebarInner = memo(
     const { isAdmin, isCurator } = useUser();
     const activeSidebarTab = useAppFocus();
     const createProjectModal = useCreateModal();
-    const newSessionButton = useMemo(
-      () => (
+    const newSessionButton = useMemo(() => {
+      const href =
+        combinedSettings?.settings?.disable_default_assistant && currentAgent
+          ? `/chat?assistantId=${currentAgent.id}`
+          : "/chat";
+      return (
         <div data-testid="AppSidebar/new-session">
           <SidebarTab
             leftIcon={SvgEditBig}
             folded={folded}
-            onClick={() => {
-              if (
-                combinedSettings?.settings?.disable_default_assistant &&
-                currentAgent
-              ) {
-                // Navigate to new chat with current assistant
-                route({ assistantId: currentAgent.id });
-              } else {
-                // Current behavior - go to default assistant
-                route({});
-              }
-            }}
+            href={href}
             active={activeSidebarTab.isNewSession()}
           >
             New Session
           </SidebarTab>
         </div>
-      ),
-      [folded, route, activeSidebarTab, combinedSettings, currentAgent]
-    );
+      );
+    }, [folded, activeSidebarTab, combinedSettings, currentAgent]);
     const moreAgentsButton = useMemo(
       () => (
         <div data-testid="AppSidebar/more-agents">
