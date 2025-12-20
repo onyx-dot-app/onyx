@@ -1,5 +1,6 @@
 import { JSX } from "react";
 import {
+  defaultTailwindCSS,
   AnthropicIcon,
   AmazonIcon,
   AzureIcon,
@@ -109,8 +110,6 @@ export const getProviderIcon = (
 // ============================================================================
 // LLM PROVIDER ICON COMPONENT
 // ============================================================================
-const defaultTailwindCSS = "my-auto flex flex-shrink-0 text-default";
-
 export interface ProviderIconProps extends IconProps {
   provider: string;
   modelName?: string;
