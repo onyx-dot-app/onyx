@@ -49,7 +49,7 @@ Do not acknowledge this hint in your response.
 # Reminder message that replaces the usual reminder if web_search was the last tool call
 OPEN_URL_REMINDER = """
 Remember that after using web_search, you are encouraged to open some pages to get more context unless the query is completely answered by the snippets.
-Open the pages that look the most promising and high quality by calling the open_urls tool with an array of URLs. Open as many as you want.
+Open the pages that look the most promising and high quality by calling the open_url tool with an array of URLs. Open as many as you want.
 
 If you do have enough to answer, remember to provide INLINE citations using the "document" field in the format [1], [2], [3], etc.
 

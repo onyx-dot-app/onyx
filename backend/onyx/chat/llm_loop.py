@@ -27,11 +27,12 @@ from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.utils import model_needs_formatting_reenabled
 from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER
 from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallInfo
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -443,7 +444,7 @@ def run_llm_loop(
                 tool_definitions=[tool.tool_definition() for tool in final_tools],
                 tool_choice=tool_choice,
                 llm=llm,
-                turn_index=llm_cycle_count + reasoning_cycles,
+                placement=Placement(turn_index=llm_cycle_count + reasoning_cycles),
                 citation_processor=citation_processor,
                 state_container=state_container,
                 # The rich docs representation is passed in so that when yielding the answer, it can also
@@ -495,7 +496,7 @@ def run_llm_loop(
                     raise ValueError("Tool response missing tool_call reference")
 
                 tool_call = tool_response.tool_call
-                tab_index = tool_call.tab_index
+                tab_index = tool_call.placement.tab_index
 
                 # Track if search tool was called (for skipping query expansion on subsequent calls)
                 if tool_call.tool_name == SearchTool.NAME:
@@ -625,7 +626,7 @@ def run_llm_loop(
 
         emitter.emit(
             Packet(
-                turn_index=llm_cycle_count + reasoning_cycles,
+                placement=Placement(turn_index=llm_cycle_count + reasoning_cycles),
                 obj=OverallStop(type="stop"),
             )
         )

@@ -29,7 +29,7 @@ class ReasoningEffort(str, Enum):
 # Budget tokens for Claude extended thinking at each reasoning effort level
 CLAUDE_REASONING_BUDGET_TOKENS: dict[ReasoningEffort, int] = {
     ReasoningEffort.OFF: 0,
-    ReasoningEffort.LOW: 1000,
+    ReasoningEffort.LOW: 1024,
     ReasoningEffort.MEDIUM: 5000,
     ReasoningEffort.HIGH: 10000,
 }

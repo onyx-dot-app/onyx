@@ -76,7 +76,7 @@ export function isFinalAnswerComplete(packets: Packet[]) {
   return packets.some(
     (packet) =>
       packet.obj.type === PacketType.SECTION_END &&
-      packet.turn_index === messageStartPacket.turn_index
+      packet.placement.turn_index === messageStartPacket.placement.turn_index
   );
 }
 
@@ -97,8 +97,8 @@ export function groupPacketsByTurnIndex(
       >,
       packet
     ) => {
-      const turn_index = packet.turn_index;
-      const tab_index = packet.tab_index ?? 0;
+      const turn_index = packet.placement.turn_index;
+      const tab_index = packet.placement.tab_index ?? 0;
       const key = `${turn_index}-${tab_index}`;
       if (!acc.has(key)) {
         acc.set(key, { turn_index, tab_index, packets: [] });

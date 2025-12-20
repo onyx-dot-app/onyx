@@ -212,70 +212,66 @@ export type ObjTypes =
   | SectionEndObj
   | CitationObj;
 
-// Packet wrapper for streaming objects
-export interface Packet {
+// Placement interface for packet positioning
+export interface Placement {
   turn_index: number;
   tab_index?: number; // For parallel tool calls - tools with same turn_index but different tab_index run in parallel
+  sub_turn_index?: number | null;
+}
+
+// Packet wrapper for streaming objects
+export interface Packet {
+  placement: Placement;
   obj: ObjTypes;
 }
 
 export interface ChatPacket {
-  turn_index: number;
-  tab_index?: number;
+  placement: Placement;
   obj: ChatObj;
 }
 
 export interface StopPacket {
-  turn_index: number;
-  tab_index?: number;
+  placement: Placement;
   obj: StopObj;
 }
 
 export interface CitationPacket {
-  turn_index: number;
-  tab_index?: number;
+  placement: Placement;
   obj: CitationObj;
 }
 
 // New specific tool packet types
 export interface SearchToolPacket {
-  turn_index: number;
-  tab_index?: number;
+  placement: Placement;
   obj: SearchToolObj;
 }
 
 export interface ImageGenerationToolPacket {
-  turn_index: number;
-  tab_index?: number;
+  placement: Placement;
   obj: ImageGenerationToolObj;
 }
 
 export interface PythonToolPacket {
-  turn_index: number;
-  tab_index?: number;
+  placement: Placement;
   obj: PythonToolObj;
 }
 
 export interface FetchToolPacket {
-  turn_index: number;
-  tab_index?: number;
+  placement: Placement;
   obj: FetchToolObj;
 }
 
 export interface CustomToolPacket {
-  turn_index: number;
-  tab_index?: number;
+  placement: Placement;
   obj: CustomToolObj;
 }
 
 export interface ReasoningPacket {
-  turn_index: number;
-  tab_index?: number;
+  placement: Placement;
   obj: ReasoningObj;
 }
 
 export interface SectionEndPacket {
-  turn_index: number;
-  tab_index?: number;
+  placement: Placement;
   obj: SectionEndObj;
 }

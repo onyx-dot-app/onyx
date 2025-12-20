@@ -1,6 +1,7 @@
 # TODO: Notes for potential extensions and future improvements:
 # 1. Allow tools that aren't search specific tools
 # 2. Use user provided custom prompts
+# 3. Save the plan for replay
 
 from collections.abc import Callable
 from typing import cast
@@ -37,6 +38,7 @@ from onyx.prompts.deep_research.orchestration_layer import ORCHESTRATOR_PROMPT_R
 from onyx.prompts.deep_research.orchestration_layer import RESEARCH_PLAN_PROMPT
 from onyx.prompts.deep_research.orchestration_layer import USER_FINAL_REPORT_QUERY
 from onyx.prompts.prompt_utils import get_current_llm_day_time
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import DeepResearchPlanDelta
@@ -45,9 +47,9 @@ from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.fake_tools.research_agent import run_research_agent_calls
+from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallInfo
 from onyx.tools.models import ToolCallKickoff
-from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -78,6 +80,7 @@ def generate_final_report(
     token_counter: Callable[[str], int],
     state_container: ChatStateContainer,
     emitter: Emitter,
+    turn_index: int,
     user_identity: LLMUserIdentity | None,
 ) -> None:
     final_report_prompt = FINAL_REPORT_PROMPT.format(
@@ -108,7 +111,7 @@ def generate_final_report(
         tool_definitions=[],
         tool_choice=ToolChoiceOptions.NONE,
         llm=llm,
-        turn_index=999,  # TODO
+        placement=Placement(turn_index=turn_index),
         citation_processor=None,
         state_container=state_container,
         reasoning_effort=ReasoningEffort.LOW,
@@ -140,7 +143,7 @@ def run_deep_research_llm_loop(
 
     # An approximate limit. In extreme cases it may still fail but this should allow deep research
     # to work in most cases.
-    if llm.config.max_input_tokens < 25000:
+    if llm.config.max_input_tokens < 50000:
         raise RuntimeError(
             "Cannot run Deep Research with an LLM that has less than 25,000 max input tokens"
         )
@@ -154,7 +157,7 @@ def run_deep_research_llm_loop(
     # Filter tools to only allow web search, internal search, and open URL
     allowed_tool_names = {SearchTool.NAME, WebSearchTool.NAME, OpenURLTool.NAME}
     allowed_tools = [tool for tool in tools if tool.name in allowed_tool_names]
-    orchestrator_start_turn_index = 0
+    orchestrator_start_turn_index = 1
 
     #########################################################
     # CLARIFICATION STEP (optional)
@@ -185,7 +188,7 @@ def run_deep_research_llm_loop(
             tool_definitions=get_clarification_tool_definitions(),
             tool_choice=ToolChoiceOptions.AUTO,
             llm=llm,
-            turn_index=0,
+            placement=Placement(turn_index=0),
             # No citations in this step, it should just pass through all
             # tokens directly so initialized as an empty citation processor
             citation_processor=None,
@@ -198,7 +201,9 @@ def run_deep_research_llm_loop(
             # Mark this turn as a clarification question
             state_container.set_is_clarification(True)
 
-            emitter.emit(Packet(turn_index=0, obj=OverallStop(type="stop")))
+            emitter.emit(
+                Packet(placement=Placement(turn_index=0), obj=OverallStop(type="stop"))
+            )
 
             # If a clarification is asked, we need to end this turn and wait on user input
             return
@@ -229,7 +234,7 @@ def run_deep_research_llm_loop(
         tool_definitions=[],
         tool_choice=ToolChoiceOptions.NONE,
         llm=llm,
-        turn_index=0,
+        placement=Placement(turn_index=0),
         citation_processor=None,
         state_container=state_container,
         final_documents=None,
@@ -244,14 +249,14 @@ def run_deep_research_llm_loop(
             if isinstance(packet.obj, AgentResponseStart):
                 emitter.emit(
                     Packet(
-                        turn_index=packet.turn_index,
+                        placement=packet.placement,
                         obj=DeepResearchPlanStart(),
                     )
                 )
             elif isinstance(packet.obj, AgentResponseDelta):
                 emitter.emit(
                     Packet(
-                        turn_index=packet.turn_index,
+                        placement=packet.placement,
                         obj=DeepResearchPlanDelta(content=packet.obj.content),
                     )
                 )
@@ -259,16 +264,16 @@ def run_deep_research_llm_loop(
                 # Pass through other packet types (e.g., ReasoningStart, ReasoningDelta, etc.)
                 emitter.emit(packet)
         except StopIteration as e:
-            llm_step_result, orchestrator_start_turn_index = e.value
-            # TODO: All that is done with the plan is for streaming to the frontend and informing the flow
-            # Currently not saved. It would have to be saved as a ToolCall for a new tool type.
+            llm_step_result, reasoned = e.value
             emitter.emit(
                 Packet(
                     # Marks the last turn end which should be the plan generation
-                    turn_index=orchestrator_start_turn_index - 1,
+                    placement=Placement(turn_index=1 if reasoned else 0),
                     obj=SectionEnd(),
                 )
             )
+            if reasoned:
+                orchestrator_start_turn_index += 1
             break
     llm_step_result = cast(LlmStepResult, llm_step_result)
 
@@ -340,7 +345,9 @@ def run_deep_research_llm_loop(
             ),
             tool_choice=ToolChoiceOptions.REQUIRED,
             llm=llm,
-            turn_index=orchestrator_start_turn_index + cycle + reasoning_cycles,
+            placement=Placement(
+                turn_index=orchestrator_start_turn_index + cycle + reasoning_cycles
+            ),
             # No citations in this step, it should just pass through all
             # tokens directly so initialized as an empty citation processor
             citation_processor=DynamicCitationProcessor(),
@@ -360,6 +367,8 @@ def run_deep_research_llm_loop(
             )
 
         if not tool_calls:
+            # Basically hope that this is an infrequent occurence and hopefully multiple research
+            # cycles have already ran
             logger.warning("No tool calls found, this should not happen.")
             generate_final_report(
                 history=simple_chat_history,
@@ -367,6 +376,7 @@ def run_deep_research_llm_loop(
                 token_counter=token_counter,
                 state_container=state_container,
                 emitter=emitter,
+                turn_index=orchestrator_start_turn_index + cycle + reasoning_cycles,
                 user_identity=user_identity,
             )
             break
@@ -381,6 +391,7 @@ def run_deep_research_llm_loop(
                 token_counter=token_counter,
                 state_container=state_container,
                 emitter=emitter,
+                turn_index=special_tool_calls.generate_report_tool_call.placement.turn_index,
                 user_identity=user_identity,
             )
             break
@@ -390,6 +401,8 @@ def run_deep_research_llm_loop(
             # This will not actually get saved to the db as a tool call but we'll attach it to the tool(s) called after
             # it as if it were just a reasoning model doing it. In the chat history, because it happens in 2 steps,
             # we will show it as a separate message.
+            # NOTE: This does not need to increment the reasoning cycles because the custom token processor causes
+            # the LLM step to handle this
             most_recent_reasoning = state_container.reasoning_tokens
             tool_call_message = think_tool_call.to_msg_str()
 
@@ -410,7 +423,6 @@ def run_deep_research_llm_loop(
                 image_files=None,
             )
             simple_chat_history.append(think_tool_response_msg)
-            reasoning_cycles += 1
             continue
         else:
             for tool_call in tool_calls:
@@ -430,12 +442,17 @@ def run_deep_research_llm_loop(
                     token_counter=token_counter,
                     state_container=state_container,
                     emitter=emitter,
+                    turn_index=orchestrator_start_turn_index + cycle + reasoning_cycles,
                     user_identity=user_identity,
                 )
                 break
 
             research_results = run_research_agent_calls(
+                # The tool calls here contain the placement information
                 research_agent_calls=research_agent_calls,
+                parent_tool_call_ids=[
+                    tool_call.tool_call_id for tool_call in tool_calls
+                ],
                 tools=allowed_tools,
                 emitter=emitter,
                 state_container=state_container,

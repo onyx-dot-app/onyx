@@ -9,13 +9,14 @@ from onyx.context.search.models import SearchDocsResponse
 from onyx.context.search.utils import convert_inference_sections_to_search_docs
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.web_search import fetch_active_web_search_provider
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
+from onyx.tools.interface import Tool
 from onyx.tools.models import ToolResponse
 from onyx.tools.models import WebSearchToolOverrideKwargs
-from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.utils import (
     convert_inference_sections_to_llm_string,
 )
@@ -110,11 +111,10 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
             },
         }
 
-    def emit_start(self, turn_index: int, tab_index: int) -> None:
+    def emit_start(self, placement: Placement) -> None:
         self.emitter.emit(
             Packet(
-                turn_index=turn_index,
-                tab_index=tab_index,
+                placement=placement,
                 obj=SearchToolStart(is_internet_search=True),
             )
         )
@@ -129,8 +129,7 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
 
     def run(
         self,
-        turn_index: int,
-        tab_index: int,
+        placement: Placement,
         override_kwargs: WebSearchToolOverrideKwargs,
         **llm_kwargs: Any,
     ) -> ToolResponse:
@@ -140,8 +139,7 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         # Emit queries
         self.emitter.emit(
             Packet(
-                turn_index=turn_index,
-                tab_index=tab_index,
+                placement=placement,
                 obj=SearchToolQueriesDelta(queries=queries),
             )
         )
@@ -205,8 +203,7 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         # Emit documents
         self.emitter.emit(
             Packet(
-                turn_index=turn_index,
-                tab_index=tab_index,
+                placement=placement,
                 obj=SearchToolDocumentsDelta(documents=search_docs),
             )
         )

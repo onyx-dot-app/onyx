@@ -10,7 +10,7 @@ import { useAppRouter } from "@/hooks/appNavigation";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Truncated from "@/refresh-components/texts/Truncated";
 import type { IconProps } from "@opal/types";
-import { usePinnedAgentsWithDetails } from "@/hooks/useAgents";
+import { usePinnedAgents } from "@/hooks/useAgents";
 import { cn, noProp } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
@@ -48,7 +48,7 @@ export interface AgentCardProps {
 export default function AgentCard({ agent }: AgentCardProps) {
   const route = useAppRouter();
   const router = useRouter();
-  const { pinnedAgents, togglePinnedAgent } = usePinnedAgentsWithDetails();
+  const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const pinned = useMemo(
     () => pinnedAgents.some((pinnedAgent) => pinnedAgent.id === agent.id),
     [agent.id, pinnedAgents]

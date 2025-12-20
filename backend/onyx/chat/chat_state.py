@@ -6,6 +6,7 @@ from typing import Any
 
 from onyx.chat.emitter import Emitter
 from onyx.context.search.models import SearchDoc
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketException
@@ -86,7 +87,7 @@ class ChatStateContainer:
             return self.is_clarification
 
 
-def run_chat_llm_with_state_containers(
+def run_chat_loop_with_state_containers(
     func: Callable[..., None],
     is_connected: Callable[[], bool],
     emitter: Emitter,
@@ -110,7 +111,7 @@ def run_chat_llm_with_state_containers(
         **kwargs: Additional keyword arguments for func
 
     Usage:
-        packets = run_chat_llm_with_state_containers(
+        packets = run_chat_loop_with_state_containers(
             my_func,
             emitter=emitter,
             state_container=state_container,
@@ -131,7 +132,7 @@ def run_chat_llm_with_state_containers(
             # If execution fails, emit an exception packet
             emitter.emit(
                 Packet(
-                    turn_index=0,
+                    placement=Placement(turn_index=0),
                     obj=PacketException(type="error", exception=e),
                 )
             )

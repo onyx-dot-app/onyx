@@ -8,7 +8,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from onyx.chat.chat_state import ChatStateContainer
-from onyx.chat.chat_state import run_chat_llm_with_state_containers
+from onyx.chat.chat_state import run_chat_loop_with_state_containers
 from onyx.chat.chat_utils import convert_chat_history
 from onyx.chat.chat_utils import create_chat_history_chain
 from onyx.chat.chat_utils import get_custom_agent_prompt
@@ -65,7 +65,7 @@ from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.utils import get_json_line
 from onyx.tools.constants import SEARCH_TOOL_ID
-from onyx.tools.tool import Tool
+from onyx.tools.interface import Tool
 from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_constructor import CustomToolConfig
 from onyx.tools.tool_constructor import SearchToolConfig
@@ -553,7 +553,7 @@ def stream_chat_message_objects(
             # (user has already responded to a clarification question)
             skip_clarification = is_last_assistant_message_clarification(chat_history)
 
-            yield from run_chat_llm_with_state_containers(
+            yield from run_chat_loop_with_state_containers(
                 run_deep_research_llm_loop,
                 is_connected=check_is_connected,
                 emitter=emitter,
@@ -568,7 +568,7 @@ def stream_chat_message_objects(
                 user_identity=user_identity,
             )
         else:
-            yield from run_chat_llm_with_state_containers(
+            yield from run_chat_loop_with_state_containers(
                 run_llm_loop,
                 is_connected=check_is_connected,  # Not passed through to run_llm_loop
                 emitter=emitter,

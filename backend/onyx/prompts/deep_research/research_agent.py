@@ -18,7 +18,7 @@ You have a limited number of cycles of searches to complete your research but yo
 Each set of web searches increments the cycle by 1 (only web searches increment the cycle count). You are on cycle {{current_cycle_count}} of 3.\
 {{optional_internal_search_tool_description}}\
 {{optional_web_search_tool_description}}\
-{{optional_open_urls_tool_description}}
+{{optional_open_url_tool_description}}
 ## {THINK_TOOL_NAME}
 CRITICAL - use the think tool after every set of searches and reads. \
 You MUST use the {THINK_TOOL_NAME} before calling the web_search tool for all calls to web_search except for the first call. \
@@ -58,10 +58,10 @@ USER_REPORT_QUERY = """
 Please write me a comprehensive report on the research topic given the context above. As a reminder, the original topic was:
 {research_topic}
 
-Remember to include as much information as possible and as faithful to the original sources as possible. \
+Remember to include AS MUCH INFORMATION AS POSSIBLE and as faithful to the original sources as possible. \
 Keep it free of formatting and focus on the facts only. Be sure to include all context for each fact to avoid misinterpretation or misattribution.
 
-CRITICAL - BE EXTREMELY THOROUGH AND COMPREHENSIVE, YOUR RESPONSE SHOULD BE SEVERAL PAGES LONG.
+CRITICAL - BE EXTREMELY THOROUGH AND COMPREHENSIVE, YOUR RESPONSE SHOULD BE MANY PAGES LONG.
 """
 
 
@@ -81,8 +81,16 @@ For context, the date is {{current_datetime}}.
 You have a limited number of cycles of searches to complete your research but you do not have to use all cycles. Each set of web searches increments the cycle by 1. You are on cycle {{current_cycle_count}} of {MAX_RESEARCH_CYCLES}.\
 {{optional_internal_search_tool_description}}\
 {{optional_web_search_tool_description}}\
-{{optional_open_urls_tool_description}}
+{{optional_open_url_tool_description}}
 ## {GENERATE_REPORT_TOOL_NAME}
 Once you have completed your research, call the {GENERATE_REPORT_TOOL_NAME} tool. You should only call this tool after you have fully researched the topic.
+""".strip()
+
+
+OPEN_URL_REMINDER_REASEARCH_AGENT = """
+Remember that after using web_search, you are encouraged to open some pages to get more context unless the query is completely answered by the snippets.
+Open the pages that look the most promising and high quality by calling the open_url tool with an array of URLs.
+
+Do not acknowledge this hint in your response.
 """.strip()
 # ruff: noqa: E501, W605 end

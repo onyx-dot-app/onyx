@@ -583,6 +583,16 @@ LINEAR_CLIENT_SECRET = os.getenv("LINEAR_CLIENT_SECRET")
 SLACK_NUM_THREADS = int(os.getenv("SLACK_NUM_THREADS") or 8)
 MAX_SLACK_QUERY_EXPANSIONS = int(os.environ.get("MAX_SLACK_QUERY_EXPANSIONS", "5"))
 
+# Slack federated search thread context settings
+# Batch size for fetching thread context (controls concurrent API calls per batch)
+SLACK_THREAD_CONTEXT_BATCH_SIZE = int(
+    os.environ.get("SLACK_THREAD_CONTEXT_BATCH_SIZE", "5")
+)
+# Maximum messages to fetch thread context for (top N by relevance get full context)
+MAX_SLACK_THREAD_CONTEXT_MESSAGES = int(
+    os.environ.get("MAX_SLACK_THREAD_CONTEXT_MESSAGES", "5")
+)
+
 DASK_JOB_CLIENT_ENABLED = (
     os.environ.get("DASK_JOB_CLIENT_ENABLED", "").lower() == "true"
 )

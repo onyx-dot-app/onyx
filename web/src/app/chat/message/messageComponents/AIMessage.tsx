@@ -236,8 +236,7 @@ export default function AIMessage({
     const { turn_index, tab_index } = parseToolKey(groupKey);
 
     const syntheticPacket: Packet = {
-      turn_index,
-      tab_index,
+      placement: { turn_index, tab_index },
       obj: { type: PacketType.SECTION_END },
     };
 
@@ -254,8 +253,8 @@ export default function AIMessage({
       const packet = rawPackets[i];
       if (!packet) continue;
 
-      const currentTurnIndex = packet.turn_index;
-      const currentTabIndex = packet.tab_index ?? 0;
+      const currentTurnIndex = packet.placement.turn_index;
+      const currentTabIndex = packet.placement.tab_index ?? 0;
       const currentGroupKey = `${currentTurnIndex}-${currentTabIndex}`;
       // If we see a new turn_index (not just tab_index), inject SECTION_END for previous groups
       // We only inject SECTION_END when moving to a completely new turn, not for parallel tools
@@ -447,7 +446,8 @@ export default function AIMessage({
         <div className="mx-auto w-[min(50rem,100%)] px-4 max-w-message-max">
           <div className="flex items-start">
             <AgentAvatar agent={chatState.assistant} size={24} />
-            <div className="max-w-message-max break-words pl-4">
+            {/* w-full ensures the MultiToolRenderer non-expanded state takes up the full width */}
+            <div className="max-w-message-max break-words pl-4 w-full">
               <div
                 ref={markdownRef}
                 className="overflow-x-visible max-w-content-max focus:outline-none select-text"

@@ -332,6 +332,9 @@ class LitellmLLM(LLM):
                     and reasoning_effort != ReasoningEffort.OFF
                     and is_reasoning
                     and "claude" in self.config.model_name.lower()
+                    # For now, Claude models cannot support reasoning when a tool is required
+                    # Maybe this will change in the future.
+                    and tool_choice != ToolChoiceOptions.REQUIRED
                     else {}
                 ),
                 # OpenAI and other providers use reasoning_effort

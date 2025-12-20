@@ -3,6 +3,7 @@ import re
 from pathlib import Path
 from textwrap import indent
 from typing import Any
+from typing import cast
 from typing import TextIO
 
 from ragas import evaluate  # type: ignore[import-not-found]
@@ -142,17 +143,20 @@ def ragas_evaluate(
         reference=reference_answer,
     )
     dataset = EvaluationDataset([sample])
-    return evaluate(
-        dataset,
-        metrics=[
-            ResponseRelevancy(),
-            Faithfulness(),
-            *(
-                [FactualCorrectness(mode="recall")]
-                if reference_answer is not None
-                else []
-            ),
-        ],
+    return cast(
+        EvaluationResult,
+        evaluate(
+            dataset,
+            metrics=[
+                ResponseRelevancy(),
+                Faithfulness(),
+                *(
+                    [FactualCorrectness(mode="recall")]
+                    if reference_answer is not None
+                    else []
+                ),
+            ],
+        ),
     )
 
 

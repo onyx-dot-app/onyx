@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from onyx.context.search.models import SearchDoc
+from onyx.server.query_and_chat.placement import Placement
 
 
 class StreamingType(Enum):
@@ -37,6 +38,9 @@ class StreamingType(Enum):
     DEEP_RESEARCH_PLAN_START = "deep_research_plan_start"
     DEEP_RESEARCH_PLAN_DELTA = "deep_research_plan_delta"
     RESEARCH_AGENT_START = "research_agent_start"
+    INTERMEDIATE_REPORT_START = "intermediate_report_start"
+    INTERMEDIATE_REPORT_DELTA = "intermediate_report_delta"
+    INTERMEDIATE_REPORT_CITED_DOCS = "intermediate_report_cited_docs"
 
 
 class BaseObj(BaseModel):
@@ -248,6 +252,26 @@ class ResearchAgentStart(BaseObj):
     research_task: str
 
 
+class IntermediateReportStart(BaseObj):
+    type: Literal["intermediate_report_start"] = (
+        StreamingType.INTERMEDIATE_REPORT_START.value
+    )
+
+
+class IntermediateReportDelta(BaseObj):
+    type: Literal["intermediate_report_delta"] = (
+        StreamingType.INTERMEDIATE_REPORT_DELTA.value
+    )
+    content: str
+
+
+class IntermediateReportCitedDocs(BaseObj):
+    type: Literal["intermediate_report_cited_docs"] = (
+        StreamingType.INTERMEDIATE_REPORT_CITED_DOCS.value
+    )
+    cited_docs: list[SearchDoc] | None = None
+
+
 ################################################
 # Packet Object
 ################################################
@@ -285,23 +309,13 @@ PacketObj = Union[
     DeepResearchPlanStart,
     DeepResearchPlanDelta,
     ResearchAgentStart,
+    IntermediateReportStart,
+    IntermediateReportDelta,
+    IntermediateReportCitedDocs,
 ]
 
 
-class Placement(BaseModel):
-    # Which iterative block in the UI is this part of, these are ordered and smaller ones happened first
-    turn_index: int
-    # For parallel tool calls to preserve order of execution
-    tab_index: int
-    # Used for tools/agents that call other tools, this currently doesn't support nested agents but can be added later
-    sub_turn_index: int
-
-
 class Packet(BaseModel):
-    turn_index: int | None
-    # For parallel tool calls to preserve order of execution
-    tab_index: int = 0
-    # Used for tools/agents that call other tools, this currently doesn't support nested agents but can be added later
-    sub_turn_index: int | None = None
+    placement: Placement
 
     obj: Annotated[PacketObj, Field(discriminator="type")]

@@ -21,9 +21,10 @@ import { ProjectFile } from "@/app/chat/projects/projectsService";
 import { useScrollonStream } from "@/app/chat/services/lib";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
-  useChatPageLayout,
   useCurrentChatState,
+  useCurrentMessageHistory,
   useCurrentMessageTree,
+  useLoadingError,
   useUncaughtError,
 } from "@/app/chat/stores/useChatSessionStore";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -84,8 +85,8 @@ const ChatUI = React.forwardRef(
       assistantId: liveAssistant?.id,
     });
     const { isMobile } = useScreenSize();
-    const { messageHistory: messages, loadingError: loadError } =
-      useChatPageLayout();
+    const loadError = useLoadingError();
+    const messages = useCurrentMessageHistory();
     const error = useUncaughtError();
     const messageTree = useCurrentMessageTree();
     const currentChatState = useCurrentChatState();
@@ -97,6 +98,7 @@ const ChatUI = React.forwardRef(
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const endDivRef = useRef<HTMLDivElement>(null);
     const scrollDist = useRef<number>(0);
+    const scrolledForSession = useRef<string | null>(null);
     const [aboveHorizon, setAboveHorizon] = useState(false);
     const debounceNumber = 100;
 
@@ -177,18 +179,24 @@ const ChatUI = React.forwardRef(
       enableAutoScroll: user?.preferences.auto_scroll,
     });
 
+    // Scroll to bottom once per chat session when messages are loaded
     useEffect(() => {
       if (!scrollContainerRef.current) return;
-      scrollContainerRef.current.scrollTop =
-        scrollContainerRef.current.scrollHeight;
-    }, [messages]);
+      if (scrolledForSession.current === currentChatSessionId) return;
+
+      if (messages.length > 0) {
+        scrollContainerRef.current.scrollTop =
+          scrollContainerRef.current.scrollHeight;
+        scrolledForSession.current = currentChatSessionId;
+      }
+    }, [messages, currentChatSessionId]);
 
     if (!liveAssistant) return <div className="flex-1" />;
 
     return (
       <div className="flex flex-col flex-1 w-full relative overflow-hidden">
         {aboveHorizon && (
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 z-floating-scroll-down-button">
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 z-sticky">
             <IconButton icon={SvgChevronDown} onClick={scrollToBottom} />
 
             <Spacer />
@@ -247,7 +255,7 @@ const ChatUI = React.forwardRef(
                 return (
                   <div
                     key={`error-${message.nodeId}`}
-                    className="max-w-message-max mx-auto"
+                    className="max-w-[min(50rem,100%)] mx-auto p-4"
                   >
                     <ErrorBanner
                       resubmit={handleResubmitLastMessage}
@@ -306,7 +314,7 @@ const ChatUI = React.forwardRef(
           {(((error !== null || loadError !== null) &&
             messages[messages.length - 1]?.type === "user") ||
             messages[messages.length - 1]?.type === "error") && (
-            <div className="max-w-message-max mx-auto">
+            <div className="max-w-[min(50rem,100%)] mx-auto p-4">
               <ErrorBanner
                 resubmit={handleResubmitLastMessage}
                 error={error || loadError || ""}

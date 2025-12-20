@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import cast
 
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import create_tool_call_failure_messages
@@ -6,7 +7,9 @@ from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.llm_step import run_llm_step
+from onyx.chat.llm_step import run_llm_step_pkt_generator
 from onyx.chat.models import ChatMessageSimple
+from onyx.chat.models import LlmStepResult
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
@@ -22,25 +25,31 @@ from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.models import ToolChoiceOptions
-from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
 from onyx.prompts.deep_research.dr_tool_prompts import OPEN_URLS_TOOL_DESCRIPTION
 from onyx.prompts.deep_research.dr_tool_prompts import (
     OPEN_URLS_TOOL_DESCRIPTION_REASONING,
 )
 from onyx.prompts.deep_research.dr_tool_prompts import WEB_SEARCH_TOOL_DESCRIPTION
+from onyx.prompts.deep_research.research_agent import OPEN_URL_REMINDER_REASEARCH_AGENT
 from onyx.prompts.deep_research.research_agent import RESEARCH_AGENT_PROMPT
 from onyx.prompts.deep_research.research_agent import RESEARCH_AGENT_PROMPT_REASONING
 from onyx.prompts.deep_research.research_agent import RESEARCH_REPORT_PROMPT
 from onyx.prompts.deep_research.research_agent import USER_REPORT_QUERY
 from onyx.prompts.prompt_utils import get_current_llm_day_time
 from onyx.prompts.tool_prompts import INTERNAL_SEARCH_GUIDANCE
+from onyx.server.query_and_chat.placement import Placement
+from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
+from onyx.server.query_and_chat.streaming_models import AgentResponseStart
+from onyx.server.query_and_chat.streaming_models import IntermediateReportCitedDocs
+from onyx.server.query_and_chat.streaming_models import IntermediateReportDelta
+from onyx.server.query_and_chat.streaming_models import IntermediateReportStart
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import Placement
 from onyx.server.query_and_chat.streaming_models import ResearchAgentStart
+from onyx.server.query_and_chat.streaming_models import SectionEnd
+from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallInfo
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -53,6 +62,8 @@ logger = setup_logger()
 
 
 RESEARCH_CYCLE_CAP = 3
+# May be good to experiment with this, empirically reports of around 5,000 tokens are pretty good.
+MAX_INTERMEDIATE_REPORT_LENGTH_TOKENS = 10000
 
 
 def generate_intermediate_report(
@@ -87,19 +98,68 @@ def generate_intermediate_report(
         available_tokens=llm.config.max_input_tokens,
     )
 
-    llm_step_result, _ = run_llm_step(
-        emitter=emitter,
+    intermediate_report_generator = run_llm_step_pkt_generator(
         history=research_history,
         tool_definitions=[],
         tool_choice=ToolChoiceOptions.NONE,
         llm=llm,
-        turn_index=999,  # TODO
+        placement=placement,
         citation_processor=DynamicCitationProcessor(),
         state_container=state_container,
         reasoning_effort=ReasoningEffort.LOW,
         final_documents=None,
         user_identity=user_identity,
+        max_tokens=MAX_INTERMEDIATE_REPORT_LENGTH_TOKENS,
     )
+
+    while True:
+        try:
+            packet = next(intermediate_report_generator)
+            # Translate AgentResponseStart/Delta packets to DeepResearchPlanStart/Delta
+            # The LLM response from this prompt is the research plan
+            if isinstance(packet.obj, AgentResponseStart):
+                emitter.emit(
+                    Packet(
+                        placement=packet.placement,
+                        obj=IntermediateReportStart(),
+                    )
+                )
+            elif isinstance(packet.obj, AgentResponseDelta):
+                emitter.emit(
+                    Packet(
+                        placement=packet.placement,
+                        obj=IntermediateReportDelta(content=packet.obj.content),
+                    )
+                )
+            else:
+                # Pass through other packet types (e.g., ReasoningStart, ReasoningDelta, etc.)
+                emitter.emit(packet)
+        except StopIteration as e:
+            llm_step_result, reasoned = e.value
+            emitter.emit(
+                Packet(
+                    placement=Placement(
+                        turn_index=placement.turn_index + (1 if reasoned else 0),
+                        tab_index=placement.tab_index,
+                        sub_turn_index=placement.sub_turn_index,
+                    ),
+                    obj=IntermediateReportCitedDocs(
+                        cited_docs=[]
+                    ),  # TODO: Add actual cited docs
+                )
+            )
+            emitter.emit(
+                Packet(
+                    placement=Placement(
+                        turn_index=placement.turn_index + (1 if reasoned else 0),
+                        tab_index=placement.tab_index,
+                    ),
+                    obj=SectionEnd(),
+                )
+            )
+            break
+
+    llm_step_result = cast(LlmStepResult, llm_step_result)
 
     final_report = llm_step_result.answer
     if final_report is None:
@@ -107,18 +167,12 @@ def generate_intermediate_report(
             f"LLM failed to generate a report for research task: {research_topic}"
         )
 
-    # emitter.emit(
-    #     Packet(
-    #         obj=ResearchAgentStart(research_task=research_topic),
-    #         placement=placement,
-    #     )
-    # )
-
     return final_report
 
 
 def run_research_agent_call(
     research_agent_call: ToolCallKickoff,
+    parent_tool_call_id: str,
     tools: list[Tool],
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -127,24 +181,22 @@ def run_research_agent_call(
     token_counter: Callable[[str], int],
     user_identity: LLMUserIdentity | None,
 ) -> ResearchAgentCallResult:
-    cycle_count = 0
+    research_cycle_count = 0
     llm_cycle_count = 0
     current_tools = tools
     gathered_documents: list[SearchDoc] | None = None
     reasoning_cycles = 0
     just_ran_web_search = False
 
-    turn_index = research_agent_call.turn_index
-    tab_index = research_agent_call.tab_index
+    turn_index = research_agent_call.placement.turn_index
+    tab_index = research_agent_call.placement.tab_index
 
     # If this fails to parse, we can't run the loop anyway, let this one fail in that case
     research_topic = research_agent_call.tool_args[RESEARCH_AGENT_TASK_KEY]
 
     emitter.emit(
         Packet(
-            turn_index=turn_index,
-            tab_index=tab_index,
-            sub_turn_index=0,
+            placement=Placement(turn_index=turn_index, tab_index=tab_index),
             obj=ResearchAgentStart(research_task=research_topic),
         )
     )
@@ -157,8 +209,9 @@ def run_research_agent_call(
     msg_history: list[ChatMessageSimple] = [initial_user_message]
 
     citation_mapping: dict[int, str] = {}
-    while cycle_count <= RESEARCH_CYCLE_CAP:
-        if cycle_count == RESEARCH_CYCLE_CAP:
+    while research_cycle_count <= RESEARCH_CYCLE_CAP:
+        if research_cycle_count == RESEARCH_CYCLE_CAP:
+            # For the last cycle, do not use any more searches, only reason or generate a report
             current_tools = [
                 tool
                 for tool in tools
@@ -195,10 +248,10 @@ def run_research_agent_call(
         system_prompt_str = system_prompt_template.format(
             available_tools=tools_description,
             current_datetime=get_current_llm_day_time(full_sentence=False),
-            current_cycle_count=cycle_count,
+            current_cycle_count=research_cycle_count,
             optional_internal_search_tool_description=internal_search_tip,
             optional_web_search_tool_description=web_search_tip,
-            optional_open_urls_tool_description=open_urls_tip,
+            optional_open_url_tool_description=open_urls_tip,
         )
 
         system_prompt = ChatMessageSimple(
@@ -209,8 +262,8 @@ def run_research_agent_call(
 
         if just_ran_web_search:
             reminder_message = ChatMessageSimple(
-                message=OPEN_URL_REMINDER,
-                token_count=token_counter(OPEN_URL_REMINDER),
+                message=OPEN_URL_REMINDER_REASEARCH_AGENT,
+                token_count=100,
                 message_type=MessageType.USER,
             )
         else:
@@ -235,7 +288,11 @@ def run_research_agent_call(
             + research_agent_tools,
             tool_choice=ToolChoiceOptions.REQUIRED,
             llm=llm,
-            turn_index=llm_cycle_count + reasoning_cycles,
+            placement=Placement(
+                turn_index=turn_index,
+                tab_index=tab_index,
+                sub_turn_index=llm_cycle_count + reasoning_cycles,
+            ),
             citation_processor=DynamicCitationProcessor(),
             state_container=state_container,
             reasoning_effort=ReasoningEffort.LOW,
@@ -250,6 +307,13 @@ def run_research_agent_call(
 
         just_ran_web_search = False
 
+        if any(
+            tool_call.tool_name in {SearchTool.NAME, WebSearchTool.NAME}
+            for tool_call in tool_calls
+        ):
+            # Only the search actions increment the cycle for the max cycle count
+            research_cycle_count += 1
+
         special_tool_calls = check_special_tool_calls(tool_calls=tool_calls)
         if special_tool_calls.generate_report_tool_call:
             final_report = generate_intermediate_report(
@@ -261,8 +325,9 @@ def run_research_agent_call(
                 state_container=state_container,
                 emitter=emitter,
                 placement=Placement(
-                    turn_index=turn_index, tab_index=tab_index, sub_turn_index=0
-                ),  # TODO
+                    turn_index=turn_index,
+                    tab_index=tab_index,
+                ),
             )
             return ResearchAgentCallResult(
                 intermediate_report=final_report, search_docs=[]
@@ -316,7 +381,7 @@ def run_research_agent_call(
                     raise ValueError("Tool response missing tool_call reference")
 
                 tool_call = tool_response.tool_call
-                tab_index = tool_call.tab_index
+                tab_index = tool_call.placement.tab_index
 
                 tool = tools_by_name.get(tool_call.tool_name)
                 if not tool:
@@ -339,9 +404,8 @@ def run_research_agent_call(
                         just_ran_web_search = True
 
                 tool_call_info = ToolCallInfo(
-                    parent_tool_call_id=None,  # TODO
-                    turn_index=llm_cycle_count
-                    + reasoning_cycles,  # TODO (subturn index also)
+                    parent_tool_call_id=parent_tool_call_id,
+                    turn_index=llm_cycle_count + reasoning_cycles,
                     tab_index=tab_index,
                     tool_name=tool_call.tool_name,
                     tool_call_id=tool_call.tool_call_id,
@@ -392,14 +456,16 @@ def run_research_agent_call(
         state_container=state_container,
         emitter=emitter,
         placement=Placement(
-            turn_index=turn_index, tab_index=tab_index, sub_turn_index=0
-        ),  # TODO
+            turn_index=turn_index,
+            tab_index=tab_index,
+        ),
     )
     return ResearchAgentCallResult(intermediate_report=final_report, search_docs=[])
 
 
 def run_research_agent_calls(
     research_agent_calls: list[ToolCallKickoff],
+    parent_tool_call_ids: list[str],
     tools: list[Tool],
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -414,6 +480,7 @@ def run_research_agent_calls(
             run_research_agent_call,
             (
                 research_agent_call,
+                parent_tool_call_id,
                 tools,
                 emitter,
                 state_container,
@@ -423,7 +490,9 @@ def run_research_agent_calls(
                 user_identity,
             ),
         )
-        for research_agent_call in research_agent_calls
+        for research_agent_call, parent_tool_call_id in zip(
+            research_agent_calls, parent_tool_call_ids
+        )
     ]
 
     return run_functions_tuples_in_parallel(
