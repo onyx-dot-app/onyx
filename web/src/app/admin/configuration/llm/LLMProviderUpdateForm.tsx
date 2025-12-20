@@ -10,7 +10,6 @@ import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import {
   SelectorFormField,
   TextFormField,
-  MultiSelectField,
   FileUploadFormField,
 } from "@/components/Field";
 import { useEffect, useRef, useState } from "react";
@@ -31,7 +30,8 @@ import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import { AgentsMultiSelect } from "@/components/AgentsMultiSelect";
-import { SvgTrash } from "@opal/icons";
+import InputComboBox from "@/refresh-components/inputs/InputComboBox";
+import { SvgTrash, SvgX } from "@opal/icons";
 
 function AutoFetchModels({
   llmProviderDescriptor,
@@ -179,7 +179,7 @@ export function LLMProviderUpdateForm({
         {} as { [key: string]: string }
       ),
     is_public: existingLlmProvider?.is_public ?? true,
-    is_auto_mode: existingLlmProvider?.is_auto_mode ?? false,
+    is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
     groups: existingLlmProvider?.groups ?? [],
     personas: existingLlmProvider?.personas ?? [],
     model_configurations: existingLlmProvider?.model_configurations ?? [],
@@ -621,11 +621,11 @@ export function LLMProviderUpdateForm({
                   <div className="flex items-center justify-between">
                     <div>
                       <label className="block font-medium text-base">
-                        Auto-update
+                        Auto Update
                       </label>
                       <span className="block text-sm text-text-03">
-                        Update the available models automatically when new
-                        models are released.
+                        Automatically update the available models when new
+                        models are released. Recommended for most teams.
                       </span>
                     </div>
                     <button
@@ -660,7 +660,9 @@ export function LLMProviderUpdateForm({
             {dynamicConfig &&
               !formikProps.values.is_auto_mode &&
               fetchModelsError && (
-                <Text className="text-red-600 text-sm">{fetchModelsError}</Text>
+                <Text className="text-status-error-05 text-sm">
+                  {fetchModelsError}
+                </Text>
               )}
 
             {!firstTimeConfiguration && (
@@ -742,36 +744,129 @@ export function LLMProviderUpdateForm({
                     )}
                   </div>
                 ) : (
-                  // Manual mode: Full model configuration
+                  // Manual mode: Unified model selection
                   <div key="manual-mode" className="animate-fadeIn">
                     {isFetchingModels && dynamicConfig ? (
                       <div>
-                        <label className="block font-medium text-base">
-                          Default Model
-                        </label>
-                        <span className="block text-sm text-text-03 mb-2">
-                          The model to use by default for this provider unless
-                          otherwise specified.
-                        </span>
                         <div className="mt-2 flex items-center p-3 border border-border-01 rounded-lg bg-background-neutral-00">
                           <div className="h-5 w-5 animate-spin rounded-full border-2 border-border-03 border-t-action-link-05" />
                         </div>
                       </div>
                     ) : currentModelConfigurations.length > 0 ? (
-                      <SelectorFormField
-                        name="default_model_name"
-                        subtext="The model to use by default for this provider unless otherwise specified."
-                        label="Default Model"
-                        options={currentModelConfigurations.map(
-                          (modelConfiguration) => ({
-                            // don't clean up names here to give admins descriptive names / handle duplicates
-                            // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
-                            name: modelConfiguration.name,
-                            value: modelConfiguration.name,
-                          })
+                      <div className="flex flex-col gap-2 w-full">
+                        <InputComboBox
+                          key={`model-select-${
+                            formikProps.values.selected_model_names?.length ?? 0
+                          }`}
+                          placeholder="Search and add models..."
+                          value=""
+                          options={currentModelConfigurations
+                            .filter(
+                              (m) =>
+                                !formikProps.values.selected_model_names?.includes(
+                                  m.name
+                                )
+                            )
+                            .map((modelConfiguration) => ({
+                              label: modelConfiguration.name,
+                              value: modelConfiguration.name,
+                            }))}
+                          onValueChange={(value) => {
+                            const currentSelected =
+                              formikProps.values.selected_model_names ?? [];
+                            const modelName = String(value);
+                            if (!currentSelected.includes(modelName)) {
+                              // Add to selected models
+                              formikProps.setFieldValue(
+                                "selected_model_names",
+                                [...currentSelected, modelName]
+                              );
+                              // If this is the first model, set it as default
+                              if (currentSelected.length === 0) {
+                                formikProps.setFieldValue(
+                                  "default_model_name",
+                                  modelName
+                                );
+                              }
+                            }
+                          }}
+                        />
+                        {(formikProps.values.selected_model_names?.length ??
+                          0) > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            {formikProps.values.selected_model_names?.map(
+                              (modelName) => {
+                                const isDefault =
+                                  formikProps.values.default_model_name ===
+                                  modelName;
+                                return (
+                                  <div
+                                    key={modelName}
+                                    className={`group flex items-center gap-1 rounded-lg border px-2 py-1 text-sm transition-colors ${
+                                      isDefault
+                                        ? "border-action-link-05 bg-action-link-05/10"
+                                        : "border-border-01 bg-background-neutral-00 hover:border-action-link-05/50 cursor-pointer"
+                                    }`}
+                                    onClick={() => {
+                                      if (!isDefault) {
+                                        formikProps.setFieldValue(
+                                          "default_model_name",
+                                          modelName
+                                        );
+                                      }
+                                    }}
+                                  >
+                                    <span
+                                      className={
+                                        isDefault
+                                          ? "text-action-link-05 font-medium"
+                                          : ""
+                                      }
+                                    >
+                                      {modelName}
+                                    </span>
+                                    {isDefault && (
+                                      <span className="text-xs text-action-link-05 ml-1">
+                                        (default)
+                                      </span>
+                                    )}
+                                    <button
+                                      type="button"
+                                      className="ml-1 p-0.5 rounded hover:bg-background-neutral-03 transition-colors"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        const currentSelected =
+                                          formikProps.values
+                                            .selected_model_names ?? [];
+                                        const newSelected =
+                                          currentSelected.filter(
+                                            (name) => name !== modelName
+                                          );
+                                        formikProps.setFieldValue(
+                                          "selected_model_names",
+                                          newSelected
+                                        );
+                                        // If removing the default, set the first remaining model as default
+                                        if (
+                                          isDefault &&
+                                          newSelected.length > 0
+                                        ) {
+                                          formikProps.setFieldValue(
+                                            "default_model_name",
+                                            newSelected[0]
+                                          );
+                                        }
+                                      }}
+                                    >
+                                      <SvgX className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                );
+                              }
+                            )}
+                          </div>
                         )}
-                        maxHeight="max-h-56"
-                      />
+                      </div>
                     ) : (
                       <TextFormField
                         name="default_model_name"
@@ -799,38 +894,6 @@ export function LLMProviderUpdateForm({
                   />
                   {showAdvancedOptions && (
                     <>
-                      {/* Display Models - only shown in Manual mode */}
-                      {!formikProps.values.is_auto_mode &&
-                        currentModelConfigurations.length > 0 && (
-                          <>
-                            <div className="w-full">
-                              <MultiSelectField
-                                selectedInitially={
-                                  formikProps.values.selected_model_names ?? []
-                                }
-                                name="selected_model_names"
-                                label="Display Models"
-                                subtext="Select the models to make available to users. Unselected models will not be available."
-                                options={currentModelConfigurations.map(
-                                  (modelConfiguration) => ({
-                                    value: modelConfiguration.name,
-                                    // don't clean up names here to give admins descriptive names / handle duplicates
-                                    // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
-                                    label: modelConfiguration.name,
-                                  })
-                                )}
-                                onChange={(selected) =>
-                                  formikProps.setFieldValue(
-                                    "selected_model_names",
-                                    selected
-                                  )
-                                }
-                              />
-                            </div>
-                            <Separator />
-                          </>
-                        )}
-
                       <div className="flex flex-col gap-3">
                         <Text headingH3>Access Controls</Text>
                         <IsPublicGroupSelector
