@@ -5,7 +5,6 @@ from math import ceil
 from fastapi import UploadFile
 from PIL import Image
 from PIL import ImageOps
-from PIL import UnidentifiedImageError
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
@@ -155,7 +154,7 @@ def categorize_uploaded_files(files: list[UploadFile]) -> CategorizedFiles:
                 token_count = estimate_image_tokens(image_data)
 
             # Otherwise, handle document as we would in file connector
-            elif extension in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
+            else:
                 # Use image_callback to count tokens as images are extracted,
                 # avoiding holding all images in memory (OOM risk)
                 embedded_image_tokens = 0
@@ -164,7 +163,7 @@ def categorize_uploaded_files(files: list[UploadFile]) -> CategorizedFiles:
                     nonlocal embedded_image_tokens
                     try:
                         embedded_image_tokens += estimate_image_tokens(img_data)
-                    except (UnidentifiedImageError, OSError) as e:
+                    except Exception as e:
                         logger.warning(
                             f"Failed to estimate tokens for embedded image "
                             f"from '{filename}': {e}"
