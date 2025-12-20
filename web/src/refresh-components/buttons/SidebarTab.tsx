@@ -120,7 +120,9 @@ export default function SidebarTab({
   );
 
   const content = href ? (
-    <Link href={href as Route} scroll={false}>{innerContent}</Link>
+    <Link href={href as Route} scroll={false}>
+      {innerContent}
+    </Link>
   ) : (
     innerContent
   );

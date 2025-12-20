@@ -17,6 +17,7 @@ import {
   ConnectorIndexingStatusLite,
   FederatedConnectorStatus,
 } from "@/lib/types";
+import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import {
   FiChevronDown,
@@ -48,7 +49,7 @@ function navigateWithModifier(
   if (e.metaKey || e.ctrlKey) {
     window.open(url, "_blank");
   } else {
-    router.push(url);
+    router.push(url as Route);
   }
 }
 
