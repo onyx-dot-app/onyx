@@ -347,20 +347,21 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
 
         inference_sections: list[InferenceSection] = all_results.sections + web_sections
 
-        failure_descriptions = []
         if not inference_sections:
+            failure_descriptions = []
             if all_results.missing_document_ids:
                 failure_descriptions.append(
                     "documents "
                     + ", ".join(sorted(set(all_results.missing_document_ids)))
                 )
-        if failed_web_urls:
-            cleaned_failures = sorted({url for url in failed_web_urls if url})
-            if cleaned_failures:
-                failure_descriptions.append("URLs " + ", ".join(cleaned_failures))
-        if failure_descriptions:
-            failure_msg = "Failed to fetch content from " + " and ".join(
-                failure_descriptions
+            if failed_web_urls:
+                cleaned_failures = sorted({url for url in failed_web_urls if url})
+                if cleaned_failures:
+                    failure_descriptions.append("URLs " + ", ".join(cleaned_failures))
+            failure_msg = (
+                "Failed to fetch content from " + " and ".join(failure_descriptions)
+                if failure_descriptions
+                else "Failed to fetch content from the requested resources."
             )
             return ToolResponse(rich_response=None, llm_facing_response=failure_msg)
 
