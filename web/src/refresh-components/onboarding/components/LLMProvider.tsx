@@ -113,7 +113,7 @@ function LLMProviderInner({
           {providerName ? (
             <ProviderIcon provider={providerName} size={16} className="" />
           ) : (
-            <SvgServer className="w-6 h-6 stroke-text-04" />
+            <SvgServer className="w-4 h-4 stroke-text-04" />
           )}
         </div>
         <div className="min-w-0 flex flex-col justify-center">
