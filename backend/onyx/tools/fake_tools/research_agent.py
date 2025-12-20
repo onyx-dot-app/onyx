@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import cast
 
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import create_tool_call_failure_messages
@@ -6,7 +7,9 @@ from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.llm_step import run_llm_step
+from onyx.chat.llm_step import run_llm_step_pkt_generator
 from onyx.chat.models import ChatMessageSimple
+from onyx.chat.models import LlmStepResult
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
@@ -35,8 +38,14 @@ from onyx.prompts.deep_research.research_agent import USER_REPORT_QUERY
 from onyx.prompts.prompt_utils import get_current_llm_day_time
 from onyx.prompts.tool_prompts import INTERNAL_SEARCH_GUIDANCE
 from onyx.server.query_and_chat.placement import Placement
+from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
+from onyx.server.query_and_chat.streaming_models import AgentResponseStart
+from onyx.server.query_and_chat.streaming_models import IntermediateReportCitedDocs
+from onyx.server.query_and_chat.streaming_models import IntermediateReportDelta
+from onyx.server.query_and_chat.streaming_models import IntermediateReportStart
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import ResearchAgentStart
+from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallInfo
 from onyx.tools.models import ToolCallKickoff
@@ -87,8 +96,7 @@ def generate_intermediate_report(
         available_tokens=llm.config.max_input_tokens,
     )
 
-    llm_step_result, _ = run_llm_step(
-        emitter=emitter,
+    intermediate_report_generator = run_llm_step_pkt_generator(
         history=research_history,
         tool_definitions=[],
         tool_choice=ToolChoiceOptions.NONE,
@@ -101,24 +109,67 @@ def generate_intermediate_report(
         user_identity=user_identity,
     )
 
+    while True:
+        try:
+            packet = next(intermediate_report_generator)
+            # Translate AgentResponseStart/Delta packets to DeepResearchPlanStart/Delta
+            # The LLM response from this prompt is the research plan
+            if isinstance(packet.obj, AgentResponseStart):
+                emitter.emit(
+                    Packet(
+                        placement=packet.placement,
+                        obj=IntermediateReportStart(),
+                    )
+                )
+            elif isinstance(packet.obj, AgentResponseDelta):
+                emitter.emit(
+                    Packet(
+                        placement=packet.placement,
+                        obj=IntermediateReportDelta(content=packet.obj.content),
+                    )
+                )
+            else:
+                # Pass through other packet types (e.g., ReasoningStart, ReasoningDelta, etc.)
+                emitter.emit(packet)
+        except StopIteration as e:
+            llm_step_result, reasoned = e.value
+            emitter.emit(
+                Packet(
+                    placement=Placement(
+                        turn_index=placement.turn_index + (1 if reasoned else 0),
+                        tab_index=placement.tab_index,
+                        sub_turn_index=placement.sub_turn_index,
+                    ),
+                    obj=IntermediateReportCitedDocs(
+                        cited_docs=[]
+                    ),  # TODO: Add actual cited docs
+                )
+            )
+            emitter.emit(
+                Packet(
+                    placement=Placement(
+                        turn_index=placement.turn_index + (1 if reasoned else 0),
+                        tab_index=placement.tab_index,
+                    ),
+                    obj=SectionEnd(),
+                )
+            )
+            break
+
+    llm_step_result = cast(LlmStepResult, llm_step_result)
+
     final_report = llm_step_result.answer
     if final_report is None:
         raise ValueError(
             f"LLM failed to generate a report for research task: {research_topic}"
         )
 
-    # emitter.emit(
-    #     Packet(
-    #         obj=ResearchAgentStart(research_task=research_topic),
-    #         placement=placement,
-    #     )
-    # )
-
     return final_report
 
 
 def run_research_agent_call(
     research_agent_call: ToolCallKickoff,
+    parent_tool_call_id: str,
     tools: list[Tool],
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -273,7 +324,6 @@ def run_research_agent_call(
                 placement=Placement(
                     turn_index=turn_index,
                     tab_index=tab_index,
-                    sub_turn_index=llm_cycle_count + reasoning_cycles,
                 ),
             )
             return ResearchAgentCallResult(
@@ -351,9 +401,8 @@ def run_research_agent_call(
                         just_ran_web_search = True
 
                 tool_call_info = ToolCallInfo(
-                    parent_tool_call_id=None,  # TODO
-                    turn_index=llm_cycle_count
-                    + reasoning_cycles,  # TODO (subturn index also)
+                    parent_tool_call_id=parent_tool_call_id,
+                    turn_index=llm_cycle_count + reasoning_cycles,
                     tab_index=tab_index,
                     tool_name=tool_call.tool_name,
                     tool_call_id=tool_call.tool_call_id,
@@ -406,7 +455,6 @@ def run_research_agent_call(
         placement=Placement(
             turn_index=turn_index,
             tab_index=tab_index,
-            sub_turn_index=llm_cycle_count + reasoning_cycles,
         ),
     )
     return ResearchAgentCallResult(intermediate_report=final_report, search_docs=[])
@@ -414,6 +462,7 @@ def run_research_agent_call(
 
 def run_research_agent_calls(
     research_agent_calls: list[ToolCallKickoff],
+    parent_tool_call_ids: list[str],
     tools: list[Tool],
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -428,6 +477,7 @@ def run_research_agent_calls(
             run_research_agent_call,
             (
                 research_agent_call,
+                parent_tool_call_id,
                 tools,
                 emitter,
                 state_container,
@@ -437,7 +487,9 @@ def run_research_agent_calls(
                 user_identity,
             ),
         )
-        for research_agent_call in research_agent_calls
+        for research_agent_call, parent_tool_call_id in zip(
+            research_agent_calls, parent_tool_call_ids
+        )
     ]
 
     return run_functions_tuples_in_parallel(

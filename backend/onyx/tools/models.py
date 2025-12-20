@@ -176,7 +176,10 @@ class CustomToolRunContext(BaseModel):
 
 
 class ToolCallInfo(BaseModel):
-    parent_tool_call_id: str | None  # None if attached to the Chat Message directly
+    # The parent_tool_call_id is the actual generated tool call id
+    # It is NOT the DB ID which often does not exist yet when the ToolCallInfo is created
+    # None if attached to the Chat Message directly
+    parent_tool_call_id: str | None
     turn_index: int
     tab_index: int
     tool_name: str

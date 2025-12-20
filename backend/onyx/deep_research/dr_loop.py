@@ -263,16 +263,16 @@ def run_deep_research_llm_loop(
                 # Pass through other packet types (e.g., ReasoningStart, ReasoningDelta, etc.)
                 emitter.emit(packet)
         except StopIteration as e:
-            llm_step_result, orchestrator_start_turn_index = e.value
-            # TODO: All that is done with the plan is for streaming to the frontend and informing the flow
-            # Currently not saved. It would have to be saved as a ToolCall for a new tool type.
+            llm_step_result, reasoned = e.value
             emitter.emit(
                 Packet(
                     # Marks the last turn end which should be the plan generation
-                    placement=Placement(turn_index=orchestrator_start_turn_index - 1),
+                    placement=Placement(turn_index=1 if reasoned else 0),
                     obj=SectionEnd(),
                 )
             )
+            if reasoned:
+                orchestrator_start_turn_index += 1
             break
     llm_step_result = cast(LlmStepResult, llm_step_result)
 
@@ -446,6 +446,9 @@ def run_deep_research_llm_loop(
             research_results = run_research_agent_calls(
                 # The tool calls here contain the placement information
                 research_agent_calls=research_agent_calls,
+                parent_tool_call_ids=[
+                    tool_call.tool_call_id for tool_call in tool_calls
+                ],
                 tools=allowed_tools,
                 emitter=emitter,
                 state_container=state_container,

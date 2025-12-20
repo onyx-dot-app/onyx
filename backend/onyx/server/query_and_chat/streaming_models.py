@@ -38,6 +38,9 @@ class StreamingType(Enum):
     DEEP_RESEARCH_PLAN_START = "deep_research_plan_start"
     DEEP_RESEARCH_PLAN_DELTA = "deep_research_plan_delta"
     RESEARCH_AGENT_START = "research_agent_start"
+    INTERMEDIATE_REPORT_START = "intermediate_report_start"
+    INTERMEDIATE_REPORT_DELTA = "intermediate_report_delta"
+    INTERMEDIATE_REPORT_CITED_DOCS = "intermediate_report_cited_docs"
 
 
 class BaseObj(BaseModel):
@@ -249,6 +252,26 @@ class ResearchAgentStart(BaseObj):
     research_task: str
 
 
+class IntermediateReportStart(BaseObj):
+    type: Literal["intermediate_report_start"] = (
+        StreamingType.INTERMEDIATE_REPORT_START.value
+    )
+
+
+class IntermediateReportDelta(BaseObj):
+    type: Literal["intermediate_report_delta"] = (
+        StreamingType.INTERMEDIATE_REPORT_DELTA.value
+    )
+    content: str
+
+
+class IntermediateReportCitedDocs(BaseObj):
+    type: Literal["intermediate_report_cited_docs"] = (
+        StreamingType.INTERMEDIATE_REPORT_CITED_DOCS.value
+    )
+    cited_docs: list[SearchDoc] | None = None
+
+
 ################################################
 # Packet Object
 ################################################
@@ -286,6 +309,9 @@ PacketObj = Union[
     DeepResearchPlanStart,
     DeepResearchPlanDelta,
     ResearchAgentStart,
+    IntermediateReportStart,
+    IntermediateReportDelta,
+    IntermediateReportCitedDocs,
 ]
 
 
