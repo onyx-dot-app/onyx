@@ -514,6 +514,14 @@ def run_deep_research_llm_loop(
             citation_mapping = research_results.citation_mapping
 
             for tab_index, report in enumerate(research_results.intermediate_reports):
+                if report is None:
+                    # The LLM will not see that this research was even attempted, it may try
+                    # something similar again but this is not bad.
+                    logger.error(
+                        f"Research agent call at tab_index {tab_index} failed, skipping"
+                    )
+                    continue
+
                 current_tool_call = research_agent_calls[tab_index]
                 tool_call_info = ToolCallInfo(
                     parent_tool_call_id=None,

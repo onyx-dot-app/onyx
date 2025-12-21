@@ -189,7 +189,7 @@ def run_research_agent_call(
     is_reasoning_model: bool,
     token_counter: Callable[[str], int],
     user_identity: LLMUserIdentity | None,
-) -> ResearchAgentCallResult:
+) -> ResearchAgentCallResult | None:
     turn_index = research_agent_call.placement.turn_index
     tab_index = research_agent_call.placement.tab_index
     try:
@@ -498,7 +498,7 @@ def run_research_agent_call(
                 obj=PacketException(type="error", exception=e),
             )
         )
-        raise e
+        return None
 
 
 def run_research_agent_calls(
@@ -536,19 +536,24 @@ def run_research_agent_calls(
 
     research_agent_call_results = run_functions_tuples_in_parallel(
         functions_with_args,
-        allow_failures=True,  # Continue even if some research agent calls fail
+        allow_failures=False,
     )
 
     updated_citation_mapping = citation_mapping
-    updated_answers = []
+    updated_answers: list[str | None] = []
 
     for result in research_agent_call_results:
+        if result is None:
+            updated_answers.append(None)
+            continue
+
         updated_answer, updated_citation_mapping = collapse_citations(
             answer_text=result.intermediate_report,
             existing_citation_mapping=updated_citation_mapping,
             new_citation_mapping=result.citation_mapping,
         )
         updated_answers.append(updated_answer)
+
     return CombinedResearchAgentCallResult(
         intermediate_reports=updated_answers,
         citation_mapping=updated_citation_mapping,
