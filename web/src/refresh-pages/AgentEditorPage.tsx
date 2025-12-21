@@ -415,6 +415,7 @@ export default function AgentEditorPage({
         onSubmit={handleSubmit}
         validateOnChange={true}
         validateOnBlur={true}
+        validateOnMount={true}
       >
         {({ isSubmitting, isValid, values, setFieldValue }) => (
           <>
