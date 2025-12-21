@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from onyx.context.search.models import SearchDoc
+from onyx.chat.citation_processor import CitationMapping
 from onyx.tools.models import ToolCallKickoff
 
 
@@ -11,4 +11,9 @@ class SpecialToolCalls(BaseModel):
 
 class ResearchAgentCallResult(BaseModel):
     intermediate_report: str
-    search_docs: list[SearchDoc]
+    citation_mapping: CitationMapping
+
+
+class CombinedResearchAgentCallResult(BaseModel):
+    intermediate_reports: list[str]
+    citation_mapping: CitationMapping

@@ -293,6 +293,15 @@ class LitellmLLM(LLM):
                     completion_kwargs["metadata"] = metadata
 
         try:
+            final_tool_choice = tool_choice if tools else None
+            # Claude models will not use reasoning if tool_choice is required
+            # Better to let it use reasoning
+            if (
+                "claude" in self.config.model_name.lower()
+                and final_tool_choice == ToolChoiceOptions.REQUIRED
+            ):
+                final_tool_choice = ToolChoiceOptions.AUTO
+
             response = litellm.completion(
                 mock_response=MOCK_LLM_RESPONSE,
                 # model choice
@@ -307,7 +316,7 @@ class LitellmLLM(LLM):
                 # actual input
                 messages=_prompt_to_dicts(prompt),
                 tools=tools,
-                tool_choice=tool_choice if tools else None,
+                tool_choice=final_tool_choice,
                 # streaming choice
                 stream=stream,
                 # model params
