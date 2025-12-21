@@ -76,11 +76,25 @@ class SearchToolUsage(str, Enum):
 
 def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
     """Helper function to get image generation LLM config based on available providers"""
-    if (
-        llm
-        and llm.config.api_key
-        and llm.config.model_provider == LlmProviderNames.OPENAI
-    ):
+    from onyx.db.image_generation import get_default_image_generation_config
+
+    # Try to get default from database first
+    default_config = get_default_image_generation_config(db_session)
+    if default_config:
+        llm_provider = default_config.model_configuration.llm_provider
+        return LLMConfig(
+            model_provider=llm_provider.provider,
+            model_name=default_config.model_configuration.name,
+            temperature=GEN_AI_TEMPERATURE,
+            api_key=llm_provider.api_key,
+            api_base=llm_provider.api_base,
+            api_version=llm_provider.api_version,
+            deployment_name=llm_provider.deployment_name,
+            max_input_tokens=llm.config.max_input_tokens,
+        )
+
+    # Fallback to current env-based logic
+    if llm.config.api_key and llm.config.model_provider == LlmProviderNames.OPENAI:
         return LLMConfig(
             model_provider=llm.config.model_provider,
             model_name=IMAGE_MODEL_NAME,
