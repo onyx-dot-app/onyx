@@ -29,7 +29,6 @@ from onyx.deep_research.utils import check_special_tool_calls
 from onyx.deep_research.utils import create_think_tool_token_processor
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
-from onyx.llm.models import ReasoningEffort
 from onyx.llm.models import ToolChoiceOptions
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.prompts.deep_research.orchestration_layer import CLARIFICATION_PROMPT
@@ -84,6 +83,7 @@ def generate_final_report(
     state_container: ChatStateContainer,
     emitter: Emitter,
     turn_index: int,
+    citation_mapping: CitationMapping,
     user_identity: LLMUserIdentity | None,
 ) -> None:
     final_report_prompt = FINAL_REPORT_PROMPT.format(
@@ -108,6 +108,12 @@ def generate_final_report(
         available_tokens=llm.config.max_input_tokens,
     )
 
+    citation_processor = DynamicCitationProcessor()
+    citation_processor.update_citation_mapping(citation_mapping)
+
+    # Only passing in the cited documents as the whole list would be too long
+    final_documents = list(citation_processor.citation_to_doc.values())
+
     llm_step_result, _ = run_llm_step(
         emitter=emitter,
         history=final_report_history,
@@ -115,10 +121,9 @@ def generate_final_report(
         tool_choice=ToolChoiceOptions.NONE,
         llm=llm,
         placement=Placement(turn_index=turn_index),
-        citation_processor=None,
+        citation_processor=citation_processor,
         state_container=state_container,
-        reasoning_effort=ReasoningEffort.LOW,
-        final_documents=None,
+        final_documents=final_documents,
         user_identity=user_identity,
         max_tokens=MAX_FINAL_REPORT_TOKENS,
     )
@@ -126,8 +131,6 @@ def generate_final_report(
     final_report = llm_step_result.answer
     if final_report is None:
         raise ValueError("LLM failed to generate the final deep research report")
-
-    state_container.set_answer_tokens(final_report)
 
 
 def run_deep_research_llm_loop(
@@ -383,6 +386,7 @@ def run_deep_research_llm_loop(
                 state_container=state_container,
                 emitter=emitter,
                 turn_index=orchestrator_start_turn_index + cycle + reasoning_cycles,
+                citation_mapping=citation_mapping,
                 user_identity=user_identity,
             )
             break
@@ -397,6 +401,7 @@ def run_deep_research_llm_loop(
                 state_container=state_container,
                 emitter=emitter,
                 turn_index=special_tool_calls.generate_report_tool_call.placement.turn_index,
+                citation_mapping=citation_mapping,
                 user_identity=user_identity,
             )
             break
@@ -448,6 +453,7 @@ def run_deep_research_llm_loop(
                     state_container=state_container,
                     emitter=emitter,
                     turn_index=orchestrator_start_turn_index + cycle + reasoning_cycles,
+                    citation_mapping=citation_mapping,
                     user_identity=user_identity,
                 )
                 break
@@ -467,6 +473,8 @@ def run_deep_research_llm_loop(
                 citation_mapping=citation_mapping,
                 user_identity=user_identity,
             )
+
+            citation_mapping = research_results.citation_mapping
 
             for tab_index, report in enumerate(research_results.intermediate_reports):
                 tool_call_info = ToolCallInfo(
