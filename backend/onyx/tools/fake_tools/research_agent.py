@@ -47,6 +47,7 @@ from onyx.server.query_and_chat.streaming_models import IntermediateReportCitedD
 from onyx.server.query_and_chat.streaming_models import IntermediateReportDelta
 from onyx.server.query_and_chat.streaming_models import IntermediateReportStart
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import PacketException
 from onyx.server.query_and_chat.streaming_models import ResearchAgentStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.interface import Tool
@@ -187,304 +188,315 @@ def run_research_agent_call(
     token_counter: Callable[[str], int],
     user_identity: LLMUserIdentity | None,
 ) -> ResearchAgentCallResult:
-    # Used to track the citations, but in this case they're not processed into links.
-    # They are later stripped from the output since the user cannot use these and the numbers
-    # change between the research and the final report.
-    citation_processor = DynamicCitationProcessor(replace_citation_tokens=False)
-
-    research_cycle_count = 0
-    llm_cycle_count = 0
-    current_tools = tools
-    reasoning_cycles = 0
-    just_ran_web_search = False
-
     turn_index = research_agent_call.placement.turn_index
     tab_index = research_agent_call.placement.tab_index
+    try:
+        # Used to track the citations, but in this case they're not processed into links.
+        # They are later stripped from the output since the user cannot use these and the numbers
+        # change between the research and the final report.
+        citation_processor = DynamicCitationProcessor(replace_citation_tokens=False)
 
-    # If this fails to parse, we can't run the loop anyway, let this one fail in that case
-    research_topic = research_agent_call.tool_args[RESEARCH_AGENT_TASK_KEY]
-
-    emitter.emit(
-        Packet(
-            placement=Placement(turn_index=turn_index, tab_index=tab_index),
-            obj=ResearchAgentStart(research_task=research_topic),
-        )
-    )
-
-    initial_user_message = ChatMessageSimple(
-        message=research_topic,
-        token_count=token_counter(research_topic),
-        message_type=MessageType.USER,
-    )
-    msg_history: list[ChatMessageSimple] = [initial_user_message]
-
-    citation_mapping: dict[int, str] = {}
-    most_recent_reasoning: str | None = None
-    while research_cycle_count <= RESEARCH_CYCLE_CAP:
-        if research_cycle_count == RESEARCH_CYCLE_CAP:
-            # For the last cycle, do not use any more searches, only reason or generate a report
-            current_tools = [
-                tool
-                for tool in tools
-                if tool.name not in {SearchTool.NAME, WebSearchTool.NAME}
-            ]
-
-        tools_by_name = {tool.name: tool for tool in current_tools}
-
-        tools_description = generate_tools_description(current_tools)
-
-        internal_search_tip = (
-            INTERNAL_SEARCH_GUIDANCE
-            if any(isinstance(tool, SearchTool) for tool in current_tools)
-            else ""
-        )
-        web_search_tip = (
-            WEB_SEARCH_TOOL_DESCRIPTION
-            if any(isinstance(tool, WebSearchTool) for tool in current_tools)
-            else ""
-        )
-        open_urls_tip = (
-            OPEN_URLS_TOOL_DESCRIPTION
-            if any(isinstance(tool, OpenURLTool) for tool in current_tools)
-            else ""
-        )
-        if is_reasoning_model and open_urls_tip:
-            open_urls_tip = OPEN_URLS_TOOL_DESCRIPTION_REASONING
-
-        system_prompt_template = (
-            RESEARCH_AGENT_PROMPT_REASONING
-            if is_reasoning_model
-            else RESEARCH_AGENT_PROMPT
-        )
-        system_prompt_str = system_prompt_template.format(
-            available_tools=tools_description,
-            current_datetime=get_current_llm_day_time(full_sentence=False),
-            current_cycle_count=research_cycle_count,
-            optional_internal_search_tool_description=internal_search_tip,
-            optional_web_search_tool_description=web_search_tip,
-            optional_open_url_tool_description=open_urls_tip,
-        )
-
-        system_prompt = ChatMessageSimple(
-            message=system_prompt_str,
-            token_count=token_counter(system_prompt_str),
-            message_type=MessageType.SYSTEM,
-        )
-
-        if just_ran_web_search:
-            reminder_message = ChatMessageSimple(
-                message=OPEN_URL_REMINDER_REASEARCH_AGENT,
-                token_count=100,
-                message_type=MessageType.USER,
-            )
-        else:
-            reminder_message = None
-
-        constructed_history = construct_message_history(
-            system_prompt=system_prompt,
-            custom_agent_prompt=None,
-            simple_chat_history=msg_history,
-            reminder_message=reminder_message,
-            project_files=None,
-            available_tokens=llm.config.max_input_tokens,
-        )
-
-        research_agent_tools = get_research_agent_additional_tool_definitions(
-            include_think_tool=not is_reasoning_model
-        )
-        llm_step_result, has_reasoned = run_llm_step(
-            emitter=emitter,
-            history=constructed_history,
-            tool_definitions=[tool.tool_definition() for tool in current_tools]
-            + research_agent_tools,
-            tool_choice=ToolChoiceOptions.REQUIRED,
-            llm=llm,
-            placement=Placement(
-                turn_index=turn_index,
-                tab_index=tab_index,
-                sub_turn_index=llm_cycle_count + reasoning_cycles,
-            ),
-            citation_processor=None,
-            state_container=None,
-            reasoning_effort=ReasoningEffort.LOW,
-            final_documents=None,
-            user_identity=user_identity,
-        )
-        if has_reasoned:
-            reasoning_cycles += 1
-
-        tool_responses: list[ToolResponse] = []
-        tool_calls = llm_step_result.tool_calls or []
-
+        research_cycle_count = 0
+        llm_cycle_count = 0
+        current_tools = tools
+        reasoning_cycles = 0
         just_ran_web_search = False
 
-        if any(
-            tool_call.tool_name in {SearchTool.NAME, WebSearchTool.NAME}
-            for tool_call in tool_calls
-        ):
-            # Only the search actions increment the cycle for the max cycle count
-            research_cycle_count += 1
+        # If this fails to parse, we can't run the loop anyway, let this one fail in that case
+        research_topic = research_agent_call.tool_args[RESEARCH_AGENT_TASK_KEY]
 
-        special_tool_calls = check_special_tool_calls(tool_calls=tool_calls)
-        if special_tool_calls.generate_report_tool_call:
-            final_report = generate_intermediate_report(
-                research_topic=research_topic,
-                history=msg_history,
-                llm=llm,
-                token_counter=token_counter,
-                citation_processor=citation_processor,
-                user_identity=user_identity,
+        emitter.emit(
+            Packet(
+                placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                obj=ResearchAgentStart(research_task=research_topic),
+            )
+        )
+
+        initial_user_message = ChatMessageSimple(
+            message=research_topic,
+            token_count=token_counter(research_topic),
+            message_type=MessageType.USER,
+        )
+        msg_history: list[ChatMessageSimple] = [initial_user_message]
+
+        citation_mapping: dict[int, str] = {}
+        most_recent_reasoning: str | None = None
+        while research_cycle_count <= RESEARCH_CYCLE_CAP:
+            if research_cycle_count == RESEARCH_CYCLE_CAP:
+                # For the last cycle, do not use any more searches, only reason or generate a report
+                current_tools = [
+                    tool
+                    for tool in tools
+                    if tool.name not in {SearchTool.NAME, WebSearchTool.NAME}
+                ]
+
+            tools_by_name = {tool.name: tool for tool in current_tools}
+
+            tools_description = generate_tools_description(current_tools)
+
+            internal_search_tip = (
+                INTERNAL_SEARCH_GUIDANCE
+                if any(isinstance(tool, SearchTool) for tool in current_tools)
+                else ""
+            )
+            web_search_tip = (
+                WEB_SEARCH_TOOL_DESCRIPTION
+                if any(isinstance(tool, WebSearchTool) for tool in current_tools)
+                else ""
+            )
+            open_urls_tip = (
+                OPEN_URLS_TOOL_DESCRIPTION
+                if any(isinstance(tool, OpenURLTool) for tool in current_tools)
+                else ""
+            )
+            if is_reasoning_model and open_urls_tip:
+                open_urls_tip = OPEN_URLS_TOOL_DESCRIPTION_REASONING
+
+            system_prompt_template = (
+                RESEARCH_AGENT_PROMPT_REASONING
+                if is_reasoning_model
+                else RESEARCH_AGENT_PROMPT
+            )
+            system_prompt_str = system_prompt_template.format(
+                available_tools=tools_description,
+                current_datetime=get_current_llm_day_time(full_sentence=False),
+                current_cycle_count=research_cycle_count,
+                optional_internal_search_tool_description=internal_search_tip,
+                optional_web_search_tool_description=web_search_tip,
+                optional_open_url_tool_description=open_urls_tip,
+            )
+
+            system_prompt = ChatMessageSimple(
+                message=system_prompt_str,
+                token_count=token_counter(system_prompt_str),
+                message_type=MessageType.SYSTEM,
+            )
+
+            if just_ran_web_search:
+                reminder_message = ChatMessageSimple(
+                    message=OPEN_URL_REMINDER_REASEARCH_AGENT,
+                    token_count=100,
+                    message_type=MessageType.USER,
+                )
+            else:
+                reminder_message = None
+
+            constructed_history = construct_message_history(
+                system_prompt=system_prompt,
+                custom_agent_prompt=None,
+                simple_chat_history=msg_history,
+                reminder_message=reminder_message,
+                project_files=None,
+                available_tokens=llm.config.max_input_tokens,
+            )
+
+            research_agent_tools = get_research_agent_additional_tool_definitions(
+                include_think_tool=not is_reasoning_model
+            )
+            llm_step_result, has_reasoned = run_llm_step(
                 emitter=emitter,
+                history=constructed_history,
+                tool_definitions=[tool.tool_definition() for tool in current_tools]
+                + research_agent_tools,
+                tool_choice=ToolChoiceOptions.REQUIRED,
+                llm=llm,
                 placement=Placement(
                     turn_index=turn_index,
                     tab_index=tab_index,
+                    sub_turn_index=llm_cycle_count + reasoning_cycles,
                 ),
+                citation_processor=None,
+                state_container=None,
+                reasoning_effort=ReasoningEffort.LOW,
+                final_documents=None,
+                user_identity=user_identity,
             )
-            return ResearchAgentCallResult(
-                intermediate_report=final_report,
-                citation_mapping=citation_processor.get_seen_citations(),
-            )
-        elif special_tool_calls.think_tool_call:
-            think_tool_call = special_tool_calls.think_tool_call
-            tool_call_message = think_tool_call.to_msg_str()
+            if has_reasoned:
+                reasoning_cycles += 1
 
-            think_tool_msg = ChatMessageSimple(
-                message=tool_call_message,
-                token_count=token_counter(tool_call_message),
-                message_type=MessageType.TOOL_CALL,
-                tool_call_id=think_tool_call.tool_call_id,
-                image_files=None,
-            )
-            msg_history.append(think_tool_msg)
+            tool_responses: list[ToolResponse] = []
+            tool_calls = llm_step_result.tool_calls or []
 
-            think_tool_response_msg = ChatMessageSimple(
-                message=THINK_TOOL_RESPONSE_MESSAGE,
-                token_count=THINK_TOOL_RESPONSE_TOKEN_COUNT,
-                message_type=MessageType.TOOL_CALL_RESPONSE,
-                tool_call_id=think_tool_call.tool_call_id,
-                image_files=None,
-            )
-            msg_history.append(think_tool_response_msg)
-            reasoning_cycles += 1
-            most_recent_reasoning = llm_step_result.reasoning
-            continue
-        else:
-            tool_responses, citation_mapping = run_tool_calls(
-                tool_calls=tool_calls,
-                tools=current_tools,
-                message_history=msg_history,
-                memories=None,
-                user_info=None,
-                citation_mapping=citation_mapping,
-                next_citation_num=citation_processor.get_next_citation_number(),
-                # May be better to not do this step, hard to say, needs to be tested
-                skip_search_query_expansion=False,
-            )
+            just_ran_web_search = False
 
-            if tool_calls and not tool_responses:
-                failure_messages = create_tool_call_failure_messages(
-                    tool_calls[0], token_counter
+            if any(
+                tool_call.tool_name in {SearchTool.NAME, WebSearchTool.NAME}
+                for tool_call in tool_calls
+            ):
+                # Only the search actions increment the cycle for the max cycle count
+                research_cycle_count += 1
+
+            special_tool_calls = check_special_tool_calls(tool_calls=tool_calls)
+            if special_tool_calls.generate_report_tool_call:
+                final_report = generate_intermediate_report(
+                    research_topic=research_topic,
+                    history=msg_history,
+                    llm=llm,
+                    token_counter=token_counter,
+                    citation_processor=citation_processor,
+                    user_identity=user_identity,
+                    emitter=emitter,
+                    placement=Placement(
+                        turn_index=turn_index,
+                        tab_index=tab_index,
+                    ),
                 )
-                msg_history.extend(failure_messages)
+                return ResearchAgentCallResult(
+                    intermediate_report=final_report,
+                    citation_mapping=citation_processor.get_seen_citations(),
+                )
+            elif special_tool_calls.think_tool_call:
+                think_tool_call = special_tool_calls.think_tool_call
+                tool_call_message = think_tool_call.to_msg_str()
+
+                think_tool_msg = ChatMessageSimple(
+                    message=tool_call_message,
+                    token_count=token_counter(tool_call_message),
+                    message_type=MessageType.TOOL_CALL,
+                    tool_call_id=think_tool_call.tool_call_id,
+                    image_files=None,
+                )
+                msg_history.append(think_tool_msg)
+
+                think_tool_response_msg = ChatMessageSimple(
+                    message=THINK_TOOL_RESPONSE_MESSAGE,
+                    token_count=THINK_TOOL_RESPONSE_TOKEN_COUNT,
+                    message_type=MessageType.TOOL_CALL_RESPONSE,
+                    tool_call_id=think_tool_call.tool_call_id,
+                    image_files=None,
+                )
+                msg_history.append(think_tool_response_msg)
+                reasoning_cycles += 1
+                most_recent_reasoning = llm_step_result.reasoning
                 continue
+            else:
+                tool_responses, citation_mapping = run_tool_calls(
+                    tool_calls=tool_calls,
+                    tools=current_tools,
+                    message_history=msg_history,
+                    memories=None,
+                    user_info=None,
+                    citation_mapping=citation_mapping,
+                    next_citation_num=citation_processor.get_next_citation_number(),
+                    # May be better to not do this step, hard to say, needs to be tested
+                    skip_search_query_expansion=False,
+                )
 
-            for tool_response in tool_responses:
-                # Extract tool_call from the response (set by run_tool_calls)
-                if tool_response.tool_call is None:
-                    raise ValueError("Tool response missing tool_call reference")
+                if tool_calls and not tool_responses:
+                    failure_messages = create_tool_call_failure_messages(
+                        tool_calls[0], token_counter
+                    )
+                    msg_history.extend(failure_messages)
+                    continue
 
-                tool_call = tool_response.tool_call
-                tab_index = tool_call.placement.tab_index
+                for tool_response in tool_responses:
+                    # Extract tool_call from the response (set by run_tool_calls)
+                    if tool_response.tool_call is None:
+                        raise ValueError("Tool response missing tool_call reference")
 
-                tool = tools_by_name.get(tool_call.tool_name)
-                if not tool:
-                    raise ValueError(
-                        f"Tool '{tool_call.tool_name}' not found in tools list"
+                    tool_call = tool_response.tool_call
+                    tab_index = tool_call.placement.tab_index
+
+                    tool = tools_by_name.get(tool_call.tool_name)
+                    if not tool:
+                        raise ValueError(
+                            f"Tool '{tool_call.tool_name}' not found in tools list"
+                        )
+
+                    search_docs = None
+                    if isinstance(tool_response.rich_response, SearchDocsResponse):
+                        search_docs = tool_response.rich_response.search_docs
+
+                        # This is used for the Open URL reminder in the next cycle
+                        # only do this if the web search tool yielded results
+                        if search_docs and tool_call.tool_name == WebSearchTool.NAME:
+                            just_ran_web_search = True
+
+                    # Makes sure the citation processor is updated with all the possible docs
+                    # and citation numbers so that it's populated when passed in to report generation.
+                    update_citation_processor_from_tool_response(
+                        tool_response=tool_response,
+                        citation_processor=citation_processor,
                     )
 
-                search_docs = None
-                if isinstance(tool_response.rich_response, SearchDocsResponse):
-                    search_docs = tool_response.rich_response.search_docs
+                    # Research Agent is a top level tool call but the tools called by the research
+                    # agent are sub-tool calls.
+                    tool_call_info = ToolCallInfo(
+                        parent_tool_call_id=parent_tool_call_id,
+                        # At the DB save level, there is only a turn index, no sub-turn etc.
+                        # This is implied by the parent tool call's turn index and the depth
+                        # of the tree traversal.
+                        turn_index=llm_cycle_count + reasoning_cycles,
+                        tab_index=tab_index,
+                        tool_name=tool_call.tool_name,
+                        tool_call_id=tool_call.tool_call_id,
+                        tool_id=tool.id,
+                        reasoning_tokens=llm_step_result.reasoning
+                        or most_recent_reasoning,
+                        tool_call_arguments=tool_call.tool_args,
+                        tool_call_response=tool_response.llm_facing_response,
+                        search_docs=search_docs,
+                        generated_images=None,
+                    )
+                    state_container.add_tool_call(tool_call_info)
 
-                    # This is used for the Open URL reminder in the next cycle
-                    # only do this if the web search tool yielded results
-                    if search_docs and tool_call.tool_name == WebSearchTool.NAME:
-                        just_ran_web_search = True
+                    # Store tool call with function name and arguments in separate layers
+                    tool_call_message = tool_call.to_msg_str()
+                    tool_call_token_count = token_counter(tool_call_message)
 
-                # Makes sure the citation processor is updated with all the possible docs
-                # and citation numbers so that it's populated when passed in to report generation.
-                update_citation_processor_from_tool_response(
-                    tool_response=tool_response,
-                    citation_processor=citation_processor,
-                )
+                    tool_call_msg = ChatMessageSimple(
+                        message=tool_call_message,
+                        token_count=tool_call_token_count,
+                        message_type=MessageType.TOOL_CALL,
+                        tool_call_id=tool_call.tool_call_id,
+                        image_files=None,
+                    )
+                    msg_history.append(tool_call_msg)
 
-                # Research Agent is a top level tool call but the tools called by the research
-                # agent are sub-tool calls.
-                tool_call_info = ToolCallInfo(
-                    parent_tool_call_id=parent_tool_call_id,
-                    # At the DB save level, there is only a turn index, no sub-turn etc.
-                    # This is implied by the parent tool call's turn index and the depth
-                    # of the tree traversal.
-                    turn_index=llm_cycle_count + reasoning_cycles,
-                    tab_index=tab_index,
-                    tool_name=tool_call.tool_name,
-                    tool_call_id=tool_call.tool_call_id,
-                    tool_id=tool.id,
-                    reasoning_tokens=llm_step_result.reasoning or most_recent_reasoning,
-                    tool_call_arguments=tool_call.tool_args,
-                    tool_call_response=tool_response.llm_facing_response,
-                    search_docs=search_docs,
-                    generated_images=None,
-                )
-                state_container.add_tool_call(tool_call_info)
+                    tool_response_message = tool_response.llm_facing_response
+                    tool_response_token_count = token_counter(tool_response_message)
 
-                # Store tool call with function name and arguments in separate layers
-                tool_call_message = tool_call.to_msg_str()
-                tool_call_token_count = token_counter(tool_call_message)
+                    tool_response_msg = ChatMessageSimple(
+                        message=tool_response_message,
+                        token_count=tool_response_token_count,
+                        message_type=MessageType.TOOL_CALL_RESPONSE,
+                        tool_call_id=tool_call.tool_call_id,
+                        image_files=None,
+                    )
+                    msg_history.append(tool_response_msg)
 
-                tool_call_msg = ChatMessageSimple(
-                    message=tool_call_message,
-                    token_count=tool_call_token_count,
-                    message_type=MessageType.TOOL_CALL,
-                    tool_call_id=tool_call.tool_call_id,
-                    image_files=None,
-                )
-                msg_history.append(tool_call_msg)
+            # If it reached this point, it did not call reasoning, so here we wipe it to not save it to multiple turns
+            most_recent_reasoning = None
+            llm_cycle_count += 1
 
-                tool_response_message = tool_response.llm_facing_response
-                tool_response_token_count = token_counter(tool_response_message)
+        # If we've run out of cycles, just try to generate a report from everything so far
+        final_report = generate_intermediate_report(
+            research_topic=research_topic,
+            history=msg_history,
+            llm=llm,
+            token_counter=token_counter,
+            citation_processor=citation_processor,
+            user_identity=user_identity,
+            emitter=emitter,
+            placement=Placement(
+                turn_index=turn_index,
+                tab_index=tab_index,
+            ),
+        )
+        return ResearchAgentCallResult(
+            intermediate_report=final_report,
+            citation_mapping=citation_processor.get_seen_citations(),
+        )
 
-                tool_response_msg = ChatMessageSimple(
-                    message=tool_response_message,
-                    token_count=tool_response_token_count,
-                    message_type=MessageType.TOOL_CALL_RESPONSE,
-                    tool_call_id=tool_call.tool_call_id,
-                    image_files=None,
-                )
-                msg_history.append(tool_response_msg)
-
-        # If it reached this point, it did not call reasoning, so here we wipe it to not save it to multiple turns
-        most_recent_reasoning = None
-        llm_cycle_count += 1
-
-    # If we've run out of cycles, just try to generate a report from everything so far
-    final_report = generate_intermediate_report(
-        research_topic=research_topic,
-        history=msg_history,
-        llm=llm,
-        token_counter=token_counter,
-        citation_processor=citation_processor,
-        user_identity=user_identity,
-        emitter=emitter,
-        placement=Placement(
-            turn_index=turn_index,
-            tab_index=tab_index,
-        ),
-    )
-    return ResearchAgentCallResult(
-        intermediate_report=final_report,
-        citation_mapping=citation_processor.get_seen_citations(),
-    )
+    except Exception as e:
+        logger.error(f"Error running research agent call: {e}")
+        emitter.emit(
+            Packet(
+                placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                obj=PacketException(type="error", exception=e),
+            )
+        )
+        raise e
 
 
 def run_research_agent_calls(

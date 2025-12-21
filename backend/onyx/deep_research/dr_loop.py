@@ -46,6 +46,7 @@ from onyx.server.query_and_chat.streaming_models import DeepResearchPlanStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import SectionEnd
+from onyx.server.query_and_chat.streaming_models import TopLevelBranching
 from onyx.tools.fake_tools.research_agent import run_research_agent_calls
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallInfo
@@ -460,6 +461,18 @@ def run_deep_research_llm_loop(
                 )
                 break
 
+            if len(research_agent_calls) > 1:
+                emitter.emit(
+                    Packet(
+                        placement=Placement(
+                            turn_index=research_agent_calls[0].placement.turn_index
+                        ),
+                        obj=TopLevelBranching(
+                            num_parallel_branches=len(research_agent_calls)
+                        ),
+                    )
+                )
+
             research_results = run_research_agent_calls(
                 # The tool calls here contain the placement information
                 research_agent_calls=research_agent_calls,
@@ -519,3 +532,10 @@ def run_deep_research_llm_loop(
 
         # If it reached this point, it did not call reasoning, so here we wipe it to not save it to multiple turns
         most_recent_reasoning = None
+
+    emitter.emit(
+        Packet(
+            placement=Placement(turn_index=cycle + reasoning_cycles),
+            obj=OverallStop(type="stop"),
+        )
+    )
