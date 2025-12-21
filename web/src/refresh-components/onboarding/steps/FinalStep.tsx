@@ -52,7 +52,7 @@ const FinalStepItemInner = ({
   }
 
   return (
-    <Link href={buttonHref as Route} className={className}>
+    <Link href={buttonHref as Route} className={className} {...linkProps}>
       {content}
     </Link>
   );
