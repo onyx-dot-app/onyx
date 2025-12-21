@@ -778,8 +778,8 @@ def create_db_search_doc(
         hidden=server_search_doc.hidden,
         doc_metadata=server_search_doc.metadata,
         is_relevant=server_search_doc.is_relevant,
-        relevance_explanation=_sanitize_for_postgres(
-            server_search_doc.relevance_explanation
+        relevance_explanation=(
+            _sanitize_for_postgres(server_search_doc.relevance_explanation)
             if server_search_doc.relevance_explanation is not None
             else None
         ),
