@@ -99,6 +99,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
 
       const { file_id } = await response.json();
       setFieldValue("uploaded_image_id", file_id);
+      setPopoverOpen(false);
     } catch (error) {
       console.error("Upload error:", error);
       setUploadedImagePreview(null);
