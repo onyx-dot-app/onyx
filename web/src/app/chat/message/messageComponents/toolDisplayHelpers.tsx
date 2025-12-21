@@ -5,9 +5,12 @@ import {
   FiGlobe,
   FiImage,
   FiLink,
+  FiList,
   FiSearch,
   FiTool,
+  FiUsers,
 } from "react-icons/fi";
+import { BrainIcon } from "@/components/icons/icons";
 
 import {
   Packet,
@@ -52,6 +55,12 @@ export function getToolName(packets: Packet[]): string {
       );
     case PacketType.IMAGE_GENERATION_TOOL_START:
       return "Generate Image";
+    case PacketType.DEEP_RESEARCH_PLAN_START:
+      return "Generate plan";
+    case PacketType.RESEARCH_AGENT_START:
+      return "Research agent";
+    case PacketType.REASONING_START:
+      return "Thinking";
     default:
       return "Tool";
   }
@@ -80,6 +89,12 @@ export function getToolIcon(packets: Packet[]): JSX.Element {
       return <FiTool className="w-3.5 h-3.5" />;
     case PacketType.IMAGE_GENERATION_TOOL_START:
       return <FiImage className="w-3.5 h-3.5" />;
+    case PacketType.DEEP_RESEARCH_PLAN_START:
+      return <FiList className="w-3.5 h-3.5" />;
+    case PacketType.RESEARCH_AGENT_START:
+      return <FiUsers className="w-3.5 h-3.5" />;
+    case PacketType.REASONING_START:
+      return <BrainIcon className="w-3.5 h-3.5" />;
     default:
       return <FiCircle className="w-3.5 h-3.5" />;
   }

@@ -463,6 +463,13 @@ def run_deep_research_llm_loop(
             )
 
             for tab_index, research_result in enumerate(research_results):
+                # Skip failed research agent calls (returns None with allow_failures=True)
+                if research_result is None:
+                    logger.error(
+                        f"Research agent call at tab_index {tab_index} failed, skipping"
+                    )
+                    continue
+
                 tool_call_info = ToolCallInfo(
                     parent_tool_call_id=None,
                     turn_index=orchestrator_start_turn_index + cycle + reasoning_cycles,

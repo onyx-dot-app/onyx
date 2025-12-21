@@ -221,6 +221,8 @@ export default function AIMessage({
       PacketType.CUSTOM_TOOL_START,
       PacketType.FETCH_TOOL_START,
       PacketType.REASONING_START,
+      PacketType.DEEP_RESEARCH_PLAN_START,
+      PacketType.RESEARCH_AGENT_START,
     ];
     return packets.some((packet) =>
       contentPacketTypes.includes(packet.obj.type as PacketType)

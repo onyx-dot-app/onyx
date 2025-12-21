@@ -69,7 +69,7 @@ function ToolItemRow({
 }: {
   icon: ((props: { size: number }) => JSX.Element) | null;
   content: JSX.Element | string;
-  status: string | null;
+  status: string | JSX.Element | null;
   isLastItem: boolean;
   isLoading?: boolean;
 }) {
@@ -329,7 +329,7 @@ function ParallelToolTabs({
           {selectedToolItems.map((item, index) => {
             const isLastItem = index === selectedToolItems.length - 1;
 
-            if (item.type === "search-step-1") {
+            if (item.type === DisplayType.SEARCH_STEP_1) {
               return (
                 <SearchToolStep1Renderer
                   key={item.key}
@@ -341,7 +341,7 @@ function ParallelToolTabs({
                   )}
                 </SearchToolStep1Renderer>
               );
-            } else if (item.type === "search-step-2") {
+            } else if (item.type === DisplayType.SEARCH_STEP_2) {
               return (
                 <SearchToolStep2Renderer
                   key={item.key}
@@ -393,7 +393,7 @@ function ExpandedToolItem({
 }: {
   icon: ((props: { size: number }) => JSX.Element) | null;
   content: JSX.Element | string;
-  status: string | null;
+  status: string | JSX.Element | null;
   isLastItem: boolean;
   showClickableToggle?: boolean;
   onToggleClick?: () => void;
@@ -526,7 +526,7 @@ export default function MultiToolRenderer({
           });
         }
       } else {
-        // Regular tool (or internet search): single entry
+        // Regular tool (including deep research plan, internet search, etc.): single entry
         items.push({
           key: `${group.turn_index}-${tab_index}`,
           type: DisplayType.REGULAR,
@@ -576,7 +576,10 @@ export default function MultiToolRenderer({
       } else if (item.type === DisplayType.REGULAR) {
         // Regular tools (including web search, openUrl, etc.): check for SECTION_END
         const hasSectionEnd = item.packets.some(
-          (p) => p.obj.type === PacketType.SECTION_END
+          (p) =>
+            p.obj.type === PacketType.SECTION_END &&
+            (p.placement.sub_turn_index === undefined ||
+              p.placement.sub_turn_index === null)
         );
         if (hasSectionEnd && item.turn_index !== undefined) {
           handleToolComplete(item.turn_index, item.tab_index);
@@ -594,7 +597,7 @@ export default function MultiToolRenderer({
     isVisible: boolean,
     childrenCallback: (result: RendererResult) => JSX.Element
   ) => {
-    if (item.type === "search-step-1") {
+    if (item.type === DisplayType.SEARCH_STEP_1) {
       return (
         <SearchToolStep1Renderer
           key={item.key}
@@ -604,7 +607,7 @@ export default function MultiToolRenderer({
           {childrenCallback}
         </SearchToolStep1Renderer>
       );
-    } else if (item.type === "search-step-2") {
+    } else if (item.type === DisplayType.SEARCH_STEP_2) {
       return (
         <SearchToolStep2Renderer
           key={item.key}
@@ -733,7 +736,10 @@ export default function MultiToolRenderer({
                       isItemComplete = searchState.isComplete;
                     } else {
                       isItemComplete = item.packets.some(
-                        (p) => p.obj.type === PacketType.SECTION_END
+                        (p) =>
+                          p.obj.type === PacketType.SECTION_END &&
+                          (p.placement.sub_turn_index === undefined ||
+                            p.placement.sub_turn_index === null)
                       );
                     }
                     const isLoading = !isItemComplete && !shouldStopShimmering;

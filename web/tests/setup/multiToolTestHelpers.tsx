@@ -42,7 +42,11 @@ export const createToolPacket = (
 export const createInternalSearchToolGroup = (
   turn_index: number = 0,
   tab_index: number = 0
-): { turn_index: number; tab_index: number; packets: Packet[] } => {
+): {
+  turn_index: number;
+  tab_index: number;
+  packets: Packet[];
+} => {
   const packets: Packet[] = [
     {
       placement: { turn_index, tab_index },
