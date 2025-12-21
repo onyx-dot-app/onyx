@@ -2,8 +2,7 @@
 
 import React, { useMemo } from "react";
 import { cn, noProp } from "@/lib/utils";
-import SvgPlus from "@/icons/plus";
-import SvgX from "@/icons/x";
+import { SvgPlus, SvgX } from "@opal/icons";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Text from "@/refresh-components/texts/Text";

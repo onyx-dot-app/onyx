@@ -1,7 +1,7 @@
 "use client";
 
 import { AdminPageLayout } from "@/refresh-components/layouts/AdminPageLayout";
-import SvgPaintBrush from "@/icons/paint-brush";
+import { SvgPaintBrush } from "@opal/icons";
 import Button from "@/refresh-components/buttons/Button";
 import {
   AppearanceThemeSettings,

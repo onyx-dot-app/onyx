@@ -1,4 +1,4 @@
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal/types";
 
 const SvgRevert = ({ size, ...props }: IconProps) => (
   <svg

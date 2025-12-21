@@ -20,7 +20,7 @@ import {
   useState,
 } from "react";
 import type { PreviewHighlightTarget } from "./Preview";
-import SvgRevert from "@/icons/revert";
+import { SvgRevert } from "@opal/icons";
 interface CharacterCountProps {
   value: string;
   limit: number;
