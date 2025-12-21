@@ -58,6 +58,8 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 MAX_USER_MESSAGES_FOR_CONTEXT = 5
+MAX_FINAL_REPORT_TOKENS = 10000
+
 # Might be something like:
 # 1. Research 1-2
 # 2. Think
@@ -117,6 +119,7 @@ def generate_final_report(
         reasoning_effort=ReasoningEffort.LOW,
         final_documents=None,
         user_identity=user_identity,
+        max_tokens=MAX_FINAL_REPORT_TOKENS,
     )
 
     final_report = llm_step_result.answer

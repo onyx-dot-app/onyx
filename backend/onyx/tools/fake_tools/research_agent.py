@@ -503,7 +503,9 @@ def run_research_agent_calls(
         )
     ]
 
-    return run_functions_tuples_in_parallel(
+    research_agent_call_results = run_functions_tuples_in_parallel(
         functions_with_args,
         allow_failures=True,  # Continue even if some research agent calls fail
     )
+
+    return research_agent_call_results
