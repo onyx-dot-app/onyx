@@ -9,6 +9,7 @@ import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Switch from "@/refresh-components/inputs/Switch";
 import Text from "@/refresh-components/texts/Text";
 import InputImage from "@/refresh-components/inputs/InputImage";
+import Button from "@/refresh-components/buttons/Button";
 import { useFormikContext } from "formik";
 import {
   forwardRef,
@@ -19,7 +20,7 @@ import {
   useState,
 } from "react";
 import type { PreviewHighlightTarget } from "./Preview";
-
+import SvgRevert from "@/icons/revert";
 interface CharacterCountProps {
   value: string;
   limit: number;
@@ -295,17 +296,26 @@ export const AppearanceThemeSettings = forwardRef<
           </FormField>
         </div>
 
-        <div>
-          <InputImage
-            content={getLogoSrc() ? "image" : "placeholder"}
-            src={getLogoSrc()}
-            onEdit={handleLogoEdit}
-            showRemove={values.use_custom_logo}
-            showRevert={!!selectedLogo}
-            onRemove={handleLogoRemove}
-            onRevert={handleLogoRevert}
-          />
-        </div>
+        <FormField state="idle">
+          <FormField.Label>Application Logo</FormField.Label>
+          <FormField.Control>
+            <InputImage
+              src={getLogoSrc()}
+              onEdit={handleLogoEdit}
+              onRemove={handleLogoRemove}
+            />
+          </FormField.Control>
+          <div className="mt-2 w-full justify-center items-center flex">
+            <Button
+              secondary
+              disabled={!selectedLogo}
+              onClick={handleLogoRevert}
+              leftIcon={SvgRevert}
+            >
+              Reset
+            </Button>
+          </div>
+        </FormField>
       </div>
 
       <Separator className="my-4" />
