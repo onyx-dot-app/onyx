@@ -8,14 +8,15 @@
   border-radius: var(--radius-08);
   background-color: var(--background-tint-00);
   padding: 0.5rem;
-}
-
-.square-button:hover {
   background-color: var(--background-tint-01);
 }
 
-.square-button:active {
+.square-button:hover {
   background-color: var(--background-tint-02);
+}
+
+.square-button:active {
+  background-color: var(--background-tint-03);
 }
 
 .square-button:disabled {

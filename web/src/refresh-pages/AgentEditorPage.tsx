@@ -164,6 +164,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
                   key="default-icon"
                   icon={() => <CustomAgentAvatar size={30} />}
                   onClick={() => handleIconClick(null)}
+                  transient={!imageSrc && selectedIconName === null}
                 />
                 {Object.keys(iconMap).map((iconName) => (
                   <SquareButton
@@ -172,7 +173,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
                     icon={() => (
                       <CustomAgentAvatar iconName={iconName} size={30} />
                     )}
-                    transient={true}
+                    transient={selectedIconName === iconName}
                   />
                 ))}
               </div>,
