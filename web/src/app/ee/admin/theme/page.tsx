@@ -9,6 +9,7 @@ import {
 } from "./AppearanceThemeSettings";
 import { useContext, useRef, useState } from "react";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { usePopup } from "@/components/admin/connectors/Popup";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { EnterpriseSettings } from "@/app/admin/settings/interfaces";
@@ -29,6 +30,7 @@ export default function LabelingPage() {
   const settings = useContext(SettingsContext);
   const [selectedLogo, setSelectedLogo] = useState<File | null>(null);
   const appearanceSettingsRef = useRef<AppearanceThemeSettingsRef>(null);
+  const { popup, setPopup } = usePopup();
 
   if (!settings) {
     return null;
@@ -188,6 +190,10 @@ export default function LabelingPage() {
         // dirty comparisons reflect the newly-saved values.
         if (success) {
           formikHelpers.resetForm({ values });
+          setPopup({
+            type: "success",
+            message: "Appearance settings saved successfully!",
+          });
         }
 
         formikHelpers.setSubmitting(false);
@@ -210,6 +216,7 @@ export default function LabelingPage() {
 
         return (
           <Form className="w-full h-full">
+            {popup}
             <AdminPageLayout
               title="Appearance & Theming"
               description="Customize how the application appears to users across your organization."
