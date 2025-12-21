@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
     if (!redirectTo) {
       if (isAdminFlow) {
         // For admin flow, redirect back to the MCP edit page
-        redirectTo = "/admin/actions/mcp";
+        redirectTo = `/admin/actions/edit-mcp?server_id=${serverId}`;
       } else {
         // For user flow, redirect to chat
         redirectTo = "/chat";
