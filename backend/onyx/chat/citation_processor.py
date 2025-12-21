@@ -22,7 +22,7 @@ logger = setup_logger()
 
 
 # ============================================================================
-# Utility functions (copied for self-containment)
+# Utility functions
 # ============================================================================
 
 
@@ -90,6 +90,7 @@ class DynamicCitationProcessor:
         """
         # Citation mapping from citation number to SearchDoc
         self.citation_to_doc: dict[int, SearchDoc] = {}
+        self.seen_citations: dict[int, SearchDoc] = {}  # citation num -> SearchDoc
 
         # Token processing state
         self.llm_out = ""  # entire output so far
@@ -153,7 +154,7 @@ class DynamicCitationProcessor:
             self.citation_to_doc.update(non_duplicate_mapping)
 
     def process_token(
-        self, token: str | None
+        self, token: str | None, strip_citations: bool = True
     ) -> Generator[str | CitationInfo, None, None]:
         """
         Process a token from the LLM stream.
@@ -168,10 +169,14 @@ class DynamicCitationProcessor:
 
         Args:
             token: The next token from the LLM stream, or None to signal end of stream
+            strip_citations: If True (default), citations are stripped from output and
+                CitationInfo objects are yielded. If False, original text is yielded
+                with citations intact and no CitationInfo objects are emitted.
+                Regardless of this flag, seen citations are always tracked internally.
 
         Yields:
-            - str: Text chunks to display (citations removed)
-            - CitationInfo: Citation metadata when a citation is detected
+            - str: Text chunks to display (citations removed if strip_citations=True)
+            - CitationInfo: Citation metadata when a citation is detected (only if strip_citations=True)
         """
         # None -> end of stream, flush remaining segment
         if token is None:
@@ -264,17 +269,24 @@ class DynamicCitationProcessor:
                     yield intermatch_str
 
                 # Process the citation (returns formatted citation text and CitationInfo objects)
+                # Always tracks seen citations regardless of strip_citations flag
                 citation_text, citation_info_list = self._process_citation(
-                    match, has_leading_space
+                    match, has_leading_space, strip_citations
                 )
-                # Yield CitationInfo objects BEFORE the citation text
-                # This allows the frontend to receive citation metadata before the token
-                # that contains [[n]](link), enabling immediate rendering
-                for citation in citation_info_list:
-                    yield citation
-                # Then yield the formatted citation text
-                if citation_text:
-                    yield citation_text
+
+                if strip_citations:
+                    # Yield CitationInfo objects BEFORE the citation text
+                    # This allows the frontend to receive citation metadata before the token
+                    # that contains [[n]](link), enabling immediate rendering
+                    for citation in citation_info_list:
+                        yield citation
+                    # Then yield the formatted citation text
+                    if citation_text:
+                        yield citation_text
+                else:
+                    # When not stripping, yield the original citation text unchanged
+                    yield match.group()
+
                 self.non_citation_count = 0
 
             # Leftover text could be part of next citation
@@ -291,7 +303,7 @@ class DynamicCitationProcessor:
             yield result
 
     def _process_citation(
-        self, match: re.Match, has_leading_space: bool
+        self, match: re.Match, has_leading_space: bool, strip_citations: bool = True
     ) -> tuple[str, list[CitationInfo]]:
         """
         Process a single citation match and return formatted citation text and citation info objects.
@@ -301,13 +313,15 @@ class DynamicCitationProcessor:
         This method:
         1. Extracts citation numbers from the match
         2. Looks up the corresponding SearchDoc from the mapping
-        3. Skips duplicate citations if they were recently cited
-        4. Creates formatted citation text like [n](link) for each citation
-        5. Creates CitationInfo objects for new citations
+        3. Always tracks seen citations in self.seen_citations
+        4. If strip_citations=True: creates formatted citation text and CitationInfo objects
+        5. If strip_citations=False: returns empty string and empty list (caller yields original text)
 
         Args:
             match: Regex match object containing the citation
             has_leading_space: Whether the text before the citation has a leading space
+            strip_citations: If True, return formatted text and CitationInfo objects.
+                If False, only track seen citations and return empty results.
         Returns:
             Tuple of (formatted_citation_text, list[CitationInfo])
             - formatted_citation_text: Markdown-formatted citation text like [1](link) [2](link)
@@ -349,7 +363,14 @@ class DynamicCitationProcessor:
             doc_id = search_doc.document_id
             link = search_doc.link or ""
 
-            # Always format the citation text as [[n]](link)
+            # Always track seen citations regardless of strip_citations flag
+            self.seen_citations[num] = search_doc
+
+            # When not stripping citations, skip the rest of the processing
+            if not strip_citations:
+                continue
+
+            # Format the citation text as [[n]](link)
             formatted_citation_parts.append(f"[[{num}]]({link})")
 
             # Skip creating CitationInfo for citations of the same work if cited recently (deduplication)
@@ -394,6 +415,19 @@ class DynamicCitationProcessor:
             List of document IDs (strings)
         """
         return [doc.document_id for doc in self.cited_documents_in_order]
+
+    def get_seen_citations(self) -> dict[int, SearchDoc]:
+        """
+        Get all seen citations as a mapping from citation number to SearchDoc.
+
+        This returns all citations that have been encountered during processing,
+        regardless of the strip_citations flag. Citations are tracked whenever
+        they are parsed, even when strip_citations=False.
+
+        Returns:
+            Dictionary mapping citation numbers to SearchDoc objects
+        """
+        return self.seen_citations
 
     @property
     def num_cited_documents(self) -> int:

@@ -1391,3 +1391,403 @@ def test_adding_project_files_across_messages(
     # This is correct - each message has its own citation space
     assert message1_processor.citation_to_doc[4].document_id == "doc_1"
     assert message2_processor.citation_to_doc[4].document_id == "project_file_4"
+
+
+# ============================================================================
+# strip_citations Flag Tests
+# ============================================================================
+
+
+def process_tokens_with_flag(
+    processor: DynamicCitationProcessor,
+    tokens: list[str | None],
+    strip_citations: bool = True,
+) -> tuple[str, list[CitationInfo]]:
+    """
+    Process a list of tokens through the processor with strip_citations flag.
+
+    Returns:
+        Tuple of (output_text, citations) where:
+        - output_text: All string outputs concatenated
+        - citations: List of CitationInfo objects emitted
+    """
+    output_text = ""
+    citations = []
+
+    for token in tokens:
+        for result in processor.process_token(token, strip_citations=strip_citations):
+            if isinstance(result, str):
+                output_text += result
+            elif isinstance(result, CitationInfo):
+                citations.append(result)
+
+    # Flush remaining segment
+    for result in processor.process_token(None, strip_citations=strip_citations):
+        if isinstance(result, str):
+            output_text += result
+        elif isinstance(result, CitationInfo):
+            citations.append(result)
+
+    return output_text, citations
+
+
+def test_strip_citations_false_preserves_original_text(
+    mock_search_docs: dict[int, SearchDoc],
+) -> None:
+    """Test that strip_citations=False preserves original citation text."""
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping({1: mock_search_docs[1]})
+
+    output, citations = process_tokens_with_flag(
+        processor, ["Text [", "1", "] here."], strip_citations=False
+    )
+
+    # Original citation format should be preserved
+    assert "[1]" in output
+    assert "Text [1] here." in output
+    # Formatted citation should NOT appear
+    assert "[[1]](https://example.com/doc1)" not in output
+    # No CitationInfo objects should be emitted
+    assert len(citations) == 0
+
+
+def test_strip_citations_false_no_citation_info_emitted(
+    mock_search_docs: dict[int, SearchDoc],
+) -> None:
+    """Test that strip_citations=False does not emit CitationInfo objects."""
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping(
+        {1: mock_search_docs[1], 2: mock_search_docs[2], 3: mock_search_docs[3]}
+    )
+
+    output, citations = process_tokens_with_flag(
+        processor, ["Text [", "1", "][", "2", "][", "3", "]"], strip_citations=False
+    )
+
+    # All original citations should be preserved
+    assert "[1]" in output
+    assert "[2]" in output
+    assert "[3]" in output
+    # No CitationInfo should be emitted
+    assert len(citations) == 0
+
+
+def test_strip_citations_false_still_tracks_seen_citations(
+    mock_search_docs: dict[int, SearchDoc],
+) -> None:
+    """Test that strip_citations=False still tracks seen citations."""
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping(
+        {1: mock_search_docs[1], 2: mock_search_docs[2], 3: mock_search_docs[3]}
+    )
+
+    process_tokens_with_flag(
+        processor, ["Text [", "1", "][", "2", "][", "3", "]"], strip_citations=False
+    )
+
+    # Seen citations should be tracked
+    seen = processor.get_seen_citations()
+    assert len(seen) == 3
+    assert 1 in seen
+    assert 2 in seen
+    assert 3 in seen
+    assert seen[1].document_id == "doc_1"
+    assert seen[2].document_id == "doc_2"
+    assert seen[3].document_id == "doc_3"
+
+
+def test_strip_citations_true_default_behavior(
+    mock_search_docs: dict[int, SearchDoc],
+) -> None:
+    """Test that strip_citations=True (default) maintains original behavior."""
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping({1: mock_search_docs[1]})
+
+    output, citations = process_tokens_with_flag(
+        processor, ["Text [", "1", "] here."], strip_citations=True
+    )
+
+    # Citation should be formatted
+    assert "[[1]](https://example.com/doc1)" in output
+    # Original citation format should be replaced
+    assert "Text [1]" not in output or "[[1]]" in output
+    # CitationInfo should be emitted
+    assert len(citations) == 1
+    assert citations[0].citation_number == 1
+    assert citations[0].document_id == "doc_1"
+
+
+def test_strip_citations_true_also_tracks_seen_citations(
+    mock_search_docs: dict[int, SearchDoc],
+) -> None:
+    """Test that strip_citations=True also tracks seen citations."""
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping({1: mock_search_docs[1], 2: mock_search_docs[2]})
+
+    process_tokens_with_flag(
+        processor, ["Text [", "1", "][", "2", "]"], strip_citations=True
+    )
+
+    # Seen citations should be tracked
+    seen = processor.get_seen_citations()
+    assert len(seen) == 2
+    assert 1 in seen
+    assert 2 in seen
+
+
+def test_strip_citations_false_with_multiple_citations_in_one_bracket(
+    mock_search_docs: dict[int, SearchDoc],
+) -> None:
+    """Test strip_citations=False with comma-separated citations [1, 2, 3]."""
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping(
+        {1: mock_search_docs[1], 2: mock_search_docs[2], 3: mock_search_docs[3]}
+    )
+
+    output, citations = process_tokens_with_flag(
+        processor,
+        ["Text [", "1", ", ", "2", ", ", "3", "] end."],
+        strip_citations=False,
+    )
+
+    # Original citation format should be preserved
+    assert "[1, 2, 3]" in output
+    assert "Text [1, 2, 3] end." in output
+    # No CitationInfo should be emitted
+    assert len(citations) == 0
+    # But seen citations should be tracked
+    seen = processor.get_seen_citations()
+    assert len(seen) == 3
+
+
+def test_strip_citations_false_with_double_brackets(
+    mock_search_docs: dict[int, SearchDoc],
+) -> None:
+    """Test strip_citations=False with double bracket citation [[1]]."""
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping({1: mock_search_docs[1]})
+
+    output, citations = process_tokens_with_flag(
+        processor, ["Text [[", "1", "]] here."], strip_citations=False
+    )
+
+    # Original double bracket format should be preserved
+    assert "[[1]]" in output
+    assert "Text [[1]] here." in output
+    # No CitationInfo should be emitted
+    assert len(citations) == 0
+    # Seen citation should be tracked
+    seen = processor.get_seen_citations()
+    assert len(seen) == 1
+    assert seen[1].document_id == "doc_1"
+
+
+def test_strip_citations_false_with_unicode_brackets(
+    mock_search_docs: dict[int, SearchDoc],
+) -> None:
+    """Test strip_citations=False with unicode bracket citation 【1】."""
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping({1: mock_search_docs[1]})
+
+    output, citations = process_tokens_with_flag(
+        processor, ["Text 【", "1", "】 here."], strip_citations=False
+    )
+
+    # Original unicode bracket format should be preserved
+    assert "【1】" in output
+    # No CitationInfo should be emitted
+    assert len(citations) == 0
+    # Seen citation should be tracked
+    seen = processor.get_seen_citations()
+    assert len(seen) == 1
+
+
+def test_strip_citations_false_citation_not_in_mapping(
+    mock_search_docs: dict[int, SearchDoc],
+) -> None:
+    """Test strip_citations=False with citation not in mapping."""
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping({1: mock_search_docs[1]})
+
+    output, citations = process_tokens_with_flag(
+        processor, ["Text [", "99", "] here."], strip_citations=False
+    )
+
+    # Citation not in mapping - text is yielded but citation not tracked
+    assert len(citations) == 0
+    # Seen citations should NOT include the unknown citation
+    seen = processor.get_seen_citations()
+    assert 99 not in seen
+
+
+def test_mixed_strip_citations_flag_usage(
+    mock_search_docs: dict[int, SearchDoc],
+) -> None:
+    """Test mixing strip_citations=True and strip_citations=False in same processor."""
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping(
+        {1: mock_search_docs[1], 2: mock_search_docs[2], 3: mock_search_docs[3]}
+    )
+
+    # First pass with strip_citations=False
+    output1, citations1 = process_tokens_with_flag(
+        processor, ["First [", "1", "]"], strip_citations=False
+    )
+    assert "[1]" in output1
+    assert len(citations1) == 0
+
+    # Second pass with strip_citations=True
+    output2, citations2 = process_tokens_with_flag(
+        processor, ["Second [", "2", "]"], strip_citations=True
+    )
+    assert "[[2]](https://example.com/doc2)" in output2
+    assert len(citations2) == 1
+
+    # Third pass with strip_citations=False again
+    output3, citations3 = process_tokens_with_flag(
+        processor, ["Third [", "3", "]"], strip_citations=False
+    )
+    assert "[3]" in output3
+    assert len(citations3) == 0
+
+    # All seen citations should be tracked regardless of flag
+    seen = processor.get_seen_citations()
+    assert len(seen) == 3
+    assert 1 in seen
+    assert 2 in seen
+    assert 3 in seen
+
+
+# ============================================================================
+# get_seen_citations Tests
+# ============================================================================
+
+
+def test_get_seen_citations_empty() -> None:
+    """Test get_seen_citations returns empty dict when no citations processed."""
+    processor = DynamicCitationProcessor()
+
+    seen = processor.get_seen_citations()
+    assert seen == {}
+
+
+def test_get_seen_citations_returns_correct_mapping(
+    mock_search_docs: dict[int, SearchDoc],
+) -> None:
+    """Test get_seen_citations returns correct citation number to SearchDoc mapping."""
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping(
+        {1: mock_search_docs[1], 2: mock_search_docs[2], 3: mock_search_docs[3]}
+    )
+
+    process_tokens(processor, ["[", "1", "][", "3", "]"])  # Note: skipping [2]
+
+    seen = processor.get_seen_citations()
+    assert len(seen) == 2
+    assert 1 in seen
+    assert 3 in seen
+    assert 2 not in seen  # Citation 2 was never encountered
+    assert seen[1] == mock_search_docs[1]
+    assert seen[3] == mock_search_docs[3]
+
+
+def test_get_seen_citations_accumulates_across_calls(
+    mock_search_docs: dict[int, SearchDoc],
+) -> None:
+    """Test get_seen_citations accumulates citations across multiple process_token calls."""
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping(
+        {1: mock_search_docs[1], 2: mock_search_docs[2], 3: mock_search_docs[3]}
+    )
+
+    # First batch
+    process_tokens(processor, ["[", "1", "]"])
+    seen1 = processor.get_seen_citations()
+    assert len(seen1) == 1
+    assert 1 in seen1
+
+    # Second batch
+    process_tokens(processor, ["[", "2", "]"])
+    seen2 = processor.get_seen_citations()
+    assert len(seen2) == 2
+    assert 1 in seen2
+    assert 2 in seen2
+
+    # Third batch
+    process_tokens(processor, ["[", "3", "]"])
+    seen3 = processor.get_seen_citations()
+    assert len(seen3) == 3
+    assert 1 in seen3
+    assert 2 in seen3
+    assert 3 in seen3
+
+
+def test_get_seen_citations_same_citation_multiple_times(
+    mock_search_docs: dict[int, SearchDoc],
+) -> None:
+    """Test that citing the same document multiple times only adds it once to seen_citations."""
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping({1: mock_search_docs[1]})
+
+    # Cite [1] multiple times
+    process_tokens(processor, ["[", "1", "][", "1", "][", "1", "]"])
+
+    seen = processor.get_seen_citations()
+    assert len(seen) == 1
+    assert seen[1] == mock_search_docs[1]
+
+
+def test_get_seen_citations_with_strip_citations_false(
+    mock_search_docs: dict[int, SearchDoc],
+) -> None:
+    """Test get_seen_citations works correctly when strip_citations=False."""
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping({1: mock_search_docs[1], 2: mock_search_docs[2]})
+
+    process_tokens_with_flag(
+        processor, ["[", "1", "][", "2", "]"], strip_citations=False
+    )
+
+    seen = processor.get_seen_citations()
+    assert len(seen) == 2
+    assert seen[1].document_id == "doc_1"
+    assert seen[2].document_id == "doc_2"
+
+
+def test_seen_citations_vs_cited_documents(
+    mock_search_docs: dict[int, SearchDoc],
+) -> None:
+    """Test the difference between seen_citations and cited_documents.
+
+    seen_citations: citation number -> SearchDoc (tracks which citations were parsed)
+    cited_documents: list of SearchDocs in first-citation order (for CitationInfo emission)
+    """
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping({1: mock_search_docs[1], 2: mock_search_docs[2]})
+
+    # With strip_citations=False, cited_documents won't be populated
+    # but seen_citations will be
+    process_tokens_with_flag(
+        processor, ["[", "1", "][", "2", "]"], strip_citations=False
+    )
+
+    # seen_citations should have both
+    seen = processor.get_seen_citations()
+    assert len(seen) == 2
+
+    # cited_documents should be empty (because strip_citations=False)
+    cited = processor.get_cited_documents()
+    assert len(cited) == 0
+
+    # Now process with strip_citations=True
+    processor2 = DynamicCitationProcessor()
+    processor2.update_citation_mapping({1: mock_search_docs[1], 2: mock_search_docs[2]})
+    process_tokens_with_flag(
+        processor2, ["[", "1", "][", "2", "]"], strip_citations=True
+    )
+
+    # Both should be populated
+    seen2 = processor2.get_seen_citations()
+    assert len(seen2) == 2
+    cited2 = processor2.get_cited_documents()
+    assert len(cited2) == 2
