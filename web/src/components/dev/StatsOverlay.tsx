@@ -11,7 +11,7 @@ import { useEffect } from "react";
  */
 export default function StatsOverlay() {
   useEffect(() => {
-    let animationFrameId: number;
+    let animationFrameId: number | undefined;
     let container: HTMLDivElement | null = null;
     let isMounted = true;
 
@@ -24,6 +24,7 @@ export default function StatsOverlay() {
 
       // Create Stats instances for FPS and MB
       const panels = [0, 2].map((panel) => {
+        // 0=FPS, 2=MB (memory)
         const stats = new Stats();
         stats.showPanel(panel);
         return stats;
@@ -58,7 +59,8 @@ export default function StatsOverlay() {
 
     return () => {
       isMounted = false;
-      cancelAnimationFrame(animationFrameId);
+      if (animationFrameId !== undefined)
+        cancelAnimationFrame(animationFrameId);
       if (container?.parentNode) {
         container.parentNode.removeChild(container);
       }
