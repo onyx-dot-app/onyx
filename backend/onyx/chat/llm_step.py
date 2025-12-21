@@ -395,7 +395,7 @@ def run_llm_step_pkt_generator(
     tool_choice: ToolChoiceOptions,
     llm: LLM,
     placement: Placement,
-    state_container: ChatStateContainer,
+    state_container: ChatStateContainer | None,
     citation_processor: DynamicCitationProcessor | None,
     reasoning_effort: ReasoningEffort | None = None,
     final_documents: list[SearchDoc] | None = None,
@@ -518,7 +518,8 @@ def run_llm_step_pkt_generator(
             if delta.reasoning_content:
                 accumulated_reasoning += delta.reasoning_content
                 # Save reasoning incrementally to state container
-                state_container.set_reasoning_tokens(accumulated_reasoning)
+                if state_container:
+                    state_container.set_reasoning_tokens(accumulated_reasoning)
                 if not reasoning_start:
                     yield Packet(
                         placement=Placement(
@@ -572,7 +573,8 @@ def run_llm_step_pkt_generator(
                         if isinstance(result, str):
                             accumulated_answer += result
                             # Save answer incrementally to state container
-                            state_container.set_answer_tokens(accumulated_answer)
+                            if state_container:
+                                state_container.set_answer_tokens(accumulated_answer)
                             yield Packet(
                                 placement=Placement(
                                     turn_index=turn_index,
@@ -594,7 +596,8 @@ def run_llm_step_pkt_generator(
                     # When citation_processor is None, use delta.content directly without modification
                     accumulated_answer += delta.content
                     # Save answer incrementally to state container
-                    state_container.set_answer_tokens(accumulated_answer)
+                    if state_container:
+                        state_container.set_answer_tokens(accumulated_answer)
                     yield Packet(
                         placement=Placement(
                             turn_index=turn_index,
@@ -683,7 +686,8 @@ def run_llm_step_pkt_generator(
             if isinstance(result, str):
                 accumulated_answer += result
                 # Save answer incrementally to state container
-                state_container.set_answer_tokens(accumulated_answer)
+                if state_container:
+                    state_container.set_answer_tokens(accumulated_answer)
                 yield Packet(
                     placement=Placement(
                         turn_index=turn_index,
@@ -734,7 +738,7 @@ def run_llm_step(
     tool_choice: ToolChoiceOptions,
     llm: LLM,
     placement: Placement,
-    state_container: ChatStateContainer,
+    state_container: ChatStateContainer | None,
     citation_processor: DynamicCitationProcessor | None,
     reasoning_effort: ReasoningEffort | None = None,
     final_documents: list[SearchDoc] | None = None,

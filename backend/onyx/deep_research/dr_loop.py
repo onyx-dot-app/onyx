@@ -305,6 +305,7 @@ def run_deep_research_llm_loop(
     orchestration_tokens = token_counter(token_count_prompt)
 
     reasoning_cycles = 0
+    most_recent_reasoning: str | None = None
     for cycle in range(max_orchestrator_cycles):
         research_agent_calls: list[ToolCallKickoff] = []
 
@@ -381,7 +382,6 @@ def run_deep_research_llm_loop(
             )
             break
 
-        most_recent_reasoning: str | None = None
         special_tool_calls = check_special_tool_calls(tool_calls=tool_calls)
 
         if special_tool_calls.generate_report_tool_call:
@@ -479,7 +479,7 @@ def run_deep_research_llm_loop(
                     tool_id=get_tool_by_name(
                         tool_name=RESEARCH_AGENT_DB_NAME, db_session=db_session
                     ).id,
-                    reasoning_tokens=most_recent_reasoning,
+                    reasoning_tokens=llm_step_result.reasoning or most_recent_reasoning,
                     tool_call_arguments=tool_call.tool_args,
                     tool_call_response=research_result.intermediate_report,
                     search_docs=research_result.search_docs,
@@ -508,5 +508,5 @@ def run_deep_research_llm_loop(
                 )
                 simple_chat_history.append(tool_call_response_msg)
 
-        if not special_tool_calls.think_tool_call:
-            most_recent_reasoning = None
+        # If it reached this point, it did not call reasoning, so here we wipe it to not save it to multiple turns
+        most_recent_reasoning = None

@@ -30,16 +30,14 @@ from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES
+from onyx.tools.built_in_tools import STOPPING_TOOLS_NAMES
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallInfo
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool_implementations.images.image_generation_tool import (
-    ImageGenerationTool,
-)
 from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
 )
-from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_runner import run_tool_calls
@@ -299,13 +297,6 @@ def run_llm_loop(
         )  # Here for lazy load LiteLLM
 
         initialize_litellm()
-
-        stopping_tools_names: list[str] = [ImageGenerationTool.NAME]
-        citeable_tools_names: list[str] = [
-            SearchTool.NAME,
-            WebSearchTool.NAME,
-            OpenURLTool.NAME,
-        ]
 
         # Initialize citation processor for handling citations dynamically
         citation_processor = DynamicCitationProcessor()
@@ -577,7 +568,7 @@ def run_llm_loop(
                 simple_chat_history.append(tool_response_msg)
 
                 # Update citation processor if this was a search tool
-                if tool_call.tool_name in citeable_tools_names:
+                if tool_call.tool_name in CITEABLE_TOOLS_NAMES:
                     # Check if the rich_response is a SearchDocsResponse
                     if isinstance(tool_response.rich_response, SearchDocsResponse):
                         search_response = tool_response.rich_response
@@ -609,13 +600,13 @@ def run_llm_loop(
 
             # Certain tools do not allow further actions, force the LLM wrap up on the next cycle
             if any(
-                tool.tool_name in stopping_tools_names
+                tool.tool_name in STOPPING_TOOLS_NAMES
                 for tool in llm_step_result.tool_calls
             ):
                 ran_image_gen = True
 
             if llm_step_result.tool_calls and any(
-                tool.tool_name in citeable_tools_names
+                tool.tool_name in CITEABLE_TOOLS_NAMES
                 for tool in llm_step_result.tool_calls
             ):
                 # As long as 1 tool with citeable documents is called at any point, we ask the LLM to try to cite
