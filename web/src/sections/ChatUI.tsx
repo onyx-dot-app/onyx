@@ -181,27 +181,34 @@ const ChatUI = React.memo(
         enableAutoScroll: user?.preferences.auto_scroll,
       });
 
-      // Reset scroll tracking when session changes
-      useEffect(() => {
-        scrolledForSession.current = null;
-      }, [currentChatSessionId]);
-
       // Scroll to bottom once per chat session when messages are loaded
       useEffect(() => {
+        // Reset tracking when session changes
+        if (
+          scrolledForSession.current !== null &&
+          scrolledForSession.current !== currentChatSessionId
+        ) {
+          scrolledForSession.current = null;
+        }
+
         if (scrolledForSession.current === currentChatSessionId) return;
         if (messages.length === 0) return;
+        if (!scrollContainerRef.current) return;
 
-        // Small delay to ensure DOM is ready after key-based remount
-        const timeoutId = setTimeout(() => {
-          if (scrollContainerRef.current) {
+        // Use requestAnimationFrame to ensure DOM is ready after key-based remount
+        const rafId = requestAnimationFrame(() => {
+          if (
+            scrollContainerRef.current &&
+            scrolledForSession.current !== currentChatSessionId
+          ) {
             scrollContainerRef.current.scrollTop =
               scrollContainerRef.current.scrollHeight;
             scrolledForSession.current = currentChatSessionId;
           }
-        }, 0);
+        });
 
-        return () => clearTimeout(timeoutId);
-      }, [messages, currentChatSessionId]);
+        return () => cancelAnimationFrame(rafId);
+      }, [messages.length, currentChatSessionId]);
 
       if (!liveAssistant) return <div className="flex-1" />;
 
