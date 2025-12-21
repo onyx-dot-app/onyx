@@ -151,8 +151,10 @@ def generate_intermediate_report(
                         sub_turn_index=placement.sub_turn_index,
                     ),
                     obj=IntermediateReportCitedDocs(
-                        cited_docs=[]
-                    ),  # TODO: Add actual cited docs
+                        cited_docs=list(
+                            citation_processor.get_seen_citations().values()
+                        )
+                    ),
                 )
             )
             emitter.emit(
