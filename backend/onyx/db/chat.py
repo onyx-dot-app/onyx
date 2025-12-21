@@ -780,6 +780,8 @@ def create_db_search_doc(
         is_relevant=server_search_doc.is_relevant,
         relevance_explanation=_sanitize_for_postgres(
             server_search_doc.relevance_explanation
+            if server_search_doc.relevance_explanation is not None
+            else None
         ),
         # For docs further down that aren't reranked, we can't use the retrieval score
         score=server_search_doc.score or 0.0,
