@@ -2,6 +2,7 @@
 
 import { ChatSession } from "@/app/chat/interfaces";
 import { cn, noProp } from "@/lib/utils";
+import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
@@ -34,6 +35,28 @@ import {
   SvgSidebar,
   SvgTrash,
 } from "@opal/icons";
+import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
+
+const footerMarkdownComponents = {
+  p: ({ children }) => (
+    <Text as="p" text03 secondaryAction className="!my-0 text-center">
+      {children}
+    </Text>
+  ),
+  a: ({ href, className, children, ...rest }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      {...rest}
+      className={cn(className, "underline underline-offset-2")}
+    >
+      <Text as="span" text03 secondaryAction>
+        {children}
+      </Text>
+    </a>
+  ),
+} satisfies Partial<Components>;
 
 export interface AppPageLayoutProps
   extends React.HtmlHTMLAttributes<HTMLDivElement> {
@@ -258,7 +281,9 @@ export default function AppPageLayout({
 
             {/* Center - contains the custom-header-content */}
             <div className="flex-1 flex flex-col items-center">
-              <Text text03>{customHeaderContent}</Text>
+              <Text text03 mainUiBody>
+                {customHeaderContent}
+              </Text>
             </div>
 
             {/* Right - contains the share and more-options buttons */}
@@ -301,10 +326,12 @@ export default function AppPageLayout({
         <div className={cn("flex-1 overflow-auto", className)} {...rest} />
 
         {customFooterContent && (
-          <footer className="w-full flex flex-row justify-center items-center gap-2 py-3">
-            <Text text03 secondaryBody>
-              {customFooterContent}
-            </Text>
+          <footer className="w-full flex flex-row justify-center items-center gap-2 py-2">
+            <MinimalMarkdown
+              content={customFooterContent}
+              className={cn("max-w-full text-center")}
+              components={footerMarkdownComponents}
+            />
           </footer>
         )}
       </div>

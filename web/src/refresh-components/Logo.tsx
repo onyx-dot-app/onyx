@@ -47,8 +47,11 @@ export default function Logo({ folded, size, className }: LogoProps) {
     [className, settings.enterpriseSettings?.use_custom_logo]
   );
 
-  const renderNameAndPoweredBy = (opts: { includeLogo: boolean }) => {
-    if (!applicationName) {
+  const renderNameAndPoweredBy = (opts: {
+    includeLogo: boolean;
+    includeName: boolean;
+  }) => {
+    if (!opts.includeName && !applicationName) {
       return null;
     }
 
@@ -56,11 +59,13 @@ export default function Logo({ folded, size, className }: LogoProps) {
       <div className="flex flex-col min-w-0">
         <div className="flex flex-row items-center gap-2 min-w-0">
           {opts.includeLogo && logo}
-          <div className="flex-1 min-w-0">
-            <Truncated headingH3 className={cn(folded && "invisible")}>
-              {applicationName}
-            </Truncated>
-          </div>
+          {opts.includeName && (
+            <div className="flex-1 min-w-0">
+              <Truncated headingH3 className={cn(folded && "invisible")}>
+                {applicationName}
+              </Truncated>
+            </div>
+          )}
         </div>
         {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && (
           <Text
@@ -68,7 +73,7 @@ export default function Logo({ folded, size, className }: LogoProps) {
             text03
             className={cn(
               "line-clamp-1 truncate",
-              opts.includeLogo && "ml-[33px]",
+              opts.includeLogo && opts.includeName && "ml-[33px]",
               folded && "invisible"
             )}
             nowrap
@@ -82,17 +87,17 @@ export default function Logo({ folded, size, className }: LogoProps) {
 
   // Handle "logo_only" display style
   if (logoDisplayStyle === "logo_only") {
-    return logo;
+    return renderNameAndPoweredBy({ includeLogo: true, includeName: false });
   }
 
   // Handle "name_only" display style
   if (logoDisplayStyle === "name_only") {
-    return renderNameAndPoweredBy({ includeLogo: false });
+    return renderNameAndPoweredBy({ includeLogo: false, includeName: true });
   }
 
   // Handle "logo_and_name" or default behavior
   return applicationName ? (
-    renderNameAndPoweredBy({ includeLogo: true })
+    renderNameAndPoweredBy({ includeLogo: true, includeName: true })
   ) : folded ? (
     <OnyxIcon size={foldedSize} className={cn("flex-shrink-0", className)} />
   ) : (

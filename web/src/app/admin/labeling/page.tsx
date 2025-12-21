@@ -142,8 +142,6 @@ export default function LabelingPage() {
       validationSchema={validationSchema}
       validateOnChange={false}
       onSubmit={async (values, formikHelpers) => {
-        console.log("values", values);
-
         // Handle logo upload if a new logo was selected
         if (selectedLogo) {
           const formData = new FormData();

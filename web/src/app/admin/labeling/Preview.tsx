@@ -17,6 +17,8 @@ const previewMarkdownComponents = {
   a: ({ href, className, children, ...rest }) => (
     <a
       href={href}
+      target="_blank"
+      rel="noopener noreferrer"
       {...rest}
       className={cn(className, "underline underline-offset-2")}
     >
