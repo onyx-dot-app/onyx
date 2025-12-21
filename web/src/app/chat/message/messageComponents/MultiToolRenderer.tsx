@@ -776,7 +776,7 @@ export default function MultiToolRenderer({
 
   // If complete, show summary with toggle and render each turn group independently
   return (
-    <div className="pb-1">
+    <div className="pb-4">
       {/* Summary header - clickable */}
       <div
         className="flex flex-row w-fit items-center group/StepsButton select-none"

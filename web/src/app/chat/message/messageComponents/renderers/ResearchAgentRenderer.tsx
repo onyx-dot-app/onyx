@@ -302,7 +302,7 @@ export const ResearchAgentRenderer: MessageRenderer<Packet, FullChatState> = ({
 
           {/* Render intermediate report */}
           {reportContent && (
-            <div className="whitespace-pre-wrap break-words mt-2 text-sm text-text-500 max-h-[4.5rem] overflow-y-auto">
+            <div className="whitespace-pre-wrap break-words mt-6 text-sm text-text-500 max-h-[9rem] overflow-y-auto">
               {reportContent}
             </div>
           )}
@@ -320,7 +320,7 @@ export const ResearchAgentRenderer: MessageRenderer<Packet, FullChatState> = ({
         >
           {/* Render nested tool calls in expanded view */}
           {nestedToolGroups.length > 0 && (
-            <div className="mb-3 space-y-0.5">
+            <div className="mb-6 space-y-0.5">
               {nestedToolGroups.map((group, index) =>
                 renderNestedTool(group, index, nestedToolGroups.length)
               )}
@@ -328,7 +328,7 @@ export const ResearchAgentRenderer: MessageRenderer<Packet, FullChatState> = ({
           )}
 
           {reportContent && (
-            <div className="mt-2 whitespace-pre-wrap break-words text-sm max-h-[9rem] overflow-y-auto">
+            <div className="mt-8 whitespace-pre-wrap break-words text-sm max-h-[12rem] overflow-y-auto">
               {reportContent}
             </div>
           )}
