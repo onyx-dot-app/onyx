@@ -50,7 +50,7 @@ import CustomAgentAvatar, {
   iconMap,
 } from "@/refresh-components/avatars/CustomAgentAvatar";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import SquareButton from "@/refresh-components/buttons/SquareButton";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
@@ -159,17 +159,20 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
                 Upload Image
               </LineItem>,
               null,
-              <div className="grid grid-cols-4 gap-0">
-                <IconButton
+              <div className="grid grid-cols-4 gap-1">
+                <SquareButton
                   key="default-icon"
-                  icon={() => <CustomAgentAvatar />}
+                  icon={() => <CustomAgentAvatar size={30} />}
                   onClick={() => handleIconClick(null)}
                 />
                 {Object.keys(iconMap).map((iconName) => (
-                  <IconButton
+                  <SquareButton
                     key={iconName}
                     onClick={() => handleIconClick(iconName)}
-                    icon={() => <CustomAgentAvatar iconName={iconName} />}
+                    icon={() => (
+                      <CustomAgentAvatar iconName={iconName} size={30} />
+                    )}
+                    transient={true}
                   />
                 ))}
               </div>,

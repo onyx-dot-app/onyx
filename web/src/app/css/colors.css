@@ -323,6 +323,7 @@
   --action-link-03: var(--blue-20);
   --action-link-02: var(--blue-10);
   --action-link-01: var(--blue-05);
+  --action-link-00: var(--blue-01);
   --action-danger-06: var(--red-60);
   --action-danger-05: var(--red-50);
   --action-danger-04: var(--red-40);
@@ -456,6 +457,7 @@
   --action-link-03: var(--blue-80);
   --action-link-02: var(--blue-85);
   --action-link-01: var(--blue-90);
+  --action-link-00: var(--blue-95);
   --action-danger-06: var(--red-40);
   --action-danger-05: var(--red-50);
   --action-danger-04: var(--red-60);

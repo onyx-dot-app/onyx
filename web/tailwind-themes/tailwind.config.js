@@ -144,6 +144,7 @@ module.exports = {
         "action-link-03": "var(--action-link-03)",
         "action-link-02": "var(--action-link-02)",
         "action-link-01": "var(--action-link-01)",
+        "action-link-00": "var(--action-link-00)",
         "action-danger-06": "var(--action-danger-06)",
         "action-danger-05": "var(--action-danger-05)",
         "action-danger-04": "var(--action-danger-04)",
