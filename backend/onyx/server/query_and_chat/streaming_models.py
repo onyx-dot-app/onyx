@@ -13,10 +13,13 @@ from onyx.server.query_and_chat.placement import Placement
 class StreamingType(Enum):
     """Enum defining all streaming packet types. This is the single source of truth for type strings."""
 
+    SECTION_END = "section_end"
+    STOP = "stop"
+    TOP_LEVEL_BRANCHING = "top_level_branching"
+    ERROR = "error"
+
     MESSAGE_START = "message_start"
     MESSAGE_DELTA = "message_delta"
-    ERROR = "error"
-    STOP = "stop"
     SEARCH_TOOL_START = "search_tool_start"
     SEARCH_TOOL_QUERIES_DELTA = "search_tool_queries_delta"
     SEARCH_TOOL_DOCUMENTS_DELTA = "search_tool_documents_delta"
@@ -45,6 +48,33 @@ class StreamingType(Enum):
 
 class BaseObj(BaseModel):
     type: str = ""
+
+
+################################################
+# Control Packets
+################################################
+# This one isn't strictly necessary, remove in the future
+class SectionEnd(BaseObj):
+    type: Literal["section_end"] = StreamingType.SECTION_END.value
+
+
+class OverallStop(BaseObj):
+    type: Literal["stop"] = StreamingType.STOP.value
+
+
+class TopLevelBranching(BaseObj):
+    # This class is used to give advanced heads up to the frontend that the top level flow is branching
+    # This is used to avoid having the frontend render the first call then rerendering the other parallel branches
+    type: Literal["top_level_branching"] = StreamingType.TOP_LEVEL_BRANCHING.value
+
+    num_parallel_branches: int
+
+
+class PacketException(BaseObj):
+    type: Literal["error"] = StreamingType.ERROR.value
+
+    exception: Exception
+    model_config = {"arbitrary_types_allowed": True}
 
 
 ################################################
@@ -93,25 +123,6 @@ class CitationInfo(BaseObj):
     # The document id of the SearchDoc (same as the field stored in the DB)
     # This is the actual document id from the connector, not the int id
     document_id: str
-
-
-################################################
-# Control Packets
-################################################
-# This one isn't strictly necessary, remove in the future
-class SectionEnd(BaseObj):
-    type: Literal["section_end"] = "section_end"
-
-
-class PacketException(BaseObj):
-    type: Literal["error"] = StreamingType.ERROR.value
-
-    exception: Exception
-    model_config = {"arbitrary_types_allowed": True}
-
-
-class OverallStop(BaseObj):
-    type: Literal["stop"] = StreamingType.STOP.value
 
 
 ################################################
@@ -277,14 +288,14 @@ class IntermediateReportCitedDocs(BaseObj):
 ################################################
 # Discriminated union of all possible packet object types
 PacketObj = Union[
-    # Agent Response Packets
-    AgentResponseStart,
-    AgentResponseDelta,
     # Control Packets
     OverallStop,
     SectionEnd,
-    # Error Packets
+    TopLevelBranching,
     PacketException,
+    # Agent Response Packets
+    AgentResponseStart,
+    AgentResponseDelta,
     # Tool Packets
     SearchToolStart,
     SearchToolQueriesDelta,
