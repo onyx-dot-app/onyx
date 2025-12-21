@@ -142,6 +142,8 @@ const ChatInputBar = React.memo(
       const textAreaRef = useRef<HTMLTextAreaElement>(null);
       const containerRef = useRef<HTMLDivElement>(null);
       const previousHeightRef = useRef<number | null>(null);
+      const onHeightChangeRef = useRef(onHeightChange);
+      onHeightChangeRef.current = onHeightChange;
 
       // Expose reset and focus methods to parent via ref
       React.useImperativeHandle(ref, () => ({
@@ -210,7 +212,7 @@ const ChatInputBar = React.memo(
 
       // Detect height changes and notify parent for scroll adjustment
       useEffect(() => {
-        if (!containerRef.current || !onHeightChange) return;
+        if (!containerRef.current) return;
 
         const observer = new ResizeObserver((entries) => {
           for (const entry of entries) {
@@ -218,7 +220,7 @@ const ChatInputBar = React.memo(
             if (previousHeightRef.current !== null) {
               const delta = newHeight - previousHeightRef.current;
               if (delta !== 0) {
-                onHeightChange(delta);
+                onHeightChangeRef.current?.(delta);
               }
             }
             previousHeightRef.current = newHeight;
@@ -227,7 +229,7 @@ const ChatInputBar = React.memo(
 
         observer.observe(containerRef.current);
         return () => observer.disconnect();
-      }, [onHeightChange]);
+      }, []);
 
       const handlePaste = (event: React.ClipboardEvent) => {
         const items = event.clipboardData?.items;
