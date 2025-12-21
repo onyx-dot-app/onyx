@@ -744,18 +744,17 @@ def update_search_docs_table_with_relevance(
     db_session.commit()
 
 
-def _sanitize_for_postgres(value: str | None) -> str | None:
+def _sanitize_for_postgres(value: str) -> str:
     """Remove NUL (0x00) characters from strings as PostgreSQL doesn't allow them."""
-    if value is None:
-        return None
-    return value.replace("\x00", "")
+    sanitized = value.replace("\x00", "")
+    if value and not sanitized:
+        logger.warning("Sanitization removed all characters from string")
+    return sanitized
 
 
-def _sanitize_list_for_postgres(values: list[str] | None) -> list[str] | None:
+def _sanitize_list_for_postgres(values: list[str]) -> list[str]:
     """Remove NUL (0x00) characters from all strings in a list."""
-    if values is None:
-        return None
-    return [v.replace("\x00", "") for v in values]
+    return [_sanitize_for_postgres(v) for v in values]
 
 
 def create_db_search_doc(
@@ -765,11 +764,14 @@ def create_db_search_doc(
 ) -> DBSearchDoc:
     # Sanitize string fields to remove NUL characters (PostgreSQL doesn't allow them)
     db_search_doc = DBSearchDoc(
-        document_id=_sanitize_for_postgres(server_search_doc.document_id) or "",
+        document_id=_sanitize_for_postgres(server_search_doc.document_id),
         chunk_ind=server_search_doc.chunk_ind,
-        semantic_id=_sanitize_for_postgres(server_search_doc.semantic_identifier)
-        or "Unknown",
-        link=_sanitize_for_postgres(server_search_doc.link),
+        semantic_id=_sanitize_for_postgres(server_search_doc.semantic_identifier),
+        link=(
+            _sanitize_for_postgres(server_search_doc.link)
+            if server_search_doc.link is not None
+            else None
+        ),
         blurb=_sanitize_for_postgres(server_search_doc.blurb),
         source_type=server_search_doc.source_type,
         boost=server_search_doc.boost,
@@ -785,9 +787,15 @@ def create_db_search_doc(
             server_search_doc.match_highlights
         ),
         updated_at=server_search_doc.updated_at,
-        primary_owners=_sanitize_list_for_postgres(server_search_doc.primary_owners),
-        secondary_owners=_sanitize_list_for_postgres(
-            server_search_doc.secondary_owners
+        primary_owners=(
+            _sanitize_list_for_postgres(server_search_doc.primary_owners)
+            if server_search_doc.primary_owners is not None
+            else None
+        ),
+        secondary_owners=(
+            _sanitize_list_for_postgres(server_search_doc.secondary_owners)
+            if server_search_doc.secondary_owners is not None
+            else None
         ),
         is_internet=server_search_doc.is_internet,
     )
