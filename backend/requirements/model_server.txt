@@ -519,7 +519,7 @@ tzdata==2025.2
     # via
     #   kombu
     #   pandas
-urllib3==2.6.1
+urllib3==2.6.2
     # via
     #   botocore
     #   requests
