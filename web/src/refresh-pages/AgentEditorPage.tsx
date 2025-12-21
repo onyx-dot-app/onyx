@@ -68,7 +68,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedIconName, setSelectedIconName] = useState<string | null>(null);
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -103,7 +103,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
       console.error("Upload error:", error);
       setUploadedImagePreview(null);
     }
-  };
+  }
 
   const imageSrc = uploadedImagePreview
     ? uploadedImagePreview
@@ -118,6 +118,11 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
     setFieldValue("uploaded_image_id", null);
     setUploadedImagePreview(null);
     setPopoverOpen(false);
+
+    // Reset the file input so the same file can be uploaded again later
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   }
 
   return (
@@ -241,9 +246,6 @@ export interface AgentEditorPageProps {
 }
 
 export default function AgentEditorPage({
-  // ccPairs,
-  // llmProviders,
-  // tools,
   agent: existingAgent,
 }: AgentEditorPageProps) {
   // Hooks for Knowledge section
