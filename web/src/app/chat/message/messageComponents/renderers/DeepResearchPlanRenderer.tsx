@@ -9,6 +9,7 @@ import {
 } from "../../../services/streamingModels";
 import { MessageRenderer, FullChatState } from "../interfaces";
 import { usePacketAnimationAndCollapse } from "../hooks/usePacketAnimationAndCollapse";
+import { useMarkdownRenderer } from "../markdownUtils";
 
 /**
  * Renderer for deep research plan packets.
@@ -66,6 +67,13 @@ export const DeepResearchPlanRenderer: MessageRenderer<
       .join("");
   }, [animate, displayedPacketCount, fullContent, packets]);
 
+  // Use markdown renderer to render the plan content
+  const { renderedContent } = useMarkdownRenderer(
+    content,
+    state,
+    "text-text-03 font-main-ui-body"
+  );
+
   const statusText = isComplete ? "Generated plan" : "Generating plan";
 
   const statusElement = (
@@ -85,34 +93,24 @@ export const DeepResearchPlanRenderer: MessageRenderer<
     </div>
   );
 
+  const planContent = (
+    <div className="text-text-600 text-sm overflow-hidden">
+      {/* Collapsible content */}
+      <div
+        className={cn(
+          "overflow-hidden transition-all duration-200 ease-in-out",
+          isExpanded ? "max-h-[2000px] opacity-100 mt-2" : "max-h-0 opacity-0"
+        )}
+      >
+        {renderedContent}
+      </div>
+    </div>
+  );
+
   return children({
     icon: FiList,
     status: statusElement,
-    content: (
-      <div className="text-text-600 text-sm overflow-hidden">
-        {/* Collapsible content */}
-        <div
-          className={cn(
-            "overflow-hidden transition-all duration-200 ease-in-out",
-            isExpanded ? "max-h-[2000px] opacity-100 mt-2" : "max-h-0 opacity-0"
-          )}
-        >
-          <div className="whitespace-pre-wrap">{content}</div>
-        </div>
-      </div>
-    ),
-    expandedText: (
-      <div className="text-text-600 text-sm overflow-hidden">
-        {/* Collapsible content */}
-        <div
-          className={cn(
-            "overflow-hidden transition-all duration-200 ease-in-out",
-            isExpanded ? "max-h-[2000px] opacity-100 mt-2" : "max-h-0 opacity-0"
-          )}
-        >
-          <div className="whitespace-pre-wrap">{content}</div>
-        </div>
-      </div>
-    ),
+    content: planContent,
+    expandedText: planContent,
   });
 };

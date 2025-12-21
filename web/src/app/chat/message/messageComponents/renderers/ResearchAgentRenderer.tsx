@@ -10,6 +10,7 @@ import { getToolIcon, getToolName } from "../toolDisplayHelpers";
 import { STANDARD_TEXT_COLOR } from "../constants";
 import Text from "@/refresh-components/texts/Text";
 import { usePacketAnimationAndCollapse } from "../hooks/usePacketAnimationAndCollapse";
+import { useMarkdownRenderer } from "../markdownUtils";
 
 interface ResearchAgentStartObj {
   type: "research_agent_start";
@@ -205,6 +206,13 @@ export const ResearchAgentRenderer: MessageRenderer<Packet, FullChatState> = ({
       .join("");
   }, [animate, displayedPacketCount, fullReportContent, packets]);
 
+  // Use markdown renderer to render the report content
+  const { renderedContent: renderedReportContent } = useMarkdownRenderer(
+    reportContent,
+    state,
+    "text-text-03 font-main-ui-body"
+  );
+
   // Determine status text
   let statusText: string;
   if (isComplete) {
@@ -279,61 +287,38 @@ export const ResearchAgentRenderer: MessageRenderer<Packet, FullChatState> = ({
     </div>
   );
 
+  const researchAgentContent = (
+    <div className="text-text-600 text-sm overflow-hidden">
+      {/* Collapsible content */}
+      <div
+        className={cn(
+          "overflow-hidden transition-all duration-200 ease-in-out",
+          isExpanded ? "max-h-[2000px] opacity-100 mt-2" : "max-h-0 opacity-0"
+        )}
+      >
+        {/* Render nested tool calls */}
+        {nestedToolGroups.length > 0 && (
+          <div className="space-y-0.5">
+            {nestedToolGroups.map((group, index) =>
+              renderNestedTool(group, index, nestedToolGroups.length)
+            )}
+          </div>
+        )}
+
+        {/* Render intermediate report */}
+        {reportContent && (
+          <div className="mt-6 text-sm text-text-500 max-h-[9rem] overflow-y-auto">
+            {renderedReportContent}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   return children({
     icon: FiUsers,
     status: statusElement,
-    content: (
-      <div className="text-text-600 text-sm overflow-hidden">
-        {/* Collapsible content */}
-        <div
-          className={cn(
-            "overflow-hidden transition-all duration-200 ease-in-out",
-            isExpanded ? "max-h-[2000px] opacity-100 mt-2" : "max-h-0 opacity-0"
-          )}
-        >
-          {/* Render nested tool calls */}
-          {nestedToolGroups.length > 0 && (
-            <div className="space-y-0.5">
-              {nestedToolGroups.map((group, index) =>
-                renderNestedTool(group, index, nestedToolGroups.length)
-              )}
-            </div>
-          )}
-
-          {/* Render intermediate report */}
-          {reportContent && (
-            <div className="whitespace-pre-wrap break-words mt-6 text-sm text-text-500 max-h-[9rem] overflow-y-auto">
-              {reportContent}
-            </div>
-          )}
-        </div>
-      </div>
-    ),
-    expandedText: (
-      <div className="whitespace-pre-wrap break-words overflow-hidden">
-        {/* Collapsible content in expanded view */}
-        <div
-          className={cn(
-            "overflow-hidden transition-all duration-200 ease-in-out",
-            isExpanded ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0"
-          )}
-        >
-          {/* Render nested tool calls in expanded view */}
-          {nestedToolGroups.length > 0 && (
-            <div className="mb-6 space-y-0.5">
-              {nestedToolGroups.map((group, index) =>
-                renderNestedTool(group, index, nestedToolGroups.length)
-              )}
-            </div>
-          )}
-
-          {reportContent && (
-            <div className="mt-8 whitespace-pre-wrap break-words text-sm max-h-[12rem] overflow-y-auto">
-              {reportContent}
-            </div>
-          )}
-        </div>
-      </div>
-    ),
+    content: researchAgentContent,
+    expandedText: researchAgentContent,
   });
 };

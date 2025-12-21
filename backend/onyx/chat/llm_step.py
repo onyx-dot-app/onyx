@@ -663,19 +663,10 @@ def run_llm_step_pkt_generator(
             )
             span_generation.span_data.output = [assistant_msg_no_tools.model_dump()]
 
-    # Close reasoning block if it's still open (can happen if stream ends with only reasoning)
+    # Should have closed the reasoning block, the only pathway to hit this is if the stream
+    # ended with reasoning content and no other content. This is an invalid state.
     if reasoning_start:
-        yield Packet(
-            placement=Placement(
-                turn_index=turn_index,
-                tab_index=tab_index,
-                sub_turn_index=sub_turn_index,
-            ),
-            obj=ReasoningDone(),
-        )
-        has_reasoned = 1
-        turn_index, sub_turn_index = _increment_turns(turn_index, sub_turn_index)
-        reasoning_start = False
+        raise RuntimeError("Reasoning block is still open but the stream ended.")
 
     # Flush any remaining content from citation processor
     # Reasoning is always first so this should use the post-incremented value of turn_index
