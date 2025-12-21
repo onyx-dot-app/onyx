@@ -337,6 +337,7 @@ def run_deep_research_llm_loop(
                 citation_mapping=citation_mapping,
                 user_identity=user_identity,
             )
+            break
 
         research_agent_calls: list[ToolCallKickoff] = []
 
