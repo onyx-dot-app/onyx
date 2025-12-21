@@ -3,7 +3,10 @@ from typing import cast
 
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import create_tool_call_failure_messages
+from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.citation_processor import DynamicCitationProcessor
+from onyx.chat.citation_utils import collapse_citations
+from onyx.chat.citation_utils import update_citation_processor_from_tool_response
 from onyx.chat.emitter import Emitter
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.llm_step import run_llm_step
@@ -11,7 +14,6 @@ from onyx.chat.llm_step import run_llm_step_pkt_generator
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import LlmStepResult
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
 from onyx.deep_research.dr_mock_tools import (
     get_research_agent_additional_tool_definitions,
@@ -19,6 +21,7 @@ from onyx.deep_research.dr_mock_tools import (
 from onyx.deep_research.dr_mock_tools import RESEARCH_AGENT_TASK_KEY
 from onyx.deep_research.dr_mock_tools import THINK_TOOL_RESPONSE_MESSAGE
 from onyx.deep_research.dr_mock_tools import THINK_TOOL_RESPONSE_TOKEN_COUNT
+from onyx.deep_research.models import CombinedResearchAgentCallResult
 from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.deep_research.utils import check_special_tool_calls
 from onyx.llm.interfaces import LLM
@@ -71,6 +74,7 @@ def generate_intermediate_report(
     history: list[ChatMessageSimple],
     llm: LLM,
     token_counter: Callable[[str], int],
+    citation_processor: DynamicCitationProcessor,
     user_identity: LLMUserIdentity | None,
     emitter: Emitter,
     placement: Placement,
@@ -106,7 +110,7 @@ def generate_intermediate_report(
         tool_choice=ToolChoiceOptions.NONE,
         llm=llm,
         placement=placement,
-        citation_processor=DynamicCitationProcessor(),
+        citation_processor=citation_processor,
         state_container=state_container,
         reasoning_effort=ReasoningEffort.LOW,
         final_documents=None,
@@ -183,10 +187,14 @@ def run_research_agent_call(
     token_counter: Callable[[str], int],
     user_identity: LLMUserIdentity | None,
 ) -> ResearchAgentCallResult:
+    # Used to track the citations, but in this case they're not processed into links.
+    # They are later stripped from the output since the user cannot use these and the numbers
+    # change between the research and the final report.
+    citation_processor = DynamicCitationProcessor(replace_citation_tokens=False)
+
     research_cycle_count = 0
     llm_cycle_count = 0
     current_tools = tools
-    gathered_documents: list[SearchDoc] | None = None
     reasoning_cycles = 0
     just_ran_web_search = False
 
@@ -296,7 +304,7 @@ def run_research_agent_call(
                 tab_index=tab_index,
                 sub_turn_index=llm_cycle_count + reasoning_cycles,
             ),
-            citation_processor=DynamicCitationProcessor(),
+            citation_processor=None,
             state_container=None,
             reasoning_effort=ReasoningEffort.LOW,
             final_documents=None,
@@ -324,6 +332,7 @@ def run_research_agent_call(
                 history=msg_history,
                 llm=llm,
                 token_counter=token_counter,
+                citation_processor=citation_processor,
                 user_identity=user_identity,
                 emitter=emitter,
                 placement=Placement(
@@ -332,7 +341,8 @@ def run_research_agent_call(
                 ),
             )
             return ResearchAgentCallResult(
-                intermediate_report=final_report, search_docs=[]
+                intermediate_report=final_report,
+                citation_mapping=citation_processor.get_seen_citations(),
             )
         elif special_tool_calls.think_tool_call:
             think_tool_call = special_tool_calls.think_tool_call
@@ -366,7 +376,7 @@ def run_research_agent_call(
                 memories=None,
                 user_info=None,
                 citation_mapping=citation_mapping,
-                citation_processor=DynamicCitationProcessor(),
+                next_citation_num=citation_processor.get_next_citation_number(),
                 # May be better to not do this step, hard to say, needs to be tested
                 skip_search_query_expansion=False,
             )
@@ -392,19 +402,21 @@ def run_research_agent_call(
                         f"Tool '{tool_call.tool_name}' not found in tools list"
                     )
 
-                # Extract search_docs if this is a search tool response
                 search_docs = None
                 if isinstance(tool_response.rich_response, SearchDocsResponse):
                     search_docs = tool_response.rich_response.search_docs
-                    if gathered_documents:
-                        gathered_documents.extend(search_docs)
-                    else:
-                        gathered_documents = search_docs
 
                     # This is used for the Open URL reminder in the next cycle
                     # only do this if the web search tool yielded results
                     if search_docs and tool_call.tool_name == WebSearchTool.NAME:
                         just_ran_web_search = True
+
+                # Makes sure the citation processor is updated with all the possible docs
+                # and citation numbers so that it's populated when passed in to report generation.
+                update_citation_processor_from_tool_response(
+                    tool_response=tool_response,
+                    citation_processor=citation_processor,
+                )
 
                 # Research Agent is a top level tool call but the tools called by the research
                 # agent are sub-tool calls.
@@ -461,6 +473,7 @@ def run_research_agent_call(
         history=msg_history,
         llm=llm,
         token_counter=token_counter,
+        citation_processor=citation_processor,
         user_identity=user_identity,
         emitter=emitter,
         placement=Placement(
@@ -468,7 +481,10 @@ def run_research_agent_call(
             tab_index=tab_index,
         ),
     )
-    return ResearchAgentCallResult(intermediate_report=final_report, search_docs=[])
+    return ResearchAgentCallResult(
+        intermediate_report=final_report,
+        citation_mapping=citation_processor.get_seen_citations(),
+    )
 
 
 def run_research_agent_calls(
@@ -480,8 +496,9 @@ def run_research_agent_calls(
     llm: LLM,
     is_reasoning_model: bool,
     token_counter: Callable[[str], int],
+    citation_mapping: CitationMapping,
     user_identity: LLMUserIdentity | None = None,
-) -> list[ResearchAgentCallResult]:
+) -> CombinedResearchAgentCallResult:
     # Run all research agent calls in parallel
     functions_with_args = [
         (
@@ -508,4 +525,17 @@ def run_research_agent_calls(
         allow_failures=True,  # Continue even if some research agent calls fail
     )
 
-    return research_agent_call_results
+    updated_citation_mapping = citation_mapping
+    updated_answers = []
+
+    for result in research_agent_call_results:
+        updated_answer, updated_citation_mapping = collapse_citations(
+            answer_text=result.intermediate_report,
+            existing_citation_mapping=updated_citation_mapping,
+            new_citation_mapping=result.citation_mapping,
+        )
+        updated_answers.append(updated_answer)
+    return CombinedResearchAgentCallResult(
+        intermediate_reports=updated_answers,
+        citation_mapping=updated_citation_mapping,
+    )

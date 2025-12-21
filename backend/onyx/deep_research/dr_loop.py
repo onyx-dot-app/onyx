@@ -9,6 +9,7 @@ from typing import cast
 from sqlalchemy.orm import Session
 
 from onyx.chat.chat_state import ChatStateContainer
+from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
 from onyx.chat.llm_loop import construct_message_history
@@ -309,6 +310,7 @@ def run_deep_research_llm_loop(
 
     reasoning_cycles = 0
     most_recent_reasoning: str | None = None
+    citation_mapping: CitationMapping = {}
     for cycle in range(max_orchestrator_cycles):
         research_agent_calls: list[ToolCallKickoff] = []
 
@@ -462,10 +464,11 @@ def run_deep_research_llm_loop(
                 llm=llm,
                 is_reasoning_model=is_reasoning_model,
                 token_counter=token_counter,
+                citation_mapping=citation_mapping,
                 user_identity=user_identity,
             )
 
-            for tab_index, research_result in enumerate(research_results):
+            for tab_index, report in enumerate(research_results.intermediate_reports):
                 tool_call_info = ToolCallInfo(
                     parent_tool_call_id=None,
                     turn_index=orchestrator_start_turn_index + cycle + reasoning_cycles,
@@ -477,8 +480,8 @@ def run_deep_research_llm_loop(
                     ).id,
                     reasoning_tokens=llm_step_result.reasoning or most_recent_reasoning,
                     tool_call_arguments=tool_call.tool_args,
-                    tool_call_response=research_result.intermediate_report,
-                    search_docs=research_result.search_docs,
+                    tool_call_response=report,
+                    search_docs=None,  # Intermediate docs are not saved/shown
                     generated_images=None,
                 )
                 state_container.add_tool_call(tool_call_info)
@@ -496,8 +499,8 @@ def run_deep_research_llm_loop(
                 simple_chat_history.append(tool_call_msg)
 
                 tool_call_response_msg = ChatMessageSimple(
-                    message=research_result.intermediate_report,
-                    token_count=token_counter(research_result.intermediate_report),
+                    message=report,
+                    token_count=token_counter(report),
                     message_type=MessageType.TOOL_CALL_RESPONSE,
                     tool_call_id=tool_call.tool_call_id,
                     image_files=None,

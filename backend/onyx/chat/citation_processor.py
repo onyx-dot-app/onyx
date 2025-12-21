@@ -4,13 +4,15 @@ Dynamic Citation Processor for LLM Responses
 This module provides a citation processor that can:
 - Accept citation number to SearchDoc mappings dynamically
 - Process token streams from LLMs to extract citations
-- Remove citation markers from output text
-- Emit CitationInfo objects for detected citations
+- Optionally replace citation markers with formatted markdown links
+- Emit CitationInfo objects for detected citations (when replacing)
+- Track all seen citations regardless of replacement mode
 - Maintain a list of cited documents in order of first citation
 """
 
 import re
 from collections.abc import Generator
+from typing import TypeAlias
 
 from onyx.configs.chat_configs import STOP_STREAM_PAT
 from onyx.context.search.models import SearchDoc
@@ -19,6 +21,9 @@ from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+CitationMapping: TypeAlias = dict[int, SearchDoc]
 
 
 # ============================================================================
@@ -43,19 +48,29 @@ class DynamicCitationProcessor:
 
     This processor is designed for multi-turn conversations where the citation
     number to document mapping is provided externally. It processes streaming
-    tokens from an LLM, detects citations (e.g., [1], [2,3], [[4]]), and:
+    tokens from an LLM, detects citations (e.g., [1], [2,3], [[4]]), and based
+    on the `replace_citation_tokens` setting:
 
-    1. Removes citation markers from the output text
-    2. Emits CitationInfo objects for tracking
-    3. Maintains the order in which documents were first cited
+    When replace_citation_tokens=True (default):
+        1. Replaces citation markers with formatted markdown links (e.g., [[1]](url))
+        2. Emits CitationInfo objects for tracking
+        3. Maintains the order in which documents were first cited
+
+    When replace_citation_tokens=False:
+        1. Preserves original citation markers in the output text
+        2. Does NOT emit CitationInfo objects
+        3. Still tracks all seen citations via get_seen_citations()
 
     Features:
-    - Accepts citation number → SearchDoc mapping via update_citation_mapping()
-    - Processes tokens from LLM and removes citation markers
-    - Holds back tokens that might be partial citations
-    - Maintains list of cited SearchDocs in order of first citation
+        - Accepts citation number → SearchDoc mapping via update_citation_mapping()
+        - Configurable citation replacement behavior at initialization
+        - Always tracks seen citations regardless of replacement mode
+        - Holds back tokens that might be partial citations
+        - Maintains list of cited SearchDocs in order of first citation
+        - Handles unicode bracket variants (【】, ［］)
+        - Skips citation processing inside code blocks
 
-    Example:
+    Example (with citation replacement - default):
         processor = DynamicCitationProcessor()
 
         # Set up citation mapping
@@ -65,38 +80,55 @@ class DynamicCitationProcessor:
         for token in llm_stream:
             for result in processor.process_token(token):
                 if isinstance(result, str):
-                    print(result)  # Display text (citations removed)
+                    print(result)  # Display text with [[1]](url) format
                 elif isinstance(result, CitationInfo):
                     handle_citation(result)  # Track citation
 
-        # Update mapping with more documents
-        processor.update_citation_mapping({3: search_doc3, 4: search_doc4})
-
-        # Continue processing...
-
         # Get cited documents at the end
         cited_docs = processor.get_cited_documents()
+
+    Example (without citation replacement):
+        processor = DynamicCitationProcessor(replace_citation_tokens=False)
+        processor.update_citation_mapping({1: search_doc1, 2: search_doc2})
+
+        # Process tokens from LLM
+        for token in llm_stream:
+            for result in processor.process_token(token):
+                # Only strings are yielded, no CitationInfo objects
+                print(result)  # Display text with original [1] format preserved
+
+        # Get all seen citations after processing
+        seen_citations = processor.get_seen_citations()  # {1: search_doc1, ...}
     """
 
     def __init__(
         self,
+        replace_citation_tokens: bool = True,
         stop_stream: str | None = STOP_STREAM_PAT,
     ):
         """
         Initialize the citation processor.
 
         Args:
-            stop_stream: Optional stop token to halt processing early
+            replace_citation_tokens: If True (default), citations like [1] are replaced
+                with formatted markdown links like [[1]](url) and CitationInfo objects
+                are emitted. If False, original citation text is preserved in output
+                and no CitationInfo objects are emitted. Regardless of this setting,
+                all seen citations are tracked and available via get_seen_citations().
+            stop_stream: Optional stop token pattern to halt processing early.
+                When this pattern is detected in the token stream, processing stops.
+                Defaults to STOP_STREAM_PAT from chat configs.
         """
         # Citation mapping from citation number to SearchDoc
-        self.citation_to_doc: dict[int, SearchDoc] = {}
-        self.seen_citations: dict[int, SearchDoc] = {}  # citation num -> SearchDoc
+        self.citation_to_doc: CitationMapping = {}
+        self.seen_citations: CitationMapping = {}  # citation num -> SearchDoc
 
         # Token processing state
         self.llm_out = ""  # entire output so far
         self.curr_segment = ""  # tokens held for citation processing
         self.hold = ""  # tokens held for stop token processing
         self.stop_stream = stop_stream
+        self.replace_citation_tokens = replace_citation_tokens
 
         # Citation tracking
         self.cited_documents_in_order: list[SearchDoc] = (
@@ -122,7 +154,7 @@ class DynamicCitationProcessor:
 
     def update_citation_mapping(
         self,
-        citation_mapping: dict[int, SearchDoc],
+        citation_mapping: CitationMapping,
         update_duplicate_keys: bool = False,
     ) -> None:
         """
@@ -154,7 +186,7 @@ class DynamicCitationProcessor:
             self.citation_to_doc.update(non_duplicate_mapping)
 
     def process_token(
-        self, token: str | None, strip_citations: bool = True
+        self, token: str | None
     ) -> Generator[str | CitationInfo, None, None]:
         """
         Process a token from the LLM stream.
@@ -162,21 +194,24 @@ class DynamicCitationProcessor:
         This method:
         1. Accumulates tokens until a complete citation or non-citation is found
         2. Holds back potential partial citations (e.g., "[", "[1")
-        3. Yields text chunks when they're safe to display (with citations REMOVED)
-        4. Yields CitationInfo when citations are detected
-        5. Handles code blocks (avoids processing citations inside code)
-        6. Handles stop tokens
+        3. Yields text chunks when they're safe to display
+        4. Handles code blocks (avoids processing citations inside code)
+        5. Handles stop tokens
+        6. Always tracks seen citations in self.seen_citations
+
+        Behavior depends on the `replace_citation_tokens` setting from __init__:
+        - If True: Citations are replaced with [[n]](url) format and CitationInfo
+          objects are yielded before each formatted citation
+        - If False: Original citation text (e.g., [1]) is preserved in output
+          and no CitationInfo objects are yielded
 
         Args:
-            token: The next token from the LLM stream, or None to signal end of stream
-            strip_citations: If True (default), citations are stripped from output and
-                CitationInfo objects are yielded. If False, original text is yielded
-                with citations intact and no CitationInfo objects are emitted.
-                Regardless of this flag, seen citations are always tracked internally.
+            token: The next token from the LLM stream, or None to signal end of stream.
+                Pass None to flush any remaining buffered text at end of stream.
 
         Yields:
-            - str: Text chunks to display (citations removed if strip_citations=True)
-            - CitationInfo: Citation metadata when a citation is detected (only if strip_citations=True)
+            str: Text chunks to display. Citation format depends on replace_citation_tokens.
+            CitationInfo: Citation metadata (only when replace_citation_tokens=True)
         """
         # None -> end of stream, flush remaining segment
         if token is None:
@@ -271,10 +306,10 @@ class DynamicCitationProcessor:
                 # Process the citation (returns formatted citation text and CitationInfo objects)
                 # Always tracks seen citations regardless of strip_citations flag
                 citation_text, citation_info_list = self._process_citation(
-                    match, has_leading_space, strip_citations
+                    match, has_leading_space, self.replace_citation_tokens
                 )
 
-                if strip_citations:
+                if self.replace_citation_tokens:
                     # Yield CitationInfo objects BEFORE the citation text
                     # This allows the frontend to receive citation metadata before the token
                     # that contains [[n]](link), enabling immediate rendering
@@ -303,29 +338,42 @@ class DynamicCitationProcessor:
             yield result
 
     def _process_citation(
-        self, match: re.Match, has_leading_space: bool, strip_citations: bool = True
+        self, match: re.Match, has_leading_space: bool, replace_tokens: bool = True
     ) -> tuple[str, list[CitationInfo]]:
         """
         Process a single citation match and return formatted citation text and citation info objects.
 
-        The match string can look like '[1]', '[1, 13, 6]', '[[4]]', '【1】', etc.
+        This is an internal method called by process_token(). The match string can be
+        in various formats: '[1]', '[1, 13, 6]', '[[4]]', '【1】', '［1］', etc.
 
-        This method:
+        This method always:
         1. Extracts citation numbers from the match
         2. Looks up the corresponding SearchDoc from the mapping
-        3. Always tracks seen citations in self.seen_citations
-        4. If strip_citations=True: creates formatted citation text and CitationInfo objects
-        5. If strip_citations=False: returns empty string and empty list (caller yields original text)
+        3. Tracks seen citations in self.seen_citations (regardless of replace_tokens)
+
+        When replace_tokens=True (controlled by self.replace_citation_tokens):
+        4. Creates formatted citation text as [[n]](url)
+        5. Creates CitationInfo objects for new citations
+        6. Handles deduplication of recently cited documents
+
+        When replace_tokens=False:
+        4. Returns empty string and empty list (caller yields original match text)
 
         Args:
-            match: Regex match object containing the citation
-            has_leading_space: Whether the text before the citation has a leading space
-            strip_citations: If True, return formatted text and CitationInfo objects.
+            match: Regex match object containing the citation pattern
+            has_leading_space: Whether the text immediately before this citation
+                ends with whitespace. Used to determine if a leading space should
+                be added to the formatted output.
+            replace_tokens: If True, return formatted text and CitationInfo objects.
                 If False, only track seen citations and return empty results.
+                This is passed from self.replace_citation_tokens by the caller.
+
         Returns:
-            Tuple of (formatted_citation_text, list[CitationInfo])
-            - formatted_citation_text: Markdown-formatted citation text like [1](link) [2](link)
-            - citation_info_list: List of CitationInfo objects
+            Tuple of (formatted_citation_text, citation_info_list):
+            - formatted_citation_text: Markdown-formatted citation text like
+              "[[1]](https://example.com)" or empty string if replace_tokens=False
+            - citation_info_list: List of CitationInfo objects for newly cited
+              documents, or empty list if replace_tokens=False
         """
         citation_str: str = match.group()  # e.g., '[1]', '[1, 2, 3]', '[[1]]', '【1】'
         formatted = (
@@ -363,11 +411,11 @@ class DynamicCitationProcessor:
             doc_id = search_doc.document_id
             link = search_doc.link or ""
 
-            # Always track seen citations regardless of strip_citations flag
+            # Always track seen citations regardless of replace_tokens setting
             self.seen_citations[num] = search_doc
 
-            # When not stripping citations, skip the rest of the processing
-            if not strip_citations:
+            # When not replacing citation tokens, skip the rest of the processing
+            if not replace_tokens:
                 continue
 
             # Format the citation text as [[n]](link)
@@ -402,8 +450,14 @@ class DynamicCitationProcessor:
         """
         Get the list of cited SearchDoc objects in the order they were first cited.
 
+        Note: This list is only populated when `replace_citation_tokens=True`.
+        When `replace_citation_tokens=False`, this will return an empty list.
+        Use get_seen_citations() instead if you need to track citations without
+        replacing them.
+
         Returns:
-            List of SearchDoc objects
+            List of SearchDoc objects in the order they were first cited.
+            Empty list if replace_citation_tokens=False.
         """
         return self.cited_documents_in_order
 
@@ -411,47 +465,89 @@ class DynamicCitationProcessor:
         """
         Get the list of cited document IDs in the order they were first cited.
 
+        Note: This list is only populated when `replace_citation_tokens=True`.
+        When `replace_citation_tokens=False`, this will return an empty list.
+        Use get_seen_citations() instead if you need to track citations without
+        replacing them.
+
         Returns:
-            List of document IDs (strings)
+            List of document IDs (strings) in the order they were first cited.
+            Empty list if replace_citation_tokens=False.
         """
         return [doc.document_id for doc in self.cited_documents_in_order]
 
-    def get_seen_citations(self) -> dict[int, SearchDoc]:
+    def get_seen_citations(self) -> CitationMapping:
         """
         Get all seen citations as a mapping from citation number to SearchDoc.
 
         This returns all citations that have been encountered during processing,
-        regardless of the strip_citations flag. Citations are tracked whenever
-        they are parsed, even when strip_citations=False.
+        regardless of the `replace_citation_tokens` setting. Citations are tracked
+        whenever they are parsed, making this useful for cases where you need to
+        know which citations appeared in the text without replacing them.
+
+        This is particularly useful when `replace_citation_tokens=False`, as
+        get_cited_documents() will be empty in that case, but get_seen_citations()
+        will still contain all the citations that were found.
 
         Returns:
-            Dictionary mapping citation numbers to SearchDoc objects
+            Dictionary mapping citation numbers (int) to SearchDoc objects.
+            The dictionary is keyed by the citation number as it appeared in
+            the text (e.g., {1: SearchDoc(...), 3: SearchDoc(...)}).
         """
         return self.seen_citations
 
     @property
     def num_cited_documents(self) -> int:
-        """Get the number of documents that have been cited."""
+        """
+        Get the number of unique documents that have been cited.
+
+        Note: This count is only updated when `replace_citation_tokens=True`.
+        When `replace_citation_tokens=False`, this will always return 0.
+        Use len(get_seen_citations()) instead if you need to count citations
+        without replacing them.
+
+        Returns:
+            Number of unique documents cited. 0 if replace_citation_tokens=False.
+        """
         return len(self.cited_document_ids)
 
     def reset_recent_citations(self) -> None:
         """
         Reset the recent citations tracker.
 
-        This can be called to allow previously cited documents to be cited again
-        without being filtered out by the deduplication logic.
+        The processor tracks "recently cited" documents to avoid emitting duplicate
+        CitationInfo objects for the same document when it's cited multiple times
+        in close succession. This method clears that tracker.
+
+        This is primarily useful when `replace_citation_tokens=True` to allow
+        previously cited documents to emit CitationInfo objects again. Has no
+        effect when `replace_citation_tokens=False`.
+
+        The recent citation tracker is also automatically cleared when more than
+        5 non-citation characters are processed between citations.
         """
         self.recent_cited_documents.clear()
 
     def get_next_citation_number(self) -> int:
         """
-        Get the next available citation number.
+        Get the next available citation number for adding new documents to the mapping.
 
-        This method returns the next citation number that should be used for new documents.
-        If no citations exist yet, it returns 1. Otherwise, it returns max + 1.
+        This method returns the next citation number that should be used when adding
+        new documents via update_citation_mapping(). Useful when dynamically adding
+        citations during processing (e.g., from tool results like web search).
+
+        If no citations exist yet in the mapping, returns 1.
+        Otherwise, returns max(existing_citation_numbers) + 1.
 
         Returns:
-            The next available citation number (1-indexed)
+            The next available citation number (1-indexed integer).
+
+        Example:
+            # After adding citations 1, 2, 3
+            processor.get_next_citation_number()  # Returns 4
+
+            # With non-sequential citations 1, 5, 10
+            processor.get_next_citation_number()  # Returns 11
         """
         if not self.citation_to_doc:
             return 1
