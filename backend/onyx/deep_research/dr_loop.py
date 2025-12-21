@@ -54,6 +54,7 @@ from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.logger import setup_logger
+from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
 
@@ -133,6 +134,7 @@ def generate_final_report(
         raise ValueError("LLM failed to generate the final deep research report")
 
 
+@log_function_time(print_only=True)
 def run_deep_research_llm_loop(
     emitter: Emitter,
     state_container: ChatStateContainer,
