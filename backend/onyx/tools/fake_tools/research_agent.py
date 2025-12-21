@@ -72,10 +72,12 @@ def generate_intermediate_report(
     llm: LLM,
     token_counter: Callable[[str], int],
     user_identity: LLMUserIdentity | None,
-    state_container: ChatStateContainer,
     emitter: Emitter,
     placement: Placement,
 ) -> str:
+    # Having the state container here to handle the tokens and not passed through means there is no way to
+    # get partial saves of the report. Arguably this is not useful anyway so not going to implement partial saves.
+    state_container = ChatStateContainer()
     system_prompt = ChatMessageSimple(
         message=RESEARCH_REPORT_PROMPT,
         token_count=token_counter(RESEARCH_REPORT_PROMPT),
@@ -209,6 +211,7 @@ def run_research_agent_call(
     msg_history: list[ChatMessageSimple] = [initial_user_message]
 
     citation_mapping: dict[int, str] = {}
+    most_recent_reasoning: str | None = None
     while research_cycle_count <= RESEARCH_CYCLE_CAP:
         if research_cycle_count == RESEARCH_CYCLE_CAP:
             # For the last cycle, do not use any more searches, only reason or generate a report
@@ -294,7 +297,7 @@ def run_research_agent_call(
                 sub_turn_index=llm_cycle_count + reasoning_cycles,
             ),
             citation_processor=DynamicCitationProcessor(),
-            state_container=state_container,
+            state_container=None,
             reasoning_effort=ReasoningEffort.LOW,
             final_documents=None,
             user_identity=user_identity,
@@ -322,7 +325,6 @@ def run_research_agent_call(
                 llm=llm,
                 token_counter=token_counter,
                 user_identity=user_identity,
-                state_container=state_container,
                 emitter=emitter,
                 placement=Placement(
                     turn_index=turn_index,
@@ -354,6 +356,7 @@ def run_research_agent_call(
             )
             msg_history.append(think_tool_response_msg)
             reasoning_cycles += 1
+            most_recent_reasoning = llm_step_result.reasoning
             continue
         else:
             tool_responses, citation_mapping = run_tool_calls(
@@ -403,20 +406,24 @@ def run_research_agent_call(
                     if search_docs and tool_call.tool_name == WebSearchTool.NAME:
                         just_ran_web_search = True
 
+                # Research Agent is a top level tool call but the tools called by the research
+                # agent are sub-tool calls.
                 tool_call_info = ToolCallInfo(
                     parent_tool_call_id=parent_tool_call_id,
+                    # At the DB save level, there is only a turn index, no sub-turn etc.
+                    # This is implied by the parent tool call's turn index and the depth
+                    # of the tree traversal.
                     turn_index=llm_cycle_count + reasoning_cycles,
                     tab_index=tab_index,
                     tool_name=tool_call.tool_name,
                     tool_call_id=tool_call.tool_call_id,
                     tool_id=tool.id,
-                    reasoning_tokens=llm_step_result.reasoning,
+                    reasoning_tokens=llm_step_result.reasoning or most_recent_reasoning,
                     tool_call_arguments=tool_call.tool_args,
                     tool_call_response=tool_response.llm_facing_response,
                     search_docs=search_docs,
                     generated_images=None,
                 )
-                # Add to state container for partial save support
                 state_container.add_tool_call(tool_call_info)
 
                 # Store tool call with function name and arguments in separate layers
@@ -444,6 +451,8 @@ def run_research_agent_call(
                 )
                 msg_history.append(tool_response_msg)
 
+        # If it reached this point, it did not call reasoning, so here we wipe it to not save it to multiple turns
+        most_recent_reasoning = None
         llm_cycle_count += 1
 
     # If we've run out of cycles, just try to generate a report from everything so far
@@ -453,7 +462,6 @@ def run_research_agent_call(
         llm=llm,
         token_counter=token_counter,
         user_identity=user_identity,
-        state_container=state_container,
         emitter=emitter,
         placement=Placement(
             turn_index=turn_index,

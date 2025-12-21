@@ -119,7 +119,11 @@ class DynamicCitationProcessor:
             r"([\[【［]{2}\d+[\]】］]{2})|([\[【［]\d+(?:, ?\d+)*[\]】］])"
         )
 
-    def update_citation_mapping(self, citation_mapping: dict[int, SearchDoc]) -> None:
+    def update_citation_mapping(
+        self,
+        citation_mapping: dict[int, SearchDoc],
+        update_duplicate_keys: bool = False,
+    ) -> None:
         """
         Update the citation number to SearchDoc mapping.
 
@@ -128,15 +132,25 @@ class DynamicCitationProcessor:
 
         Args:
             citation_mapping: Dictionary mapping citation numbers (1, 2, 3, ...) to SearchDoc objects
+            update_duplicate_keys: If True, update existing mappings with new values when keys overlap.
+                If False (default), filter out duplicate keys and only add non-duplicates.
+                The default behavior is useful when OpenURL may have the same citation number as a
+                Web Search result - in those cases, we keep the web search citation and snippet etc.
         """
-        # Filter out duplicate keys and only add non-duplicates
-        # Reason for this is that OpenURL may have the same citation number as a Web Search result
-        # For those, we should just keep the web search citation and snippet etc.
-        duplicate_keys = set(citation_mapping.keys()) & set(self.citation_to_doc.keys())
-        non_duplicate_mapping = {
-            k: v for k, v in citation_mapping.items() if k not in duplicate_keys
-        }
-        self.citation_to_doc.update(non_duplicate_mapping)
+        if update_duplicate_keys:
+            # Update all mappings, including duplicates
+            self.citation_to_doc.update(citation_mapping)
+        else:
+            # Filter out duplicate keys and only add non-duplicates
+            # Reason for this is that OpenURL may have the same citation number as a Web Search result
+            # For those, we should just keep the web search citation and snippet etc.
+            duplicate_keys = set(citation_mapping.keys()) & set(
+                self.citation_to_doc.keys()
+            )
+            non_duplicate_mapping = {
+                k: v for k, v in citation_mapping.items() if k not in duplicate_keys
+            }
+            self.citation_to_doc.update(non_duplicate_mapping)
 
     def process_token(
         self, token: str | None

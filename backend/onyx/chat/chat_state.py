@@ -28,8 +28,11 @@ class ChatStateContainer:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
+        # These are collected at the end after the entire tool call is completed
         self.tool_calls: list[ToolCallInfo] = []
+        # This is accumulated during the streaming
         self.reasoning_tokens: str | None = None
+        # This is accumulated during the streaming of the answer
         self.answer_tokens: str | None = None
         # Store citation mapping for building citation_docs_info during partial saves
         self.citation_to_doc: dict[int, SearchDoc] = {}
