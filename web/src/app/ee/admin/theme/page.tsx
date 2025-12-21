@@ -209,7 +209,7 @@ export default function LabelingPage() {
         const hasLogoChange = selectedLogo && logoWillBeDisplayed;
 
         return (
-          <Form className="w-full">
+          <Form className="w-full h-full">
             <AdminPageLayout
               title="Appearance & Theming"
               description="Customize how the application appears to users across your organization."
