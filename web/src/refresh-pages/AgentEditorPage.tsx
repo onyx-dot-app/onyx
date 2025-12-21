@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 import Settings from "@/layouts/settings-pages";
 import Button from "@/refresh-components/buttons/Button";
 import { FullPersona } from "@/app/admin/assistants/interfaces";
@@ -252,6 +253,8 @@ export interface AgentEditorPageProps {
 export default function AgentEditorPage({
   agent: existingAgent,
 }: AgentEditorPageProps) {
+  const router = useRouter();
+
   // Hooks for Knowledge section
   const { allRecentFiles, beginUpload } = useProjectsContext();
   const { data: documentSets } = useDocumentSets();
@@ -413,7 +416,7 @@ export default function AgentEditorPage({
         validateOnChange={true}
         validateOnBlur={true}
       >
-        {({ isSubmitting, values, setFieldValue }) => (
+        {({ isSubmitting, isValid, values, setFieldValue }) => (
           <>
             <userFilesModal.Provider>
               <UserFilesModal
@@ -467,9 +470,18 @@ export default function AgentEditorPage({
                   icon={SvgOnyxOctagon}
                   title={existingAgent ? "Edit Agent" : "Create Agent"}
                   rightChildren={
-                    <Button type="submit" disabled={isSubmitting}>
-                      {existingAgent ? "Save" : "Create"}
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        secondary
+                        onClick={() => router.back()}
+                      >
+                        Cancel
+                      </Button>
+                      <Button type="submit" disabled={isSubmitting || !isValid}>
+                        {existingAgent ? "Save" : "Create"}
+                      </Button>
+                    </div>
                   }
                   backButton
                   separator
