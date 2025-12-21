@@ -51,10 +51,6 @@ export default function Logo({ folded, size, className }: LogoProps) {
     includeLogo: boolean;
     includeName: boolean;
   }) => {
-    if (!opts.includeName && !applicationName) {
-      return null;
-    }
-
     return (
       <div className="flex flex-col min-w-0">
         <div className="flex flex-row items-center gap-2 min-w-0">
