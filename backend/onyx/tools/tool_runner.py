@@ -3,7 +3,6 @@ from collections import defaultdict
 from typing import Any
 
 import onyx.tracing.framework._error_tracing as _error_tracing
-from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.models import ChatMessageSimple
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
@@ -140,7 +139,7 @@ def run_tool_calls(
     memories: list[str] | None,
     user_info: str | None,
     citation_mapping: dict[int, str],
-    citation_processor: DynamicCitationProcessor,
+    next_citation_num: int,
     # Skip query expansion for repeat search tool calls
     skip_search_query_expansion: bool = False,
 ) -> tuple[list[ToolResponse], dict[int, str]]:
@@ -157,7 +156,7 @@ def run_tool_calls(
         memories: User memories, if available
         user_info: User information string, if available
         citation_mapping: Current citation number to URL mapping
-        citation_processor: Processor for managing citations
+        next_citation_num: Next citation number to use
         skip_search_query_expansion: Whether to skip query expansion for search tools
 
     Returns:
@@ -174,7 +173,7 @@ def run_tool_calls(
     tools_by_name = {tool.name: tool for tool in tools}
 
     # Get starting citation number from citation processor to avoid conflicts with project files
-    starting_citation_num = citation_processor.get_next_citation_number()
+    starting_citation_num = next_citation_num
 
     # Prepare minimal history for SearchTool (computed once, shared by all)
     minimal_history = [
