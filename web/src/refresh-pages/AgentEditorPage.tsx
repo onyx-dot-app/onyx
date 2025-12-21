@@ -144,6 +144,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
               size={imageSrc ? 7.5 * 16 : 40}
               src={imageSrc}
               iconName={selectedIconName ?? undefined}
+              name={values.name}
             />
             <Button
               className="absolute bottom-0 left-1/2 -translate-x-1/2 h-[1.75rem] mb-2 invisible group-hover/InputAvatar:visible"
@@ -168,7 +169,9 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
               <div className="grid grid-cols-4 gap-1">
                 <SquareButton
                   key="default-icon"
-                  icon={() => <CustomAgentAvatar size={30} />}
+                  icon={() => (
+                    <CustomAgentAvatar name={values.name} size={30} />
+                  )}
                   onClick={() => handleIconClick(null)}
                   transient={!imageSrc && selectedIconName === null}
                 />
