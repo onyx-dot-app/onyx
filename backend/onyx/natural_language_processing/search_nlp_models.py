@@ -447,8 +447,13 @@ class CloudEmbedding:
                 return await self._embed_voyage(texts, model_name, embedding_type)
             elif self.provider == EmbeddingProvider.GOOGLE:
                 # Use synchronous API to avoid asyncio memory leaks
-                return self._embed_vertex_sync(
-                    texts, model_name, embedding_type, reduced_dimension
+                # Run in thread to avoid blocking the event loop
+                return await asyncio.to_thread(
+                    self._embed_vertex_sync,
+                    texts,
+                    model_name,
+                    embedding_type,
+                    reduced_dimension,
                 )
             else:
                 raise ValueError(f"Unsupported provider: {self.provider}")
