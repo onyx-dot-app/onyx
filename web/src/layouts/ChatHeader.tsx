@@ -1,10 +1,8 @@
 "use client";
 
-import { ChatSession } from "@/app/chat/interfaces";
 import { cn, noProp } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
-import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import { useCallback, useMemo, useState, useEffect } from "react";
 import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -35,8 +33,6 @@ import {
   SvgTrash,
 } from "@opal/icons";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
-
-export default function ChatHeader() {
 
 export default function ChatHeader() {
   const settings = useSettingsContext();

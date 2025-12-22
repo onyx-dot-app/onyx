@@ -1,12 +1,8 @@
 "use client";
 
 import Text from "@/refresh-components/texts/Text";
-import { CombinedSettings } from "@/app/admin/settings/interfaces";
-import { ChatSession } from "@/app/chat/interfaces";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
-
-export default function ChatFooter() {
 
 export default function ChatFooter() {
   const { currentChatSession } = useChatSessions();
