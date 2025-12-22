@@ -45,7 +45,7 @@ export default function FileDisplay({ files, alignBubble }: FileDisplayProps) {
       {textFiles.length > 0 && (
         <div
           id="onyx-file"
-          className={cn("mt-2 auto", alignBubble && "ml-auto")}
+          className={cn("m-2 auto", alignBubble && "ml-auto")}
         >
           <div className="flex flex-col items-end gap-2">
             {textFiles.map((file) => (
@@ -62,7 +62,7 @@ export default function FileDisplay({ files, alignBubble }: FileDisplayProps) {
       {imageFiles.length > 0 && (
         <div
           id="onyx-image"
-          className={cn("mt-2 auto", alignBubble && "ml-auto")}
+          className={cn("m-2 auto", alignBubble && "ml-auto")}
         >
           <div className="flex flex-col items-end gap-2">
             {imageFiles.map((file) => (
@@ -73,7 +73,7 @@ export default function FileDisplay({ files, alignBubble }: FileDisplayProps) {
       )}
 
       {csvFiles.length > 0 && (
-        <div className={cn("mt-2 auto", alignBubble && "ml-auto")}>
+        <div className={cn("m-2 auto", alignBubble && "ml-auto")}>
           <div className="flex flex-col items-end gap-2">
             {csvFiles.map((file) => {
               return (
