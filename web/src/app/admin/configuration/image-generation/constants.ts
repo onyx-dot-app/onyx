@@ -40,7 +40,7 @@ export const IMAGE_PROVIDER_GROUPS: ProviderGroup[] = [
     name: "Azure OpenAI",
     providers: [
       {
-        id: "azure-dall-e-3",
+        id: "azure-dall-e-3", //actual model name will be extracted from the target uri
         provider_name: "azure",
         icon: AzureIcon,
         title: "Azure OpenAI DALL·E 3",

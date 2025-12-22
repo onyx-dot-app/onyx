@@ -29,33 +29,100 @@ logger = setup_logger()
 admin_router = APIRouter(prefix="/admin/image-generation")
 
 
-def _generate_unique_provider_name(
-    db_session: Session, base_name: str, model_name: str
-) -> str:
-    """Generate a unique provider name for image generation.
+def _build_llm_provider_request(
+    db_session: Session,
+    model_name: str,
+    source_llm_provider_id: int | None,
+    provider: str | None,
+    api_key: str | None,
+    api_base: str | None,
+    api_version: str | None,
+    deployment_name: str | None,
+) -> LLMProviderUpsertRequest:
+    """Build LLM provider request for image generation config.
 
-    Tries "Image Gen - {base_name}" first, then appends numbers if needed.
+    Supports two modes:
+    1. Clone mode: source_llm_provider_id provided - uses API key from source
+    2. New credentials mode: api_key + provider provided
     """
-    # First try simple name
-    candidate = f"Image Gen - {base_name}"
-    existing = db_session.query(LLMProviderModel).filter_by(name=candidate).first()
-    if not existing:
-        return candidate
+    if source_llm_provider_id is not None:
+        # Clone mode: Only use API key from source provider
+        source_provider = db_session.get(LLMProviderModel, source_llm_provider_id)
+        if not source_provider:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Source LLM provider with id {source_llm_provider_id} not found",
+            )
 
-    # Try with model name
-    candidate = f"Image Gen - {base_name} ({model_name})"
-    existing = db_session.query(LLMProviderModel).filter_by(name=candidate).first()
-    if not existing:
-        return candidate
+        return LLMProviderUpsertRequest(
+            name=f"Image Gen - {model_name}",
+            provider=source_provider.provider,
+            api_key=source_provider.api_key,  # Only this from source
+            api_base=api_base,  # From request
+            api_version=api_version,  # From request
+            default_model_name=model_name,
+            deployment_name=deployment_name,  # From request
+            is_public=True,
+            groups=[],
+            model_configurations=[
+                ModelConfigurationUpsertRequest(
+                    name=model_name,
+                    is_visible=True,
+                )
+            ],
+        )
 
-    # Append numbers until we find a unique name
-    counter = 2
-    while True:
-        candidate = f"Image Gen - {base_name} ({model_name}) {counter}"
-        existing = db_session.query(LLMProviderModel).filter_by(name=candidate).first()
-        if not existing:
-            return candidate
-        counter += 1
+    elif api_key is not None and provider is not None:
+        # New credentials mode
+        return LLMProviderUpsertRequest(
+            name=f"Image Gen - {model_name}",
+            provider=provider,
+            api_key=api_key,
+            api_base=api_base,
+            api_version=api_version,
+            default_model_name=model_name,
+            deployment_name=deployment_name,
+            is_public=True,
+            groups=[],
+            model_configurations=[
+                ModelConfigurationUpsertRequest(
+                    name=model_name,
+                    is_visible=True,
+                )
+            ],
+        )
+
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Either source_llm_provider_id or (api_key + provider) must be provided",
+        )
+
+
+def _create_llm_provider_and_get_model_config_id(
+    db_session: Session,
+    provider_request: LLMProviderUpsertRequest,
+    model_name: str,
+) -> int:
+    """Create LLM provider and return the model configuration ID."""
+    new_provider = upsert_llm_provider(provider_request, db_session)
+
+    model_config = (
+        db_session.query(ModelConfiguration)
+        .filter(
+            ModelConfiguration.llm_provider_id == new_provider.id,
+            ModelConfiguration.name == model_name,
+        )
+        .first()
+    )
+
+    if not model_config:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create model configuration for new provider",
+        )
+
+    return model_config.id
 
 
 @admin_router.post("/test")
@@ -82,8 +149,9 @@ def test_image_generation(
             model = f"azure/{deployment}"
 
             # Make a minimal image generation request using LiteLLM
+            # Use descriptive prompt to avoid Azure content policy rejection
             image_generation(
-                prompt="test",
+                prompt="a simple blue circle on white background",
                 model=model,
                 api_key=test_request.api_key,
                 api_base=test_request.api_base,
@@ -94,7 +162,7 @@ def test_image_generation(
         else:
             # OpenAI or other providers
             image_generation(
-                prompt="test",
+                prompt="a simple blue circle on white background",
                 model=test_request.model_name,
                 api_key=test_request.api_key,
                 api_base=test_request.api_base or None,
@@ -107,21 +175,7 @@ def test_image_generation(
     except Exception as e:
         error_msg = str(e)
         logger.warning(f"Image generation test failed: {error_msg}")
-
-        # Extract meaningful error message
-        if "authentication" in error_msg.lower() or "api key" in error_msg.lower():
-            raise HTTPException(status_code=401, detail="Invalid API key")
-        elif "not found" in error_msg.lower() or "does not exist" in error_msg.lower():
-            raise HTTPException(
-                status_code=400, detail=f"Model '{test_request.model_name}' not found"
-            )
-        elif "permission" in error_msg.lower() or "access" in error_msg.lower():
-            raise HTTPException(
-                status_code=403,
-                detail="API key does not have permission for image generation",
-            )
-        else:
-            raise HTTPException(status_code=400, detail=error_msg)
+        raise HTTPException(status_code=400, detail=error_msg)
 
 
 @admin_router.post("/config")
@@ -135,99 +189,29 @@ def create_config(
     Both modes create a new LLM provider + model config + image config:
 
     1. Clone mode: source_llm_provider_id provided
-       → Extract credentials from existing provider, create new provider
+       → Extract api key from existing provider, create new provider
 
     2. New credentials mode: api_key + provider provided
        → Create new provider with given credentials
     """
     try:
-        if config_create.source_llm_provider_id is not None:
-            # Clone mode: Extract credentials from source provider
-            source_provider = db_session.get(
-                LLMProviderModel, config_create.source_llm_provider_id
-            )
-            if not source_provider:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Source LLM provider with id {config_create.source_llm_provider_id} not found",
-                )
-
-            # Generate unique name for the new provider
-            new_provider_name = _generate_unique_provider_name(
-                db_session, source_provider.name, config_create.model_name
-            )
-
-            # Create new LLM provider with same credentials
-            new_provider_request = LLMProviderUpsertRequest(
-                name=new_provider_name,
-                provider=source_provider.provider,
-                api_key=source_provider.api_key,
-                api_base=source_provider.api_base,
-                api_version=source_provider.api_version,
-                custom_config=source_provider.custom_config,
-                default_model_name=config_create.model_name,
-                deployment_name=source_provider.deployment_name,
-                is_public=True,
-                groups=[],
-                model_configurations=[
-                    ModelConfigurationUpsertRequest(
-                        name=config_create.model_name,
-                        is_visible=True,
-                    )
-                ],
-            )
-
-        elif config_create.api_key is not None and config_create.provider is not None:
-            # New credentials mode: Use provided credentials
-            new_provider_name = _generate_unique_provider_name(
-                db_session,
-                f"{config_create.provider.title()} Provider",
-                config_create.model_name,
-            )
-
-            new_provider_request = LLMProviderUpsertRequest(
-                name=new_provider_name,
-                provider=config_create.provider,
-                api_key=config_create.api_key,
-                api_base=config_create.api_base,
-                api_version=config_create.api_version,
-                default_model_name=config_create.model_name,
-                deployment_name=config_create.deployment_name,
-                is_public=True,
-                groups=[],
-                model_configurations=[
-                    ModelConfigurationUpsertRequest(
-                        name=config_create.model_name,
-                        is_visible=True,
-                    )
-                ],
-            )
-
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail="Either source_llm_provider_id or (api_key + provider) must be provided",
-            )
-
-        # Create the new LLM provider
-        new_provider = upsert_llm_provider(new_provider_request, db_session)
-
-        # Query database directly to get model configuration ID
-        model_config = (
-            db_session.query(ModelConfiguration)
-            .filter(
-                ModelConfiguration.llm_provider_id == new_provider.id,
-                ModelConfiguration.name == config_create.model_name,
-            )
-            .first()
+        # Build and create LLM provider
+        provider_request = _build_llm_provider_request(
+            db_session=db_session,
+            model_name=config_create.model_name,
+            source_llm_provider_id=config_create.source_llm_provider_id,
+            provider=config_create.provider,
+            api_key=config_create.api_key,
+            api_base=config_create.api_base,
+            api_version=config_create.api_version,
+            deployment_name=config_create.deployment_name,
         )
 
-        if not model_config:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to create model configuration for new provider",
-            )
-        model_configuration_id = model_config.id
+        model_configuration_id = _create_llm_provider_and_get_model_config_id(
+            db_session=db_session,
+            provider_request=provider_request,
+            model_name=config_create.model_name,
+        )
 
         # Create the ImageGenerationConfig
         config = create_image_generation_config(
@@ -300,97 +284,29 @@ def update_config(
 
         old_llm_provider_id = existing_config.model_configuration.llm_provider_id
 
-        # 2. Build request for new LLM provider (same logic as create)
-        if config_update.source_llm_provider_id is not None:
-            # Clone mode: Extract credentials from source provider
-            source_provider = db_session.get(
-                LLMProviderModel, config_update.source_llm_provider_id
-            )
-            if not source_provider:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Source LLM provider with id {config_update.source_llm_provider_id} not found",
-                )
-
-            new_provider_name = _generate_unique_provider_name(
-                db_session, source_provider.name, config_update.model_name
-            )
-
-            new_provider_request = LLMProviderUpsertRequest(
-                name=new_provider_name,
-                provider=source_provider.provider,
-                api_key=source_provider.api_key,
-                api_base=source_provider.api_base,
-                api_version=source_provider.api_version,
-                custom_config=source_provider.custom_config,
-                default_model_name=config_update.model_name,
-                deployment_name=source_provider.deployment_name,
-                is_public=True,
-                groups=[],
-                model_configurations=[
-                    ModelConfigurationUpsertRequest(
-                        name=config_update.model_name,
-                        is_visible=True,
-                    )
-                ],
-            )
-
-        elif config_update.api_key is not None and config_update.provider is not None:
-            # New credentials mode
-            new_provider_name = _generate_unique_provider_name(
-                db_session,
-                f"{config_update.provider.title()} Provider",
-                config_update.model_name,
-            )
-
-            new_provider_request = LLMProviderUpsertRequest(
-                name=new_provider_name,
-                provider=config_update.provider,
-                api_key=config_update.api_key,
-                api_base=config_update.api_base,
-                api_version=config_update.api_version,
-                default_model_name=config_update.model_name,
-                deployment_name=config_update.deployment_name,
-                is_public=True,
-                groups=[],
-                model_configurations=[
-                    ModelConfigurationUpsertRequest(
-                        name=config_update.model_name,
-                        is_visible=True,
-                    )
-                ],
-            )
-
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail="Either source_llm_provider_id or (api_key + provider) must be provided",
-            )
-
-        # 3. Create the new LLM provider
-        new_provider = upsert_llm_provider(new_provider_request, db_session)
-
-        # Get model configuration ID from new provider
-        new_model_config = (
-            db_session.query(ModelConfiguration)
-            .filter(
-                ModelConfiguration.llm_provider_id == new_provider.id,
-                ModelConfiguration.name == config_update.model_name,
-            )
-            .first()
+        # 2. Build and create new LLM provider
+        provider_request = _build_llm_provider_request(
+            db_session=db_session,
+            model_name=config_update.model_name,
+            source_llm_provider_id=config_update.source_llm_provider_id,
+            provider=config_update.provider,
+            api_key=config_update.api_key,
+            api_base=config_update.api_base,
+            api_version=config_update.api_version,
+            deployment_name=config_update.deployment_name,
         )
 
-        if not new_model_config:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to create model configuration for new provider",
-            )
+        new_model_config_id = _create_llm_provider_and_get_model_config_id(
+            db_session=db_session,
+            provider_request=provider_request,
+            model_name=config_update.model_name,
+        )
 
-        # 4. Update the ImageGenerationConfig to point to new model config
-        existing_config.model_configuration_id = new_model_config.id
+        # 3. Update the ImageGenerationConfig to point to new model config
+        existing_config.model_configuration_id = new_model_config_id
         db_session.commit()
 
-        # 5. Delete old LLM provider (it was exclusively for image gen)
+        # 4. Delete old LLM provider (it was exclusively for image gen)
         remove_llm_provider(db_session, old_llm_provider_id)
 
         # Refresh to load relationships
