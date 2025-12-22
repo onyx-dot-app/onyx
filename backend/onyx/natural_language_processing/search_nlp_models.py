@@ -834,7 +834,16 @@ class EmbeddingModel:
         #   2. we are using an API-based embedding model (provider_type is not None)
         #   3. there are more than 1 batch (no point in threading if only 1)
         if num_threads >= 1 and self.provider_type and len(text_batches) > 1:
-            with ThreadPoolExecutor(max_workers=num_threads) as executor:
+            # Limit max workers to prevent overwhelming the API with too many concurrent requests
+            # This helps prevent retry storms by reducing connection pressure
+            max_workers = min(
+                num_threads, len(text_batches), 4
+            )  # Cap at 4 concurrent threads
+            if len(text_batches) > 20:
+                # For very large batches, reduce concurrency further to prevent retry storms
+                max_workers = min(max_workers, 2)
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 future_to_batch = {
                     executor.submit(
                         partial(
