@@ -31,7 +31,7 @@ export const IMAGE_PROVIDER_GROUPS: ProviderGroup[] = [
       {
         id: "dall-e-3",
         provider_name: "openai",
-        title: "DALL·E 3",
+        title: "DALL-E 3",
         description:
           "OpenAI image generation model capable of generating rich and expressive images.",
       },
@@ -43,9 +43,9 @@ export const IMAGE_PROVIDER_GROUPS: ProviderGroup[] = [
       {
         id: "azure-dall-e-3", //actual model name will be extracted from the target uri
         provider_name: "azure",
-        title: "Azure OpenAI DALL·E 3",
+        title: "Azure OpenAI DALL-E 3",
         description:
-          "DALL·E 3 image generation model hosted on Microsoft Azure.",
+          "DALL-E 3 image generation model hosted on Microsoft Azure.",
       },
     ],
   },
