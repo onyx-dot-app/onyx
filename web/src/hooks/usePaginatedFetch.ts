@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, useRef, useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import type { Route } from "next";
 
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
@@ -146,7 +147,7 @@ function usePaginatedFetch<T extends PaginatedType>({
       if (currentPath && searchParams) {
         const params = new URLSearchParams(searchParams);
         params.set("page", page.toString());
-        router.replace(`${currentPath}?${params.toString()}`, {
+        router.replace(`${currentPath}?${params.toString()}` as Route, {
           scroll: false,
         });
       }

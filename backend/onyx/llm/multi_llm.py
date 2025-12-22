@@ -163,16 +163,6 @@ class LitellmLLM(LLM):
 
         self._model_kwargs = model_kwargs
 
-        self._max_token_param = LEGACY_MAX_TOKENS_KWARG
-        try:
-            from litellm.utils import get_supported_openai_params
-
-            params = get_supported_openai_params(model_name, model_provider)
-            if STANDARD_MAX_TOKENS_KWARG in (params or []):
-                self._max_token_param = STANDARD_MAX_TOKENS_KWARG
-        except Exception as e:
-            logger.warning(f"Error getting supported openai params: {e}")
-
     def _safe_model_config(self) -> dict:
         dump = self.config.model_dump()
         dump["api_key"] = mask_string(dump.get("api_key", ""))
@@ -293,6 +283,15 @@ class LitellmLLM(LLM):
                     completion_kwargs["metadata"] = metadata
 
         try:
+            final_tool_choice = tool_choice if tools else None
+            # Claude models will not use reasoning if tool_choice is required
+            # Better to let it use reasoning
+            if (
+                "claude" in self.config.model_name.lower()
+                and final_tool_choice == ToolChoiceOptions.REQUIRED
+            ):
+                final_tool_choice = ToolChoiceOptions.AUTO
+
             response = litellm.completion(
                 mock_response=MOCK_LLM_RESPONSE,
                 # model choice
@@ -307,12 +306,13 @@ class LitellmLLM(LLM):
                 # actual input
                 messages=_prompt_to_dicts(prompt),
                 tools=tools,
-                tool_choice=tool_choice if tools else None,
+                tool_choice=final_tool_choice,
                 # streaming choice
                 stream=stream,
                 # model params
                 temperature=(1 if is_reasoning else self._temperature),
                 timeout=timeout_override or self._timeout,
+                max_tokens=max_tokens,
                 **({"stream_options": {"include_usage": True}} if stream else {}),
                 # NOTE: we can't pass parallel_tool_calls if tools are not specified
                 # or else OpenAI throws an error
@@ -349,7 +349,6 @@ class LitellmLLM(LLM):
                     if structured_response_format
                     else {}
                 ),
-                **({self._max_token_param: max_tokens} if max_tokens else {}),
                 **completion_kwargs,
             )
             return response

@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { usePopup } from "../admin/connectors/Popup";
 import { PopupSpec } from "../admin/connectors/Popup";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 
 interface PopupMessages {
   [key: string]: PopupSpec;
@@ -21,7 +22,7 @@ export const usePopupFromQuery = (messages: PopupMessages) => {
     // Check if any key from messages object is present in search params
     if (messageValue && messageValue in messages) {
       const popupMessage = messages[messageValue];
-      router.replace(window.location.pathname);
+      router.replace(window.location.pathname as Route);
       if (popupMessage !== undefined) {
         setPopup(popupMessage);
       }

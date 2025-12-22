@@ -11,6 +11,8 @@ from onyx.db.chat import get_db_search_doc_by_id
 from onyx.db.chat import translate_db_search_doc_to_saved_search_doc
 from onyx.db.models import ChatMessage
 from onyx.db.tools import get_tool_by_id
+from onyx.deep_research.dr_mock_tools import RESEARCH_AGENT_DB_NAME
+from onyx.deep_research.dr_mock_tools import RESEARCH_AGENT_TASK_KEY
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
@@ -20,6 +22,7 @@ from onyx.server.query_and_chat.streaming_models import CustomToolStart
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
+from onyx.server.query_and_chat.streaming_models import IntermediateReportDelta
 from onyx.server.query_and_chat.streaming_models import OpenUrlDocuments
 from onyx.server.query_and_chat.streaming_models import OpenUrlStart
 from onyx.server.query_and_chat.streaming_models import OpenUrlUrls
@@ -27,6 +30,7 @@ from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
+from onyx.server.query_and_chat.streaming_models import ResearchAgentStart
 from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
@@ -184,6 +188,48 @@ def create_custom_tool_packets(
         ),
     )
 
+    packets.append(
+        Packet(
+            placement=Placement(turn_index=turn_index, tab_index=tab_index),
+            obj=SectionEnd(),
+        )
+    )
+
+    return packets
+
+
+def create_research_agent_packets(
+    research_task: str,
+    report_content: str | None,
+    turn_index: int,
+    tab_index: int = 0,
+) -> list[Packet]:
+    """Create packets for research agent tool calls.
+    This recreates the packet structure that ResearchAgentRenderer expects:
+    - ResearchAgentStart with the research task
+    - IntermediateReportDelta with the report content (if available)
+    - SectionEnd to mark completion
+    """
+    packets: list[Packet] = []
+
+    # Emit research agent start
+    packets.append(
+        Packet(
+            placement=Placement(turn_index=turn_index, tab_index=tab_index),
+            obj=ResearchAgentStart(research_task=research_task),
+        )
+    )
+
+    # Emit report content if available
+    if report_content:
+        packets.append(
+            Packet(
+                placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                obj=IntermediateReportDelta(content=report_content),
+            )
+        )
+
+    # Emit section end
     packets.append(
         Packet(
             placement=Placement(turn_index=turn_index, tab_index=tab_index),
@@ -370,6 +416,22 @@ def translate_assistant_message_to_packets(
                                     images, turn_num, tab_index=tool_call.tab_index
                                 )
                             )
+
+                    elif tool.in_code_tool_id == RESEARCH_AGENT_DB_NAME:
+                        # Not ideal but not a huge issue if the research task is lost.
+                        research_task = cast(
+                            str,
+                            tool_call.tool_call_arguments.get(RESEARCH_AGENT_TASK_KEY)
+                            or "Could not fetch saved research task.",
+                        )
+                        packet_list.extend(
+                            create_research_agent_packets(
+                                research_task=research_task,
+                                report_content=tool_call.tool_call_response,
+                                turn_index=turn_num,
+                                tab_index=tool_call.tab_index,
+                            )
+                        )
 
                     else:
                         # Custom tool or unknown tool

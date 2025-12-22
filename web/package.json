@@ -8,6 +8,7 @@
   ],
   "scripts": {
     "dev": "next dev",
+    "dev:profile": "NEXT_PUBLIC_ENABLE_STATS=true next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -118,6 +119,7 @@
     "@types/node": "18.15.11",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
+    "@types/stats.js": "^0.17.4",
     "@types/uuid": "^9.0.8",
     "babel-plugin-react-compiler": "^1.0.0",
     "chromatic": "^11.25.2",
@@ -128,6 +130,7 @@
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
     "prettier": "3.1.0",
+    "stats.js": "^0.17.0",
     "tailwindcss": "^3.4.17",
     "ts-jest": "^29.2.5",
     "ts-unused-exports": "^11.0.1",

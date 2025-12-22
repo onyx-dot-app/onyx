@@ -19,6 +19,7 @@ const nextConfig = {
   productionBrowserSourceMaps: false,
   output: "standalone",
   transpilePackages: ["@onyx/opal"],
+  typedRoutes: true,
   reactCompiler: true,
   images: {
     // Used to fetch favicons

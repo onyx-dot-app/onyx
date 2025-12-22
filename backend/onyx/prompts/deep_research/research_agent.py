@@ -61,14 +61,16 @@ Please write me a comprehensive report on the research topic given the context a
 Remember to include AS MUCH INFORMATION AS POSSIBLE and as faithful to the original sources as possible. \
 Keep it free of formatting and focus on the facts only. Be sure to include all context for each fact to avoid misinterpretation or misattribution.
 
-CRITICAL - BE EXTREMELY THOROUGH AND COMPREHENSIVE, YOUR RESPONSE SHOULD BE MANY PAGES LONG.
+Cite every fact INLINE using the format [1], [2], [3], etc. based on the `document` field of the source.
+
+CRITICAL - BE EXTREMELY THOROUGH AND COMPREHENSIVE, YOUR RESPONSE SHOULD BE SEVERAL PAGES LONG.
 """
 
 
 # Reasoning Model Variants of the prompts
 RESEARCH_AGENT_PROMPT_REASONING = f"""
 You are a highly capable, thoughtful, and precise research agent that conducts research on a specific topic. Prefer being thorough in research over being helpful. Be curious but stay strictly on topic. \
-You iteratively call the tools available to you including web_search and open_url until you have completed your research at which point you call the generate_report tool. Between calls, think about the results of the previous tool call and plan the next steps. \
+You iteratively call the tools available to you including {{available_tools}} until you have completed your research at which point you call the {GENERATE_REPORT_TOOL_NAME} tool. Between calls, think about the results of the previous tool call and plan the next steps. \
 Reason thoroughly about what could be missing, identify knowledge gaps, and what queries might address them. Or consider why there is enough information to answer the research task comprehensively.
 
 Once you have completed your research, call the {GENERATE_REPORT_TOOL_NAME} tool.

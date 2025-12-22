@@ -54,9 +54,6 @@ class BasicCreateChatMessageRequest(ChunkContext):
     # https://platform.openai.com/docs/guides/structured-outputs/introduction
     structured_response_format: dict | None = None
 
-    # If True, uses agentic search instead of basic search
-    use_agentic_search: bool = False
-
     @model_validator(mode="after")
     def validate_chat_session_or_persona(self) -> "BasicCreateChatMessageRequest":
         if self.chat_session_id is None and self.persona_id is None:
@@ -76,8 +73,6 @@ class BasicCreateChatMessageWithHistoryRequest(ChunkContext):
     # only works if using an OpenAI model. See the following for more details:
     # https://platform.openai.com/docs/guides/structured-outputs/introduction
     structured_response_format: dict | None = None
-    # If True, uses agentic search instead of basic search
-    use_agentic_search: bool = False
 
 
 class SimpleDoc(BaseModel):

@@ -130,10 +130,6 @@ class CreateChatMessageRequest(ChunkContext):
     # https://platform.openai.com/docs/guides/structured-outputs/introduction
     structured_response_format: dict | None = None
 
-    # If true, ignores most of the search options and uses pro search instead.
-    # TODO: decide how many of the above options we want to pass through to pro search
-    use_agentic_search: bool = False
-
     skip_gen_ai_answer_generation: bool = False
 
     # List of allowed tool IDs to restrict tool usage. If not provided, all tools available to the persona will be used.
@@ -142,6 +138,8 @@ class CreateChatMessageRequest(ChunkContext):
     # List of tool IDs we MUST use.
     # TODO: make this a single one since unclear how to force this for multiple at a time.
     forced_tool_ids: list[int] | None = None
+
+    deep_research: bool = False
 
     @model_validator(mode="after")
     def check_search_doc_ids_or_retrieval_options(self) -> "CreateChatMessageRequest":
@@ -346,9 +344,6 @@ class OneShotQARequest(ChunkContext):
 
     # If True, skips generating an AI response to the search query
     skip_gen_ai_answer_generation: bool = False
-
-    # If True, uses agentic search instead of basic search
-    use_agentic_search: bool = False
 
     @model_validator(mode="after")
     def check_persona_fields(self) -> "OneShotQARequest":

@@ -1,5 +1,6 @@
 import { fetchSS } from "@/lib/utilsSS";
 import { redirect } from "next/navigation";
+import type { Route } from "next";
 import { requireAuth } from "@/lib/auth/requireAuth";
 import SharedChatDisplay from "@/app/chat/shared/[chatId]/SharedChatDisplay";
 import { AppPageLayout } from "@/layouts/app-pages";
@@ -49,7 +50,7 @@ export default async function Page(props: PageProps) {
 
   const authResult = await requireAuth();
   if (authResult.redirect) {
-    return redirect(authResult.redirect);
+    return redirect(authResult.redirect as Route);
   }
 
   // Catch cases where backend is completely unreachable

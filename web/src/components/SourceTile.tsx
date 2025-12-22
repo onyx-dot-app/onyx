@@ -1,6 +1,7 @@
 import { SourceIcon } from "@/components/SourceIcon";
 import { AlertIcon } from "@/components/icons/icons";
 import Link from "next/link";
+import type { Route } from "next";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import React from "react";
 import Text from "@/refresh-components/texts/Text";
@@ -37,7 +38,7 @@ export default function SourceTile({
                   : "bg-background-tint-00"
               }
             `}
-      href={navigationUrl}
+      href={navigationUrl as Route}
     >
       {sourceMetadata.federated && !hasExistingSlackCredentials && (
         <div className="absolute -top-2 -left-2 z-10 bg-background-tint-01 rounded-full p-1 shadow-md border border-status-warning-05">

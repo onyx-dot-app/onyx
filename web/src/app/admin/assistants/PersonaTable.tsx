@@ -20,6 +20,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Button from "@/refresh-components/buttons/Button";
 import { SvgAlertCircle, SvgTrash } from "@opal/icons";
+import type { Route } from "next";
 
 function PersonaTypeDisplay({ persona }: { persona: Persona }) {
   if (persona.builtin_persona) {
@@ -241,7 +242,7 @@ export function PersonasTable({
                       router.push(
                         `/assistants/edit/${
                           persona.id
-                        }?u=${Date.now()}&admin=true`
+                        }?u=${Date.now()}&admin=true` as Route
                       )
                     }
                   />

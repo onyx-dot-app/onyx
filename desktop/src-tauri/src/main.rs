@@ -7,6 +7,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::RwLock;
+#[cfg(target_os = "macos")]
 use std::time::Duration;
 use tauri::image::Image;
 use tauri::menu::{
@@ -15,12 +16,15 @@ use tauri::menu::{
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 use tauri::Wry;
 use tauri::{
-    webview::PageLoadPayload, AppHandle, Manager, Webview, WebviewUrl, WebviewWindow,
-    WebviewWindowBuilder,
+    webview::PageLoadPayload, AppHandle, Manager, Webview, WebviewUrl, WebviewWindowBuilder,
 };
+#[cfg(target_os = "macos")]
+use tauri::WebviewWindow;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+#[cfg(target_os = "macos")]
 use tokio::time::sleep;
 use url::Url;
+#[cfg(target_os = "macos")]
 use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
 
 // ============================================================================
@@ -29,6 +33,7 @@ use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
 
 const DEFAULT_SERVER_URL: &str = "https://cloud.onyx.app";
 const CONFIG_FILE_NAME: &str = "config.json";
+#[cfg(target_os = "macos")]
 const TITLEBAR_SCRIPT: &str = include_str!("../../src/titlebar.js");
 const TRAY_ID: &str = "onyx-tray";
 const TRAY_ICON_BYTES: &[u8] = include_bytes!("../icons/tray-icon.png");
@@ -153,7 +158,7 @@ fn trigger_new_window(app: &AppHandle) {
 
     tauri::async_runtime::spawn(async move {
         let window_label = format!("onyx-{}", uuid::Uuid::new_v4());
-        if let Ok(window) = WebviewWindowBuilder::new(
+        let builder = WebviewWindowBuilder::new(
             &handle,
             &window_label,
             WebviewUrl::External(server_url.parse().unwrap()),
@@ -161,17 +166,23 @@ fn trigger_new_window(app: &AppHandle) {
         .title("Onyx")
         .inner_size(1200.0, 800.0)
         .min_inner_size(800.0, 600.0)
-        .transparent(true)
-        .title_bar_style(tauri::TitleBarStyle::Overlay)
-        .hidden_title(true)
-        .build()
-        {
+        .transparent(true);
+
+        #[cfg(target_os = "macos")]
+        let builder = builder
+            .title_bar_style(tauri::TitleBarStyle::Overlay)
+            .hidden_title(true);
+
+        #[cfg(target_os = "linux")]
+        let builder = builder.background_color(tauri::window::Color(0x1a, 0x1a, 0x2e, 0xff));
+
+        if let Ok(window) = builder.build() {
             #[cfg(target_os = "macos")]
             {
                 let _ = apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, None);
+                inject_titlebar(window.clone());
             }
 
-            inject_titlebar(window.clone());
             let _ = window.set_focus();
         }
     });
@@ -334,7 +345,7 @@ async fn new_window(app: AppHandle, state: tauri::State<'_, ConfigState>) -> Res
     let server_url = state.0.read().unwrap().server_url.clone();
     let window_label = format!("onyx-{}", uuid::Uuid::new_v4());
 
-    let window = WebviewWindowBuilder::new(
+    let builder = WebviewWindowBuilder::new(
         &app,
         &window_label,
         WebviewUrl::External(
@@ -346,19 +357,28 @@ async fn new_window(app: AppHandle, state: tauri::State<'_, ConfigState>) -> Res
     .title("Onyx")
     .inner_size(1200.0, 800.0)
     .min_inner_size(800.0, 600.0)
-    .transparent(true)
-    .title_bar_style(tauri::TitleBarStyle::Overlay)
-    .hidden_title(true)
-    .build()
-    .map_err(|e| e.to_string())?;
+    .transparent(true);
 
-    // Apply vibrancy effect
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .title_bar_style(tauri::TitleBarStyle::Overlay)
+        .hidden_title(true);
+
+    #[cfg(target_os = "linux")]
+    let builder = builder.background_color(tauri::window::Color(0x1a, 0x1a, 0x2e, 0xff));
+
     #[cfg(target_os = "macos")]
     {
+        let window = builder.build().map_err(|e| e.to_string())?;
+        // Apply vibrancy effect and inject titlebar
         let _ = apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, None);
+        inject_titlebar(window.clone());
     }
 
-    inject_titlebar(window.clone());
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _window = builder.build().map_err(|e| e.to_string())?;
+    }
 
     Ok(())
 }
@@ -372,6 +392,7 @@ fn reset_config(state: tauri::State<ConfigState>) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
 fn inject_titlebar(window: WebviewWindow) {
     let script = TITLEBAR_SCRIPT.to_string();
     tauri::async_runtime::spawn(async move {
@@ -659,6 +680,7 @@ fn main() {
                     }
                 }
 
+                #[cfg(target_os = "macos")]
                 inject_titlebar(window.clone());
 
                 let _ = window.set_focus();
@@ -666,9 +688,10 @@ fn main() {
 
             Ok(())
         })
-        .on_page_load(|webview: &Webview, _payload: &PageLoadPayload| {
-            // Re-inject titlebar after every navigation/page load
-            let _ = webview.eval(TITLEBAR_SCRIPT);
+        .on_page_load(|_webview: &Webview, _payload: &PageLoadPayload| {
+            // Re-inject titlebar after every navigation/page load (macOS only)
+            #[cfg(target_os = "macos")]
+            let _ = _webview.eval(TITLEBAR_SCRIPT);
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

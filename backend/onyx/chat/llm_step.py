@@ -5,14 +5,10 @@ from collections.abc import Mapping
 from collections.abc import Sequence
 from typing import Any
 from typing import cast
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from onyx.chat.emitter import Emitter
-
-from onyx.llm.models import ReasoningEffort
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.citation_processor import DynamicCitationProcessor
+from onyx.chat.emitter import Emitter
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import LlmStepResult
 from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
@@ -29,16 +25,17 @@ from onyx.llm.models import ChatCompletionMessage
 from onyx.llm.models import FunctionCall
 from onyx.llm.models import ImageContentPart
 from onyx.llm.models import ImageUrlDetail
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.models import SystemMessage
 from onyx.llm.models import TextContentPart
 from onyx.llm.models import ToolCall
 from onyx.llm.models import ToolMessage
 from onyx.llm.models import UserMessage
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningDone
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
@@ -199,6 +196,7 @@ def _update_tool_call_with_delta(
 def _extract_tool_call_kickoffs(
     id_to_tool_call_map: dict[int, dict[str, Any]],
     turn_index: int,
+    tab_index: int | None = None,
     sub_turn_index: int | None = None,
 ) -> list[ToolCallKickoff]:
     """Extract ToolCallKickoff objects from the tool call map.
@@ -207,7 +205,7 @@ def _extract_tool_call_kickoffs(
     Each tool call is assigned the given turn_index and a tab_index based on its order.
     """
     tool_calls: list[ToolCallKickoff] = []
-    tab_index = 0
+    tab_index_calculated = 0
     for tool_call_data in id_to_tool_call_map.values():
         if tool_call_data.get("id") and tool_call_data.get("name"):
             try:
@@ -226,12 +224,14 @@ def _extract_tool_call_kickoffs(
                     tool_args=tool_args,
                     placement=Placement(
                         turn_index=turn_index,
-                        tab_index=tab_index,
+                        tab_index=(
+                            tab_index_calculated if tab_index is None else tab_index
+                        ),
                         sub_turn_index=sub_turn_index,
                     ),
                 )
             )
-            tab_index += 1
+            tab_index_calculated += 1
     return tool_calls
 
 
@@ -395,7 +395,7 @@ def run_llm_step_pkt_generator(
     tool_choice: ToolChoiceOptions,
     llm: LLM,
     placement: Placement,
-    state_container: ChatStateContainer,
+    state_container: ChatStateContainer | None,
     citation_processor: DynamicCitationProcessor | None,
     reasoning_effort: ReasoningEffort | None = None,
     final_documents: list[SearchDoc] | None = None,
@@ -404,6 +404,8 @@ def run_llm_step_pkt_generator(
         Callable[[Delta | None, Any], tuple[Delta | None, Any]] | None
     ) = None,
     max_tokens: int | None = None,
+    # TODO: Temporary handling of nested tool calls with agents, figure out a better way to handle this
+    use_existing_tab_index: bool = False,
 ) -> Generator[Packet, None, tuple[LlmStepResult, bool]]:
     """Run an LLM step and stream the response as packets.
     NOTE: DO NOT TOUCH THIS FUNCTION BEFORE ASKING YUHONG, this is very finicky and
@@ -518,7 +520,8 @@ def run_llm_step_pkt_generator(
             if delta.reasoning_content:
                 accumulated_reasoning += delta.reasoning_content
                 # Save reasoning incrementally to state container
-                state_container.set_reasoning_tokens(accumulated_reasoning)
+                if state_container:
+                    state_container.set_reasoning_tokens(accumulated_reasoning)
                 if not reasoning_start:
                     yield Packet(
                         placement=Placement(
@@ -572,7 +575,8 @@ def run_llm_step_pkt_generator(
                         if isinstance(result, str):
                             accumulated_answer += result
                             # Save answer incrementally to state container
-                            state_container.set_answer_tokens(accumulated_answer)
+                            if state_container:
+                                state_container.set_answer_tokens(accumulated_answer)
                             yield Packet(
                                 placement=Placement(
                                     turn_index=turn_index,
@@ -594,7 +598,8 @@ def run_llm_step_pkt_generator(
                     # When citation_processor is None, use delta.content directly without modification
                     accumulated_answer += delta.content
                     # Save answer incrementally to state container
-                    state_container.set_answer_tokens(accumulated_answer)
+                    if state_container:
+                        state_container.set_answer_tokens(accumulated_answer)
                     yield Packet(
                         placement=Placement(
                             turn_index=turn_index,
@@ -631,7 +636,10 @@ def run_llm_step_pkt_generator(
                     _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
 
         tool_calls = _extract_tool_call_kickoffs(
-            id_to_tool_call_map, turn_index, sub_turn_index
+            id_to_tool_call_map=id_to_tool_call_map,
+            turn_index=turn_index,
+            tab_index=tab_index if use_existing_tab_index else None,
+            sub_turn_index=sub_turn_index,
         )
         if tool_calls:
             tool_calls_list: list[ToolCall] = [
@@ -660,10 +668,20 @@ def run_llm_step_pkt_generator(
             )
             span_generation.span_data.output = [assistant_msg_no_tools.model_dump()]
 
-    # Should have closed the reasoning block, the only pathway to hit this is if the stream
-    # ended with reasoning content and no other content. This is an invalid state.
+    # This may happen if the custom token processor is used to modify other packets into reasoning
+    # Then there won't necessarily be anything else to come after the reasoning tokens
     if reasoning_start:
-        raise RuntimeError("Reasoning block is still open but the stream ended.")
+        yield Packet(
+            placement=Placement(
+                turn_index=turn_index,
+                tab_index=tab_index,
+                sub_turn_index=sub_turn_index,
+            ),
+            obj=ReasoningDone(),
+        )
+        has_reasoned = 1
+        turn_index, sub_turn_index = _increment_turns(turn_index, sub_turn_index)
+        reasoning_start = False
 
     # Flush any remaining content from citation processor
     # Reasoning is always first so this should use the post-incremented value of turn_index
@@ -674,7 +692,8 @@ def run_llm_step_pkt_generator(
             if isinstance(result, str):
                 accumulated_answer += result
                 # Save answer incrementally to state container
-                state_container.set_answer_tokens(accumulated_answer)
+                if state_container:
+                    state_container.set_answer_tokens(accumulated_answer)
                 yield Packet(
                     placement=Placement(
                         turn_index=turn_index,
@@ -719,13 +738,13 @@ def run_llm_step_pkt_generator(
 
 
 def run_llm_step(
-    emitter: "Emitter",
+    emitter: Emitter,
     history: list[ChatMessageSimple],
     tool_definitions: list[dict],
     tool_choice: ToolChoiceOptions,
     llm: LLM,
     placement: Placement,
-    state_container: ChatStateContainer,
+    state_container: ChatStateContainer | None,
     citation_processor: DynamicCitationProcessor | None,
     reasoning_effort: ReasoningEffort | None = None,
     final_documents: list[SearchDoc] | None = None,
@@ -734,6 +753,7 @@ def run_llm_step(
         Callable[[Delta | None, Any], tuple[Delta | None, Any]] | None
     ) = None,
     max_tokens: int | None = None,
+    use_existing_tab_index: bool = False,
 ) -> tuple[LlmStepResult, bool]:
     """Wrapper around run_llm_step_pkt_generator that consumes packets and emits them.
 
@@ -753,6 +773,7 @@ def run_llm_step(
         user_identity=user_identity,
         custom_token_processor=custom_token_processor,
         max_tokens=max_tokens,
+        use_existing_tab_index=use_existing_tab_index,
     )
 
     while True:
