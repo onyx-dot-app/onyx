@@ -288,13 +288,18 @@ class CloudEmbedding:
         embeddings = [embedding["embedding"] for embedding in response.data]
         return embeddings
 
-    async def _embed_vertex(
+    def _embed_vertex_sync(
         self,
         texts: list[str],
         model: str | None,
         embedding_type: str,
         reduced_dimension: int | None,
     ) -> list[Embedding]:
+        """Synchronous Google Vertex AI embedding using the Google GenAI SDK.
+
+        This replaces the async version to avoid asyncio-related memory leaks
+        from connection pooling issues with aiohttp.
+        """
         from google import genai
         from google.genai import types as genai_types
 
@@ -313,11 +318,35 @@ class CloudEmbedding:
             or "us-central1"
         )
 
+        # Configure httpx client with connection limits to prevent memory leaks
+        sync_client = httpx.Client(
+            limits=httpx.Limits(
+                max_connections=10,  # Limit total connections
+                max_keepalive_connections=5,  # Limit keepalive pool
+            ),
+            timeout=httpx.Timeout(60.0),  # 60 second timeout
+        )
+
+        # Configure retry options to limit aggressive retries that cause memory buildup
+        retry_options = genai_types.HttpRetryOptions(
+            attempts=3,  # Reduce from SDK default (~10) to 3
+            initial_delay=1.0,  # Start with 1 second delay
+            max_delay=10.0,  # Cap at 10 seconds
+            exp_base=2.0,  # Exponential backoff
+        )
+
+        http_options = genai_types.HttpOptions(
+            httpx_client=sync_client,
+            retry_options=retry_options,
+            timeout=60,  # Overall timeout in seconds
+        )
+
         client = genai.Client(
             vertexai=True,
             project=project_id,
             location=location,
             credentials=credentials,
+            http_options=http_options,
         )
 
         embed_config = genai_types.EmbedContentConfig(
@@ -331,44 +360,40 @@ class CloudEmbedding:
             for i in range(0, len(texts), VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE)
         ]
 
-        async def _embed_batch(batch_texts: list[str]) -> list[Embedding]:
-            content_requests: list[Any] = [
-                genai_types.Content(parts=[genai_types.Part(text=text)])
-                for text in batch_texts
-            ]
-            response = await client.aio.models.embed_content(
-                model=model,
-                contents=content_requests,
-                config=embed_config,
-            )
-
-            if not response.embeddings:
-                raise RuntimeError("Received empty embeddings from Google GenAI.")
-
-            embeddings: list[Embedding] = []
-            for idx, embedding in enumerate(response.embeddings):
-                if embedding.values is None:
-                    raise RuntimeError(
-                        f"Missing embedding values for input at index {idx}."
-                    )
-                embeddings.append(embedding.values)
-            return embeddings
+        all_embeddings: list[Embedding] = []
 
         try:
-            results = await asyncio.gather(*[_embed_batch(batch) for batch in batches])
-            return [
-                embedding
-                for batch_embeddings in results
-                for embedding in batch_embeddings
-            ]
+            for batch_texts in batches:
+                content_requests: list[Any] = [
+                    genai_types.Content(parts=[genai_types.Part(text=text)])
+                    for text in batch_texts
+                ]
+
+                # Use SYNCHRONOUS API instead of async
+                response = client.models.embed_content(
+                    model=model,
+                    contents=content_requests,
+                    config=embed_config,
+                )
+
+                if not response.embeddings:
+                    raise RuntimeError("Received empty embeddings from Google GenAI.")
+
+                for idx, embedding in enumerate(response.embeddings):
+                    if embedding.values is None:
+                        raise RuntimeError(
+                            f"Missing embedding values for input at index {idx}."
+                        )
+                    all_embeddings.append(embedding.values)
+
+            return all_embeddings
         finally:
-            # Ensure client is closed with a timeout to prevent hanging on stuck sessions
+            # Close the synchronous client - no async/await needed
             try:
-                await asyncio.wait_for(client.aio.aclose(), timeout=5.0)
-            except asyncio.TimeoutError:
-                logger.warning("Google GenAI client aclose() timed out after 5s")
+                client.close()
+                sync_client.close()
             except Exception as e:
-                logger.warning(f"Error closing Google GenAI client: {e}")
+                logger.warning(f"Error closing Google GenAI sync client: {e}")
 
     async def _embed_litellm_proxy(
         self, texts: list[str], model_name: str | None
@@ -421,7 +446,8 @@ class CloudEmbedding:
             elif self.provider == EmbeddingProvider.VOYAGE:
                 return await self._embed_voyage(texts, model_name, embedding_type)
             elif self.provider == EmbeddingProvider.GOOGLE:
-                return await self._embed_vertex(
+                # Use synchronous API to avoid asyncio memory leaks
+                return self._embed_vertex_sync(
                     texts, model_name, embedding_type, reduced_dimension
                 )
             else:
