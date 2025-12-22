@@ -3,24 +3,20 @@ import { FiUsers, FiCircle } from "react-icons/fi";
 import { SvgChevronDown } from "@opal/icons";
 import { cn } from "@/lib/utils";
 
-import { PacketType, Packet } from "../../../services/streamingModels";
+import {
+  PacketType,
+  Packet,
+  ResearchAgentPacket,
+  ResearchAgentStart,
+  IntermediateReportDelta,
+} from "../../../services/streamingModels";
 import { MessageRenderer, FullChatState, RendererResult } from "../interfaces";
 import { RendererComponent } from "../renderMessageComponent";
-import { getToolIcon, getToolName } from "../toolDisplayHelpers";
+import { getToolName } from "../toolDisplayHelpers";
 import { STANDARD_TEXT_COLOR } from "../constants";
 import Text from "@/refresh-components/texts/Text";
 import { usePacketAnimationAndCollapse } from "../hooks/usePacketAnimationAndCollapse";
 import { useMarkdownRenderer } from "../markdownUtils";
-
-interface ResearchAgentStartObj {
-  type: "research_agent_start";
-  research_task: string;
-}
-
-interface IntermediateReportDeltaObj {
-  type: "intermediate_report_delta";
-  content: string;
-}
 
 interface NestedToolGroup {
   sub_turn_index: number;
@@ -95,7 +91,10 @@ function NestedToolItemRow({
  * Renderer for research agent steps in deep research.
  * Shows the research task, nested tool calls, and streams the intermediate report.
  */
-export const ResearchAgentRenderer: MessageRenderer<Packet, FullChatState> = ({
+export const ResearchAgentRenderer: MessageRenderer<
+  ResearchAgentPacket,
+  FullChatState
+> = ({
   packets,
   state,
   onComplete,
@@ -109,7 +108,7 @@ export const ResearchAgentRenderer: MessageRenderer<Packet, FullChatState> = ({
     (p) => p.obj.type === PacketType.RESEARCH_AGENT_START
   );
   const researchTask = startPacket
-    ? (startPacket.obj as ResearchAgentStartObj).research_task
+    ? (startPacket.obj as ResearchAgentStart).research_task
     : "";
 
   // Separate parent packets (no sub_turn_index or sub_turn_index === undefined)
@@ -178,7 +177,7 @@ export const ResearchAgentRenderer: MessageRenderer<Packet, FullChatState> = ({
   const fullReportContent = parentPackets
     .map((packet) => {
       if (packet.obj.type === PacketType.INTERMEDIATE_REPORT_DELTA) {
-        return (packet.obj as IntermediateReportDeltaObj).content;
+        return (packet.obj as IntermediateReportDelta).content;
       }
       return "";
     })
@@ -199,7 +198,7 @@ export const ResearchAgentRenderer: MessageRenderer<Packet, FullChatState> = ({
       )
       .map((packet) => {
         if (packet.obj.type === PacketType.INTERMEDIATE_REPORT_DELTA) {
-          return (packet.obj as IntermediateReportDeltaObj).content;
+          return (packet.obj as IntermediateReportDelta).content;
         }
         return "";
       })

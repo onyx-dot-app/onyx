@@ -331,3 +331,8 @@ export interface DeepResearchPlanPacket {
   placement: Placement;
   obj: DeepResearchPlanObj;
 }
+
+export interface ResearchAgentPacket {
+  placement: Placement;
+  obj: ResearchAgentObj;
+}
