@@ -2454,7 +2454,7 @@ class ModelConfiguration(Base):
 class ImageGenerationConfig(Base):
     __tablename__ = "image_generation_config"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    image_provider_id: Mapped[str] = mapped_column(String, primary_key=True)
     model_configuration_id: Mapped[int] = mapped_column(
         ForeignKey("model_configuration.id", ondelete="CASCADE"),
         nullable=False,
