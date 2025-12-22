@@ -181,7 +181,7 @@ class Deletable(abc.ABC):
     @abc.abstractmethod
     def delete(
         self,
-        # TODO: Fine for now but this can probably be a batch operation that
+        # TODO(andrei): Fine for now but this can probably be a batch operation that
         # takes in a list of IDs.
         document_id: str,
         chunk_count: int | None = None,
