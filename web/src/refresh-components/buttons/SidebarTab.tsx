@@ -5,6 +5,7 @@ import type { IconProps } from "@opal/types";
 import { cn } from "@/lib/utils";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Link from "next/link";
+import type { Route } from "next";
 import Truncated from "@/refresh-components/texts/Truncated";
 
 const backgroundClasses = (active?: boolean) =>
@@ -119,7 +120,7 @@ export default function SidebarTab({
   );
 
   const content = href ? (
-    <Link href={href} scroll={false}>
+    <Link href={href as Route} scroll={false}>
       {innerContent}
     </Link>
   ) : (

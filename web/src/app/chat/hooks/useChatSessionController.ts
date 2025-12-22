@@ -27,6 +27,7 @@ import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile } from "../projects/projectsService";
 import { getSessionProjectTokenCount } from "../projects/projectsService";
 import { getProjectFilesForSession } from "../projects/projectsService";
+import { ChatInputBarHandle } from "../components/input/ChatInputBar";
 
 interface UseChatSessionControllerProps {
   existingChatSessionId: string | null;
@@ -44,7 +45,7 @@ interface UseChatSessionControllerProps {
   // Refs
   chatSessionIdRef: React.RefObject<string | null>;
   loadedIdSessionRef: React.RefObject<string | null>;
-  textAreaRef: React.RefObject<HTMLTextAreaElement | null>;
+  chatInputBarRef: React.RefObject<ChatInputBarHandle | null>;
   isInitialLoad: React.RefObject<boolean>;
   submitOnLoadPerformed: React.RefObject<boolean>;
 
@@ -68,7 +69,7 @@ export function useChatSessionController({
   setCurrentMessageFiles,
   chatSessionIdRef,
   loadedIdSessionRef,
-  textAreaRef,
+  chatInputBarRef,
   isInitialLoad,
   submitOnLoadPerformed,
   refreshChatSessions,
@@ -114,7 +115,7 @@ export function useChatSessionController({
     chatSessionIdRef.current = existingChatSessionId;
     loadedIdSessionRef.current = existingChatSessionId;
 
-    textAreaRef.current?.focus();
+    chatInputBarRef.current?.focus();
 
     const isCreatingNewSession =
       priorChatSessionId === null && existingChatSessionId !== null;

@@ -9,6 +9,7 @@ import {
 import { StreamStopInfo } from "@/lib/search/interfaces";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Route } from "next";
 import { usePostHog } from "posthog-js/react";
 import { stopChatSession } from "../chat_search/utils";
 import {
@@ -236,7 +237,7 @@ export function useChatController({
 
     // Navigate immediately if still on chat page
     if (pathname === "/chat" && !navigatingAway.current) {
-      router.push(newUrl, { scroll: false });
+      router.push(newUrl as Route, { scroll: false });
     }
 
     // Refresh sidebar so chat appears (will show as "New Chat" initially)
@@ -390,7 +391,7 @@ export function useChatController({
           const newUrl = params.toString()
             ? `${pathname}?${params.toString()}`
             : pathname;
-          router.replace(newUrl, { scroll: false });
+          router.replace(newUrl as Route, { scroll: false });
         }
       }
 

@@ -63,7 +63,7 @@ Keep it free of formatting and focus on the facts only. Be sure to include all c
 
 Cite every fact INLINE using the format [1], [2], [3], etc. based on the `document` field of the source.
 
-CRITICAL - BE EXTREMELY THOROUGH AND COMPREHENSIVE, YOUR RESPONSE SHOULD BE MANY PAGES LONG.
+CRITICAL - BE EXTREMELY THOROUGH AND COMPREHENSIVE, YOUR RESPONSE SHOULD BE SEVERAL PAGES LONG.
 """
 
 

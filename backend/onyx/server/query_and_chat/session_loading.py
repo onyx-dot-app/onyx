@@ -11,6 +11,8 @@ from onyx.db.chat import get_db_search_doc_by_id
 from onyx.db.chat import translate_db_search_doc_to_saved_search_doc
 from onyx.db.models import ChatMessage
 from onyx.db.tools import get_tool_by_id
+from onyx.deep_research.dr_mock_tools import RESEARCH_AGENT_DB_NAME
+from onyx.deep_research.dr_mock_tools import RESEARCH_AGENT_TASK_KEY
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
@@ -42,9 +44,6 @@ from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearch
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-# Research Agent tool identifier
-RESEARCH_AGENT_TOOL_NAME = "ResearchAgent"
 
 
 def create_message_packets(
@@ -206,7 +205,6 @@ def create_research_agent_packets(
     tab_index: int = 0,
 ) -> list[Packet]:
     """Create packets for research agent tool calls.
-
     This recreates the packet structure that ResearchAgentRenderer expects:
     - ResearchAgentStart with the research task
     - IntermediateReportDelta with the report content (if available)
@@ -419,10 +417,12 @@ def translate_assistant_message_to_packets(
                                 )
                             )
 
-                    elif tool.in_code_tool_id == RESEARCH_AGENT_TOOL_NAME:
-                        # Research agent tool - use ResearchAgentStart packets
+                    elif tool.in_code_tool_id == RESEARCH_AGENT_DB_NAME:
+                        # Not ideal but not a huge issue if the research task is lost.
                         research_task = cast(
-                            str, tool_call.tool_call_arguments.get("task", "Research")
+                            str,
+                            tool_call.tool_call_arguments.get(RESEARCH_AGENT_TASK_KEY)
+                            or "Could not fetch saved research task.",
                         )
                         packet_list.extend(
                             create_research_agent_packets(

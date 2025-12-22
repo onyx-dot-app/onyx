@@ -62,20 +62,20 @@ logger = setup_logger()
 MAX_USER_MESSAGES_FOR_CONTEXT = 5
 MAX_FINAL_REPORT_TOKENS = 10000
 
-# Might be something like:
-# 1. Research 1-2
-# 2. Think
-# 3. Research 3-4
-# 4. Think
-# 5. Research 5-6
-# 6. Think
-# 7. Research, possibly something new or different from the plan
-# 8. Think
-# 9. Generate report
-MAX_ORCHESTRATOR_CYCLES = 9
+# Might be something like (this gives a lot of leeway for change but typically the models don't do this):
+# 0. Research topics 1-3
+# 1. Think
+# 2. Research topics 4-5
+# 3. Think
+# 4. Research topics 6 + something new or different from the plan
+# 5. Think
+# 6. Research, possibly something new or different from the plan
+# 7. Think
+# 8. Generate report
+MAX_ORCHESTRATOR_CYCLES = 8
 
 # Similar but without the 4 thinking tool calls
-MAX_ORCHESTRATOR_CYCLES_REASONING = 5
+MAX_ORCHESTRATOR_CYCLES_REASONING = 4
 
 
 def generate_final_report(
@@ -87,6 +87,7 @@ def generate_final_report(
     turn_index: int,
     citation_mapping: CitationMapping,
     user_identity: LLMUserIdentity | None,
+    saved_reasoning: str | None = None,
 ) -> None:
     final_report_prompt = FINAL_REPORT_PROMPT.format(
         current_datetime=get_current_llm_day_time(full_sentence=False),
@@ -133,6 +134,12 @@ def generate_final_report(
     final_report = llm_step_result.answer
     if final_report is None:
         raise ValueError("LLM failed to generate the final deep research report")
+
+    if saved_reasoning:
+        # The reasoning we want to save with the message is more about calling this
+        # generate report and why it's done. Also some models don't have reasoning
+        # but we'd still want to capture the reasoning from the think_tool of theprevious turn.
+        state_container.set_reasoning_tokens(saved_reasoning)
 
 
 @log_function_time(print_only=True)
@@ -318,6 +325,20 @@ def run_deep_research_llm_loop(
     most_recent_reasoning: str | None = None
     citation_mapping: CitationMapping = {}
     for cycle in range(max_orchestrator_cycles):
+        if cycle == max_orchestrator_cycles - 1:
+            # If it's the last cycle, forcibly generate the final report
+            generate_final_report(
+                history=simple_chat_history,
+                llm=llm,
+                token_counter=token_counter,
+                state_container=state_container,
+                emitter=emitter,
+                turn_index=orchestrator_start_turn_index + cycle + reasoning_cycles,
+                citation_mapping=citation_mapping,
+                user_identity=user_identity,
+            )
+            break
+
         research_agent_calls: list[ToolCallKickoff] = []
 
         orchestrator_prompt = orchestrator_prompt_template.format(
@@ -406,6 +427,7 @@ def run_deep_research_llm_loop(
                 turn_index=special_tool_calls.generate_report_tool_call.placement.turn_index,
                 citation_mapping=citation_mapping,
                 user_identity=user_identity,
+                saved_reasoning=most_recent_reasoning,
             )
             break
         elif special_tool_calls.think_tool_call:
@@ -492,31 +514,40 @@ def run_deep_research_llm_loop(
             citation_mapping = research_results.citation_mapping
 
             for tab_index, report in enumerate(research_results.intermediate_reports):
+                if report is None:
+                    # The LLM will not see that this research was even attempted, it may try
+                    # something similar again but this is not bad.
+                    logger.error(
+                        f"Research agent call at tab_index {tab_index} failed, skipping"
+                    )
+                    continue
+
+                current_tool_call = research_agent_calls[tab_index]
                 tool_call_info = ToolCallInfo(
                     parent_tool_call_id=None,
                     turn_index=orchestrator_start_turn_index + cycle + reasoning_cycles,
                     tab_index=tab_index,
-                    tool_name=tool_call.tool_name,
-                    tool_call_id=tool_call.tool_call_id,
+                    tool_name=current_tool_call.tool_name,
+                    tool_call_id=current_tool_call.tool_call_id,
                     tool_id=get_tool_by_name(
                         tool_name=RESEARCH_AGENT_DB_NAME, db_session=db_session
                     ).id,
                     reasoning_tokens=llm_step_result.reasoning or most_recent_reasoning,
-                    tool_call_arguments=tool_call.tool_args,
+                    tool_call_arguments=current_tool_call.tool_args,
                     tool_call_response=report,
                     search_docs=None,  # Intermediate docs are not saved/shown
                     generated_images=None,
                 )
                 state_container.add_tool_call(tool_call_info)
 
-                tool_call_message = tool_call.to_msg_str()
+                tool_call_message = current_tool_call.to_msg_str()
                 tool_call_token_count = token_counter(tool_call_message)
 
                 tool_call_msg = ChatMessageSimple(
                     message=tool_call_message,
                     token_count=tool_call_token_count,
                     message_type=MessageType.TOOL_CALL,
-                    tool_call_id=tool_call.tool_call_id,
+                    tool_call_id=current_tool_call.tool_call_id,
                     image_files=None,
                 )
                 simple_chat_history.append(tool_call_msg)
@@ -525,7 +556,7 @@ def run_deep_research_llm_loop(
                     message=report,
                     token_count=token_counter(report),
                     message_type=MessageType.TOOL_CALL_RESPONSE,
-                    tool_call_id=tool_call.tool_call_id,
+                    tool_call_id=current_tool_call.tool_call_id,
                     image_files=None,
                 )
                 simple_chat_history.append(tool_call_response_msg)

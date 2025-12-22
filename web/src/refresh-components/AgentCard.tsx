@@ -13,6 +13,7 @@ import type { IconProps } from "@opal/types";
 import { usePinnedAgents } from "@/hooks/useAgents";
 import { cn, noProp } from "@/lib/utils";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { checkUserOwnsAssistant } from "@/lib/assistants/utils";
 import { useUser } from "@/components/user/UserProvider";
@@ -85,7 +86,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                   icon={SvgBarChart}
                   tertiary
                   onClick={noProp(() =>
-                    router.push(`/assistants/stats/${agent.id}`)
+                    router.push(`/ee/assistants/stats/${agent.id}` as Route)
                   )}
                   tooltip="View Agent Stats"
                   className="hidden group-hover/AgentCard:flex"
@@ -96,7 +97,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                   icon={SvgEdit}
                   tertiary
                   onClick={noProp(() =>
-                    router.push(`/assistants/edit/${agent.id}`)
+                    router.push(`/assistants/edit/${agent.id}` as Route)
                   )}
                   tooltip="Edit Agent"
                   className="hidden group-hover/AgentCard:flex"

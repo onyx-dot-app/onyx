@@ -81,7 +81,6 @@ def _get_answer(
                 db_session=db_session,
                 skip_gen_ai_answer_generation=False,
                 llm_override=full_configuration.llm,
-                use_agentic_search=False,
                 allowed_tool_ids=full_configuration.allowed_tool_ids,
             )
             packets = stream_chat_message_objects(

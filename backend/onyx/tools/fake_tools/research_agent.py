@@ -151,8 +151,10 @@ def generate_intermediate_report(
                         sub_turn_index=placement.sub_turn_index,
                     ),
                     obj=IntermediateReportCitedDocs(
-                        cited_docs=[]
-                    ),  # TODO: Add actual cited docs
+                        cited_docs=list(
+                            citation_processor.get_seen_citations().values()
+                        )
+                    ),
                 )
             )
             emitter.emit(
@@ -187,7 +189,7 @@ def run_research_agent_call(
     is_reasoning_model: bool,
     token_counter: Callable[[str], int],
     user_identity: LLMUserIdentity | None,
-) -> ResearchAgentCallResult:
+) -> ResearchAgentCallResult | None:
     turn_index = research_agent_call.placement.turn_index
     tab_index = research_agent_call.placement.tab_index
     try:
@@ -310,12 +312,24 @@ def run_research_agent_call(
                 reasoning_effort=ReasoningEffort.LOW,
                 final_documents=None,
                 user_identity=user_identity,
+                use_existing_tab_index=True,
             )
             if has_reasoned:
                 reasoning_cycles += 1
 
             tool_responses: list[ToolResponse] = []
             tool_calls = llm_step_result.tool_calls or []
+
+            # TODO handle the restriction of only 1 tool call type per turn
+            # This is a problem right now because of the Placement system not allowing for
+            # differentiating sub-tool calls.
+            # Filter tool calls to only include the first tool type used
+            # This prevents mixing different tool types in the same batch
+            if tool_calls:
+                first_tool_type = tool_calls[0].tool_name
+                tool_calls = [
+                    tc for tc in tool_calls if tc.tool_name == first_tool_type
+                ]
 
             just_ran_web_search = False
 
@@ -496,7 +510,7 @@ def run_research_agent_call(
                 obj=PacketException(type="error", exception=e),
             )
         )
-        raise e
+        return None
 
 
 def run_research_agent_calls(
@@ -534,19 +548,24 @@ def run_research_agent_calls(
 
     research_agent_call_results = run_functions_tuples_in_parallel(
         functions_with_args,
-        allow_failures=True,  # Continue even if some research agent calls fail
+        allow_failures=False,
     )
 
     updated_citation_mapping = citation_mapping
-    updated_answers = []
+    updated_answers: list[str | None] = []
 
     for result in research_agent_call_results:
+        if result is None:
+            updated_answers.append(None)
+            continue
+
         updated_answer, updated_citation_mapping = collapse_citations(
             answer_text=result.intermediate_report,
             existing_citation_mapping=updated_citation_mapping,
             new_citation_mapping=result.citation_mapping,
         )
         updated_answers.append(updated_answer)
+
     return CombinedResearchAgentCallResult(
         intermediate_reports=updated_answers,
         citation_mapping=updated_citation_mapping,
