@@ -53,6 +53,31 @@ def get_all_image_generation_configs(
     return list(db_session.scalars(stmt).all())
 
 
+def get_image_generation_config(
+    db_session: Session,
+    config_id: int,
+) -> ImageGenerationConfig | None:
+    """Get a single image generation config by ID with relationships loaded.
+
+    Args:
+        db_session: Database session
+        config_id: ID of the config to get
+
+    Returns:
+        The ImageGenerationConfig or None if not found
+    """
+    stmt = (
+        select(ImageGenerationConfig)
+        .where(ImageGenerationConfig.id == config_id)
+        .options(
+            selectinload(ImageGenerationConfig.model_configuration).selectinload(
+                ModelConfiguration.llm_provider
+            )
+        )
+    )
+    return db_session.scalar(stmt)
+
+
 def get_default_image_generation_config(
     db_session: Session,
 ) -> ImageGenerationConfig | None:
