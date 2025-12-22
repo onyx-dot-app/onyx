@@ -500,7 +500,7 @@ def upload_files(
                         file_id = file_store.save_file(
                             content=BytesIO(sub_file_bytes),
                             display_name=os.path.basename(file_info),
-                            file_origin=FileOrigin.CONNECTOR,
+                            file_origin=file_origin,
                             file_type=mime_type,
                         )
                         deduped_file_paths.append(file_id)
@@ -510,7 +510,7 @@ def upload_files(
             file_id = file_store.save_file(
                 content=file.file,
                 display_name=file.filename,
-                file_origin=FileOrigin.CONNECTOR,
+                file_origin=file_origin,
                 file_type=file.content_type or "text/plain",
             )
             deduped_file_paths.append(file_id)
