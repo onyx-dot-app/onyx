@@ -13,6 +13,7 @@ from datetime import timedelta
 from typing import BinaryIO
 from typing import cast
 from typing import List
+from uuid import UUID
 
 import httpx
 import jinja2
@@ -41,11 +42,11 @@ from onyx.document_index.interfaces import (
 from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
 from onyx.document_index.interfaces import IndexBatchParams
 from onyx.document_index.interfaces import MinimalDocumentIndexingInfo
+from onyx.document_index.interfaces import UpdateRequest
 from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.document_index.interfaces import VespaDocumentFields
 from onyx.document_index.interfaces import VespaDocumentUserFields
 from onyx.document_index.interfaces_new import IndexingMetadata
-from onyx.document_index.interfaces_new import MetadataUpdateRequest
 from onyx.document_index.vespa.chunk_retrieval import batch_search_api_retrieval
 from onyx.document_index.vespa.chunk_retrieval import (
     parallel_visit_api_retrieval,
@@ -65,10 +66,16 @@ from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
 )
 from onyx.document_index.vespa.vespa_document_index import TenantState
 from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
+from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
 from onyx.document_index.vespa_constants import BATCH_SIZE
+from onyx.document_index.vespa_constants import BOOST
 from onyx.document_index.vespa_constants import CONTENT_SUMMARY
+from onyx.document_index.vespa_constants import DOCUMENT_ID
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
+from onyx.document_index.vespa_constants import DOCUMENT_SETS
+from onyx.document_index.vespa_constants import HIDDEN
 from onyx.document_index.vespa_constants import NUM_THREADS
+from onyx.document_index.vespa_constants import USER_PROJECT
 from onyx.document_index.vespa_constants import VESPA_APPLICATION_ENDPOINT
 from onyx.document_index.vespa_constants import VESPA_TIMEOUT
 from onyx.document_index.vespa_constants import YQL_BASE
@@ -600,6 +607,89 @@ class VespaIndex(DocumentIndex):
                         )
                         raise requests.HTTPError(failure_msg) from e
 
+    def update(self, update_requests: list[UpdateRequest], *, tenant_id: str) -> None:
+        logger.debug(f"Updating {len(update_requests)} documents in Vespa")
+
+        # Handle Vespa character limitations
+        # Mutating update_requests but it's not used later anyway
+        for update_request in update_requests:
+            for doc_info in update_request.minimal_document_indexing_info:
+                doc_info.doc_id = replace_invalid_doc_id_characters(doc_info.doc_id)
+
+        update_start = time.monotonic()
+
+        processed_updates_requests: list[_VespaUpdateRequest] = []
+        all_doc_chunk_ids: dict[str, list[UUID]] = {}
+
+        # Fetch all chunks for each document ahead of time
+        index_names = [self.index_name]
+        if self.secondary_index_name:
+            index_names.append(self.secondary_index_name)
+
+        chunk_id_start_time = time.monotonic()
+        with self.httpx_client_context as http_client:
+            for update_request in update_requests:
+                for doc_info in update_request.minimal_document_indexing_info:
+                    for index_name in index_names:
+                        doc_chunk_info = VespaIndex.enrich_basic_chunk_info(
+                            index_name=index_name,
+                            http_client=http_client,
+                            document_id=doc_info.doc_id,
+                            previous_chunk_count=doc_info.chunk_start_index,
+                            new_chunk_count=0,
+                        )
+                        doc_chunk_ids = get_document_chunk_ids(
+                            enriched_document_info_list=[doc_chunk_info],
+                            tenant_id=tenant_id,
+                            large_chunks_enabled=False,
+                        )
+                        all_doc_chunk_ids[doc_info.doc_id] = doc_chunk_ids
+
+        logger.debug(
+            f"Took {time.monotonic() - chunk_id_start_time:.2f} seconds to fetch all Vespa chunk IDs"
+        )
+
+        # Build the _VespaUpdateRequest objects
+        for update_request in update_requests:
+            update_dict: dict[str, dict] = {"fields": {}}
+            if update_request.boost is not None:
+                update_dict["fields"][BOOST] = {"assign": update_request.boost}
+            if update_request.document_sets is not None:
+                update_dict["fields"][DOCUMENT_SETS] = {
+                    "assign": {
+                        document_set: 1 for document_set in update_request.document_sets
+                    }
+                }
+            if update_request.access is not None:
+                update_dict["fields"][ACCESS_CONTROL_LIST] = {
+                    "assign": {
+                        acl_entry: 1 for acl_entry in update_request.access.to_acl()
+                    }
+                }
+            if update_request.hidden is not None:
+                update_dict["fields"][HIDDEN] = {"assign": update_request.hidden}
+
+            if not update_dict["fields"]:
+                logger.error("Update request received but nothing to update")
+                continue
+
+            for doc_info in update_request.minimal_document_indexing_info:
+                for doc_chunk_id in all_doc_chunk_ids[doc_info.doc_id]:
+                    processed_updates_requests.append(
+                        _VespaUpdateRequest(
+                            document_id=doc_info.doc_id,
+                            url=f"{DOCUMENT_ID_ENDPOINT.format(index_name=self.index_name)}/{doc_chunk_id}",
+                            update_request=update_dict,
+                        )
+                    )
+
+        with self.httpx_client_context as httpx_client:
+            self._apply_updates_batched(processed_updates_requests, httpx_client)
+        logger.debug(
+            "Finished updating Vespa documents in %.2f seconds",
+            time.monotonic() - update_start,
+        )
+
     def kg_chunk_updates(
         self, kg_update_requests: list[KGUChunkUpdateRequest], tenant_id: str
     ) -> None:
@@ -643,8 +733,77 @@ class VespaIndex(DocumentIndex):
             time.monotonic() - update_start,
         )
 
-    def update(self, update_requests: list[UpdateRequest], *, tenant_id: str) -> None:
-        raise NotImplementedError
+    @retry(
+        tries=3,
+        delay=1,
+        backoff=2,
+    )
+    def _update_single_chunk(
+        self,
+        doc_chunk_id: UUID,
+        index_name: str,
+        fields: VespaDocumentFields | None,
+        user_fields: VespaDocumentUserFields | None,
+        doc_id: str,
+        http_client: httpx.Client,
+    ) -> None:
+        """
+        Update a single "chunk" (document) in Vespa using its chunk ID.
+        Retries if we encounter transient HTTPStatusError (e.g., overload).
+        """
+
+        update_dict: dict[str, dict] = {"fields": {}}
+
+        if fields is not None:
+            if fields.boost is not None:
+                update_dict["fields"][BOOST] = {"assign": fields.boost}
+
+            if fields.document_sets is not None:
+                update_dict["fields"][DOCUMENT_SETS] = {
+                    "assign": {document_set: 1 for document_set in fields.document_sets}
+                }
+
+            if fields.access is not None:
+                update_dict["fields"][ACCESS_CONTROL_LIST] = {
+                    "assign": {acl_entry: 1 for acl_entry in fields.access.to_acl()}
+                }
+
+            if fields.hidden is not None:
+                update_dict["fields"][HIDDEN] = {"assign": fields.hidden}
+
+            # document_id update is added only for migration purposes, ideally we should not be updating this field
+            if fields.document_id is not None:
+                update_dict["fields"][DOCUMENT_ID] = {"assign": fields.document_id}
+
+        if user_fields is not None:
+            if user_fields.user_projects is not None:
+                update_dict["fields"][USER_PROJECT] = {
+                    "assign": user_fields.user_projects
+                }
+
+        if not update_dict["fields"]:
+            logger.error("Update request received but nothing to update.")
+            return
+
+        vespa_url = (
+            f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{doc_chunk_id}"
+            "?create=true"
+        )
+
+        try:
+            resp = http_client.put(
+                vespa_url,
+                headers={"Content-Type": "application/json"},
+                json=update_dict,
+            )
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            logger.error(
+                f"Failed to update doc chunk {doc_chunk_id} (doc_id={doc_id}). "
+                f"Details: {e.response.text}"
+            )
+            # Re-raise so the @retry decorator will catch and retry
+            raise
 
     def update_single(
         self,
@@ -654,52 +813,47 @@ class VespaIndex(DocumentIndex):
         tenant_id: str,
         fields: VespaDocumentFields | None,
         user_fields: VespaDocumentUserFields | None,
-    ) -> None:
+    ) -> int:
         """Note: if the document id does not exist, the update will be a no-op and the
         function will complete with no errors or exceptions.
         Handle other exceptions if you wish to implement retry behavior
         """
-        if fields is None and user_fields is None:
-            raise ValueError(
-                f"Bug: Tried to update document {doc_id} with no updated fields or user fields."
-            )
-        # TODO(andrei): Very temporary, reinstate this soon.
-        # if fields is not None and fields.document_id is not None:
-        #     raise ValueError(
-        #         "The new vector db interface does not support updating the document ID field."
-        #     )
+        doc_chunk_count = 0
 
-        vespa_document_index = VespaDocumentIndex(
-            index_name=self.index_name,
-            tenant_state=TenantState(
-                tenant_id=tenant_id,
-                multitenant=self.multitenant,
-            ),
-            large_chunks_enabled=self.large_chunks_enabled,
-            httpx_client=self.httpx_client,
-        )
+        doc_id = replace_invalid_doc_id_characters(doc_id)
 
-        project_ids: set[int] | None = None
-        if user_fields is not None and user_fields.user_projects is not None:
-            project_ids = set(user_fields.user_projects)
-        update_request = MetadataUpdateRequest(
-            document_ids=[doc_id],
-            doc_id_to_chunk_cnt={
-                doc_id: chunk_count if chunk_count is not None else -1
-            },  # NOTE: -1 represents an unknown chunk count.
-            access=fields.access if fields is not None else None,
-            document_sets=fields.document_sets if fields is not None else None,
-            boost=fields.boost if fields is not None else None,
-            hidden=fields.hidden if fields is not None else None,
-            project_ids=project_ids,
-        )
+        with self.httpx_client_context as httpx_client:
+            for (
+                index_name,
+                large_chunks_enabled,
+            ) in self.index_to_large_chunks_enabled.items():
+                enriched_doc_infos = VespaIndex.enrich_basic_chunk_info(
+                    index_name=index_name,
+                    http_client=httpx_client,
+                    document_id=doc_id,
+                    previous_chunk_count=chunk_count,
+                    new_chunk_count=0,
+                )
 
-        old_doc_id_to_new_doc_id: dict[str, str] = dict()
-        if fields is not None and fields.document_id is not None:
-            old_doc_id_to_new_doc_id[doc_id] = fields.document_id
-        vespa_document_index.update(
-            [update_request], old_doc_id_to_new_doc_id=old_doc_id_to_new_doc_id
-        )
+                doc_chunk_ids = get_document_chunk_ids(
+                    enriched_document_info_list=[enriched_doc_infos],
+                    tenant_id=tenant_id,
+                    large_chunks_enabled=large_chunks_enabled,
+                )
+
+                doc_chunk_count += len(doc_chunk_ids)
+
+                for doc_chunk_id in doc_chunk_ids:
+                    self._update_single_chunk(
+                        doc_chunk_id,
+                        index_name,
+                        fields,
+                        user_fields,
+                        doc_id,
+                        httpx_client,
+                    )
+
+        return doc_chunk_count
 
     def delete_single(
         self,
