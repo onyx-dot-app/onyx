@@ -388,12 +388,16 @@ class CloudEmbedding:
 
             return all_embeddings
         finally:
-            # Close the synchronous client - no async/await needed
+            # Close both clients independently to ensure cleanup even if one fails
             try:
                 client.close()
+            except Exception as e:
+                logger.warning(f"Error closing Google GenAI client: {e}")
+
+            try:
                 sync_client.close()
             except Exception as e:
-                logger.warning(f"Error closing Google GenAI sync client: {e}")
+                logger.warning(f"Error closing httpx sync client: {e}")
 
     async def _embed_litellm_proxy(
         self, texts: list[str], model_name: str | None
