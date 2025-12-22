@@ -1,3 +1,5 @@
+"use client";
+
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { MCPServersResponse } from "@/lib/tools/interfaces";
 import useSWR from "swr";
