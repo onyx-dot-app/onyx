@@ -47,26 +47,37 @@ const IMAGE_GEN_TEST_URL = "/api/admin/image-generation/test";
 
 /**
  * Test API key for image generation provider
+ *
+ * Two modes:
+ * 1. Direct: provider + apiKey provided
+ * 2. From existing provider: sourceLlmProviderId provided (backend fetches API key)
  */
 export async function testImageGenerationApiKey(
-  provider: string,
-  apiKey: string,
   modelName: string,
-  apiBase?: string,
-  apiVersion?: string,
-  deploymentName?: string
+  options: {
+    // Option 1: Direct API key
+    provider?: string;
+    apiKey?: string;
+    // Option 2: Use existing provider
+    sourceLlmProviderId?: number;
+    // Additional fields
+    apiBase?: string;
+    apiVersion?: string;
+    deploymentName?: string;
+  }
 ): Promise<TestApiKeyResult> {
   try {
     const response = await fetch(IMAGE_GEN_TEST_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        provider,
-        api_key: apiKey,
         model_name: modelName,
-        api_base: apiBase || null,
-        api_version: apiVersion || null,
-        deployment_name: deploymentName || null,
+        provider: options.provider || null,
+        api_key: options.apiKey || null,
+        source_llm_provider_id: options.sourceLlmProviderId || null,
+        api_base: options.apiBase || null,
+        api_version: options.apiVersion || null,
+        deployment_name: options.deploymentName || null,
       }),
     });
 

@@ -1,17 +1,17 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import type { IconProps } from "@opal/types";
 import { cn, noProp } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import SelectButton from "@/refresh-components/buttons/SelectButton";
 import {
   SvgArrowExchange,
   SvgArrowRightCircle,
   SvgCheckSquare,
-  SvgX,
-  SvgEdit,
+  SvgSettings,
 } from "@opal/icons";
 
 export interface SelectProps {
@@ -39,29 +39,6 @@ export interface SelectProps {
   disabled?: boolean;
 }
 
-interface HoverButtonProps extends React.ComponentProps<typeof Button> {
-  isHovered: boolean;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
-  children: React.ReactNode;
-}
-
-function HoverButton({
-  isHovered,
-  onMouseEnter,
-  onMouseLeave,
-  children,
-  ...buttonProps
-}: HoverButtonProps) {
-  return (
-    <div onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
-      <Button {...buttonProps} rightIcon={isHovered ? SvgX : SvgCheckSquare}>
-        {children}
-      </Button>
-    </div>
-  );
-}
-
 export default function Select({
   icon: Icon,
   title,
@@ -77,13 +54,10 @@ export default function Select({
   className,
   disabled,
 }: SelectProps) {
-  const [isButtonHovered, setIsButtonHovered] = useState(false);
-
   const isSelected = status === "selected";
   const isConnected = status === "connected";
   const isDisconnected = status === "disconnected";
 
-  const showEditButton = (isConnected || isSelected) && onEdit;
   const isCardClickable = isDisconnected && onConnect && !disabled;
 
   const handleCardClick = () => {
@@ -92,41 +66,11 @@ export default function Select({
     }
   };
 
-  const getButtonConfig = () => {
-    if (isDisconnected) {
-      return {
-        label: connectLabel,
-        icon: SvgArrowExchange,
-        onClick: onConnect,
-        isHoverButton: false,
-      };
-    }
-
-    if (isConnected) {
-      return {
-        label: selectLabel,
-        icon: SvgArrowRightCircle,
-        onClick: onSelect,
-        isHoverButton: false,
-      };
-    }
-
-    // Selected state
-    return {
-      label: selectedLabel,
-      icon: SvgCheckSquare,
-      onClick: onDeselect,
-      isHoverButton: true,
-    };
-  };
-
-  const buttonConfig = getButtonConfig();
-
   return (
     <div
       onClick={isCardClickable ? handleCardClick : undefined}
       className={cn(
-        "flex items-start justify-between gap-3 rounded-16 border p-2",
+        "flex items-start justify-between gap-3 rounded-16 border p-4",
         "bg-background-neutral-01",
         isSelected
           ? "border-action-link-05 bg-action-link-01"
@@ -138,7 +82,7 @@ export default function Select({
       )}
     >
       {/* Left section - Icon, Title, Description */}
-      <div className="flex flex-1 items-start gap-1 px-2 py-1">
+      <div className="flex flex-1 items-start gap-1 py-1">
         <div className="flex size-5 items-center justify-center px-0.5 shrink-0">
           <Icon
             className={cn(
@@ -158,41 +102,67 @@ export default function Select({
       </div>
 
       {/* Right section - Actions */}
-      <div className="flex items-center justify-end gap-2">
-        {showEditButton && (
-          <IconButton
-            icon={SvgEdit}
-            tooltip="Edit"
-            internal
-            tertiary
-            onClick={noProp(onEdit)}
-            className="h-6 w-6 opacity-70 hover:opacity-100"
-            aria-label={`Edit ${title}`}
-          />
-        )}
-
-        {buttonConfig.isHoverButton ? (
-          <HoverButton
-            isHovered={isButtonHovered}
-            onMouseEnter={() => setIsButtonHovered(true)}
-            onMouseLeave={() => setIsButtonHovered(false)}
-            action
-            tertiary
-            disabled={disabled}
-            onClick={noProp(buttonConfig.onClick)}
-          >
-            {buttonConfig.label}
-          </HoverButton>
-        ) : (
+      <div className="flex items-center justify-end gap-1">
+        {/* Disconnected: Show Connect button */}
+        {isDisconnected && (
           <Button
             action={false}
             tertiary
-            disabled={disabled || !buttonConfig.onClick}
-            onClick={noProp(buttonConfig.onClick)}
-            rightIcon={buttonConfig.icon}
+            disabled={disabled || !onConnect}
+            onClick={noProp(onConnect)}
+            rightIcon={SvgArrowExchange}
           >
-            {buttonConfig.label}
+            {connectLabel}
           </Button>
+        )}
+
+        {/* Connected: Show select icon + settings icon */}
+        {isConnected && (
+          <>
+            <IconButton
+              icon={SvgArrowRightCircle}
+              tooltip={selectLabel}
+              internal
+              tertiary
+              disabled={disabled || !onSelect}
+              onClick={noProp(onSelect)}
+              aria-label={selectLabel}
+            />
+            {onEdit && (
+              <IconButton
+                icon={SvgSettings}
+                tooltip="Edit"
+                internal
+                tertiary
+                onClick={noProp(onEdit)}
+                aria-label={`Edit ${title}`}
+              />
+            )}
+          </>
+        )}
+
+        {/* Selected: Show "Current Default" label + settings icon */}
+        {isSelected && (
+          <>
+            <SelectButton
+              action
+              engaged
+              disabled={disabled}
+              leftIcon={SvgCheckSquare}
+            >
+              {selectedLabel}
+            </SelectButton>
+            {onEdit && (
+              <IconButton
+                icon={SvgSettings}
+                tooltip="Edit"
+                internal
+                tertiary
+                onClick={noProp(onEdit)}
+                aria-label={`Edit ${title}`}
+              />
+            )}
+          </>
         )}
       </div>
     </div>
