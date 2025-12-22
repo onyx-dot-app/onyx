@@ -24,6 +24,7 @@ from onyx.deep_research.dr_mock_tools import THINK_TOOL_RESPONSE_TOKEN_COUNT
 from onyx.deep_research.models import CombinedResearchAgentCallResult
 from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.deep_research.utils import check_special_tool_calls
+from onyx.deep_research.utils import create_think_tool_token_processor
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.models import ReasoningEffort
@@ -295,6 +296,12 @@ def run_research_agent_call(
             research_agent_tools = get_research_agent_additional_tool_definitions(
                 include_think_tool=not is_reasoning_model
             )
+            # Use think tool processor for non-reasoning models to convert
+            # think_tool calls to reasoning content (same as dr_loop.py)
+            custom_processor = (
+                create_think_tool_token_processor() if not is_reasoning_model else None
+            )
+
             llm_step_result, has_reasoned = run_llm_step(
                 emitter=emitter,
                 history=constructed_history,
@@ -312,6 +319,7 @@ def run_research_agent_call(
                 reasoning_effort=ReasoningEffort.LOW,
                 final_documents=None,
                 user_identity=user_identity,
+                custom_token_processor=custom_processor,
                 use_existing_tab_index=True,
             )
             if has_reasoned:

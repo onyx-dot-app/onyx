@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { FiUsers, FiCircle } from "react-icons/fi";
+import { FiUsers, FiCircle, FiTarget } from "react-icons/fi";
 import { SvgChevronDown } from "@opal/icons";
 import { cn } from "@/lib/utils";
 
@@ -136,8 +136,11 @@ export const ResearchAgentRenderer: MessageRenderer<
       .sort(([a], [b]) => a - b)
       .map(([subTurnIndex, toolPackets]) => {
         const name = getToolName(toolPackets);
+        // Check for completion: SECTION_END for regular tools, REASONING_DONE for reasoning/think tools
         const isComplete = toolPackets.some(
-          (p) => p.obj.type === PacketType.SECTION_END
+          (p) =>
+            p.obj.type === PacketType.SECTION_END ||
+            p.obj.type === PacketType.REASONING_DONE
         );
         return {
           sub_turn_index: subTurnIndex,
@@ -262,8 +265,8 @@ export const ResearchAgentRenderer: MessageRenderer<
     );
   };
 
-  // Total steps = nested tool groups count
-  const stepCount = nestedToolGroups.length;
+  // Total steps = research task (1) + nested tool groups count
+  const stepCount = 1 + nestedToolGroups.length;
 
   // Custom status element with toggle chevron
   const statusElement = (
@@ -295,6 +298,23 @@ export const ResearchAgentRenderer: MessageRenderer<
           isExpanded ? "max-h-[2000px] opacity-100 mt-2" : "max-h-0 opacity-0"
         )}
       >
+        {/* First item: Research Task */}
+        {researchTask && (
+          <div className="space-y-0.5 mb-1">
+            <NestedToolItemRow
+              icon={({ size }) => <FiTarget size={size} />}
+              content={
+                <div className="text-text-600 text-sm break-words whitespace-normal">
+                  {researchTask}
+                </div>
+              }
+              status="Research Task"
+              isLastItem={nestedToolGroups.length === 0 && !reportContent}
+              isLoading={false}
+            />
+          </div>
+        )}
+
         {/* Render nested tool calls */}
         {nestedToolGroups.length > 0 && (
           <div className="space-y-0.5">

@@ -575,8 +575,12 @@ export default function MultiToolRenderer({
         }
       } else if (item.type === DisplayType.REGULAR) {
         // Regular tools (including web search, openUrl, etc.): check for SECTION_END
+        // For tools with nested sub_turn_index packets (like research_agent), only check parent-level SECTION_END
         const hasSectionEnd = item.packets.some(
-          (p) => !p.placement.sub_turn_index
+          (p) =>
+            p.obj.type === PacketType.SECTION_END &&
+            (p.placement.sub_turn_index === undefined ||
+              p.placement.sub_turn_index === null)
         );
         if (hasSectionEnd && item.turn_index !== undefined) {
           handleToolComplete(item.turn_index, item.tab_index);
@@ -732,8 +736,12 @@ export default function MultiToolRenderer({
                       );
                       isItemComplete = searchState.isComplete;
                     } else {
+                      // Check for parent-level SECTION_END (not nested tool SECTION_END)
                       isItemComplete = item.packets.some(
-                        (p) => !p.placement.sub_turn_index
+                        (p) =>
+                          p.obj.type === PacketType.SECTION_END &&
+                          (p.placement.sub_turn_index === undefined ||
+                            p.placement.sub_turn_index === null)
                       );
                     }
                     const isLoading = !isItemComplete && !shouldStopShimmering;

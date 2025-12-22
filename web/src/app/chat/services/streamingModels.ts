@@ -160,6 +160,10 @@ export interface ReasoningDelta extends BaseObj {
   reasoning: string;
 }
 
+export interface ReasoningDone extends BaseObj {
+  type: "reasoning_done";
+}
+
 // Citation Packets
 export interface StreamingCitation {
   citation_num: number;
@@ -236,7 +240,11 @@ export type NewToolObj =
   | FetchToolObj
   | CustomToolObj;
 
-export type ReasoningObj = ReasoningStart | ReasoningDelta | SectionEnd;
+export type ReasoningObj =
+  | ReasoningStart
+  | ReasoningDelta
+  | ReasoningDone
+  | SectionEnd;
 
 export type CitationObj = CitationStart | CitationInfo | SectionEnd;
 
