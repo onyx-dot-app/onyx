@@ -485,11 +485,13 @@ def load_chat_file(
     if file_type.is_text_file():
         try:
             content_text = extract_file_text(
-                file=file_io, file_name=file_descriptor["name"] or ""
+                file=file_io,
+                file_name=file_descriptor["name"] or "",
+                break_on_unprocessable=False,
             )
-        except UnicodeDecodeError:
+        except Exception as e:
             logger.warning(
-                f"Failed to decode text content for file {file_descriptor['id']}"
+                f"Failed to retrieve content for file {file_descriptor['id']}: {str(e)}"
             )
 
     # Get token count from UserFile if available
