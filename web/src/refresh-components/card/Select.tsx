@@ -71,10 +71,11 @@ export default function Select({
       onClick={isCardClickable ? handleCardClick : undefined}
       className={cn(
         "flex items-start justify-between gap-3 rounded-16 border p-4",
-        "bg-background-neutral-01",
         isSelected
           ? "border-action-link-05 bg-action-link-01"
-          : "border-border-01",
+          : isConnected
+            ? "border-border-01 bg-background-tint-00"
+            : "border-border-01 bg-background-neutral-01",
         isCardClickable &&
           "cursor-pointer hover:bg-background-tint-01 transition-colors",
         disabled && "opacity-50 cursor-not-allowed",
