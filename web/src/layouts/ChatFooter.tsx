@@ -3,13 +3,18 @@
 import Text from "@/refresh-components/texts/Text";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import { ChatSession } from "@/app/chat/interfaces";
+import useChatSessions from "@/hooks/useChatSessions";
+import { useSettingsContext } from "@/components/settings/SettingsProvider";
 
 export interface ChatFooterProps {
   settings: CombinedSettings | null;
   chatSession: ChatSession | null;
 }
 
-export default function ChatFooter({ settings, chatSession }: ChatFooterProps) {
+export default function ChatFooter() {
+  const { currentChatSession } = useChatSessions();
+  const settings = useSettingsContext();
+
   const customFooterContent =
     settings?.enterpriseSettings?.custom_lower_disclaimer_content;
 
@@ -26,7 +31,7 @@ export default function ChatFooter({ settings, chatSession }: ChatFooterProps) {
 
   // On the landing page (no chat session), render an empty spacer
   // to balance the header and keep content centered
-  if (!chatSession) {
+  if (!currentChatSession) {
     return <div className="h-16" />;
   }
 

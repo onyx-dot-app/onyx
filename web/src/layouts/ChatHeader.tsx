@@ -34,13 +34,15 @@ import {
   SvgSidebar,
   SvgTrash,
 } from "@opal/icons";
+import { useSettingsContext } from "@/components/settings/SettingsProvider";
 
 export interface ChatHeaderProps {
   settings: CombinedSettings | null;
   chatSession: ChatSession | null;
 }
 
-export default function ChatHeader({ settings, chatSession }: ChatHeaderProps) {
+export default function ChatHeader() {
+  const settings = useSettingsContext();
   const { isMobile } = useScreenSize();
   const { setFolded } = useAppSidebarContext();
   const [showShareModal, setShowShareModal] = useState(false);
@@ -60,7 +62,8 @@ export default function ChatHeader({ settings, chatSession }: ChatHeaderProps) {
     refreshCurrentProjectDetails,
     currentProjectId,
   } = useProjectsContext();
-  const { refreshChatSessions, currentChatSessionId } = useChatSessions();
+  const { currentChatSession, refreshChatSessions, currentChatSessionId } =
+    useChatSessions();
   const { popup, setPopup } = usePopup();
   const router = useRouter();
 
@@ -89,11 +92,11 @@ export default function ChatHeader({ settings, chatSession }: ChatHeaderProps) {
 
   const performMove = useCallback(
     async (targetProjectId: number) => {
-      if (!chatSession) return;
+      if (!currentChatSession) return;
       try {
         await handleMoveOperation(
           {
-            chatSession,
+            chatSession: currentChatSession,
             targetProjectId,
             refreshChatSessions,
             refreshCurrentProjectDetails,
@@ -109,7 +112,7 @@ export default function ChatHeader({ settings, chatSession }: ChatHeaderProps) {
       }
     },
     [
-      chatSession,
+      currentChatSession,
       refreshChatSessions,
       refreshCurrentProjectDetails,
       fetchProjects,
@@ -121,21 +124,21 @@ export default function ChatHeader({ settings, chatSession }: ChatHeaderProps) {
 
   const handleMoveClick = useCallback(
     (projectId: number) => {
-      if (!chatSession) return;
-      if (shouldShowMoveModal(chatSession)) {
+      if (!currentChatSession) return;
+      if (shouldShowMoveModal(currentChatSession)) {
         setPendingMoveProjectId(projectId);
         setShowMoveCustomAgentModal(true);
         return;
       }
       void performMove(projectId);
     },
-    [chatSession, performMove]
+    [currentChatSession, performMove]
   );
 
   const handleDeleteChat = useCallback(async () => {
-    if (!chatSession) return;
+    if (!currentChatSession) return;
     try {
-      const response = await deleteChatSession(chatSession.id);
+      const response = await deleteChatSession(currentChatSession.id);
       if (!response.ok) {
         throw new Error("Failed to delete chat session");
       }
@@ -149,7 +152,13 @@ export default function ChatHeader({ settings, chatSession }: ChatHeaderProps) {
         "Failed to delete chat. Please try again."
       );
     }
-  }, [chatSession, refreshChatSessions, fetchProjects, router, setPopup]);
+  }, [
+    currentChatSession,
+    refreshChatSessions,
+    fetchProjects,
+    router,
+    setPopup,
+  ]);
 
   const setDeleteConfirmationModalOpen = useCallback((open: boolean) => {
     setDeleteModalOpen(open);
@@ -200,7 +209,7 @@ export default function ChatHeader({ settings, chatSession }: ChatHeaderProps) {
   }, [
     showMoveOptions,
     filteredProjects,
-    chatSession,
+    currentChatSession,
     setDeleteConfirmationModalOpen,
     handleMoveClick,
   ]);
@@ -209,9 +218,9 @@ export default function ChatHeader({ settings, chatSession }: ChatHeaderProps) {
     <>
       {popup}
 
-      {showShareModal && chatSession && (
+      {showShareModal && currentChatSession && (
         <ShareChatSessionModal
-          chatSession={chatSession}
+          chatSession={currentChatSession}
           onClose={() => setShowShareModal(false)}
         />
       )}
