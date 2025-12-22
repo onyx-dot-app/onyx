@@ -68,6 +68,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
     name: string;
     icon_name: string | null;
     uploaded_image_id: string | null;
+    remove_image: boolean | null;
   }>();
   const [uploadedImagePreview, setUploadedImagePreview] = useState<
     string | null
@@ -79,8 +80,12 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Clear selected icon when uploading an image
+    // Clear previous preview to free memory
+    setUploadedImagePreview(null);
+
+    // Clear selected icon and remove_image flag when uploading an image
     setFieldValue("icon_name", null);
+    setFieldValue("remove_image", false);
 
     // Show preview immediately
     const reader = new FileReader();
@@ -117,13 +122,18 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
     ? uploadedImagePreview
     : values.uploaded_image_id
       ? buildImgUrl(values.uploaded_image_id)
-      : existingAgent?.uploaded_image_id
-        ? buildImgUrl(existingAgent.uploaded_image_id)
-        : undefined;
+      : values.icon_name
+        ? undefined
+        : values.remove_image
+          ? undefined
+          : existingAgent?.uploaded_image_id
+            ? buildImgUrl(existingAgent.uploaded_image_id)
+            : undefined;
 
   function handleIconClick(iconName: string | null) {
     setFieldValue("icon_name", iconName);
     setFieldValue("uploaded_image_id", null);
+    setFieldValue("remove_image", true);
     setUploadedImagePreview(null);
     setPopoverOpen(false);
 
@@ -278,6 +288,7 @@ export default function AgentEditorPage({
     // General
     icon_name: existingAgent?.icon_name ?? "",
     uploaded_image_id: existingAgent?.uploaded_image_id ?? null,
+    remove_image: false,
     name: existingAgent?.name ?? "",
     description: existingAgent?.description ?? "",
 
@@ -313,6 +324,7 @@ export default function AgentEditorPage({
   const validationSchema = Yup.object().shape({
     // General
     icon_name: Yup.string().nullable(),
+    remove_image: Yup.boolean().optional(),
     uploaded_image_id: Yup.string().nullable(),
     name: Yup.string().required("Agent name is required."),
     description: Yup.string().required("Description is required."),
@@ -378,9 +390,11 @@ export default function AgentEditorPage({
         users: undefined, // TODO: Handle restricted access users
         groups: [], // TODO: Handle groups
         tool_ids: [], // Temporarily empty - will add back later
-        remove_image: false,
+        remove_image: values.remove_image ?? false,
         search_start_date: null,
         uploaded_image: null, // Already uploaded separately
+        uploaded_image_id: values.uploaded_image_id,
+        icon_name: values.icon_name,
         is_default_persona: false,
         label_ids: null,
       };

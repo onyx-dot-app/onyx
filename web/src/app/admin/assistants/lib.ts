@@ -51,6 +51,8 @@ export interface PersonaUpsertParameters {
   remove_image?: boolean;
   search_start_date: Date | null;
   uploaded_image: File | null;
+  uploaded_image_id: string | null;
+  icon_name: string | null;
   is_default_persona: boolean;
   label_ids: number[] | null;
   user_file_ids: string[];
@@ -130,7 +132,7 @@ export async function uploadFile(file: File): Promise<string | null> {
 export async function createPersona(
   personaUpsertParams: PersonaUpsertParameters
 ): Promise<Response | null> {
-  let fileId = null;
+  let fileId = personaUpsertParams.uploaded_image_id;
   if (personaUpsertParams.uploaded_image) {
     fileId = await uploadFile(personaUpsertParams.uploaded_image);
     if (!fileId) {
@@ -143,7 +145,11 @@ export async function createPersona(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(
-      buildPersonaUpsertRequest(personaUpsertParams, fileId, null)
+      buildPersonaUpsertRequest(
+        personaUpsertParams,
+        fileId,
+        personaUpsertParams.icon_name
+      )
     ),
     credentials: "include",
   });
@@ -155,7 +161,7 @@ export async function updatePersona(
   id: number,
   personaUpsertParams: PersonaUpsertParameters
 ): Promise<Response | null> {
-  let fileId = null;
+  let fileId = personaUpsertParams.uploaded_image_id;
   if (personaUpsertParams.uploaded_image) {
     fileId = await uploadFile(personaUpsertParams.uploaded_image);
     if (!fileId) {
@@ -169,7 +175,11 @@ export async function updatePersona(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(
-      buildPersonaUpsertRequest(personaUpsertParams, fileId, null)
+      buildPersonaUpsertRequest(
+        personaUpsertParams,
+        fileId,
+        personaUpsertParams.icon_name
+      )
     ),
     credentials: "include",
   });
