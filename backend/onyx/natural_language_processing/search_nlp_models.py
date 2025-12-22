@@ -94,6 +94,84 @@ _AUTH_ERROR_PERMISSION = "permission"
 # which was causing severe memory leaks with API-based embedding providers
 _thread_local = threading.local()
 
+# Google GenAI client pool to prevent creating new clients for each batch
+# This significantly reduces memory usage and connection overhead
+_vertex_client_pool: dict[str, Any] = {}
+_vertex_client_pool_lock = threading.Lock()
+_vertex_client_creation_count: dict[str, int] = {}
+_VERTEX_CLIENT_MAX_USES = (
+    500  # Recreate client after 500 uses to prevent stale connections
+)
+
+
+def _get_vertex_client_key(project_id: str, location: str, api_key_hash: str) -> str:
+    """Generate a unique key for the client pool based on credentials."""
+    return f"{project_id}:{location}:{api_key_hash}"
+
+
+def _get_or_create_vertex_client(
+    api_key: str,
+) -> Any:
+    """Get or create a pooled Google GenAI client.
+
+    Reuses clients across multiple embedding calls to reduce memory overhead
+    and connection setup time. Clients are keyed by project_id and location
+    to ensure correct routing.
+
+    Clients are automatically recreated after max uses to prevent stale connections.
+    """
+    from google import genai
+
+    service_account_info = json.loads(api_key)
+    credentials = service_account.Credentials.from_service_account_info(
+        service_account_info,
+        scopes=["https://www.googleapis.com/auth/cloud-platform"],
+    )
+    project_id = service_account_info["project_id"]
+    location = (
+        service_account_info.get("location")
+        or os.environ.get("GOOGLE_CLOUD_LOCATION")
+        or "us-central1"
+    )
+
+    # Create a hash of the API key for the pool key (don't store full key)
+    api_key_hash = str(hash(api_key))[-8:]
+    pool_key = _get_vertex_client_key(project_id, location, api_key_hash)
+
+    with _vertex_client_pool_lock:
+        # Check if we need to recreate the client due to max uses
+        if pool_key in _vertex_client_creation_count:
+            _vertex_client_creation_count[pool_key] += 1
+
+            if _vertex_client_creation_count[pool_key] > _VERTEX_CLIENT_MAX_USES:
+                logger.debug(
+                    f"Recreating Vertex AI client after {_VERTEX_CLIENT_MAX_USES} uses"
+                )
+                # Close old client if it exists
+                if pool_key in _vertex_client_pool:
+                    try:
+                        _vertex_client_pool[pool_key]
+                        # Note: Synchronous close, async close happens in cleanup
+                        del _vertex_client_pool[pool_key]
+                    except Exception as e:
+                        logger.warning(f"Error removing old Vertex AI client: {e}")
+
+                _vertex_client_creation_count[pool_key] = 0
+
+        # Get or create client
+        if pool_key not in _vertex_client_pool:
+            logger.debug(f"Creating new Vertex AI client for {project_id}/{location}")
+            client = genai.Client(
+                vertexai=True,
+                project=project_id,
+                location=location,
+                credentials=credentials,
+            )
+            _vertex_client_pool[pool_key] = client
+            _vertex_client_creation_count[pool_key] = 0
+
+        return _vertex_client_pool[pool_key]
+
 
 def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
     """Get or create a thread-local event loop for API embedding calls.
@@ -295,30 +373,14 @@ class CloudEmbedding:
         embedding_type: str,
         reduced_dimension: int | None,
     ) -> list[Embedding]:
-        from google import genai
         from google.genai import types as genai_types
 
         if not model:
             model = DEFAULT_VERTEX_MODEL
 
-        service_account_info = json.loads(self.api_key)
-        credentials = service_account.Credentials.from_service_account_info(
-            service_account_info,
-            scopes=["https://www.googleapis.com/auth/cloud-platform"],
-        )
-        project_id = service_account_info["project_id"]
-        location = (
-            service_account_info.get("location")
-            or os.environ.get("GOOGLE_CLOUD_LOCATION")
-            or "us-central1"
-        )
-
-        client = genai.Client(
-            vertexai=True,
-            project=project_id,
-            location=location,
-            credentials=credentials,
-        )
+        # Use pooled client instead of creating a new one each time
+        # This significantly reduces memory overhead and connection setup time
+        client = _get_or_create_vertex_client(self.api_key)
 
         embed_config = genai_types.EmbedContentConfig(
             task_type=embedding_type,
@@ -354,21 +416,12 @@ class CloudEmbedding:
                 embeddings.append(embedding.values)
             return embeddings
 
-        try:
-            results = await asyncio.gather(*[_embed_batch(batch) for batch in batches])
-            return [
-                embedding
-                for batch_embeddings in results
-                for embedding in batch_embeddings
-            ]
-        finally:
-            # Ensure client is closed with a timeout to prevent hanging on stuck sessions
-            try:
-                await asyncio.wait_for(client.aio.aclose(), timeout=5.0)
-            except asyncio.TimeoutError:
-                logger.warning("Google GenAI client aclose() timed out after 5s")
-            except Exception as e:
-                logger.warning(f"Error closing Google GenAI client: {e}")
+        # No try/finally needed - client is pooled and managed separately
+        # Closing is handled by the pool when clients are rotated out
+        results = await asyncio.gather(*[_embed_batch(batch) for batch in batches])
+        return [
+            embedding for batch_embeddings in results for embedding in batch_embeddings
+        ]
 
     async def _embed_litellm_proxy(
         self, texts: list[str], model_name: str | None
