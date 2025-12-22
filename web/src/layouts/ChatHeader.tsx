@@ -36,10 +36,7 @@ import {
 } from "@opal/icons";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 
-export interface ChatHeaderProps {
-  settings: CombinedSettings | null;
-  chatSession: ChatSession | null;
-}
+export default function ChatHeader() {
 
 export default function ChatHeader() {
   const settings = useSettingsContext();
