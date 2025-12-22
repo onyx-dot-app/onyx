@@ -101,16 +101,73 @@ def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
     This prevents creating a new event loop for every batch during embedding,
     which was causing memory leaks. Instead, each thread reuses the same loop.
 
+    Periodically recreates the loop to prevent task accumulation from retries
+    and API failures, which can cause gradual memory leaks.
+
     Returns:
         asyncio.AbstractEventLoop: The thread-local event loop
     """
+    should_recreate = False
+
+    # Check if we need to recreate the loop
     if (
-        not hasattr(_thread_local, "loop")
+        hasattr(_thread_local, "loop")
+        and _thread_local.loop
+        and not _thread_local.loop.is_closed()
+    ):
+        # Check for accumulated pending tasks (from retries/failures)
+        pending_tasks = [
+            task for task in asyncio.all_tasks(_thread_local.loop) if not task.done()
+        ]
+
+        # Recreate if too many tasks accumulated
+        if len(pending_tasks) > 5:
+            logger.warning(
+                f"Recreating event loop with {len(pending_tasks)} pending tasks "
+                "to prevent memory leak"
+            )
+            should_recreate = True
+
+        # Also recreate periodically based on usage count to prevent gradual accumulation
+        if not hasattr(_thread_local, "loop_task_count"):
+            _thread_local.loop_task_count = 0
+        _thread_local.loop_task_count += 1
+
+        # Recreate every 100 operations to prevent gradual accumulation
+        if _thread_local.loop_task_count > 100:
+            logger.debug("Recreating event loop after 100 operations")
+            should_recreate = True
+
+    # Recreate or create new loop
+    if (
+        should_recreate
+        or not hasattr(_thread_local, "loop")
         or _thread_local.loop is None
         or _thread_local.loop.is_closed()
     ):
+        # Close old loop if it exists
+        if (
+            hasattr(_thread_local, "loop")
+            and _thread_local.loop
+            and not _thread_local.loop.is_closed()
+        ):
+            try:
+                # Cancel any pending tasks before closing
+                pending = [
+                    task
+                    for task in asyncio.all_tasks(_thread_local.loop)
+                    if not task.done()
+                ]
+                for task in pending:
+                    task.cancel()
+                _thread_local.loop.close()
+            except Exception as e:
+                logger.warning(f"Error closing old event loop: {e}")
+
         _thread_local.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(_thread_local.loop)
+        _thread_local.loop_task_count = 0
+
     return _thread_local.loop
 
 
