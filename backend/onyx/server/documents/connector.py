@@ -1753,14 +1753,39 @@ def get_basic_connector_indexing_status(
         get_editable=False,
         user=user,
     )
-    return [
-        BasicCCPairInfo(
-            has_successful_run=cc_pair.last_successful_index_time is not None,
-            source=cc_pair.connector.source,
+
+    result = []
+    has_ingestion_api = False
+    ingestion_api_has_successful_run = False
+    has_file_source = False
+
+    for cc_pair in cc_pairs:
+        source = cc_pair.connector.source
+        if source == DocumentSource.INGESTION_API:
+            has_ingestion_api = True
+            if cc_pair.last_successful_index_time is not None:
+                ingestion_api_has_successful_run = True
+        else:
+            if source == DocumentSource.FILE:
+                has_file_source = True
+            result.append(
+                BasicCCPairInfo(
+                    has_successful_run=cc_pair.last_successful_index_time is not None,
+                    source=source,
+                )
+            )
+
+    # INGESTION_API documents are indexed as FILE (see ingestion.py),
+    # so include FILE in the list if INGESTION_API connectors exist
+    if has_ingestion_api and not has_file_source:
+        result.append(
+            BasicCCPairInfo(
+                has_successful_run=ingestion_api_has_successful_run,
+                source=DocumentSource.FILE,
+            )
         )
-        for cc_pair in cc_pairs
-        if cc_pair.connector.source != DocumentSource.INGESTION_API
-    ]
+
+    return result
 
 
 def trigger_indexing_for_cc_pair(

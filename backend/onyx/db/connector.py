@@ -246,13 +246,28 @@ def fetch_latest_index_attempts_by_status(
 
 
 def fetch_unique_document_sources(db_session: Session) -> list[DocumentSource]:
+    """Fetch unique document sources from configured connectors.
+
+    Note: INGESTION_API connectors are excluded from the returned list because
+    they are not user-facing sources. However, documents ingested via the
+    Ingestion API are indexed with source_type=FILE (see ingestion.py),
+    so we include FILE in the list if any INGESTION_API connectors exist.
+    """
     distinct_sources = db_session.query(Connector.source).distinct().all()
 
-    sources = [
-        source[0]
-        for source in distinct_sources
-        if source[0] != DocumentSource.INGESTION_API
-    ]
+    sources = []
+    has_ingestion_api = False
+
+    for source in distinct_sources:
+        if source[0] == DocumentSource.INGESTION_API:
+            has_ingestion_api = True
+        else:
+            sources.append(source[0])
+
+    # INGESTION_API documents are indexed as FILE (see ingestion.py),
+    # so include FILE in valid sources if INGESTION_API connectors exist
+    if has_ingestion_api and DocumentSource.FILE not in sources:
+        sources.append(DocumentSource.FILE)
 
     return sources
 
