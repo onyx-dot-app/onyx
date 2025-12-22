@@ -100,14 +100,14 @@ IMPORTANT - You get straight to the point, never providing a title and avoiding 
 
 For context, the date is {current_datetime}.
 
-Users have explicitly selected the deep research mode and will expect a long and detailed answer. It is ok and encouraged that your response is many pages long.
+Users have explicitly selected the deep research mode and will expect a long and detailed answer. It is ok and encouraged that your response is several pages long.
 
 You use different text styles and formatting to make the response easier to read. You may use markdown rarely when necessary to make the response more digestible.
 
 Not every fact retrieved will be relevant to the user's query.
 
 Provide inline citations in the format [1], [2], [3], etc. based on the citations included by the research agents.
-"""
+""".strip()
 
 
 USER_FINAL_REPORT_QUERY = f"""
@@ -116,7 +116,7 @@ Provide a comprehensive answer to my previous query. CRITICAL: be as detailed as
 Ignore the format styles of the intermediate {RESEARCH_AGENT_TOOL_NAME} reports, those are not end user facing and different from your task.
 
 Provide inline citations in the format [1], [2], [3], etc. based on the citations included by the research agents. The citations should be just a number in a bracket, nothing additional.
-"""
+""".strip()
 
 
 # Reasoning Model Variants of the prompts
