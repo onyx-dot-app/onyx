@@ -41,7 +41,7 @@ export const IMAGE_PROVIDER_GROUPS: ProviderGroup[] = [
     providers: [
       {
         id: "azure-dall-e-3",
-        provider_name: "azure_openai",
+        provider_name: "azure",
         icon: AzureIcon,
         title: "Azure OpenAI DALL·E 3",
         description:
