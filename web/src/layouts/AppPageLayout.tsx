@@ -26,7 +26,7 @@ export default function AppPageLayout({
     <div className="flex flex-col h-full w-full">
       <ChatHeader settings={settings} chatSession={chatSession} />
       <div className={cn("flex-1 overflow-auto", className)} {...rest} />
-      <ChatFooter settings={settings} />
+      <ChatFooter settings={settings} chatSession={chatSession} />
     </div>
   );
 }
