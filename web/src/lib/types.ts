@@ -527,6 +527,7 @@ export const validAutoSyncSources = [
   ValidSources.Salesforce,
   ValidSources.GitHub,
   ValidSources.Sharepoint,
+  ValidSources.Teams,
 ] as const;
 
 // Create a type from the array elements

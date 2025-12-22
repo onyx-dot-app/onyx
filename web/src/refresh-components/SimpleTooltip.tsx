@@ -40,11 +40,7 @@ export default function SimpleTooltip({
   const isDomElement =
     React.isValidElement(children) && typeof children.type === "string";
 
-  const triggerChild = isDomElement ? (
-    children
-  ) : (
-    <span className="inline-flex">{children}</span>
-  );
+  const triggerChild = isDomElement ? children : <span>{children}</span>;
 
   return (
     <TooltipProvider>

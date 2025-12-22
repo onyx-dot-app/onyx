@@ -20,4 +20,5 @@ export const autoSyncConfigBySource: Record<
   slack: {},
   salesforce: {},
   sharepoint: {},
+  teams: {},
 };
