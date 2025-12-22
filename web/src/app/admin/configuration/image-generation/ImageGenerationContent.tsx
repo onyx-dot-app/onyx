@@ -18,6 +18,7 @@ import {
   setDefaultImageGenerationConfig,
 } from "@/lib/configuration/imageConfigurationService";
 import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
+import Message from "@/refresh-components/messages/Message";
 
 export default function ImageGenerationContent() {
   const { popup, setPopup } = usePopup();
@@ -137,6 +138,16 @@ export default function ImageGenerationContent() {
             Select a model to generate images in chat.
           </Text>
         </div>
+
+        {connectedProviderIds.size === 0 && (
+          <Message
+            info
+            static
+            large
+            text="Connect an image generation model to use in chat."
+            className="w-full"
+          />
+        )}
 
         {/* Provider Groups */}
         {IMAGE_PROVIDER_GROUPS.map((group) => (
