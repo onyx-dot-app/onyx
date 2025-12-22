@@ -60,7 +60,7 @@ export default function ChatHeader({ settings, chatSession }: ChatHeaderProps) {
     refreshCurrentProjectDetails,
     currentProjectId,
   } = useProjectsContext();
-  const { refreshChatSessions, currentChatSessionId } = useChatSessions();
+  const { refreshChatSessions } = useChatSessions();
   const { popup, setPopup } = usePopup();
   const router = useRouter();
 
@@ -269,7 +269,7 @@ export default function ChatHeader({ settings, chatSession }: ChatHeaderProps) {
         <div
           className={cn(
             "flex-1 flex flex-row items-center justify-end px-1",
-            !currentChatSessionId && "invisible"
+            !chatSession && "invisible"
           )}
         >
           <Button
