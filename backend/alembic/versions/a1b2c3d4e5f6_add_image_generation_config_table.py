@@ -1,7 +1,7 @@
 """add image generation config table
 
-Revision ID: a1b2c3d4e5f6
-Revises: e8f0d2a38171
+Revision ID: 7206234e012a
+Revises: c1d2e3f4a5b6
 Create Date: 2025-12-21 00:00:00.000000
 
 """
@@ -11,8 +11,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = "a1b2c3d4e5f6"
-down_revision = "e8f0d2a38171"
+revision = "7206234e012a"
+down_revision = "c1d2e3f4a5b6"
 branch_labels = None
 depends_on = None
 
