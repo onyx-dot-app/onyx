@@ -366,7 +366,8 @@ export default function LLMConnectionFieldsBasic({
                 }}
                 options={modelOptions}
                 disabled={
-                  disabled || modelOptions.length === 0 || isFetchingModels
+                  (disabled || modelOptions.length === 0 || isFetchingModels) &&
+                  llmDescriptor?.name !== "azure"
                 }
                 rightSection={
                   canFetchModels ? (
