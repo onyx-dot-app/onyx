@@ -6,10 +6,7 @@ import { ChatSession } from "@/app/chat/interfaces";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 
-export interface ChatFooterProps {
-  settings: CombinedSettings | null;
-  chatSession: ChatSession | null;
-}
+export default function ChatFooter() {
 
 export default function ChatFooter() {
   const { currentChatSession } = useChatSessions();
