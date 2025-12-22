@@ -153,7 +153,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
       onSubmit({
         message,
         currentMessageFiles,
-        useAgentSearch: deepResearchEnabled,
+        deepResearch: deepResearchEnabled,
       });
     }
   }
@@ -406,7 +406,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
     onSubmit({
       message: lastUserMsg.message,
       currentMessageFiles: currentMessageFiles,
-      useAgentSearch: deepResearchEnabled,
+      deepResearch: deepResearchEnabled,
       messageIdToResend: lastUserMsg.messageId,
     });
   }, [
@@ -434,7 +434,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
       onSubmit({
         message,
         currentMessageFiles: currentMessageFiles,
-        useAgentSearch: deepResearchEnabled,
+        deepResearch: deepResearchEnabled,
       });
       setShowOnboarding(false);
     },

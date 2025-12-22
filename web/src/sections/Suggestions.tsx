@@ -23,7 +23,7 @@ export default function Suggestions({ onSubmit }: SuggestionsProps) {
     onSubmit({
       message: suggestion,
       currentMessageFiles: [],
-      useAgentSearch: false,
+      deepResearch: false,
     });
   };
 
