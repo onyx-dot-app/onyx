@@ -66,17 +66,15 @@ import OnboardingFlow from "@/refresh-components/onboarding/OnboardingFlow";
 import { useOnboardingState } from "@/refresh-components/onboarding/useOnboardingState";
 import { OnboardingStep } from "@/refresh-components/onboarding/types";
 import { AppPageLayout } from "@/layouts/app-pages";
-import { HeaderData } from "@/lib/headers/fetchHeaderDataSS";
 import { SvgFileText } from "@opal/icons";
 import Spacer from "@/refresh-components/Spacer";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 
 export interface ChatPageProps {
   firstMessage?: string;
-  headerData: HeaderData;
 }
 
-export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
+export default function ChatPage({ firstMessage }: ChatPageProps) {
   // Performance tracking
   // Keeping this here in case we need to track down slow renders in the future
   // const renderCount = useRef(0);
@@ -611,10 +609,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
 
       <FederatedOAuthModal />
 
-      <AppPageLayout
-        settings={headerData.settings}
-        chatSession={headerData.chatSession}
-      >
+      <AppPageLayout>
         <Dropzone
           onDrop={(acceptedFiles) =>
             handleMessageSpecificFileUpload(acceptedFiles)

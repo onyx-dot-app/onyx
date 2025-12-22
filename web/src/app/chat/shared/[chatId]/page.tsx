@@ -5,7 +5,6 @@ import { requireAuth } from "@/lib/auth/requireAuth";
 import SharedChatDisplay from "@/app/chat/shared/[chatId]/SharedChatDisplay";
 import { AppPageLayout } from "@/layouts/app-pages";
 import { Persona } from "@/app/admin/assistants/interfaces";
-import { fetchHeaderDataSS } from "@/lib/headers/fetchHeaderDataSS";
 
 // This is used for rendering a persona in the shared chat display
 export function constructMiniFiedPersona(name: string, id: number): Persona {
@@ -62,10 +61,8 @@ export default async function Page(props: PageProps) {
     chatSession?.persona_id ?? 0
   );
 
-  const headerData = await fetchHeaderDataSS();
-
   return (
-    <AppPageLayout {...headerData}>
+    <AppPageLayout>
       <SharedChatDisplay chatSession={chatSession} persona={persona} />
     </AppPageLayout>
   );

@@ -40,9 +40,7 @@
 
 "use client";
 
-import { ChatSession } from "@/app/chat/interfaces";
 import { cn, noProp } from "@/lib/utils";
-import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import { useCallback, useMemo, useState, useEffect } from "react";
@@ -74,13 +72,10 @@ import {
   SvgSidebar,
   SvgTrash,
 } from "@opal/icons";
+import { useSettingsContext } from "@/components/settings/SettingsProvider";
 
-interface ChatHeaderProps {
-  settings: CombinedSettings | null;
-  chatSession: ChatSession | null;
-}
-
-function ChatHeader({ settings, chatSession }: ChatHeaderProps) {
+function ChatHeader() {
+  const settings = useSettingsContext();
   const { isMobile } = useScreenSize();
   const { setFolded } = useAppSidebarContext();
   const [showShareModal, setShowShareModal] = useState(false);
@@ -100,7 +95,8 @@ function ChatHeader({ settings, chatSession }: ChatHeaderProps) {
     refreshCurrentProjectDetails,
     currentProjectId,
   } = useProjectsContext();
-  const { refreshChatSessions, currentChatSessionId } = useChatSessions();
+  const { currentChatSession, refreshChatSessions, currentChatSessionId } =
+    useChatSessions();
   const { popup, setPopup } = usePopup();
   const router = useRouter();
 
@@ -129,11 +125,11 @@ function ChatHeader({ settings, chatSession }: ChatHeaderProps) {
 
   const performMove = useCallback(
     async (targetProjectId: number) => {
-      if (!chatSession) return;
+      if (!currentChatSession) return;
       try {
         await handleMoveOperation(
           {
-            chatSession,
+            chatSession: currentChatSession,
             targetProjectId,
             refreshChatSessions,
             refreshCurrentProjectDetails,
@@ -149,7 +145,7 @@ function ChatHeader({ settings, chatSession }: ChatHeaderProps) {
       }
     },
     [
-      chatSession,
+      currentChatSession,
       refreshChatSessions,
       refreshCurrentProjectDetails,
       fetchProjects,
@@ -161,21 +157,21 @@ function ChatHeader({ settings, chatSession }: ChatHeaderProps) {
 
   const handleMoveClick = useCallback(
     (projectId: number) => {
-      if (!chatSession) return;
-      if (shouldShowMoveModal(chatSession)) {
+      if (!currentChatSession) return;
+      if (shouldShowMoveModal(currentChatSession)) {
         setPendingMoveProjectId(projectId);
         setShowMoveCustomAgentModal(true);
         return;
       }
       void performMove(projectId);
     },
-    [chatSession, performMove]
+    [currentChatSession, performMove]
   );
 
   const handleDeleteChat = useCallback(async () => {
-    if (!chatSession) return;
+    if (!currentChatSession) return;
     try {
-      const response = await deleteChatSession(chatSession.id);
+      const response = await deleteChatSession(currentChatSession.id);
       if (!response.ok) {
         throw new Error("Failed to delete chat session");
       }
@@ -189,7 +185,13 @@ function ChatHeader({ settings, chatSession }: ChatHeaderProps) {
         "Failed to delete chat. Please try again."
       );
     }
-  }, [chatSession, refreshChatSessions, fetchProjects, router, setPopup]);
+  }, [
+    currentChatSession,
+    refreshChatSessions,
+    fetchProjects,
+    router,
+    setPopup,
+  ]);
 
   const setDeleteConfirmationModalOpen = useCallback((open: boolean) => {
     setDeleteModalOpen(open);
@@ -199,48 +201,46 @@ function ChatHeader({ settings, chatSession }: ChatHeaderProps) {
   }, []);
 
   useEffect(() => {
-    if (!showMoveOptions) {
-      const items = [
-        <LineItem
-          key="move"
-          icon={SvgFolderIn}
-          onClick={noProp(() => setShowMoveOptions(true))}
-        >
-          Move to Project
-        </LineItem>,
-        <LineItem
-          key="delete"
-          icon={SvgTrash}
-          onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
-          danger
-        >
-          Delete
-        </LineItem>,
-      ];
-      setPopoverItems(items);
-    } else {
-      const items = [
-        <PopoverSearchInput
-          key="search"
-          setShowMoveOptions={setShowMoveOptions}
-          onSearch={setSearchTerm}
-        />,
-        ...filteredProjects.map((project) => (
+    const items = showMoveOptions
+      ? [
+          <PopoverSearchInput
+            key="search"
+            setShowMoveOptions={setShowMoveOptions}
+            onSearch={setSearchTerm}
+          />,
+          ...filteredProjects.map((project) => (
+            <LineItem
+              key={project.id}
+              icon={SvgFolderIn}
+              onClick={noProp(() => handleMoveClick(project.id))}
+            >
+              {project.name}
+            </LineItem>
+          )),
+        ]
+      : [
           <LineItem
-            key={project.id}
+            key="move"
             icon={SvgFolderIn}
-            onClick={noProp(() => handleMoveClick(project.id))}
+            onClick={noProp(() => setShowMoveOptions(true))}
           >
-            {project.name}
-          </LineItem>
-        )),
-      ];
-      setPopoverItems(items);
-    }
+            Move to Project
+          </LineItem>,
+          <LineItem
+            key="delete"
+            icon={SvgTrash}
+            onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
+            danger
+          >
+            Delete
+          </LineItem>,
+        ];
+
+    setPopoverItems(items);
   }, [
     showMoveOptions,
     filteredProjects,
-    chatSession,
+    currentChatSession,
     setDeleteConfirmationModalOpen,
     handleMoveClick,
   ]);
@@ -249,9 +249,9 @@ function ChatHeader({ settings, chatSession }: ChatHeaderProps) {
     <>
       {popup}
 
-      {showShareModal && chatSession && (
+      {showShareModal && currentChatSession && (
         <ShareChatSessionModal
-          chatSession={chatSession}
+          chatSession={currentChatSession}
           onClose={() => setShowShareModal(false)}
         />
       )}
@@ -289,88 +289,79 @@ function ChatHeader({ settings, chatSession }: ChatHeaderProps) {
         </ConfirmationModalLayout>
       )}
 
-      <header className="w-full flex flex-row justify-center items-center py-3 px-4 h-16">
-        {/* Left - contains the icon-button to fold the AppSidebar on mobile */}
-        <div className="flex-1">
-          <IconButton
-            icon={SvgSidebar}
-            onClick={() => setFolded(false)}
-            className={cn(!isMobile && "invisible")}
-            internal
-          />
-        </div>
+      {(isMobile || customHeaderContent || currentChatSessionId) && (
+        <header className="w-full flex flex-row justify-center items-center py-3 px-4 h-16">
+          {/* Left - contains the icon-button to fold the AppSidebar on mobile */}
+          <div className="flex-1">
+            <IconButton
+              icon={SvgSidebar}
+              onClick={() => setFolded(false)}
+              className={cn(!isMobile && "invisible")}
+              internal
+            />
+          </div>
 
-        {/* Center - contains the custom-header-content */}
-        <div className="flex-1 flex flex-col items-center">
-          <Text text03>{customHeaderContent}</Text>
-        </div>
+          {/* Center - contains the custom-header-content */}
+          <div className="flex-1 flex flex-col items-center">
+            <Text text03>{customHeaderContent}</Text>
+          </div>
 
-        {/* Right - contains the share and more-options buttons */}
-        <div
-          className={cn(
-            "flex-1 flex flex-row items-center justify-end px-1",
-            !currentChatSessionId && "invisible"
-          )}
-        >
-          <Button
-            leftIcon={SvgShare}
-            transient={showShareModal}
-            tertiary
-            onClick={() => setShowShareModal(true)}
+          {/* Right - contains the share and more-options buttons */}
+          <div
+            className={cn(
+              "flex-1 flex flex-row items-center justify-end px-1",
+              !currentChatSessionId && "invisible"
+            )}
           >
-            Share Chat
-          </Button>
-          <SimplePopover
-            trigger={
-              <IconButton
-                icon={SvgMoreHorizontal}
-                className="ml-2"
-                transient={popoverOpen}
-                tertiary
-              />
-            }
-            onOpenChange={(state) => {
-              setPopoverOpen(state);
-              if (!state) setShowMoveOptions(false);
-            }}
-            side="bottom"
-            align="end"
-          >
-            <PopoverMenu>{popoverItems}</PopoverMenu>
-          </SimplePopover>
-        </div>
-      </header>
+            <Button
+              leftIcon={SvgShare}
+              transient={showShareModal}
+              tertiary
+              onClick={() => setShowShareModal(true)}
+            >
+              Share Chat
+            </Button>
+            <SimplePopover
+              trigger={
+                <IconButton
+                  icon={SvgMoreHorizontal}
+                  className="ml-2"
+                  transient={popoverOpen}
+                  tertiary
+                />
+              }
+              onOpenChange={(state) => {
+                setPopoverOpen(state);
+                if (!state) setShowMoveOptions(false);
+              }}
+              side="bottom"
+              align="end"
+            >
+              <PopoverMenu>{popoverItems}</PopoverMenu>
+            </SimplePopover>
+          </div>
+        </header>
+      )}
     </>
   );
 }
 
-interface ChatFooterProps {
-  settings: CombinedSettings | null;
-  chatSession: ChatSession | null;
-}
+function ChatFooter() {
+  const settings = useSettingsContext();
 
-function ChatFooter({ settings, chatSession }: ChatFooterProps) {
   const customFooterContent =
     settings?.enterpriseSettings?.custom_lower_disclaimer_content;
 
   // When there's custom footer content, show it
-  if (customFooterContent) {
-    return (
-      <footer className="w-full flex flex-row justify-center items-center gap-2 py-3">
-        <Text text03 secondaryBody>
-          {customFooterContent}
-        </Text>
-      </footer>
-    );
-  }
+  if (!customFooterContent) return null;
 
-  // On the landing page (no chat session), render an empty spacer
-  // to balance the header and keep content centered
-  if (!chatSession) {
-    return <div className="h-16" />;
-  }
-
-  return null;
+  return (
+    <footer className="w-full flex flex-row justify-center items-center gap-2 py-3">
+      <Text text03 secondaryBody>
+        {customFooterContent}
+      </Text>
+    </footer>
+  );
 }
 
 /**
@@ -380,10 +371,8 @@ function ChatFooter({ settings, chatSession }: ChatFooterProps) {
  * @property chatSession - Current chat session for action buttons (share, move, delete)
  * @property className - Additional CSS classes for the content area
  */
-export interface AppPageLayoutProps
-  extends React.HtmlHTMLAttributes<HTMLDivElement> {
-  settings: CombinedSettings | null;
-  chatSession: ChatSession | null;
+export interface AppPageLayoutProps {
+  children?: React.ReactNode;
 }
 
 /**
@@ -434,17 +423,12 @@ export interface AppPageLayoutProps
  * // The footer will show custom disclaimer (if configured)
  * ```
  */
-export function AppPageLayout({
-  settings,
-  chatSession,
-  className,
-  ...rest
-}: AppPageLayoutProps) {
+export function AppPageLayout({ children }: AppPageLayoutProps) {
   return (
     <div className="flex flex-col h-full w-full">
-      <ChatHeader settings={settings} chatSession={chatSession} />
-      <div className={cn("flex-1 overflow-auto", className)} {...rest} />
-      <ChatFooter settings={settings} chatSession={chatSession} />
+      <ChatHeader />
+      <div className="flex-1 overflow-auto h-full w-full">{children}</div>
+      <ChatFooter />
     </div>
   );
 }
