@@ -33,6 +33,7 @@ import {
   SvgPlus,
   SvgUser,
 } from "@opal/icons";
+import useOnMount from "@/hooks/useOnMount";
 
 interface AgentsSectionProps {
   title: string;
@@ -85,10 +86,10 @@ export default function AgentsNavigationPage() {
   >(new Map());
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
+  useOnMount(() => {
     // Focus the search input when the page loads
     searchInputRef.current?.focus();
-  }, []);
+  });
 
   // Fetch all MCP servers used by agents
   useEffect(() => {

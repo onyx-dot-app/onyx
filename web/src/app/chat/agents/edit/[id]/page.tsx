@@ -20,7 +20,7 @@ export default function Page(props: PageProps) {
     return null;
   }
 
-  const { agent, isLoading, error } = useAgent(personaId);
+  const { agent, isLoading } = useAgent(personaId);
 
   // Redirect to home if agent not found after loading completes
   useEffect(() => {
@@ -30,9 +30,7 @@ export default function Page(props: PageProps) {
   }, [isLoading, agent, router]);
 
   // Show nothing while redirecting or loading
-  if (isLoading || !agent) {
-    return null;
-  }
+  if (isLoading || !agent) return null;
 
   return <AgentEditorPage agent={agent} />;
 }
