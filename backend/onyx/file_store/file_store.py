@@ -145,7 +145,7 @@ class FileStore(ABC):
         """
 
     @abstractmethod
-    def get_file_with_mime_type(self, filename: str) -> FileWithMimeType | None:
+    def get_file_with_mime_type(self, file_id: str) -> FileWithMimeType | None:
         """
         Get the file + parse out the mime type.
         """
