@@ -100,6 +100,7 @@ const ChatUI = React.memo(
       const endDivRef = useRef<HTMLDivElement>(null);
       const scrollDist = useRef<number>(0);
       const scrolledForSession = useRef<string | null>(null);
+      const prevMessageCount = useRef<number>(0);
       const [aboveHorizon, setAboveHorizon] = useState(false);
       const debounceNumber = 100;
 
@@ -181,32 +182,46 @@ const ChatUI = React.memo(
         enableAutoScroll: user?.preferences.auto_scroll,
       });
 
-      // Scroll to bottom once per chat session when messages are loaded
+      // Scroll to bottom on session load and when new messages are added
       useEffect(() => {
-        // Reset tracking when session changes
-        if (
+        const messageCount = messages.length;
+        const isNewSession =
           scrolledForSession.current !== null &&
-          scrolledForSession.current !== currentChatSessionId
-        ) {
+          scrolledForSession.current !== currentChatSessionId;
+        const isNewMessage = messageCount > prevMessageCount.current;
+
+        // Reset tracking when session changes
+        if (isNewSession) {
           scrolledForSession.current = null;
+          prevMessageCount.current = 0;
         }
 
-        if (scrolledForSession.current === currentChatSessionId) return;
-        if (messages.length === 0) return;
-        if (!scrollContainerRef.current) return;
+        // Determine if we should scroll
+        const shouldScrollForSession =
+          scrolledForSession.current !== currentChatSessionId &&
+          messageCount > 0;
+        const shouldScrollForNewMessage = isNewMessage && messageCount > 0;
 
-        // Use requestAnimationFrame to ensure DOM is ready after key-based remount
+        if (!shouldScrollForSession && !shouldScrollForNewMessage) {
+          prevMessageCount.current = messageCount;
+          return;
+        }
+
+        if (!scrollContainerRef.current) {
+          prevMessageCount.current = messageCount;
+          return;
+        }
+
+        // Use requestAnimationFrame to ensure DOM is ready
         const rafId = requestAnimationFrame(() => {
-          if (
-            scrollContainerRef.current &&
-            scrolledForSession.current !== currentChatSessionId
-          ) {
+          if (scrollContainerRef.current) {
             scrollContainerRef.current.scrollTop =
               scrollContainerRef.current.scrollHeight;
             scrolledForSession.current = currentChatSessionId;
           }
         });
 
+        prevMessageCount.current = messageCount;
         return () => cancelAnimationFrame(rafId);
       }, [messages.length, currentChatSessionId]);
 
