@@ -18,6 +18,7 @@ import { SourceChip } from "../components/input/ChatInputBar";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import { SvgMoreHorizontal, SvgPlus, SvgX } from "@opal/icons";
+
 export default function InputPrompts() {
   const [inputPrompts, setInputPrompts] = useState<InputPrompt[]>([]);
   const [editingPromptId, setEditingPromptId] = useState<number | null>(null);
@@ -150,7 +151,7 @@ export default function InputPrompts() {
   };
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="mx-auto max-w-4xl py-8">
       <div className="absolute top-4 left-4">
         <BackButton />
       </div>
