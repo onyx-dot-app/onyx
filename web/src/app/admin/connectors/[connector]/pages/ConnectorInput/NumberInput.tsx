@@ -44,8 +44,8 @@ export default function NumberInput({
         value={
           field.value === undefined || field.value === null ? "" : field.value
         }
-        className={`mt-2 block w-full px-3 py-2 
-                bg-[#fff] dark:bg-transparent border border-background-300 rounded-md 
+        className={`mt-2 block w-full px-3 py-2
+                bg-[#fff] dark:bg-transparent border border-background-300 rounded-md
                 text-sm shadow-sm placeholder-text-400
                 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500
                 disabled:bg-background-50 disabled:text-text-500 disabled:border-background-200 disabled:shadow-none

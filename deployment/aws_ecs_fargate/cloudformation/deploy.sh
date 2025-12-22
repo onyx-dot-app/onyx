@@ -70,10 +70,10 @@ validate_template() {
 create_parameters_from_json() {
   local template_file=$1
   local temp_params_file="${template_file%.yaml}_parameters.json"
-  
+
   # Convert the config file contents to CloudFormation parameter format
   echo "[" > "$temp_params_file"
-  
+
   # Process all key-value pairs from the config file
   local first=true
   remove_comments "$CONFIG_FILE" | jq -r 'to_entries[] | select(.value != null and .value != "") | "\(.key)|\(.value)"' | while IFS='|' read -r key value; do
@@ -84,14 +84,14 @@ create_parameters_from_json() {
     fi
     echo "    {\"ParameterKey\": \"$key\", \"ParameterValue\": \"$value\"}" >> "$temp_params_file"
   done
-  
+
   echo "]" >> "$temp_params_file"
-  
+
   # Debug output - display the created parameters file
   echo "Generated parameters file: $temp_params_file" >&2
   echo "Contents:" >&2
   cat "$temp_params_file" >&2
-  
+
   # Return just the filename
   echo "$temp_params_file"
 }
@@ -106,10 +106,10 @@ deploy_stack() {
     echo "Stack $stack_name already exists. Skipping deployment."
     return 0
   fi
-  
+
   # Create temporary parameters file for this template
   local temp_params_file=$(create_parameters_from_json "$template_file")
-  
+
   # Special handling for SubnetIDs parameter if needed
   if grep -q "SubnetIDs" "$template_file"; then
     echo "Template uses SubnetIDs parameter, ensuring it's properly formatted..."
@@ -121,7 +121,7 @@ deploy_stack() {
       echo "Warning: SubnetIDs not found in config but template requires it."
     fi
   fi
-  
+
   echo "Deploying stack: $stack_name with template: $template_file and generated config from: $CONFIG_FILE..."
   aws cloudformation deploy \
     --stack-name "$stack_name" \
@@ -135,10 +135,10 @@ deploy_stack() {
     echo "Error: Deployment failed for $stack_name. Exiting."
     exit 1
   fi
-  
+
   # Clean up temporary parameter file
   rm "$temp_params_file"
-  
+
   echo "Stack deployed successfully: $stack_name."
 }
 
@@ -172,7 +172,7 @@ deploy_infra_stacks() {
     done
 }
 
-deploy_services_stacks() { 
+deploy_services_stacks() {
     for template_name in "${SERVICE_ORDER[@]}"; do
       template_file="$SERVICE_DIR/$template_name"
       stack_name="$ENVIRONMENT-$(basename "$template_name" _template.yaml)"

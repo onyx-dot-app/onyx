@@ -99,11 +99,11 @@ export function CredentialForm<T extends Yup.AnyObject>({
                 type="submit"
                 color="green"
                 disabled={isSubmitting}
-                className="mx-auto w-64 inline-flex items-center 
-                justify-center whitespace-nowrap rounded-md text-sm 
+                className="mx-auto w-64 inline-flex items-center
+                justify-center whitespace-nowrap rounded-md text-sm
                 font-medium transition-colors  bg-background-200 text-primary-foreground
-                focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring 
-                disabled:pointer-events-none disabled:opacity-50 
+                focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring
+                disabled:pointer-events-none disabled:opacity-50
                 shadow hover:bg-primary/90 h-9 px-4 py-2"
               >
                 Update

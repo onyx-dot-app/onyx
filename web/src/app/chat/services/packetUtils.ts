@@ -84,7 +84,7 @@ export function groupPacketsByTurnIndex(
   packets: Packet[]
 ): { turn_index: number; tab_index: number; packets: Packet[] }[] {
   /*
-  Group packets by (turn_index, tab_index). 
+  Group packets by (turn_index, tab_index).
   Ordered from lowest turn_index to highest, then by tab_index within each turn.
   This supports parallel tool calls where multiple tools share the same turn_index
   but have different tab_index values.

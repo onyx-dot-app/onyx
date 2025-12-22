@@ -12,16 +12,16 @@ export function MetadataBadge({
   return (
     <div
       className={`
-      text-xs 
+      text-xs
       text-strong
       flex
-      bg-accent-background-hovered 
-      rounded-full 
+      bg-accent-background-hovered
+      rounded-full
       px-1
-      py-0.5 
-      w-fit 
-      my-auto 
-      select-none 
+      py-0.5
+      w-fit
+      my-auto
+      select-none
       ${flexNone ? "flex-none" : ""}`}
     >
       {icon &&

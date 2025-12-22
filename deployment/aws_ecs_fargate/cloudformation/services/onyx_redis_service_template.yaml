@@ -96,7 +96,7 @@ Resources:
           Fn::Sub: "${Environment}-onyx-cluster-OnyxNamespace"
       HealthCheckCustomConfig:
         FailureThreshold: 1
-  
+
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
@@ -116,8 +116,8 @@ Resources:
         CpuArchitecture: ARM64
         OperatingSystemFamily: LINUX
       ContainerDefinitions:
-        - Name: redis 
-          Image: redis:7.4-alpine 
+        - Name: redis
+          Image: redis:7.4-alpine
           Cpu: 0
           Essential: true
           Command:

@@ -36,7 +36,7 @@ Replace `gated_tenants_no_query_3mo_<your_datetime>.csv` with the CSV name from 
 This will update the data plane database to 1/ cancel all index attempts 2/ mark all connectors as up for deletion.
 We now need to wait for the deletion to run.
 
-It's done this way to re-use as much of the existing code + take advantage of existing infra for parallelized, long running jobs. These 
+It's done this way to re-use as much of the existing code + take advantage of existing infra for parallelized, long running jobs. These
 deletion jobs can take a LONG time (>6hrs), so having it performed syncronously by a script is not really tenable.
 
 
@@ -53,7 +53,7 @@ PEM_FILE_LOCATION=<PEM_FILE_LOCATION_WHICH_GIVES_ACCESS_TO_BASTION> \
 python scripts/tenant_cleanup/cleanup_tenants.py --csv gated_tenants_no_query_3mo_<your_datetime>.csv --force
 ```
 
-This will drop the tenant schema from the data plane DB, cleanup the `user_tenant_mapping` table, and 
+This will drop the tenant schema from the data plane DB, cleanup the `user_tenant_mapping` table, and
 clean up any control plane DB tables associated with each tenant.
 
 NOTE: if the previous step has not completed, tenants with documents will throw an exception.

@@ -32,7 +32,7 @@ export function Popover({
   requiresContentPadding?: boolean;
   triggerMaxWidth?: boolean;
 }) {
-  /* 
+  /*
   This Popover is needed when we want to put a popup / dropdown in a component
   with `overflow-hidden`. This is because the Radix Popover uses `absolute` positioning
   outside of the component's container.
@@ -50,7 +50,7 @@ export function Popover({
           e.stopPropagation();
         }}
       >
-        {/* NOTE: this weird `-mb-1.5` is needed to offset the Anchor, otherwise 
+        {/* NOTE: this weird `-mb-1.5` is needed to offset the Anchor, otherwise
           the content will shift up by 1.5px when the Popover is open. */}
         {open ? (
           <div className={requiresContentPadding ? "-mb-1.5" : ""}>
@@ -63,7 +63,7 @@ export function Popover({
       <RadixPopover.Portal>
         <RadixPopover.Content
           className={`
-            PopoverContent z-[100] 
+            PopoverContent z-[100]
             ${contentClassName}
             ${matchWidth ? " PopoverContentMatchWidth" : ""}
           `}

@@ -8,7 +8,7 @@ Parameters:
     Default: production
   VpcID:
     Type: String
-    Default: vpc-0f230ca52bb04c722 
+    Default: vpc-0f230ca52bb04c722
   SubnetIDs:
     Type: CommaDelimitedList
     Description: "Comma-delimited list of at least two subnet IDs in different Availability Zones"
@@ -18,7 +18,7 @@ Resources:
   OnyxEfs:
     Type: AWS::EFS::FileSystem
     Properties:
-      BackupPolicy: 
+      BackupPolicy:
         Status: ENABLED
       Encrypted: True
       PerformanceMode: generalPurpose
@@ -32,11 +32,11 @@ Resources:
   VespaEngineTmpEfsAccessPoint:
     Type: AWS::EFS::AccessPoint
     Properties:
-      AccessPointTags: 
+      AccessPointTags:
         - Key: Name
           Value: vespaengine-tmp
       FileSystemId: !Ref OnyxEfs
-      RootDirectory: 
+      RootDirectory:
         CreationInfo:
           OwnerGid: "1000"
           OwnerUid: "1000"
@@ -46,11 +46,11 @@ Resources:
   VespaEngineDataEfsAccessPoint:
     Type: AWS::EFS::AccessPoint
     Properties:
-      AccessPointTags: 
+      AccessPointTags:
         - Key: Name
           Value: vespaengine-data
       FileSystemId: !Ref OnyxEfs
-      RootDirectory: 
+      RootDirectory:
         CreationInfo:
           OwnerGid: "1000"
           OwnerUid: "1000"
@@ -60,11 +60,11 @@ Resources:
   PostgresDataEfsAccessPoint:
     Type: AWS::EFS::AccessPoint
     Properties:
-      AccessPointTags: 
+      AccessPointTags:
         - Key: Name
           Value: postgres-data
       FileSystemId: !Ref OnyxEfs
-      RootDirectory: 
+      RootDirectory:
         CreationInfo:
           OwnerGid: "1000"
           OwnerUid: "1000"

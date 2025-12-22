@@ -35,4 +35,3 @@ spec:
     {{- toYaml .Values.celery_worker_user_file_processing.autoscaling.customTriggers | nindent 4 }}
     {{- end }}
 {{- end }}
-

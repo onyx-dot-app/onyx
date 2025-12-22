@@ -158,4 +158,3 @@ When deploying the application, ensure that:
 4. Call `file_store.initialize()` during application startup to ensure the bucket exists
 
 The file store will automatically create the bucket if it doesn't exist and the credentials have sufficient permissions.
- 

@@ -29,10 +29,10 @@ trap cleanup SIGINT SIGTERM
 while true; do
     # Add timestamp
     echo -e "\n--- Docker Stats: $(date) ---" >> "$OUTPUT_FILE"
-    
+
     # Run docker stats for a single snapshot (--no-stream ensures it runs once)
     docker stats --no-stream --all >> "$OUTPUT_FILE"
-    
+
     # Wait for the next interval
     echo "Stats collected at $(date). Next collection in 10 minutes."
     sleep $INTERVAL_SECONDS

@@ -22,8 +22,8 @@ You can also run the CLI directly from the command line:
 ```bash
 onyx$ python -m dotenv -f .vscode/.env run -- python backend/onyx/evals/eval_cli.py --local-dataset-path backend/onyx/evals/data/eval.json --search-permissions-email richard@onyx.app
 ```
-make sure your AUTH_TYPE=disabled when running evals locally. Save the env var ONYX_EVAL_API_KEY in your .env file so you don't 
-have to specify it every time for triggering remote runs. 
+make sure your AUTH_TYPE=disabled when running evals locally. Save the env var ONYX_EVAL_API_KEY in your .env file so you don't
+have to specify it every time for triggering remote runs.
 
 
 ### Production Environment

@@ -47,7 +47,7 @@ Onyx comes loaded with advanced features like Agents, Web Search, RAG, MCP, Deep
 ## ⭐ Features
 - **🤖 Custom Agents:** Build AI Agents with unique instructions, knowledge and actions.
 - **🌍 Web Search:** Browse the web with Google PSE, Exa, and Serper as well as an in-house scraper or Firecrawl.
-- **🔍 RAG:** Best in class hybrid-search + knowledge graph for uploaded files and ingested documents from connectors. 
+- **🔍 RAG:** Best in class hybrid-search + knowledge graph for uploaded files and ingested documents from connectors.
 - **🔄 Connectors:** Pull knowledge, metadata, and access information from over 40 applications.
 - **🔬 Deep Research:** Get in depth answers with an agentic multi-step search.
 - **▶️ Actions & MCP:** Give AI Agents the ability to interact with external systems.
@@ -70,7 +70,7 @@ See guides below:
 - [Terraform](https://docs.onyx.app/deployment/local/terraform?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme) (best for teams already using Terraform)
 - Cloud specific guides (best if specifically using [AWS EKS](https://docs.onyx.app/deployment/cloud/aws/eks?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme), [Azure VMs](https://docs.onyx.app/deployment/cloud/azure?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme), etc.)
 
-> [!TIP]  
+> [!TIP]
 > **To try Onyx for free without deploying, check out [Onyx Cloud](https://cloud.onyx.app/signup?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)**.
 
 

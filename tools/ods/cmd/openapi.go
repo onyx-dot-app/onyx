@@ -200,4 +200,3 @@ func runOpenAPIAll(opts *OpenAPIOptions) {
 
 	log.Info("Generation completed successfully")
 }
-

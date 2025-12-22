@@ -98,13 +98,13 @@ export function AdminTextField({
         id={name}
         className={`
           ${small && "text-sm"}
-          border 
-          border-border 
-          rounded 
-          w-full 
+          border
+          border-border
+          rounded
+          w-full
           bg-input
-          py-2 
-          px-3 
+          py-2
+          px-3
           mt-1
           ${heightString}
           ${fontSize}

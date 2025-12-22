@@ -39,14 +39,14 @@ export function FilterDropdown({
         dropdown={
           <div
             className={`
-              border 
-              border-border 
-              rounded-lg 
+              border
+              border-border
+              rounded-lg
               ${backgroundColor || "bg-background"}
-              flex 
-              flex-col 
+              flex
+              flex-col
               ${dropdownWidth || width}
-              max-h-96 
+              max-h-96
               overflow-y-scroll
               overscroll-contain
               `}
@@ -75,7 +75,7 @@ export function FilterDropdown({
                         ind === options.length - 1
                           ? ""
                           : "border-b border-border"
-                      } 
+                      }
                     `}
                   onClick={(event) => {
                     handleSelect(option);
@@ -103,11 +103,11 @@ export function FilterDropdown({
             text-sm
             px-3
             py-1.5
-            rounded-lg 
-            border 
+            rounded-lg
+            border
             gap-x-2
             border-border
-            cursor-pointer 
+            cursor-pointer
             ${backgroundColor || "bg-background"}
             hover:bg-accent-background`}
         >

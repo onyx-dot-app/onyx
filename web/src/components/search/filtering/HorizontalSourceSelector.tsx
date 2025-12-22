@@ -97,8 +97,8 @@ export function HorizontalSourceSelector({
         <PopoverTrigger asChild>
           <button
             className="
-              flex items-center space-x-1 border 
-              border-border rounded-lg px-3 py-1.5 
+              flex items-center space-x-1 border
+              border-border rounded-lg px-3 py-1.5
               hover:bg-accent-background-hovered text-sm cursor-pointer
               bg-background-search-filter
             "

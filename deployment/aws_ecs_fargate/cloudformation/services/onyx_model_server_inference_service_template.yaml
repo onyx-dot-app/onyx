@@ -96,7 +96,7 @@ Resources:
           Fn::Sub: "${Environment}-onyx-cluster-OnyxNamespace"
       HealthCheckCustomConfig:
         FailureThreshold: 1
-  
+
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
@@ -155,7 +155,7 @@ Resources:
           EFSVolumeConfiguration:
             FilesystemId:
               Fn::ImportValue:
-                Fn::Sub: "${Environment}-onyx-efs-OnyxEfsId" 
+                Fn::Sub: "${Environment}-onyx-efs-OnyxEfsId"
             RootDirectory: "/"
 
   ECSAutoScalingTarget:

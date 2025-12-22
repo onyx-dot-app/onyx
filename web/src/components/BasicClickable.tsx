@@ -17,11 +17,11 @@ export function BasicClickable({
     <button
       onClick={onClick}
       className={`
-        border 
+        border
         border-border
         rounded
-        font-medium 
-        text-text-darker 
+        font-medium
+        text-text-darker
         text-sm
         relative
         px-1 py-1.5
@@ -53,11 +53,11 @@ export function EmphasizedClickable({
   return (
     <button
       className={`
-        inline-flex 
-        items-center 
-        justify-center 
-        flex-shrink-0 
-        font-medium 
+        inline-flex
+        items-center
+        justify-center
+        flex-shrink-0
+        font-medium
         ${
           size === "sm"
             ? `p-1`
@@ -65,9 +65,9 @@ export function EmphasizedClickable({
               ? `min-h-[38px]  py-1 px-3`
               : `min-h-[42px] py-2 px-4`
         }
-        w-fit 
+        w-fit
         bg-accent-background-hovered
-        border-1 border-border-medium border bg-background-100 
+        border-1 border-border-medium border bg-background-100
         text-sm
         rounded-lg
         hover:bg-background-125
@@ -102,7 +102,7 @@ export function BasicSelectable({
     <div
       className={`
         rounded
-        font-medium 
+        font-medium
         text-sm
         truncate
         px-2

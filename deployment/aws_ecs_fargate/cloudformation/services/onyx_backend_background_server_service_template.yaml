@@ -96,7 +96,7 @@ Resources:
           Fn::Sub: "${Environment}-onyx-cluster-OnyxNamespace"
       HealthCheckCustomConfig:
         FailureThreshold: 1
-  
+
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
@@ -141,27 +141,27 @@ Resources:
               awslogs-stream-prefix: ecs
           Environment:
             - Name: REDIS_HOST
-              Value: !Sub 
+              Value: !Sub
                 - "${Environment}-onyx-redis-service.${ImportedNamespace}"
                 - ImportedNamespace: !ImportValue
                     Fn::Sub: "${Environment}-onyx-cluster-OnyxNamespaceName"
             - Name: MODEL_SERVER_HOST
-              Value: !Sub 
+              Value: !Sub
                 - "${Environment}-onyx-model-server-inference-service.${ImportedNamespace}"
                 - ImportedNamespace: !ImportValue
                     Fn::Sub: "${Environment}-onyx-cluster-OnyxNamespaceName"
             - Name: VESPA_HOST
-              Value: !Sub 
+              Value: !Sub
                 - "${Environment}-onyx-vespaengine-service.${ImportedNamespace}"
                 - ImportedNamespace: !ImportValue
                     Fn::Sub: "${Environment}-onyx-cluster-OnyxNamespaceName"
             - Name: POSTGRES_HOST
-              Value: !Sub 
+              Value: !Sub
                 - "${Environment}-onyx-postgres-service.${ImportedNamespace}"
                 - ImportedNamespace: !ImportValue
                     Fn::Sub: "${Environment}-onyx-cluster-OnyxNamespaceName"
             - Name: INDEXING_MODEL_SERVER_HOST
-              Value: !Sub 
+              Value: !Sub
                 - "${Environment}-onyx-model-server-indexing-service.${ImportedNamespace}"
                 - ImportedNamespace: !ImportValue
                     Fn::Sub: "${Environment}-onyx-cluster-OnyxNamespaceName"

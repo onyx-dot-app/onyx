@@ -53,7 +53,7 @@ By default, some onyx containers run as root. If you'd like to explicitly run th
     ```
 
 ## Resourcing
-In the helm charts, we have resource suggestions for all Onyx-owned components. 
+In the helm charts, we have resource suggestions for all Onyx-owned components.
 These are simply initial suggestions, and may need to be tuned for your specific use case.
 
 Please talk to us in Slack if you have any questions!

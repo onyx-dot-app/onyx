@@ -87,7 +87,7 @@ if [ "$SHUTDOWN_MODE" = true ]; then
     echo ""
     echo -e "${BLUE}${BOLD}=== Shutting down Onyx ===${NC}"
     echo ""
-    
+
     if [ -d "${INSTALL_ROOT}/deployment" ]; then
         print_info "Stopping Onyx containers..."
 

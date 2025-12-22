@@ -274,11 +274,11 @@ export function HorizontalSourceSelector({
         <PopoverTrigger asChild>
           <div
             className={`
-              border 
+              border
               max-w-36
-              border-border 
-              rounded-lg 
-              max-h-96 
+              border-border
+              rounded-lg
+              max-h-96
               overflow-y-scroll
               overscroll-contain
               px-3

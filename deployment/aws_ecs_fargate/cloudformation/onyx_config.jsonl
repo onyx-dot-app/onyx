@@ -13,4 +13,4 @@
   "DomainName": "YOUR_DOMAIN e.g ecs.onyx.app",
   "ValidationMethod": "DNS",
   "HostedZoneId": ""  // Only specify if using Route 53 for DNS
-} 
+}

@@ -37,7 +37,7 @@ Built with [Tauri](https://tauri.app) for minimal bundle size (~10MB vs Electron
    ```bash
    # Using homebrew
    brew install node
-   
+
    # Or using nvm
    nvm install 18
    ```

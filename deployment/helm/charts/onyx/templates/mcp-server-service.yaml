@@ -21,4 +21,3 @@ spec:
     {{- toYaml .Values.mcpServer.deploymentLabels | nindent 4 }}
     {{- end }}
 {{- end }}
-

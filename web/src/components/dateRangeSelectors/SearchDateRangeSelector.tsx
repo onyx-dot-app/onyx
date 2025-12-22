@@ -33,15 +33,15 @@ export function SearchDateRangeSelector({
       >
         <div
           className={`
-            flex 
-            text-sm  
+            flex
+            text-sm
             px-3
             line-clamp-1
-            py-1.5 
-            rounded-lg 
-            border 
-            border-border 
-            cursor-pointer 
+            py-1.5
+            rounded-lg
+            border
+            border-border
+            cursor-pointer
             hover:bg-accent-background-hovered`}
         >
           <FiCalendar className="flex-none my-auto mr-2" />{" "}

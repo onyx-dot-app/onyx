@@ -26,4 +26,3 @@ services:
       - "${MCP_TEST_SERVER_PORT:-8004}:${MCP_TEST_SERVER_PORT:-8004}"
     volumes:
       - ../..:/workspace:ro
-

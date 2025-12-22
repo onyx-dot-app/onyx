@@ -18,4 +18,3 @@ services:
       - "${MCP_API_KEY_TEST_PORT:-8005}:${MCP_API_KEY_TEST_PORT:-8005}"
     volumes:
       - ../..:/workspace:ro
-

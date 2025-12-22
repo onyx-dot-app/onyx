@@ -47,8 +47,8 @@ Parameters:
     Description: "URL to the nginx run script on GitHub"
 
 Conditions:
-  CreateRoute53: !Not 
-    - !Equals 
+  CreateRoute53: !Not
+    - !Equals
       - !Ref HostedZoneId
       - ''
 
@@ -72,7 +72,7 @@ Resources:
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: "ENABLED"
-          SecurityGroups: 
+          SecurityGroups:
             - !Ref SecurityGroup
           Subnets: !Ref SubnetIDs
       PlatformVersion: "LATEST"
@@ -157,10 +157,10 @@ Resources:
             - sh
             - -c
             - !Sub |
-              curl -L ${GitHubConfigUrl} -o /etc/nginx/conf.d/app.conf.template && 
-              curl -L ${GitHubRunScriptUrl} -o /etc/nginx/conf.d/run-nginx.sh && 
-              chmod 644 /etc/nginx/conf.d/app.conf.template && 
-              chmod 755 /etc/nginx/conf.d/run-nginx.sh && 
+              curl -L ${GitHubConfigUrl} -o /etc/nginx/conf.d/app.conf.template &&
+              curl -L ${GitHubRunScriptUrl} -o /etc/nginx/conf.d/run-nginx.sh &&
+              chmod 644 /etc/nginx/conf.d/app.conf.template &&
+              chmod 755 /etc/nginx/conf.d/run-nginx.sh &&
               exit 0 || exit 1
           MountPoints:
             - SourceVolume: efs-volume
@@ -181,7 +181,7 @@ Resources:
           Fn::Sub: "${Environment}-onyx-cluster-ECSTaskRole"
       ExecutionRoleArn:
         Fn::ImportValue:
-          Fn::Sub: "${Environment}-onyx-cluster-ECSTaskExecutionRole" 
+          Fn::Sub: "${Environment}-onyx-cluster-ECSTaskExecutionRole"
       NetworkMode: awsvpc
       Volumes:
         - Name: efs-volume
@@ -195,7 +195,7 @@ Resources:
         - FARGATE
       Cpu: !Ref TaskCpu
       Memory: !Ref TaskMemory
-      EnableFaultInjection: false 
+      EnableFaultInjection: false
 
   SecurityGroup:
     Type: "AWS::EC2::SecurityGroup"
@@ -234,7 +234,7 @@ Resources:
       Type: application
       Scheme: internet-facing
       Subnets: !Ref SubnetIDs
-      SecurityGroups: 
+      SecurityGroups:
         - !Ref SecurityGroup
 
   LoadBalancerListener:

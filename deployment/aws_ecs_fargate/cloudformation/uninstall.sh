@@ -50,7 +50,7 @@ delete_stack() {
   	aws cloudformation delete-stack \
 		--stack-name "$stack_name" \
 		--region "$AWS_REGION"
-	
+
 	echo "Waiting for stack $stack_name to be deleted..."
 	aws cloudformation wait stack-delete-complete \
 		--stack-name "$stack_name" \
@@ -66,7 +66,7 @@ delete_stack() {
   else
 	echo "Stack $stack_name does not exist, skipping."
 	return 0
-  fi	
+  fi
 }
 
 for stack_name in "${STACK_NAMES[@]}"; do

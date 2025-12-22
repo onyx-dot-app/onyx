@@ -25,4 +25,3 @@ spec:
         - {{ .Values.ingress.api.host }}
       secretName: {{ include "onyx.fullname" . }}-ingress-mcp-tls
 {{- end }}
-

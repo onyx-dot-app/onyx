@@ -32,10 +32,10 @@ export function AssistantTools({
                   className={`
                     px-1.5
                     py-1
-                    rounded-lg 
+                    rounded-lg
                     border
-                    border-border 
-                    w-fit 
+                    border-border
+                    w-fit
                     flex
                     items-center
                     ${list ? "bg-background-125" : "bg-background-100"}`}
@@ -53,10 +53,10 @@ export function AssistantTools({
                   className={`
                     px-1.5
                     py-1
-                    rounded-lg 
+                    rounded-lg
                     border
-                    border-border 
-                    w-fit 
+                    border-border
+                    w-fit
                     flex
                     ${list ? "bg-background-125" : "bg-background-100"}`}
                 >
@@ -76,10 +76,10 @@ export function AssistantTools({
                   className={`
                   px-1.5
                   py-1
-                  rounded-lg 
+                  rounded-lg
                   border
-                  border-border 
-                  w-fit 
+                  border-border
+                  w-fit
                   flex
                   items-center
                   ${

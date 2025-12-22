@@ -38,15 +38,15 @@ limit: null
 llm:
   # Name of the LLM
   name: "default_test_llm"
-  
+
   # Provider of the LLM (e.g., OpenAI)
   provider: "openai"
-  
+
   # API key
   api_key: "PUT_API_KEY_HERE"
-  
+
   # Default model name to use
   default_model_name: "gpt-4o"
-  
+
   # List of model names to use for testing
   model_names: ["gpt-4o"]

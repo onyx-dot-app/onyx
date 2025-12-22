@@ -20,10 +20,10 @@ export function useToolDisplayTiming(
   isFinalAnswerComing: boolean,
   isComplete: boolean
 ) {
-  /* Adds a "minimum display time" for each tool and makes sure that we 
+  /* Adds a "minimum display time" for each tool and makes sure that we
   display tools one after another (e.g. only after the rendering of a tool is complete,
-  do we start showing the next tool). 
-  
+  do we start showing the next tool).
+
   For parallel tools (same turn_index, different tab_index), they are shown together. */
   const MINIMUM_DISPLAY_TIME_MS = 1500; // 1.5 seconds minimum display time
   const [visibleTools, setVisibleTools] = useState<Set<string>>(() =>

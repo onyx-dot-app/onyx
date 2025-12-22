@@ -43,11 +43,11 @@ export const ResponseSection = ({
     <div>
       <div
         className={`
-        flex 
-        my-1 
-        p-1 
-        rounded  
-        select-none 
+        flex
+        my-1
+        p-1
+        rounded
+        select-none
         ${isNotControllable ? "" : "hover:bg-background-800 cursor-pointer"}`}
         onClick={() => {
           if (!isNotControllable) {
