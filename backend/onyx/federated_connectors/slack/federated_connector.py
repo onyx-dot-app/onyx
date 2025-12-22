@@ -302,6 +302,54 @@ class SlackFederatedConnector(FederatedConnector):
             # Cast response.data to dict for type checking
             auth_data: dict[str, Any] = auth_response.data  # type: ignore
             team_id = auth_data.get("team_id")
+            is_enterprise_install = auth_data.get("is_enterprise_install", False)
+
+            # Handle Enterprise Grid org-level installs
+            # When is_enterprise_install=true, team_id contains the enterprise ID
+            # (starts with 'E') rather than a workspace ID (starts with 'T').
+            # We need to use auth.teams.list to get actual workspace IDs.
+            if is_enterprise_install and team_id and team_id.startswith("E"):
+                logger.info(
+                    f"Org-level enterprise install detected, "
+                    f"resolving workspace ID from enterprise ID: {team_id}"
+                )
+                try:
+                    teams_response = slack_client.auth_teams_list()
+                    teams_response.validate()
+                    teams_data: dict[str, Any] = teams_response.data  # type: ignore
+                    teams = teams_data.get("teams", [])
+                    if teams:
+                        # Use the first available workspace
+                        # TODO: Consider letting user choose which workspace to search
+                        first_team = teams[0]
+                        resolved_team_id = first_team.get("id")
+                        team_name = first_team.get("name") or "unknown"
+                        if resolved_team_id and resolved_team_id.startswith("T"):
+                            team_id = resolved_team_id
+                            logger.info(
+                                f"Using workspace: {team_name} (id={team_id})"
+                            )
+                        else:
+                            logger.warning(
+                                f"Resolved team_id '{resolved_team_id}' does not "
+                                f"start with 'T', cannot use for API calls"
+                            )
+                            team_id = None
+                        if len(teams) > 1:
+                            other_names = [
+                                t.get("name") or "unknown" for t in teams[1:]
+                            ]
+                            logger.info(f"Other available workspaces: {other_names}")
+                    else:
+                        logger.warning(
+                            "auth.teams.list returned no teams, "
+                            "cannot resolve workspace ID"
+                        )
+                        team_id = None
+                except Exception as teams_err:
+                    logger.warning(f"Could not fetch workspace list: {teams_err}")
+                    team_id = None
+
             logger.debug(f"Slack team_id: {team_id}")
         except Exception as e:
             logger.warning(f"Could not fetch team_id from Slack API: {e}")
