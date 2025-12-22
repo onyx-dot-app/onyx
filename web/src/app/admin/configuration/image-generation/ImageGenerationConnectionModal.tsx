@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import { Form, Formik } from "formik";
+import * as Yup from "yup";
 import ProviderModal from "@/components/modals/ProviderModal";
 import { ModalCreationInterface } from "@/refresh-components/contexts/ModalContext";
 import { FormikField } from "@/refresh-components/form/FormikField";
@@ -15,7 +16,10 @@ import {
 } from "@/app/admin/configuration/llm/interfaces";
 import { ImageProvider } from "./constants";
 import { MODAL_CONTENT_MAP } from "@/refresh-components/onboarding/constants";
-import { parseAzureTargetUri } from "@/lib/azureTargetUri";
+import {
+  parseAzureTargetUri,
+  isValidAzureTargetUri,
+} from "@/lib/azureTargetUri";
 import {
   testImageGenerationApiKey,
   createImageGenerationConfig,
@@ -38,6 +42,31 @@ interface Props {
 
 type APIStatus = "idle" | "loading" | "success" | "error";
 
+const getImageGenValidationSchema = (
+  llmDescriptor: WellKnownLLMProviderDescriptor | undefined
+) => {
+  const schema: Record<string, Yup.AnySchema> = {};
+  const isAzure = llmDescriptor?.name === "azure";
+
+  schema.api_key = Yup.string().required("API Key is required");
+
+  // Azure: target_uri contains api_base, api_version, deployment_name
+  if (
+    isAzure &&
+    (llmDescriptor?.api_base_required || llmDescriptor?.api_version_required)
+  ) {
+    schema.target_uri = Yup.string()
+      .required("Target URI is required")
+      .test(
+        "valid-target-uri",
+        "Target URI must be a valid URL with api-version and deployment name",
+        (value) => (value ? isValidAzureTargetUri(value) : false)
+      );
+  }
+
+  return Yup.object().shape(schema);
+};
+
 export default function ImageGenerationConnectionModal({
   modal,
   imageProvider,
@@ -57,10 +86,8 @@ export default function ImageGenerationConnectionModal({
     useState<ImageGenerationCredentials | null>(null);
   const [isLoadingCredentials, setIsLoadingCredentials] = useState(false);
 
-  // Determine if we're in edit mode
   const isEditMode = !!existingConfig;
 
-  // Use llmDescriptor.name to determine if this is Azure
   const isAzure = llmDescriptor?.name === "azure";
 
   // Fetch credentials when modal opens in edit mode
@@ -94,19 +121,16 @@ export default function ImageGenerationConnectionModal({
     }
   }, [apiStatus, isSubmitting, modal, onSuccess]);
 
-  // Get field metadata from MODAL_CONTENT_MAP using descriptor name
   const modalContent = llmDescriptor?.name
     ? MODAL_CONTENT_MAP[llmDescriptor.name]
     : undefined;
 
-  // Filter providers that match this image provider's provider_name
   const matchingProviders = useMemo(() => {
     return existingProviders.filter(
       (p) => p.provider === imageProvider.provider_name
     );
   }, [existingProviders, imageProvider.provider_name]);
 
-  // Build combobox options with provider names (API keys are masked by backend)
   const apiKeyOptions = useMemo(() => {
     return matchingProviders.map((provider) => ({
       value: `existing:${provider.id}:${provider.name}`,
@@ -145,7 +169,11 @@ export default function ImageGenerationConnectionModal({
   // Track initial API key for change detection
   const initialApiKey = fetchedCredentials?.api_key || "";
 
-  // Handle form submit - test API key and create/update config
+  const validationSchema = useMemo(
+    () => getImageGenValidationSchema(llmDescriptor),
+    [llmDescriptor]
+  );
+
   const handleSubmit = async (values: typeof initialValues) => {
     setIsSubmitting(true);
     setShowApiMessage(true);
@@ -169,17 +197,46 @@ export default function ImageGenerationConnectionModal({
         }
         const providerId = parseInt(providerIdStr, 10);
 
+        // Parse fields based on provider type (clone mode only uses API key from source)
+        let apiBase: string | undefined;
+        let apiVersion: string | undefined;
+        let deploymentName: string | undefined;
+
+        if (isAzure && values.target_uri) {
+          // Azure: parse from target URI
+          try {
+            const parsed = parseAzureTargetUri(values.target_uri);
+            apiBase = parsed.url.origin;
+            apiVersion = parsed.apiVersion;
+            deploymentName = parsed.deploymentName || undefined;
+          } catch {
+            setApiStatus("error");
+            setErrorMessage("Invalid Azure Target URI");
+            setIsSubmitting(false);
+            return;
+          }
+        } else {
+          apiBase = llmDescriptor?.default_api_base || undefined;
+        }
+        const modelName = isAzure ? deploymentName || "" : imageProvider.id;
+
         if (isEditMode && existingConfig) {
           // Update mode: Backend deletes old provider and creates new one
           await updateImageGenerationConfig(existingConfig.id, {
-            modelName: imageProvider.id,
+            modelName,
             sourceLlmProviderId: providerId,
+            apiBase,
+            apiVersion,
+            deploymentName,
           });
         } else {
           // Create mode: Backend creates new provider
           await createImageGenerationConfig({
-            modelName: imageProvider.id,
+            modelName,
             sourceLlmProviderId: providerId,
+            apiBase,
+            apiVersion,
+            deploymentName,
             isDefault: false,
           });
         }
@@ -187,7 +244,7 @@ export default function ImageGenerationConnectionModal({
         setApiStatus("success");
       } else {
         // User entered new API key - test it first
-        let apiBase = values.api_base;
+        let apiBase: string | undefined;
         let apiVersion: string | undefined;
         let deploymentName: string | undefined;
 
@@ -203,9 +260,10 @@ export default function ImageGenerationConnectionModal({
             setIsSubmitting(false);
             return;
           }
+        } else {
+          apiBase = llmDescriptor?.default_api_base || undefined;
         }
 
-        // Test API key
         const result = await testImageGenerationApiKey(
           imageProvider.provider_name,
           values.api_key,
@@ -222,12 +280,10 @@ export default function ImageGenerationConnectionModal({
           return;
         }
 
-        // API key valid - show success message
         setApiStatus("success");
         setErrorMessage("");
 
         if (isEditMode && existingConfig) {
-          // Update mode: Backend deletes old provider and creates new one
           await updateImageGenerationConfig(existingConfig.id, {
             modelName: imageProvider.id,
             provider: imageProvider.provider_name,
@@ -237,7 +293,6 @@ export default function ImageGenerationConnectionModal({
             deploymentName,
           });
         } else {
-          // Create mode: Backend creates new provider
           await createImageGenerationConfig({
             modelName: imageProvider.id,
             provider: imageProvider.provider_name,
@@ -250,7 +305,6 @@ export default function ImageGenerationConnectionModal({
         }
       }
 
-      // Reset isSubmitting so useEffect can close the modal
       setIsSubmitting(false);
     } catch (error) {
       const message =
@@ -274,6 +328,7 @@ export default function ImageGenerationConnectionModal({
     <Formik
       initialValues={initialValues}
       onSubmit={handleSubmit}
+      validationSchema={validationSchema}
       enableReinitialize
     >
       {(formikProps) => (
@@ -289,7 +344,9 @@ export default function ImageGenerationConnectionModal({
           icon={() => <imageProvider.icon className="size-5" />}
           onSubmit={formikProps.submitForm}
           submitDisabled={
-            (!isEditMode && !formikProps.dirty) || apiStatus === "loading"
+            !formikProps.isValid ||
+            (!isEditMode && !formikProps.dirty) ||
+            apiStatus === "loading"
           }
           isSubmitting={isSubmitting}
         >
@@ -339,7 +396,6 @@ export default function ImageGenerationConnectionModal({
                 />
               )}
 
-              {/* API Key field - render if descriptor requires it (or if no descriptor, always show) */}
               {(llmDescriptor?.api_key_required ?? true) && (
                 <FormikField<string>
                   name="api_key"
@@ -390,7 +446,6 @@ export default function ImageGenerationConnectionModal({
                           />
                         )}
                       </FormField.Control>
-                      {/* Show API message (loading/success/error) when testing */}
                       {showApiMessage ? (
                         <FormField.APIMessage
                           state={apiStatus}
