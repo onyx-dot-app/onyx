@@ -131,12 +131,14 @@ def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
         # Also recreate periodically based on usage count to prevent gradual accumulation
         if not hasattr(_thread_local, "loop_task_count"):
             _thread_local.loop_task_count = 0
-        _thread_local.loop_task_count += 1
 
         # Recreate every 100 operations to prevent gradual accumulation
-        if _thread_local.loop_task_count > 100:
+        if _thread_local.loop_task_count >= 100:
             logger.debug("Recreating event loop after 100 operations")
             should_recreate = True
+
+        if not should_recreate:
+            _thread_local.loop_task_count += 1
 
     # Recreate or create new loop
     if (
