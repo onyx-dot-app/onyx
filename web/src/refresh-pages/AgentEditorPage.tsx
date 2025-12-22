@@ -58,6 +58,14 @@ import {
   updatePersona,
   PersonaUpsertParameters,
 } from "@/app/admin/assistants/lib";
+import useMcpServers from "@/hooks/useMcpServers";
+import MCPActionCard from "@/sections/actions/MCPActionCard";
+import { getActionIcon } from "@/lib/tools/mcpUtils";
+import {
+  ActionStatus,
+  MCPServerStatus,
+  MCPServer,
+} from "@/lib/tools/interfaces";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
@@ -283,6 +291,23 @@ export default function AgentEditorPage({
     document_id: string;
     semantic_identifier: string;
   } | null>(null);
+
+  const { mcpData } = useMcpServers();
+
+  // Helper to determine action status from server status
+  const getActionStatusForServer = (server: MCPServer): ActionStatus => {
+    if (server.status === MCPServerStatus.CONNECTED) {
+      return ActionStatus.CONNECTED;
+    } else if (
+      server.status === MCPServerStatus.AWAITING_AUTH ||
+      server.status === MCPServerStatus.CREATED
+    ) {
+      return ActionStatus.PENDING;
+    } else if (server.status === MCPServerStatus.FETCHING_TOOLS) {
+      return ActionStatus.FETCHING;
+    }
+    return ActionStatus.DISCONNECTED;
+  };
 
   const initialValues = {
     // General
@@ -871,8 +896,34 @@ export default function AgentEditorPage({
 
                         <Separator noPadding className="py-1" />
 
-                        {/* MCP tools here */}
-                        <div className="h-[2rem] w-full" />
+                        {/* MCP tools */}
+                        {mcpData &&
+                          mcpData.mcp_servers &&
+                          mcpData.mcp_servers.length > 0 && (
+                            <div className="flex flex-col gap-2">
+                              {mcpData.mcp_servers.map((server) => {
+                                const status = getActionStatusForServer(server);
+                                return (
+                                  <MCPActionCard
+                                    key={server.id}
+                                    serverId={server.id}
+                                    server={server}
+                                    title={server.name}
+                                    description={
+                                      server.description || server.server_url
+                                    }
+                                    logo={getActionIcon(
+                                      server.server_url,
+                                      server.name
+                                    )}
+                                    status={status}
+                                    toolCount={server.tool_count}
+                                    initialExpanded={false}
+                                  />
+                                );
+                              })}
+                            </div>
+                          )}
                       </Section>
                     </SimpleCollapsible>
 
