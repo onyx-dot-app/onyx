@@ -26,13 +26,22 @@ from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 logger = setup_logger()
 
 QUERIES_FIELD = "queries"
+URLS_FIELD = "urls"
+
+# Mapping of tool name to the field that should be merged when multiple calls exist
+MERGEABLE_TOOL_FIELDS: dict[str, str] = {
+    SearchTool.NAME: QUERIES_FIELD,
+    WebSearchTool.NAME: QUERIES_FIELD,
+    OpenURLTool.NAME: URLS_FIELD,
+}
 
 
 def _merge_tool_calls(tool_calls: list[ToolCallKickoff]) -> list[ToolCallKickoff]:
-    """Merge multiple tool calls for SearchTool or WebSearchTool into a single call.
+    """Merge multiple tool calls for SearchTool, WebSearchTool, or OpenURLTool into a single call.
 
     For SearchTool (internal_search) and WebSearchTool (web_search), if there are
     multiple calls, their queries are merged into a single tool call.
+    For OpenURLTool (open_url), multiple calls have their urls merged.
     Other tool calls are left unchanged.
 
     Args:
@@ -41,9 +50,6 @@ def _merge_tool_calls(tool_calls: list[ToolCallKickoff]) -> list[ToolCallKickoff
     Returns:
         List of merged tool calls
     """
-    # Tool names that support query merging
-    MERGEABLE_TOOLS = {SearchTool.NAME, WebSearchTool.NAME}
-
     # Group tool calls by tool name
     tool_calls_by_name: dict[str, list[ToolCallKickoff]] = defaultdict(list)
     merged_calls: list[ToolCallKickoff] = []
@@ -53,20 +59,22 @@ def _merge_tool_calls(tool_calls: list[ToolCallKickoff]) -> list[ToolCallKickoff
 
     # Process each tool name group
     for tool_name, calls in tool_calls_by_name.items():
-        if tool_name in MERGEABLE_TOOLS and len(calls) > 1:
-            # Merge queries from all calls
-            all_queries: list[str] = []
-            for call in calls:
-                queries = call.tool_args.get(QUERIES_FIELD, [])
-                if isinstance(queries, list):
-                    all_queries.extend(queries)
-                elif queries:
-                    # Handle case where it might be a single string
-                    all_queries.append(str(queries))
+        if tool_name in MERGEABLE_TOOL_FIELDS and len(calls) > 1:
+            merge_field = MERGEABLE_TOOL_FIELDS[tool_name]
 
-            # Create a merged tool call using the first call's ID and merging queries
+            # Merge field values from all calls
+            all_values: list[str] = []
+            for call in calls:
+                values = call.tool_args.get(merge_field, [])
+                if isinstance(values, list):
+                    all_values.extend(values)
+                elif values:
+                    # Handle case where it might be a single string
+                    all_values.append(str(values))
+
+            # Create a merged tool call using the first call's ID and merging the field
             merged_args = calls[0].tool_args.copy()
-            merged_args[QUERIES_FIELD] = all_queries
+            merged_args[merge_field] = all_values
 
             merged_call = ToolCallKickoff(
                 tool_call_id=calls[0].tool_call_id,  # Use first call's ID
@@ -145,7 +153,7 @@ def run_tool_calls(
 ) -> tuple[list[ToolResponse], dict[int, str]]:
     """Run multiple tool calls in parallel and update citation mappings.
 
-    Merges tool calls for SearchTool and WebSearchTool before execution.
+    Merges tool calls for SearchTool, WebSearchTool, and OpenURLTool before execution.
     All tools are executed in parallel, and citation mappings are updated
     from search tool responses.
 

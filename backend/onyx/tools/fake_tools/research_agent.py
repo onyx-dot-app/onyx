@@ -312,12 +312,24 @@ def run_research_agent_call(
                 reasoning_effort=ReasoningEffort.LOW,
                 final_documents=None,
                 user_identity=user_identity,
+                use_existing_tab_index=True,
             )
             if has_reasoned:
                 reasoning_cycles += 1
 
             tool_responses: list[ToolResponse] = []
             tool_calls = llm_step_result.tool_calls or []
+
+            # TODO handle the restriction of only 1 tool call type per turn
+            # This is a problem right now because of the Placement system not allowing for
+            # differentiating sub-tool calls.
+            # Filter tool calls to only include the first tool type used
+            # This prevents mixing different tool types in the same batch
+            if tool_calls:
+                first_tool_type = tool_calls[0].tool_name
+                tool_calls = [
+                    tc for tc in tool_calls if tc.tool_name == first_tool_type
+                ]
 
             just_ran_web_search = False
 
