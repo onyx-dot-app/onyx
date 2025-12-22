@@ -161,6 +161,18 @@ class DocumentManager:
         )
 
     @staticmethod
+    def delete(
+        document_id: str,
+        api_key: DATestAPIKey | None = None,
+    ) -> None:
+        response = requests.delete(
+            f"{API_SERVER_URL}/onyx-api/ingestion/{document_id}",
+            headers=api_key.headers if api_key else GENERAL_HEADERS,
+        )
+        response.raise_for_status()
+        print(f"Deleted document {document_id} successfully.")
+
+    @staticmethod
     def verify(
         vespa_client: vespa_fixture,
         cc_pair: DATestCCPair,
