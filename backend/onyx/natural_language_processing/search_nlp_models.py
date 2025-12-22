@@ -94,12 +94,35 @@ _AUTH_ERROR_PERMISSION = "permission"
 # which was causing severe memory leaks with API-based embedding providers
 _thread_local = threading.local()
 
+# Semaphore to limit concurrent embedding operations per thread
+# This prevents overwhelming the API with too many concurrent requests
+_embedding_semaphore: threading.Semaphore | None = None
+
+
+def _get_embedding_semaphore() -> threading.Semaphore:
+    """Get or create a semaphore to limit concurrent embedding operations.
+
+    This helps prevent retry storms by limiting how many concurrent
+    embedding operations can run at once.
+
+    Returns:
+        threading.Semaphore: Semaphore limiting concurrent operations
+    """
+    global _embedding_semaphore
+    if _embedding_semaphore is None:
+        # Limit to 3 concurrent operations per thread to prevent overwhelming APIs
+        max_concurrent = int(os.environ.get("EMBEDDING_MAX_CONCURRENT_PER_THREAD", "3"))
+        _embedding_semaphore = threading.Semaphore(max_concurrent)
+    return _embedding_semaphore
+
 
 def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
     """Get or create a thread-local event loop for API embedding calls.
 
     This prevents creating a new event loop for every batch during embedding,
     which was causing memory leaks. Instead, each thread reuses the same loop.
+
+    Also ensures proper cleanup of pending tasks to prevent memory accumulation.
 
     Returns:
         asyncio.AbstractEventLoop: The thread-local event loop
@@ -111,6 +134,19 @@ def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
     ):
         _thread_local.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(_thread_local.loop)
+    else:
+        # Clean up any pending tasks that might have accumulated
+        # This helps prevent memory leaks from failed retries
+        pending_tasks = [
+            task for task in asyncio.all_tasks(_thread_local.loop) if not task.done()
+        ]
+        if pending_tasks:
+            logger.debug(
+                f"Cleaning up {len(pending_tasks)} pending tasks in event loop"
+            )
+            for task in pending_tasks:
+                if not task.done():
+                    task.cancel()
     return _thread_local.loop
 
 
@@ -395,7 +431,6 @@ class CloudEmbedding:
         result = response.json()
         return [embedding["embedding"] for embedding in result["data"]]
 
-    @retry(tries=_RETRY_TRIES, delay=_RETRY_DELAY)
     async def embed(
         self,
         *,
@@ -405,60 +440,102 @@ class CloudEmbedding:
         deployment_name: str | None = None,
         reduced_dimension: int | None = None,
     ) -> list[Embedding]:
+        """Embed texts with retry logic.
+
+        Note: For Google provider, we don't use the @retry decorator because
+        the Google GenAI client already has its own retry logic. Adding another
+        retry layer causes double retries and retry storms.
+        """
         import openai
 
-        try:
-            if self.provider == EmbeddingProvider.OPENAI:
-                return await self._embed_openai(texts, model_name, reduced_dimension)
-            elif self.provider == EmbeddingProvider.AZURE:
-                return await self._embed_azure(texts, f"azure/{deployment_name}")
-            elif self.provider == EmbeddingProvider.LITELLM:
-                return await self._embed_litellm_proxy(texts, model_name)
-
-            embedding_type = EmbeddingModelTextType.get_type(self.provider, text_type)
-            if self.provider == EmbeddingProvider.COHERE:
-                return await self._embed_cohere(texts, model_name, embedding_type)
-            elif self.provider == EmbeddingProvider.VOYAGE:
-                return await self._embed_voyage(texts, model_name, embedding_type)
-            elif self.provider == EmbeddingProvider.GOOGLE:
+        # For Google provider, don't use retry decorator - the client handles retries internally
+        # For other providers, use retry with exponential backoff
+        if self.provider == EmbeddingProvider.GOOGLE:
+            # Google GenAI client has built-in retry logic, so we call directly
+            # to avoid double retries that cause retry storms
+            try:
+                embedding_type = EmbeddingModelTextType.get_type(
+                    self.provider, text_type
+                )
                 return await self._embed_vertex(
                     texts, model_name, embedding_type, reduced_dimension
                 )
-            else:
-                raise ValueError(f"Unsupported provider: {self.provider}")
-        except openai.AuthenticationError:
-            raise AuthenticationError(provider="OpenAI")
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 401:
-                raise AuthenticationError(provider=str(self.provider))
+            except Exception as e:
+                # Check for authentication errors - these shouldn't be retried
+                if is_authentication_error(e):
+                    raise AuthenticationError(provider=str(self.provider)) from e
+                # For connection errors, let the Google client handle retries
+                # but log for monitoring
+                error_str = str(e).lower()
+                if "server disconnected" in error_str or "connection" in error_str:
+                    logger.warning(
+                        f"Google API connection error (client will retry): {str(e)[:200]}"
+                    )
+                raise
+        else:
+            # For other providers, use retry decorator with exponential backoff
+            @retry(tries=_RETRY_TRIES, delay=_RETRY_DELAY, backoff=2, max_delay=60)
+            async def _embed_with_retry() -> list[Embedding]:
+                try:
+                    if self.provider == EmbeddingProvider.OPENAI:
+                        return await self._embed_openai(
+                            texts, model_name, reduced_dimension
+                        )
+                    elif self.provider == EmbeddingProvider.AZURE:
+                        return await self._embed_azure(
+                            texts, f"azure/{deployment_name}"
+                        )
+                    elif self.provider == EmbeddingProvider.LITELLM:
+                        return await self._embed_litellm_proxy(texts, model_name)
 
-            error_string = format_embedding_error(
-                e,
-                str(self.provider),
-                model_name or deployment_name,
-                self.provider,
-                sanitized_api_key=self.sanitized_api_key,
-                status_code=e.response.status_code,
-            )
-            logger.error(error_string)
-            logger.debug(f"Exception texts: {texts}")
+                    embedding_type = EmbeddingModelTextType.get_type(
+                        self.provider, text_type
+                    )
+                    if self.provider == EmbeddingProvider.COHERE:
+                        return await self._embed_cohere(
+                            texts, model_name, embedding_type
+                        )
+                    elif self.provider == EmbeddingProvider.VOYAGE:
+                        return await self._embed_voyage(
+                            texts, model_name, embedding_type
+                        )
+                    else:
+                        raise ValueError(f"Unsupported provider: {self.provider}")
+                except openai.AuthenticationError:
+                    raise AuthenticationError(provider="OpenAI")
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 401:
+                        raise AuthenticationError(provider=str(self.provider))
 
-            raise RuntimeError(error_string)
-        except Exception as e:
-            if is_authentication_error(e):
-                raise AuthenticationError(provider=str(self.provider))
+                    error_string = format_embedding_error(
+                        e,
+                        str(self.provider),
+                        model_name or deployment_name,
+                        self.provider,
+                        sanitized_api_key=self.sanitized_api_key,
+                        status_code=e.response.status_code,
+                    )
+                    logger.error(error_string)
+                    logger.debug(f"Exception texts: {texts}")
 
-            error_string = format_embedding_error(
-                e,
-                str(self.provider),
-                model_name or deployment_name,
-                self.provider,
-                sanitized_api_key=self.sanitized_api_key,
-            )
-            logger.error(error_string)
-            logger.debug(f"Exception texts: {texts}")
+                    raise RuntimeError(error_string)
+                except Exception as e:
+                    if is_authentication_error(e):
+                        raise AuthenticationError(provider=str(self.provider))
 
-            raise RuntimeError(error_string)
+                    error_string = format_embedding_error(
+                        e,
+                        str(self.provider),
+                        model_name or deployment_name,
+                        self.provider,
+                        sanitized_api_key=self.sanitized_api_key,
+                    )
+                    logger.error(error_string)
+                    logger.debug(f"Exception texts: {texts}")
+
+                    raise RuntimeError(error_string)
+
+            return await _embed_with_retry()
 
     @staticmethod
     def create(
@@ -806,14 +883,34 @@ class EmbeddingModel:
             # Route between direct API calls and model server calls
             if self.provider_type is not None:
                 # For API providers, make direct API call
-                # Use thread-local event loop to prevent memory leaks from creating
-                # thousands of event loops during batch processing
-                loop = _get_or_create_event_loop()
-                response = loop.run_until_complete(
-                    self._make_direct_api_call(
-                        embed_request, tenant_id=tenant_id, request_id=request_id
-                    )
-                )
+                # Use semaphore to limit concurrent operations and prevent retry storms
+                semaphore = _get_embedding_semaphore()
+                with semaphore:
+                    # Use thread-local event loop to prevent memory leaks from creating
+                    # thousands of event loops during batch processing
+                    loop = _get_or_create_event_loop()
+                    try:
+                        response = loop.run_until_complete(
+                            self._make_direct_api_call(
+                                embed_request,
+                                tenant_id=tenant_id,
+                                request_id=request_id,
+                            )
+                        )
+                    except Exception:
+                        # Clean up event loop on error to prevent memory accumulation
+                        # from failed operations
+                        pending_tasks = [
+                            task for task in asyncio.all_tasks(loop) if not task.done()
+                        ]
+                        if pending_tasks:
+                            logger.debug(
+                                f"Cleaning up {len(pending_tasks)} pending tasks after error"
+                            )
+                            for task in pending_tasks:
+                                if not task.done():
+                                    task.cancel()
+                        raise
             else:
                 # For local models, use model server
                 response = self._make_model_server_request(
@@ -834,7 +931,16 @@ class EmbeddingModel:
         #   2. we are using an API-based embedding model (provider_type is not None)
         #   3. there are more than 1 batch (no point in threading if only 1)
         if num_threads >= 1 and self.provider_type and len(text_batches) > 1:
-            with ThreadPoolExecutor(max_workers=num_threads) as executor:
+            # Limit max workers to prevent overwhelming the API with too many concurrent requests
+            # This helps prevent retry storms by reducing connection pressure
+            max_workers = min(
+                num_threads, len(text_batches), 4
+            )  # Cap at 4 concurrent threads
+            if len(text_batches) > 20:
+                # For very large batches, reduce concurrency further to prevent retry storms
+                max_workers = min(max_workers, 2)
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 future_to_batch = {
                     executor.submit(
                         partial(
@@ -851,13 +957,26 @@ class EmbeddingModel:
 
                 # Collect results in order
                 batch_results: list[tuple[int, list[Embedding]]] = []
+                failed_batches = []
                 for future in as_completed(future_to_batch):
                     try:
                         result = future.result()
                         batch_results.append(result)
                     except Exception as e:
-                        logger.exception("Embedding model failed to process batch")
-                        raise e
+                        batch_idx = future_to_batch[future]
+                        failed_batches.append((batch_idx, e))
+                        logger.exception(
+                            f"Embedding model failed to process batch {batch_idx}"
+                        )
+                        # Don't raise immediately - collect all failures first
+                        # This allows other batches to complete
+
+                # If we have failures, raise after logging all of them
+                if failed_batches:
+                    error_msg = f"Failed to process {len(failed_batches)} out of {len(text_batches)} embedding batches"
+                    logger.error(error_msg)
+                    # Raise the first error as representative
+                    raise failed_batches[0][1]
 
                 # Sort by batch index and extend embeddings
                 batch_results.sort(key=lambda x: x[0])
