@@ -62,20 +62,20 @@ logger = setup_logger()
 MAX_USER_MESSAGES_FOR_CONTEXT = 5
 MAX_FINAL_REPORT_TOKENS = 10000
 
-# Might be something like:
-# 1. Research 1-2
-# 2. Think
-# 3. Research 3-4
-# 4. Think
-# 5. Research 5-6
-# 6. Think
-# 7. Research, possibly something new or different from the plan
-# 8. Think
-# 9. Generate report
-MAX_ORCHESTRATOR_CYCLES = 9
+# Might be something like (this gives a lot of leeway for change but typically the models don't do this):
+# 0. Research topics 1-3
+# 1. Think
+# 2. Research topics 4-5
+# 3. Think
+# 4. Research topics 6 + something new or different from the plan
+# 5. Think
+# 6. Research, possibly something new or different from the plan
+# 7. Think
+# 8. Generate report
+MAX_ORCHESTRATOR_CYCLES = 8
 
 # Similar but without the 4 thinking tool calls
-MAX_ORCHESTRATOR_CYCLES_REASONING = 5
+MAX_ORCHESTRATOR_CYCLES_REASONING = 4
 
 
 def generate_final_report(
