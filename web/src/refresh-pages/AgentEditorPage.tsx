@@ -224,10 +224,10 @@ function ConversationStarters() {
   const max_starters = CONVERSATION_STARTERS.length;
 
   const { values } = useFormikContext<{
-    starters: string[];
+    conversation_starters: string[];
   }>();
 
-  const starters = values.starters || [];
+  const starters = values.conversation_starters || [];
 
   // Count how many non-empty starters we have
   const filledStarters = starters.filter((s) => s).length;
@@ -243,13 +243,13 @@ function ConversationStarters() {
   );
 
   return (
-    <FieldArray name="starters">
+    <FieldArray name="conversation_starters">
       {(arrayHelpers) => (
         <div className="flex flex-col gap-2">
           {Array.from({ length: visibleCount }, (_, i) => (
             <InputTypeInElementField
-              key={`starters.${i}`}
-              name={`starters.${i}`}
+              key={`conversation_starters.${i}`}
+              name={`conversation_starters.${i}`}
               placeholder={
                 CONVERSATION_STARTERS[i] || "Enter a conversation starter..."
               }
@@ -286,7 +286,7 @@ export default function AgentEditorPage({
 
   const initialValues = {
     // General
-    icon_name: existingAgent?.icon_name ?? "",
+    icon_name: existingAgent?.icon_name ?? null,
     uploaded_image_id: existingAgent?.uploaded_image_id ?? null,
     remove_image: false,
     name: existingAgent?.name ?? "",
@@ -364,6 +364,10 @@ export default function AgentEditorPage({
           name: message,
         }));
 
+      // Send null instead of empty array if no starter messages
+      const finalStarterMessages =
+        starterMessages.length > 0 ? starterMessages : null;
+
       // Determine knowledge settings
       const teamKnowledge = values.knowledge_source === "team_knowledge";
       const numChunks = values.enable_knowledge ? values.num_chunks || 25 : 0;
@@ -386,7 +390,7 @@ export default function AgentEditorPage({
         llm_relevance_filter: false,
         llm_model_provider_override: null,
         llm_model_version_override: null,
-        starter_messages: starterMessages,
+        starter_messages: finalStarterMessages,
         users: undefined, // TODO: Handle restricted access users
         groups: [], // TODO: Handle groups
         tool_ids: [], // Temporarily empty - will add back later
@@ -531,7 +535,7 @@ export default function AgentEditorPage({
           validateOnBlur={true}
           validateOnMount={true}
         >
-          {({ isSubmitting, isValid, values, setFieldValue }) => (
+          {({ isSubmitting, isValid, dirty, values, setFieldValue }) => (
             <>
               <userFilesModal.Provider>
                 <UserFilesModal
@@ -597,7 +601,7 @@ export default function AgentEditorPage({
                         </Button>
                         <Button
                           type="submit"
-                          disabled={isSubmitting || !isValid}
+                          disabled={isSubmitting || !isValid || !dirty}
                         >
                           {existingAgent ? "Save" : "Create"}
                         </Button>
