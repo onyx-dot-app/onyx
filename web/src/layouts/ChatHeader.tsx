@@ -80,12 +80,12 @@ export default function ChatHeader({ settings, chatSession }: ChatHeaderProps) {
     );
   }, [availableProjects, searchTerm]);
 
-  const resetMoveState = () => {
+  const resetMoveState = useCallback(() => {
     setShowMoveOptions(false);
     setSearchTerm("");
     setPendingMoveProjectId(null);
     setShowMoveCustomAgentModal(false);
-  };
+  }, []);
 
   const performMove = useCallback(
     async (targetProjectId: number) => {
@@ -115,6 +115,7 @@ export default function ChatHeader({ settings, chatSession }: ChatHeaderProps) {
       fetchProjects,
       currentProjectId,
       setPopup,
+      resetMoveState,
     ]
   );
 
