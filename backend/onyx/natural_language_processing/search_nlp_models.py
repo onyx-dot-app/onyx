@@ -836,7 +836,7 @@ class EmbeddingModel:
         if num_threads >= 1 and self.provider_type and len(text_batches) > 1:
             # Limit max workers to prevent overwhelming the API with too many concurrent requests
             # This helps prevent retry storms by reducing connection pressure
-            max_workers = min(
+            max_workers: int = min(
                 num_threads, len(text_batches), 4
             )  # Cap at 4 concurrent threads
             if len(text_batches) > 20:
