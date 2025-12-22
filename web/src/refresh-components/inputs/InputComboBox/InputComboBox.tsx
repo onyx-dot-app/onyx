@@ -79,7 +79,6 @@ import React, { useCallback, useContext, useMemo, useRef, useId } from "react";
 import { cn, noProp } from "@/lib/utils";
 import InputTypeIn from "../InputTypeIn";
 import { FieldContext } from "../../form/FieldContext";
-import Text from "../../texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { FieldMessage } from "../../messages/FieldMessage";
 
@@ -140,10 +139,22 @@ const InputComboBox = ({
   const { matchedOptions, unmatchedOptions, hasSearchTerm } =
     useOptionFiltering({ options, inputValue });
 
-  // Combined list for keyboard navigation
+  // Whether to show the create option (only when no partial matches)
+  const showCreateOption =
+    !strict &&
+    hasSearchTerm &&
+    inputValue.trim() !== "" &&
+    matchedOptions.length === 0;
+
+  // Combined list for keyboard navigation (includes create option when shown)
   const allVisibleOptions = useMemo(() => {
-    return [...matchedOptions, ...unmatchedOptions];
-  }, [matchedOptions, unmatchedOptions]);
+    const baseOptions = [...matchedOptions, ...unmatchedOptions];
+    if (showCreateOption) {
+      // Prepend a synthetic option for the "create new" item
+      return [{ value: inputValue, label: inputValue }, ...baseOptions];
+    }
+    return baseOptions;
+  }, [matchedOptions, unmatchedOptions, showCreateOption, inputValue]);
 
   // Position Hook
   const { dropdownPosition, containerRef } = useDropdownPosition({ isOpen });
@@ -186,8 +197,8 @@ const InputComboBox = ({
         setIsOpen(true);
       }
 
-      // Reset highlighted index to -1 when filtering changes (no initial highlight)
-      setHighlightedIndex(-1);
+      // Auto-highlight first match when typing
+      setHighlightedIndex(0);
       setIsKeyboardNav(false); // Reset keyboard navigation mode when typing
     },
     [
@@ -369,6 +380,8 @@ const InputComboBox = ({
             }
           }}
           isExactMatch={isExactMatch}
+          inputValue={inputValue}
+          allowCreate={!strict}
         />
       </div>
 

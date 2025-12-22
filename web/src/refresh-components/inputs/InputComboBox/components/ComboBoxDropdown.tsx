@@ -21,6 +21,10 @@ interface ComboBoxDropdownProps {
   onMouseEnter: (index: number) => void;
   onMouseMove: () => void;
   isExactMatch: (option: ComboBoxOption) => boolean;
+  /** Current input value for creating new option */
+  inputValue: string;
+  /** Whether to show create option when no exact match */
+  allowCreate: boolean;
 }
 
 /**
@@ -48,6 +52,8 @@ export const ComboBoxDropdown = forwardRef<
       onMouseEnter,
       onMouseMove,
       isExactMatch,
+      inputValue,
+      allowCreate,
     },
     ref
   ) => {
@@ -120,6 +126,8 @@ export const ComboBoxDropdown = forwardRef<
           onMouseEnter={onMouseEnter}
           onMouseMove={onMouseMove}
           isExactMatch={isExactMatch}
+          inputValue={inputValue}
+          allowCreate={allowCreate}
         />
       </div>,
       document.body
