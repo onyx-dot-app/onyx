@@ -2,11 +2,12 @@
 import React, { useState, useEffect } from "react";
 import { SvgDownloadCloud, SvgFold, SvgMaximize2, SvgX } from "@opal/icons";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import Modal from "@/refresh-components/Modal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 import { FileDescriptor } from "@/app/chat/interfaces";
 import { cn } from "@/lib/utils";
+import TextView from "@/components/chat/TextView";
+import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 
 export interface ExpandableContentWrapperProps {
   fileDescriptor: FileDescriptor;
@@ -96,25 +97,31 @@ export default function ExpandableContentWrapper({
         )}
       >
         <CardContent className="p-0">
-          <ContentComponent
-            fileDescriptor={fileDescriptor}
-            isLoading={isLoading}
-            fadeIn={fadeIn}
-            expanded={expanded}
-          />
+          {!expanded && (
+            <ContentComponent
+              fileDescriptor={fileDescriptor}
+              isLoading={isLoading}
+              fadeIn={fadeIn}
+              expanded={expanded}
+            />
+          )}
         </CardContent>
       </Card>
     </div>
   );
 
+  const presentingDocument: MinimalOnyxDocument = {
+    document_id: fileDescriptor.id,
+    semantic_identifier: fileDescriptor.name ?? null,
+  };
+
   return (
     <>
       {expanded && (
-        <Modal open onOpenChange={() => setExpanded(false)}>
-          <Modal.Content large className="!p-0">
-            <Modal.Body className="p-0">{Content}</Modal.Body>
-          </Modal.Content>
-        </Modal>
+        <TextView
+          presentingDocument={presentingDocument}
+          onClose={() => setExpanded(false)}
+        />
       )}
       {!expanded && Content}
     </>

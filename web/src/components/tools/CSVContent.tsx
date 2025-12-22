@@ -104,7 +104,10 @@ const CsvContent: React.FC<ContentComponentProps> = ({
 
   return (
     <div
-      className={`flex relative ${expanded ? "max-h-2/3" : "max-h-[300px]"}`}
+      className={cn(
+        "flex relative overflow-auto",
+        expanded ? "max-h-[600px]" : "max-h-[300px]"
+      )}
     >
       <Table>
         <TableHeader className="sticky top-0 z-sticky">
@@ -119,7 +122,7 @@ const CsvContent: React.FC<ContentComponentProps> = ({
           </TableRow>
         </TableHeader>
 
-        <TableBody className="h-[300px] overflow-y-hidden ">
+        <TableBody>
           {data.length > 0 ? (
             data.map((row, rowIndex) => (
               <TableRow key={rowIndex}>
