@@ -299,12 +299,22 @@ export default function AgentEditorPage({
       (_, i) => existingAgent?.starter_messages?.[i]?.message ?? ""
     ),
 
-    // Knowledge
-    enable_knowledge: false,
-    knowledge_source: "team_knowledge" as "team_knowledge" | "user_knowledge",
-    document_set_ids: [] as number[],
-    user_file_ids: [] as string[],
-    num_chunks: null as number | null,
+    // Knowledge - enabled if there are doc sets, user files, OR num_chunks is set
+    enable_knowledge: (() => {
+      const hasDocSets = (existingAgent?.document_sets?.length ?? 0) > 0;
+      const hasUserFiles = (existingAgent?.user_file_ids?.length ?? 0) > 0;
+      const hasNumChunks =
+        existingAgent?.num_chunks !== null &&
+        existingAgent?.num_chunks !== undefined;
+      return hasDocSets || hasUserFiles || hasNumChunks;
+    })(),
+    knowledge_source:
+      existingAgent?.user_file_ids && existingAgent.user_file_ids.length > 0
+        ? "user_knowledge"
+        : ("team_knowledge" as "team_knowledge" | "user_knowledge"),
+    document_set_ids: existingAgent?.document_sets?.map((ds) => ds.id) ?? [],
+    user_file_ids: existingAgent?.user_file_ids ?? [],
+    num_chunks: existingAgent?.num_chunks ?? null,
 
     // Access
     general_access:
