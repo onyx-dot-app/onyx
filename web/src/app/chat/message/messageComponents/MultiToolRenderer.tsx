@@ -576,10 +576,7 @@ export default function MultiToolRenderer({
       } else if (item.type === DisplayType.REGULAR) {
         // Regular tools (including web search, openUrl, etc.): check for SECTION_END
         const hasSectionEnd = item.packets.some(
-          (p) =>
-            p.obj.type === PacketType.SECTION_END &&
-            (p.placement.sub_turn_index === undefined ||
-              p.placement.sub_turn_index === null)
+          (p) => !p.placement.sub_turn_index
         );
         if (hasSectionEnd && item.turn_index !== undefined) {
           handleToolComplete(item.turn_index, item.tab_index);
@@ -736,10 +733,7 @@ export default function MultiToolRenderer({
                       isItemComplete = searchState.isComplete;
                     } else {
                       isItemComplete = item.packets.some(
-                        (p) =>
-                          p.obj.type === PacketType.SECTION_END &&
-                          (p.placement.sub_turn_index === undefined ||
-                            p.placement.sub_turn_index === null)
+                        (p) => !p.placement.sub_turn_index
                       );
                     }
                     const isLoading = !isItemComplete && !shouldStopShimmering;
