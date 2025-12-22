@@ -279,7 +279,7 @@ class Updatable(abc.ABC):
         chunk_count: int | None,
         fields: VespaDocumentFields | None,
         user_fields: VespaDocumentUserFields | None,
-    ) -> int:
+    ) -> None:
         """
         Updates all chunks for a document with the specified fields.
         None values mean that the field does not need an update.

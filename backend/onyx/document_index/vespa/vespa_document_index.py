@@ -124,6 +124,10 @@ def _enrich_basic_chunk_info(
             http_client=http_client,
         )
 
+    assert (
+        last_indexed_chunk is not None and last_indexed_chunk >= 0
+    ), f"Bug: Last indexed chunk index is None or less than 0 for document: {document_id}."
+
     enriched_doc_info = EnrichedDocumentIndexingInfo(
         doc_id=document_id,
         chunk_start_index=new_chunk_count,
@@ -218,6 +222,7 @@ def _update_single_chunk(
     doc_id: str,
     http_client: httpx.Client,
     update_request: MetadataUpdateRequest,
+    new_doc_id: str | None,
 ) -> None:
     """Updates a single document chunk in Vespa.
 
@@ -226,7 +231,8 @@ def _update_single_chunk(
     Args:
         doc_chunk_id: The ID of the chunk to update.
         index_name: The index the chunk belongs to.
-        doc_id: The ID of the document the chunk belongs to.
+        doc_id: The ID of the document the chunk belongs to. Used only for
+            logging.
         http_client: The HTTP client to use to make the request.
         update_request: Metadata update request object received in the bulk
             update method containing fields to update.
@@ -252,6 +258,11 @@ def _update_single_chunk(
         model_config = {"frozen": True}
         assign: list[int]
 
+    # TODO(andrei): Very temporary, delete soon.
+    class _DocumentId(BaseModel):
+        model_config = {"frozen": True}
+        assign: str
+
     class _VespaPutFields(BaseModel):
         model_config = {"frozen": True}
         # The names of these fields are based the Vespa schema. Changes to the
@@ -262,6 +273,8 @@ def _update_single_chunk(
         access_control_list: _AccessControl | None = None
         hidden: _Hidden | None = None
         user_project: _UserProjects | None = None
+        # TODO(andrei): Very temporary, delete soon.
+        document_id: _DocumentId | None = None
 
     class _VespaPutRequest(BaseModel):
         model_config = {"frozen": True}
@@ -296,6 +309,10 @@ def _update_single_chunk(
         if update_request.project_ids is not None
         else None
     )
+    # TODO(andrei): Very temporary, delete soon.
+    document_id_update: _DocumentId | None = (
+        _DocumentId(assign=new_doc_id) if new_doc_id is not None else None
+    )
 
     vespa_put_fields = _VespaPutFields(
         boost=boost_update,
@@ -303,6 +320,8 @@ def _update_single_chunk(
         access_control_list=access_update,
         hidden=hidden_update,
         user_project=user_projects_update,
+        # TODO(andrei): Very temporary, delete soon.
+        document_id=document_id_update,
     )
 
     vespa_put_request = _VespaPutRequest(
@@ -498,7 +517,14 @@ class VespaDocumentIndex(DocumentIndex):
     def delete(self, db_doc_id: str, chunk_count: int | None) -> int:
         raise NotImplementedError
 
-    def update(self, update_requests: list[MetadataUpdateRequest]) -> None:
+    def update(
+        self,
+        update_requests: list[MetadataUpdateRequest],
+        # TODO(andrei), WARNING: Very temporary, this is not the interface we want
+        # in Updatable, we only have this to continue supporting
+        # user_file_docid_migration_task for Vespa which should be done soon.
+        old_doc_id_to_new_doc_id: dict[str, str],
+    ) -> None:
         with self._httpx_client_context as httpx_client:
             # Each invocation of this method can contain multiple update requests.
             for update_request in update_requests:
@@ -524,10 +550,17 @@ class VespaDocumentIndex(DocumentIndex):
                         _update_single_chunk(
                             doc_chunk_id,
                             self._index_name,
+                            # NOTE: Used only for logging, raw ID is ok here.
                             doc_id,
                             httpx_client,
                             update_request,
+                            # NOTE: The key is the raw ID, not the sanitized ID.
+                            new_doc_id=old_doc_id_to_new_doc_id.get(doc_id, None),
                         )
+
+                    logger.info(
+                        f"Updated {len(doc_chunk_ids)} chunks for document {doc_id}."
+                    )
 
     def id_based_retrieval(
         self, chunk_requests: list[DocumentSectionRequest]
