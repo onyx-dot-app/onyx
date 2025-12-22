@@ -17,6 +17,7 @@ import {
   ImageGenerationConfigView,
   setDefaultImageGenerationConfig,
 } from "@/lib/configuration/imageConfigurationService";
+import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 
 export default function ImageGenerationContent() {
   const { popup, setPopup } = usePopup();
@@ -147,7 +148,9 @@ export default function ImageGenerationContent() {
               {group.providers.map((provider) => (
                 <Select
                   key={provider.id}
-                  icon={provider.icon}
+                  icon={() => (
+                    <ProviderIcon provider={provider.provider_name} size={18} />
+                  )}
                   title={provider.title}
                   description={provider.description}
                   status={getStatus(provider)}

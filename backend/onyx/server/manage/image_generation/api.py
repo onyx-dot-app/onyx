@@ -129,15 +129,43 @@ def _create_llm_provider_and_get_model_config_id(
 def test_image_generation(
     test_request: TestImageGenerationRequest,
     _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
 ) -> None:
     """Test if an API key is valid for image generation.
 
     Makes a minimal image generation request to verify credentials using LiteLLM.
+
+    Two modes:
+    1. Direct: api_key + provider provided
+    2. From existing provider: source_llm_provider_id provided (fetches API key from DB)
     """
     from litellm import image_generation
 
+    # Resolve API key and provider
+    if test_request.source_llm_provider_id is not None:
+        # Fetch API key from existing provider
+        source_provider = db_session.get(
+            LLMProviderModel, test_request.source_llm_provider_id
+        )
+        if not source_provider:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Source LLM provider with id {test_request.source_llm_provider_id} not found",
+            )
+        api_key = source_provider.api_key
+        provider = source_provider.provider
+    elif test_request.api_key is not None and test_request.provider is not None:
+        # Use directly provided credentials
+        api_key = test_request.api_key
+        provider = test_request.provider
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Either source_llm_provider_id or (api_key + provider) must be provided",
+        )
+
     try:
-        if test_request.provider == "azure":
+        if provider == "azure":
             if not test_request.api_base or not test_request.api_version:
                 raise HTTPException(
                     status_code=400,
@@ -153,7 +181,7 @@ def test_image_generation(
             image_generation(
                 prompt="a simple blue circle on white background",
                 model=model,
-                api_key=test_request.api_key,
+                api_key=api_key,
                 api_base=test_request.api_base,
                 api_version=test_request.api_version,
                 size="1024x1024",
@@ -164,7 +192,7 @@ def test_image_generation(
             image_generation(
                 prompt="a simple blue circle on white background",
                 model=test_request.model_name,
-                api_key=test_request.api_key,
+                api_key=api_key,
                 api_base=test_request.api_base or None,
                 size="1024x1024",
                 n=1,

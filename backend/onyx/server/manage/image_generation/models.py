@@ -7,11 +7,23 @@ if TYPE_CHECKING:
 
 
 class TestImageGenerationRequest(BaseModel):
-    """Request model for testing image generation API key."""
+    """Request model for testing image generation API key.
 
-    provider: str  # e.g., "openai", "azure"
-    api_key: str
+    Two modes:
+    1. Direct API key: Provide api_key + provider
+    2. From existing provider: Provide source_llm_provider_id (backend fetches API key)
+    """
+
     model_name: str  # e.g., "gpt-image-1", "dall-e-3"
+
+    # Option 1: Direct API key
+    provider: str | None = None  # e.g., "openai", "azure"
+    api_key: str | None = None
+
+    # Option 2: Use API key from existing provider
+    source_llm_provider_id: int | None = None
+
+    # Additional fields for Azure
     api_base: str | None = None
     api_version: str | None = None
     deployment_name: str | None = None
