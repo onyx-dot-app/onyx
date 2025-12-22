@@ -161,6 +161,17 @@ class DocumentManager:
         )
 
     @staticmethod
+    def list(
+        api_key: DATestAPIKey | None = None,
+    ) -> list[dict]:
+        response = requests.get(
+            f"{API_SERVER_URL}/onyx-api/ingestion",
+            headers=api_key.headers if api_key else GENERAL_HEADERS,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    @staticmethod
     def delete(
         document_id: str,
         api_key: DATestAPIKey | None = None,
