@@ -244,6 +244,7 @@ def create_config(
         # Create the ImageGenerationConfig
         config = create_image_generation_config(
             db_session=db_session,
+            image_provider_id=config_create.image_provider_id,
             model_configuration_id=model_configuration_id,
             is_default=config_create.is_default,
         )
@@ -266,9 +267,9 @@ def get_all_configs(
     return [ImageGenerationConfigView.from_model(config) for config in configs]
 
 
-@admin_router.get("/config/{config_id}/credentials")
+@admin_router.get("/config/{image_provider_id}/credentials")
 def get_config_credentials(
-    config_id: int,
+    image_provider_id: str,
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ImageGenerationCredentials:
@@ -276,19 +277,19 @@ def get_config_credentials(
 
     Returns the unmasked API key and other credential fields.
     """
-    config = get_image_generation_config(db_session, config_id)
+    config = get_image_generation_config(db_session, image_provider_id)
     if not config:
         raise HTTPException(
             status_code=404,
-            detail=f"ImageGenerationConfig with id {config_id} not found",
+            detail=f"ImageGenerationConfig with image_provider_id {image_provider_id} not found",
         )
 
     return ImageGenerationCredentials.from_model(config)
 
 
-@admin_router.put("/config/{config_id}")
+@admin_router.put("/config/{image_provider_id}")
 def update_config(
-    config_id: int,
+    image_provider_id: str,
     config_update: ImageGenerationConfigUpdate,
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
@@ -303,11 +304,11 @@ def update_config(
     """
     try:
         # 1. Get existing config
-        existing_config = get_image_generation_config(db_session, config_id)
+        existing_config = get_image_generation_config(db_session, image_provider_id)
         if not existing_config:
             raise HTTPException(
                 status_code=404,
-                detail=f"ImageGenerationConfig with id {config_id} not found",
+                detail=f"ImageGenerationConfig with image_provider_id {image_provider_id} not found",
             )
 
         old_llm_provider_id = existing_config.model_configuration.llm_provider_id
@@ -347,27 +348,27 @@ def update_config(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@admin_router.delete("/config/{config_id}")
+@admin_router.delete("/config/{image_provider_id}")
 def delete_config(
-    config_id: int,
+    image_provider_id: str,
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     """Delete an image generation configuration."""
     try:
-        delete_image_generation_config(db_session, config_id)
+        delete_image_generation_config(db_session, image_provider_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@admin_router.post("/config/{config_id}/default")
+@admin_router.post("/config/{image_provider_id}/default")
 def set_config_as_default(
-    config_id: int,
+    image_provider_id: str,
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     """Set a configuration as the default for image generation."""
     try:
-        set_default_image_generation_config(db_session, config_id)
+        set_default_image_generation_config(db_session, image_provider_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

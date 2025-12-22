@@ -42,6 +42,7 @@ class ImageGenerationConfigCreate(BaseModel):
     """
 
     # Required for both modes
+    image_provider_id: str  # Static unique key (e.g., "openai_gpt_image_1")
     model_name: str  # e.g., "gpt-image-1", "dall-e-3"
 
     # Option 1: Clone mode - use credentials from existing provider
@@ -66,6 +67,7 @@ class ImageGenerationConfigUpdate(BaseModel):
 
     # Required
     model_name: str  # e.g., "gpt-image-1", "dall-e-3"
+    # Note: image_provider_id cannot be changed during update
 
     # Option 1: Clone mode - use credentials from existing provider
     source_llm_provider_id: int | None = None
@@ -81,7 +83,7 @@ class ImageGenerationConfigUpdate(BaseModel):
 class ImageGenerationConfigView(BaseModel):
     """Response model for image generation config with related data."""
 
-    id: int
+    image_provider_id: str  # Primary key - static unique key for UI-DB mapping
     model_configuration_id: int
     model_name: str  # From model_configuration.name
     llm_provider_id: int  # From model_configuration.llm_provider_id
@@ -94,7 +96,7 @@ class ImageGenerationConfigView(BaseModel):
     ) -> "ImageGenerationConfigView":
         """Convert database model to view model."""
         return cls(
-            id=config.id,
+            image_provider_id=config.image_provider_id,
             model_configuration_id=config.model_configuration_id,
             model_name=config.model_configuration.name,
             llm_provider_id=config.model_configuration.llm_provider_id,

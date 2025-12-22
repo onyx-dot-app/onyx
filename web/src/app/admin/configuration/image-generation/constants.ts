@@ -1,5 +1,6 @@
 export interface ImageProvider {
-  id: string;
+  image_provider_id: string; // Static unique key for UI-DB mapping
+  model_name: string; // Actual model name for LLM API
   provider_name: string;
   title: string;
   description: string;
@@ -15,21 +16,24 @@ export const IMAGE_PROVIDER_GROUPS: ProviderGroup[] = [
     name: "OpenAI",
     providers: [
       {
-        id: "gpt-image-1.5",
+        image_provider_id: "openai_gpt_image_1_5",
+        model_name: "gpt-image-1.5",
         provider_name: "openai",
         title: "GPT Image 1.5",
         description:
           "OpenAI's latest Image Generation model with the highest prompt fidelity.",
       },
       {
-        id: "gpt-image-1",
+        image_provider_id: "openai_gpt_image_1",
+        model_name: "gpt-image-1",
         provider_name: "openai",
         title: "GPT Image 1",
         description:
           "OpenAI's latest Image Generation model with the highest prompt fidelity.",
       },
       {
-        id: "dall-e-3",
+        image_provider_id: "openai_dalle_3",
+        model_name: "dall-e-3",
         provider_name: "openai",
         title: "DALL-E 3",
         description:
@@ -41,7 +45,8 @@ export const IMAGE_PROVIDER_GROUPS: ProviderGroup[] = [
     name: "Azure OpenAI",
     providers: [
       {
-        id: "azure-dall-e-3", //actual model name will be extracted from the target uri
+        image_provider_id: "azure_dalle_3",
+        model_name: "", // Extracted from deployment in target URI
         provider_name: "azure",
         title: "Azure OpenAI DALL-E 3",
         description:

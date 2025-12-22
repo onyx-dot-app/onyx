@@ -58,7 +58,7 @@ export default function ImageGenerationContent() {
     useState<ImageGenerationConfigView | null>(null);
 
   const connectedProviderIds = useMemo(() => {
-    return new Set(configs.map((c) => c.model_name));
+    return new Set(configs.map((c) => c.image_provider_id));
   }, [configs]);
 
   const defaultConfig = useMemo(() => {
@@ -68,8 +68,10 @@ export default function ImageGenerationContent() {
   const getStatus = (
     provider: ImageProvider
   ): "disconnected" | "connected" | "selected" => {
-    if (defaultConfig?.model_name === provider.id) return "selected";
-    if (connectedProviderIds.has(provider.id)) return "connected";
+    if (defaultConfig?.image_provider_id === provider.image_provider_id)
+      return "selected";
+    if (connectedProviderIds.has(provider.image_provider_id))
+      return "connected";
     return "disconnected";
   };
 
@@ -80,10 +82,12 @@ export default function ImageGenerationContent() {
   };
 
   const handleSelect = async (provider: ImageProvider) => {
-    const config = configs.find((c) => c.model_name === provider.id);
+    const config = configs.find(
+      (c) => c.image_provider_id === provider.image_provider_id
+    );
     if (config) {
       try {
-        await setDefaultImageGenerationConfig(config.id);
+        await setDefaultImageGenerationConfig(config.image_provider_id);
         setPopup({
           message: `${provider.title} set as default`,
           type: "success",
@@ -104,7 +108,9 @@ export default function ImageGenerationContent() {
   };
 
   const handleEdit = (provider: ImageProvider) => {
-    const config = configs.find((c) => c.model_name === provider.id);
+    const config = configs.find(
+      (c) => c.image_provider_id === provider.image_provider_id
+    );
     setEditConfig(config || null);
     setActiveProvider(provider);
     modal.toggle(true);
@@ -158,7 +164,7 @@ export default function ImageGenerationContent() {
             <div className="flex flex-col gap-2">
               {group.providers.map((provider) => (
                 <Select
-                  key={provider.id}
+                  key={provider.image_provider_id}
                   icon={() => (
                     <ProviderIcon provider={provider.provider_name} size={18} />
                   )}

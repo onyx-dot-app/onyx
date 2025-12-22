@@ -8,6 +8,7 @@ from onyx.db.models import ModelConfiguration
 
 def create_image_generation_config(
     db_session: Session,
+    image_provider_id: str,
     model_configuration_id: int,
     is_default: bool = False,
 ) -> ImageGenerationConfig:
@@ -15,6 +16,7 @@ def create_image_generation_config(
 
     Args:
         db_session: Database session
+        image_provider_id: Static unique key for UI-DB mapping
         model_configuration_id: ID of the model configuration to use
         is_default: Whether this should be the default config
 
@@ -32,6 +34,7 @@ def create_image_generation_config(
             existing_default.is_default = False
 
     new_config = ImageGenerationConfig(
+        image_provider_id=image_provider_id,
         model_configuration_id=model_configuration_id,
         is_default=is_default,
     )
@@ -55,20 +58,20 @@ def get_all_image_generation_configs(
 
 def get_image_generation_config(
     db_session: Session,
-    config_id: int,
+    image_provider_id: str,
 ) -> ImageGenerationConfig | None:
-    """Get a single image generation config by ID with relationships loaded.
+    """Get a single image generation config by image_provider_id with relationships loaded.
 
     Args:
         db_session: Database session
-        config_id: ID of the config to get
+        image_provider_id: The image provider ID (primary key)
 
     Returns:
         The ImageGenerationConfig or None if not found
     """
     stmt = (
         select(ImageGenerationConfig)
-        .where(ImageGenerationConfig.id == config_id)
+        .where(ImageGenerationConfig.image_provider_id == image_provider_id)
         .options(
             selectinload(ImageGenerationConfig.model_configuration).selectinload(
                 ModelConfiguration.llm_provider
@@ -100,27 +103,29 @@ def get_default_image_generation_config(
 
 def set_default_image_generation_config(
     db_session: Session,
-    config_id: int,
+    image_provider_id: str,
 ) -> None:
     """Set a config as the default (clears previous default).
 
     Args:
         db_session: Database session
-        config_id: ID of the config to set as default
+        image_provider_id: The image provider ID to set as default
 
     Raises:
         ValueError: If config not found
     """
     # Get the config to set as default
-    new_default = db_session.get(ImageGenerationConfig, config_id)
+    new_default = db_session.get(ImageGenerationConfig, image_provider_id)
     if not new_default:
-        raise ValueError(f"ImageGenerationConfig with id {config_id} not found")
+        raise ValueError(
+            f"ImageGenerationConfig with image_provider_id {image_provider_id} not found"
+        )
 
     # Clear existing default
     existing_default = db_session.scalar(
         select(ImageGenerationConfig).where(ImageGenerationConfig.is_default.is_(True))
     )
-    if existing_default and existing_default.id != config_id:
+    if existing_default and existing_default.image_provider_id != image_provider_id:
         existing_default.is_default = False
         db_session.flush()
 
@@ -131,20 +136,22 @@ def set_default_image_generation_config(
 
 def delete_image_generation_config(
     db_session: Session,
-    config_id: int,
+    image_provider_id: str,
 ) -> None:
-    """Delete an image generation config by ID.
+    """Delete an image generation config by image_provider_id.
 
     Args:
         db_session: Database session
-        config_id: ID of the config to delete
+        image_provider_id: The image provider ID to delete
 
     Raises:
         ValueError: If config not found
     """
-    config = db_session.get(ImageGenerationConfig, config_id)
+    config = db_session.get(ImageGenerationConfig, image_provider_id)
     if not config:
-        raise ValueError(f"ImageGenerationConfig with id {config_id} not found")
+        raise ValueError(
+            f"ImageGenerationConfig with image_provider_id {image_provider_id} not found"
+        )
 
     db_session.delete(config)
     db_session.commit()
