@@ -183,7 +183,7 @@ export default function ChatHeader({ settings, chatSession }: ChatHeaderProps) {
       ];
       setPopoverItems(items);
     }
-  }, [showMoveOptions, filteredProjects]);
+  }, [showMoveOptions, filteredProjects, chatSession]);
 
   return (
     <>
