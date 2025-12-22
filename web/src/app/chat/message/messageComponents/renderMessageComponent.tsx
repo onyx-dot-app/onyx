@@ -70,7 +70,13 @@ function isDeepResearchPlanPacket(packet: Packet) {
 }
 
 function isResearchAgentPacket(packet: Packet) {
-  return packet.obj.type === PacketType.RESEARCH_AGENT_START;
+  // Check for any packet type that indicates a research agent group
+  return (
+    packet.obj.type === PacketType.RESEARCH_AGENT_START ||
+    packet.obj.type === PacketType.INTERMEDIATE_REPORT_START ||
+    packet.obj.type === PacketType.INTERMEDIATE_REPORT_DELTA ||
+    packet.obj.type === PacketType.INTERMEDIATE_REPORT_CITED_DOCS
+  );
 }
 
 export function findRenderer(

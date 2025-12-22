@@ -203,6 +203,12 @@ def _extract_tool_call_kickoffs(
 
     Returns a list of ToolCallKickoff objects for valid tool calls (those with both id and name).
     Each tool call is assigned the given turn_index and a tab_index based on its order.
+
+    Args:
+        id_to_tool_call_map: Map of tool call index to tool call data
+        turn_index: The turn index for this set of tool calls
+        tab_index: If provided, use this tab_index for all tool calls (otherwise auto-increment)
+        sub_turn_index: The sub-turn index for nested tool calls
     """
     tool_calls: list[ToolCallKickoff] = []
     tab_index_calculated = 0
@@ -542,72 +548,102 @@ def run_llm_step_pkt_generator(
                 reasoning_start = True
 
             if delta.content:
-                if reasoning_start:
-                    yield Packet(
-                        placement=Placement(
-                            turn_index=turn_index,
-                            tab_index=tab_index,
-                            sub_turn_index=sub_turn_index,
-                        ),
-                        obj=ReasoningDone(),
-                    )
-                    has_reasoned = 1
-                    turn_index, sub_turn_index = _increment_turns(
-                        turn_index, sub_turn_index
-                    )
-                    reasoning_start = False
-
-                if not answer_start:
-                    yield Packet(
-                        placement=Placement(
-                            turn_index=turn_index,
-                            tab_index=tab_index,
-                            sub_turn_index=sub_turn_index,
-                        ),
-                        obj=AgentResponseStart(
-                            final_documents=final_documents,
-                        ),
-                    )
-                    answer_start = True
-
-                if citation_processor:
-                    for result in citation_processor.process_token(delta.content):
-                        if isinstance(result, str):
-                            accumulated_answer += result
-                            # Save answer incrementally to state container
-                            if state_container:
-                                state_container.set_answer_tokens(accumulated_answer)
-                            yield Packet(
-                                placement=Placement(
-                                    turn_index=turn_index,
-                                    tab_index=tab_index,
-                                    sub_turn_index=sub_turn_index,
-                                ),
-                                obj=AgentResponseDelta(content=result),
-                            )
-                        elif isinstance(result, CitationInfo):
-                            yield Packet(
-                                placement=Placement(
-                                    turn_index=turn_index,
-                                    tab_index=tab_index,
-                                    sub_turn_index=sub_turn_index,
-                                ),
-                                obj=result,
-                            )
-                else:
-                    # When citation_processor is None, use delta.content directly without modification
-                    accumulated_answer += delta.content
-                    # Save answer incrementally to state container
+                # When tool_choice is REQUIRED, content before tool calls is reasoning/thinking
+                # about which tool to call, not an actual answer to the user.
+                # Treat this content as reasoning instead of answer.
+                if tool_choice == ToolChoiceOptions.REQUIRED:
+                    # Treat content as reasoning when we know tool calls are coming
+                    accumulated_reasoning += delta.content
                     if state_container:
-                        state_container.set_answer_tokens(accumulated_answer)
+                        state_container.set_reasoning_tokens(accumulated_reasoning)
+                    if not reasoning_start:
+                        yield Packet(
+                            placement=Placement(
+                                turn_index=turn_index,
+                                tab_index=tab_index,
+                                sub_turn_index=sub_turn_index,
+                            ),
+                            obj=ReasoningStart(),
+                        )
                     yield Packet(
                         placement=Placement(
                             turn_index=turn_index,
                             tab_index=tab_index,
                             sub_turn_index=sub_turn_index,
                         ),
-                        obj=AgentResponseDelta(content=delta.content),
+                        obj=ReasoningDelta(reasoning=delta.content),
                     )
+                    reasoning_start = True
+                else:
+                    # Normal flow for AUTO or NONE tool choice
+                    if reasoning_start:
+                        yield Packet(
+                            placement=Placement(
+                                turn_index=turn_index,
+                                tab_index=tab_index,
+                                sub_turn_index=sub_turn_index,
+                            ),
+                            obj=ReasoningDone(),
+                        )
+                        has_reasoned = 1
+                        turn_index, sub_turn_index = _increment_turns(
+                            turn_index, sub_turn_index
+                        )
+                        reasoning_start = False
+
+                    if not answer_start:
+                        yield Packet(
+                            placement=Placement(
+                                turn_index=turn_index,
+                                tab_index=tab_index,
+                                sub_turn_index=sub_turn_index,
+                            ),
+                            obj=AgentResponseStart(
+                                final_documents=final_documents,
+                            ),
+                        )
+                        answer_start = True
+
+                    if citation_processor:
+                        for result in citation_processor.process_token(delta.content):
+                            if isinstance(result, str):
+                                accumulated_answer += result
+                                # Save answer incrementally to state container
+                                if state_container:
+                                    state_container.set_answer_tokens(
+                                        accumulated_answer
+                                    )
+                                yield Packet(
+                                    placement=Placement(
+                                        turn_index=turn_index,
+                                        tab_index=tab_index,
+                                        sub_turn_index=sub_turn_index,
+                                    ),
+                                    obj=AgentResponseDelta(content=result),
+                                )
+                            elif isinstance(result, CitationInfo):
+                                yield Packet(
+                                    placement=Placement(
+                                        turn_index=turn_index,
+                                        tab_index=tab_index,
+                                        sub_turn_index=sub_turn_index,
+                                    ),
+                                    obj=result,
+                                )
+                    else:
+                        # When citation_processor is None, use delta.content directly without modification
+                        accumulated_answer += delta.content
+                        # Save answer incrementally to state container
+                        if state_container:
+                            state_container.set_answer_tokens(accumulated_answer)
+                        yield Packet(
+                            placement=Placement(
+                                turn_index=turn_index,
+                                tab_index=tab_index,
+                                sub_turn_index=sub_turn_index,
+                            ),
+                            obj=AgentResponseDelta(content=delta.content),
+                        )
 
             if delta.tool_calls:
                 if reasoning_start:
