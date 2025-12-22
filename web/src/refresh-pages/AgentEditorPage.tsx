@@ -254,10 +254,12 @@ function ConversationStarters() {
 
 export interface AgentEditorPageProps {
   agent?: FullPersona;
+  refreshAgent?: () => void;
 }
 
 export default function AgentEditorPage({
   agent: existingAgent,
+  refreshAgent,
 }: AgentEditorPageProps) {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
@@ -414,8 +416,11 @@ export default function AgentEditorPage({
         } successfully`,
       });
 
-      // Refresh agents list
+      // Refresh agents list and the specific agent
       await refreshAgents();
+      if (refreshAgent) {
+        await refreshAgent();
+      }
 
       // Navigate back
       router.push("/chat/agents");
@@ -496,396 +501,408 @@ export default function AgentEditorPage({
   }
 
   return (
-    <div
-      data-testid="AgentsEditorPage/container"
-      aria-label="Agents Editor Page"
-      className="h-full w-full"
-    >
-      <Formik
-        initialValues={initialValues}
-        validationSchema={validationSchema}
-        onSubmit={handleSubmit}
-        validateOnChange={true}
-        validateOnBlur={true}
-        validateOnMount={true}
+    <>
+      {popup}
+
+      <div
+        data-testid="AgentsEditorPage/container"
+        aria-label="Agents Editor Page"
+        className="h-full w-full"
       >
-        {({ isSubmitting, isValid, values, setFieldValue }) => (
-          <>
-            <userFilesModal.Provider>
-              <UserFilesModal
-                title="User Files"
-                description="All files selected for this agent"
-                recentFiles={values.user_file_ids
-                  .map((userFileId: string) => {
-                    const rf = allRecentFiles.find((f) => f.id === userFileId);
-                    if (rf) return rf;
-                    return {
-                      id: userFileId,
-                      name: `File ${userFileId.slice(0, 8)}`,
-                      status: UserFileStatus.COMPLETED,
-                      file_id: userFileId,
-                      created_at: new Date().toISOString(),
-                      project_id: null,
-                      user_id: null,
-                      file_type: "",
-                      last_accessed_at: new Date().toISOString(),
-                      chat_file_type: "file" as const,
-                    } as unknown as ProjectFile;
-                  })
-                  .filter((f): f is ProjectFile => f !== null)}
-                selectedFileIds={values.user_file_ids}
-                onPickRecent={(file: ProjectFile) => {
-                  if (!values.user_file_ids.includes(file.id)) {
-                    setFieldValue("user_file_ids", [
-                      ...values.user_file_ids,
-                      file.id,
-                    ]);
-                  }
-                }}
-                onUnpickRecent={(file: ProjectFile) => {
-                  setFieldValue(
-                    "user_file_ids",
-                    values.user_file_ids.filter((id) => id !== file.id)
-                  );
-                }}
-                onView={(file: ProjectFile) => {
-                  setPresentingDocument({
-                    document_id: `project_file__${file.file_id}`,
-                    semantic_identifier: file.name,
-                  });
-                }}
-              />
-            </userFilesModal.Provider>
-
-            <Form className="h-full w-full">
-              <Settings.Root>
-                <Settings.Header
-                  icon={SvgOnyxOctagon}
-                  title={existingAgent ? "Edit Agent" : "Create Agent"}
-                  rightChildren={
-                    <div className="flex gap-2">
-                      <Button
-                        type="button"
-                        secondary
-                        onClick={() => router.back()}
-                      >
-                        Cancel
-                      </Button>
-                      <Button type="submit" disabled={isSubmitting || !isValid}>
-                        {existingAgent ? "Save" : "Create"}
-                      </Button>
-                    </div>
-                  }
-                  backButton
-                  separator
+        <Formik
+          initialValues={initialValues}
+          validationSchema={validationSchema}
+          onSubmit={handleSubmit}
+          validateOnChange={true}
+          validateOnBlur={true}
+          validateOnMount={true}
+        >
+          {({ isSubmitting, isValid, values, setFieldValue }) => (
+            <>
+              <userFilesModal.Provider>
+                <UserFilesModal
+                  title="User Files"
+                  description="All files selected for this agent"
+                  recentFiles={values.user_file_ids
+                    .map((userFileId: string) => {
+                      const rf = allRecentFiles.find(
+                        (f) => f.id === userFileId
+                      );
+                      if (rf) return rf;
+                      return {
+                        id: userFileId,
+                        name: `File ${userFileId.slice(0, 8)}`,
+                        status: UserFileStatus.COMPLETED,
+                        file_id: userFileId,
+                        created_at: new Date().toISOString(),
+                        project_id: null,
+                        user_id: null,
+                        file_type: "",
+                        last_accessed_at: new Date().toISOString(),
+                        chat_file_type: "file" as const,
+                      } as unknown as ProjectFile;
+                    })
+                    .filter((f): f is ProjectFile => f !== null)}
+                  selectedFileIds={values.user_file_ids}
+                  onPickRecent={(file: ProjectFile) => {
+                    if (!values.user_file_ids.includes(file.id)) {
+                      setFieldValue("user_file_ids", [
+                        ...values.user_file_ids,
+                        file.id,
+                      ]);
+                    }
+                  }}
+                  onUnpickRecent={(file: ProjectFile) => {
+                    setFieldValue(
+                      "user_file_ids",
+                      values.user_file_ids.filter((id) => id !== file.id)
+                    );
+                  }}
+                  onView={(file: ProjectFile) => {
+                    setPresentingDocument({
+                      document_id: `project_file__${file.file_id}`,
+                      semantic_identifier: file.name,
+                    });
+                  }}
                 />
+              </userFilesModal.Provider>
 
-                {/* Agent Form Content */}
-                <Settings.Body>
-                  <div className="flex flex-row gap-10 justify-between items-start w-full">
+              <Form className="h-full w-full">
+                <Settings.Root>
+                  <Settings.Header
+                    icon={SvgOnyxOctagon}
+                    title={existingAgent ? "Edit Agent" : "Create Agent"}
+                    rightChildren={
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          secondary
+                          onClick={() => router.back()}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="submit"
+                          disabled={isSubmitting || !isValid}
+                        >
+                          {existingAgent ? "Save" : "Create"}
+                        </Button>
+                      </div>
+                    }
+                    backButton
+                    separator
+                  />
+
+                  {/* Agent Form Content */}
+                  <Settings.Body>
+                    <div className="flex flex-row gap-10 justify-between items-start w-full">
+                      <Section>
+                        <VerticalLabelWrapper name="name" label="Name">
+                          <InputTypeInField
+                            name="name"
+                            placeholder="Name your agent"
+                          />
+                        </VerticalLabelWrapper>
+
+                        <VerticalLabelWrapper
+                          name="description"
+                          label="Description"
+                        >
+                          <InputTextAreaField
+                            name="description"
+                            placeholder="What does this agent do?"
+                          />
+                        </VerticalLabelWrapper>
+                      </Section>
+
+                      <Section className="flex flex-col items-center w-fit gap-1">
+                        <FieldLabel
+                          name="agent_avatar"
+                          label="Agent Avatar"
+                          className="w-fit"
+                        />
+                        <AgentIconEditor existingAgent={existingAgent} />
+                      </Section>
+                    </div>
+
+                    <Separator noPadding />
+
                     <Section>
-                      <VerticalLabelWrapper name="name" label="Name">
-                        <InputTypeInField
-                          name="name"
-                          placeholder="Name your agent"
+                      <VerticalLabelWrapper
+                        name="instructions"
+                        label="Instructions"
+                        optional
+                        description="Add instructions to tailor the response for this agent."
+                      >
+                        <InputTextAreaField
+                          name="instructions"
+                          placeholder="Think step by step and show reasoning for complex problems. Use specific examples. Emphasize action items, and leave blanks for the human to fill in when you have unknown. Use a polite enthusiastic tone."
                         />
                       </VerticalLabelWrapper>
 
                       <VerticalLabelWrapper
-                        name="description"
-                        label="Description"
+                        name="conversation_starters"
+                        label="Conversation Starters"
+                        description="Example messages that help users understand what this agent can do and how to interact with it effectively."
+                        optional
                       >
-                        <InputTextAreaField
-                          name="description"
-                          placeholder="What does this agent do?"
-                        />
+                        <ConversationStarters />
                       </VerticalLabelWrapper>
                     </Section>
 
-                    <Section className="flex flex-col items-center w-fit gap-1">
-                      <FieldLabel
-                        name="agent_avatar"
-                        label="Agent Avatar"
-                        className="w-fit"
-                      />
-                      <AgentIconEditor existingAgent={existingAgent} />
-                    </Section>
-                  </div>
+                    <Separator noPadding />
 
-                  <Separator noPadding />
-
-                  <Section>
-                    <VerticalLabelWrapper
-                      name="instructions"
-                      label="Instructions"
-                      optional
-                      description="Add instructions to tailor the response for this agent."
-                    >
-                      <InputTextAreaField
-                        name="instructions"
-                        placeholder="Think step by step and show reasoning for complex problems. Use specific examples. Emphasize action items, and leave blanks for the human to fill in when you have unknown. Use a polite enthusiastic tone."
-                      />
-                    </VerticalLabelWrapper>
-
-                    <VerticalLabelWrapper
-                      name="conversation_starters"
-                      label="Conversation Starters"
-                      description="Example messages that help users understand what this agent can do and how to interact with it effectively."
-                      optional
-                    >
-                      <ConversationStarters />
-                    </VerticalLabelWrapper>
-                  </Section>
-
-                  <Separator noPadding />
-
-                  <Section>
-                    <div className="flex flex-col gap-4">
-                      <FieldLabel
-                        name="knowledge"
-                        label="Knowledge"
-                        description="Add specific connectors and documents for this agent should use to inform its responses."
-                      />
-
-                      <Card>
-                        <HorizontalLabelWrapper
-                          name="enable_knowledge"
-                          label="Enable Knowledge"
-                        >
-                          <SwitchField name="enable_knowledge" />
-                        </HorizontalLabelWrapper>
-
-                        {values.enable_knowledge && (
-                          <HorizontalLabelWrapper
-                            name="knowledge_source"
-                            label="Knowledge Source"
-                            description="Choose the sources of truth this agent refers to."
-                          >
-                            <InputSelectField
-                              name="knowledge_source"
-                              className="w-full"
-                            >
-                              <InputSelect.Trigger />
-                              <InputSelect.Content>
-                                <InputSelect.Item value="team_knowledge">
-                                  Team Knowledge
-                                </InputSelect.Item>
-                                <InputSelect.Item value="user_knowledge">
-                                  User Knowledge
-                                </InputSelect.Item>
-                              </InputSelect.Content>
-                            </InputSelectField>
-                          </HorizontalLabelWrapper>
-                        )}
-
-                        {values.enable_knowledge &&
-                          values.knowledge_source === "team_knowledge" &&
-                          documentSets &&
-                          (documentSets?.length ?? 0) > 0 && (
-                            <div className="flex gap-2 flex-wrap">
-                              {documentSets!.map((documentSet) => (
-                                <DocumentSetSelectable
-                                  key={documentSet.id}
-                                  documentSet={documentSet}
-                                  isSelected={values.document_set_ids.includes(
-                                    documentSet.id
-                                  )}
-                                  onSelect={() => {
-                                    const index =
-                                      values.document_set_ids.indexOf(
-                                        documentSet.id
-                                      );
-                                    if (index !== -1) {
-                                      const newIds = [
-                                        ...values.document_set_ids,
-                                      ];
-                                      newIds.splice(index, 1);
-                                      setFieldValue("document_set_ids", newIds);
-                                    } else {
-                                      setFieldValue("document_set_ids", [
-                                        ...values.document_set_ids,
-                                        documentSet.id,
-                                      ]);
-                                    }
-                                  }}
-                                />
-                              ))}
-                            </div>
-                          )}
-
-                        {values.enable_knowledge &&
-                          values.knowledge_source === "user_knowledge" && (
-                            <div className="flex flex-col gap-2">
-                              <FilePickerPopover
-                                trigger={(open) => (
-                                  <CreateButton transient={open}>
-                                    Add User Files
-                                  </CreateButton>
-                                )}
-                                selectedFileIds={values.user_file_ids}
-                                onPickRecent={(file) =>
-                                  handlePickRecentFile(
-                                    file,
-                                    values.user_file_ids,
-                                    setFieldValue
-                                  )
-                                }
-                                onUnpickRecent={(file) =>
-                                  handleUnpickRecentFile(
-                                    file,
-                                    values.user_file_ids,
-                                    setFieldValue
-                                  )
-                                }
-                                onFileClick={handleFileClick}
-                                handleUploadChange={(e) =>
-                                  handleUploadChange(
-                                    e,
-                                    values.user_file_ids,
-                                    setFieldValue
-                                  )
-                                }
-                              />
-
-                              {values.user_file_ids.length > 0 && (
-                                <div className="flex flex-wrap gap-2">
-                                  {values.user_file_ids.map((fileId) => {
-                                    const file = allRecentFiles.find(
-                                      (f) => f.id === fileId
-                                    );
-                                    if (!file) return null;
-
-                                    return (
-                                      <FileCard
-                                        key={fileId}
-                                        file={file}
-                                        removeFile={(id: string) => {
-                                          setFieldValue(
-                                            "user_file_ids",
-                                            values.user_file_ids.filter(
-                                              (fid) => fid !== id
-                                            )
-                                          );
-                                        }}
-                                        onFileClick={(f: ProjectFile) => {
-                                          setPresentingDocument({
-                                            document_id: `project_file__${f.file_id}`,
-                                            semantic_identifier: f.name,
-                                          });
-                                        }}
-                                      />
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                      </Card>
-                    </div>
-                  </Section>
-
-                  <Separator noPadding />
-
-                  <SimpleCollapsible
-                    trigger={
-                      <SimpleCollapsible.Header
-                        title="Actions"
-                        description="Tools and capabilities available for this agent to use."
-                      />
-                    }
-                  >
-                    <Section className="gap-2">
-                      <Card>
-                        <HorizontalLabelWrapper
-                          name="image_generation"
-                          label="Image Generation"
-                          description="Generate and manipulate images using AI-powered tools."
-                        >
-                          <SwitchField name="image_generation" />
-                        </HorizontalLabelWrapper>
-                      </Card>
-
-                      <Card>
-                        <HorizontalLabelWrapper
-                          name="web_search"
-                          label="Web Search"
-                          description="Search the web for real-time information and up-to-date results."
-                        >
-                          <SwitchField name="web_search" />
-                        </HorizontalLabelWrapper>
-                      </Card>
-
-                      <Card>
-                        <HorizontalLabelWrapper
-                          name="code_interpreter"
-                          label="Code Interpreter"
-                          description="Generate and run code."
-                        >
-                          <SwitchField name="code_interpreter" />
-                        </HorizontalLabelWrapper>
-                      </Card>
-
-                      <Separator noPadding className="py-1" />
-
-                      {/* MCP tools here */}
-                      <div className="h-[2rem] w-full" />
-                    </Section>
-                  </SimpleCollapsible>
-
-                  <Separator noPadding />
-
-                  <SimpleCollapsible
-                    trigger={
-                      <SimpleCollapsible.Header
-                        title="Advanced Options"
-                        description="Fine-tune agent prompts and knowledge."
-                      />
-                    }
-                  >
                     <Section>
-                      <Card>
-                        <HorizontalLabelWrapper
-                          name="current_datetime_aware"
-                          label="Current Datetime Aware"
-                          description='Include the current date and time explicitly in the agent prompt (formatted as "Thursday Jan 1, 1970 00:01"). To inject it in a specific place in the prompt, use the pattern [[CURRENT_DATETIME]].'
-                        >
-                          <SwitchField name="current_datetime_aware" />
-                        </HorizontalLabelWrapper>
-                        <HorizontalLabelWrapper
-                          name="overwrite_system_prompts"
-                          label="Overwrite System Prompts"
-                          description='Completely replace the base system prompt. This might affect response quality since it will also overwrite useful system instructions (e.g. "You (the LLM) can provide markdown and it will be rendered").'
-                        >
-                          <SwitchField name="overwrite_system_prompts" />
-                        </HorizontalLabelWrapper>
-                      </Card>
+                      <div className="flex flex-col gap-4">
+                        <FieldLabel
+                          name="knowledge"
+                          label="Knowledge"
+                          description="Add specific connectors and documents for this agent should use to inform its responses."
+                        />
 
-                      <div className="flex flex-col gap-1">
-                        <VerticalLabelWrapper
-                          name="reminders"
-                          label="Reminders"
-                        >
-                          <InputTextAreaField
-                            name="reminders"
-                            placeholder="Remember, I want you to always format your response as a numbered list."
-                          />
-                        </VerticalLabelWrapper>
-                        <Text text03 secondaryBody>
-                          Append a brief reminder to the prompt messages. Use
-                          this to remind the agent if you find that it tends to
-                          forget certain instructions as the chat progresses.
-                          This should be brief and not interfere with the user
-                          messages.
-                        </Text>
+                        <Card>
+                          <HorizontalLabelWrapper
+                            name="enable_knowledge"
+                            label="Enable Knowledge"
+                          >
+                            <SwitchField name="enable_knowledge" />
+                          </HorizontalLabelWrapper>
+
+                          {values.enable_knowledge && (
+                            <HorizontalLabelWrapper
+                              name="knowledge_source"
+                              label="Knowledge Source"
+                              description="Choose the sources of truth this agent refers to."
+                            >
+                              <InputSelectField
+                                name="knowledge_source"
+                                className="w-full"
+                              >
+                                <InputSelect.Trigger />
+                                <InputSelect.Content>
+                                  <InputSelect.Item value="team_knowledge">
+                                    Team Knowledge
+                                  </InputSelect.Item>
+                                  <InputSelect.Item value="user_knowledge">
+                                    User Knowledge
+                                  </InputSelect.Item>
+                                </InputSelect.Content>
+                              </InputSelectField>
+                            </HorizontalLabelWrapper>
+                          )}
+
+                          {values.enable_knowledge &&
+                            values.knowledge_source === "team_knowledge" &&
+                            documentSets &&
+                            (documentSets?.length ?? 0) > 0 && (
+                              <div className="flex gap-2 flex-wrap">
+                                {documentSets!.map((documentSet) => (
+                                  <DocumentSetSelectable
+                                    key={documentSet.id}
+                                    documentSet={documentSet}
+                                    isSelected={values.document_set_ids.includes(
+                                      documentSet.id
+                                    )}
+                                    onSelect={() => {
+                                      const index =
+                                        values.document_set_ids.indexOf(
+                                          documentSet.id
+                                        );
+                                      if (index !== -1) {
+                                        const newIds = [
+                                          ...values.document_set_ids,
+                                        ];
+                                        newIds.splice(index, 1);
+                                        setFieldValue(
+                                          "document_set_ids",
+                                          newIds
+                                        );
+                                      } else {
+                                        setFieldValue("document_set_ids", [
+                                          ...values.document_set_ids,
+                                          documentSet.id,
+                                        ]);
+                                      }
+                                    }}
+                                  />
+                                ))}
+                              </div>
+                            )}
+
+                          {values.enable_knowledge &&
+                            values.knowledge_source === "user_knowledge" && (
+                              <div className="flex flex-col gap-2">
+                                <FilePickerPopover
+                                  trigger={(open) => (
+                                    <CreateButton transient={open}>
+                                      Add User Files
+                                    </CreateButton>
+                                  )}
+                                  selectedFileIds={values.user_file_ids}
+                                  onPickRecent={(file) =>
+                                    handlePickRecentFile(
+                                      file,
+                                      values.user_file_ids,
+                                      setFieldValue
+                                    )
+                                  }
+                                  onUnpickRecent={(file) =>
+                                    handleUnpickRecentFile(
+                                      file,
+                                      values.user_file_ids,
+                                      setFieldValue
+                                    )
+                                  }
+                                  onFileClick={handleFileClick}
+                                  handleUploadChange={(e) =>
+                                    handleUploadChange(
+                                      e,
+                                      values.user_file_ids,
+                                      setFieldValue
+                                    )
+                                  }
+                                />
+
+                                {values.user_file_ids.length > 0 && (
+                                  <div className="flex flex-wrap gap-2">
+                                    {values.user_file_ids.map((fileId) => {
+                                      const file = allRecentFiles.find(
+                                        (f) => f.id === fileId
+                                      );
+                                      if (!file) return null;
+
+                                      return (
+                                        <FileCard
+                                          key={fileId}
+                                          file={file}
+                                          removeFile={(id: string) => {
+                                            setFieldValue(
+                                              "user_file_ids",
+                                              values.user_file_ids.filter(
+                                                (fid) => fid !== id
+                                              )
+                                            );
+                                          }}
+                                          onFileClick={(f: ProjectFile) => {
+                                            setPresentingDocument({
+                                              document_id: `project_file__${f.file_id}`,
+                                              semantic_identifier: f.name,
+                                            });
+                                          }}
+                                        />
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                        </Card>
                       </div>
                     </Section>
-                  </SimpleCollapsible>
-                </Settings.Body>
-              </Settings.Root>
-            </Form>
-          </>
-        )}
-      </Formik>
-    </div>
+
+                    <Separator noPadding />
+
+                    <SimpleCollapsible
+                      trigger={
+                        <SimpleCollapsible.Header
+                          title="Actions"
+                          description="Tools and capabilities available for this agent to use."
+                        />
+                      }
+                    >
+                      <Section className="gap-2">
+                        <Card>
+                          <HorizontalLabelWrapper
+                            name="image_generation"
+                            label="Image Generation"
+                            description="Generate and manipulate images using AI-powered tools."
+                          >
+                            <SwitchField name="image_generation" />
+                          </HorizontalLabelWrapper>
+                        </Card>
+
+                        <Card>
+                          <HorizontalLabelWrapper
+                            name="web_search"
+                            label="Web Search"
+                            description="Search the web for real-time information and up-to-date results."
+                          >
+                            <SwitchField name="web_search" />
+                          </HorizontalLabelWrapper>
+                        </Card>
+
+                        <Card>
+                          <HorizontalLabelWrapper
+                            name="code_interpreter"
+                            label="Code Interpreter"
+                            description="Generate and run code."
+                          >
+                            <SwitchField name="code_interpreter" />
+                          </HorizontalLabelWrapper>
+                        </Card>
+
+                        <Separator noPadding className="py-1" />
+
+                        {/* MCP tools here */}
+                        <div className="h-[2rem] w-full" />
+                      </Section>
+                    </SimpleCollapsible>
+
+                    <Separator noPadding />
+
+                    <SimpleCollapsible
+                      trigger={
+                        <SimpleCollapsible.Header
+                          title="Advanced Options"
+                          description="Fine-tune agent prompts and knowledge."
+                        />
+                      }
+                    >
+                      <Section>
+                        <Card>
+                          <HorizontalLabelWrapper
+                            name="current_datetime_aware"
+                            label="Current Datetime Aware"
+                            description='Include the current date and time explicitly in the agent prompt (formatted as "Thursday Jan 1, 1970 00:01"). To inject it in a specific place in the prompt, use the pattern [[CURRENT_DATETIME]].'
+                          >
+                            <SwitchField name="current_datetime_aware" />
+                          </HorizontalLabelWrapper>
+                          <HorizontalLabelWrapper
+                            name="overwrite_system_prompts"
+                            label="Overwrite System Prompts"
+                            description='Completely replace the base system prompt. This might affect response quality since it will also overwrite useful system instructions (e.g. "You (the LLM) can provide markdown and it will be rendered").'
+                          >
+                            <SwitchField name="overwrite_system_prompts" />
+                          </HorizontalLabelWrapper>
+                        </Card>
+
+                        <div className="flex flex-col gap-1">
+                          <VerticalLabelWrapper
+                            name="reminders"
+                            label="Reminders"
+                          >
+                            <InputTextAreaField
+                              name="reminders"
+                              placeholder="Remember, I want you to always format your response as a numbered list."
+                            />
+                          </VerticalLabelWrapper>
+                          <Text text03 secondaryBody>
+                            Append a brief reminder to the prompt messages. Use
+                            this to remind the agent if you find that it tends
+                            to forget certain instructions as the chat
+                            progresses. This should be brief and not interfere
+                            with the user messages.
+                          </Text>
+                        </div>
+                      </Section>
+                    </SimpleCollapsible>
+                  </Settings.Body>
+                </Settings.Root>
+              </Form>
+            </>
+          )}
+        </Formik>
+      </div>
+    </>
   );
 }
