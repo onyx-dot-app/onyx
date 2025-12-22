@@ -677,26 +677,31 @@ export function useLlmManager(
 
   const [imageFilesPresent, setImageFilesPresent] = useState(false);
 
-  const updateImageFilesPresent = (present: boolean) => {
+  const updateImageFilesPresent = useCallback((present: boolean) => {
     setImageFilesPresent(present);
-  };
+  }, []);
 
   // Manually set the LLM
-  const updateCurrentLlm = (newLlm: LlmDescriptor) => {
+  const updateCurrentLlm = useCallback((newLlm: LlmDescriptor) => {
     setCurrentLlm(newLlm);
     setUserHasManuallyOverriddenLLM(true);
-  };
+  }, []);
 
   const updateCurrentLlmToModelName = (modelName: string) => {
     setCurrentLlm(getValidLlmDescriptor(modelName));
     setUserHasManuallyOverriddenLLM(true);
   };
 
-  const updateModelOverrideBasedOnChatSession = (chatSession?: ChatSession) => {
-    if (chatSession && chatSession.current_alternate_model?.length > 0) {
-      setCurrentLlm(getValidLlmDescriptor(chatSession.current_alternate_model));
-    }
-  };
+  const updateModelOverrideBasedOnChatSession = useCallback(
+    (chatSession?: ChatSession) => {
+      if (chatSession && chatSession.current_alternate_model?.length > 0) {
+        setCurrentLlm(
+          getValidLlmDescriptor(chatSession.current_alternate_model)
+        );
+      }
+    },
+    [llmProviders]
+  );
 
   const [temperature, setTemperature] = useState<number>(() => {
     llmUpdate();
@@ -757,36 +762,59 @@ export function useLlmManager(
     user?.preferences?.default_model,
   ]);
 
-  const updateTemperature = (temperature: number) => {
-    if (isAnthropic(currentLlm.provider, currentLlm.modelName)) {
-      setTemperature(Math.min(temperature, 1.0));
-    } else {
-      setTemperature(temperature);
-    }
-    if (chatSession) {
-      updateTemperatureOverrideForChatSession(chatSession.id, temperature);
-    }
-  };
+  const updateTemperature = useCallback(
+    (newTemperature: number) => {
+      if (isAnthropic(currentLlm.provider, currentLlm.modelName)) {
+        setTemperature(Math.min(newTemperature, 1.0));
+      } else {
+        setTemperature(newTemperature);
+      }
+      if (chatSession) {
+        updateTemperatureOverrideForChatSession(chatSession.id, newTemperature);
+      }
+    },
+    [currentLlm.provider, currentLlm.modelName, chatSession]
+  );
 
   // Track if any provider exists (for onboarding checks)
   const hasAnyProvider = (allUserProviders?.length ?? 0) > 0;
 
-  return {
-    updateModelOverrideBasedOnChatSession,
-    currentLlm,
-    updateCurrentLlm,
-    temperature,
-    updateTemperature,
-    imageFilesPresent,
-    updateImageFilesPresent,
-    liveAssistant: liveAssistant ?? null,
-    maxTemperature,
-    llmProviders,
-    isLoadingProviders:
-      isLoadingAllProviders ||
-      (personaId !== undefined && isLoadingPersonaProviders),
-    hasAnyProvider,
-  };
+  // Compute isLoadingProviders once to use in deps
+  const isLoadingProviders =
+    isLoadingAllProviders ||
+    (personaId !== undefined && isLoadingPersonaProviders);
+
+  // Memoize the return object to prevent unnecessary re-renders of consumers
+  return useMemo(
+    () => ({
+      updateModelOverrideBasedOnChatSession,
+      currentLlm,
+      updateCurrentLlm,
+      temperature,
+      updateTemperature,
+      imageFilesPresent,
+      updateImageFilesPresent,
+      liveAssistant: liveAssistant ?? null,
+      maxTemperature,
+      llmProviders,
+      isLoadingProviders,
+      hasAnyProvider,
+    }),
+    [
+      updateModelOverrideBasedOnChatSession,
+      currentLlm,
+      updateCurrentLlm,
+      temperature,
+      updateTemperature,
+      imageFilesPresent,
+      updateImageFilesPresent,
+      liveAssistant,
+      maxTemperature,
+      llmProviders,
+      isLoadingProviders,
+      hasAnyProvider,
+    ]
+  );
 }
 
 export function useAuthType(): AuthType | null {
