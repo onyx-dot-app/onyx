@@ -20,7 +20,7 @@ depends_on = None
 def upgrade() -> None:
     op.create_table(
         "image_generation_config",
-        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+        sa.Column("image_provider_id", sa.String(), primary_key=True),
         sa.Column("model_configuration_id", sa.Integer(), nullable=False),
         sa.Column("is_default", sa.Boolean(), nullable=False),
         sa.ForeignKeyConstraint(

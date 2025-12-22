@@ -5,7 +5,7 @@
 
 // Types
 export interface ImageGenerationConfigView {
-  id: number;
+  image_provider_id: string; // Primary key
   model_configuration_id: number;
   model_name: string;
   llm_provider_id: number;
@@ -27,6 +27,7 @@ export interface ImageGenerationCredentials {
 
 // Creation options - either clone from existing provider or use new credentials
 export interface ImageGenerationConfigCreateOptions {
+  imageProviderId: string;
   modelName: string;
   isDefault?: boolean;
 
@@ -116,10 +117,10 @@ export async function fetchImageGenerationConfigs(): Promise<
  * Fetch credentials for an image generation config (for edit mode)
  */
 export async function fetchImageGenerationCredentials(
-  configId: number
+  imageProviderId: string
 ): Promise<ImageGenerationCredentials> {
   const response = await fetch(
-    `${IMAGE_GEN_CONFIG_URL}/${configId}/credentials`
+    `${IMAGE_GEN_CONFIG_URL}/${imageProviderId}/credentials`
   );
   if (!response.ok) {
     throw new Error("Failed to fetch credentials");
@@ -138,6 +139,7 @@ export async function createImageGenerationConfig(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      image_provider_id: options.imageProviderId,
       model_name: options.modelName,
       is_default: options.isDefault ?? false,
       // Clone mode
@@ -179,10 +181,10 @@ export interface ImageGenerationConfigUpdateOptions {
  * Backend deletes old LLM provider and creates new one
  */
 export async function updateImageGenerationConfig(
-  configId: number,
+  imageProviderId: string,
   options: ImageGenerationConfigUpdateOptions
 ): Promise<ImageGenerationConfigView> {
-  const response = await fetch(`${IMAGE_GEN_CONFIG_URL}/${configId}`, {
+  const response = await fetch(`${IMAGE_GEN_CONFIG_URL}/${imageProviderId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -210,11 +212,14 @@ export async function updateImageGenerationConfig(
  * Set image generation config as default
  */
 export async function setDefaultImageGenerationConfig(
-  configId: number
+  imageProviderId: string
 ): Promise<void> {
-  const response = await fetch(`${IMAGE_GEN_CONFIG_URL}/${configId}/default`, {
-    method: "POST",
-  });
+  const response = await fetch(
+    `${IMAGE_GEN_CONFIG_URL}/${imageProviderId}/default`,
+    {
+      method: "POST",
+    }
+  );
 
   if (!response.ok) {
     const error = await response.json();
@@ -226,9 +231,9 @@ export async function setDefaultImageGenerationConfig(
  * Delete image generation configuration
  */
 export async function deleteImageGenerationConfig(
-  configId: number
+  imageProviderId: string
 ): Promise<void> {
-  const response = await fetch(`${IMAGE_GEN_CONFIG_URL}/${configId}`, {
+  const response = await fetch(`${IMAGE_GEN_CONFIG_URL}/${imageProviderId}`, {
     method: "DELETE",
   });
 

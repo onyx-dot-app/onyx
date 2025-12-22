@@ -97,7 +97,7 @@ export default function ImageGenerationConnectionModal({
   useEffect(() => {
     if (existingConfig && modal.isOpen) {
       setIsLoadingCredentials(true);
-      fetchImageGenerationCredentials(existingConfig.id)
+      fetchImageGenerationCredentials(existingConfig.image_provider_id)
         .then((creds) => {
           setFetchedCredentials(creds);
         })
@@ -152,7 +152,7 @@ export default function ImageGenerationConnectionModal({
         fetchedCredentials.api_version
       ) {
         const deployment =
-          fetchedCredentials.deployment_name || imageProvider.id;
+          fetchedCredentials.deployment_name || imageProvider.model_name;
         targetUri = `${fetchedCredentials.api_base}/openai/deployments/${deployment}/images/generations?api-version=${fetchedCredentials.api_version}`;
       }
 
@@ -167,7 +167,7 @@ export default function ImageGenerationConnectionModal({
       api_base: "",
       target_uri: "",
     };
-  }, [isEditMode, fetchedCredentials, isAzure, imageProvider.id]);
+  }, [isEditMode, fetchedCredentials, isAzure, imageProvider.model_name]);
 
   // Track initial API key for change detection
   const initialApiKey = fetchedCredentials?.api_key || "";
@@ -221,7 +221,10 @@ export default function ImageGenerationConnectionModal({
         } else {
           apiBase = llmDescriptor?.default_api_base || undefined;
         }
-        const modelName = isAzure ? deploymentName || "" : imageProvider.id;
+        // For Azure use deployment name, otherwise use model_name from constants
+        const modelName = isAzure
+          ? deploymentName || imageProvider.model_name
+          : imageProvider.model_name;
 
         // Test API key from existing provider before creating config
         const result = await testImageGenerationApiKey(modelName, {
@@ -241,7 +244,7 @@ export default function ImageGenerationConnectionModal({
         // Test passed - now create/update config
         if (isEditMode && existingConfig) {
           // Update mode: Backend deletes old provider and creates new one
-          await updateImageGenerationConfig(existingConfig.id, {
+          await updateImageGenerationConfig(existingConfig.image_provider_id, {
             modelName,
             sourceLlmProviderId: providerId,
             apiBase,
@@ -251,6 +254,7 @@ export default function ImageGenerationConnectionModal({
         } else {
           // Create mode: Backend creates new provider
           await createImageGenerationConfig({
+            imageProviderId: imageProvider.image_provider_id,
             modelName,
             sourceLlmProviderId: providerId,
             apiBase,
@@ -283,7 +287,12 @@ export default function ImageGenerationConnectionModal({
           apiBase = llmDescriptor?.default_api_base || undefined;
         }
 
-        const result = await testImageGenerationApiKey(imageProvider.id, {
+        // For non-Azure, use model_name from constants; for Azure use deployment name
+        const modelNameForTest = isAzure
+          ? deploymentName || imageProvider.model_name
+          : imageProvider.model_name;
+
+        const result = await testImageGenerationApiKey(modelNameForTest, {
           provider: imageProvider.provider_name,
           apiKey: values.api_key,
           apiBase,
@@ -301,9 +310,14 @@ export default function ImageGenerationConnectionModal({
         setApiStatus("success");
         setErrorMessage("");
 
+        // Use deployment name for Azure, otherwise use model_name from constants
+        const modelNameForConfig = isAzure
+          ? deploymentName || imageProvider.model_name
+          : imageProvider.model_name;
+
         if (isEditMode && existingConfig) {
-          await updateImageGenerationConfig(existingConfig.id, {
-            modelName: imageProvider.id,
+          await updateImageGenerationConfig(existingConfig.image_provider_id, {
+            modelName: modelNameForConfig,
             provider: imageProvider.provider_name,
             apiKey: values.api_key,
             apiBase: apiBase || undefined,
@@ -312,7 +326,8 @@ export default function ImageGenerationConnectionModal({
           });
         } else {
           await createImageGenerationConfig({
-            modelName: imageProvider.id,
+            imageProviderId: imageProvider.image_provider_id,
+            modelName: modelNameForConfig,
             provider: imageProvider.provider_name,
             apiKey: values.api_key,
             apiBase: apiBase || undefined,
@@ -373,7 +388,7 @@ export default function ImageGenerationConnectionModal({
           isSubmitting={isSubmitting}
         >
           <Form className="flex flex-col gap-0 bg-background-tint-01">
-            <div className="flex flex-col p-4 gap-4 w-full">
+            <div className="flex flex-col gap-4 w-full">
               {/* Azure-specific Target URI field */}
               {isAzure && (
                 <FormikField<string>
