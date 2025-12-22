@@ -50,6 +50,7 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketException
 from onyx.server.query_and_chat.streaming_models import ResearchAgentStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
+from onyx.server.query_and_chat.streaming_models import StreamingType
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallInfo
 from onyx.tools.models import ToolCallKickoff
@@ -507,7 +508,7 @@ def run_research_agent_call(
         emitter.emit(
             Packet(
                 placement=Placement(turn_index=turn_index, tab_index=tab_index),
-                obj=PacketException(type="error", exception=e),
+                obj=PacketException(type=StreamingType.ERROR.value, exception=e),
             )
         )
         return None

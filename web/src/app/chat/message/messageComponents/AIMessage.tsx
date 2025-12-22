@@ -276,8 +276,11 @@ export default function AIMessage({
       // Track this group key
       seenGroupKeysRef.current.add(currentGroupKey);
 
-      // Track SECTION_END packets
-      if (packet.obj.type === PacketType.SECTION_END) {
+      // Track SECTION_END and ERROR packets (both indicate completion)
+      if (
+        packet.obj.type === PacketType.SECTION_END ||
+        packet.obj.type === PacketType.ERROR
+      ) {
         groupKeysWithSectionEndRef.current.add(currentGroupKey);
       }
 

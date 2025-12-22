@@ -17,8 +17,10 @@ function constructCustomToolState(packets: CustomToolPacket[]) {
   const toolDeltas = packets
     .filter((p) => p.obj.type === PacketType.CUSTOM_TOOL_DELTA)
     .map((p) => p.obj as CustomToolDelta);
-  const toolEnd = packets.find((p) => p.obj.type === PacketType.SECTION_END)
-    ?.obj as SectionEnd | null;
+  const toolEnd = packets.find(
+    (p) =>
+      p.obj.type === PacketType.SECTION_END || p.obj.type === PacketType.ERROR
+  )?.obj as SectionEnd | null;
 
   const toolName = toolStart?.tool_name || toolDeltas[0]?.tool_name || "Tool";
   const latestDelta = toolDeltas[toolDeltas.length - 1] || null;
