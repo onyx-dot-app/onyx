@@ -63,6 +63,9 @@ from onyx.server.query_and_chat.models import OneShotQAResponse
 from onyx.server.query_and_chat.models import SearchSessionDetailResponse
 from onyx.server.query_and_chat.models import SourceTag
 from onyx.server.query_and_chat.models import TagResponse
+from onyx.server.query_and_chat.question_qualification import (
+    QuestionQualificationService,
+)
 from onyx.server.utils import get_json_line
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -210,6 +213,25 @@ def get_answer_stream(
 ) -> AnswerStream:
     query = query_request.messages[0].message
     logger.notice(f"Received query for Answer API: {query}")
+
+    # Question Qualification Check - Block sensitive questions early
+    try:
+        qualification_service = QuestionQualificationService()
+        qualification_result = qualification_service.qualify_question(query, db_session)
+
+        if qualification_result.is_blocked:
+            logger.info(f"One-shot query blocked by qualification service: {query}")
+
+            # Return HTTP error immediately
+            raise HTTPException(
+                status_code=403, detail=qualification_result.standard_response
+            )
+
+    except HTTPException:
+        raise  # Re-raise HTTPException
+    except Exception as e:
+        logger.warning(f"Question qualification check failed for one-shot query: {e}")
+        # Continue with normal processing if qualification fails
 
     if (
         query_request.persona_override_config is None

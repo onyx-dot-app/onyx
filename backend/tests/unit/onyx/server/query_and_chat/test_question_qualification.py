@@ -7,37 +7,73 @@ Tests cover:
 - HTTPException propagation in query_backend
 """
 
+import sys
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
 from fastapi import HTTPException
 
-# Mock Session type
-Session = MagicMock
-
-# Note: These tests require the full onyx environment to be set up
-# For a minimal test, we'll verify the code structure and logic patterns
-# Full integration tests would require all dependencies installed
+# Mock heavy dependencies before importing the module under test
+# This is necessary because question_qualification.py imports from onyx.llm.factory
+# which has a large dependency chain
 
 
 @pytest.fixture(autouse=True)
-def reset_singleton():
-    """Reset singleton state before each test."""
-    try:
-        from onyx.server.query_and_chat.question_qualification import (
-            QuestionQualificationService,
-        )
+def mock_heavy_dependencies():
+    """Mock heavy dependencies before any imports."""
+    # Store original modules
+    original_modules = {}
+    modules_to_mock = [
+        "onyx.llm.factory",
+        "onyx.llm.interfaces",
+        "onyx.db.models",
+        "onyx.chat.models",
+        "onyx.context.search.models",
+        "sqlalchemy",
+        "sqlalchemy.orm",
+    ]
 
-        QuestionQualificationService._instance = None
-        QuestionQualificationService._initialized = False
-        yield
-        # Cleanup after test
-        QuestionQualificationService._instance = None
-        QuestionQualificationService._initialized = False
-    except (ImportError, ModuleNotFoundError):
-        # Don't skip - allow tests to handle their own imports
-        yield
+    for module_name in modules_to_mock:
+        if module_name in sys.modules:
+            original_modules[module_name] = sys.modules[module_name]
+        sys.modules[module_name] = MagicMock()
+
+    # Create mock LLM
+    mock_llm = MagicMock()
+    mock_llm.config.model_name = "test-model"
+    mock_llm.config.model_provider = "test-provider"
+
+    # Mock get_default_llms to return (llm, fast_llm)
+    sys.modules["onyx.llm.factory"].get_default_llms = MagicMock(
+        return_value=(mock_llm, mock_llm)
+    )
+    sys.modules["onyx.llm.interfaces"].LLM = MagicMock
+
+    yield
+
+    # Restore original modules
+    for module_name in modules_to_mock:
+        if module_name in original_modules:
+            sys.modules[module_name] = original_modules[module_name]
+        else:
+            sys.modules.pop(module_name, None)
+
+    # Clear the question_qualification module so it can be re-imported fresh
+    sys.modules.pop("onyx.server.query_and_chat.question_qualification", None)
+
+
+@pytest.fixture(autouse=True)
+def reset_singleton(mock_heavy_dependencies):
+    """Reset singleton state before each test."""
+    # Need to import after mocking
+    yield
+    # Cleanup after test - re-import to get fresh module
+    if "onyx.server.query_and_chat.question_qualification" in sys.modules:
+        module = sys.modules["onyx.server.query_and_chat.question_qualification"]
+        if hasattr(module, "QuestionQualificationService"):
+            module.QuestionQualificationService._instance = None
+            module.QuestionQualificationService._initialized = False
 
 
 class TestQuestionQualificationService:
@@ -45,9 +81,14 @@ class TestQuestionQualificationService:
 
     def test_singleton_pattern(self):
         """Test that service is a singleton."""
+        # Import after mocking
         from onyx.server.query_and_chat.question_qualification import (
             QuestionQualificationService,
         )
+
+        # Reset singleton state for this test
+        QuestionQualificationService._instance = None
+        QuestionQualificationService._initialized = False
 
         service1 = QuestionQualificationService()
         service2 = QuestionQualificationService()
@@ -62,6 +103,10 @@ class TestQuestionQualificationService:
         from onyx.server.query_and_chat.question_qualification import (
             QuestionQualificationService,
         )
+
+        # Reset singleton state for this test
+        QuestionQualificationService._instance = None
+        QuestionQualificationService._initialized = False
 
         service = QuestionQualificationService()
 
@@ -78,6 +123,10 @@ class TestQuestionQualificationService:
         from onyx.server.query_and_chat.question_qualification import (
             QuestionQualificationService,
         )
+
+        # Reset singleton state for this test
+        QuestionQualificationService._instance = None
+        QuestionQualificationService._initialized = False
 
         service = QuestionQualificationService()
         mock_db_session = MagicMock()
@@ -100,6 +149,10 @@ class TestQuestionQualificationService:
             QuestionQualificationService,
         )
 
+        # Reset singleton state for this test
+        QuestionQualificationService._instance = None
+        QuestionQualificationService._initialized = False
+
         mock_load_config.return_value = True
         service = QuestionQualificationService()
 
@@ -111,6 +164,10 @@ class TestQuestionQualificationService:
         from onyx.server.query_and_chat.question_qualification import (
             QuestionQualificationService,
         )
+
+        # Reset singleton state for this test
+        QuestionQualificationService._instance = None
+        QuestionQualificationService._initialized = False
 
         service = QuestionQualificationService()
         stats = service.get_stats()
@@ -160,3 +217,44 @@ class TestHTTPExceptionPropagation:
             pytest.fail(
                 "HTTPException should be caught by HTTPException handler, not generic Exception"
             )
+
+
+class TestQuestionQualificationResult:
+    """Test QuestionQualificationResult data class."""
+
+    def test_result_attributes(self):
+        """Test that result has expected attributes."""
+        from onyx.server.query_and_chat.question_qualification import (
+            QuestionQualificationResult,
+        )
+
+        result = QuestionQualificationResult(
+            is_blocked=True,
+            similarity_score=0.95,
+            standard_response="Blocked",
+            matched_question="salary question",
+            matched_question_index=0,
+            reasoning="test",
+        )
+
+        assert result.is_blocked is True
+        assert result.similarity_score == 0.95
+        assert result.standard_response == "Blocked"
+        assert result.matched_question == "salary question"
+        assert result.matched_question_index == 0
+        assert result.reasoning == "test"
+
+    def test_result_defaults(self):
+        """Test default values for result."""
+        from onyx.server.query_and_chat.question_qualification import (
+            QuestionQualificationResult,
+        )
+
+        result = QuestionQualificationResult(is_blocked=False)
+
+        assert result.is_blocked is False
+        assert result.similarity_score == 0.0
+        assert result.standard_response == ""
+        assert result.matched_question == ""
+        assert result.matched_question_index == -1
+        assert result.reasoning == ""
