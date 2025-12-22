@@ -5,6 +5,7 @@ import {
   SearchToolDocumentsDelta,
   StreamingCitation,
   FetchToolDocuments,
+  TopLevelBranching,
 } from "@/app/chat/services/streamingModels";
 import { CitationMap } from "@/app/chat/interfaces";
 import { FullChatState } from "@/app/chat/message/messageComponents/interfaces";
@@ -186,6 +187,8 @@ export default function AIMessage({
   // Track composite keys "turn_index-tab_index" for graceful SECTION_END injection
   const seenGroupKeysRef = useRef<Set<string>>(new Set());
   const groupKeysWithSectionEndRef = useRef<Set<string>>(new Set());
+  // Track expected parallel branches per turn_index from TopLevelBranching packets
+  const expectedBranchesRef = useRef<Map<number, number>>(new Map());
 
   // Reset incremental state when switching messages or when stream resets
   const resetState = () => {
@@ -201,6 +204,7 @@ export default function AIMessage({
     stopPacketSeenRef.current = isStreamingComplete(rawPackets);
     seenGroupKeysRef.current = new Set();
     groupKeysWithSectionEndRef.current = new Set();
+    expectedBranchesRef.current = new Map();
   };
   useEffect(() => {
     resetState();
@@ -254,6 +258,17 @@ export default function AIMessage({
     for (let i = lastProcessedIndexRef.current; i < rawPackets.length; i++) {
       const packet = rawPackets[i];
       if (!packet) continue;
+
+      // Handle TopLevelBranching packets - these tell us how many parallel branches to expect
+      if (packet.obj.type === PacketType.TOP_LEVEL_BRANCHING) {
+        const branchingPacket = packet.obj as TopLevelBranching;
+        expectedBranchesRef.current.set(
+          packet.placement.turn_index,
+          branchingPacket.num_parallel_branches
+        );
+        // Don't add this packet to any group, it's just metadata
+        continue;
+      }
 
       const currentTurnIndex = packet.placement.turn_index;
       const currentTabIndex = packet.placement.tab_index ?? 0;
@@ -497,6 +512,9 @@ export default function AIMessage({
                             isStreaming={globalChatState === "streaming"}
                             onAllToolsDisplayed={() =>
                               setFinalAnswerComing(true)
+                            }
+                            expectedBranchesPerTurn={
+                              expectedBranchesRef.current
                             }
                           />
                         )}

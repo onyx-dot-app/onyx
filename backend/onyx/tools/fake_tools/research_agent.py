@@ -129,26 +129,32 @@ def generate_intermediate_report(
             if isinstance(packet.obj, AgentResponseStart):
                 emitter.emit(
                     Packet(
-                        placement=packet.placement,
+                        placement=placement,  # Use original placement
                         obj=IntermediateReportStart(),
                     )
                 )
             elif isinstance(packet.obj, AgentResponseDelta):
                 emitter.emit(
                     Packet(
-                        placement=packet.placement,
+                        placement=placement,  # Use original placement
                         obj=IntermediateReportDelta(content=packet.obj.content),
                     )
                 )
             else:
                 # Pass through other packet types (e.g., ReasoningStart, ReasoningDelta, etc.)
-                emitter.emit(packet)
+                # Also use original placement to keep everything in the same group
+                emitter.emit(
+                    Packet(
+                        placement=placement,
+                        obj=packet.obj,
+                    )
+                )
         except StopIteration as e:
             llm_step_result, reasoned = e.value
             emitter.emit(
                 Packet(
                     placement=Placement(
-                        turn_index=placement.turn_index + (1 if reasoned else 0),
+                        turn_index=placement.turn_index,
                         tab_index=placement.tab_index,
                         sub_turn_index=placement.sub_turn_index,
                     ),
@@ -162,8 +168,9 @@ def generate_intermediate_report(
             emitter.emit(
                 Packet(
                     placement=Placement(
-                        turn_index=placement.turn_index + (1 if reasoned else 0),
+                        turn_index=placement.turn_index,
                         tab_index=placement.tab_index,
+                        sub_turn_index=placement.sub_turn_index,
                     ),
                     obj=SectionEnd(),
                 )
@@ -328,17 +335,6 @@ def run_research_agent_call(
 
             tool_responses: list[ToolResponse] = []
             tool_calls = llm_step_result.tool_calls or []
-
-            # TODO handle the restriction of only 1 tool call type per turn
-            # This is a problem right now because of the Placement system not allowing for
-            # differentiating sub-tool calls.
-            # Filter tool calls to only include the first tool type used
-            # This prevents mixing different tool types in the same batch
-            if tool_calls:
-                first_tool_type = tool_calls[0].tool_name
-                tool_calls = [
-                    tc for tc in tool_calls if tc.tool_name == first_tool_type
-                ]
 
             just_ran_web_search = False
 
@@ -517,6 +513,14 @@ def run_research_agent_call(
             Packet(
                 placement=Placement(turn_index=turn_index, tab_index=tab_index),
                 obj=PacketException(type=StreamingType.ERROR.value, exception=e),
+            )
+        )
+        # Emit SectionEnd so the frontend knows this research agent is complete (even if it failed)
+        # Without this, the frontend will hang waiting for the SectionEnd packet
+        emitter.emit(
+            Packet(
+                placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                obj=SectionEnd(),
             )
         )
         return None

@@ -491,6 +491,7 @@ export default function MultiToolRenderer({
   stopPacketSeen,
   onAllToolsDisplayed,
   isStreaming,
+  expectedBranchesPerTurn,
 }: {
   packetGroups: { turn_index: number; tab_index: number; packets: Packet[] }[];
   chatState: FullChatState;
@@ -499,6 +500,8 @@ export default function MultiToolRenderer({
   stopPacketSeen: boolean;
   onAllToolsDisplayed?: () => void;
   isStreaming?: boolean;
+  // Map of turn_index -> expected number of parallel branches (from TopLevelBranching packet)
+  expectedBranchesPerTurn?: Map<number, number>;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isStreamingExpanded, setIsStreamingExpanded] = useState(false);
@@ -559,7 +562,12 @@ export default function MultiToolRenderer({
 
   // Use the custom hook to manage tool display timing
   const { visibleTools, allToolsDisplayed, handleToolComplete } =
-    useToolDisplayTiming(toolGroups, isFinalAnswerComing, isComplete);
+    useToolDisplayTiming(
+      toolGroups,
+      isFinalAnswerComing,
+      isComplete,
+      expectedBranchesPerTurn
+    );
 
   // Notify parent when all tools are displayed
   useEffect(() => {
