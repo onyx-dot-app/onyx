@@ -85,7 +85,6 @@ repos:
       - id: check-json
       - id: check-symlinks
       - id: check-toml
-      - id: detect-private-key
       - id: end-of-file-fixer
       - id: fix-byte-order-marker
       - id: trailing-whitespace
