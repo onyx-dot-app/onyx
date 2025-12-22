@@ -203,8 +203,8 @@ test.describe("Assistant Creation and Edit Verification", () => {
       expect(assistantId).not.toBeNull();
 
       // Navigate directly to the edit page
-      await page.goto(`http://localhost:3000/assistants/edit/${assistantId}`);
-      await page.waitForURL(`**/assistants/edit/${assistantId}`);
+      await page.goto(`http://localhost:3000/chat/agents/edit/${assistantId}`);
+      await page.waitForURL(`**/chat/agents/edit/${assistantId}`);
 
       // Verify basic fields
       await expect(getNameInput(page)).toHaveValue(assistantName);
@@ -265,8 +265,8 @@ test.describe("Assistant Creation and Edit Verification", () => {
       expect(page.url()).toContain(`assistantId=${assistantId}`);
 
       // --- Navigate to Edit Page Again and Verify Edited Values ---
-      await page.goto(`http://localhost:3000/assistants/edit/${assistantId}`);
-      await page.waitForURL(`**/assistants/edit/${assistantId}`);
+      await page.goto(`http://localhost:3000/chat/agents/edit/${assistantId}`);
+      await page.waitForURL(`**/chat/agents/edit/${assistantId}`);
 
       // Verify basic fields
       await expect(getNameInput(page)).toHaveValue(editedAssistantName);

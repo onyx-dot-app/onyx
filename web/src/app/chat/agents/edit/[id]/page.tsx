@@ -1,21 +1,38 @@
 "use client";
 
+import { use, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAgent } from "@/hooks/useAgents";
 import AgentEditorPage from "@/refresh-pages/AgentEditorPage";
 
 export interface PageProps {
   params: Promise<{ id: string }>;
 }
 
-export default async function Page(props: PageProps) {
-  const { id } = await props.params;
-  // const [values, error] = await fetchAgentEditorInfoSS(id);
-  // if (!values) {
-  //   return (
-  //     <div className="px-32">
-  //       <ErrorCallout errorTitle="Something went wrong :(" errorMsg={error} />
-  //     </div>
-  //   );
-  // }
+export default function Page(props: PageProps) {
+  const router = useRouter();
+  const { id } = use(props.params);
+  const personaId = parseInt(id);
 
-  return <AgentEditorPage />;
+  // Handle invalid ID (NaN)
+  if (isNaN(personaId)) {
+    router.push("/chat");
+    return null;
+  }
+
+  const { agent, isLoading, error } = useAgent(personaId);
+
+  // Redirect to home if agent not found after loading completes
+  useEffect(() => {
+    if (!isLoading && !agent) {
+      router.push("/chat");
+    }
+  }, [isLoading, agent, router]);
+
+  // Show nothing while redirecting or loading
+  if (isLoading || !agent) {
+    return null;
+  }
+
+  return <AgentEditorPage agent={agent} />;
 }
