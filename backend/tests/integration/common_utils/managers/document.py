@@ -93,6 +93,11 @@ def _generate_dummy_document(
 
 
 class DocumentManager:
+    """
+    Manager for seeding documents via the ingestion API.
+    Used to test various connector features.
+    """
+
     @staticmethod
     def seed_dummy_docs(
         cc_pair: DATestCCPair,
@@ -159,29 +164,6 @@ class DocumentManager:
             id=document["document"]["id"],
             content=document["document"]["sections"][0]["text"],
         )
-
-    @staticmethod
-    def list(
-        api_key: DATestAPIKey | None = None,
-    ) -> list[dict]:
-        response = requests.get(
-            f"{API_SERVER_URL}/onyx-api/ingestion",
-            headers=api_key.headers if api_key else GENERAL_HEADERS,
-        )
-        response.raise_for_status()
-        return response.json()
-
-    @staticmethod
-    def delete(
-        document_id: str,
-        api_key: DATestAPIKey | None = None,
-    ) -> None:
-        response = requests.delete(
-            f"{API_SERVER_URL}/onyx-api/ingestion/{document_id}",
-            headers=api_key.headers if api_key else GENERAL_HEADERS,
-        )
-        response.raise_for_status()
-        print(f"Deleted document {document_id} successfully.")
 
     @staticmethod
     def verify(
@@ -276,3 +258,33 @@ class DocumentManager:
             )
 
         return final_docs
+
+
+class IngestionManager(DocumentManager):
+    """
+    Manager for additional ingestion API endpoints not covered by DocumentManager.
+    Used specifically to test the ingestion API.
+    """
+
+    @staticmethod
+    def list_all_ingestion_docs(
+        api_key: DATestAPIKey | None = None,
+    ) -> list[dict]:
+        response = requests.get(
+            f"{API_SERVER_URL}/onyx-api/ingestion",
+            headers=api_key.headers if api_key else GENERAL_HEADERS,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    @staticmethod
+    def delete(
+        document_id: str,
+        api_key: DATestAPIKey | None = None,
+    ) -> None:
+        response = requests.delete(
+            f"{API_SERVER_URL}/onyx-api/ingestion/{document_id}",
+            headers=api_key.headers if api_key else GENERAL_HEADERS,
+        )
+        response.raise_for_status()
+        print(f"Deleted document {document_id} successfully.")
