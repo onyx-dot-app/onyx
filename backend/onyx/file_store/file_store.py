@@ -556,10 +556,10 @@ class S3BackedFileStore(FileStore):
                 )
                 raise
 
-    def get_file_with_mime_type(self, filename: str) -> FileWithMimeType | None:
+    def get_file_with_mime_type(self, file_id: str) -> FileWithMimeType | None:
         mime_type: str = "application/octet-stream"
         try:
-            file_io = self.read_file(filename, mode="b")
+            file_io = self.read_file(file_id, mode="b")
             file_content = file_io.read()
             matches = puremagic.magic_string(file_content)
             if matches:
