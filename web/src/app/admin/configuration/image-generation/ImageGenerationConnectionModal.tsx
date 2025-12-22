@@ -29,6 +29,9 @@ import {
   ImageGenerationCredentials,
 } from "@/lib/configuration/imageConfigurationService";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { SvgServer } from "@opal/icons";
+import { ProviderIcon } from "../llm/ProviderIcon";
+import LLMConnectionIcons from "@/refresh-components/onboarding/components/LLMConnectionIcons";
 
 interface Props {
   modal: ModalCreationInterface;
@@ -220,6 +223,22 @@ export default function ImageGenerationConnectionModal({
         }
         const modelName = isAzure ? deploymentName || "" : imageProvider.id;
 
+        // Test API key from existing provider before creating config
+        const result = await testImageGenerationApiKey(modelName, {
+          sourceLlmProviderId: providerId,
+          apiBase,
+          apiVersion,
+          deploymentName,
+        });
+
+        if (!result.ok) {
+          setApiStatus("error");
+          setErrorMessage(result.errorMessage || "API key validation failed");
+          setIsSubmitting(false);
+          return;
+        }
+
+        // Test passed - now create/update config
         if (isEditMode && existingConfig) {
           // Update mode: Backend deletes old provider and creates new one
           await updateImageGenerationConfig(existingConfig.id, {
@@ -264,14 +283,13 @@ export default function ImageGenerationConnectionModal({
           apiBase = llmDescriptor?.default_api_base || undefined;
         }
 
-        const result = await testImageGenerationApiKey(
-          imageProvider.provider_name,
-          values.api_key,
-          imageProvider.id,
-          apiBase || undefined,
+        const result = await testImageGenerationApiKey(imageProvider.id, {
+          provider: imageProvider.provider_name,
+          apiKey: values.api_key,
+          apiBase,
           apiVersion,
-          deploymentName
-        );
+          deploymentName,
+        });
 
         if (!result.ok) {
           setApiStatus("error");
@@ -324,6 +342,10 @@ export default function ImageGenerationConnectionModal({
     }
   };
 
+  const iconNode = (
+    <ProviderIcon provider={imageProvider.provider_name} size={24} />
+  );
+
   return (
     <Formik
       initialValues={initialValues}
@@ -341,7 +363,7 @@ export default function ImageGenerationConnectionModal({
               : `Connect ${imageProvider.title}`
           }
           description={imageProvider.description}
-          icon={() => <imageProvider.icon className="size-5" />}
+          icon={() => <LLMConnectionIcons icon={iconNode} />}
           onSubmit={formikProps.submitForm}
           submitDisabled={
             !formikProps.isValid ||
