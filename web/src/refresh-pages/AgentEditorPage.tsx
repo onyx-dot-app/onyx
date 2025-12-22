@@ -59,12 +59,15 @@ import {
   PersonaUpsertParameters,
 } from "@/app/admin/assistants/lib";
 import useMcpServers from "@/hooks/useMcpServers";
+import useOpenApiTools from "@/hooks/useOpenApiTools";
 import MCPActionCard from "@/sections/actions/MCPActionCard";
+import OpenApiActionCard from "@/sections/actions/OpenApiActionCard";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import {
   ActionStatus,
   MCPServerStatus,
   MCPServer,
+  ToolSnapshot,
 } from "@/lib/tools/interfaces";
 
 interface AgentIconEditorProps {
@@ -293,6 +296,7 @@ export default function AgentEditorPage({
   } | null>(null);
 
   const { mcpData } = useMcpServers();
+  const { openApiTools, mutateOpenApiTools } = useOpenApiTools();
 
   // Helper to determine action status from server status
   const getActionStatusForServer = (server: MCPServer): ActionStatus => {
@@ -924,6 +928,21 @@ export default function AgentEditorPage({
                               })}
                             </div>
                           )}
+
+                        {/* OpenAPI tools */}
+                        {openApiTools && openApiTools.length > 0 && (
+                          <div className="flex flex-col gap-2">
+                            {openApiTools.map((tool) => (
+                              <OpenApiActionCard
+                                key={tool.id}
+                                tool={tool}
+                                onAuthenticate={() => {}}
+                                mutateOpenApiTools={mutateOpenApiTools}
+                                setPopup={setPopup}
+                              />
+                            ))}
+                          </div>
+                        )}
                       </Section>
                     </SimpleCollapsible>
 
