@@ -533,7 +533,7 @@ markupsafe==3.0.3
     #   jinja2
     #   mako
     #   werkzeug
-marshmallow==3.26.1
+marshmallow==3.26.2
     # via
     #   dataclasses-json
     #   unstructured-client
