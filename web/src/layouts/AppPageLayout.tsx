@@ -2,9 +2,9 @@
 
 import { ChatSession } from "@/app/chat/interfaces";
 import { cn } from "@/lib/utils";
-import Text from "@/refresh-components/texts/Text";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import ChatHeader from "./ChatHeader";
+import ChatFooter from "./ChatFooter";
 
 export interface AppPageLayoutProps
   extends React.HtmlHTMLAttributes<HTMLDivElement> {
@@ -22,22 +22,11 @@ export default function AppPageLayout({
   className,
   ...rest
 }: AppPageLayoutProps) {
-  const customFooterContent =
-    settings?.enterpriseSettings?.custom_lower_disclaimer_content;
-
   return (
     <div className="flex flex-col h-full w-full">
       <ChatHeader settings={settings} chatSession={chatSession} />
-
       <div className={cn("flex-1 overflow-auto", className)} {...rest} />
-
-      {customFooterContent && (
-        <footer className="w-full flex flex-row justify-center items-center gap-2 py-3">
-          <Text text03 secondaryBody>
-            {customFooterContent}
-          </Text>
-        </footer>
-      )}
+      <ChatFooter settings={settings} />
     </div>
   );
 }
