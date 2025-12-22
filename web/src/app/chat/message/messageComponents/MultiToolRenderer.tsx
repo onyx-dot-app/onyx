@@ -19,7 +19,12 @@ import { useToolDisplayTiming } from "./hooks/useToolDisplayTiming";
 import { STANDARD_TEXT_COLOR } from "./constants";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
-import { getToolIcon, getToolName, hasToolError } from "./toolDisplayHelpers";
+import {
+  getToolIcon,
+  getToolName,
+  hasToolError,
+  isToolComplete,
+} from "./toolDisplayHelpers";
 import {
   SearchToolStep1Renderer,
   SearchToolStep2Renderer,
@@ -143,19 +148,15 @@ function ParallelToolTabs({
     items.forEach((item) => {
       if (!seen.has(item.tab_index)) {
         seen.add(item.tab_index);
-        // Check if this tool is complete (has SECTION_END or ERROR)
-        const isComplete = item.packets.some(
-          (p) =>
-            p.obj.type === PacketType.SECTION_END ||
-            p.obj.type === PacketType.ERROR
-        );
+        // Check if this tool is complete using the helper that handles research agents properly
+        const toolComplete = isToolComplete(item.packets);
         const hasError = hasToolError(item.packets);
         tabs.push({
           tab_index: item.tab_index,
           name: getToolName(item.packets),
           icon: getToolIcon(item.packets),
           packets: item.packets,
-          isComplete,
+          isComplete: toolComplete,
           hasError,
         });
       }
@@ -590,12 +591,9 @@ export default function MultiToolRenderer({
           handleToolComplete(item.turn_index, item.tab_index);
         }
       } else if (item.type === DisplayType.REGULAR) {
-        // Regular tools (including web search, openUrl, etc.): check for SECTION_END or ERROR
-        const hasCompletion = item.packets.some(
-          (p) =>
-            p.obj.type === PacketType.SECTION_END ||
-            p.obj.type === PacketType.ERROR
-        );
+        // Regular tools (including web search, openUrl, research agents, etc.):
+        // Use isToolComplete helper which handles research agents correctly
+        const hasCompletion = isToolComplete(item.packets);
         if (hasCompletion && item.turn_index !== undefined) {
           handleToolComplete(item.turn_index, item.tab_index);
         }
@@ -750,12 +748,9 @@ export default function MultiToolRenderer({
                       );
                       isItemComplete = searchState.isComplete;
                     } else {
-                      // Check for parent-level SECTION_END (not nested tool SECTION_END)
-                      isItemComplete = item.packets.some(
-                        (p) =>
-                          p.obj.type === PacketType.SECTION_END ||
-                          p.obj.type === PacketType.ERROR
-                      );
+                      // Use isToolComplete helper which handles research agents correctly
+                      // (only looks at parent-level SECTION_END for research agents)
+                      isItemComplete = isToolComplete(item.packets);
                     }
                     const isLoading = !isItemComplete && !shouldStopShimmering;
 
