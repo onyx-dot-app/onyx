@@ -9,8 +9,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ContentComponentProps } from "./ExpandableContentWrapper";
-import { WarningCircle } from "@phosphor-icons/react";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import { SvgAlertCircle } from "@opal/icons";
 
 const CsvContent: React.FC<ContentComponentProps> = ({
   fileDescriptor,
@@ -22,14 +22,29 @@ const CsvContent: React.FC<ContentComponentProps> = ({
   const [headers, setHeaders] = useState<string[]>([]);
   const [isFetching, setIsFetching] = useState(true);
 
+  // Cache parsed CSV across mounts so closing other modals doesn't force a refetch.
+  // Keyed by file id; safe because chat file ids are unique.
+  const cacheKey = fileDescriptor.id;
+  const cached = csvCache.get(cacheKey);
+
   useEffect(() => {
+    if (cached) {
+      setHeaders(cached.headers);
+      setData(cached.data);
+      setIsFetching(false);
+      return;
+    }
+
     fetchCSV(fileDescriptor.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileDescriptor.id]);
 
   const fetchCSV = async (id: string) => {
     setIsFetching(true);
     try {
-      const response = await fetch(`api/chat/file/${id}`);
+      const response = await fetch(`/api/chat/file/${id}`, {
+        cache: "force-cache",
+      });
       if (!response.ok) {
         throw new Error("Failed to fetch CSV file");
       }
@@ -67,6 +82,7 @@ const CsvContent: React.FC<ContentComponentProps> = ({
         );
       });
       setData(parsedData);
+      csvCache.set(id, { headers: parsedHeaders, data: parsedData });
     } catch (error) {
       console.error("Error fetching CSV file:", error);
       setData([]);
@@ -129,7 +145,7 @@ const CsvContent: React.FC<ContentComponentProps> = ({
                   className="text-center py-8"
                 >
                   <div className="flex flex-col items-center justify-center space-y-2">
-                    <WarningCircle className="w-8 h-8 text-error" />
+                    <SvgAlertCircle className="w-8 h-8 stroke-error" />
                     <p className="text-text-600 font-medium">
                       {headers.length === 0
                         ? "Error loading CSV"
@@ -152,3 +168,8 @@ const CsvContent: React.FC<ContentComponentProps> = ({
 };
 
 export default CsvContent;
+
+const csvCache = new Map<
+  string,
+  { headers: string[]; data: Record<string, string>[] }
+>();
