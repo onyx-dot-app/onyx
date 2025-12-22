@@ -5,7 +5,7 @@ import { cn, noProp } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
-import { useMemo, useState, useEffect } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -87,38 +87,51 @@ export default function ChatHeader({ settings, chatSession }: ChatHeaderProps) {
     setShowMoveCustomAgentModal(false);
   };
 
-  const performMove = async (targetProjectId: number) => {
-    if (!chatSession) return;
-    try {
-      await handleMoveOperation(
-        {
-          chatSession,
-          targetProjectId,
-          refreshChatSessions,
-          refreshCurrentProjectDetails,
-          fetchProjects,
-          currentProjectId,
-        },
-        setPopup
-      );
-      resetMoveState();
-      setPopoverOpen(false);
-    } catch (error) {
-      console.error("Failed to move chat session:", error);
-    }
-  };
+  const performMove = useCallback(
+    async (targetProjectId: number) => {
+      if (!chatSession) return;
+      try {
+        await handleMoveOperation(
+          {
+            chatSession,
+            targetProjectId,
+            refreshChatSessions,
+            refreshCurrentProjectDetails,
+            fetchProjects,
+            currentProjectId,
+          },
+          setPopup
+        );
+        resetMoveState();
+        setPopoverOpen(false);
+      } catch (error) {
+        console.error("Failed to move chat session:", error);
+      }
+    },
+    [
+      chatSession,
+      refreshChatSessions,
+      refreshCurrentProjectDetails,
+      fetchProjects,
+      currentProjectId,
+      setPopup,
+    ]
+  );
 
-  const handleMoveClick = (projectId: number) => {
-    if (!chatSession) return;
-    if (shouldShowMoveModal(chatSession)) {
-      setPendingMoveProjectId(projectId);
-      setShowMoveCustomAgentModal(true);
-      return;
-    }
-    void performMove(projectId);
-  };
+  const handleMoveClick = useCallback(
+    (projectId: number) => {
+      if (!chatSession) return;
+      if (shouldShowMoveModal(chatSession)) {
+        setPendingMoveProjectId(projectId);
+        setShowMoveCustomAgentModal(true);
+        return;
+      }
+      void performMove(projectId);
+    },
+    [chatSession, performMove]
+  );
 
-  const handleDeleteChat = async () => {
+  const handleDeleteChat = useCallback(async () => {
     if (!chatSession) return;
     try {
       const response = await deleteChatSession(chatSession.id);
@@ -135,14 +148,14 @@ export default function ChatHeader({ settings, chatSession }: ChatHeaderProps) {
         "Failed to delete chat. Please try again."
       );
     }
-  };
+  }, [chatSession, refreshChatSessions, fetchProjects, router, setPopup]);
 
-  const setDeleteConfirmationModalOpen = (open: boolean) => {
+  const setDeleteConfirmationModalOpen = useCallback((open: boolean) => {
     setDeleteModalOpen(open);
     if (open) {
       setPopoverOpen(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (!showMoveOptions) {
