@@ -3,6 +3,8 @@
 import Text from "@/refresh-components/texts/Text";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import { ChatSession } from "@/app/chat/interfaces";
+import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
+import { usePathname } from "next/navigation";
 
 export interface ChatFooterProps {
   settings: CombinedSettings | null;
@@ -10,6 +12,8 @@ export interface ChatFooterProps {
 }
 
 export default function ChatFooter({ settings, chatSession }: ChatFooterProps) {
+  const { currentProjectId } = useProjectsContext();
+  const pathname = usePathname();
   const customFooterContent =
     settings?.enterpriseSettings?.custom_lower_disclaimer_content;
 
@@ -24,9 +28,11 @@ export default function ChatFooter({ settings, chatSession }: ChatFooterProps) {
     );
   }
 
-  // On the landing page (no chat session), render an empty spacer
+  // On the landing page (/chat with no chat session, no project), render an empty spacer
   // to balance the header and keep content centered
-  if (!chatSession) {
+  const isLandingPage =
+    pathname === "/chat" && !chatSession && !currentProjectId;
+  if (isLandingPage) {
     return <div className="h-16" />;
   }
 
