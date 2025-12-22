@@ -52,6 +52,12 @@ import CustomAgentAvatar, {
 } from "@/refresh-components/avatars/CustomAgentAvatar";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import SquareButton from "@/refresh-components/buttons/SquareButton";
+import { useAgents } from "@/hooks/useAgents";
+import {
+  createPersona,
+  updatePersona,
+  PersonaUpsertParameters,
+} from "@/app/admin/assistants/lib";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
@@ -60,6 +66,7 @@ interface AgentIconEditorProps {
 function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
   const { values, setFieldValue } = useFormikContext<{
     name: string;
+    icon_name: string | null;
     uploaded_image_id: string | null;
   }>();
   const [uploadedImagePreview, setUploadedImagePreview] = useState<
@@ -67,14 +74,13 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
   >(null);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [selectedIconName, setSelectedIconName] = useState<string | null>(null);
 
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
     // Clear selected icon when uploading an image
-    setSelectedIconName(null);
+    setFieldValue("icon_name", null);
 
     // Show preview immediately
     const reader = new FileReader();
@@ -116,7 +122,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
         : undefined;
 
   function handleIconClick(iconName: string | null) {
-    setSelectedIconName(iconName);
+    setFieldValue("icon_name", iconName);
     setFieldValue("uploaded_image_id", null);
     setUploadedImagePreview(null);
     setPopoverOpen(false);
@@ -144,7 +150,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
             <CustomAgentAvatar
               size={imageSrc ? 7.5 * 16 : 40}
               src={imageSrc}
-              iconName={selectedIconName ?? undefined}
+              iconName={values.icon_name ?? undefined}
               name={values.name}
             />
             <Button
@@ -174,7 +180,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
                     <CustomAgentAvatar name={values.name} size={30} />
                   )}
                   onClick={() => handleIconClick(null)}
-                  transient={!imageSrc && selectedIconName === null}
+                  transient={!imageSrc && values.icon_name === null}
                 />
                 {Object.keys(iconMap).map((iconName) => (
                   <SquareButton
@@ -183,7 +189,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
                     icon={() => (
                       <CustomAgentAvatar iconName={iconName} size={30} />
                     )}
-                    transient={selectedIconName === iconName}
+                    transient={values.icon_name === iconName}
                   />
                 ))}
               </div>,
@@ -254,12 +260,13 @@ export default function AgentEditorPage({
   agent: existingAgent,
 }: AgentEditorPageProps) {
   const router = useRouter();
+  const { popup, setPopup } = usePopup();
+  const { refresh: refreshAgents } = useAgents();
 
   // Hooks for Knowledge section
   const { allRecentFiles, beginUpload } = useProjectsContext();
   const { data: documentSets } = useDocumentSets();
   const userFilesModal = useCreateModal();
-  const { setPopup } = usePopup();
   const [presentingDocument, setPresentingDocument] = useState<{
     document_id: string;
     semantic_identifier: string;
@@ -276,7 +283,7 @@ export default function AgentEditorPage({
     instructions: existingAgent?.system_prompt ?? "",
     conversation_starters: Array.from(
       { length: CONVERSATION_STARTERS.length },
-      (_, i) => existingAgent?.starter_messages?.[i] ?? ""
+      (_, i) => existingAgent?.starter_messages?.[i]?.message ?? ""
     ),
 
     // Knowledge
@@ -303,6 +310,8 @@ export default function AgentEditorPage({
 
   const validationSchema = Yup.object().shape({
     // General
+    icon_name: Yup.string().nullable(),
+    uploaded_image_id: Yup.string().nullable(),
     name: Yup.string().required("Agent name is required."),
     description: Yup.string().required("Description is required."),
 
@@ -332,8 +341,91 @@ export default function AgentEditorPage({
   });
 
   const handleSubmit = async (values: typeof initialValues) => {
-    console.log("Form submitted:", values);
-    // TODO: Implement agent creation/update logic
+    try {
+      // Map conversation starters
+      const starterMessages = values.conversation_starters
+        .filter((message: string) => message.trim() !== "")
+        .map((message: string) => ({
+          message: message,
+          name: message,
+        }));
+
+      // Determine knowledge settings
+      const teamKnowledge = values.knowledge_source === "team_knowledge";
+      const numChunks = values.enable_knowledge ? values.num_chunks || 25 : 0;
+
+      // Build submission data
+      const submissionData: PersonaUpsertParameters = {
+        name: values.name,
+        description: values.description,
+        system_prompt: values.instructions,
+        task_prompt: "",
+        datetime_aware: values.current_datetime_aware,
+        document_set_ids:
+          teamKnowledge && values.enable_knowledge
+            ? values.document_set_ids
+            : [],
+        user_file_ids:
+          !teamKnowledge && values.enable_knowledge ? values.user_file_ids : [],
+        num_chunks: numChunks,
+        is_public: values.general_access === "public",
+        llm_relevance_filter: false,
+        llm_model_provider_override: null,
+        llm_model_version_override: null,
+        starter_messages: starterMessages,
+        users: undefined, // TODO: Handle restricted access users
+        groups: [], // TODO: Handle groups
+        tool_ids: [], // Temporarily empty - will add back later
+        remove_image: false,
+        search_start_date: null,
+        uploaded_image: null, // Already uploaded separately
+        is_default_persona: false,
+        label_ids: null,
+      };
+
+      // Call API
+      let personaResponse;
+      if (existingAgent) {
+        personaResponse = await updatePersona(existingAgent.id, submissionData);
+      } else {
+        personaResponse = await createPersona(submissionData);
+      }
+
+      // Handle response
+      if (!personaResponse || !personaResponse.ok) {
+        const error = personaResponse
+          ? await personaResponse.text()
+          : "No response received";
+        setPopup({
+          type: "error",
+          message: `Failed to ${
+            existingAgent ? "update" : "create"
+          } agent - ${error}`,
+        });
+        return;
+      }
+
+      // Success
+      const agent = await personaResponse.json();
+      setPopup({
+        type: "success",
+        message: `Agent "${agent.name}" ${
+          existingAgent ? "updated" : "created"
+        } successfully`,
+      });
+
+      // Refresh agents list
+      await refreshAgents();
+
+      // Navigate back
+      router.push("/chat/agents");
+    } catch (error) {
+      console.error("Submit error:", error);
+      setPopup({
+        type: "error",
+        message: `An error occurred: ${error}`,
+      });
+    }
   };
 
   // FilePickerPopover callbacks - defined outside render to avoid inline functions
