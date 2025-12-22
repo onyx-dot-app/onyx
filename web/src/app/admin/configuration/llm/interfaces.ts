@@ -148,4 +148,6 @@ export interface DynamicProviderConfig<
   successMessage: (count: number) => string;
   // If true, uses models from the descriptor instead of making an API call
   isStatic?: boolean;
+  // If true, requires user to click a button to fetch models (no auto-fetch)
+  requiresManualFetch?: boolean;
 }

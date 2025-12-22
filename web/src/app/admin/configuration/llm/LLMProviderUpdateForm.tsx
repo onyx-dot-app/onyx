@@ -2,7 +2,6 @@ import ReactMarkdown from "react-markdown";
 import { LoadingAnimation } from "@/components/Loading";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import Text from "@/refresh-components/texts/Text";
-import Separator from "@/refresh-components/Separator";
 import Button from "@/refresh-components/buttons/Button";
 import { Form, Formik } from "formik";
 import type { FormikProps } from "formik";
@@ -53,13 +52,21 @@ function AutoFetchModels({
   const hasAutoFetchedRef = useRef(false);
 
   useEffect(() => {
-    // Skip auto-fetch in auto mode since we use descriptor's recommended models
-    if (values.is_auto_mode) {
+    const config = dynamicProviderConfigs[llmProviderDescriptor.name];
+    if (!config) {
       return;
     }
 
-    const config = dynamicProviderConfigs[llmProviderDescriptor.name];
-    if (!config) {
+    // For static providers (OpenAI, Anthropic, etc.) in auto mode, skip fetch
+    // since we use the descriptor's recommended models directly.
+    // For dynamic providers (Ollama, Bedrock, OpenRouter), always fetch when
+    // credentials are ready since they have no descriptor models.
+    if (values.is_auto_mode && config.isStatic) {
+      return;
+    }
+
+    // Skip auto-fetch for providers that require manual fetch (e.g., Bedrock)
+    if (config.requiresManualFetch) {
       return;
     }
 
@@ -179,7 +186,11 @@ export function LLMProviderUpdateForm({
         {} as { [key: string]: string }
       ),
     is_public: existingLlmProvider?.is_public ?? true,
-    is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
+    // For dynamic providers with no descriptor models (Ollama, Bedrock, OpenRouter),
+    // default to manual mode since auto mode has nothing to show
+    is_auto_mode:
+      existingLlmProvider?.is_auto_mode ??
+      llmProviderDescriptor.model_configurations.length > 0,
     groups: existingLlmProvider?.groups ?? [],
     personas: existingLlmProvider?.personas ?? [],
     model_configurations: existingLlmProvider?.model_configurations ?? [],
@@ -656,8 +667,9 @@ export function LLMProviderUpdateForm({
                 </div>
               )}
 
-            {/* Show error state for auto-fetching models */}
+            {/* Show error state for auto-fetching models (not for manual fetch providers) */}
             {dynamicConfig &&
+              !dynamicConfig.requiresManualFetch &&
               !formikProps.values.is_auto_mode &&
               fetchModelsError && (
                 <Text className="text-status-error-05 text-sm">
@@ -746,6 +758,20 @@ export function LLMProviderUpdateForm({
                 ) : (
                   // Manual mode: Unified model selection
                   <div key="manual-mode" className="animate-fadeIn">
+                    {/* Show header when auto mode toggle is not available */}
+                    {!llmProviderDescriptor.model_configurations.some(
+                      (m) => m.is_visible
+                    ) && (
+                      <div className="mb-2">
+                        <label className="block font-medium text-base">
+                          Available Models
+                        </label>
+                        <span className="block text-sm text-text-03">
+                          Select which models to make available for this
+                          provider.
+                        </span>
+                      </div>
+                    )}
                     {isFetchingModels && dynamicConfig ? (
                       <div>
                         <div className="mt-2 flex items-center p-3 border border-border-01 rounded-lg bg-background-neutral-00">
@@ -794,14 +820,45 @@ export function LLMProviderUpdateForm({
                         {(formikProps.values.selected_model_names?.length ??
                           0) > 0 && (
                           <div className="flex flex-wrap gap-2 mt-1">
-                            {formikProps.values.selected_model_names?.map(
-                              (modelName) => {
+                            {[
+                              ...(formikProps.values.selected_model_names ??
+                                []),
+                            ]
+                              .sort((a, b) => {
+                                // Default model always first
+                                const aIsDefault =
+                                  a === formikProps.values.default_model_name;
+                                const bIsDefault =
+                                  b === formikProps.values.default_model_name;
+                                if (aIsDefault && !bIsDefault) return -1;
+                                if (!aIsDefault && bIsDefault) return 1;
+
+                                // Recommended models (is_visible in descriptor) come next
+                                const recommendedModels = new Set(
+                                  llmProviderDescriptor.model_configurations
+                                    .filter((m) => m.is_visible)
+                                    .map((m) => m.name)
+                                );
+                                const aIsRecommended = recommendedModels.has(a);
+                                const bIsRecommended = recommendedModels.has(b);
+                                if (aIsRecommended && !bIsRecommended)
+                                  return -1;
+                                if (!aIsRecommended && bIsRecommended) return 1;
+
+                                return 0;
+                              })
+                              .map((modelName) => {
                                 const isDefault =
                                   formikProps.values.default_model_name ===
                                   modelName;
                                 return (
                                   <div
                                     key={modelName}
+                                    title={
+                                      isDefault
+                                        ? undefined
+                                        : "Click to set as default"
+                                    }
                                     className={`group flex items-center gap-1 rounded-lg border px-2 py-1 text-sm transition-colors ${
                                       isDefault
                                         ? "border-action-link-05 bg-action-link-05/10"
@@ -832,7 +889,7 @@ export function LLMProviderUpdateForm({
                                     )}
                                     <button
                                       type="button"
-                                      className="ml-1 p-0.5 rounded hover:bg-background-neutral-03 transition-colors"
+                                      className="p-0.5 rounded hover:bg-background-neutral-03 transition-colors"
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         const currentSelected =
@@ -862,12 +919,60 @@ export function LLMProviderUpdateForm({
                                     </button>
                                   </div>
                                 );
-                              }
+                              })}
+                          </div>
+                        )}
+                      </div>
+                    ) : dynamicConfig ? (
+                      // Dynamic provider - show appropriate message/button based on state
+                      <div className="flex flex-col gap-2">
+                        {dynamicConfig.isDisabled(formikProps.values) ? (
+                          <div className="p-3 border border-border-01 rounded-lg bg-background-neutral-00">
+                            <Text secondaryBody text03>
+                              {dynamicConfig.disabledReason ||
+                                "Fill in the required fields above to fetch available models."}
+                            </Text>
+                          </div>
+                        ) : dynamicConfig.requiresManualFetch ? (
+                          <div className="flex flex-col gap-2">
+                            {fetchModelsError && (
+                              <Text className="text-status-error-05 text-sm">
+                                {fetchModelsError}
+                              </Text>
                             )}
+                            <Button
+                              type="button"
+                              secondary
+                              disabled={isFetchingModels}
+                              onClick={() => {
+                                fetchModels(
+                                  llmProviderDescriptor,
+                                  existingLlmProvider,
+                                  formikProps.values,
+                                  formikProps.setFieldValue,
+                                  setIsFetchingModels,
+                                  setFetchModelsError,
+                                  setPopup
+                                );
+                              }}
+                            >
+                              {isFetchingModels
+                                ? "Fetching Models..."
+                                : "Fetch Available Models"}
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="p-3 border border-border-01 rounded-lg bg-background-neutral-00">
+                            <Text secondaryBody text03>
+                              {fetchModelsError
+                                ? "Failed to fetch models. Check your credentials and try again."
+                                : "No models available."}
+                            </Text>
                           </div>
                         )}
                       </div>
                     ) : (
+                      // Fallback to manual text input for providers without dynamic config
                       <TextFormField
                         name="default_model_name"
                         subtext="The model to use by default for this provider unless otherwise specified."

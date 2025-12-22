@@ -1,0 +1,47 @@
+{
+  "version": "1.0",
+  "updated_at": "2025-12-17T00:00:00Z",
+  "providers": {
+    "openai": {
+      "default_model": { "name": "gpt-5.2" },
+      "additional_visible_models": [
+        { "name": "gpt-4.1" }
+      ]
+    },
+    "anthropic": {
+      "default_model": "claude-opus-4-5",
+      "additional_visible_models": [
+        {
+          "name": "claude-sonnet-4-5",
+          "display_name": "Claude Sonnet 4.5"
+        }
+      ]
+    },
+    "vertex_ai": {
+      "default_model": "gemini-3-pro-preview",
+      "additional_visible_models": [
+        {
+          "name": "gemini-3-pro-preview",
+          "display_name": "Gemini 3 Pro"
+        },
+        {
+          "name": "gemini-3-flash-preview",
+          "display_name": "Gemini 3 Flash"
+        }
+      ]
+    },
+    "openrouter": {
+      "default_model": "z-ai/glm-4.6v",
+      "additional_visible_models": [
+        {
+          "name": "o3-mini",
+          "display_name": "O3 Mini"
+        },
+        {
+          "name": "o3-mini-high",
+          "display_name": "O3 Mini High"
+        }
+      ]
+    }
+  }
+}

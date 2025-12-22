@@ -141,6 +141,7 @@ export const dynamicProviderConfigs: Record<
     endpoint: "/api/admin/llm/bedrock/available-models",
     isDisabled: (values) => !values.custom_config?.AWS_REGION_NAME,
     disabledReason: "AWS region is required to fetch Bedrock models",
+    requiresManualFetch: true,
     buildRequestBody: ({ values, existingLlmProvider }) => ({
       aws_region_name: values.custom_config?.AWS_REGION_NAME,
       aws_access_key_id: values.custom_config?.AWS_ACCESS_KEY_ID,
@@ -318,11 +319,6 @@ export const fetchModels = async (
 
     // Force a re-render by updating a timestamp or counter
     setFieldValue("_modelListUpdated", Date.now());
-
-    setPopup?.({
-      message: config.successMessage(availableModelNames.length),
-      type: "success",
-    });
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";

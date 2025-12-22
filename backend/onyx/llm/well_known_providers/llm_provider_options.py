@@ -4,9 +4,6 @@ import pathlib
 from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
-from onyx.llm.well_known_providers.auto_update_service import (
-    fetch_llm_recommendations_from_github,
-)
 from onyx.llm.well_known_providers.constants import ANTHROPIC_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import AZURE_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import BEDROCK_PROVIDER_NAME
@@ -47,9 +44,9 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
 
 def _get_reccomendations() -> LLMRecommendations:
     """Get the recommendations from the GitHub config."""
-    recommendations_from_github = fetch_llm_recommendations_from_github()
-    if recommendations_from_github:
-        return recommendations_from_github
+    # recommendations_from_github = fetch_llm_recommendations_from_github()
+    # if recommendations_from_github:
+    #     return recommendations_from_github
 
     # Fall back to json bundled with code
     json_path = pathlib.Path(__file__).parent / "recommended-models.json"
@@ -457,10 +454,16 @@ def fetch_model_configurations_for_provider(
     from onyx.llm.utils import get_max_input_tokens
 
     llm_recommendations = _get_reccomendations()
-    visible_models = llm_recommendations.get_visible_models(provider_name)
-    visible_model_names = {model.name for model in visible_models}
+    recommended_visible_models = llm_recommendations.get_visible_models(provider_name)
+    recommended_visible_model_names = {
+        model.name for model in recommended_visible_models
+    }
     configs = []
-    for model_name in fetch_models_for_provider(provider_name):
+
+    model_names = set(fetch_models_for_provider(provider_name)).union(
+        recommended_visible_model_names
+    )
+    for model_name in model_names:
         max_input_tokens = get_max_input_tokens(
             model_name=model_name,
             model_provider=provider_name,
@@ -469,7 +472,7 @@ def fetch_model_configurations_for_provider(
         configs.append(
             ModelConfigurationView(
                 name=model_name,
-                is_visible=model_name in visible_model_names,
+                is_visible=model_name in recommended_visible_model_names,
                 max_input_tokens=max_input_tokens,
                 supports_image_input=model_supports_image_input(
                     model_name=model_name,
