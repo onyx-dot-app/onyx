@@ -5,6 +5,7 @@ import {
   FiChevronLeft,
   FiCircle,
   FiGitBranch,
+  FiXCircle,
 } from "react-icons/fi";
 import {
   Packet,
@@ -18,7 +19,7 @@ import { useToolDisplayTiming } from "./hooks/useToolDisplayTiming";
 import { STANDARD_TEXT_COLOR } from "./constants";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
-import { getToolIcon, getToolName } from "./toolDisplayHelpers";
+import { getToolIcon, getToolName, hasToolError } from "./toolDisplayHelpers";
 import {
   SearchToolStep1Renderer,
   SearchToolStep2Renderer,
@@ -137,20 +138,25 @@ function ParallelToolTabs({
       icon: JSX.Element;
       packets: Packet[];
       isComplete: boolean;
+      hasError: boolean;
     }[] = [];
     items.forEach((item) => {
       if (!seen.has(item.tab_index)) {
         seen.add(item.tab_index);
-        // Check if this tool is complete (has SECTION_END)
+        // Check if this tool is complete (has SECTION_END or ERROR)
         const isComplete = item.packets.some(
-          (p) => p.obj.type === PacketType.SECTION_END
+          (p) =>
+            p.obj.type === PacketType.SECTION_END ||
+            p.obj.type === PacketType.ERROR
         );
+        const hasError = hasToolError(item.packets);
         tabs.push({
           tab_index: item.tab_index,
           name: getToolName(item.packets),
           icon: getToolIcon(item.packets),
           packets: item.packets,
           isComplete,
+          hasError,
         });
       }
     });
@@ -247,7 +253,17 @@ function ParallelToolTabs({
                         {tab.name}
                       </span>
                       {isLoading && <LoadingSpinner size="small" />}
-                      {tab.isComplete && !isLoading && (
+                      {tab.isComplete && !isLoading && tab.hasError && (
+                        <FiXCircle
+                          className={cn(
+                            "w-3 h-3",
+                            isActive && isExpanded
+                              ? "text-red-300"
+                              : "text-red-500"
+                          )}
+                        />
+                      )}
+                      {tab.isComplete && !isLoading && !tab.hasError && (
                         <FiCheckCircle
                           className={cn(
                             "w-3 h-3",
@@ -574,15 +590,13 @@ export default function MultiToolRenderer({
           handleToolComplete(item.turn_index, item.tab_index);
         }
       } else if (item.type === DisplayType.REGULAR) {
-        // Regular tools (including web search, openUrl, etc.): check for SECTION_END
-        // For tools with nested sub_turn_index packets (like research_agent), only check parent-level SECTION_END
-        const hasSectionEnd = item.packets.some(
+        // Regular tools (including web search, openUrl, etc.): check for SECTION_END or ERROR
+        const hasCompletion = item.packets.some(
           (p) =>
-            p.obj.type === PacketType.SECTION_END &&
-            (p.placement.sub_turn_index === undefined ||
-              p.placement.sub_turn_index === null)
+            p.obj.type === PacketType.SECTION_END ||
+            p.obj.type === PacketType.ERROR
         );
-        if (hasSectionEnd && item.turn_index !== undefined) {
+        if (hasCompletion && item.turn_index !== undefined) {
           handleToolComplete(item.turn_index, item.tab_index);
         }
       }
@@ -739,9 +753,8 @@ export default function MultiToolRenderer({
                       // Check for parent-level SECTION_END (not nested tool SECTION_END)
                       isItemComplete = item.packets.some(
                         (p) =>
-                          p.obj.type === PacketType.SECTION_END &&
-                          (p.placement.sub_turn_index === undefined ||
-                            p.placement.sub_turn_index === null)
+                          p.obj.type === PacketType.SECTION_END ||
+                          p.obj.type === PacketType.ERROR
                       );
                     }
                     const isLoading = !isItemComplete && !shouldStopShimmering;
@@ -907,14 +920,30 @@ export default function MultiToolRenderer({
                         rounded-full
                       "
                     >
-                      <FiCheckCircle className="w-3 h-3 rounded-full" />
+                      {toolGroups.some((group) =>
+                        group.packets.some(
+                          (p) => p.obj.type === PacketType.ERROR
+                        )
+                      ) ? (
+                        <FiXCircle className="w-3 h-3 rounded-full text-red-500" />
+                      ) : (
+                        <FiCheckCircle className="w-3 h-3 rounded-full" />
+                      )}
                     </div>
                   </div>
 
                   {/* Content with padding */}
                   <div className="flex-1">
                     <div className="flex mb-1">
-                      <div className="text-sm">Done</div>
+                      <div className="text-sm">
+                        {toolGroups.some((group) =>
+                          group.packets.some(
+                            (p) => p.obj.type === PacketType.ERROR
+                          )
+                        )
+                          ? "Completed with errors"
+                          : "Done"}
+                      </div>
                     </div>
                   </div>
                 </div>

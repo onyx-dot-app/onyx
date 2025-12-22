@@ -9,6 +9,7 @@ import {
   FiSearch,
   FiTool,
   FiUsers,
+  FiXCircle,
 } from "react-icons/fi";
 import { BrainIcon } from "@/components/icons/icons";
 
@@ -18,6 +19,20 @@ import {
   SearchToolPacket,
 } from "@/app/chat/services/streamingModels";
 import { constructCurrentSearchState } from "./renderers/SearchToolRendererV2";
+
+/**
+ * Check if a packet group contains an ERROR packet (tool failed)
+ */
+export function hasToolError(packets: Packet[]): boolean {
+  return packets.some((p) => p.obj.type === PacketType.ERROR);
+}
+
+/**
+ * Get an error icon for failed tools
+ */
+export function getToolErrorIcon(): JSX.Element {
+  return <FiXCircle className="w-3.5 h-3.5 text-error" />;
+}
 
 export function getToolKey(turn_index: number, tab_index: number): string {
   return `${turn_index}-${tab_index}`;

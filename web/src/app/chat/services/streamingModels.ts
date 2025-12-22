@@ -12,6 +12,7 @@ export enum PacketType {
 
   STOP = "stop",
   SECTION_END = "section_end",
+  ERROR = "error",
 
   // Specific tool packets
   SEARCH_TOOL_START = "search_tool_start",
@@ -74,6 +75,11 @@ export interface Stop extends BaseObj {
 
 export interface SectionEnd extends BaseObj {
   type: "section_end";
+}
+
+export interface PacketError extends BaseObj {
+  type: "error";
+  message?: string;
 }
 
 // Specific tool packets
@@ -216,23 +222,36 @@ export type StopObj = Stop;
 
 export type SectionEndObj = SectionEnd;
 
+export type PacketErrorObj = PacketError;
+
 // Specific tool objects
 export type SearchToolObj =
   | SearchToolStart
   | SearchToolQueriesDelta
   | SearchToolDocumentsDelta
-  | SectionEnd;
+  | SectionEnd
+  | PacketError;
 export type ImageGenerationToolObj =
   | ImageGenerationToolStart
   | ImageGenerationToolDelta
-  | SectionEnd;
-export type PythonToolObj = PythonToolStart | PythonToolDelta | SectionEnd;
+  | SectionEnd
+  | PacketError;
+export type PythonToolObj =
+  | PythonToolStart
+  | PythonToolDelta
+  | SectionEnd
+  | PacketError;
 export type FetchToolObj =
   | FetchToolStart
   | FetchToolUrls
   | FetchToolDocuments
-  | SectionEnd;
-export type CustomToolObj = CustomToolStart | CustomToolDelta | SectionEnd;
+  | SectionEnd
+  | PacketError;
+export type CustomToolObj =
+  | CustomToolStart
+  | CustomToolDelta
+  | SectionEnd
+  | PacketError;
 export type NewToolObj =
   | SearchToolObj
   | ImageGenerationToolObj
@@ -244,9 +263,14 @@ export type ReasoningObj =
   | ReasoningStart
   | ReasoningDelta
   | ReasoningDone
-  | SectionEnd;
+  | SectionEnd
+  | PacketError;
 
-export type CitationObj = CitationStart | CitationInfo | SectionEnd;
+export type CitationObj =
+  | CitationStart
+  | CitationInfo
+  | SectionEnd
+  | PacketError;
 
 export type DeepResearchPlanObj =
   | DeepResearchPlanStart
@@ -269,7 +293,9 @@ export type ObjTypes =
   | SectionEndObj
   | CitationObj
   | DeepResearchPlanObj
-  | ResearchAgentObj;
+  | ResearchAgentObj
+  | PacketErrorObj
+  | CitationObj;
 
 // Placement interface for packet positioning
 export interface Placement {

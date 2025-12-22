@@ -22,7 +22,9 @@ function constructCurrentImageState(packets: ImageGenerationToolPacket[]) {
     )
     .map((packet) => packet.obj as ImageGenerationToolDelta);
   const imageEnd = packets.find(
-    (packet) => packet.obj.type === PacketType.SECTION_END
+    (packet) =>
+      packet.obj.type === PacketType.SECTION_END ||
+      packet.obj.type === PacketType.ERROR
   )?.obj as SectionEnd | null;
 
   const prompt = ""; // Image generation tools don't have a main description
