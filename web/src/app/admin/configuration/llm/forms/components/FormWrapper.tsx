@@ -23,7 +23,7 @@ export interface ProviderFormContext {
 interface ProviderFormEntrypointWrapperProps {
   children: (context: ProviderFormContext) => ReactNode;
   providerName: string;
-  providerEndpoint: string;
+  providerEndpoint?: string;
   existingLlmProvider?: LLMProviderView;
 }
 
@@ -45,7 +45,9 @@ export function ProviderFormEntrypointWrapper({
 
   // Fetch model configurations for this provider
   const { data: _modelConfigurations } = useSWR<ModelConfiguration[]>(
-    `/api/admin/llm/built-in/options/${providerEndpoint}`,
+    providerEndpoint
+      ? `/api/admin/llm/built-in/options/${providerEndpoint}`
+      : null,
     errorHandlingFetcher
   );
   const modelConfigurations = _modelConfigurations ?? [];
