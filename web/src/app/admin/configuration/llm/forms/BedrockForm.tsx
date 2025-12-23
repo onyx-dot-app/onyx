@@ -302,18 +302,20 @@ export function BedrockForm({
                       isDisabled={isFetchDisabled}
                       disabledHint={
                         !formikProps.values.custom_config?.AWS_REGION_NAME
-                          ? "Select an AWS region first"
+                          ? "Select an AWS region."
                           : !isAuthComplete
-                            ? "Complete the authentication credentials"
+                            ? 'Complete the "Authentication Method" section.'
                             : undefined
                       }
                       onModelsFetched={setFetchedModels}
                     />
 
+                    <Separator />
+
                     <DisplayModels
                       modelConfigurations={currentModels}
                       formikProps={formikProps}
-                      noModelConfigurationsMessage="No models found. Please select a region and fetch available models."
+                      noModelConfigurationsMessage="Fetch available models first."
                     />
 
                     <Separator />
