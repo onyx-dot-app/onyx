@@ -1,5 +1,5 @@
 import AgentsPage from "@/refresh-pages/AgentsPage";
-import AppLayouts from "@/layouts/app-layouts";
+import * as AppLayouts from "@/layouts/app-layouts";
 
 export default async function Page() {
   return (

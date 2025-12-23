@@ -3,7 +3,7 @@ import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { cookies } from "next/headers";
 import NRFPage from "./NRFPage";
 import { NRFPreferencesProvider } from "../../../components/context/NRFPreferencesContext";
-import AppLayouts from "@/layouts/app-layouts";
+import * as AppLayouts from "@/layouts/app-layouts";
 
 export default async function Page() {
   noStore();

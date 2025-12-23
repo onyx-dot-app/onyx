@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import type { Route } from "next";
 import { requireAuth } from "@/lib/auth/requireAuth";
 import SharedChatDisplay from "@/app/chat/shared/[chatId]/SharedChatDisplay";
-import AppLayouts from "@/layouts/app-layouts";
+import * as AppLayouts from "@/layouts/app-layouts";
 import { Persona } from "@/app/admin/assistants/interfaces";
 
 // This is used for rendering a persona in the shared chat display

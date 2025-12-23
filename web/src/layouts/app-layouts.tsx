@@ -416,6 +416,4 @@ function AppRoot({ children }: AppRootProps) {
   );
 }
 
-export default {
-  Root: AppRoot,
-};
+export { AppRoot as Root };
