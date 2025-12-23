@@ -91,9 +91,7 @@ export function AdminPageHeader({
         {rightChildren}
       </div>
       <div className="flex flex-col">
-        <Text headingH2 aria-label="admin-page-title">
-          {title}
-        </Text>
+        <Text headingH2>{title}</Text>
         <Text secondaryBody text03>
           {description}
         </Text>
