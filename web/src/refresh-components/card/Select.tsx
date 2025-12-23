@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import type { IconProps } from "@opal/types";
 import { cn, noProp } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
@@ -34,6 +34,10 @@ export interface SelectProps {
   selectLabel?: string;
   selectedLabel?: string;
 
+  // Size
+  large?: boolean;
+  medium?: boolean;
+
   // Optional
   className?: string;
   disabled?: boolean;
@@ -51,9 +55,14 @@ export default function Select({
   connectLabel = "Connect",
   selectLabel = "Set as Default",
   selectedLabel = "Current Default",
+  large = true,
+  medium,
   className,
   disabled,
 }: SelectProps) {
+  const sizeClass = medium ? "h-[3.75rem]" : "h-[4.25rem]";
+  const [isHovered, setIsHovered] = useState(false);
+
   const isSelected = status === "selected";
   const isConnected = status === "connected";
   const isDisconnected = status === "disconnected";
@@ -68,14 +77,17 @@ export default function Select({
 
   return (
     <div
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       onClick={isCardClickable ? handleCardClick : undefined}
       className={cn(
-        "flex items-start justify-between gap-3 rounded-16 border p-4",
+        "flex items-start justify-between gap-3 rounded-16 border p-2",
+        sizeClass,
         isSelected
           ? "border-action-link-05 bg-action-link-01"
           : isConnected
-            ? "border-border-01 bg-background-tint-00"
-            : "border-border-01 bg-background-neutral-01",
+            ? "border-border-01 bg-background-tint-00 hover:shadow-00"
+            : "border-border-01 bg-background-neutral-01 hover:shadow-00",
         isCardClickable &&
           "cursor-pointer hover:bg-background-tint-01 transition-colors",
         disabled && "opacity-50 cursor-not-allowed",
@@ -83,7 +95,7 @@ export default function Select({
       )}
     >
       {/* Left section - Icon, Title, Description */}
-      <div className="flex flex-1 items-start gap-1 py-1">
+      <div className="flex flex-1 items-start gap-1 p-1">
         <div className="flex size-5 items-center justify-center px-0.5 shrink-0">
           <Icon
             className={cn(
@@ -120,15 +132,16 @@ export default function Select({
         {/* Connected: Show select icon + settings icon */}
         {isConnected && (
           <>
-            <IconButton
-              icon={SvgArrowRightCircle}
-              tooltip={selectLabel}
-              internal
-              tertiary
+            <SelectButton
+              action
+              folded
+              transient={isHovered}
               disabled={disabled || !onSelect}
-              onClick={noProp(onSelect)}
-              aria-label={selectLabel}
-            />
+              onClick={onSelect}
+              rightIcon={SvgArrowRightCircle}
+            >
+              {selectLabel}
+            </SelectButton>
             {onEdit && (
               <IconButton
                 icon={SvgSettings}

@@ -1,4 +1,5 @@
 from sqlalchemy import select
+from sqlalchemy import update
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
@@ -23,15 +24,14 @@ def create_image_generation_config(
     Returns:
         The created ImageGenerationConfig
     """
-    # If setting as default, clear any existing default
+    # If setting as default, clear ALL existing defaults in a single atomic update
+    # This is more atomic than select-then-update pattern
     if is_default:
-        existing_default = db_session.scalar(
-            select(ImageGenerationConfig).where(
-                ImageGenerationConfig.is_default.is_(True)
-            )
+        db_session.execute(
+            update(ImageGenerationConfig)
+            .where(ImageGenerationConfig.is_default.is_(True))
+            .values(is_default=False)
         )
-        if existing_default:
-            existing_default.is_default = False
 
     new_config = ImageGenerationConfig(
         image_provider_id=image_provider_id,
@@ -121,13 +121,16 @@ def set_default_image_generation_config(
             f"ImageGenerationConfig with image_provider_id {image_provider_id} not found"
         )
 
-    # Clear existing default
-    existing_default = db_session.scalar(
-        select(ImageGenerationConfig).where(ImageGenerationConfig.is_default.is_(True))
+    # Clear ALL existing defaults in a single atomic update
+    # This is more atomic than select-then-update pattern
+    db_session.execute(
+        update(ImageGenerationConfig)
+        .where(
+            ImageGenerationConfig.is_default.is_(True),
+            ImageGenerationConfig.image_provider_id != image_provider_id,
+        )
+        .values(is_default=False)
     )
-    if existing_default and existing_default.image_provider_id != image_provider_id:
-        existing_default.is_default = False
-        db_session.flush()
 
     # Set new default
     new_default.is_default = True
