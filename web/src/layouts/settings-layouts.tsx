@@ -91,7 +91,7 @@ function SettingsRoot(props: SettingsRootProps) {
  * - Sticky positioning at the top of the page
  * - Icon display (1.75rem size)
  * - Title (headingH2 style)
- * - Optional description (secondary body text)
+ * - Optional description (supports any React node for dynamic content)
  * - Optional right-aligned action buttons via rightChildren
  * - Optional children content below title/description
  * - Optional back button
@@ -140,12 +140,25 @@ function SettingsRoot(props: SettingsRootProps) {
  *   description="Expert configuration options"
  *   renderBackButton
  * />
+ *
+ * // With dynamic description content
+ * <SettingsLayouts.Header
+ *   icon={SvgDatabase}
+ *   title="API Keys"
+ *   description={
+ *     <div>
+ *       <Text secondaryBody text03>
+ *         Manage your API keys. Last updated: {lastUpdated}
+ *       </Text>
+ *     </div>
+ *   }
+ * />
  * ```
  */
 export interface SettingsHeaderProps {
   icon: React.FunctionComponent<IconProps>;
   title: string;
-  description?: string;
+  description?: React.ReactNode;
   children?: React.ReactNode;
   rightChildren?: React.ReactNode;
   backButton?: boolean;
@@ -206,11 +219,14 @@ function SettingsHeader({
           </div>
           <div className="flex flex-col">
             <Text headingH2>{title}</Text>
-            {description && (
-              <Text secondaryBody text03>
-                {description}
-              </Text>
-            )}
+            {description &&
+              (typeof description === "string" ? (
+                <Text secondaryBody text03>
+                  {description}
+                </Text>
+              ) : (
+                description
+              ))}
           </div>
         </div>
         {children}
