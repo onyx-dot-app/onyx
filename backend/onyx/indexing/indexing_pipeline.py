@@ -356,6 +356,9 @@ def index_doc_batch_prepare(
 
 def filter_documents(document_batch: list[Document]) -> list[Document]:
     documents: list[Document] = []
+    total_chars_in_batch = 0
+    skipped_too_long = []
+
     for document in document_batch:
         empty_contents = not any(
             isinstance(section, TextSection)
@@ -393,22 +396,38 @@ def filter_documents(document_batch: list[Document]) -> list[Document]:
             )
             for section in document.sections
         )
-        if (
-            MAX_DOCUMENT_CHARS
-            and len(document.title or document.semantic_identifier) + section_chars
-            > MAX_DOCUMENT_CHARS
-        ):
+        doc_total_chars = (
+            len(document.title or document.semantic_identifier) + section_chars
+        )
+
+        if MAX_DOCUMENT_CHARS and doc_total_chars > MAX_DOCUMENT_CHARS:
             # Skip documents that are too long, later on there are more memory intensive steps done on the text
             # and the container will run out of memory and crash. Several other checks are included upstream but
             # those are at the connector level so a catchall is still needed.
             # Assumption here is that files that are that long, are generated files and not the type users
             # generally care for.
             logger.warning(
-                f"Skipping document with ID {document.id} as it is too long."
+                f"Skipping document with ID {document.id} as it is too long "
+                f"({doc_total_chars:,} chars, max={MAX_DOCUMENT_CHARS:,})"
             )
+            skipped_too_long.append((document.id, doc_total_chars))
             continue
 
+        total_chars_in_batch += doc_total_chars
         documents.append(document)
+
+    # Log batch statistics for OOM debugging
+    if documents:
+        avg_chars = total_chars_in_batch / len(documents)
+        logger.info(
+            f"Document batch filter: {len(documents)} docs kept, {len(skipped_too_long)} skipped (too long). "
+            f"Total chars: {total_chars_in_batch:,}, Avg: {avg_chars:,.0f} chars/doc"
+        )
+        if skipped_too_long:
+            logger.warning(
+                f"Skipped oversized documents: {skipped_too_long[:5]}"
+            )  # Log first 5
+
     return documents
 
 
