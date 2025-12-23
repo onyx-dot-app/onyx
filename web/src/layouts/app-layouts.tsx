@@ -14,7 +14,7 @@
  *
  * @example
  * ```tsx
- * import { AppPageLayout } from "@/layouts/app-pages";
+ * import { AppPageLayout } from "@/layouts/app-layouts";
  *
  * export default function ChatPage() {
  *   const settings = useCombinedSettings();
@@ -423,7 +423,7 @@ export interface AppPageLayoutProps {
  * // The footer will show custom disclaimer (if configured)
  * ```
  */
-export function AppPageLayout({ children }: AppPageLayoutProps) {
+function AppPageLayout({ children }: AppPageLayoutProps) {
   return (
     <div className="flex flex-col h-full w-full">
       <ChatHeader />
@@ -432,3 +432,7 @@ export function AppPageLayout({ children }: AppPageLayoutProps) {
     </div>
   );
 }
+
+export default {
+  AppPageLayout,
+};

@@ -1,7 +1,7 @@
 "use client";
 
 import { SvgActions } from "@opal/icons";
-import Settings from "@/layouts/settings-pages";
+import Settings from "@/layouts/settings-layouts";
 import OpenApiPageContent from "@/sections/actions/OpenApiPageContent";
 
 export default function Main() {

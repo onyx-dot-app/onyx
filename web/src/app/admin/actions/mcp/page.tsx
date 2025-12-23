@@ -2,7 +2,7 @@
 
 import { SvgMcp } from "@opal/icons";
 import MCPPageContent from "@/sections/actions/MCPPageContent";
-import Settings from "@/layouts/settings-pages";
+import Settings from "@/layouts/settings-layouts";
 
 export default function Main() {
   return (

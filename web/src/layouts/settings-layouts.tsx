@@ -7,7 +7,7 @@
  *
  * @example
  * ```tsx
- * import Settings from "@/layouts/settings-pages";
+ * import Settings from "@/layouts/settings-layouts";
  * import { SvgSettings } from "@opal/icons";
  *
  * function MySettingsPage() {
