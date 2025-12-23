@@ -92,8 +92,6 @@ export function OpenAIForm({
                     <DisplayModels
                       modelConfigurations={modelConfigurations}
                       formikProps={formikProps}
-                      noModelConfigurationsMessage="No models found. Please provide a valid API base URL."
-                      isLoading={false}
                     />
 
                     <AdvancedOptions

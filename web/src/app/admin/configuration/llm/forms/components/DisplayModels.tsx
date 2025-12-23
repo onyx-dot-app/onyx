@@ -24,8 +24,8 @@ export function DisplayModels<T extends BaseLLMFormValues>({
 }: {
   formikProps: FormikProps<T>;
   modelConfigurations: ModelConfiguration[];
-  noModelConfigurationsMessage: string;
-  isLoading: boolean;
+  noModelConfigurationsMessage?: string;
+  isLoading?: boolean;
 }) {
   if (isLoading) {
     return (
@@ -87,7 +87,9 @@ export function DisplayModels<T extends BaseLLMFormValues>({
     return (
       <div>
         <DisplayModelHeader />
-        <p className="text-sm text-text-03">{noModelConfigurationsMessage}</p>
+        <p className="text-sm text-text-03">
+          {noModelConfigurationsMessage ?? "No models found."}
+        </p>
       </div>
     );
   }
