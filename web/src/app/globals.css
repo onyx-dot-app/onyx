@@ -206,6 +206,10 @@
   letter-spacing: 0px;
 }
 
+.font-main-content-body strong {
+  font-weight: 700;
+}
+
 .font-main-content-emphasis {
   font-family: var(--font-hanken-grotesk);
   font-size: 16px;

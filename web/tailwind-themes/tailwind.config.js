@@ -12,15 +12,6 @@ module.exports = {
     transparent: "transparent",
     current: "currentColor",
     extend: {
-      typography: {
-        DEFAULT: {
-          css: {
-            strong: {
-              fontWeight: "700",
-            },
-          },
-        },
-      },
       transitionProperty: {
         spacing: "margin, padding",
       },
