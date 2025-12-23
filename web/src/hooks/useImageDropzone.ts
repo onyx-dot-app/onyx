@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { useDropzone, DropzoneOptions, FileRejection } from "react-dropzone";
 
 const ACCEPTED_IMAGE_TYPES = {
@@ -34,12 +34,8 @@ export function useImageDropzone({
   disabled = false,
   accept = ACCEPTED_IMAGE_TYPES,
 }: UseImageDropzoneOptions): UseImageDropzoneReturn {
-  const [isDragActive, setIsDragActive] = useState(false);
-
   const onDrop = useCallback(
     (acceptedFiles: File[], rejections: FileRejection[]) => {
-      setIsDragActive(false);
-
       if (rejections.length > 0) {
         onImageRejected?.(rejections);
         return;
@@ -53,20 +49,8 @@ export function useImageDropzone({
     [onImageAccepted, onImageRejected]
   );
 
-  const onDragEnter = useCallback(() => {
-    if (!disabled) {
-      setIsDragActive(true);
-    }
-  }, [disabled]);
-
-  const onDragLeave = useCallback(() => {
-    setIsDragActive(false);
-  }, []);
-
-  const { getRootProps, getInputProps, open } = useDropzone({
+  const { getRootProps, getInputProps, open, isDragActive } = useDropzone({
     onDrop,
-    onDragEnter,
-    onDragLeave,
     accept,
     multiple: false,
     disabled,

@@ -25,7 +25,7 @@ export default function WelcomeMessage({
       return enterpriseSettings?.custom_greeting_message;
     }
     return getRandomGreeting();
-  }, [enterpriseSettings?.custom_greeting_message]);
+  }, [enterpriseSettings]);
 
   if (isDefaultAgent) {
     content = (

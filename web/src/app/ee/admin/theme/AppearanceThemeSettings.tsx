@@ -110,7 +110,6 @@ export const AppearanceThemeSettings = forwardRef<
         { name: "custom_popup_content", ref: noticeContentInputRef },
         { name: "consent_screen_prompt", ref: consentPromptTextAreaRef },
       ];
-      console.log("errors", errors);
       for (const field of fieldRefs) {
         if (errors[field.name] && field.ref.current) {
           field.ref.current.focus();
@@ -173,9 +172,26 @@ export const AppearanceThemeSettings = forwardRef<
     setSelectedLogo(null);
   };
 
-  const getLogoSrc = () => {
+  // Memoize the blob URL to prevent creating new URLs on every render
+  const logoObjectUrl = useMemo(() => {
     if (selectedLogo) {
       return URL.createObjectURL(selectedLogo);
+    }
+    return null;
+  }, [selectedLogo]);
+
+  // Clean up the blob URL when selectedLogo changes or component unmounts
+  useEffect(() => {
+    return () => {
+      if (logoObjectUrl) {
+        URL.revokeObjectURL(logoObjectUrl);
+      }
+    };
+  }, [logoObjectUrl]);
+
+  const getLogoSrc = () => {
+    if (logoObjectUrl) {
+      return logoObjectUrl;
     }
     if (values.use_custom_logo) {
       return `/api/enterprise-settings/logo?u=${Date.now()}`;

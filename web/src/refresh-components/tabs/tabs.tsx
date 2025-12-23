@@ -53,7 +53,7 @@ const TabsTrigger = React.forwardRef<
         )}
         {...props}
       >
-        {tooltip ? (
+        {tooltip && !disabled ? (
           <SimpleTooltip tooltip={tooltip} side={tooltipSide}>
             {children}
           </SimpleTooltip>

@@ -25,7 +25,7 @@ const CHAR_LIMITS = {
   consent_screen_prompt: 200,
 };
 
-export default function LabelingPage() {
+export default function ThemePage() {
   const router = useRouter();
   const settings = useContext(SettingsContext);
   const [selectedLogo, setSelectedLogo] = useState<File | null>(null);
@@ -152,7 +152,6 @@ export default function LabelingPage() {
         if (selectedLogo) {
           const formData = new FormData();
           formData.append("file", selectedLogo);
-          setSelectedLogo(null);
           const response = await fetch("/api/admin/enterprise-settings/logo", {
             method: "PUT",
             body: formData,
@@ -163,6 +162,8 @@ export default function LabelingPage() {
             formikHelpers.setSubmitting(false);
             return;
           }
+          // Only clear the selected logo after a successful upload
+          setSelectedLogo(null);
           values.use_custom_logo = true;
         }
 

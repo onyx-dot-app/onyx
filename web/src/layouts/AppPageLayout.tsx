@@ -43,7 +43,7 @@ const footerMarkdownComponents = {
       {children}
     </Text>
   ),
-  a: ({ href, className, children, ...rest }) => {
+  a: ({ node, href, className, children, ...rest }) => {
     // Ensure href has a protocol, default to https if missing
     const fullHref =
       href && !href.startsWith("http") ? `https://${href}` : href;

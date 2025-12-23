@@ -27,8 +27,6 @@ function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
     [onFoldClick]
   );
 
-  const settings = useSettingsContext();
-
   return (
     <div
       className={cn(

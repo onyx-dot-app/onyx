@@ -52,7 +52,7 @@ export default function MinimalMarkdown({
 
     return {
       ...defaults,
-      ...(components ?? null),
+      ...(components ?? {}),
     } satisfies Components;
   }, [content, components]);
 
