@@ -105,7 +105,8 @@ export default function AppPageLayout({
   const customHeaderContent =
     settings?.enterpriseSettings?.custom_header_content;
   const customFooterContent =
-    settings?.enterpriseSettings?.custom_lower_disclaimer_content;
+    settings?.enterpriseSettings?.custom_lower_disclaimer_content ||
+    "[Onyx v2.0.8-dev](https://www.onyx.app/) - Open Source AI Platform";
 
   const availableProjects = useMemo(() => {
     if (!projects) return [];
@@ -285,8 +286,12 @@ export default function AppPageLayout({
             </div>
 
             {/* Center - contains the custom-header-content */}
-            <div className="flex-1 flex flex-col items-center">
-              <Text text03 mainUiBody>
+            <div className="flex-1 flex flex-col items-center overflow-hidden">
+              <Text
+                text03
+                mainUiBody
+                className="text-center break-words w-full"
+              >
                 {customHeaderContent}
               </Text>
             </div>
