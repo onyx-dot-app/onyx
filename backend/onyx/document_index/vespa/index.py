@@ -741,7 +741,6 @@ class VespaIndex(DocumentIndex):
             chunk_requests=generic_chunk_requests,
             filters=filters,
             batch_retrieval=batch_retrieval,
-            get_large_chunks=get_large_chunks,
         )
 
     @log_function_time(print_only=True, debug_only=True)
