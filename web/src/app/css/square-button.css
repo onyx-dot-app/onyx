@@ -1,0 +1,39 @@
+.square-button {
+  /* Base styles */
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-08);
+  background-color: var(--background-tint-00);
+  padding: 0.5rem;
+  background-color: var(--background-tint-01);
+}
+
+.square-button:hover {
+  background-color: var(--background-tint-02);
+}
+
+.square-button:active {
+  background-color: var(--background-tint-03);
+}
+
+.square-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Transient state */
+.square-button[data-state="transient"] {
+  border: 1px solid var(--action-link-05);
+  background-color: var(--action-link-00);
+}
+
+.square-button[data-state="transient"]:hover {
+  background-color: var(--action-link-01);
+}
+
+.square-button[data-state="transient"]:active {
+  background-color: var(--action-link-02);
+}

@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useRef, useEffect, useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import type { IconProps } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import { SvgChevronDownSmall } from "@opal/icons";
+import { useContentSize } from "@/hooks/useContentSize";
+
 const MARGIN = 5;
 
 const baseClassNames = (engaged?: boolean, transient?: boolean) =>
@@ -116,8 +118,8 @@ export default function SelectButton({
   const state = disabled ? "disabled" : "enabled";
 
   // Refs and state for measuring foldedContent width
-  const measureRef = useRef<HTMLDivElement>(null);
-  const [foldedContentWidth, setFoldedContentWidth] = useState<number>(0);
+  // const measureRef = useRef<HTMLDivElement>(null);
+  // const [foldedContentWidth, setFoldedContentWidth] = useState<number>(0);
   const [hovered, setHovered] = useState<boolean>(false);
 
   // Memoize class name invocations
@@ -152,12 +154,7 @@ export default function SelectButton({
     ),
     [textClasses, iconClasses, rightChevronIcon, children, transient]
   );
-  useEffect(() => {
-    if (measureRef.current) {
-      const width = measureRef.current.clientWidth;
-      setFoldedContentWidth(width);
-    }
-  }, [content]);
+  const [measureRef, { width: foldedContentWidth }] = useContentSize([content]);
 
   return (
     <>
