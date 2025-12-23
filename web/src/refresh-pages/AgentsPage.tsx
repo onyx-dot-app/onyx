@@ -8,7 +8,7 @@ import { useAgents } from "@/hooks/useAgents";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import SettingsLayouts from "@/layouts/settings-layouts";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import CounterSeparator from "@/refresh-components/CounterSeparator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import FilterButton from "@/refresh-components/buttons/FilterButton";
