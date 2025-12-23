@@ -302,6 +302,7 @@ export const AppearanceThemeSettings = forwardRef<
             <InputImage
               src={getLogoSrc()}
               onEdit={handleLogoEdit}
+              onDrop={(file) => setSelectedLogo(file)}
               onRemove={handleLogoRemove}
             />
           </FormField.Control>

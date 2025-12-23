@@ -2,6 +2,7 @@
 
 import { OnyxIcon, OnyxLogoTypeIcon } from "@/components/icons/icons";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
+import Image from "next/image";
 import {
   LOGO_FOLDED_SIZE_PX,
   LOGO_UNFOLDED_SIZE_PX,
@@ -28,23 +29,28 @@ export default function Logo({ folded, size, className }: LogoProps) {
   const logo = useMemo(
     () =>
       settings.enterpriseSettings?.use_custom_logo ? (
-        <img
-          src="/api/enterprise-settings/logo"
-          alt="Logo"
-          style={{
-            objectFit: "contain",
-            height: foldedSize,
-            width: foldedSize,
-          }}
-          className={cn("flex-shrink-0", className)}
-        />
+        <div
+          className={cn(
+            "aspect-square rounded-full overflow-hidden relative flex-shrink-0",
+            className
+          )}
+          style={{ height: foldedSize, width: foldedSize }}
+        >
+          <Image
+            alt="Logo"
+            src="/api/enterprise-settings/logo"
+            fill
+            className="object-cover object-center"
+            sizes={`${foldedSize}px`}
+          />
+        </div>
       ) : (
         <OnyxIcon
           size={foldedSize}
           className={cn("flex-shrink-0", className)}
         />
       ),
-    [className, settings.enterpriseSettings?.use_custom_logo]
+    [className, foldedSize, settings.enterpriseSettings?.use_custom_logo]
   );
 
   const renderNameAndPoweredBy = (opts: {
@@ -55,22 +61,19 @@ export default function Logo({ folded, size, className }: LogoProps) {
       <div className="flex flex-col min-w-0">
         <div className="flex flex-row items-center gap-2 min-w-0">
           {opts.includeLogo && logo}
-          {opts.includeName && (
+          {opts.includeName && !folded && (
             <div className="flex-1 min-w-0">
-              <Truncated headingH3 className={cn(folded && "invisible")}>
-                {applicationName}
-              </Truncated>
+              <Truncated headingH3>{applicationName}</Truncated>
             </div>
           )}
         </div>
-        {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && (
+        {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && !folded && (
           <Text
             secondaryBody
             text03
             className={cn(
               "line-clamp-1 truncate",
-              opts.includeLogo && opts.includeName && "ml-[33px]",
-              folded && "invisible"
+              opts.includeLogo && opts.includeName && "ml-[33px]"
             )}
             nowrap
           >

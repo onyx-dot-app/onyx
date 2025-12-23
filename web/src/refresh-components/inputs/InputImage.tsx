@@ -6,6 +6,7 @@ import { SvgPlus, SvgX } from "@opal/icons";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Text from "@/refresh-components/texts/Text";
+import { useImageDropzone } from "@/hooks/useImageDropzone";
 
 const backgroundClasses = () =>
   ({
@@ -19,15 +20,17 @@ const backgroundClasses = () =>
     disabled: ["bg-background-neutral-00"],
   }) as const;
 
-const borderClasses = () =>
+const borderClasses = (isDragActive: boolean = false) =>
   ({
-    enabled: [
-      "border-border-01", // default
-      "hover:border-border-03", // hover
-      "active:border-border-05", // pressed
-      "focus-visible:border-border-05", // focus
-      "focus-visible:hover:border-border-05", // focus + hover
-    ],
+    enabled: isDragActive
+      ? ["border-action-link-05", "border-solid"]
+      : [
+          "border-border-01", // default
+          "hover:border-border-03", // hover
+          "active:border-border-05", // pressed
+          "focus-visible:border-border-05", // focus
+          "focus-visible:hover:border-border-05", // focus + hover
+        ],
     disabled: ["border-border-01"],
   }) as const;
 
@@ -54,6 +57,10 @@ export interface InputImageProps {
   // Callbacks
   onEdit?: () => void;
   onRemove?: () => void;
+  /** Callback when image is dropped onto the component */
+  onDrop?: (file: File) => void;
+  /** Callback when file is rejected */
+  onDropRejected?: (reason: string) => void;
 
   // Size control
   size?: number;
@@ -67,19 +74,47 @@ export default function InputImage({
   alt = "Image",
   onEdit,
   onRemove,
+  onDrop,
+  onDropRejected,
   size = 120,
   className,
 }: InputImageProps) {
-  const isInteractive = !disabled && onEdit;
+  const isInteractive = !disabled && (onEdit || onDrop);
   const hasImage = !!src;
 
   const abled = disabled ? "disabled" : "enabled";
 
+  const { isDragActive, getRootProps, getInputProps, openFilePicker } =
+    useImageDropzone({
+      onImageAccepted: (file) => {
+        onDrop?.(file);
+      },
+      onImageRejected: (rejections) => {
+        const firstRejection = rejections[0];
+        const reason = firstRejection?.errors[0]?.message || "File rejected";
+        onDropRejected?.(reason);
+      },
+      disabled: disabled || !onDrop,
+    });
+
+  const handleClick = () => {
+    if (disabled) return;
+    if (onEdit) {
+      onEdit();
+    } else if (onDrop) {
+      openFilePicker();
+    }
+  };
+
   const bgClass = useMemo(() => backgroundClasses()[abled], [abled]);
 
-  const borderClass = useMemo(() => borderClasses()[abled], [abled]);
+  const borderClass = useMemo(
+    () => borderClasses(isDragActive)[abled],
+    [abled, isDragActive]
+  );
 
   const borderStyleClass = useMemo(() => {
+    if (isDragActive) return ["border-solid", "border-2"] as const;
     if (hasImage) return ["border-solid"] as const;
     if (disabled) return ["border-dashed"] as const;
     return [
@@ -87,19 +122,25 @@ export default function InputImage({
       "hover:border-solid",
       "active:border-solid",
     ] as const;
-  }, [hasImage, disabled]);
+  }, [hasImage, disabled, isDragActive]);
 
   const iconClass = useMemo(() => iconClasses()[abled], [abled]);
+
+  const dropzoneProps = onDrop ? getRootProps() : {};
 
   return (
     <div
       className={cn("relative group", className)}
       style={{ width: size, height: size }}
+      {...dropzoneProps}
     >
+      {/* Hidden input for file selection */}
+      {onDrop && <input {...getInputProps()} />}
+
       {/* Main container */}
       <button
         type="button"
-        onClick={disabled ? undefined : onEdit}
+        onClick={handleClick}
         disabled={disabled}
         className={cn(
           "relative w-full h-full rounded-full overflow-hidden",
@@ -111,7 +152,7 @@ export default function InputImage({
           disabled && "opacity-50 cursor-not-allowed"
         )}
         aria-label={
-          onEdit ? (hasImage ? "Edit image" : "Upload image") : undefined
+          isInteractive ? (hasImage ? "Edit image" : "Upload image") : undefined
         }
       >
         {/* Content */}
@@ -119,14 +160,23 @@ export default function InputImage({
           <img
             src={src}
             alt={alt}
-            className="absolute inset-0 w-full h-full object-cover"
+            className="absolute inset-0 w-full h-full object-cover pointer-events-none"
           />
         ) : (
-          <SvgPlus className={cn("w-6 h-6", iconClass)} />
+          <SvgPlus
+            className={cn("w-6 h-6", iconClass, "pointer-events-none")}
+          />
+        )}
+
+        {/* Drag overlay indicator */}
+        {isDragActive && (
+          <div className="absolute inset-0 bg-action-link-05/10 flex items-center justify-center rounded-full pointer-events-none">
+            <SvgPlus className="w-8 h-8 stroke-action-link-05" />
+          </div>
         )}
 
         {/* Edit overlay - shows on hover/focus when image is uploaded */}
-        {isInteractive && hasImage && (
+        {isInteractive && hasImage && !isDragActive && (
           <div
             className={cn(
               "absolute bottom-0 left-0 right-0",
