@@ -8,8 +8,7 @@ import useSWR from "swr";
  * Fetches OpenAPI tools configuration.
  *
  * OpenAPI tools provide custom actions and integrations to agents through
- * OpenAPI specifications. This hook polls the OpenAPI tools endpoint
- * every 10 seconds to keep the data fresh.
+ * OpenAPI specifications.
  *
  * @returns Object containing:
  *   - openApiTools: ToolSnapshot[] data or null if not loaded
@@ -28,9 +27,7 @@ export default function useOpenApiTools() {
     error,
     isLoading: isOpenApiLoading,
     mutate: mutateOpenApiTools,
-  } = useSWR<ToolSnapshot[]>("/api/tool/openapi", errorHandlingFetcher, {
-    refreshInterval: 10000,
-  });
+  } = useSWR<ToolSnapshot[]>("/api/tool/openapi", errorHandlingFetcher);
 
   return {
     openApiTools: openApiTools ?? null,
