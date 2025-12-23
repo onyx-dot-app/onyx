@@ -149,6 +149,7 @@ export default function Select({
               action
               engaged
               disabled={disabled}
+              onClick={onDeselect}
               leftIcon={SvgCheckSquare}
             >
               {selectedLabel}
