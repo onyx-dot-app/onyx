@@ -280,8 +280,6 @@ export function BedrockForm({
                       </Tabs>
                     </div>
 
-                    <Separator />
-
                     <FetchModelsButton
                       onFetch={() =>
                         fetchBedrockModels({
@@ -315,7 +313,10 @@ export function BedrockForm({
                     <DisplayModels
                       modelConfigurations={currentModels}
                       formikProps={formikProps}
-                      noModelConfigurationsMessage="Fetch available models first."
+                      noModelConfigurationsMessage={
+                        "Fetch available models first, then you'll be able to select " +
+                        "the models you want to make available in Onyx."
+                      }
                     />
 
                     <Separator />

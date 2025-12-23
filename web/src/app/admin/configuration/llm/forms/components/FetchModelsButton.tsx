@@ -1,7 +1,7 @@
 import { useState } from "react";
 import Button from "@/refresh-components/buttons/Button";
-import { LoadingAnimation } from "@/components/Loading";
 import Text from "@/refresh-components/texts/Text";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { ModelConfiguration } from "../../interfaces";
 
 interface FetchModelsButtonProps {
@@ -47,21 +47,20 @@ export function FetchModelsButton({
 
   return (
     <div className="flex flex-col gap-y-1">
-      <Button
-        type="button"
-        onClick={handleFetchModels}
-        disabled={isFetchingModels || isDisabled}
-      >
-        Fetch Available Models
-      </Button>
+      <SimpleTooltip tooltip={isDisabled ? disabledHint : undefined} side="top">
+        <div className="w-fit">
+          <Button
+            type="button"
+            onClick={handleFetchModels}
+            disabled={isFetchingModels || isDisabled}
+          >
+            Fetch Available Models
+          </Button>
+        </div>
+      </SimpleTooltip>
       {fetchModelsError && (
         <Text className="text-xs text-status-error-05 mt-1">
           {fetchModelsError}
-        </Text>
-      )}
-      {isDisabled && disabledHint && !fetchModelsError && (
-        <Text mainUiMuted text03 className="text-xs mt-1">
-          {disabledHint}
         </Text>
       )}
     </div>
