@@ -314,10 +314,7 @@ def run_deep_research_llm_loop(
                     Packet(
                         # Marks the last turn end which should be the plan generation
                         placement=Placement(
-                            turn_index=packet.placement.turn_index
-                            + (1 if reasoned else 0),
-                            tab_index=packet.placement.tab_index,
-                            sub_turn_index=packet.placement.sub_turn_index,
+                            turn_index=1 if reasoned else 0,
                         ),
                         obj=SectionEnd(),
                     )
