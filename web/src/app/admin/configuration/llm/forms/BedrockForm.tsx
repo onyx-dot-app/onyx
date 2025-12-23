@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Form, Formik } from "formik";
 import {
   SelectorFormField,
@@ -13,6 +14,7 @@ import {
 } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";
 import { FormActionButtons } from "./components/FormActionButtons";
+import { FetchModelsButton } from "./components/FetchModelsButton";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
@@ -21,11 +23,9 @@ import {
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
+import { fetchBedrockModels } from "../utils";
 import Separator from "@/refresh-components/Separator";
-import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
-import { LoadingAnimation } from "@/components/Loading";
-import { useEffect, useState } from "react";
 import {
   Tabs,
   TabsList,
@@ -36,7 +36,6 @@ import { cn } from "@/lib/utils";
 
 export const BEDROCK_PROVIDER_NAME = "bedrock";
 const BEDROCK_DISPLAY_NAME = "AWS Bedrock";
-const BEDROCK_MODELS_API_URL = "/api/admin/llm/bedrock/available-models";
 
 // AWS Bedrock regions - kept in sync with backend
 const AWS_REGION_OPTIONS = [
@@ -75,22 +74,11 @@ interface BedrockFormProps {
   shouldMarkAsDefault?: boolean;
 }
 
-interface BedrockModelResponse {
-  name: string;
-  display_name: string;
-  max_input_tokens: number;
-  supports_image_input: boolean;
-}
-
 export function BedrockForm({
   existingLlmProvider,
   shouldMarkAsDefault,
 }: BedrockFormProps) {
-  const [availableModels, setAvailableModels] = useState<ModelConfiguration[]>(
-    []
-  );
-  const [isLoadingModels, setIsLoadingModels] = useState(false);
-  const [fetchModelsError, setFetchModelsError] = useState<string>("");
+  const [fetchedModels, setFetchedModels] = useState<ModelConfiguration[]>([]);
 
   return (
     <ProviderFormEntrypointWrapper
@@ -111,7 +99,7 @@ export function BedrockForm({
         const initialValues: BedrockFormValues = {
           ...buildDefaultInitialValues(
             existingLlmProvider,
-            availableModels.length > 0 ? availableModels : modelConfigurations
+            modelConfigurations
           ),
           default_model_name: existingLlmProvider?.default_model_name ?? "",
           custom_config: {
@@ -138,65 +126,6 @@ export function BedrockForm({
             AWS_REGION_NAME: Yup.string().required("AWS Region is required"),
           }),
         });
-
-        const fetchModels = async (regionName: string) => {
-          if (!regionName) {
-            setFetchModelsError("AWS region is required to fetch models");
-            return;
-          }
-
-          setIsLoadingModels(true);
-          setFetchModelsError("");
-
-          try {
-            const response = await fetch(BEDROCK_MODELS_API_URL, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                aws_region_name: regionName,
-                provider_name: existingLlmProvider?.name,
-              }),
-            });
-
-            if (!response.ok) {
-              let errorMessage = "Failed to fetch models";
-              try {
-                const errorData = await response.json();
-                errorMessage = errorData.detail || errorMessage;
-              } catch {
-                // ignore JSON parsing errors
-              }
-              throw new Error(errorMessage);
-            }
-
-            const data: BedrockModelResponse[] = await response.json();
-            const models: ModelConfiguration[] = data.map((model) => ({
-              name: model.name,
-              display_name: model.display_name,
-              is_visible: true,
-              max_input_tokens: model.max_input_tokens,
-              supports_image_input: model.supports_image_input,
-            }));
-
-            setAvailableModels(models);
-            setPopup({
-              message: `Successfully fetched ${models.length} models for the selected region.`,
-              type: "success",
-            });
-          } catch (error) {
-            const errorMessage =
-              error instanceof Error ? error.message : "Unknown error";
-            setFetchModelsError(errorMessage);
-            setPopup({
-              message: `Failed to fetch models: ${errorMessage}`,
-              type: "error",
-            });
-          } finally {
-            setIsLoadingModels(false);
-          }
-        };
 
         return (
           <>
@@ -225,8 +154,8 @@ export function BedrockForm({
                   values: submitValues,
                   initialValues,
                   modelConfigurations:
-                    availableModels.length > 0
-                      ? availableModels
+                    fetchedModels.length > 0
+                      ? fetchedModels
                       : modelConfigurations,
                   existingLlmProvider,
                   shouldMarkAsDefault,
@@ -243,23 +172,23 @@ export function BedrockForm({
                 const authMethod =
                   formikProps.values.custom_config?.BEDROCK_AUTH_METHOD;
 
-                // Auto-fetch models when editing an existing provider
-                useEffect(() => {
-                  if (
-                    existingLlmProvider &&
-                    formikProps.values.custom_config?.AWS_REGION_NAME &&
-                    availableModels.length === 0
-                  ) {
-                    fetchModels(
-                      formikProps.values.custom_config.AWS_REGION_NAME
-                    );
-                  }
-                }, []);
-
                 const currentModels =
-                  availableModels.length > 0
-                    ? availableModels
+                  fetchedModels.length > 0
+                    ? fetchedModels
                     : modelConfigurations;
+
+                // Check if auth credentials are complete
+                const isAuthComplete =
+                  authMethod === AUTH_METHOD_IAM ||
+                  (authMethod === AUTH_METHOD_ACCESS_KEY &&
+                    formikProps.values.custom_config?.AWS_ACCESS_KEY_ID &&
+                    formikProps.values.custom_config?.AWS_SECRET_ACCESS_KEY) ||
+                  (authMethod === AUTH_METHOD_LONG_TERM_API_KEY &&
+                    formikProps.values.custom_config?.AWS_BEARER_TOKEN_BEDROCK);
+
+                const isFetchDisabled =
+                  !formikProps.values.custom_config?.AWS_REGION_NAME ||
+                  !isAuthComplete;
 
                 return (
                   <Form className="gap-y-4 items-stretch mt-6">
@@ -353,47 +282,38 @@ export function BedrockForm({
 
                     <Separator />
 
-                    <div className="flex flex-col gap-2">
-                      <Button
-                        type="button"
-                        onClick={() =>
-                          fetchModels(
-                            formikProps.values.custom_config?.AWS_REGION_NAME ||
-                              ""
-                          )
-                        }
-                        disabled={
-                          isLoadingModels ||
-                          !formikProps.values.custom_config?.AWS_REGION_NAME
-                        }
-                        className="w-fit"
-                      >
-                        {isLoadingModels ? (
-                          <Text>
-                            <LoadingAnimation text="Fetching models" />
-                          </Text>
-                        ) : (
-                          "Fetch Available Models"
-                        )}
-                      </Button>
-
-                      {fetchModelsError && (
-                        <Text className="text-red-600 text-sm">
-                          {fetchModelsError}
-                        </Text>
-                      )}
-
-                      <Text className="text-sm text-gray-600">
-                        Retrieve the latest available models for this region
-                        (including cross-region inference models).
-                      </Text>
-                    </div>
+                    <FetchModelsButton
+                      onFetch={() =>
+                        fetchBedrockModels({
+                          awsRegionName:
+                            formikProps.values.custom_config?.AWS_REGION_NAME ??
+                            "",
+                          awsAccessKeyId:
+                            formikProps.values.custom_config?.AWS_ACCESS_KEY_ID,
+                          awsSecretAccessKey:
+                            formikProps.values.custom_config
+                              ?.AWS_SECRET_ACCESS_KEY,
+                          awsBearerTokenBedrock:
+                            formikProps.values.custom_config
+                              ?.AWS_BEARER_TOKEN_BEDROCK,
+                          providerName: existingLlmProvider?.name,
+                        })
+                      }
+                      isDisabled={isFetchDisabled}
+                      disabledHint={
+                        !formikProps.values.custom_config?.AWS_REGION_NAME
+                          ? "Select an AWS region first"
+                          : !isAuthComplete
+                            ? "Complete the authentication credentials"
+                            : undefined
+                      }
+                      onModelsFetched={setFetchedModels}
+                    />
 
                     <DisplayModels
                       modelConfigurations={currentModels}
                       formikProps={formikProps}
                       noModelConfigurationsMessage="No models found. Please select a region and fetch available models."
-                      isLoading={isLoadingModels}
                     />
 
                     <Separator />
