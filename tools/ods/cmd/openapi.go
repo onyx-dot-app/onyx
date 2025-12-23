@@ -10,7 +10,7 @@ import (
 // Default paths relative to git root
 const (
 	DefaultSchemaPath = "backend/generated/openapi.json"
-	DefaultClientDir  = "backend/generated/onyx_openapi_client"
+	DefaultClientDir  = "backend/generated/"
 )
 
 // OpenAPIOptions holds options for the openapi command.
@@ -200,4 +200,3 @@ func runOpenAPIAll(opts *OpenAPIOptions) {
 
 	log.Info("Generation completed successfully")
 }
-
