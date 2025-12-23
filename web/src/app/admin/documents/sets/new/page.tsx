@@ -6,7 +6,7 @@ import { DocumentSetCreationForm } from "../DocumentSetCreationForm";
 import { useConnectorStatus, useUserGroups } from "@/lib/hooks";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { BackButton } from "@/components/BackButton";
+import { BackButton } from "@/refresh-components/buttons/BackButton";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { useRouter } from "next/navigation";
 import { refreshDocumentSets } from "../hooks";

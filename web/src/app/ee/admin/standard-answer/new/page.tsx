@@ -2,7 +2,7 @@ import { AdminPageTitle } from "@/components/admin/Title";
 import { StandardAnswerCreationForm } from "@/app/ee/admin/standard-answer/StandardAnswerCreationForm";
 import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { BackButton } from "@/components/BackButton";
+import { BackButton } from "@/refresh-components/buttons/BackButton";
 import { ClipboardIcon } from "@/components/icons/icons";
 import { StandardAnswerCategory } from "@/lib/types";
 

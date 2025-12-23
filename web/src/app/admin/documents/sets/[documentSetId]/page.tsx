@@ -7,7 +7,7 @@ import { useConnectorStatus, useUserGroups } from "@/lib/hooks";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { BookmarkIcon } from "@/components/icons/icons";
-import { BackButton } from "@/components/BackButton";
+import { BackButton } from "@/refresh-components/buttons/BackButton";
 import CardSection from "@/components/admin/CardSection";
 import { DocumentSetCreationForm } from "../DocumentSetCreationForm";
 import { useRouter } from "next/navigation";
