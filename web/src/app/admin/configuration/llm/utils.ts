@@ -221,6 +221,138 @@ export const dynamicProviderConfigs: Record<
   },
 };
 
+/**
+ * Fetches models for a provider and returns them directly.
+ * Does not interact with formik or any form state.
+ */
+export const fetchModelsOnly = async (
+  llmProviderDescriptor: WellKnownLLMProviderDescriptor,
+  existingLlmProvider: LLMProviderView | undefined,
+  values: any
+): Promise<{ models: ModelConfiguration[]; error?: string }> => {
+  const config = dynamicProviderConfigs[llmProviderDescriptor.name];
+  if (!config) {
+    return { models: [], error: "Unknown provider" };
+  }
+
+  if (config.isDisabled(values)) {
+    return { models: [], error: config.disabledReason };
+  }
+
+  try {
+    let updatedModelConfigs: ModelConfiguration[];
+
+    if (config.isStatic) {
+      // For static providers, use models from the descriptor (which comes from litellm)
+      const existingVisibleModels = new Set(
+        existingLlmProvider?.model_configurations
+          .filter((m) => m.is_visible)
+          .map((m) => m.name) || []
+      );
+
+      updatedModelConfigs = llmProviderDescriptor.model_configurations.map(
+        (model) => ({
+          ...model,
+          is_visible: existingVisibleModels.has(model.name)
+            ? true
+            : model.is_visible,
+        })
+      );
+    } else {
+      // For dynamic providers, fetch from the API
+      const response = await fetch(config.endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(
+          config.buildRequestBody({ values, existingLlmProvider })
+        ),
+      });
+
+      if (!response.ok) {
+        let errorMessage = "Failed to fetch models";
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorMessage;
+        } catch {
+          // ignore JSON parsing errors
+        }
+        return { models: [], error: errorMessage };
+      }
+
+      const availableModels = await response.json();
+      updatedModelConfigs = config.processResponse(
+        availableModels,
+        llmProviderDescriptor
+      );
+    }
+
+    return { models: updatedModelConfigs };
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    return { models: [], error: errorMessage };
+  }
+};
+
+/**
+ * Fetches Bedrock models directly without any form state dependencies.
+ */
+export const fetchBedrockModels = async (params: {
+  awsRegionName: string;
+  awsAccessKeyId?: string;
+  awsSecretAccessKey?: string;
+  awsBearerTokenBedrock?: string;
+  providerName?: string;
+}): Promise<{ models: ModelConfiguration[]; error?: string }> => {
+  if (!params.awsRegionName) {
+    return { models: [], error: "AWS region is required" };
+  }
+
+  try {
+    const response = await fetch("/api/admin/llm/bedrock/available-models", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        aws_region_name: params.awsRegionName,
+        aws_access_key_id: params.awsAccessKeyId,
+        aws_secret_access_key: params.awsSecretAccessKey,
+        aws_bearer_token_bedrock: params.awsBearerTokenBedrock,
+        provider_name: params.providerName,
+      }),
+    });
+
+    if (!response.ok) {
+      let errorMessage = "Failed to fetch models";
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.detail || errorMessage;
+      } catch {
+        // ignore JSON parsing errors
+      }
+      return { models: [], error: errorMessage };
+    }
+
+    const data: BedrockModelResponse[] = await response.json();
+    const models: ModelConfiguration[] = data.map((modelData) => ({
+      name: modelData.name,
+      display_name: modelData.display_name,
+      is_visible: false,
+      max_input_tokens: modelData.max_input_tokens,
+      supports_image_input: modelData.supports_image_input,
+    }));
+
+    return { models };
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    return { models: [], error: errorMessage };
+  }
+};
+
 export const fetchModels = async (
   llmProviderDescriptor: WellKnownLLMProviderDescriptor,
   existingLlmProvider: LLMProviderView | undefined,

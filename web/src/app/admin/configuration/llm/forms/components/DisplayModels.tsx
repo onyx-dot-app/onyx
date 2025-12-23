@@ -5,12 +5,13 @@ import { BaseLLMFormValues } from "../formUtils";
 
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 
-function DisplayModelHeader() {
+function DisplayModelHeader({ alternativeText }: { alternativeText?: string }) {
   return (
     <div className="mb-2">
       <label className="block font-medium text-base">Available Models</label>
       <span className="block text-sm text-text-03">
-        Select which models to make available for this provider.
+        {alternativeText ??
+          "Select which models to make available for this provider."}
       </span>
     </div>
   );
@@ -86,10 +87,9 @@ export function DisplayModels<T extends BaseLLMFormValues>({
   if (modelConfigurations.length === 0) {
     return (
       <div>
-        <DisplayModelHeader />
-        <p className="text-sm text-text-03">
-          {noModelConfigurationsMessage ?? "No models found."}
-        </p>
+        <DisplayModelHeader
+          alternativeText={noModelConfigurationsMessage ?? "No models found"}
+        />
       </div>
     );
   }
