@@ -63,7 +63,7 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 MAX_USER_MESSAGES_FOR_CONTEXT = 5
-MAX_FINAL_REPORT_TOKENS = 10000
+MAX_FINAL_REPORT_TOKENS = 20000
 
 # Might be something like (this gives a lot of leeway for change but typically the models don't do this):
 # 0. Research topics 1-3
