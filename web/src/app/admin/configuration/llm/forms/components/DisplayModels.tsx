@@ -49,9 +49,6 @@ export function DisplayModels<T extends BaseLLMFormValues>({
       <DisplayModelHeader />
       <div className="flex flex-col gap-2 w-full">
         <InputComboBox
-          // key={`model-select-${
-          //   formikProps.values.selected_model_names?.length ?? 0
-          // }`}
           placeholder="Select your models"
           value=""
           options={modelConfigurations
