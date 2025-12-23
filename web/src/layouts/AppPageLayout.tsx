@@ -43,19 +43,24 @@ const footerMarkdownComponents = {
       {children}
     </Text>
   ),
-  a: ({ href, className, children, ...rest }) => (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      {...rest}
-      className={cn(className, "underline underline-offset-2")}
-    >
-      <Text as="span" text03 secondaryAction>
-        {children}
-      </Text>
-    </a>
-  ),
+  a: ({ href, className, children, ...rest }) => {
+    // Ensure href has a protocol, default to https if missing
+    const fullHref =
+      href && !href.startsWith("http") ? `https://${href}` : href;
+    return (
+      <a
+        href={fullHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        {...rest}
+        className={cn(className, "underline underline-offset-2")}
+      >
+        <Text as="span" text03 secondaryAction>
+          {children}
+        </Text>
+      </a>
+    );
+  },
 } satisfies Partial<Components>;
 
 export interface AppPageLayoutProps
