@@ -357,10 +357,27 @@ class CloudEmbedding:
             for i in range(0, len(texts), VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE)
         ]
         all_embeddings: list[Embedding] = []
+
+        logger.debug(
+            f"VertexAI embedding: processing {len(texts)} texts in {len(batches)} batches "
+            f"(batch_size={VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE})"
+        )
+
         try:
-            for batch in batches:
+            for batch_idx, batch in enumerate(batches):
                 batch_embeddings = await _embed_batch(batch)
                 all_embeddings.extend(batch_embeddings)
+
+                # Log progress for large batches to track memory usage patterns
+                if batch_idx % 10 == 0 and batch_idx > 0:
+                    logger.debug(
+                        f"VertexAI embedding progress: batch {batch_idx}/{len(batches)}, "
+                        f"total_embeddings={len(all_embeddings)}"
+                    )
+
+            logger.debug(
+                f"VertexAI embedding completed: {len(all_embeddings)} embeddings generated"
+            )
             return all_embeddings
         finally:
             # Ensure client is closed with a timeout to prevent hanging on stuck sessions

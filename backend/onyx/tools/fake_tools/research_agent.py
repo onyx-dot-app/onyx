@@ -24,6 +24,7 @@ from onyx.deep_research.dr_mock_tools import THINK_TOOL_RESPONSE_TOKEN_COUNT
 from onyx.deep_research.models import CombinedResearchAgentCallResult
 from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.deep_research.utils import check_special_tool_calls
+from onyx.deep_research.utils import create_think_tool_token_processor
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.models import ReasoningEffort
@@ -124,39 +125,43 @@ def generate_intermediate_report(
             user_identity=user_identity,
             max_tokens=MAX_INTERMEDIATE_REPORT_LENGTH_TOKENS,
             use_existing_tab_index=True,
+            is_deep_research=True,
         )
 
         while True:
             try:
                 packet = next(intermediate_report_generator)
-                # Translate AgentResponseStart/Delta packets to DeepResearchPlanStart/Delta
-                # The LLM response from this prompt is the research plan
+                # Translate AgentResponseStart/Delta packets to IntermediateReportStart/Delta
+                # Use original placement consistently for all packets
                 if isinstance(packet.obj, AgentResponseStart):
                     emitter.emit(
                         Packet(
-                            placement=packet.placement,
+                            placement=placement,
                             obj=IntermediateReportStart(),
                         )
                     )
                 elif isinstance(packet.obj, AgentResponseDelta):
                     emitter.emit(
                         Packet(
-                            placement=packet.placement,
+                            placement=placement,
                             obj=IntermediateReportDelta(content=packet.obj.content),
                         )
                     )
                 else:
                     # Pass through other packet types (e.g., ReasoningStart, ReasoningDelta, etc.)
-                    emitter.emit(packet)
+                    # Also use original placement to keep everything in the same group
+                    emitter.emit(
+                        Packet(
+                            placement=placement,
+                            obj=packet.obj,
+                        )
+                    )
             except StopIteration as e:
-                llm_step_result, reasoned = e.value
+                llm_step_result, _ = e.value
+                # Use original placement for completion packets
                 emitter.emit(
                     Packet(
-                        placement=Placement(
-                            turn_index=placement.turn_index + (1 if reasoned else 0),
-                            tab_index=placement.tab_index,
-                            sub_turn_index=placement.sub_turn_index,
-                        ),
+                        placement=placement,
                         obj=IntermediateReportCitedDocs(
                             cited_docs=list(
                                 citation_processor.get_seen_citations().values()
@@ -166,10 +171,7 @@ def generate_intermediate_report(
                 )
                 emitter.emit(
                     Packet(
-                        placement=Placement(
-                            turn_index=placement.turn_index + (1 if reasoned else 0),
-                            tab_index=placement.tab_index,
-                        ),
+                        placement=placement,
                         obj=SectionEnd(),
                     )
                 )
@@ -305,6 +307,14 @@ def run_research_agent_call(
                 research_agent_tools = get_research_agent_additional_tool_definitions(
                     include_think_tool=not is_reasoning_model
                 )
+                # Use think tool processor for non-reasoning models to convert
+                # think_tool calls to reasoning content (same as dr_loop.py)
+                custom_processor = (
+                    create_think_tool_token_processor()
+                    if not is_reasoning_model
+                    else None
+                )
+
                 llm_step_result, has_reasoned = run_llm_step(
                     emitter=emitter,
                     history=constructed_history,
@@ -322,7 +332,9 @@ def run_research_agent_call(
                     reasoning_effort=ReasoningEffort.LOW,
                     final_documents=None,
                     user_identity=user_identity,
+                    custom_token_processor=custom_processor,
                     use_existing_tab_index=True,
+                    is_deep_research=True,
                 )
                 if has_reasoned:
                     reasoning_cycles += 1
