@@ -54,6 +54,7 @@ from onyx.tools.models import ToolCallKickoff
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
+from onyx.tracing.framework.create import function_span
 from onyx.tracing.framework.create import trace
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
@@ -97,59 +98,62 @@ def generate_final_report(
         bool: True if reasoning occurred during report generation (turn_index was incremented),
               False otherwise.
     """
-    final_report_prompt = FINAL_REPORT_PROMPT.format(
-        current_datetime=get_current_llm_day_time(full_sentence=False),
-    )
-    system_prompt = ChatMessageSimple(
-        message=final_report_prompt,
-        token_count=token_counter(final_report_prompt),
-        message_type=MessageType.SYSTEM,
-    )
-    reminder_message = ChatMessageSimple(
-        message=USER_FINAL_REPORT_QUERY,
-        token_count=token_counter(USER_FINAL_REPORT_QUERY),
-        message_type=MessageType.USER,
-    )
-    final_report_history = construct_message_history(
-        system_prompt=system_prompt,
-        custom_agent_prompt=None,
-        simple_chat_history=history,
-        reminder_message=reminder_message,
-        project_files=None,
-        available_tokens=llm.config.max_input_tokens,
-    )
+    with function_span("generate_report") as span:
+        span.span_data.input = f"history_length={len(history)}, turn_index={turn_index}"
+        final_report_prompt = FINAL_REPORT_PROMPT.format(
+            current_datetime=get_current_llm_day_time(full_sentence=False),
+        )
+        system_prompt = ChatMessageSimple(
+            message=final_report_prompt,
+            token_count=token_counter(final_report_prompt),
+            message_type=MessageType.SYSTEM,
+        )
+        reminder_message = ChatMessageSimple(
+            message=USER_FINAL_REPORT_QUERY,
+            token_count=token_counter(USER_FINAL_REPORT_QUERY),
+            message_type=MessageType.USER,
+        )
+        final_report_history = construct_message_history(
+            system_prompt=system_prompt,
+            custom_agent_prompt=None,
+            simple_chat_history=history,
+            reminder_message=reminder_message,
+            project_files=None,
+            available_tokens=llm.config.max_input_tokens,
+        )
 
-    citation_processor = DynamicCitationProcessor()
-    citation_processor.update_citation_mapping(citation_mapping)
+        citation_processor = DynamicCitationProcessor()
+        citation_processor.update_citation_mapping(citation_mapping)
 
-    # Only passing in the cited documents as the whole list would be too long
-    final_documents = list(citation_processor.citation_to_doc.values())
+        # Only passing in the cited documents as the whole list would be too long
+        final_documents = list(citation_processor.citation_to_doc.values())
 
-    llm_step_result, has_reasoned = run_llm_step(
-        emitter=emitter,
-        history=final_report_history,
-        tool_definitions=[],
-        tool_choice=ToolChoiceOptions.NONE,
-        llm=llm,
-        placement=Placement(turn_index=turn_index),
-        citation_processor=citation_processor,
-        state_container=state_container,
-        final_documents=final_documents,
-        user_identity=user_identity,
-        max_tokens=MAX_FINAL_REPORT_TOKENS,
-    )
+        llm_step_result, has_reasoned = run_llm_step(
+            emitter=emitter,
+            history=final_report_history,
+            tool_definitions=[],
+            tool_choice=ToolChoiceOptions.NONE,
+            llm=llm,
+            placement=Placement(turn_index=turn_index),
+            citation_processor=citation_processor,
+            state_container=state_container,
+            final_documents=final_documents,
+            user_identity=user_identity,
+            max_tokens=MAX_FINAL_REPORT_TOKENS,
+        )
 
-    final_report = llm_step_result.answer
-    if final_report is None:
-        raise ValueError("LLM failed to generate the final deep research report")
+        final_report = llm_step_result.answer
+        if final_report is None:
+            raise ValueError("LLM failed to generate the final deep research report")
 
-    if saved_reasoning:
-        # The reasoning we want to save with the message is more about calling this
-        # generate report and why it's done. Also some models don't have reasoning
-        # but we'd still want to capture the reasoning from the think_tool of theprevious turn.
-        state_container.set_reasoning_tokens(saved_reasoning)
+        if saved_reasoning:
+            # The reasoning we want to save with the message is more about calling this
+            # generate report and why it's done. Also some models don't have reasoning
+            # but we'd still want to capture the reasoning from the think_tool of theprevious turn.
+            state_container.set_reasoning_tokens(saved_reasoning)
 
-    return has_reasoned
+        span.span_data.output = final_report if final_report else None
+        return has_reasoned
 
 
 @log_function_time(print_only=True)
@@ -164,9 +168,15 @@ def run_deep_research_llm_loop(
     db_session: Session,
     skip_clarification: bool = False,
     user_identity: LLMUserIdentity | None = None,
+    chat_session_id: str | None = None,
 ) -> None:
     with trace(
-        "run_deep_research_llm_loop", metadata={"tenant_id": get_current_tenant_id()}
+        "run_deep_research_llm_loop",
+        group_id=chat_session_id,
+        metadata={
+            "tenant_id": get_current_tenant_id(),
+            "chat_session_id": chat_session_id,
+        },
     ):
         # Here for lazy load LiteLLM
         from onyx.llm.litellm_singleton.config import initialize_litellm
@@ -459,26 +469,29 @@ def run_deep_research_llm_loop(
                 # we will show it as a separate message.
                 # NOTE: This does not need to increment the reasoning cycles because the custom token processor causes
                 # the LLM step to handle this
-                most_recent_reasoning = state_container.reasoning_tokens
-                tool_call_message = think_tool_call.to_msg_str()
+                with function_span("think_tool") as span:
+                    span.span_data.input = str(think_tool_call.tool_args)
+                    most_recent_reasoning = state_container.reasoning_tokens
+                    tool_call_message = think_tool_call.to_msg_str()
 
-                think_tool_msg = ChatMessageSimple(
-                    message=tool_call_message,
-                    token_count=token_counter(tool_call_message),
-                    message_type=MessageType.TOOL_CALL,
-                    tool_call_id=think_tool_call.tool_call_id,
-                    image_files=None,
-                )
-                simple_chat_history.append(think_tool_msg)
+                    think_tool_msg = ChatMessageSimple(
+                        message=tool_call_message,
+                        token_count=token_counter(tool_call_message),
+                        message_type=MessageType.TOOL_CALL,
+                        tool_call_id=think_tool_call.tool_call_id,
+                        image_files=None,
+                    )
+                    simple_chat_history.append(think_tool_msg)
 
-                think_tool_response_msg = ChatMessageSimple(
-                    message=THINK_TOOL_RESPONSE_MESSAGE,
-                    token_count=THINK_TOOL_RESPONSE_TOKEN_COUNT,
-                    message_type=MessageType.TOOL_CALL_RESPONSE,
-                    tool_call_id=think_tool_call.tool_call_id,
-                    image_files=None,
-                )
-                simple_chat_history.append(think_tool_response_msg)
+                    think_tool_response_msg = ChatMessageSimple(
+                        message=THINK_TOOL_RESPONSE_MESSAGE,
+                        token_count=THINK_TOOL_RESPONSE_TOKEN_COUNT,
+                        message_type=MessageType.TOOL_CALL_RESPONSE,
+                        tool_call_id=think_tool_call.tool_call_id,
+                        image_files=None,
+                    )
+                    simple_chat_history.append(think_tool_response_msg)
+                    span.span_data.output = THINK_TOOL_RESPONSE_MESSAGE
                 continue
             else:
                 for tool_call in tool_calls:

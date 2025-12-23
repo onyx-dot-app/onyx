@@ -292,8 +292,16 @@ def run_llm_loop(
     db_session: Session,
     forced_tool_id: int | None = None,
     user_identity: LLMUserIdentity | None = None,
+    chat_session_id: str | None = None,
 ) -> None:
-    with trace("run_llm_loop", metadata={"tenant_id": get_current_tenant_id()}):
+    with trace(
+        "run_llm_loop",
+        group_id=chat_session_id,
+        metadata={
+            "tenant_id": get_current_tenant_id(),
+            "chat_session_id": chat_session_id,
+        },
+    ):
         # Fix some LiteLLM issues,
         from onyx.llm.litellm_singleton.config import (
             initialize_litellm,
