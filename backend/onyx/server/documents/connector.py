@@ -509,6 +509,8 @@ def upload_files(
                         deduped_file_names.append(os.path.basename(file_info))
                 continue
 
+            # Since we can't render docx files in the UI,
+            # we store them in the file store as plain text
             if file.content_type == WORD_PROCESSING_MIME_TYPE:
                 # Lazy load to avoid importing markitdown when not needed
                 from onyx.file_processing.extract_file_text import read_docx_file
