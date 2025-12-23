@@ -42,31 +42,15 @@ from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.connectors.google_utils.google_auth import (
     get_google_oauth_creds,
 )
-from onyx.connectors.google_utils.google_kv import (
-    build_service_account_creds,
-)
-from onyx.connectors.google_utils.google_kv import (
-    delete_google_app_cred,
-)
-from onyx.connectors.google_utils.google_kv import (
-    delete_service_account_key,
-)
+from onyx.connectors.google_utils.google_kv import build_service_account_creds
+from onyx.connectors.google_utils.google_kv import delete_google_app_cred
+from onyx.connectors.google_utils.google_kv import delete_service_account_key
 from onyx.connectors.google_utils.google_kv import get_auth_url
-from onyx.connectors.google_utils.google_kv import (
-    get_google_app_cred,
-)
-from onyx.connectors.google_utils.google_kv import (
-    get_service_account_key,
-)
-from onyx.connectors.google_utils.google_kv import (
-    update_credential_access_tokens,
-)
-from onyx.connectors.google_utils.google_kv import (
-    upsert_google_app_cred,
-)
-from onyx.connectors.google_utils.google_kv import (
-    upsert_service_account_key,
-)
+from onyx.connectors.google_utils.google_kv import get_google_app_cred
+from onyx.connectors.google_utils.google_kv import get_service_account_key
+from onyx.connectors.google_utils.google_kv import update_credential_access_tokens
+from onyx.connectors.google_utils.google_kv import upsert_google_app_cred
+from onyx.connectors.google_utils.google_kv import upsert_service_account_key
 from onyx.connectors.google_utils.google_kv import verify_csrf
 from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_TOKEN_KEY
 from onyx.connectors.google_utils.shared_constants import (
