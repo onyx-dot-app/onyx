@@ -6,8 +6,9 @@ on:
       - "*"
   workflow_dispatch:
 
-permissions:
-  contents: write
+# Set restrictive default permissions for all jobs. Jobs that need more permissions
+# should explicitly declare them.
+permissions: {}
 
 env:
   IS_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' }}
@@ -153,6 +154,9 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6.0.1
+        with:
+          # NOTE: persist-credentials is needed for tauri-action to create GitHub releases.
+          persist-credentials: true # zizmor: ignore[artipacked]
 
       - name: install dependencies (ubuntu only)
         if: startsWith(matrix.platform, 'ubuntu-')
@@ -183,11 +187,6 @@ jobs:
           # Those targets are only used on macos runners so it's in an `if` to slightly speed up windows and linux builds.
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-      - name: Rust cache
-        uses: swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # ratchet:swatinem/rust-cache@v2
-        with:
-          workspaces: './desktop/src-tauri -> target'
-
       - name: install frontend dependencies
         working-directory: ./desktop
         run: npm install
@@ -195,9 +194,11 @@ jobs:
       - name: Inject version (Unix)
         if: runner.os != 'Windows'
         working-directory: ./desktop
+        env:
+          SHORT_SHA: ${{ needs.determine-builds.outputs.short-sha }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          SHORT_SHA="${{ needs.determine-builds.outputs.short-sha }}"
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          if [ "${EVENT_NAME}" == "workflow_dispatch" ]; then
             VERSION="0.0.0-dev+${SHORT_SHA}"
           else
             VERSION="${GITHUB_REF_NAME#v}+${SHORT_SHA}"
