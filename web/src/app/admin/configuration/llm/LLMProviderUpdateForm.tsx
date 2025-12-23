@@ -28,10 +28,10 @@ import {
   parseAzureTargetUri,
 } from "@/lib/azureTargetUri";
 import * as Yup from "yup";
-import isEqual from "lodash/isEqual";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import { AgentsMultiSelect } from "@/components/AgentsMultiSelect";
-import { SvgTrash } from "@opal/icons";
+import { submitLLMProvider } from "./forms/formUtils";
+import { FormActionButtons } from "./forms/components/FormActionButtons";
 function AutoFetchModelsOnEdit({
   llmProviderDescriptor,
   existingLlmProvider,
@@ -273,162 +273,42 @@ export function LLMProviderUpdateForm({
       initialValues={initialValues}
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting }) => {
-        setSubmitting(true);
-
-        // build final payload
-        const {
-          selected_model_names: visibleModels,
-          model_configurations: modelConfigurations,
-          fetched_model_configurations,
-          target_uri,
-          _modelListUpdated,
-          ...rest
-        } = values;
-
         // For Azure OpenAI, parse target_uri to extract api_base, api_version, and deployment_name
-        let finalApiBase = rest.api_base;
-        let finalApiVersion = rest.api_version;
-        let finalDeploymentName = rest.deployment_name;
+        let processedValues = { ...values };
 
-        if (llmProviderDescriptor.name === "azure" && target_uri) {
+        if (llmProviderDescriptor.name === "azure" && values.target_uri) {
           try {
-            const { url, apiVersion, deploymentName } =
-              parseAzureTargetUri(target_uri);
-            finalApiBase = url.origin; // Only use origin (protocol + hostname + port)
-            finalApiVersion = apiVersion;
-
-            if (deploymentName) {
-              finalDeploymentName = deploymentName;
-            }
+            const { url, apiVersion, deploymentName } = parseAzureTargetUri(
+              values.target_uri
+            );
+            processedValues = {
+              ...processedValues,
+              api_base: url.origin, // Only use origin (protocol + hostname + port)
+              api_version: apiVersion,
+              deployment_name:
+                deploymentName || processedValues.deployment_name,
+            };
           } catch (error) {
             // This should not happen due to validation, but handle gracefully
             console.error("Failed to parse target_uri:", error);
           }
         }
 
-        // Create the final payload with proper typing
-        // Filter out models that are not default, fast default, or visible
-        const filteredModelConfigurations = getCurrentModelConfigurations(
-          values
-        )
-          .map(
-            (modelConfiguration): ModelConfiguration => ({
-              name: modelConfiguration.name,
-              is_visible: visibleModels.includes(modelConfiguration.name),
-              max_input_tokens: modelConfiguration.max_input_tokens ?? null,
-              supports_image_input: modelConfiguration.supports_image_input,
-              display_name: modelConfiguration.display_name,
-            })
-          )
-          .filter(
-            (modelConfiguration) =>
-              modelConfiguration.name === rest.default_model_name ||
-              modelConfiguration.is_visible
-          );
-
-        const finalValues = {
-          ...rest,
-          api_base: finalApiBase,
-          api_version: finalApiVersion,
-          deployment_name: finalDeploymentName,
-          api_key_changed: values.api_key !== initialValues.api_key,
-          model_configurations: filteredModelConfigurations,
-        };
-
-        // test the configuration
-        if (!isEqual(finalValues, initialValues)) {
-          setIsTesting(true);
-
-          const response = await fetch("/api/admin/llm/test", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              provider: llmProviderDescriptor.name,
-              ...finalValues,
-            }),
-          });
-          setIsTesting(false);
-
-          if (!response.ok) {
-            const errorMsg = (await response.json()).detail;
-            setTestError(errorMsg);
-            return;
-          }
-        }
-
-        const response = await fetch(
-          `${LLM_PROVIDERS_ADMIN_URL}${
-            existingLlmProvider ? "" : "?is_creation=true"
-          }`,
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              provider: llmProviderDescriptor.name,
-              ...finalValues,
-            }),
-          }
-        );
-
-        if (!response.ok) {
-          const errorMsg = (await response.json()).detail;
-          const fullErrorMsg = existingLlmProvider
-            ? `Failed to update provider: ${errorMsg}`
-            : `Failed to enable provider: ${errorMsg}`;
-          if (setPopup) {
-            setPopup({
-              type: "error",
-              message: fullErrorMsg,
-            });
-          } else {
-            alert(fullErrorMsg);
-          }
-          return;
-        }
-
-        if (shouldMarkAsDefault) {
-          const newLlmProvider = (await response.json()) as LLMProviderView;
-          const setDefaultResponse = await fetch(
-            `${LLM_PROVIDERS_ADMIN_URL}/${newLlmProvider.id}/default`,
-            {
-              method: "POST",
-            }
-          );
-          if (!setDefaultResponse.ok) {
-            const errorMsg = (await setDefaultResponse.json()).detail;
-            const fullErrorMsg = `Failed to set provider as default: ${errorMsg}`;
-            if (setPopup) {
-              setPopup({
-                type: "error",
-                message: fullErrorMsg,
-              });
-            } else {
-              alert(fullErrorMsg);
-            }
-            return;
-          }
-        }
-
-        mutate(LLM_PROVIDERS_ADMIN_URL);
-        onClose();
-
-        const successMsg = existingLlmProvider
-          ? "Provider updated successfully!"
-          : "Provider enabled successfully!";
-        if (!hideSuccess && setPopup) {
-          setPopup({
-            type: "success",
-            message: successMsg,
-          });
-        } else {
-          alert(successMsg);
-        }
-
-        setSubmitting(false);
+        await submitLLMProvider({
+          providerName: llmProviderDescriptor.name,
+          values: processedValues,
+          initialValues,
+          modelConfigurations: getCurrentModelConfigurations(values),
+          existingLlmProvider,
+          shouldMarkAsDefault,
+          hideSuccess,
+          setIsTesting,
+          setTestError,
+          setPopup,
+          mutate,
+          onClose,
+          setSubmitting,
+        });
       }}
     >
       {(formikProps) => {
@@ -714,70 +594,14 @@ export function LLMProviderUpdateForm({
               </>
             )}
 
-            {/* NOTE: this is above the test button to make sure it's visible */}
-            {testError && <Text className="text-error mt-2">{testError}</Text>}
-
-            <div className="flex w-full mt-4 gap-2">
-              <Button type="submit" disabled={isTesting}>
-                {isTesting ? (
-                  <Text inverted>
-                    <LoadingAnimation text="Testing" />
-                  </Text>
-                ) : existingLlmProvider ? (
-                  "Update"
-                ) : (
-                  "Enable"
-                )}
-              </Button>
-              {existingLlmProvider && (
-                <Button
-                  danger
-                  leftIcon={SvgTrash}
-                  onClick={async () => {
-                    const response = await fetch(
-                      `${LLM_PROVIDERS_ADMIN_URL}/${existingLlmProvider.id}`,
-                      {
-                        method: "DELETE",
-                      }
-                    );
-
-                    if (!response.ok) {
-                      const errorMsg = (await response.json()).detail;
-                      alert(`Failed to delete provider: ${errorMsg}`);
-                      return;
-                    }
-
-                    // If the deleted provider was the default, set the first remaining provider as default
-                    if (existingLlmProvider.is_default_provider) {
-                      const remainingProvidersResponse = await fetch(
-                        LLM_PROVIDERS_ADMIN_URL
-                      );
-                      if (remainingProvidersResponse.ok) {
-                        const remainingProviders =
-                          await remainingProvidersResponse.json();
-
-                        if (remainingProviders.length > 0) {
-                          const setDefaultResponse = await fetch(
-                            `${LLM_PROVIDERS_ADMIN_URL}/${remainingProviders[0].id}/default`,
-                            {
-                              method: "POST",
-                            }
-                          );
-                          if (!setDefaultResponse.ok) {
-                            console.error("Failed to set new default provider");
-                          }
-                        }
-                      }
-                    }
-
-                    mutate(LLM_PROVIDERS_ADMIN_URL);
-                    onClose();
-                  }}
-                >
-                  Delete
-                </Button>
-              )}
-            </div>
+            {/* NOTE: this is above the submit button to make sure it's visible */}
+            <FormActionButtons
+              isTesting={isTesting}
+              testError={testError}
+              existingLlmProvider={existingLlmProvider}
+              mutate={mutate}
+              onClose={onClose}
+            />
           </Form>
         );
       }}

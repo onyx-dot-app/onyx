@@ -16,6 +16,9 @@ import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import { CustomLLMProviderUpdateForm } from "./CustomLLMProviderUpdateForm";
 import { ConfiguredLLMProviderDisplay } from "./ConfiguredLLMProviderDisplay";
 import { SvgSettings } from "@opal/icons";
+import { OpenAIForm, OPENAI_PROVIDER_NAME } from "./forms/OpenAIForm";
+import { AnthropicForm } from "./forms/AnthropicForm";
+import { OllamaForm } from "./forms/OllamaForm";
 
 function LLMProviderUpdateModal({
   llmProviderDescriptor,
@@ -156,6 +159,8 @@ export function LLMConfiguration() {
     return <ThreeDotsLoader />;
   }
 
+  const isFirstProvider = existingLlmProviders.length === 0;
+
   return (
     <>
       <Title className="mb-2">Enabled LLM Providers</Title>
@@ -185,7 +190,15 @@ export function LLMConfiguration() {
         providers or by specifying your own custom LLM provider.
       </Text>
 
-      <div className="gap-y-4 flex flex-col">
+      <div className="flex flex-col gap-y-4">
+        <OpenAIForm shouldMarkAsDefault={isFirstProvider} />
+        <AnthropicForm shouldMarkAsDefault={isFirstProvider} />
+        <OllamaForm shouldMarkAsDefault={isFirstProvider} />
+
+        <AddCustomLLMProvider existingLlmProviders={existingLlmProviders} />
+      </div>
+
+      {/* <div className="gap-y-4 flex flex-col">
         {llmProviderDescriptors.map((llmProviderDescriptor) => (
           <DefaultLLMProviderDisplay
             key={llmProviderDescriptor.name}
@@ -197,7 +210,7 @@ export function LLMConfiguration() {
 
       <div className="mt-4">
         <AddCustomLLMProvider existingLlmProviders={existingLlmProviders} />
-      </div>
+      </div> */}
     </>
   );
 }
