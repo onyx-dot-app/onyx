@@ -36,30 +36,6 @@ export function AdvancedOptions({
 
       {showAdvancedOptions && (
         <>
-          {currentModelConfigurations.length > 0 && (
-            <div className="w-full">
-              <MultiSelectField
-                selectedInitially={
-                  formikProps.values.selected_model_names ?? []
-                }
-                name="selected_model_names"
-                label="Display Models"
-                subtext="Select the models to make available to users. Unselected models will not be available."
-                options={currentModelConfigurations.map(
-                  (modelConfiguration) => ({
-                    value: modelConfiguration.name,
-                    label: modelConfiguration.name,
-                  })
-                )}
-                onChange={(selected) =>
-                  formikProps.setFieldValue("selected_model_names", selected)
-                }
-              />
-            </div>
-          )}
-
-          <Separator />
-
           <div className="flex flex-col gap-3">
             <Text headingH3>Access Controls</Text>
             <IsPublicGroupSelector
