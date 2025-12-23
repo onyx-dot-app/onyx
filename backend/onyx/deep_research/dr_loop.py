@@ -225,6 +225,7 @@ def run_deep_research_llm_loop(
                 state_container=state_container,
                 final_documents=None,
                 user_identity=user_identity,
+                is_deep_research=True,
             )
 
             if not llm_step_result.tool_calls:
@@ -414,6 +415,7 @@ def run_deep_research_llm_loop(
                 final_documents=None,
                 user_identity=user_identity,
                 custom_token_processor=custom_processor,
+                is_deep_research=True,
             )
             if has_reasoned:
                 reasoning_cycles += 1

@@ -791,6 +791,7 @@ def run_llm_step(
     ) = None,
     max_tokens: int | None = None,
     use_existing_tab_index: bool = False,
+    is_deep_research: bool = False,
 ) -> tuple[LlmStepResult, bool]:
     """Wrapper around run_llm_step_pkt_generator that consumes packets and emits them.
 
@@ -811,6 +812,7 @@ def run_llm_step(
         custom_token_processor=custom_token_processor,
         max_tokens=max_tokens,
         use_existing_tab_index=use_existing_tab_index,
+        is_deep_research=is_deep_research,
     )
 
     while True:

@@ -325,6 +325,7 @@ def run_research_agent_call(
                 user_identity=user_identity,
                 custom_token_processor=custom_processor,
                 use_existing_tab_index=True,
+                is_deep_research=True,
             )
             if has_reasoned:
                 reasoning_cycles += 1
