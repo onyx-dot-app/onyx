@@ -45,7 +45,7 @@ export function DisplayModels<T extends BaseLLMFormValues>({
   }
 
   return (
-    <div key="manual-mode" className="animate-fadeIn">
+    <div key="manual-mode">
       <DisplayModelHeader />
       <div className="flex flex-col gap-2 w-full">
         <InputComboBox
