@@ -4,6 +4,7 @@ import { OpenAIForm } from "./OpenAIForm";
 import { OllamaForm } from "./OllamaForm";
 import { AzureForm } from "./AzureForm";
 import { VertexAIForm } from "./VertexAIForm";
+import { OpenRouterForm } from "./OpenRouterForm";
 import { CustomLLMProviderUpdateForm } from "../CustomLLMProviderUpdateForm";
 
 export const getFormForProvider = (providerName: LLMProviderName) => {
@@ -18,6 +19,8 @@ export const getFormForProvider = (providerName: LLMProviderName) => {
       return <AzureForm />;
     case LLMProviderName.VERTEX_AI:
       return <VertexAIForm />;
+    case LLMProviderName.OPENROUTER:
+      return <OpenRouterForm />;
     // default:
     //   return <CustomLLMProviderUpdateForm />;
   }
