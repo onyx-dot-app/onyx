@@ -486,7 +486,7 @@ def load_chat_file(
         try:
             content_text = extract_file_text(
                 file=file_io,
-                file_name=file_descriptor["name"] or "",
+                file_name=file_descriptor.get("name") or "",
                 break_on_unprocessable=False,
             )
         except Exception as e:
