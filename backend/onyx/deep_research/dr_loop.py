@@ -175,7 +175,7 @@ def run_deep_research_llm_loop(
         # to work in most cases.
         if llm.config.max_input_tokens < 50000:
             raise RuntimeError(
-                "Cannot run Deep Research with an LLM that has less than 25,000 max input tokens"
+                "Cannot run Deep Research with an LLM that has less than 50,000 max input tokens"
             )
 
         initialize_litellm()
