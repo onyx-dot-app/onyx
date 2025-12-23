@@ -46,6 +46,7 @@ export function OllamaForm({
   const [availableModels, setAvailableModels] = useState<ModelConfiguration[]>(
     []
   );
+  const [isLoadingModels, setIsLoadingModels] = useState(true);
 
   console.log("availableModels", availableModels);
 
@@ -144,6 +145,11 @@ export function OllamaForm({
                             supports_image_input: model.supports_image_input,
                           }))
                         );
+                        setIsLoadingModels(false);
+                      })
+                      .catch((error) => {
+                        console.error("Error fetching models:", error);
+                        setIsLoadingModels(false);
                       });
                   }
                 }, [formikProps.values.api_base]);
@@ -174,6 +180,7 @@ export function OllamaForm({
                       modelConfigurations={availableModels}
                       formikProps={formikProps}
                       noModelConfigurationsMessage="No models found. Please provide a valid API base URL."
+                      isLoading={isLoadingModels}
                     />
 
                     <AdvancedOptions
