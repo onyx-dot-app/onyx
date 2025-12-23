@@ -2393,6 +2393,8 @@ class LLMProvider(Base):
     default_vision_model: Mapped[str | None] = mapped_column(String, nullable=True)
     # EE only
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Auto mode: models, visibility, and defaults are managed by GitHub config
+    is_auto_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     groups: Mapped[list["UserGroup"]] = relationship(
         "UserGroup",
         secondary="llm_provider__user_group",

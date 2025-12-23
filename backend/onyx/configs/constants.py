@@ -492,6 +492,7 @@ class OnyxCeleryTask:
     CHECK_FOR_DOC_PERMISSIONS_SYNC = "check_for_doc_permissions_sync"
     CHECK_FOR_EXTERNAL_GROUP_SYNC = "check_for_external_group_sync"
     CHECK_FOR_LLM_MODEL_UPDATE = "check_for_llm_model_update"
+    CHECK_FOR_AUTO_LLM_UPDATE = "check_for_auto_llm_update"
 
     # User file processing
     CHECK_FOR_USER_FILE_PROCESSING = "check_for_user_file_processing"

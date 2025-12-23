@@ -2,6 +2,8 @@ import copy
 from datetime import timedelta
 from typing import Any
 
+from onyx.configs.app_configs import AUTO_LLM_CONFIG_URL
+from onyx.configs.app_configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS
 from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
 from onyx.configs.app_configs import LLM_MODEL_UPDATE_API_URL
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
@@ -181,6 +183,20 @@ if LLM_MODEL_UPDATE_API_URL:
             "options": {
                 "priority": OnyxCeleryPriority.LOW,
                 "expires": BEAT_EXPIRES_DEFAULT,
+            },
+        }
+    )
+
+# Add the Auto LLM update task if the config URL is set (has a default)
+if AUTO_LLM_CONFIG_URL:
+    beat_task_templates.append(
+        {
+            "name": "check-for-auto-llm-update",
+            "task": OnyxCeleryTask.CHECK_FOR_AUTO_LLM_UPDATE,
+            "schedule": timedelta(seconds=AUTO_LLM_UPDATE_INTERVAL_SECONDS),
+            "options": {
+                "priority": OnyxCeleryPriority.LOW,
+                "expires": AUTO_LLM_UPDATE_INTERVAL_SECONDS,
             },
         }
     )
