@@ -48,8 +48,6 @@ logger = setup_logger()
 MAX_API_PAGE_SIZE = 2000  # max allowed by API
 DRUPAL_WIKI_SPACE_KEY = "space"
 
-SUPPORTED_ATTACHMENT_EXTENSIONS = OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS
-
 
 rate_limited_get = retry_builder()(
     rate_limit_builder(max_calls=10, period=1)(rl_requests.get)
@@ -184,7 +182,7 @@ class DrupalWikiConnector(
         # Get file extension
         file_extension = Path(file_name).suffix.lower()
 
-        if file_extension in SUPPORTED_ATTACHMENT_EXTENSIONS:
+        if file_extension in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
             return True
         logger.info(f"Unsupported file type: {file_extension} for {file_name}")
         return False
