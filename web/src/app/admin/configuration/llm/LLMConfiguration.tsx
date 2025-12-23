@@ -20,6 +20,7 @@ import { OpenAIForm, OPENAI_PROVIDER_NAME } from "./forms/OpenAIForm";
 import { AnthropicForm } from "./forms/AnthropicForm";
 import { OllamaForm } from "./forms/OllamaForm";
 import { AzureForm } from "./forms/AzureForm";
+import { BedrockForm } from "./forms/BedrockForm";
 
 function LLMProviderUpdateModal({
   llmProviderDescriptor,
@@ -196,6 +197,7 @@ export function LLMConfiguration() {
         <AnthropicForm shouldMarkAsDefault={isFirstProvider} />
         <OllamaForm shouldMarkAsDefault={isFirstProvider} />
         <AzureForm shouldMarkAsDefault={isFirstProvider} />
+        <BedrockForm shouldMarkAsDefault={isFirstProvider} />
 
         <AddCustomLLMProvider existingLlmProviders={existingLlmProviders} />
       </div>
