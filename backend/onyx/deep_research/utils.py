@@ -53,6 +53,7 @@ def _unescape_json_string(s: str) -> str:
     result = result.replace("\\r", "\r")
     result = result.replace("\\t", "\t")
     result = result.replace('\\"', '"')
+    result = result.replace('\\/', '/')
 
     # Finally, restore escaped backslashes as single backslashes
     result = result.replace(placeholder, "\\")
