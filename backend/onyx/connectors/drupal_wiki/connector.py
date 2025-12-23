@@ -115,9 +115,8 @@ class DrupalWikiConnector(
         self.include_attachments = include_attachments
         self.allow_images = allow_images
 
-        # Will be set by load_credentials
-        self.headers: dict[str, str] | None = None
-        self._api_token: str | None = None
+        self.headers: dict[str, str] = {"Accept": "application/json"}
+        # self._api_token is set by load_credentials
 
     def set_allow_images(self, value: bool) -> None:
         logger.info(f"Setting allow_images to {value}.")
@@ -161,11 +160,7 @@ class DrupalWikiConnector(
         logger.info(f"Downloading attachment {attachment_id} from {url}")
 
         # Use headers without Accept for binary downloads
-        if self.headers is None:
-            raise ValueError(
-                "Headers not set in connector instance"
-            )  # because mypy complains
-        download_headers = {"Authorization": self.headers["Authorization"]}
+        download_headers = {"Authorization": f"Bearer {self._api_token}"}
 
         response = rate_limited_get(url, headers=download_headers)
         response.raise_for_status()
@@ -353,16 +348,20 @@ class DrupalWikiConnector(
         Returns:
             None
         """
-        if "drupal_wiki_api_token" not in credentials:
+
+        api_token = credentials.get("drupal_wiki_api_token", "").strip()
+
+        if not api_token:
             raise ConnectorValidationError(
                 "API token is required for Drupal Wiki connector"
             )
 
-        self._api_token = credentials["drupal_wiki_api_token"]
-        self.headers = {
-            "Accept": "application/json",
-            "Authorization": f"Bearer {self._api_token}",
-        }
+        self._api_token = api_token
+        self.headers.update(
+            {
+                "Authorization": f"Bearer {api_token}",
+            }
+        )
 
         return None
 
