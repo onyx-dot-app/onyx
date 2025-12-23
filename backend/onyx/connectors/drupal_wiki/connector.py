@@ -112,7 +112,7 @@ class DrupalWikiConnector(
         self.allow_images = allow_images
 
         self.headers: dict[str, str] = {"Accept": "application/json"}
-        # self._api_token is set by load_credentials
+        self._api_token: str | None = None  # set by load_credentials
 
     def set_allow_images(self, value: bool) -> None:
         logger.info(f"Setting allow_images to {value}.")
