@@ -4,7 +4,7 @@ import {
   MemoizedLink,
   MemoizedParagraph,
 } from "@/app/chat/message/MemoizedTextComponents";
-import React, { useMemo, CSSProperties } from "react";
+import { useMemo, CSSProperties } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
