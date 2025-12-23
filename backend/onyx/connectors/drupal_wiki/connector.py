@@ -242,7 +242,7 @@ class DrupalWikiConnector(
             if media_type.startswith("image/"):
                 if not self.allow_images:
                     logger.info(
-                        "Skipping image attachment {file_name} because allow_images is False",
+                        f"Skipping image attachment {file_name} because allow_images is False",
                     )
                     return [], None
 
