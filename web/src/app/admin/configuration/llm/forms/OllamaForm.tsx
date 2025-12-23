@@ -16,11 +16,7 @@ import {
   BaseLLMFormValues,
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
-import { fetchModels } from "../utils";
-import { useState } from "react";
-import Button from "@/refresh-components/buttons/Button";
-import { LoadingAnimation } from "@/components/Loading";
-import Text from "@/refresh-components/texts/Text";
+import { FetchModelsButton } from "./components/FetchModelsButton";
 
 export const OLLAMA_PROVIDER_NAME = "ollama_chat";
 const DEFAULT_API_BASE = "http://127.0.0.1:11434";
@@ -56,9 +52,6 @@ function OllamaFormContent({
   existingLlmProvider,
   shouldMarkAsDefault,
 }: OllamaFormContentProps) {
-  const [isFetchingModels, setIsFetchingModels] = useState(false);
-  const [fetchModelsError, setFetchModelsError] = useState("");
-
   const initialValues: OllamaFormValues = {
     ...buildDefaultInitialValues(existingLlmProvider, modelConfigurations),
     api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
@@ -119,34 +112,22 @@ function OllamaFormContent({
           const currentModelConfigurations =
             values.fetched_model_configurations ?? modelConfigurations;
 
-          const handleFetchModels = async () => {
-            // Create a minimal descriptor for fetchModels
-            const descriptor = {
-              name: OLLAMA_PROVIDER_NAME,
-              display_name: "Ollama",
-              title: "Ollama",
-              api_key_required: false,
-              api_base_required: true,
-              api_version_required: false,
-              deployment_name_required: false,
-              single_model_supported: false,
-              custom_config_keys: null,
-              model_configurations: modelConfigurations,
-              default_model: null,
-              default_api_base: DEFAULT_API_BASE,
-              is_public: true,
-              groups: [],
-            };
-
-            await fetchModels(
-              descriptor,
-              existingLlmProvider,
-              values,
-              setFieldValue,
-              setIsFetchingModels,
-              setFetchModelsError,
-              setPopup
-            );
+          // Create a minimal descriptor for fetchModels
+          const descriptor = {
+            name: OLLAMA_PROVIDER_NAME,
+            display_name: "Ollama",
+            title: "Ollama",
+            api_key_required: false,
+            api_base_required: true,
+            api_version_required: false,
+            deployment_name_required: false,
+            single_model_supported: false,
+            custom_config_keys: null,
+            model_configurations: modelConfigurations,
+            default_model: null,
+            default_api_base: DEFAULT_API_BASE,
+            is_public: true,
+            groups: [],
           };
 
           return (
@@ -171,57 +152,10 @@ function OllamaFormContent({
 
               <Separator />
 
-              <div className="flex flex-col gap-y-2">
-                <div className="flex items-center gap-x-4">
-                  <Button
-                    type="button"
-                    onClick={handleFetchModels}
-                    disabled={isFetchingModels || !values.api_base}
-                  >
-                    {isFetchingModels ? (
-                      <LoadingAnimation />
-                    ) : (
-                      "Fetch Available Models"
-                    )}
-                  </Button>
-                  {fetchModelsError && (
-                    <Text className="text-sm text-error">
-                      {fetchModelsError}
-                    </Text>
-                  )}
-                </div>
-                {!values.api_base && (
-                  <Text mainUiMuted className="text-sm">
-                    Enter an API Base URL to fetch available models
-                  </Text>
-                )}
-              </div>
-
-              {currentModelConfigurations.length > 0 && (
-                <>
-                  <SelectorFormField
-                    name="default_model_name"
-                    subtext="The model to use by default for this provider unless otherwise specified."
-                    label="Default Model"
-                    options={currentModelConfigurations.map(
-                      (modelConfiguration) => ({
-                        name:
-                          modelConfiguration.display_name ||
-                          modelConfiguration.name,
-                        value: modelConfiguration.name,
-                      })
-                    )}
-                    maxHeight="max-h-56"
-                  />
-
-                  <Separator />
-
-                  <AdvancedOptions
-                    currentModelConfigurations={currentModelConfigurations}
-                    formikProps={formikProps}
-                  />
-                </>
-              )}
+              <AdvancedOptions
+                currentModelConfigurations={currentModelConfigurations}
+                formikProps={formikProps}
+              />
 
               <FormActionButtons
                 isTesting={isTesting}
