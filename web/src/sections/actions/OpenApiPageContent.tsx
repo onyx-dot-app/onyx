@@ -1,8 +1,7 @@
 "use client";
+
 import { ToolSnapshot } from "@/lib/tools/interfaces";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import useSWR from "swr";
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import OpenAPIAuthenticationModal, {
   AuthMethod,
@@ -17,15 +16,14 @@ import { updateCustomTool, deleteCustomTool } from "@/lib/tools/openApiService";
 import { updateToolStatus } from "@/lib/tools/mcpService";
 import DisconnectEntityModal from "./modals/DisconnectEntityModal";
 import ActionCardSkeleton from "./skeleton/ActionCardSkeleton";
+import useOpenApiTools from "@/hooks/useOpenApiTools";
 
 export default function OpenApiPageContent() {
   const {
-    data: openApiTools,
-    mutate: mutateOpenApiTools,
+    openApiTools,
+    mutateOpenApiTools,
     isLoading: isOpenApiLoading,
-  } = useSWR<ToolSnapshot[]>("/api/tool/openapi", errorHandlingFetcher, {
-    refreshInterval: 10000,
-  });
+  } = useOpenApiTools();
   const addOpenAPIActionModal = useCreateModal();
   const openAPIAuthModal = useCreateModal();
   const disconnectModal = useCreateModal();
