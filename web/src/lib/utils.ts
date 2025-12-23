@@ -11,6 +11,23 @@ export const truncateString = (str: string, maxLength: number) => {
 };
 
 /**
+ * Ensures an href has a protocol, adding https:// only to bare domains.
+ * Preserves existing protocols, relative paths, anchors, mailto:, and tel: links.
+ */
+export function ensureHrefProtocol(
+  href: string | undefined
+): string | undefined {
+  if (!href) return href;
+  const needsProtocol =
+    !href.includes("://") &&
+    !href.startsWith("/") &&
+    !href.startsWith("#") &&
+    !href.startsWith("mailto:") &&
+    !href.startsWith("tel:");
+  return needsProtocol ? `https://${href}` : href;
+}
+
+/**
  * Custom URL transformer function for ReactMarkdown.
  * Only allows a small, safe set of protocols and strips everything else.
  * Returning null removes the href attribute entirely.

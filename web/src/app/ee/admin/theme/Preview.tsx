@@ -4,7 +4,7 @@ import React from "react";
 import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
-import { cn } from "@/lib/utils";
+import { cn, ensureHrefProtocol } from "@/lib/utils";
 import { OnyxIcon } from "@/components/icons/icons";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 
@@ -14,10 +14,8 @@ const previewMarkdownComponents = {
       {children}
     </Text>
   ),
-  a: ({ href, className, children, ...rest }) => {
-    // Ensure href has a protocol, default to https if missing
-    const fullHref =
-      href && !href.startsWith("http") ? `https://${href}` : href;
+  a: ({ node, href, className, children, ...rest }) => {
+    const fullHref = ensureHrefProtocol(href);
     return (
       <a
         href={fullHref}

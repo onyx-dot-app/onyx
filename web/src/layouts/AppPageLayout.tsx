@@ -1,7 +1,7 @@
 "use client";
 
 import { ChatSession } from "@/app/chat/interfaces";
-import { cn, noProp } from "@/lib/utils";
+import { cn, ensureHrefProtocol, noProp } from "@/lib/utils";
 import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
@@ -44,9 +44,7 @@ const footerMarkdownComponents = {
     </Text>
   ),
   a: ({ node, href, className, children, ...rest }) => {
-    // Ensure href has a protocol, default to https if missing
-    const fullHref =
-      href && !href.startsWith("http") ? `https://${href}` : href;
+    const fullHref = ensureHrefProtocol(href);
     return (
       <a
         href={fullHref}
