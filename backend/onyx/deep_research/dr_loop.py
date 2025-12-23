@@ -271,6 +271,7 @@ def run_deep_research_llm_loop(
             state_container=state_container,
             final_documents=None,
             user_identity=user_identity,
+            is_deep_research=True,
         )
 
         while True:

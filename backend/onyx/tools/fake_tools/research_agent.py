@@ -119,6 +119,7 @@ def generate_intermediate_report(
         final_documents=None,
         user_identity=user_identity,
         max_tokens=MAX_INTERMEDIATE_REPORT_LENGTH_TOKENS,
+        is_deep_research=True,
     )
 
     while True:

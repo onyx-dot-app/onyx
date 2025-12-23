@@ -412,6 +412,7 @@ def run_llm_step_pkt_generator(
     max_tokens: int | None = None,
     # TODO: Temporary handling of nested tool calls with agents, figure out a better way to handle this
     use_existing_tab_index: bool = False,
+    is_deep_research: bool = False,
 ) -> Generator[Packet, None, tuple[LlmStepResult, bool]]:
     """Run an LLM step and stream the response as packets.
     NOTE: DO NOT TOUCH THIS FUNCTION BEFORE ASKING YUHONG, this is very finicky and
@@ -551,7 +552,7 @@ def run_llm_step_pkt_generator(
                 # When tool_choice is REQUIRED, content before tool calls is reasoning/thinking
                 # about which tool to call, not an actual answer to the user.
                 # Treat this content as reasoning instead of answer.
-                if tool_choice == ToolChoiceOptions.REQUIRED:
+                if is_deep_research and tool_choice == ToolChoiceOptions.REQUIRED:
                     # Treat content as reasoning when we know tool calls are coming
                     accumulated_reasoning += delta.content
                     if state_container:
