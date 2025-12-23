@@ -23,6 +23,7 @@ import {
   BaseLLMFormValues,
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
+import { DisplayModels } from "./components/DisplayModels";
 
 export const ANTHROPIC_PROVIDER_NAME = "anthropic";
 const DEFAULT_DEFAULT_MODEL_NAME = "claude-sonnet-4-5";
@@ -97,22 +98,10 @@ export function AnthropicForm({
 
                     <ApiKeyField />
 
-                    <Separator />
-
-                    <SelectorFormField
-                      name="default_model_name"
-                      subtext="The model to use by default for this provider unless otherwise specified."
-                      label="Default Model"
-                      options={modelConfigurations.map(
-                        (modelConfiguration) => ({
-                          name: modelConfiguration.name,
-                          value: modelConfiguration.name,
-                        })
-                      )}
-                      maxHeight="max-h-56"
+                    <DisplayModels
+                      modelConfigurations={modelConfigurations}
+                      formikProps={formikProps}
                     />
-
-                    <Separator />
 
                     <AdvancedOptions
                       currentModelConfigurations={modelConfigurations}
