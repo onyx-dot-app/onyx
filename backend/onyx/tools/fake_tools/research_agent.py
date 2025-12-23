@@ -129,32 +129,27 @@ def generate_intermediate_report(
             if isinstance(packet.obj, AgentResponseStart):
                 emitter.emit(
                     Packet(
-                        placement=placement,  # Use original placement
+                        placement=packet.placement,
                         obj=IntermediateReportStart(),
                     )
                 )
             elif isinstance(packet.obj, AgentResponseDelta):
                 emitter.emit(
                     Packet(
-                        placement=placement,  # Use original placement
+                        placement=packet.placement,
                         obj=IntermediateReportDelta(content=packet.obj.content),
                     )
                 )
             else:
                 # Pass through other packet types (e.g., ReasoningStart, ReasoningDelta, etc.)
                 # Also use original placement to keep everything in the same group
-                emitter.emit(
-                    Packet(
-                        placement=placement,
-                        obj=packet.obj,
-                    )
-                )
+                emitter.emit(packet)
         except StopIteration as e:
             llm_step_result, reasoned = e.value
             emitter.emit(
                 Packet(
                     placement=Placement(
-                        turn_index=placement.turn_index,
+                        turn_index=placement.turn_index + (1 if reasoned else 0),
                         tab_index=placement.tab_index,
                         sub_turn_index=placement.sub_turn_index,
                     ),
@@ -513,14 +508,6 @@ def run_research_agent_call(
             Packet(
                 placement=Placement(turn_index=turn_index, tab_index=tab_index),
                 obj=PacketException(type=StreamingType.ERROR.value, exception=e),
-            )
-        )
-        # Emit SectionEnd so the frontend knows this research agent is complete (even if it failed)
-        # Without this, the frontend will hang waiting for the SectionEnd packet
-        emitter.emit(
-            Packet(
-                placement=Placement(turn_index=turn_index, tab_index=tab_index),
-                obj=SectionEnd(),
             )
         )
         return None
