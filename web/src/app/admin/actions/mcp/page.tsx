@@ -1,7 +1,7 @@
 "use client";
 import { SvgMcp } from "@opal/icons";
 import MCPPageContent from "@/sections/actions/MCPPageContent";
-import { AdminPageLayout } from "@/refresh-components/layouts/AdminPageLayout";
+import { AdminPageLayout } from "@/layouts/admin-pages";
 export default function Main() {
   return (
     <AdminPageLayout
