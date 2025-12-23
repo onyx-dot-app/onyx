@@ -19,6 +19,7 @@ import { SvgSettings } from "@opal/icons";
 import { OpenAIForm, OPENAI_PROVIDER_NAME } from "./forms/OpenAIForm";
 import { AnthropicForm } from "./forms/AnthropicForm";
 import { OllamaForm } from "./forms/OllamaForm";
+import { AzureForm } from "./forms/AzureForm";
 
 function LLMProviderUpdateModal({
   llmProviderDescriptor,
@@ -194,6 +195,7 @@ export function LLMConfiguration() {
         <OpenAIForm shouldMarkAsDefault={isFirstProvider} />
         <AnthropicForm shouldMarkAsDefault={isFirstProvider} />
         <OllamaForm shouldMarkAsDefault={isFirstProvider} />
+        <AzureForm shouldMarkAsDefault={isFirstProvider} />
 
         <AddCustomLLMProvider existingLlmProviders={existingLlmProviders} />
       </div>
