@@ -118,6 +118,7 @@ def generate_intermediate_report(
         final_documents=None,
         user_identity=user_identity,
         max_tokens=MAX_INTERMEDIATE_REPORT_LENGTH_TOKENS,
+        use_existing_tab_index=True,
     )
 
     while True:

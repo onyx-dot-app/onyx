@@ -90,7 +90,13 @@ def generate_final_report(
     citation_mapping: CitationMapping,
     user_identity: LLMUserIdentity | None,
     saved_reasoning: str | None = None,
-) -> None:
+) -> bool:
+    """Generate the final research report.
+
+    Returns:
+        bool: True if reasoning occurred during report generation (turn_index was incremented),
+              False otherwise.
+    """
     final_report_prompt = FINAL_REPORT_PROMPT.format(
         current_datetime=get_current_llm_day_time(full_sentence=False),
     )
@@ -119,7 +125,7 @@ def generate_final_report(
     # Only passing in the cited documents as the whole list would be too long
     final_documents = list(citation_processor.citation_to_doc.values())
 
-    llm_step_result, _ = run_llm_step(
+    llm_step_result, has_reasoned = run_llm_step(
         emitter=emitter,
         history=final_report_history,
         tool_definitions=[],
@@ -142,6 +148,8 @@ def generate_final_report(
         # generate report and why it's done. Also some models don't have reasoning
         # but we'd still want to capture the reasoning from the think_tool of theprevious turn.
         state_container.set_reasoning_tokens(saved_reasoning)
+
+    return has_reasoned
 
 
 @log_function_time(print_only=True)
@@ -336,7 +344,7 @@ def run_deep_research_llm_loop(
         for cycle in range(max_orchestrator_cycles):
             if cycle == max_orchestrator_cycles - 1:
                 # If it's the last cycle, forcibly generate the final report
-                generate_final_report(
+                report_reasoned = generate_final_report(
                     history=simple_chat_history,
                     llm=llm,
                     token_counter=token_counter,
@@ -346,6 +354,8 @@ def run_deep_research_llm_loop(
                     citation_mapping=citation_mapping,
                     user_identity=user_identity,
                 )
+                # Update final_turn_index: base + 1 for the report itself + 1 if reasoning occurred
+                reasoning_cycles += 1 if report_reasoned else 0
                 break
 
             research_agent_calls: list[ToolCallKickoff] = []
@@ -412,7 +422,7 @@ def run_deep_research_llm_loop(
                 # Basically hope that this is an infrequent occurence and hopefully multiple research
                 # cycles have already ran
                 logger.warning("No tool calls found, this should not happen.")
-                generate_final_report(
+                report_reasoned = generate_final_report(
                     history=simple_chat_history,
                     llm=llm,
                     token_counter=token_counter,
@@ -422,22 +432,24 @@ def run_deep_research_llm_loop(
                     citation_mapping=citation_mapping,
                     user_identity=user_identity,
                 )
+                reasoning_cycles += 1 if report_reasoned else 0
                 break
 
             special_tool_calls = check_special_tool_calls(tool_calls=tool_calls)
 
             if special_tool_calls.generate_report_tool_call:
-                generate_final_report(
+                report_reasoned = generate_final_report(
                     history=simple_chat_history,
                     llm=llm,
                     token_counter=token_counter,
                     state_container=state_container,
                     emitter=emitter,
-                    turn_index=special_tool_calls.generate_report_tool_call.placement.turn_index,
+                    turn_index=orchestrator_start_turn_index + cycle + reasoning_cycles,
                     citation_mapping=citation_mapping,
                     user_identity=user_identity,
                     saved_reasoning=most_recent_reasoning,
                 )
+                reasoning_cycles += 1 if report_reasoned else 0
                 break
             elif special_tool_calls.think_tool_call:
                 think_tool_call = special_tool_calls.think_tool_call
@@ -480,7 +492,7 @@ def run_deep_research_llm_loop(
                     logger.warning(
                         "No research agent tool calls found, this should not happen."
                     )
-                    generate_final_report(
+                    report_reasoned = generate_final_report(
                         history=simple_chat_history,
                         llm=llm,
                         token_counter=token_counter,
@@ -492,6 +504,7 @@ def run_deep_research_llm_loop(
                         citation_mapping=citation_mapping,
                         user_identity=user_identity,
                     )
+                    reasoning_cycles += 1 if report_reasoned else 0
                     break
 
                 if len(research_agent_calls) > 1:
@@ -582,7 +595,9 @@ def run_deep_research_llm_loop(
 
         emitter.emit(
             Packet(
-                placement=Placement(turn_index=cycle + reasoning_cycles),
+                placement=Placement(
+                    turn_index=orchestrator_start_turn_index + cycle + reasoning_cycles
+                ),
                 obj=OverallStop(type="stop"),
             )
         )
