@@ -14,27 +14,27 @@
  *
  * @example
  * ```tsx
- * import { AppPageLayout } from "@/layouts/app-layouts";
+ * import AppLayouts from "@/layouts/app-layouts";
  *
  * export default function ChatPage() {
  *   const settings = useCombinedSettings();
  *   const chatSession = useCurrentChatSession();
  *
  *   return (
- *     <AppPageLayout settings={settings} chatSession={chatSession}>
+ *     <AppLayouts.Root settings={settings} chatSession={chatSession}>
  *       <ChatInterface />
- *     </AppPageLayout>
+ *     </AppLayouts.Root>
  *   );
  * }
  *
  * // With custom className
- * <AppPageLayout
+ * <AppLayouts.Root
  *   settings={settings}
  *   chatSession={chatSession}
  *   className="bg-custom-background"
  * >
  *   <ChatInterface />
- * </AppPageLayout>
+ * </AppLayouts.Root>
  * ```
  */
 
@@ -411,9 +411,9 @@ export interface AppRootProps {
  * @example
  * ```tsx
  * // Basic usage in a chat page
- * <AppPageLayout settings={settings} chatSession={currentSession}>
+ * <AppLayouts.Root settings={settings} chatSession={currentSession}>
  *   <ChatInterface />
- * </AppPageLayout>
+ * </AppLayouts.Root>
  *
  * // The header will show:
  * // - Mobile: Sidebar toggle button

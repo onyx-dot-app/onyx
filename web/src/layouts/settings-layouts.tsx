@@ -7,25 +7,25 @@
  *
  * @example
  * ```tsx
- * import Settings from "@/layouts/settings-layouts";
+ * import SettingsLayouts from "@/layouts/settings-layouts";
  * import { SvgSettings } from "@opal/icons";
  *
  * function MySettingsPage() {
  *   return (
- *     <Settings.Root>
- *       <Settings.Header
+ *     <SettingsLayouts.Root>
+ *       <SettingsLayouts.Header
  *         icon={SvgSettings}
  *         title="Account Settings"
  *         description="Manage your account preferences and settings"
  *         rightChildren={<Button>Save</Button>}
  *       >
  *         <InputTypeIn placeholder="Search settings..." />
- *       </Settings.Header>
+ *       </SettingsLayouts.Header>
  *
- *       <Settings.Body>
+ *       <SettingsLayouts.Body>
  *         <Card>Settings content here</Card>
- *       </Settings.Body>
- *     </Settings.Root>
+ *       </SettingsLayouts.Body>
+ *     </SettingsLayouts.Root>
  *   );
  * }
  * ```
@@ -55,10 +55,10 @@ import { useEffect, useRef, useState } from "react";
  *
  * @example
  * ```tsx
- * <Settings.Root>
- *   <Settings.Header {...} />
- *   <Settings.Body>...</Settings.Body>
- * </Settings.Root>
+ * <SettingsLayouts.Root>
+ *   <SettingsLayouts.Header {...} />
+ *   <SettingsLayouts.Body>...</SettingsLayouts.Body>
+ * </SettingsLayouts.Root>
  * ```
  */
 export interface SettingsRootProps
@@ -101,20 +101,20 @@ function SettingsRoot(props: SettingsRootProps) {
  * @example
  * ```tsx
  * // Basic header
- * <Settings.Header
+ * <SettingsLayouts.Header
  *   icon={SvgUser}
  *   title="Profile Settings"
  *   description="Update your profile information"
  * />
  *
  * // Without description
- * <Settings.Header
+ * <SettingsLayouts.Header
  *   icon={SvgUser}
  *   title="Profile Settings"
  * />
  *
  * // With action buttons
- * <Settings.Header
+ * <SettingsLayouts.Header
  *   icon={SvgSettings}
  *   title="General Settings"
  *   description="Configure your preferences"
@@ -124,17 +124,17 @@ function SettingsRoot(props: SettingsRootProps) {
  * />
  *
  * // With search/filter below and bottom separator
- * <Settings.Header
+ * <SettingsLayouts.Header
  *   icon={SvgDatabase}
  *   title="Data Sources"
  *   description="Manage your connected data sources"
  *   includeBottomSeparator
  * >
  *   <InputTypeIn placeholder="Search data sources..." />
- * </Settings.Header>
+ * </SettingsLayouts.Header>
  *
  * // With back button
- * <Settings.Header
+ * <SettingsLayouts.Header
  *   icon={SvgArrow}
  *   title="Advanced Settings"
  *   description="Expert configuration options"
@@ -249,7 +249,7 @@ function SettingsHeader({
  * @example
  * ```tsx
  * // Basic usage
- * <Settings.Body>
+ * <SettingsLayouts.Body>
  *   <Card>
  *     <h3>Section 1</h3>
  *     <p>Content here</p>
@@ -258,17 +258,17 @@ function SettingsHeader({
  *     <h3>Section 2</h3>
  *     <p>More content</p>
  *   </Card>
- * </Settings.Body>
+ * </SettingsLayouts.Body>
  *
  * // Custom spacing
- * <Settings.Body className="gap-4">
+ * <SettingsLayouts.Body className="gap-4">
  *   <Card>Tighter spacing</Card>
- * </Settings.Body>
+ * </SettingsLayouts.Body>
  *
  * // No padding
- * <Settings.Body className="p-0">
+ * <SettingsLayouts.Body className="p-0">
  *   <FullWidthComponent />
- * </Settings.Body>
+ * </SettingsLayouts.Body>
  * ```
  */
 export interface SettingsBodyProps {
