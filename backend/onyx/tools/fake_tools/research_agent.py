@@ -125,35 +125,38 @@ def generate_intermediate_report(
     while True:
         try:
             packet = next(intermediate_report_generator)
-            # Translate AgentResponseStart/Delta packets to DeepResearchPlanStart/Delta
-            # The LLM response from this prompt is the research plan
+            # Translate AgentResponseStart/Delta packets to IntermediateReportStart/Delta
+            # Use the original placement to ensure all packets stay in the same group
+            # as the RESEARCH_AGENT_START packet (turn_index may increment if reasoning occurs)
             if isinstance(packet.obj, AgentResponseStart):
                 emitter.emit(
                     Packet(
-                        placement=packet.placement,
+                        placement=placement,
                         obj=IntermediateReportStart(),
                     )
                 )
             elif isinstance(packet.obj, AgentResponseDelta):
                 emitter.emit(
                     Packet(
-                        placement=packet.placement,
+                        placement=placement,
                         obj=IntermediateReportDelta(content=packet.obj.content),
                     )
                 )
             else:
                 # Pass through other packet types (e.g., ReasoningStart, ReasoningDelta, etc.)
                 # Also use original placement to keep everything in the same group
-                emitter.emit(packet)
+                emitter.emit(
+                    Packet(
+                        placement=placement,
+                        obj=packet.obj,
+                    )
+                )
         except StopIteration as e:
-            llm_step_result, reasoned = e.value
+            llm_step_result, _ = e.value
+            # Use original placement to keep all packets in the same group
             emitter.emit(
                 Packet(
-                    placement=Placement(
-                        turn_index=placement.turn_index + (1 if reasoned else 0),
-                        tab_index=placement.tab_index,
-                        sub_turn_index=placement.sub_turn_index,
-                    ),
+                    placement=placement,
                     obj=IntermediateReportCitedDocs(
                         cited_docs=list(
                             citation_processor.get_seen_citations().values()
@@ -163,11 +166,7 @@ def generate_intermediate_report(
             )
             emitter.emit(
                 Packet(
-                    placement=Placement(
-                        turn_index=placement.turn_index,
-                        tab_index=placement.tab_index,
-                        sub_turn_index=placement.sub_turn_index,
-                    ),
+                    placement=placement,
                     obj=SectionEnd(),
                 )
             )

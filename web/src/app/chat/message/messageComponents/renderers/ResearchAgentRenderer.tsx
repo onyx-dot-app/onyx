@@ -186,27 +186,7 @@ export const ResearchAgentRenderer: MessageRenderer<
     })
     .join("");
 
-  // Get content based on displayed packet count
-  const reportContent = useMemo(() => {
-    if (!animate || displayedPacketCount === -1) {
-      return fullReportContent;
-    }
-
-    return packets
-      .slice(0, displayedPacketCount)
-      .filter(
-        (p) =>
-          p.placement.sub_turn_index === undefined ||
-          p.placement.sub_turn_index === null
-      )
-      .map((packet) => {
-        if (packet.obj.type === PacketType.INTERMEDIATE_REPORT_DELTA) {
-          return (packet.obj as IntermediateReportDelta).content;
-        }
-        return "";
-      })
-      .join("");
-  }, [animate, displayedPacketCount, fullReportContent, packets]);
+  const reportContent = fullReportContent;
 
   // Use markdown renderer to render the report content
   const { renderedContent: renderedReportContent } = useMarkdownRenderer(
