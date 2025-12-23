@@ -12,6 +12,7 @@ export enum PacketType {
 
   STOP = "stop",
   SECTION_END = "section_end",
+  TOP_LEVEL_BRANCHING = "top_level_branching",
   ERROR = "error",
 
   // Specific tool packets
@@ -40,6 +41,14 @@ export enum PacketType {
   CITATION_END = "citation_end",
   // Backend sends individual citation_info packets during streaming
   CITATION_INFO = "citation_info",
+
+  // Deep Research packets
+  DEEP_RESEARCH_PLAN_START = "deep_research_plan_start",
+  DEEP_RESEARCH_PLAN_DELTA = "deep_research_plan_delta",
+  RESEARCH_AGENT_START = "research_agent_start",
+  INTERMEDIATE_REPORT_START = "intermediate_report_start",
+  INTERMEDIATE_REPORT_DELTA = "intermediate_report_delta",
+  INTERMEDIATE_REPORT_CITED_DOCS = "intermediate_report_cited_docs",
 }
 
 // Basic Message Packets
@@ -67,6 +76,11 @@ export interface Stop extends BaseObj {
 
 export interface SectionEnd extends BaseObj {
   type: "section_end";
+}
+
+export interface TopLevelBranching extends BaseObj {
+  type: "top_level_branching";
+  num_parallel_branches: number;
 }
 
 export interface PacketError extends BaseObj {
@@ -158,6 +172,10 @@ export interface ReasoningDelta extends BaseObj {
   reasoning: string;
 }
 
+export interface ReasoningDone extends BaseObj {
+  type: "reasoning_done";
+}
+
 // Citation Packets
 export interface StreamingCitation {
   citation_num: number;
@@ -175,11 +193,42 @@ export interface CitationInfo extends BaseObj {
   document_id: string;
 }
 
+// Deep Research Plan Packets
+export interface DeepResearchPlanStart extends BaseObj {
+  type: "deep_research_plan_start";
+}
+
+export interface DeepResearchPlanDelta extends BaseObj {
+  type: "deep_research_plan_delta";
+  content: string;
+}
+
+export interface ResearchAgentStart extends BaseObj {
+  type: "research_agent_start";
+  research_task: string;
+}
+
+export interface IntermediateReportStart extends BaseObj {
+  type: "intermediate_report_start";
+}
+
+export interface IntermediateReportDelta extends BaseObj {
+  type: "intermediate_report_delta";
+  content: string;
+}
+
+export interface IntermediateReportCitedDocs extends BaseObj {
+  type: "intermediate_report_cited_docs";
+  cited_docs: OnyxDocument[] | null;
+}
+
 export type ChatObj = MessageStart | MessageDelta | MessageEnd;
 
 export type StopObj = Stop;
 
 export type SectionEndObj = SectionEnd;
+
+export type TopLevelBranchingObj = TopLevelBranching;
 
 export type PacketErrorObj = PacketError;
 
@@ -221,6 +270,7 @@ export type NewToolObj =
 export type ReasoningObj =
   | ReasoningStart
   | ReasoningDelta
+  | ReasoningDone
   | SectionEnd
   | PacketError;
 
@@ -230,6 +280,18 @@ export type CitationObj =
   | SectionEnd
   | PacketError;
 
+export type DeepResearchPlanObj =
+  | DeepResearchPlanStart
+  | DeepResearchPlanDelta
+  | SectionEnd;
+
+export type ResearchAgentObj =
+  | ResearchAgentStart
+  | IntermediateReportStart
+  | IntermediateReportDelta
+  | IntermediateReportCitedDocs
+  | SectionEnd;
+
 // Union type for all possible streaming objects
 export type ObjTypes =
   | ChatObj
@@ -237,6 +299,10 @@ export type ObjTypes =
   | ReasoningObj
   | StopObj
   | SectionEndObj
+  | TopLevelBranchingObj
+  | CitationObj
+  | DeepResearchPlanObj
+  | ResearchAgentObj
   | PacketErrorObj
   | CitationObj;
 
@@ -302,4 +368,19 @@ export interface ReasoningPacket {
 export interface SectionEndPacket {
   placement: Placement;
   obj: SectionEndObj;
+}
+
+export interface TopLevelBranchingPacket {
+  placement: Placement;
+  obj: TopLevelBranchingObj;
+}
+
+export interface DeepResearchPlanPacket {
+  placement: Placement;
+  obj: DeepResearchPlanObj;
+}
+
+export interface ResearchAgentPacket {
+  placement: Placement;
+  obj: ResearchAgentObj;
 }

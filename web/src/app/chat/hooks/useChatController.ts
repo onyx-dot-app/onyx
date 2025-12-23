@@ -81,7 +81,7 @@ export interface OnSubmitProps {
   currentMessageFiles: ProjectFile[];
   // from the chat bar???
 
-  useAgentSearch: boolean;
+  deepResearch: boolean;
 
   // optional params
   messageIdToResend?: number;
@@ -375,7 +375,7 @@ export function useChatController({
     async ({
       message,
       currentMessageFiles,
-      useAgentSearch,
+      deepResearch,
       messageIdToResend,
       queryOverride,
       forceSearch,
@@ -694,7 +694,7 @@ export function useChatController({
           systemPromptOverride:
             searchParams?.get(SEARCH_PARAM_NAMES.SYSTEM_PROMPT) || undefined,
           useExistingUserMessage: isSeededChat,
-          useAgentSearch,
+          deepResearch,
           enabledToolIds:
             disabledToolIds && liveAssistant
               ? liveAssistant.tools

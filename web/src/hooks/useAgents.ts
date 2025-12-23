@@ -1,6 +1,9 @@
 import useSWR from "swr";
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import {
+  MinimalPersonaSnapshot,
+  FullPersona,
+} from "@/app/admin/assistants/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { pinAgents } from "../lib/assistants/orderAssistants";
 import { useUser } from "@/components/user/UserProvider";
@@ -8,6 +11,27 @@ import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import useChatSessions from "./useChatSessions";
 
+/**
+ * Fetches all agents (personas) available to the current user.
+ *
+ * Returns minimal agent snapshots containing basic information like name, description,
+ * tools, and display settings. Use this for listing agents in UI components like
+ * sidebars, dropdowns, or agent selection interfaces.
+ *
+ * For full agent details including user_file_ids, groups, and advanced settings,
+ * use `useAgent(personaId)` instead.
+ *
+ * @returns Object containing:
+ *   - agents: Array of MinimalPersonaSnapshot objects (empty array while loading)
+ *   - isLoading: Boolean indicating if data is being fetched
+ *   - error: Any error that occurred during fetch
+ *   - refresh: Function to manually revalidate the data
+ *
+ * @example
+ * const { agents, isLoading } = useAgents();
+ * if (isLoading) return <Spinner />;
+ * return <AgentList agents={agents} />;
+ */
 export function useAgents() {
   const { data, error, mutate } = useSWR<MinimalPersonaSnapshot[]>(
     "/api/persona",
@@ -21,6 +45,46 @@ export function useAgents() {
   return {
     agents: data ?? [],
     isLoading: !error && !data,
+    error,
+    refresh: mutate,
+  };
+}
+
+/**
+ * Fetches a single agent (persona) by ID with full details.
+ *
+ * Returns complete agent information including user_file_ids, groups, system prompts,
+ * and all configuration settings. Use this when you need detailed agent data for
+ * editing, configuration, or displaying full agent details.
+ *
+ * For listing multiple agents with basic information, use `useAgents()` instead.
+ *
+ * @param agentId - The ID of the agent to fetch, or null to skip fetching
+ * @returns Object containing:
+ *   - agent: FullPersona object with complete agent details, or null if not loaded/not found
+ *   - isLoading: Boolean indicating if data is being fetched (false when personaId is null)
+ *   - error: Any error that occurred during fetch
+ *   - refresh: Function to manually revalidate the data
+ *
+ * @example
+ * const { agent, isLoading } = useAgent(selectedAgentId);
+ * if (isLoading) return <Spinner />;
+ * if (!agent) return <NotFound />;
+ * return <AgentEditor agent={agent} />;
+ */
+export function useAgent(agentId: number | null) {
+  const { data, error, mutate } = useSWR<FullPersona>(
+    agentId ? `/api/persona/${agentId}` : null,
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 60000,
+    }
+  );
+
+  return {
+    agent: data ?? null,
+    isLoading: !error && !data && agentId !== null,
     error,
     refresh: mutate,
   };

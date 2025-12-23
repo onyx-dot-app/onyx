@@ -50,6 +50,32 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+def _try_parse_json_string(value: Any) -> Any:
+    """Attempt to parse a JSON string value into its Python equivalent.
+
+    If value is a string that looks like a JSON array or object, parse it.
+    Otherwise return the value unchanged.
+
+    This handles the case where the LLM returns arguments like:
+    - queries: '["query1", "query2"]' instead of ["query1", "query2"]
+    """
+    if not isinstance(value, str):
+        return value
+
+    stripped = value.strip()
+    # Only attempt to parse if it looks like a JSON array or object
+    if not (
+        (stripped.startswith("[") and stripped.endswith("]"))
+        or (stripped.startswith("{") and stripped.endswith("}"))
+    ):
+        return value
+
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError:
+        return value
+
+
 def _parse_tool_args_to_dict(raw_args: Any) -> dict[str, Any]:
     """Parse tool arguments into a dict.
 
@@ -59,6 +85,9 @@ def _parse_tool_args_to_dict(raw_args: Any) -> dict[str, Any]:
     Defensive case (JSON string literal of an object):
     - raw_args == '"{\\"queries\\":[...]}"' -> json.loads -> str -> json.loads -> dict
 
+    Also handles the case where argument values are JSON strings that need parsing:
+    - {"queries": '["q1", "q2"]'} -> {"queries": ["q1", "q2"]}
+
     Anything else returns {}.
     """
 
@@ -66,7 +95,8 @@ def _parse_tool_args_to_dict(raw_args: Any) -> dict[str, Any]:
         return {}
 
     if isinstance(raw_args, dict):
-        return raw_args
+        # Parse any string values that look like JSON arrays/objects
+        return {k: _try_parse_json_string(v) for k, v in raw_args.items()}
 
     if not isinstance(raw_args, str):
         return {}
@@ -77,14 +107,18 @@ def _parse_tool_args_to_dict(raw_args: Any) -> dict[str, Any]:
         return {}
 
     if isinstance(parsed1, dict):
-        return parsed1
+        # Parse any string values that look like JSON arrays/objects
+        return {k: _try_parse_json_string(v) for k, v in parsed1.items()}
 
     if isinstance(parsed1, str):
         try:
             parsed2: Any = json.loads(parsed1)
         except json.JSONDecodeError:
             return {}
-        return parsed2 if isinstance(parsed2, dict) else {}
+        if isinstance(parsed2, dict):
+            # Parse any string values that look like JSON arrays/objects
+            return {k: _try_parse_json_string(v) for k, v in parsed2.items()}
+        return {}
 
     return {}
 
@@ -203,6 +237,12 @@ def _extract_tool_call_kickoffs(
 
     Returns a list of ToolCallKickoff objects for valid tool calls (those with both id and name).
     Each tool call is assigned the given turn_index and a tab_index based on its order.
+
+    Args:
+        id_to_tool_call_map: Map of tool call index to tool call data
+        turn_index: The turn index for this set of tool calls
+        tab_index: If provided, use this tab_index for all tool calls (otherwise auto-increment)
+        sub_turn_index: The sub-turn index for nested tool calls
     """
     tool_calls: list[ToolCallKickoff] = []
     tab_index_calculated = 0
@@ -406,6 +446,7 @@ def run_llm_step_pkt_generator(
     max_tokens: int | None = None,
     # TODO: Temporary handling of nested tool calls with agents, figure out a better way to handle this
     use_existing_tab_index: bool = False,
+    is_deep_research: bool = False,
 ) -> Generator[Packet, None, tuple[LlmStepResult, bool]]:
     """Run an LLM step and stream the response as packets.
     NOTE: DO NOT TOUCH THIS FUNCTION BEFORE ASKING YUHONG, this is very finicky and
@@ -542,72 +583,102 @@ def run_llm_step_pkt_generator(
                 reasoning_start = True
 
             if delta.content:
-                if reasoning_start:
-                    yield Packet(
-                        placement=Placement(
-                            turn_index=turn_index,
-                            tab_index=tab_index,
-                            sub_turn_index=sub_turn_index,
-                        ),
-                        obj=ReasoningDone(),
-                    )
-                    has_reasoned = 1
-                    turn_index, sub_turn_index = _increment_turns(
-                        turn_index, sub_turn_index
-                    )
-                    reasoning_start = False
-
-                if not answer_start:
-                    yield Packet(
-                        placement=Placement(
-                            turn_index=turn_index,
-                            tab_index=tab_index,
-                            sub_turn_index=sub_turn_index,
-                        ),
-                        obj=AgentResponseStart(
-                            final_documents=final_documents,
-                        ),
-                    )
-                    answer_start = True
-
-                if citation_processor:
-                    for result in citation_processor.process_token(delta.content):
-                        if isinstance(result, str):
-                            accumulated_answer += result
-                            # Save answer incrementally to state container
-                            if state_container:
-                                state_container.set_answer_tokens(accumulated_answer)
-                            yield Packet(
-                                placement=Placement(
-                                    turn_index=turn_index,
-                                    tab_index=tab_index,
-                                    sub_turn_index=sub_turn_index,
-                                ),
-                                obj=AgentResponseDelta(content=result),
-                            )
-                        elif isinstance(result, CitationInfo):
-                            yield Packet(
-                                placement=Placement(
-                                    turn_index=turn_index,
-                                    tab_index=tab_index,
-                                    sub_turn_index=sub_turn_index,
-                                ),
-                                obj=result,
-                            )
-                else:
-                    # When citation_processor is None, use delta.content directly without modification
-                    accumulated_answer += delta.content
-                    # Save answer incrementally to state container
+                # When tool_choice is REQUIRED, content before tool calls is reasoning/thinking
+                # about which tool to call, not an actual answer to the user.
+                # Treat this content as reasoning instead of answer.
+                if is_deep_research and tool_choice == ToolChoiceOptions.REQUIRED:
+                    # Treat content as reasoning when we know tool calls are coming
+                    accumulated_reasoning += delta.content
                     if state_container:
-                        state_container.set_answer_tokens(accumulated_answer)
+                        state_container.set_reasoning_tokens(accumulated_reasoning)
+                    if not reasoning_start:
+                        yield Packet(
+                            placement=Placement(
+                                turn_index=turn_index,
+                                tab_index=tab_index,
+                                sub_turn_index=sub_turn_index,
+                            ),
+                            obj=ReasoningStart(),
+                        )
                     yield Packet(
                         placement=Placement(
                             turn_index=turn_index,
                             tab_index=tab_index,
                             sub_turn_index=sub_turn_index,
                         ),
-                        obj=AgentResponseDelta(content=delta.content),
+                        obj=ReasoningDelta(reasoning=delta.content),
                     )
+                    reasoning_start = True
+                else:
+                    # Normal flow for AUTO or NONE tool choice
+                    if reasoning_start:
+                        yield Packet(
+                            placement=Placement(
+                                turn_index=turn_index,
+                                tab_index=tab_index,
+                                sub_turn_index=sub_turn_index,
+                            ),
+                            obj=ReasoningDone(),
+                        )
+                        has_reasoned = 1
+                        turn_index, sub_turn_index = _increment_turns(
+                            turn_index, sub_turn_index
+                        )
+                        reasoning_start = False
+
+                    if not answer_start:
+                        yield Packet(
+                            placement=Placement(
+                                turn_index=turn_index,
+                                tab_index=tab_index,
+                                sub_turn_index=sub_turn_index,
+                            ),
+                            obj=AgentResponseStart(
+                                final_documents=final_documents,
+                            ),
+                        )
+                        answer_start = True
+
+                    if citation_processor:
+                        for result in citation_processor.process_token(delta.content):
+                            if isinstance(result, str):
+                                accumulated_answer += result
+                                # Save answer incrementally to state container
+                                if state_container:
+                                    state_container.set_answer_tokens(
+                                        accumulated_answer
+                                    )
+                                yield Packet(
+                                    placement=Placement(
+                                        turn_index=turn_index,
+                                        tab_index=tab_index,
+                                        sub_turn_index=sub_turn_index,
+                                    ),
+                                    obj=AgentResponseDelta(content=result),
+                                )
+                            elif isinstance(result, CitationInfo):
+                                yield Packet(
+                                    placement=Placement(
+                                        turn_index=turn_index,
+                                        tab_index=tab_index,
+                                        sub_turn_index=sub_turn_index,
+                                    ),
+                                    obj=result,
+                                )
+                    else:
+                        # When citation_processor is None, use delta.content directly without modification
+                        accumulated_answer += delta.content
+                        # Save answer incrementally to state container
+                        if state_container:
+                            state_container.set_answer_tokens(accumulated_answer)
+                        yield Packet(
+                            placement=Placement(
+                                turn_index=turn_index,
+                                tab_index=tab_index,
+                                sub_turn_index=sub_turn_index,
+                            ),
+                            obj=AgentResponseDelta(content=delta.content),
+                        )
 
             if delta.tool_calls:
                 if reasoning_start:
@@ -754,6 +825,7 @@ def run_llm_step(
     ) = None,
     max_tokens: int | None = None,
     use_existing_tab_index: bool = False,
+    is_deep_research: bool = False,
 ) -> tuple[LlmStepResult, bool]:
     """Wrapper around run_llm_step_pkt_generator that consumes packets and emits them.
 
@@ -774,6 +846,7 @@ def run_llm_step(
         custom_token_processor=custom_token_processor,
         max_tokens=max_tokens,
         use_existing_tab_index=use_existing_tab_index,
+        is_deep_research=is_deep_research,
     )
 
     while True:

@@ -23,6 +23,12 @@ export function isToolPacket(
     PacketType.FETCH_TOOL_START,
     PacketType.FETCH_TOOL_URLS,
     PacketType.FETCH_TOOL_DOCUMENTS,
+    PacketType.DEEP_RESEARCH_PLAN_START,
+    PacketType.DEEP_RESEARCH_PLAN_DELTA,
+    PacketType.RESEARCH_AGENT_START,
+    PacketType.INTERMEDIATE_REPORT_START,
+    PacketType.INTERMEDIATE_REPORT_DELTA,
+    PacketType.INTERMEDIATE_REPORT_CITED_DOCS,
   ];
   if (includeSectionEnd) {
     toolPacketTypes.push(PacketType.SECTION_END);

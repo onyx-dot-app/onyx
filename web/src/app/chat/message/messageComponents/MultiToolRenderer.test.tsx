@@ -227,7 +227,9 @@ describe("MultiToolRenderer - Streaming Mode", () => {
       isComplete: false,
     });
 
-    expect(screen.getByText("Tool executing")).toBeInTheDocument();
+    // With all tools shown, there will be multiple "Tool executing" texts
+    const statuses = screen.getAllByText("Tool executing");
+    expect(statuses.length).toBeGreaterThan(0);
   });
 
   test("clicking tool status expands to show all tools in streaming", async () => {
@@ -237,13 +239,14 @@ describe("MultiToolRenderer - Streaming Mode", () => {
       isComplete: false,
     });
 
-    // Find the tool status
-    const toolStatus = screen.getByText("Tool executing");
+    // Find a tool status (there will be multiple since all tools are shown)
+    const toolStatuses = screen.getAllByText("Tool executing");
+    expect(toolStatuses.length).toBeGreaterThan(0);
 
     // Click to expand
-    await user.click(toolStatus);
+    await user.click(toolStatuses[0]!);
 
-    // More tools should be visible
+    // Tools should be visible
     await waitFor(() => {
       const toolContents = screen.getAllByTestId("tool-content");
       expect(toolContents.length).toBeGreaterThanOrEqual(1);
@@ -256,8 +259,9 @@ describe("MultiToolRenderer - Streaming Mode", () => {
       isComplete: false,
     });
 
-    // Should show tool executing status
-    expect(screen.getByText("Tool executing")).toBeInTheDocument();
+    // Should show tool executing status (multiple expected since all tools shown)
+    const statuses = screen.getAllByText("Tool executing");
+    expect(statuses.length).toBeGreaterThan(0);
 
     // Tool content should be visible
     const toolContents = screen.getAllByTestId("tool-content");

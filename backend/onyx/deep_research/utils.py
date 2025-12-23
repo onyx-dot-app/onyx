@@ -32,6 +32,33 @@ class ThinkToolProcessorState(BaseModel):
     buffer: str = ""
 
 
+def _unescape_json_string(s: str) -> str:
+    """
+    Unescape JSON string escape sequences.
+
+    JSON strings use backslash escapes like \\n for newlines, \\t for tabs, etc.
+    When we extract content from JSON by string manipulation (without json.loads),
+    we need to manually decode these escape sequences.
+
+    Note: We use a placeholder approach to handle escaped backslashes correctly.
+    For example, "\\\\n" (escaped backslash + n) should become "\\n" (literal backslash + n),
+    not a newline character.
+    """
+    # First, protect escaped backslashes with a placeholder
+    placeholder = "\x00ESCAPED_BACKSLASH\x00"
+    result = s.replace("\\\\", placeholder)
+
+    # Now unescape common JSON escape sequences
+    result = result.replace("\\n", "\n")
+    result = result.replace("\\r", "\r")
+    result = result.replace("\\t", "\t")
+    result = result.replace('\\"', '"')
+
+    # Finally, restore escaped backslashes as single backslashes
+    result = result.replace(placeholder, "\\")
+    return result
+
+
 def _extract_reasoning_chunk(state: ThinkToolProcessorState) -> str | None:
     """
     Extract reasoning content from accumulated arguments, stripping JSON wrapper.
@@ -66,6 +93,10 @@ def _extract_reasoning_chunk(state: ThinkToolProcessorState) -> str | None:
     # Emit everything except last 2 chars
     to_emit = state.buffer[:-2]
     state.buffer = state.buffer[-2:]
+
+    # Unescape JSON escape sequences (e.g., \\n -> \n)
+    if to_emit:
+        to_emit = _unescape_json_string(to_emit)
 
     return to_emit if to_emit else None
 
