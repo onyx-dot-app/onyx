@@ -17,24 +17,12 @@
  * import AppLayouts from "@/layouts/app-layouts";
  *
  * export default function ChatPage() {
- *   const settings = useCombinedSettings();
- *   const chatSession = useCurrentChatSession();
- *
  *   return (
- *     <AppLayouts.Root settings={settings} chatSession={chatSession}>
+ *     <AppLayouts.Root>
  *       <ChatInterface />
  *     </AppLayouts.Root>
  *   );
  * }
- *
- * // With custom className
- * <AppLayouts.Root
- *   settings={settings}
- *   chatSession={chatSession}
- *   className="bg-custom-background"
- * >
- *   <ChatInterface />
- * </AppLayouts.Root>
  * ```
  */
 
@@ -365,18 +353,7 @@ function AppFooter() {
 }
 
 /**
- * App Page Layout Props
- *
- * @property settings - Combined enterprise settings for white-labeling (header/footer content)
- * @property chatSession - Current chat session for action buttons (share, move, delete)
- * @property className - Additional CSS classes for the content area
- */
-export interface AppRootProps {
-  children?: React.ReactNode;
-}
-
-/**
- * App Page Layout Component
+ * App Root Component
  *
  * Wraps chat pages with white-labeling chrome (custom header/footer) and
  * provides chat session management actions.
@@ -397,7 +374,7 @@ export interface AppRootProps {
  * Features:
  * - Renders custom header content from enterprise settings
  * - Shows sidebar toggle on mobile
- * - "Share Chat" button (visible when not showing centered input)
+ * - "Share Chat" button for current chat session
  * - Kebab menu with "Move to Project" and "Delete" options
  * - Move confirmation modal for custom agent chats
  * - Delete confirmation modal
@@ -407,22 +384,28 @@ export interface AppRootProps {
  * - Manages multiple modals (share, move, delete)
  * - Handles project search/filtering in move modal
  * - Integrates with projects context for chat operations
+ * - Uses settings context for white-labeling
+ * - Uses chat sessions hook for current session
  *
  * @example
  * ```tsx
  * // Basic usage in a chat page
- * <AppLayouts.Root settings={settings} chatSession={currentSession}>
+ * <AppLayouts.Root>
  *   <ChatInterface />
  * </AppLayouts.Root>
  *
  * // The header will show:
  * // - Mobile: Sidebar toggle button
- * // - Desktop: Share button + kebab menu
+ * // - Desktop: Share button + kebab menu (when chat session exists)
  * // - Custom header text (if configured)
  *
  * // The footer will show custom disclaimer (if configured)
  * ```
  */
+export interface AppRootProps {
+  children?: React.ReactNode;
+}
+
 function AppRoot({ children }: AppRootProps) {
   return (
     <div className="flex flex-col h-full w-full">
