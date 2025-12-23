@@ -38,22 +38,23 @@ export function DisplayModels<T extends BaseLLMFormValues>({
     );
   }
 
-  const selectedModels = formikProps.values.selected_model_names ?? [];
-  const defaultModel = formikProps.values.default_model_name;
-
   const handleCheckboxChange = (modelName: string, checked: boolean) => {
+    // Read current values inside the handler to avoid stale closure issues
+    const currentSelected = formikProps.values.selected_model_names ?? [];
+    const currentDefault = formikProps.values.default_model_name;
+
     if (checked) {
-      const newSelected = [...selectedModels, modelName];
+      const newSelected = [...currentSelected, modelName];
       formikProps.setFieldValue("selected_model_names", newSelected);
       // If this is the first model, set it as default
-      if (selectedModels.length === 0) {
+      if (currentSelected.length === 0) {
         formikProps.setFieldValue("default_model_name", modelName);
       }
     } else {
-      const newSelected = selectedModels.filter((name) => name !== modelName);
+      const newSelected = currentSelected.filter((name) => name !== modelName);
       formikProps.setFieldValue("selected_model_names", newSelected);
       // If removing the default, set the first remaining model as default
-      if (defaultModel === modelName && newSelected.length > 0) {
+      if (currentDefault === modelName && newSelected.length > 0) {
         formikProps.setFieldValue("default_model_name", newSelected[0]);
       } else if (newSelected.length === 0) {
         formikProps.setFieldValue("default_model_name", null);
@@ -64,6 +65,9 @@ export function DisplayModels<T extends BaseLLMFormValues>({
   const handleSetDefault = (modelName: string) => {
     formikProps.setFieldValue("default_model_name", modelName);
   };
+
+  const selectedModels = formikProps.values.selected_model_names ?? [];
+  const defaultModel = formikProps.values.default_model_name;
 
   if (modelConfigurations.length === 0) {
     return (
@@ -93,7 +97,10 @@ export function DisplayModels<T extends BaseLLMFormValues>({
                   handleCheckboxChange(modelConfiguration.name, !isSelected)
                 }
               >
-                <div onClick={(e) => e.stopPropagation()}>
+                <div
+                  className="flex items-center"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <Checkbox
                     checked={isSelected}
                     onCheckedChange={(checked) =>
@@ -101,7 +108,7 @@ export function DisplayModels<T extends BaseLLMFormValues>({
                     }
                   />
                 </div>
-                <span className="text-sm select-none">
+                <span className="text-sm select-none leading-none">
                   {modelConfiguration.name}
                 </span>
               </div>

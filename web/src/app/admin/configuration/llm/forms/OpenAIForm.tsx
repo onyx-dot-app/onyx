@@ -13,6 +13,7 @@ import {
   submitLLMProvider,
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
+import { DisplayModels } from "./components/DisplayModels";
 
 export const OPENAI_PROVIDER_NAME = "openai";
 const DEFAULT_DEFAULT_MODEL_NAME = "gpt-4o";
@@ -88,22 +89,12 @@ export function OpenAIForm({
 
                     <ApiKeyField />
 
-                    <Separator />
-
-                    <SelectorFormField
-                      name="default_model_name"
-                      subtext="The model to use by default for this provider unless otherwise specified."
-                      label="Default Model"
-                      options={modelConfigurations.map(
-                        (modelConfiguration) => ({
-                          name: modelConfiguration.name,
-                          value: modelConfiguration.name,
-                        })
-                      )}
-                      maxHeight="max-h-56"
+                    <DisplayModels
+                      modelConfigurations={modelConfigurations}
+                      formikProps={formikProps}
+                      noModelConfigurationsMessage="No models found. Please provide a valid API base URL."
+                      isLoading={false}
                     />
-
-                    <Separator />
 
                     <AdvancedOptions
                       currentModelConfigurations={modelConfigurations}
