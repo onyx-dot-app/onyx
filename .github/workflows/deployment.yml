@@ -202,7 +202,7 @@ jobs:
           if [ "${EVENT_NAME}" == "workflow_dispatch" ]; then
             VERSION="0.0.0-dev+${SHORT_SHA}"
           else
-            VERSION="${GITHUB_REF_NAME#v}+${SHORT_SHA}"
+            VERSION="${GITHUB_REF_NAME#v}"
           fi
           echo "Injecting version: $VERSION"
 
@@ -229,7 +229,8 @@ jobs:
           if ("${{ github.event_name }}" -eq "workflow_dispatch") {
             $VERSION = "0.0.0"
           } else {
-            $VERSION = "$env:GITHUB_REF_NAME" -replace '^v', ''
+            # Strip 'v' prefix and any pre-release suffix (e.g., -beta.13) for MSI compatibility
+            $VERSION = "$env:GITHUB_REF_NAME" -replace '^v', '' -replace '-.*$', ''
           }
           Write-Host "Injecting version: $VERSION"
 
