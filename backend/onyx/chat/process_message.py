@@ -545,7 +545,10 @@ def stream_chat_message_objects(
         # for stop signals. run_llm_loop itself doesn't know about stopping.
         # Note: DB session is not thread safe but nothing else uses it and the
         # reference is passed directly so it's ok.
-        if os.environ.get("ENABLE_DEEP_RESEARCH_LOOP"):  # Dev only feature flag for now
+        if (
+            new_msg_req.deep_research
+            or os.environ.get("FORCE_DEEP_RESEARCH_LOOP", "false").lower() == "true"
+        ):
             if chat_session.project_id:
                 raise RuntimeError("Deep research is not supported for projects")
 
@@ -566,6 +569,7 @@ def stream_chat_message_objects(
                 db_session=db_session,
                 skip_clarification=skip_clarification,
                 user_identity=user_identity,
+                chat_session_id=str(chat_session_id),
             )
         else:
             yield from run_chat_loop_with_state_containers(
@@ -588,6 +592,7 @@ def stream_chat_message_objects(
                     else None
                 ),
                 user_identity=user_identity,
+                chat_session_id=str(chat_session_id),
             )
 
         # Determine if stopped by user

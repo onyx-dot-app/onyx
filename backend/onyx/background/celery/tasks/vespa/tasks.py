@@ -501,7 +501,7 @@ def vespa_metadata_sync_task(self: Task, document_id: str, *, tenant_id: str) ->
                 )
 
                 # update Vespa. OK if doc doesn't exist. Raises exception otherwise.
-                chunks_affected = retry_index.update_single(
+                retry_index.update_single(
                     document_id,
                     tenant_id=tenant_id,
                     chunk_count=doc.chunk_count,
@@ -515,10 +515,7 @@ def vespa_metadata_sync_task(self: Task, document_id: str, *, tenant_id: str) ->
 
                 elapsed = time.monotonic() - start
                 task_logger.info(
-                    f"doc={document_id} "
-                    f"action=sync "
-                    f"chunks={chunks_affected} "
-                    f"elapsed={elapsed:.2f}"
+                    f"doc={document_id} " f"action=sync " f"elapsed={elapsed:.2f}"
                 )
                 completion_status = OnyxCeleryTaskCompletionStatus.SUCCEEDED
     except SoftTimeLimitExceeded:

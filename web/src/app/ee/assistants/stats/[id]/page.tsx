@@ -1,6 +1,7 @@
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { unstable_noStore as noStore } from "next/cache";
 import { redirect } from "next/navigation";
+import type { Route } from "next";
 import { requireAuth } from "@/lib/auth/requireAuth";
 import { AssistantStats } from "./AssistantStats";
 import { BackButton } from "@/components/BackButton";
@@ -15,7 +16,7 @@ export default async function GalleryPage(props: {
   const authResult = await requireAuth();
 
   if (authResult.redirect) {
-    redirect(authResult.redirect);
+    redirect(authResult.redirect as Route);
   }
 
   return (

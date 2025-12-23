@@ -513,6 +513,7 @@ def search_chunks(
     return top_chunks
 
 
+# TODO: This is unused code.
 def inference_sections_from_ids(
     doc_identifiers: list[tuple[str, int]],
     document_index: DocumentIndex,

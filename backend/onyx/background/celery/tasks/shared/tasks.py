@@ -95,7 +95,6 @@ def document_by_cc_pair_cleanup_task(
     try:
         with get_session_with_current_tenant() as db_session:
             action = "skip"
-            chunks_affected = 0
 
             active_search_settings = get_active_search_settings(db_session)
             doc_index = get_default_document_index(
@@ -114,7 +113,7 @@ def document_by_cc_pair_cleanup_task(
 
                 chunk_count = fetch_chunk_count_for_document(document_id, db_session)
 
-                chunks_affected = retry_index.delete_single(
+                _ = retry_index.delete_single(
                     document_id,
                     tenant_id=tenant_id,
                     chunk_count=chunk_count,
@@ -157,7 +156,7 @@ def document_by_cc_pair_cleanup_task(
                 )
 
                 # update Vespa. OK if doc doesn't exist. Raises exception otherwise.
-                chunks_affected = retry_index.update_single(
+                retry_index.update_single(
                     document_id,
                     tenant_id=tenant_id,
                     chunk_count=doc.chunk_count,
@@ -187,7 +186,6 @@ def document_by_cc_pair_cleanup_task(
                 f"doc={document_id} "
                 f"action={action} "
                 f"refcount={count} "
-                f"chunks={chunks_affected} "
                 f"elapsed={elapsed:.2f}"
             )
     except SoftTimeLimitExceeded:

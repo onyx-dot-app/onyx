@@ -57,7 +57,9 @@ const constructCurrentSearchState = (
     .map((packet) => packet.obj as SearchToolDocumentsDelta);
 
   const searchEnd = packets.find(
-    (packet) => packet.obj.type === PacketType.SECTION_END
+    (packet) =>
+      packet.obj.type === PacketType.SECTION_END ||
+      packet.obj.type === PacketType.ERROR
   )?.obj as SectionEnd | null;
 
   // Extract queries from query delta packets

@@ -5,6 +5,7 @@ import { useAuthType } from "@/lib/hooks";
 import { parseLlmDescriptor, structureValue } from "@/lib/llm/utils";
 import { setUserDefaultModel } from "@/lib/userSettings";
 import { usePathname, useRouter } from "next/navigation";
+import type { Route } from "next";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useUser } from "@/components/user/UserProvider";
 import { ThemePreference } from "@/lib/types";
@@ -251,7 +252,7 @@ export default function UserSettings() {
 
   const handleConnectOAuth = (authorizeUrl: string) => {
     // Redirect to OAuth URL in the same window
-    router.push(authorizeUrl);
+    router.push(authorizeUrl as Route);
   };
 
   const handleDisconnectOAuth = async (connectorId: number) => {

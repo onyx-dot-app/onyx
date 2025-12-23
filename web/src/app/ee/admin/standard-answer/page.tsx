@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table";
 
 import Link from "next/link";
+import type { Route } from "next";
 import { StandardAnswer, StandardAnswerCategory } from "@/lib/types";
 import { MagnifyingGlass } from "@phosphor-icons/react";
 import { useState, JSX } from "react";
@@ -110,7 +111,7 @@ const StandardAnswersTableRow = ({
       entries={[
         <Link
           key={`edit-${standardAnswer.id}`}
-          href={`/admin/standard-answer/${standardAnswer.id}`}
+          href={`/ee/admin/standard-answer/${standardAnswer.id}` as Route}
         >
           <EditIcon />
         </Link>,

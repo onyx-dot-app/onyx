@@ -436,7 +436,7 @@ const ChatButton = memo(
       >
         <PopoverAnchor>
           <SidebarTab
-            href={`/chat?chatId=${chatSession.id}`}
+            onClick={() => route({ chatSessionId: chatSession.id })}
             active={active}
             rightChildren={rightMenu}
             focused={renaming}

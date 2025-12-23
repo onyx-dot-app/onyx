@@ -1,10 +1,7 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
-import { ChatFileType, FileDescriptor } from "@/app/chat/interfaces";
-import Attachment from "@/refresh-components/Attachment";
-import { InMessageImage } from "@/app/chat/components/files/images/InMessageImage";
-import CsvContent from "@/components/tools/CSVContent";
+import { useEffect, useRef, useState } from "react";
+import { FileDescriptor } from "@/app/chat/interfaces";
 import "katex/dist/katex.min.css";
 import MessageSwitcher from "@/app/chat/message/MessageSwitcher";
 import Text from "@/refresh-components/texts/Text";
@@ -12,86 +9,13 @@ import { cn } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Button from "@/refresh-components/buttons/Button";
-import ExpandableContentWrapper from "@/components/tools/ExpandableContentWrapper";
 import { SvgEdit } from "@opal/icons";
-
-interface FileDisplayProps {
-  files: FileDescriptor[];
-  alignBubble?: boolean;
-}
+import FileDisplay from "./FileDisplay";
 
 interface MessageEditingProps {
   content: string;
   onSubmitEdit: (editedContent: string) => void;
   onCancelEdit: () => void;
-}
-
-function FileDisplay({ files, alignBubble }: FileDisplayProps) {
-  const [close, setClose] = useState(true);
-  const textFiles = files.filter(
-    (file) =>
-      file.type === ChatFileType.PLAIN_TEXT ||
-      file.type === ChatFileType.DOCUMENT
-  );
-  const imageFiles = files.filter((file) => file.type === ChatFileType.IMAGE);
-  const csvFiles = files.filter((file) => file.type === ChatFileType.CSV);
-
-  return (
-    <>
-      {textFiles.length > 0 && (
-        <div
-          id="onyx-file"
-          className={cn("mt-2 auto", alignBubble && "ml-auto")}
-        >
-          <div className="flex flex-col items-end gap-2">
-            {textFiles.map((file) => (
-              <Attachment key={file.id} fileName={file.name || file.id} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {imageFiles.length > 0 && (
-        <div
-          id="onyx-image"
-          className={cn("mt-2 auto", alignBubble && "ml-auto")}
-        >
-          <div className="flex flex-col items-end gap-2">
-            {imageFiles.map((file) => (
-              <InMessageImage key={file.id} fileId={file.id} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {csvFiles.length > 0 && (
-        <div className={cn("mt-2 auto", alignBubble && "ml-auto")}>
-          <div className="flex flex-col items-end gap-2">
-            {csvFiles.map((file) => {
-              return (
-                <div key={file.id} className="w-fit">
-                  {close ? (
-                    <>
-                      <ExpandableContentWrapper
-                        fileDescriptor={file}
-                        close={() => setClose(false)}
-                        ContentComponent={CsvContent}
-                      />
-                    </>
-                  ) : (
-                    <Attachment
-                      open={() => setClose(true)}
-                      fileName={file.name || file.id}
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </>
-  );
 }
 
 function MessageEditing({

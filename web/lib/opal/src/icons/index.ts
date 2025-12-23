@@ -17,6 +17,7 @@ export { default as SvgArrowWallRight } from "@opal/icons/arrow-wall-right";
 export { default as SvgAws } from "@opal/icons/aws";
 export { default as SvgBarChart } from "@opal/icons/bar-chart";
 export { default as SvgBell } from "@opal/icons/bell";
+export { default as SvgBookOpen } from "@opal/icons/book-open";
 export { default as SvgBracketCurly } from "@opal/icons/bracket-curly";
 export { default as SvgBubbleText } from "@opal/icons/bubble-text";
 export { default as SvgCalendar } from "@opal/icons/calendar";

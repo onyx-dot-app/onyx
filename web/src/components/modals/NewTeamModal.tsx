@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import type { Route } from "next";
 import { Dialog } from "@headlessui/react";
 import Button from "@/refresh-components/buttons/Button";
 import { usePopup } from "@/components/admin/connectors/Popup";
@@ -118,7 +119,7 @@ export default function NewTeamModal() {
 
   const handleContinueToNewOrg = () => {
     const newUrl = window.location.pathname;
-    router.replace(newUrl);
+    router.replace(newUrl as Route);
     setShowNewTeamModal(false);
   };
 

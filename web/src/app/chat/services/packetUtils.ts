@@ -26,6 +26,7 @@ export function isToolPacket(
   ];
   if (includeSectionEnd) {
     toolPacketTypes.push(PacketType.SECTION_END);
+    toolPacketTypes.push(PacketType.ERROR);
   }
   return toolPacketTypes.includes(packet.obj.type as PacketType);
 }
@@ -72,10 +73,11 @@ export function isFinalAnswerComplete(packets: Packet[]) {
     return false;
   }
 
-  // Check if there's a corresponding SECTION_END with the same turn_index
+  // Check if there's a corresponding SECTION_END or ERROR with the same turn_index
   return packets.some(
     (packet) =>
-      packet.obj.type === PacketType.SECTION_END &&
+      (packet.obj.type === PacketType.SECTION_END ||
+        packet.obj.type === PacketType.ERROR) &&
       packet.placement.turn_index === messageStartPacket.placement.turn_index
   );
 }

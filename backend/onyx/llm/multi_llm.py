@@ -163,16 +163,6 @@ class LitellmLLM(LLM):
 
         self._model_kwargs = model_kwargs
 
-        self._max_token_param = LEGACY_MAX_TOKENS_KWARG
-        try:
-            from litellm.utils import get_supported_openai_params
-
-            params = get_supported_openai_params(model_name, model_provider)
-            if STANDARD_MAX_TOKENS_KWARG in (params or []):
-                self._max_token_param = STANDARD_MAX_TOKENS_KWARG
-        except Exception as e:
-            logger.warning(f"Error getting supported openai params: {e}")
-
     def _safe_model_config(self) -> dict:
         dump = self.config.model_dump()
         dump["api_key"] = mask_string(dump.get("api_key", ""))
@@ -322,6 +312,7 @@ class LitellmLLM(LLM):
                 # model params
                 temperature=(1 if is_reasoning else self._temperature),
                 timeout=timeout_override or self._timeout,
+                max_tokens=max_tokens,
                 **({"stream_options": {"include_usage": True}} if stream else {}),
                 # NOTE: we can't pass parallel_tool_calls if tools are not specified
                 # or else OpenAI throws an error
@@ -358,7 +349,6 @@ class LitellmLLM(LLM):
                     if structured_response_format
                     else {}
                 ),
-                **({self._max_token_param: max_tokens} if max_tokens else {}),
                 **completion_kwargs,
             )
             return response
