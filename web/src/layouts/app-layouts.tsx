@@ -74,7 +74,7 @@ import {
 } from "@opal/icons";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 
-function ChatHeader() {
+function AppHeader() {
   const settings = useSettingsContext();
   const { isMobile } = useScreenSize();
   const { setFolded } = useAppSidebarContext();
@@ -346,7 +346,7 @@ function ChatHeader() {
   );
 }
 
-function ChatFooter() {
+function AppFooter() {
   const settings = useSettingsContext();
 
   const customFooterContent =
@@ -371,7 +371,7 @@ function ChatFooter() {
  * @property chatSession - Current chat session for action buttons (share, move, delete)
  * @property className - Additional CSS classes for the content area
  */
-export interface AppPageLayoutProps {
+export interface AppRootProps {
   children?: React.ReactNode;
 }
 
@@ -423,16 +423,16 @@ export interface AppPageLayoutProps {
  * // The footer will show custom disclaimer (if configured)
  * ```
  */
-function AppPageLayout({ children }: AppPageLayoutProps) {
+function AppRoot({ children }: AppRootProps) {
   return (
     <div className="flex flex-col h-full w-full">
-      <ChatHeader />
+      <AppHeader />
       <div className="flex-1 overflow-auto h-full w-full">{children}</div>
-      <ChatFooter />
+      <AppFooter />
     </div>
   );
 }
 
 export default {
-  AppPageLayout,
+  Root: AppRoot,
 };
