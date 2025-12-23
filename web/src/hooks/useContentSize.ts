@@ -58,11 +58,11 @@ interface ContentSize {
  *
  *   return (
  *     <div>
- *       {/* Hidden element for measurement */}
+ *       // Hidden element for measurement
  *       <div ref={measureRef} style={{ position: 'absolute', visibility: 'hidden' }}>
  *         {content}
  *       </div>
- *       {/* Actual button with calculated width */}
+ *       // Actual button with calculated width
  *       <button style={{ width: contentWidth }}>
  *         {content}
  *       </button>
@@ -107,6 +107,11 @@ export function useContentSize(
   };
 
   // Measure on dependencies change
+  // We intentionally use the `dependencies` parameter directly as the dependency array.
+  // The exhaustive-deps rule is disabled because:
+  // 1. `measureSize` is stable (doesn't change) and doesn't need to be in the deps
+  // 2. We want to re-measure ONLY when the caller's dependencies change, not when measureSize changes
+  // 3. The caller passes their own dependency array to control when measurement happens
   useEffect(() => {
     measureSize();
     // eslint-disable-next-line react-hooks/exhaustive-deps
