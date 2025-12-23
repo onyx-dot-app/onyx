@@ -145,7 +145,7 @@ function SettingsRoot(props: SettingsRootProps) {
 export interface SettingsHeaderProps {
   icon: React.FunctionComponent<IconProps>;
   title: string;
-  description?: string;
+  description?: React.ReactNode;
   children?: React.ReactNode;
   rightChildren?: React.ReactNode;
   backButton?: boolean;
@@ -206,11 +206,14 @@ function SettingsHeader({
           </div>
           <div className="flex flex-col">
             <Text headingH2>{title}</Text>
-            {description && (
-              <Text secondaryBody text03>
-                {description}
-              </Text>
-            )}
+            {description &&
+              (typeof description === "string" ? (
+                <Text secondaryBody text03>
+                  {description}
+                </Text>
+              ) : (
+                description
+              ))}
           </div>
         </div>
         {children}

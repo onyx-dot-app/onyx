@@ -14,6 +14,8 @@ export const INTERNAL_URL = process.env.INTERNAL_URL || "http://127.0.0.1:8080";
 // Documentation URLs
 export const DOCS_BASE_URL = "https://docs.onyx.app";
 export const DOCS_ADMINS_PATH = `${DOCS_BASE_URL}/admins`;
+export const GITHUB_RELEASES_URL =
+  "https://github.com/onyx-dot-app/onyx/releases";
 
 export const MCP_INTERNAL_URL =
   process.env.MCP_INTERNAL_URL || "http://127.0.0.1:8090";

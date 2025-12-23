@@ -60,6 +60,7 @@ import useScreenSize from "@/hooks/useScreenSize";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import {
   SvgEditBig,
+  SvgFileText,
   SvgFolderPlus,
   SvgMoreHorizontal,
   SvgOnyxOctagon,
@@ -411,6 +412,14 @@ const MemoizedAppSidebarInner = memo(
     const settingsButton = useMemo(
       () => (
         <div>
+          <SidebarTab
+            href="/chat/release-notes"
+            leftIcon={SvgFileText}
+            folded={folded}
+            active={activeSidebarTab.isReleaseNotes()}
+          >
+            Release Notes
+          </SidebarTab>
           {(isAdmin || isCurator) && (
             <SidebarTab
               href="/admin/indexing/status"
@@ -423,7 +432,7 @@ const MemoizedAppSidebarInner = memo(
           <Settings folded={folded} />
         </div>
       ),
-      [folded, isAdmin, isCurator]
+      [folded, isAdmin, isCurator, activeSidebarTab]
     );
 
     return (

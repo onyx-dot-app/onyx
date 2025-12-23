@@ -11,7 +11,8 @@ import { usePathname, useSearchParams } from "next/navigation";
 export type AppFocusType =
   | { type: "agent" | "project" | "chat"; id: string }
   | "new-session"
-  | "more-agents";
+  | "more-agents"
+  | "release-notes";
 
 export class AppFocus {
   constructor(public value: AppFocusType) {}
@@ -36,11 +37,21 @@ export class AppFocus {
     return this.value === "more-agents";
   }
 
+  isReleaseNotes(): boolean {
+    return this.value === "release-notes";
+  }
+
   getId(): string | null {
     return typeof this.value === "object" ? this.value.id : null;
   }
 
-  getType(): "agent" | "project" | "chat" | "new-session" | "more-agents" {
+  getType():
+    | "agent"
+    | "project"
+    | "chat"
+    | "release-notes"
+    | "new-session"
+    | "more-agents" {
     return typeof this.value === "object" ? this.value.type : this.value;
   }
 }
@@ -52,6 +63,11 @@ export default function useAppFocus(): AppFocus {
   // Check if we're on the agents page
   if (pathname === "/chat/agents") {
     return new AppFocus("more-agents");
+  }
+
+  // Check if we're on the release notes page
+  if (pathname === "/chat/release-notes") {
+    return new AppFocus("release-notes");
   }
 
   // Check search params for chat, agent, or project
