@@ -38,6 +38,7 @@ import { cn } from "@/lib/utils";
 import Separator from "@/refresh-components/Separator";
 import Spacer from "@/refresh-components/Spacer";
 import Text from "@/refresh-components/texts/Text";
+import { WithoutStyles } from "@/types";
 import { IconProps } from "@opal/types";
 import { useEffect, useRef, useState } from "react";
 
@@ -61,8 +62,9 @@ import { useEffect, useRef, useState } from "react";
  * </SettingsLayouts.Root>
  * ```
  */
-export interface SettingsRootProps
-  extends React.HtmlHTMLAttributes<HTMLDivElement> {}
+export type SettingsRootProps = WithoutStyles<
+  React.HtmlHTMLAttributes<HTMLDivElement>
+>;
 
 function SettingsRoot(props: SettingsRootProps) {
   return (
@@ -74,7 +76,12 @@ function SettingsRoot(props: SettingsRootProps) {
           to detect scroll position and show/hide the scroll shadow.
           DO NOT REMOVE this ID without updating SettingsHeader accordingly. */}
       <div className="h-full w-[min(50rem,100%)]">
-        <div {...props} />
+        <div
+          // We add a default aria-label.
+          // Users should ideally aim to override this and set their own custom label.
+          aria-label="admin-page-title"
+          {...props}
+        />
       </div>
     </div>
   );
