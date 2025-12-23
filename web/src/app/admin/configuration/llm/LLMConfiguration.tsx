@@ -21,6 +21,7 @@ import { AnthropicForm } from "./forms/AnthropicForm";
 import { OllamaForm } from "./forms/OllamaForm";
 import { AzureForm } from "./forms/AzureForm";
 import { BedrockForm } from "./forms/BedrockForm";
+import { VertexAIForm } from "./forms/VertexAIForm";
 
 function LLMProviderUpdateModal({
   llmProviderDescriptor,
@@ -198,6 +199,7 @@ export function LLMConfiguration() {
         <OllamaForm shouldMarkAsDefault={isFirstProvider} />
         <AzureForm shouldMarkAsDefault={isFirstProvider} />
         <BedrockForm shouldMarkAsDefault={isFirstProvider} />
+        <VertexAIForm shouldMarkAsDefault={isFirstProvider} />
 
         <AddCustomLLMProvider existingLlmProviders={existingLlmProviders} />
       </div>
