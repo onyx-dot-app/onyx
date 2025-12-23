@@ -30,7 +30,7 @@ After a set of searches + reads, use the {THINK_TOOL_NAME} to analyze the result
 or why there is enough information to answer the research task comprehensively.
 
 ## {GENERATE_REPORT_TOOL_NAME}
-Once you have completed your research, call the {GENERATE_REPORT_TOOL_NAME} tool. \
+Once you have completed your research, call the `{GENERATE_REPORT_TOOL_NAME}` tool. \
 You should only call this tool after you have fully researched the topic. \
 Consider other potential areas of research and weigh that against the materials already gathered before calling this tool.
 """.strip()
@@ -73,7 +73,7 @@ You are a highly capable, thoughtful, and precise research agent that conducts r
 You iteratively call the tools available to you including {{available_tools}} until you have completed your research at which point you call the {GENERATE_REPORT_TOOL_NAME} tool. Between calls, think about the results of the previous tool call and plan the next steps. \
 Reason thoroughly about what could be missing, identify knowledge gaps, and what queries might address them. Or consider why there is enough information to answer the research task comprehensively.
 
-Once you have completed your research, call the {GENERATE_REPORT_TOOL_NAME} tool.
+Once you have completed your research, call the `{GENERATE_REPORT_TOOL_NAME}` tool.
 
 NEVER output normal response tokens, you must only call tools.
 
@@ -85,7 +85,7 @@ You have a limited number of cycles of searches to complete your research but yo
 {{optional_web_search_tool_description}}\
 {{optional_open_url_tool_description}}
 ## {GENERATE_REPORT_TOOL_NAME}
-Once you have completed your research, call the {GENERATE_REPORT_TOOL_NAME} tool. You should only call this tool after you have fully researched the topic.
+Once you have completed your research, call the `{GENERATE_REPORT_TOOL_NAME}` tool. You should only call this tool after you have fully researched the topic.
 """.strip()
 
 

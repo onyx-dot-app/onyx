@@ -50,6 +50,32 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+def _try_parse_json_string(value: Any) -> Any:
+    """Attempt to parse a JSON string value into its Python equivalent.
+
+    If value is a string that looks like a JSON array or object, parse it.
+    Otherwise return the value unchanged.
+
+    This handles the case where the LLM returns arguments like:
+    - queries: '["query1", "query2"]' instead of ["query1", "query2"]
+    """
+    if not isinstance(value, str):
+        return value
+
+    stripped = value.strip()
+    # Only attempt to parse if it looks like a JSON array or object
+    if not (
+        (stripped.startswith("[") and stripped.endswith("]"))
+        or (stripped.startswith("{") and stripped.endswith("}"))
+    ):
+        return value
+
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError:
+        return value
+
+
 def _parse_tool_args_to_dict(raw_args: Any) -> dict[str, Any]:
     """Parse tool arguments into a dict.
 
@@ -59,6 +85,9 @@ def _parse_tool_args_to_dict(raw_args: Any) -> dict[str, Any]:
     Defensive case (JSON string literal of an object):
     - raw_args == '"{\\"queries\\":[...]}"' -> json.loads -> str -> json.loads -> dict
 
+    Also handles the case where argument values are JSON strings that need parsing:
+    - {"queries": '["q1", "q2"]'} -> {"queries": ["q1", "q2"]}
+
     Anything else returns {}.
     """
 
@@ -66,7 +95,8 @@ def _parse_tool_args_to_dict(raw_args: Any) -> dict[str, Any]:
         return {}
 
     if isinstance(raw_args, dict):
-        return raw_args
+        # Parse any string values that look like JSON arrays/objects
+        return {k: _try_parse_json_string(v) for k, v in raw_args.items()}
 
     if not isinstance(raw_args, str):
         return {}
@@ -77,14 +107,18 @@ def _parse_tool_args_to_dict(raw_args: Any) -> dict[str, Any]:
         return {}
 
     if isinstance(parsed1, dict):
-        return parsed1
+        # Parse any string values that look like JSON arrays/objects
+        return {k: _try_parse_json_string(v) for k, v in parsed1.items()}
 
     if isinstance(parsed1, str):
         try:
             parsed2: Any = json.loads(parsed1)
         except json.JSONDecodeError:
             return {}
-        return parsed2 if isinstance(parsed2, dict) else {}
+        if isinstance(parsed2, dict):
+            # Parse any string values that look like JSON arrays/objects
+            return {k: _try_parse_json_string(v) for k, v in parsed2.items()}
+        return {}
 
     return {}
 
