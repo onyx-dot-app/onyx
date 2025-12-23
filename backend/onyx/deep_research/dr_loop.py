@@ -140,6 +140,7 @@ def generate_final_report(
             final_documents=final_documents,
             user_identity=user_identity,
             max_tokens=MAX_FINAL_REPORT_TOKENS,
+            is_deep_research=True,
         )
 
         final_report = llm_step_result.answer
@@ -312,7 +313,12 @@ def run_deep_research_llm_loop(
                 emitter.emit(
                     Packet(
                         # Marks the last turn end which should be the plan generation
-                        placement=Placement(turn_index=1 if reasoned else 0),
+                        placement=Placement(
+                            turn_index=packet.placement.turn_index
+                            + (1 if reasoned else 0),
+                            tab_index=packet.placement.tab_index,
+                            sub_turn_index=packet.placement.sub_turn_index,
+                        ),
                         obj=SectionEnd(),
                     )
                 )
