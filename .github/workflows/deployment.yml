@@ -137,6 +137,7 @@ jobs:
     if: needs.determine-builds.outputs.build-desktop == 'true'
     permissions:
       contents: write
+      actions: read
     strategy:
       fail-fast: false
       matrix:
