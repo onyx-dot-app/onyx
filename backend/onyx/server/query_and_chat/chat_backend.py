@@ -726,6 +726,7 @@ def seed_chat_from_slack(
 @router.get("/file/{file_id:path}")
 def fetch_chat_file(
     file_id: str,
+    request: Request,
     _: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
@@ -755,7 +756,19 @@ def fetch_chat_file(
     media_type = file_record.file_type
     file_io = file_store.read_file(file_id, mode="b")
 
-    return StreamingResponse(file_io, media_type=media_type)
+    # Files served here are immutable (content-addressed by file_id), so allow long-lived caching.
+    # Use `private` because this is behind auth / tenant scoping.
+    etag = f'"{file_id}"'
+    cache_headers = {
+        "Cache-Control": "private, max-age=31536000, immutable",
+        "ETag": etag,
+        "Vary": "Cookie",
+    }
+
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=cache_headers)
+
+    return StreamingResponse(file_io, media_type=media_type, headers=cache_headers)
 
 
 @router.get("/search")

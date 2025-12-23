@@ -458,6 +458,7 @@ class VespaDocumentIndex(DocumentIndex):
                     new_chunk_count=doc_id_to_new_chunk_cnt[doc_id],
                 )
                 for doc_id in doc_id_to_chunk_cnt_diff.keys()
+                # TODO(andrei), WARNING: Don't we need to sanitize these doc IDs?
             ]
 
             for enriched_doc_info in enriched_doc_infos:
@@ -479,7 +480,7 @@ class VespaDocumentIndex(DocumentIndex):
             # the source of truth.
             chunks_to_delete = get_document_chunk_ids(
                 enriched_document_info_list=enriched_doc_infos,
-                tenant_id=self._tenant_id,  # TODO: Figure out this typing bro wtf.
+                tenant_id=self._tenant_id,
                 large_chunks_enabled=self._large_chunks_enabled,
             )
 
@@ -514,8 +515,38 @@ class VespaDocumentIndex(DocumentIndex):
             for cleaned_doc_id in all_cleaned_doc_ids
         ]
 
-    def delete(self, db_doc_id: str, chunk_count: int | None) -> int:
-        raise NotImplementedError
+    def delete(self, document_id: str, chunk_count: int | None = None) -> int:
+        total_chunks_deleted = 0
+
+        sanitized_doc_id = replace_invalid_doc_id_characters(document_id)
+
+        with (
+            concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor,
+            self._httpx_client_context as http_client,
+        ):
+            enriched_doc_info = _enrich_basic_chunk_info(
+                index_name=self._index_name,
+                http_client=http_client,
+                document_id=sanitized_doc_id,
+                previous_chunk_count=chunk_count,
+                new_chunk_count=0,
+            )
+            chunks_to_delete = get_document_chunk_ids(
+                enriched_document_info_list=[enriched_doc_info],
+                tenant_id=self._tenant_id,
+                large_chunks_enabled=self._large_chunks_enabled,
+            )
+
+            for doc_chunk_ids_batch in batch_generator(chunks_to_delete, BATCH_SIZE):
+                total_chunks_deleted += len(doc_chunk_ids_batch)
+                delete_vespa_chunks(
+                    doc_chunk_ids=doc_chunk_ids_batch,
+                    index_name=self._index_name,
+                    http_client=http_client,
+                    executor=executor,
+                )
+
+        return total_chunks_deleted
 
     def update(
         self,

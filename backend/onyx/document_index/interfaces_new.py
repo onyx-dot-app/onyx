@@ -144,8 +144,7 @@ class Indexable(abc.ABC):
         chunks: list[DocMetadataAwareIndexChunk],
         indexing_metadata: IndexingMetadata,
     ) -> list[DocumentInsertionRecord]:
-        """
-        Takes a list of document chunks and indexes them in the document index.
+        """Indexes a list of document chunks into the document index.
 
         This is often a batch operation including chunks from multiple
         documents.
@@ -166,7 +165,7 @@ class Indexable(abc.ABC):
                 cleaning / updating.
 
         Returns:
-            List of document ids which map to unique documents and are used for
+            List of document IDs which map to unique documents and are used for
             deduping chunks when updating, as well as if the document is newly
             indexed or already existed and just updated.
         """
@@ -175,38 +174,45 @@ class Indexable(abc.ABC):
 
 class Deletable(abc.ABC):
     """
-    Class must implement the ability to delete document by a given unique document id. Note that the document id is the
-    unique identifier for the document as represented in Onyx, not in the document index.
+    Class must implement the ability to delete a document by a given unique
+    document ID.
     """
 
     @abc.abstractmethod
     def delete(
         self,
-        db_doc_id: str,
-        # Passed in in case it helps the efficiency of the delete implementation
-        chunk_count: int | None,
+        # TODO(andrei): Fine for now but this can probably be a batch operation that
+        # takes in a list of IDs.
+        document_id: str,
+        chunk_count: int | None = None,
     ) -> int:
         """
-        Given a single document, hard delete all of the chunks for the document from the document index
+        Hard deletes all of the chunks for the corresponding document in the
+        document index.
 
-        Parameters:
-        - doc_id: document id as represented in Onyx
-        - chunk_count: number of chunks in the document
+        Args:
+            document_id: The unique identifier for the document as represented
+                in Onyx, not necessarily in the document index.
+            chunk_count: The number of chunks in the document. May be useful for
+                improving the efficiency of the delete operation. Defaults to
+                None.
 
         Returns:
-            number of chunks deleted
+            The number of chunks deleted.
         """
         raise NotImplementedError
 
 
 class Updatable(abc.ABC):
     """
-    Class must implement the ability to update certain attributes of a document without needing to
-    update all of the fields. Specifically, needs to be able to update:
+    Class must implement the ability to update certain attributes of a document
+    without needing to update all of the fields. Specifically, needs to be able
+    to update:
     - Access Control List
     - Document-set membership
     - Boost value (learning from feedback mechanism)
-    - Whether the document is hidden or not, hidden documents are not returned from search
+    - Whether the document is hidden or not; hidden documents are not returned
+      from search
     - Which Projects the document is a part of
     """
 
@@ -224,10 +230,14 @@ class Updatable(abc.ABC):
         requests. Each update request in the list applies its changes to a list of document ids.
         None values mean that the field does not need an update.
 
-        Parameters:
-        - update_requests: for a list of document ids in the update request, apply the same updates
-                to all of the documents with those ids. This is for bulk handling efficiency. Many
-                updates are done at the connector level which have many documents for the connector
+        The document and fields to update are specified in the update requests.
+        Each update request in the list applies its changes to a list of
+        document IDs. None values mean that the field does not need an update.
+
+        Args:
+            update_requests: A list of update requests, each containing a list
+                of document IDs and the fields to update. The field updates
+                apply to all of the specified documents in each update request.
         """
         raise NotImplementedError
 
@@ -267,7 +277,7 @@ class IdRetrievalCapable(abc.ABC):
 
 class HybridCapable(abc.ABC):
     """
-    Class must implement hybrid (keyword + vector) search functionality
+    Class must implement hybrid (keyword + vector) search functionality.
     """
 
     @abc.abstractmethod
@@ -281,22 +291,25 @@ class HybridCapable(abc.ABC):
         num_to_retrieve: int,
         offset: int = 0,
     ) -> list[InferenceChunk]:
-        """
-        Run hybrid search and return a list of inference chunks.
+        """Runs hybrid search and returns a list of inference chunks.
 
-        Parameters:
-        - query: unmodified user query. This may be needed for getting the matching highlighted
-                keywords or for logging purposes
-        - query_embedding: vector representation of the query, must be of the correct
-                dimensionality for the primary index
-        - final_keywords: Final keywords to be used from the query, defaults to query if not set
-        - query_type: Semantic or keyword type query, may use different scoring logic for each
-        - filters: Filters for things like permissions, source type, time, etc.
-        - num_to_retrieve: number of highest matching chunks to return
-        - offset: number of highest matching chunks to skip (kind of like pagination)
+        Args:
+            query: Unmodified user query. This may be needed for getting the
+                matching highlighted keywords or for logging purposes.
+            query_embedding: Vector representation of the query. Must be of the
+                correct dimensionality for the primary index.
+            final_keywords: Final keywords to be used from the query; defaults
+                to query if not set.
+            query_type: Semantic or keyword type query; may use different
+                scoring logic for each.
+            filters: Filters for things like permissions, source type, time,
+                etc.
+            num_to_retrieve: Number of highest matching chunks to return.
+            offset: Number of highest matching chunks to initially skip (kind of
+                like pagination). Defaults to 0.
 
         Returns:
-            Score ranked (highest first) list of highest matching chunks
+            Score-ranked (highest first) list of highest matching chunks.
         """
         raise NotImplementedError
 

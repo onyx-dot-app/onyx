@@ -326,11 +326,6 @@ class CloudEmbedding:
             auto_truncate=True,
         )
 
-        batches = [
-            texts[i : i + VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE]
-            for i in range(0, len(texts), VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE)
-        ]
-
         async def _embed_batch(batch_texts: list[str]) -> list[Embedding]:
             content_requests: list[Any] = [
                 genai_types.Content(parts=[genai_types.Part(text=text)])
@@ -354,13 +349,19 @@ class CloudEmbedding:
                 embeddings.append(embedding.values)
             return embeddings
 
+        # Process VertexAI batches sequentially to avoid additional intra-task fanout.
+        # The higher-level thread pool already provides concurrency; running these
+        # requests in parallel here was causing excessive memory usage.
+        batches = [
+            texts[i : i + VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE]
+            for i in range(0, len(texts), VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE)
+        ]
+        all_embeddings: list[Embedding] = []
         try:
-            results = await asyncio.gather(*[_embed_batch(batch) for batch in batches])
-            return [
-                embedding
-                for batch_embeddings in results
-                for embedding in batch_embeddings
-            ]
+            for batch in batches:
+                batch_embeddings = await _embed_batch(batch)
+                all_embeddings.extend(batch_embeddings)
+            return all_embeddings
         finally:
             # Ensure client is closed with a timeout to prevent hanging on stuck sessions
             try:

@@ -38,6 +38,7 @@ from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.search_settings import get_current_search_settings
+from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
@@ -483,10 +484,14 @@ def load_chat_file(
 
     if file_type.is_text_file():
         try:
-            content_text = content.decode("utf-8")
-        except UnicodeDecodeError:
+            content_text = extract_file_text(
+                file=file_io,
+                file_name=file_descriptor.get("name") or "",
+                break_on_unprocessable=False,
+            )
+        except Exception as e:
             logger.warning(
-                f"Failed to decode text content for file {file_descriptor['id']}"
+                f"Failed to retrieve content for file {file_descriptor['id']}: {str(e)}"
             )
 
     # Get token count from UserFile if available
@@ -581,9 +586,16 @@ def convert_chat_history(
 
             # Add text files as separate messages before the user message
             for text_file in text_files:
+                file_text = text_file.content_text or ""
+                filename = text_file.filename
+                message = (
+                    f"File: {filename}\n{file_text}\nEnd of File"
+                    if filename
+                    else file_text
+                )
                 simple_messages.append(
                     ChatMessageSimple(
-                        message=text_file.content_text or "",
+                        message=message,
                         token_count=text_file.token_count,
                         message_type=MessageType.USER,
                         image_files=None,
