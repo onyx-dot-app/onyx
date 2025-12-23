@@ -419,9 +419,8 @@ class DrupalWikiConnector(
         page = 0
         all_pages = []
         has_more = True
-        max_pages = 100  # Safety limit to prevent infinite loops
 
-        while has_more and page < max_pages:
+        while has_more:
             params: dict[str, str | int] = {
                 DRUPAL_WIKI_SPACE_KEY: str(space_id),
                 "size": size,
@@ -458,11 +457,6 @@ class DrupalWikiConnector(
             has_more = len(page_response.content) >= size
 
             page += 1
-
-        if page >= max_pages:
-            logger.warning(
-                f"Reached maximum page limit ({max_pages}) while fetching pages for space {space_id}"
-            )
 
         logger.info(f"Total pages fetched for space {space_id}: {len(all_pages)}")
         return all_pages
