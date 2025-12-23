@@ -419,13 +419,15 @@ def filter_documents(document_batch: list[Document]) -> list[Document]:
     # Log batch statistics for OOM debugging
     if documents:
         avg_chars = total_chars_in_batch / len(documents)
+        # Get the source from the first document (all in batch should be same source)
+        source = documents[0].source.value if documents[0].source else "unknown"
         logger.info(
-            f"Document batch filter: {len(documents)} docs kept, {len(skipped_too_long)} skipped (too long). "
+            f"Document batch filter [{source}]: {len(documents)} docs kept, {len(skipped_too_long)} skipped (too long). "
             f"Total chars: {total_chars_in_batch:,}, Avg: {avg_chars:,.0f} chars/doc"
         )
         if skipped_too_long:
             logger.warning(
-                f"Skipped oversized documents: {skipped_too_long[:5]}"
+                f"Skipped oversized documents [{source}]: {skipped_too_long[:5]}"
             )  # Log first 5
 
     return documents
@@ -699,6 +701,15 @@ def index_doc_batch(
 
     Returns a tuple where the first element is the number of new docs and the
     second element is the number of chunks."""
+
+    # Log connector info for debugging OOM issues
+    connector_id = getattr(adapter, "connector_id", None)
+    credential_id = getattr(adapter, "credential_id", None)
+    logger.debug(
+        f"Starting index_doc_batch: connector_id={connector_id}, "
+        f"credential_id={credential_id}, tenant_id={tenant_id}, "
+        f"num_docs={len(document_batch)}"
+    )
 
     filtered_documents = filter_fnc(document_batch)
     context = adapter.prepare(filtered_documents, ignore_time_skip)
