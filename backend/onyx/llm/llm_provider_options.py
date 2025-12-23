@@ -583,3 +583,14 @@ def fetch_model_configurations_for_provider(
             )
         )
     return configs
+
+
+def fetch_default_model_for_provider(provider_name: str) -> str | None:
+    if provider_name == OPENAI_PROVIDER_NAME:
+        return "gpt-4o"
+    elif provider_name == ANTHROPIC_PROVIDER_NAME:
+        return "claude-sonnet-4-5-20250929"
+    elif provider_name == VERTEXAI_PROVIDER_NAME:
+        return VERTEXAI_DEFAULT_MODEL
+
+    return None
