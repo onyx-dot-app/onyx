@@ -1,15 +1,9 @@
-import { Label, MultiSelectField, SubLabel } from "@/components/Field";
+import { Label, SubLabel } from "@/components/Field";
 import { ModelConfiguration } from "../../interfaces";
 import { FormikProps } from "formik";
 import { BaseLLMFormValues } from "../formUtils";
 
-import Text from "@/refresh-components/texts/Text";
-import SvgX from "@opal/icons/x";
-import InputComboBox from "@/refresh-components/inputs/InputComboBox";
-
-const DISPLAY_MODELS_LABEL = "Display Models";
-const DISPLAY_MODELS_SUBTEXT =
-  "Select the models to make available to users. Unselected models will not be available.";
+import Checkbox from "@/refresh-components/inputs/Checkbox";
 
 function DisplayModelHeader() {
   return (
@@ -44,133 +38,92 @@ export function DisplayModels<T extends BaseLLMFormValues>({
     );
   }
 
-  return (
-    <div key="manual-mode">
-      <DisplayModelHeader />
-      <div className="flex flex-col gap-2 w-full">
-        <InputComboBox
-          placeholder="Select your models"
-          value=""
-          options={modelConfigurations
-            .filter(
-              (m) => !formikProps.values.selected_model_names?.includes(m.name)
-            )
-            .map((modelConfiguration) => ({
-              label: modelConfiguration.name,
-              value: modelConfiguration.name,
-            }))}
-          onValueChange={(value) => {
-            const currentSelected =
-              formikProps.values.selected_model_names ?? [];
-            const modelName = String(value);
-            if (!currentSelected.includes(modelName)) {
-              // Add to selected models
-              formikProps.setFieldValue("selected_model_names", [
-                ...currentSelected,
-                modelName,
-              ]);
-              // If this is the first model, set it as default
-              if (currentSelected.length === 0) {
-                formikProps.setFieldValue("default_model_name", modelName);
-              }
-            }
-          }}
-        />
-        {(formikProps.values.selected_model_names?.length ?? 0) > 0 && (
-          <div className="flex flex-wrap gap-2 mt-1">
-            {[...(formikProps.values.selected_model_names ?? [])].map(
-              (modelName) => {
-                const isDefault =
-                  formikProps.values.default_model_name === modelName;
-                return (
-                  <div
-                    key={modelName}
-                    title={isDefault ? undefined : "Click to set as default"}
-                    className={`group flex items-center gap-1 rounded-lg border px-2 py-1 text-sm transition-colors ${
-                      isDefault
-                        ? "border-action-link-05 bg-action-link-05/10"
-                        : "border-border-01 bg-background-neutral-00 hover:border-action-link-05/50 cursor-pointer"
-                    }`}
-                    onClick={() => {
-                      if (!isDefault) {
-                        formikProps.setFieldValue(
-                          "default_model_name",
-                          modelName
-                        );
-                      }
-                    }}
-                  >
-                    <span
-                      className={
-                        isDefault ? "text-action-link-05 font-medium" : ""
-                      }
-                    >
-                      {modelName}
-                    </span>
-                    {isDefault && (
-                      <span className="text-xs text-action-link-05 ml-1">
-                        (default)
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      className="p-0.5 rounded hover:bg-background-neutral-03 transition-colors"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const currentSelected =
-                          formikProps.values.selected_model_names ?? [];
-                        const newSelected = currentSelected.filter(
-                          (name) => name !== modelName
-                        );
-                        formikProps.setFieldValue(
-                          "selected_model_names",
-                          newSelected
-                        );
-                        // If removing the default, set the first remaining model as default
-                        if (isDefault && newSelected.length > 0) {
-                          formikProps.setFieldValue(
-                            "default_model_name",
-                            newSelected[0]
-                          );
-                        }
-                      }}
-                    >
-                      <SvgX className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                );
-              }
-            )}
-          </div>
-        )}
+  const selectedModels = formikProps.values.selected_model_names ?? [];
+  const defaultModel = formikProps.values.default_model_name;
+
+  const handleCheckboxChange = (modelName: string, checked: boolean) => {
+    if (checked) {
+      const newSelected = [...selectedModels, modelName];
+      formikProps.setFieldValue("selected_model_names", newSelected);
+      // If this is the first model, set it as default
+      if (selectedModels.length === 0) {
+        formikProps.setFieldValue("default_model_name", modelName);
+      }
+    } else {
+      const newSelected = selectedModels.filter((name) => name !== modelName);
+      formikProps.setFieldValue("selected_model_names", newSelected);
+      // If removing the default, set the first remaining model as default
+      if (defaultModel === modelName && newSelected.length > 0) {
+        formikProps.setFieldValue("default_model_name", newSelected[0]);
+      } else if (newSelected.length === 0) {
+        formikProps.setFieldValue("default_model_name", null);
+      }
+    }
+  };
+
+  const handleSetDefault = (modelName: string) => {
+    formikProps.setFieldValue("default_model_name", modelName);
+  };
+
+  if (modelConfigurations.length === 0) {
+    return (
+      <div>
+        <DisplayModelHeader />
+        <p className="text-sm text-text-03">{noModelConfigurationsMessage}</p>
       </div>
-    </div>
-  );
+    );
+  }
 
   return (
-    <div className="w-full">
-      {modelConfigurations.length > 0 ? (
-        <MultiSelectField
-          selectedInitially={formikProps.values.selected_model_names ?? []}
-          name="selected_model_names"
-          label={DISPLAY_MODELS_LABEL}
-          subtext={DISPLAY_MODELS_SUBTEXT}
-          options={modelConfigurations.map((modelConfiguration) => ({
-            value: modelConfiguration.name,
-            // don't clean up names here to give admins descriptive names / handle duplicates
-            // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
-            label: modelConfiguration.name,
-          }))}
-          onChange={(selected) =>
-            formikProps.setFieldValue("selected_model_names", selected)
-          }
-        />
-      ) : (
-        <div className="mb-6">
-          <Label>{DISPLAY_MODELS_LABEL}</Label>
-          <Text text03>{noModelConfigurationsMessage}</Text>
-        </div>
-      )}
+    <div>
+      <DisplayModelHeader />
+      <div className="flex flex-col gap-1 max-h-80 overflow-y-auto border border-border-01 rounded-lg p-3">
+        {modelConfigurations.map((modelConfiguration) => {
+          const isSelected = selectedModels.includes(modelConfiguration.name);
+          const isDefault = defaultModel === modelConfiguration.name;
+
+          return (
+            <div
+              key={modelConfiguration.name}
+              className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-background-neutral-subtle"
+            >
+              <div
+                className="flex items-center gap-2 cursor-pointer"
+                onClick={() =>
+                  handleCheckboxChange(modelConfiguration.name, !isSelected)
+                }
+              >
+                <div onClick={(e) => e.stopPropagation()}>
+                  <Checkbox
+                    checked={isSelected}
+                    onCheckedChange={(checked) =>
+                      handleCheckboxChange(modelConfiguration.name, checked)
+                    }
+                  />
+                </div>
+                <span className="text-sm select-none">
+                  {modelConfiguration.name}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleSetDefault(modelConfiguration.name)}
+                className={`text-xs px-2 py-0.5 rounded transition-all duration-200 ease-in-out ${
+                  isSelected
+                    ? "opacity-100 translate-x-0"
+                    : "opacity-0 translate-x-2 pointer-events-none"
+                } ${
+                  isDefault
+                    ? "bg-action-link-05 text-text-inverse font-medium scale-100"
+                    : "bg-background-neutral-02 text-text-03 hover:bg-background-neutral-03 scale-95 hover:scale-100"
+                }`}
+              >
+                {isDefault ? "Default" : "Set as default"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
