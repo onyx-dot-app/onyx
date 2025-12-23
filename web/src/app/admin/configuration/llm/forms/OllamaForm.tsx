@@ -174,8 +174,6 @@ export function OllamaForm({
                       showPasswordToggle
                     />
 
-                    <Separator />
-
                     <DisplayModels
                       modelConfigurations={availableModels}
                       formikProps={formikProps}
