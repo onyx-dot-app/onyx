@@ -2,7 +2,7 @@ import React, { memo, useRef } from "react";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { OnboardingState, OnboardingActions, OnboardingStep } from "../types";
-import { Avatar } from "@/components/ui/avatar";
+import { Avatar } from "@/components/ui/InputAvatar";
 import { cn } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgCheckCircle, SvgEdit, SvgUser } from "@opal/icons";
