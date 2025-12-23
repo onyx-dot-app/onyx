@@ -178,12 +178,12 @@ def generate_intermediate_report(
         llm_step_result = cast(LlmStepResult, llm_step_result)
 
         final_report = llm_step_result.answer
+        span.span_data.output = final_report if final_report else None
         if final_report is None:
             raise ValueError(
                 f"LLM failed to generate a report for research task: {research_topic}"
             )
 
-        span.span_data.output = final_report[:1000] if final_report else None
         return final_report
 
 
@@ -365,9 +365,7 @@ def run_research_agent_call(
                             tab_index=tab_index,
                         ),
                     )
-                    span.span_data.output = (
-                        final_report[:1000] if final_report else None
-                    )
+                    span.span_data.output = final_report if final_report else None
                     return ResearchAgentCallResult(
                         intermediate_report=final_report,
                         citation_mapping=citation_processor.get_seen_citations(),
@@ -518,7 +516,7 @@ def run_research_agent_call(
                     tab_index=tab_index,
                 ),
             )
-            span.span_data.output = final_report[:1000] if final_report else None
+            span.span_data.output = final_report if final_report else None
             return ResearchAgentCallResult(
                 intermediate_report=final_report,
                 citation_mapping=citation_processor.get_seen_citations(),
