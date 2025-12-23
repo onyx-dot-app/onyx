@@ -29,7 +29,7 @@ export const IMAGE_PROVIDER_GROUPS: ProviderGroup[] = [
         provider_name: "openai",
         title: "GPT Image 1",
         description:
-          "OpenAI's latest Image Generation model with the highest prompt fidelity.",
+          "A capable image generation model from OpenAI with strong prompt adherence.",
       },
       {
         image_provider_id: "openai_dalle_3",
