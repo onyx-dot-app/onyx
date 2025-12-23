@@ -421,7 +421,7 @@ def filter_documents(document_batch: list[Document]) -> list[Document]:
         avg_chars = total_chars_in_batch / len(documents)
         # Get the source from the first document (all in batch should be same source)
         source = documents[0].source.value if documents[0].source else "unknown"
-        logger.info(
+        logger.debug(
             f"Document batch filter [{source}]: {len(documents)} docs kept, {len(skipped_too_long)} skipped (too long). "
             f"Total chars: {total_chars_in_batch:,}, Avg: {avg_chars:,.0f} chars/doc"
         )
