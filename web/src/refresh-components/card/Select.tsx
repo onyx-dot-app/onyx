@@ -14,6 +14,12 @@ import {
   SvgSettings,
 } from "@opal/icons";
 
+const containerClasses = {
+  selected: "border-action-link-05 bg-action-link-01",
+  connected: "border-border-01 bg-background-tint-00 hover:shadow-00",
+  disconnected: "border-border-01 bg-background-neutral-01 hover:shadow-00",
+} as const;
+
 export interface SelectProps {
   // Content
   icon: React.FunctionComponent<IconProps>;
@@ -61,6 +67,7 @@ export default function Select({
   disabled,
 }: SelectProps) {
   const sizeClass = medium ? "h-[3.75rem]" : "h-[4.25rem]";
+  const containerClass = containerClasses[status];
   const [isHovered, setIsHovered] = useState(false);
 
   const isSelected = status === "selected";
@@ -81,13 +88,9 @@ export default function Select({
       onMouseLeave={() => setIsHovered(false)}
       onClick={isCardClickable ? handleCardClick : undefined}
       className={cn(
-        "flex items-start justify-between gap-3 rounded-16 border p-2",
+        "flex items-start justify-between gap-3 rounded-16 border p-2 min-w-[17.5rem]",
         sizeClass,
-        isSelected
-          ? "border-action-link-05 bg-action-link-01"
-          : isConnected
-            ? "border-border-01 bg-background-tint-00 hover:shadow-00"
-            : "border-border-01 bg-background-neutral-01 hover:shadow-00",
+        containerClass,
         isCardClickable &&
           "cursor-pointer hover:bg-background-tint-01 transition-colors",
         disabled && "opacity-50 cursor-not-allowed",
