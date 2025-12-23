@@ -283,10 +283,8 @@ function SettingsBody({ children }: SettingsBodyProps) {
   );
 }
 
-const Settings = {
+export default {
   Root: SettingsRoot,
   Header: SettingsHeader,
   Body: SettingsBody,
 };
-
-export default Settings;
