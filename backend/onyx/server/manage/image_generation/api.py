@@ -29,8 +29,25 @@ logger = setup_logger()
 admin_router = APIRouter(prefix="/admin/image-generation")
 
 
+def _get_test_quality_for_model(model_name: str) -> str | None:
+    """Returns the fastest quality setting for credential testing.
+
+    - gpt-image-1: 'low' (fastest)
+    - dall-e-3: 'standard' (faster than 'hd')
+    - Other models: None (use API default)
+    """
+    model_lower = model_name.lower()
+
+    if "gpt-image-1" in model_lower:
+        return "low"
+    elif "dall-e-3" in model_lower or "dalle-3" in model_lower:
+        return "standard"
+    return None
+
+
 def _build_llm_provider_request(
     db_session: Session,
+    image_provider_id: str,
     model_name: str,
     source_llm_provider_id: int | None,
     provider: str | None,
@@ -44,6 +61,7 @@ def _build_llm_provider_request(
     Supports two modes:
     1. Clone mode: source_llm_provider_id provided - uses API key from source
     2. New credentials mode: api_key + provider provided
+
     """
     if source_llm_provider_id is not None:
         # Clone mode: Only use API key from source provider
@@ -55,7 +73,7 @@ def _build_llm_provider_request(
             )
 
         return LLMProviderUpsertRequest(
-            name=f"Image Gen - {model_name}",
+            name=f"Image Gen - {image_provider_id}",
             provider=source_provider.provider,
             api_key=source_provider.api_key,  # Only this from source
             api_base=api_base,  # From request
@@ -75,7 +93,7 @@ def _build_llm_provider_request(
     elif api_key is not None and provider is not None:
         # New credentials mode
         return LLMProviderUpsertRequest(
-            name=f"Image Gen - {model_name}",
+            name=f"Image Gen - {image_provider_id}",
             provider=provider,
             api_key=api_key,
             api_base=api_base,
@@ -163,7 +181,8 @@ def test_image_generation(
             status_code=400,
             detail="Either source_llm_provider_id or (api_key + provider) must be provided",
         )
-
+    # Use lowest quality for faster testing
+    quality = _get_test_quality_for_model(test_request.model_name)
     try:
         if provider == "azure":
             if not test_request.api_base or not test_request.api_version:
@@ -186,9 +205,9 @@ def test_image_generation(
                 api_version=test_request.api_version,
                 size="1024x1024",
                 n=1,
+                quality=quality,
             )
         else:
-            # OpenAI or other providers
             image_generation(
                 prompt="a simple blue circle on white background",
                 model=test_request.model_name,
@@ -196,6 +215,7 @@ def test_image_generation(
                 api_base=test_request.api_base or None,
                 size="1024x1024",
                 n=1,
+                quality=quality,
             )
 
     except HTTPException:
@@ -226,6 +246,7 @@ def create_config(
         # Build and create LLM provider
         provider_request = _build_llm_provider_request(
             db_session=db_session,
+            image_provider_id=config_create.image_provider_id,
             model_name=config_create.model_name,
             source_llm_provider_id=config_create.source_llm_provider_id,
             provider=config_create.provider,
@@ -316,6 +337,7 @@ def update_config(
         # 2. Build and create new LLM provider
         provider_request = _build_llm_provider_request(
             db_session=db_session,
+            image_provider_id=image_provider_id,
             model_name=config_update.model_name,
             source_llm_provider_id=config_update.source_llm_provider_id,
             provider=config_update.provider,
