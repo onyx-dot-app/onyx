@@ -1,7 +1,9 @@
 "use client";
+
 import { SvgMcp } from "@opal/icons";
 import MCPPageContent from "@/sections/actions/MCPPageContent";
 import Settings from "@/layouts/settings-pages";
+
 export default function Main() {
   return (
     <Settings.Root>

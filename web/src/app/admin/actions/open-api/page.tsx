@@ -1,7 +1,9 @@
 "use client";
+
 import { SvgActions } from "@opal/icons";
 import Settings from "@/layouts/settings-pages";
 import OpenApiPageContent from "@/sections/actions/OpenApiPageContent";
+
 export default function Main() {
   return (
     <Settings.Root>
