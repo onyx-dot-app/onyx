@@ -12,7 +12,36 @@ interface OptionItemProps {
   onSelect: (option: ComboBoxOption) => void;
   onMouseEnter: (index: number) => void;
   onMouseMove: () => void;
+  /** Search term to highlight in the label */
+  searchTerm: string;
 }
+
+/**
+ * Escapes special regex characters in a string
+ */
+const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Highlights matching text within a string
+ */
+const highlightMatch = (text: string, searchTerm: string): React.ReactNode => {
+  if (!searchTerm.trim()) return text;
+
+  const regex = new RegExp(`(${escapeRegex(searchTerm)})`, "gi");
+  const parts = text.split(regex);
+
+  if (parts.length === 1) return text;
+
+  return parts.map((part, i) =>
+    part.toLowerCase() === searchTerm.toLowerCase() ? (
+      <span key={i} className="font-semibold">
+        {part}
+      </span>
+    ) : (
+      part
+    )
+  );
+};
 
 /**
  * Renders a single option item in the dropdown
@@ -29,6 +58,7 @@ export const OptionItem = React.memo(
     onSelect,
     onMouseEnter,
     onMouseMove,
+    searchTerm,
   }: OptionItemProps) => {
     return (
       <div
@@ -65,7 +95,7 @@ export const OptionItem = React.memo(
             !isExact && isSelected && "font-medium"
           )}
         >
-          {option.label}
+          {highlightMatch(option.label, searchTerm)}
         </span>
         {option.description && (
           <span
