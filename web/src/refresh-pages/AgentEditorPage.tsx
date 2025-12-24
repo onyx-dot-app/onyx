@@ -12,6 +12,7 @@ import * as Yup from "yup";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputTypeInElementField from "@/refresh-components/form/InputTypeInElementField";
+import InputDatePickerField from "@/refresh-components/form/InputDatePickerField";
 import Separator from "@/refresh-components/Separator";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { useFormikContext } from "formik";
@@ -348,7 +349,6 @@ export default function AgentEditorPage({
 
     // Advanced
     knowledge_cutoff_date: new Date(),
-    current_datetime_aware: false,
     overwrite_system_prompts: false,
     reminders: "",
     image_generation: false,
@@ -381,7 +381,6 @@ export default function AgentEditorPage({
 
     // Advanced
     knowledge_cutoff_date: Yup.date().optional(),
-    current_datetime_aware: Yup.boolean(),
     overwrite_system_prompts: Yup.boolean(),
     reminders: Yup.string().optional(),
     image_generation: Yup.boolean(),
@@ -413,7 +412,7 @@ export default function AgentEditorPage({
         description: values.description,
         system_prompt: values.instructions,
         task_prompt: "",
-        datetime_aware: values.current_datetime_aware,
+        datetime_aware: false,
         document_set_ids:
           teamKnowledge && values.enable_knowledge
             ? values.document_set_ids
@@ -955,11 +954,11 @@ export default function AgentEditorPage({
                       <Section>
                         <Card>
                           <InputLayouts.Horizontal
-                            name="current_datetime_aware"
-                            label="Current Datetime Aware"
-                            description='Include the current date and time explicitly in the agent prompt (formatted as "Thursday Jan 1, 1970 00:01"). To inject it in a specific place in the prompt, use the pattern [[CURRENT_DATETIME]].'
+                            name="knowledge_cutoff_date"
+                            label="Knowledge Cutoff Date"
+                            description="Set the knowledge cutoff date for this agent. The agent will only use information up to this date."
                           >
-                            <SwitchField name="current_datetime_aware" />
+                            <InputDatePickerField name="knowledge_cutoff_date" />
                           </InputLayouts.Horizontal>
                           <InputLayouts.Horizontal
                             name="overwrite_system_prompts"
