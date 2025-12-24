@@ -75,7 +75,14 @@
  * ```
  */
 
-import React, { useCallback, useContext, useMemo, useRef, useId } from "react";
+import React, {
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useId,
+  useEffect,
+} from "react";
 import {
   useFloating,
   autoUpdate,
@@ -204,6 +211,29 @@ const InputComboBox = ({
     externalIsError,
     onValidationError,
   });
+
+  // Sync highlightedIndex with exact match when typing (not keyboard nav)
+  useEffect(() => {
+    // Skip if keyboard navigating or dropdown closed
+    if (isKeyboardNav || !isOpen) return;
+    if (!inputValue.trim()) return;
+
+    const exactMatchIndex = allVisibleOptions.findIndex(
+      (opt) =>
+        opt.value.toLowerCase() === inputValue.trim().toLowerCase() ||
+        opt.label.toLowerCase() === inputValue.trim().toLowerCase()
+    );
+
+    if (exactMatchIndex >= 0) {
+      setHighlightedIndex(exactMatchIndex);
+    }
+  }, [
+    inputValue,
+    allVisibleOptions,
+    isKeyboardNav,
+    isOpen,
+    setHighlightedIndex,
+  ]);
 
   // Event Handlers
   const handleInputChange = useCallback(
