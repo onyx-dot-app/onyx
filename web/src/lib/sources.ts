@@ -1,59 +1,60 @@
+import { Persona } from "@/app/admin/assistants/interfaces";
 import {
+  AirtableIcon,
+  AsanaIcon,
   AxeroIcon,
+  BitbucketIcon,
   BookstackIcon,
-  OutlineIcon,
   ClickupIcon,
+  CodaIcon,
+  ColorDiscordIcon,
+  ColorSlackIcon,
   ConfluenceIcon,
   DiscourseIcon,
   Document360Icon,
   DropboxIcon,
+  DrupalWikiIcon,
+  EgnyteIcon,
+  EmailIcon,
+  FirefliesIcon,
+  FreshdeskIcon,
+  GitbookIcon,
   GithubIcon,
   GitlabIcon,
-  BitbucketIcon,
   GmailIcon,
   GongIcon,
   GoogleDriveIcon,
   GoogleSitesIcon,
+  GoogleStorageIcon,
   GuruIcon,
+  HighspotIcon,
   HubSpotIcon,
   JiraIcon,
+  JiraServiceManagementIcon,
   LinearIcon,
   LoopioIcon,
-  CodaIcon,
+  MediaWikiIcon,
   NotionIcon,
+  OCIStorageIcon,
+  OutlineIcon,
   ProductboardIcon,
   R2Icon,
+  S3Icon,
   SalesforceIcon,
   SharepointIcon,
-  TeamsIcon,
   SlabIcon,
+  TeamsIcon,
+  TestRailIcon,
+  WikipediaIcon,
+  XenforoIcon,
   ZendeskIcon,
   ZulipIcon,
-  MediaWikiIcon,
-  WikipediaIcon,
-  AsanaIcon,
-  S3Icon,
-  OCIStorageIcon,
-  GoogleStorageIcon,
-  ColorSlackIcon,
-  XenforoIcon,
-  ColorDiscordIcon,
-  FreshdeskIcon,
-  FirefliesIcon,
-  EgnyteIcon,
-  AirtableIcon,
-  GitbookIcon,
-  HighspotIcon,
-  DrupalWikiIcon,
-  EmailIcon,
-  TestRailIcon,
 } from "@/components/icons/icons";
-import { ValidSources } from "./types";
-import { SourceCategory, SourceMetadata } from "./search/interfaces";
-import { Persona } from "@/app/admin/assistants/interfaces";
+import { SvgFileText, SvgGlobe } from "@opal/icons";
 import React from "react";
 import { DOCS_ADMINS_PATH } from "./constants";
-import { SvgFileText, SvgGlobe } from "@opal/icons";
+import { SourceCategory, SourceMetadata } from "./search/interfaces";
+import { ValidSources } from "./types";
 
 interface PartialSourceMetadata {
   icon: React.FC<{ size?: number; className?: string }>;
@@ -89,6 +90,12 @@ const slackMetadata = {
 
 export const SOURCE_METADATA_MAP: SourceMap = {
   // Knowledge Base & Wikis
+  jira_service_management: {
+    icon: JiraServiceManagementIcon,
+    displayName: "Jira SM",
+    category: SourceCategory.TicketingAndTaskManagement,
+    docs: "https://docs.onyx.app/admin/connectors/official/jira_service_management",
+  },
   confluence: {
     icon: ConfluenceIcon,
     displayName: "Confluence",

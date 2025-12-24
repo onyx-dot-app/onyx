@@ -1,31 +1,11 @@
 "use client";
 
-import { JSX } from "react";
-import Image from "next/image";
-import { StaticImageData } from "next/image";
 import { BrainIcon as Brain } from "@phosphor-icons/react";
-import {
-  FiAlertCircle,
-  FiAlertTriangle,
-  FiChevronDown,
-  FiChevronsDown,
-  FiChevronsUp,
-  FiClipboard,
-  FiCpu,
-  FiDatabase,
-  FiEdit2,
-  FiFile,
-  FiGlobe,
-  FiInfo,
-  FiMail,
-} from "react-icons/fi";
-import { FaRobot } from "react-icons/fa";
-import { SiBookstack } from "react-icons/si";
-import axeroImage from "@public/Axero.jpeg";
 import airtableIcon from "@public/Airtable.svg";
 import amazonSVG from "@public/Amazon.svg";
 import anthropicSVG from "@public/Anthropic.svg";
 import asanaIcon from "@public/Asana.png";
+import axeroImage from "@public/Axero.jpeg";
 import azureIcon from "@public/Azure.png";
 import bitbucketIcon from "@public/Bitbucket.svg";
 import clickupIcon from "@public/Clickup.svg";
@@ -45,9 +25,12 @@ import geminiSVG from "@public/Gemini.svg";
 import gitbookDarkIcon from "@public/GitBookDark.png";
 import gitbookLightIcon from "@public/GitBookLight.png";
 import githubLightIcon from "@public/Github.png";
+import gitlabIcon from "@public/Gitlab.png";
+import gmailIcon from "@public/Gmail.png";
 import gongIcon from "@public/Gong.png";
 import googleIcon from "@public/Google.png";
 import googleCloudStorageIcon from "@public/GoogleCloudStorage.png";
+import googleDriveIcon from "@public/GoogleDrive.png";
 import googleSitesIcon from "@public/GoogleSites.png";
 import guruIcon from "@public/Guru.svg";
 import highspotIcon from "@public/Highspot.png";
@@ -56,6 +39,7 @@ import jiraSVG from "@public/Jira.svg";
 import kimiIcon from "@public/Kimi.png";
 import linearIcon from "@public/Linear.png";
 import litellmIcon from "@public/litellm.png";
+import loopioIcon from "@public/Loopio.png";
 import mediawikiIcon from "@public/MediaWiki.svg";
 import metaSVG from "@public/Meta.svg";
 import microsoftIcon from "@public/microsoft.png";
@@ -63,31 +47,46 @@ import microsoftSVG from "@public/Microsoft.svg";
 import mistralSVG from "@public/Mistral.svg";
 import mixedBreadSVG from "@public/Mixedbread.png";
 import nomicSVG from "@public/nomic.svg";
+import notionIcon from "@public/Notion.png";
 import OCIStorageSVG from "@public/OCI.svg";
 import ollamaIcon from "@public/Ollama.png";
 import openAISVG from "@public/Openai.svg";
 import openSourceIcon from "@public/OpenSource.png";
 import outlinePNG from "@public/Outline.png";
+import productboardIcon from "@public/Productboard.png";
 import qwenSVG from "@public/Qwen.svg";
 import r2Icon from "@public/r2.png";
 import s3Icon from "@public/S3.png";
 import salesforceIcon from "@public/Salesforce.png";
 import sharepointIcon from "@public/Sharepoint.png";
+import slabLogoIcon from "@public/SlabLogo.png";
 import slackIcon from "@public/Slack.png";
 import teamsIcon from "@public/Teams.png";
+import testrailSVG from "@public/Testrail.svg";
 import wikipediaIcon from "@public/Wikipedia.png";
 import xenforoIcon from "@public/Xenforo.svg";
 import zAIIcon from "@public/Z_AI.png";
 import zendeskIcon from "@public/Zendesk.svg";
 import zulipIcon from "@public/Zulip.png";
-import testrailSVG from "@public/Testrail.svg";
-import gitlabIcon from "@public/Gitlab.png";
-import gmailIcon from "@public/Gmail.png";
-import googleDriveIcon from "@public/GoogleDrive.png";
-import loopioIcon from "@public/Loopio.png";
-import notionIcon from "@public/Notion.png";
-import productboardIcon from "@public/Productboard.png";
-import slabLogoIcon from "@public/SlabLogo.png";
+import Image, { StaticImageData } from "next/image";
+import { JSX } from "react";
+import { FaRobot } from "react-icons/fa";
+import {
+  FiAlertCircle,
+  FiAlertTriangle,
+  FiChevronDown,
+  FiChevronsDown,
+  FiChevronsUp,
+  FiClipboard,
+  FiCpu,
+  FiDatabase,
+  FiEdit2,
+  FiFile,
+  FiGlobe,
+  FiInfo,
+  FiMail,
+} from "react-icons/fi";
+import { SiBookstack } from "react-icons/si";
 
 export interface IconProps {
   size?: number;
@@ -860,6 +859,16 @@ export const GuruIcon = createLogoIcon(guruIcon, { monochromatic: true });
 export const HighspotIcon = createLogoIcon(highspotIcon);
 export const HubSpotIcon = createLogoIcon(hubSpotIcon);
 export const JiraIcon = createLogoIcon(jiraSVG);
+export const JiraServiceManagementIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => (
+  <LogoIcon
+    size={size + 4}
+    className={`${className} -m-0.5`}
+    src={jiraSVG} 
+  />
+);
 export const KimiIcon = createLogoIcon(kimiIcon);
 export const LinearIcon = createLogoIcon(linearIcon);
 export const LiteLLMIcon = createLogoIcon(litellmIcon);

@@ -3,6 +3,8 @@ from onyx.configs.constants import DocumentSource
 
 def source_to_github_img_link(source: DocumentSource) -> str | None:
     # TODO: store these images somewhere better
+    if source == DocumentSource.JIRA_SERVICE_MANAGEMENT.value:
+            return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/backend/slackbot_images/JiraServiceManagement.png"
     if source == DocumentSource.WEB.value:
         return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/backend/slackbot_images/Web.png"
     if source == DocumentSource.FILE.value:
