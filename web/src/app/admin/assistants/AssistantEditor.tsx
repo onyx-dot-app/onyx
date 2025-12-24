@@ -683,7 +683,6 @@ export default function AssistantEditor({
                 <UserFilesModal
                   title="User Files"
                   description="All files selected for this assistant"
-                  icon={SvgFiles}
                   recentFiles={values.user_file_ids.map(
                     (userFileId: string) => {
                       const rf = allRecentFiles.find(
