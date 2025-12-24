@@ -63,7 +63,7 @@ const AgentButton = memo(({ agent }: AgentButtonProps) => {
           key={agent.id}
           leftIcon={() => <AgentAvatar agent={agent} />}
           onClick={() => route({ agentId: agent.id })}
-          active={
+          transient={
             activeSidebarTab.isAgent() &&
             activeSidebarTab.getId() === String(agent.id)
           }

@@ -207,7 +207,7 @@ export default function Settings({ folded }: SettingsProps) {
                   </Text>
                 </InputAvatar>
               )}
-              active={!!popupState}
+              transient={!!popupState}
               folded={folded}
             >
               {displayName}
