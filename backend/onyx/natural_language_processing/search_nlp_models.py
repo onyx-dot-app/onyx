@@ -131,15 +131,16 @@ def cleanup_embedding_thread_locals() -> None:
         if not loop.is_closed():
             # Cancel all pending tasks in the event loop
             try:
+                # Ensure loop is set as current event loop before accessing tasks
+                asyncio.set_event_loop(loop)
                 pending = asyncio.all_tasks(loop)
                 if pending:
                     logger.debug(
                         f"Cleaning up event loop with {len(pending)} pending tasks in thread {threading.current_thread().name}"
                     )
-                for task in pending:
-                    task.cancel()
-                # Run the loop briefly to allow cancelled tasks to complete
-                if pending:
+                    for task in pending:
+                        task.cancel()
+                    # Run the loop briefly to allow cancelled tasks to complete
                     loop.run_until_complete(
                         asyncio.gather(*pending, return_exceptions=True)
                     )
