@@ -25,6 +25,7 @@ export default function InputSelectField({
       value={field.value}
       onValueChange={(value) => {
         helpers.setValue(value);
+        helpers.setTouched(true);
         onValueChange?.(value);
       }}
       error={!!hasError}
