@@ -11,21 +11,25 @@ export interface VerticalLayoutProps extends FieldLabelLayoutProps {
 }
 
 /**
- * VerticalLayout - A layout component for form fields with vertical label arrangement
+ * VerticalInputLayout - A layout component for form fields with vertical label arrangement
  *
  * Use this layout when you want the label, input, and error message stacked vertically.
  * Common for most form inputs where the label appears above the input field.
  *
+ * Exported as `Vertical` for convenient usage.
+ *
  * @example
  * ```tsx
- * <VerticalLayout
+ * import { Vertical } from "@/layouts/input-layouts";
+ *
+ * <Vertical
  *   name="email"
  *   label="Email Address"
  *   description="We'll never share your email"
  *   optional
  * >
  *   <InputTypeIn name="email" type="email" />
- * </VerticalLayout>
+ * </Vertical>
  * ```
  */
 function VerticalInputLayout({
@@ -50,21 +54,25 @@ export interface HorizontalLayoutProps extends FieldLabelLayoutProps {
 }
 
 /**
- * HorizontalLayout - A layout component for form fields with horizontal label arrangement
+ * HorizontalInputLayout - A layout component for form fields with horizontal label arrangement
  *
  * Use this layout when you want the label on the left and the input control on the right.
  * Commonly used for toggles, switches, and checkboxes where the label and control
  * should be side-by-side.
  *
+ * Exported as `Horizontal` for convenient usage.
+ *
  * @example
  * ```tsx
- * <HorizontalLayout
+ * import { Horizontal } from "@/layouts/input-layouts";
+ *
+ * <Horizontal
  *   name="notifications"
  *   label="Enable Notifications"
  *   description="Receive updates about your account"
  * >
  *   <Switch name="notifications" />
- * </HorizontalLayout>
+ * </Horizontal>
  * ```
  */
 function HorizontalInputLayout({
@@ -105,10 +113,12 @@ export interface FieldLabelLayoutProps {
 }
 
 /**
- * FieldLabelLayout - A reusable label component for form fields
+ * LabelLayout - A reusable label component for form fields
  *
  * Renders a semantic label element with optional description and "Optional" indicator.
  * If no `name` prop is provided, renders a `div` instead of a `label` element.
+ *
+ * Exported as `Label` for convenient usage.
  *
  * @param name - The field name to associate the label with (renders as `<label>` if provided)
  * @param label - The main label text
@@ -118,7 +128,9 @@ export interface FieldLabelLayoutProps {
  *
  * @example
  * ```tsx
- * <FieldLabelLayout
+ * import { Label } from "@/layouts/input-layouts";
+ *
+ * <Label
  *   name="username"
  *   label="Username"
  *   description="Choose a unique username"
@@ -168,17 +180,21 @@ interface FieldErrorLayoutProps {
 }
 
 /**
- * FieldErrorLayout - Displays Formik field validation errors
+ * ErrorLayout - Displays Formik field validation errors
  *
  * Automatically shows error messages from Formik's validation state.
  * Only displays when the field has been touched and has an error.
+ *
+ * Exported as `Error` for convenient usage.
  *
  * @param name - The Formik field name to display errors for
  *
  * @example
  * ```tsx
+ * import { Error } from "@/layouts/input-layouts";
+ *
  * <InputTypeIn name="email" />
- * <FieldErrorLayout name="email" />
+ * <Error name="email" />
  * ```
  *
  * @remarks
