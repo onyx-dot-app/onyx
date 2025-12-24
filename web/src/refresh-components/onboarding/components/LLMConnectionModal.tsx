@@ -301,6 +301,7 @@ export default function LLMConnectionModal({
         const handleFetchModels = async () => {
           if (!llmDescriptor) return;
 
+          setIsFetchingModels(true);
           const { models, error } = await fetchModels(
             llmDescriptor.name,
             formikProps.values
@@ -311,6 +312,7 @@ export default function LLMConnectionModal({
             setFetchedModelConfigurations(models);
           }
         };
+        setIsFetchingModels(false);
 
         return (
           <ProviderModal
