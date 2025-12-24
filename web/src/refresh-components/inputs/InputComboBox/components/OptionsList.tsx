@@ -4,6 +4,7 @@ import { OptionItem } from "./OptionItem";
 import { ComboBoxOption } from "../types";
 import { cn } from "@/lib/utils";
 import { SvgPlus } from "@opal/icons";
+import { sanitizeOptionId } from "../utils/aria";
 
 interface OptionsListProps {
   matchedOptions: ComboBoxOption[];
@@ -69,7 +70,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
       {/* Create New Option */}
       {showCreateOption && (
         <div
-          id={`${fieldId}-option-${inputValue}`}
+          id={`${fieldId}-option-${sanitizeOptionId(inputValue)}`}
           data-index={0}
           role="option"
           aria-selected={false}
