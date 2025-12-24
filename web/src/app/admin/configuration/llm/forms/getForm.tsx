@@ -9,7 +9,6 @@ import { CustomForm } from "./CustomForm";
 import { BedrockForm } from "./BedrockForm";
 
 export const getFormForExistingProvider = (provider: LLMProviderView) => {
-  console.log("provider", provider);
   switch (provider.provider) {
     case LLMProviderName.OPENAI:
       return <OpenAIForm existingLlmProvider={provider} />;

@@ -19,15 +19,12 @@ import { getFormForExistingProvider } from "./forms/getForm";
 import { CustomForm } from "./forms/CustomForm";
 
 export function LLMConfiguration() {
-  const { data: llmProviderDescriptors } = useSWR<
-    WellKnownLLMProviderDescriptor[]
-  >("/api/admin/llm/built-in/options", errorHandlingFetcher);
   const { data: existingLlmProviders } = useSWR<LLMProviderView[]>(
     LLM_PROVIDERS_ADMIN_URL,
     errorHandlingFetcher
   );
 
-  if (!llmProviderDescriptors || !existingLlmProviders) {
+  if (!existingLlmProviders) {
     return <ThreeDotsLoader />;
   }
 
