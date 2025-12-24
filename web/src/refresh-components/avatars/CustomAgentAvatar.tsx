@@ -18,7 +18,7 @@ interface IconConfig {
   className?: string;
 }
 
-export const iconMap: Record<string, IconConfig> = {
+export const avatarIconMap: Record<string, IconConfig> = {
   search: { Icon: SvgSearch, className: "stroke-theme-green-05" },
   check: { Icon: SvgCheck, className: "stroke-theme-green-05" },
   code: { Icon: SvgCode, className: "stroke-theme-orange-04" },
