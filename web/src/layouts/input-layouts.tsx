@@ -1,3 +1,5 @@
+"use client";
+
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import { SvgXOctagon } from "@opal/icons";
@@ -8,6 +10,24 @@ export interface LabelWrapperProps extends FieldLabelProps {
   children?: React.ReactNode;
 }
 
+/**
+ * VerticalLabelWrapper - A layout component for form fields with vertical label arrangement
+ *
+ * Use this wrapper when you want the label, input, and error message stacked vertically.
+ * Common for most form inputs where the label appears above the input field.
+ *
+ * @example
+ * ```tsx
+ * <VerticalLabelWrapper
+ *   name="email"
+ *   label="Email Address"
+ *   description="We'll never share your email"
+ *   optional
+ * >
+ *   <InputTypeIn name="email" type="email" />
+ * </VerticalLabelWrapper>
+ * ```
+ */
 export function VerticalLabelWrapper({
   children,
 
@@ -23,6 +43,24 @@ export function VerticalLabelWrapper({
   );
 }
 
+/**
+ * HorizontalLabelWrapper - A layout component for form fields with horizontal label arrangement
+ *
+ * Use this wrapper when you want the label on the left and the input control on the right.
+ * Commonly used for toggles, switches, and checkboxes where the label and control
+ * should be side-by-side.
+ *
+ * @example
+ * ```tsx
+ * <HorizontalLabelWrapper
+ *   name="notifications"
+ *   label="Enable Notifications"
+ *   description="Receive updates about your account"
+ * >
+ *   <Switch name="notifications" />
+ * </HorizontalLabelWrapper>
+ * ```
+ */
 export function HorizontalLabelWrapper({
   children,
 
@@ -60,8 +98,28 @@ export interface FieldLabelProps {
   className?: string;
 }
 
-// If you do not pass anything to the `name` prop, this renders a NON-`label` tag (i.e., a simple `div`).
-// Use it if you want the UI rendering without the HTML labelling features.
+/**
+ * FieldLabel - A reusable label component for form fields
+ *
+ * Renders a semantic label element with optional description and "Optional" indicator.
+ * If no `name` prop is provided, renders a `div` instead of a `label` element.
+ *
+ * @param name - The field name to associate the label with (renders as `<label>` if provided)
+ * @param label - The main label text
+ * @param optional - Whether to show "(Optional)" indicator
+ * @param description - Additional helper text shown below the label
+ * @param className - Additional CSS classes
+ *
+ * @example
+ * ```tsx
+ * <FieldLabel
+ *   name="username"
+ *   label="Username"
+ *   description="Choose a unique username"
+ *   optional
+ * />
+ * ```
+ */
 export function FieldLabel({
   name,
   label,
@@ -103,6 +161,24 @@ interface FieldErrorProps {
   name: string;
 }
 
+/**
+ * FieldError - Displays Formik field validation errors
+ *
+ * Automatically shows error messages from Formik's validation state.
+ * Only displays when the field has been touched and has an error.
+ *
+ * @param name - The Formik field name to display errors for
+ *
+ * @example
+ * ```tsx
+ * <InputTypeIn name="email" />
+ * <FieldError name="email" />
+ * ```
+ *
+ * @remarks
+ * This component uses Formik's `useField` hook internally and requires
+ * the component to be rendered within a Formik context.
+ */
 function FieldError({ name }: FieldErrorProps) {
   const [, meta] = useField(name);
   const hasError = meta.touched && meta.error;
