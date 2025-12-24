@@ -522,7 +522,7 @@ def _patch_openai_responses_chunk_parser() -> None:
     _patched_openai_responses_chunk_parser.__name__ = (
         "_patched_openai_responses_chunk_parser"
     )
-    OpenAiResponsesToChatCompletionStreamIterator.chunk_parser = _patched_openai_responses_chunk_parser  # type: ignore[method-assign]
+    OpenAiResponsesToChatCompletionStreamIterator.chunk_parser = _patched_openai_responses_chunk_parser  # type: ignore[method-assign, assignment]
 
 
 def _patch_openai_responses_transform_response() -> None:
