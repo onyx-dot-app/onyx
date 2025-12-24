@@ -89,7 +89,7 @@ Once you have completed your research, call the `{GENERATE_REPORT_TOOL_NAME}` to
 """.strip()
 
 
-OPEN_URL_REMINDER_REASEARCH_AGENT = """
+OPEN_URL_REMINDER_RESEARCH_AGENT = """
 Remember that after using web_search, you are encouraged to open some pages to get more context unless the query is completely answered by the snippets.
 Open the pages that look the most promising and high quality by calling the open_url tool with an array of URLs.
 
