@@ -56,8 +56,7 @@ const colors = {
   },
 };
 
-export interface TextProps
-  extends Omit<HTMLAttributes<HTMLParagraphElement>, "as"> {
+export interface TextProps extends Omit<HTMLAttributes<HTMLElement>, "as"> {
   nowrap?: boolean;
 
   // Fonts
@@ -93,7 +92,7 @@ export interface TextProps
   textDark05?: boolean;
 
   // Tag type override
-  as?: "p" | "span" | "div";
+  as?: "p" | "span" | "div" | "li";
 }
 
 export default function Text({

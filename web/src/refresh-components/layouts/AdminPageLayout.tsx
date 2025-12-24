@@ -26,7 +26,7 @@ export function AdminPageHeader({
   return (
     <div className="flex flex-col">
       <div className="flex flex-row justify-between items-center gap-4">
-        <Icon className="stroke-text-04 h-[1.75rem] w-[1.75rem]" />
+        <Icon className="stroke-text-04 h-8 w-8" />
         {rightChildren}
       </div>
       <div className="flex flex-col">

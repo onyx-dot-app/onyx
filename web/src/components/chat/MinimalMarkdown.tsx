@@ -5,7 +5,7 @@ import {
   MemoizedParagraph,
 } from "@/app/chat/message/MemoizedTextComponents";
 import React, { useMemo, CSSProperties } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import remarkMath from "remark-math";
@@ -13,19 +13,27 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { transformLinkUri } from "@/lib/utils";
 
+type MinimalMarkdownComponentOverrides = Partial<Components>;
+
 interface MinimalMarkdownProps {
   content: string;
   className?: string;
   style?: CSSProperties;
+  /**
+   * Override specific markdown renderers.
+   * Any renderer not provided will fall back to this component's defaults.
+   */
+  components?: MinimalMarkdownComponentOverrides;
 }
 
 export default function MinimalMarkdown({
   content,
   className = "",
   style,
+  components,
 }: MinimalMarkdownProps) {
-  const markdownComponents = useMemo(
-    () => ({
+  const markdownComponents = useMemo(() => {
+    const defaults: Components = {
       a: MemoizedLink,
       p: MemoizedParagraph,
       pre: ({ node, className, children }: any) => {
@@ -40,9 +48,13 @@ export default function MinimalMarkdown({
           </CodeBlock>
         );
       },
-    }),
-    [content]
-  );
+    };
+
+    return {
+      ...defaults,
+      ...(components ?? {}),
+    } satisfies Components;
+  }, [content, components]);
 
   return (
     <div style={style || {}} className={`${className}`}>

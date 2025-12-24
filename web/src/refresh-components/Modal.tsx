@@ -339,6 +339,7 @@ ModalContent.displayName = DialogPrimitive.Content.displayName;
 interface ModalHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
   icon: React.FunctionComponent<IconProps>;
   title: string;
+  titleClassName?: string;
   description?: string;
   onClose?: () => void;
   withBottomShadow?: boolean;
@@ -349,6 +350,7 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
       withBottomShadow = false,
       icon: Icon,
       title,
+      titleClassName,
       description,
       onClose,
       className,
@@ -384,7 +386,7 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
             )}
           </div>
           <DialogPrimitive.Title asChild>
-            <Truncated headingH3 as="span">
+            <Truncated headingH3 as="span" className={titleClassName}>
               {title}
             </Truncated>
           </DialogPrimitive.Title>

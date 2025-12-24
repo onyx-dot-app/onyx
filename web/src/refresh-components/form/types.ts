@@ -21,6 +21,7 @@ export type LabelProps = React.HTMLAttributes<HTMLLabelElement> & {
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
   optional?: boolean;
+  required?: boolean;
   rightAction?: React.ReactNode;
 };
 

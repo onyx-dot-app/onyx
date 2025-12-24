@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Logo from "@/refresh-components/Logo";
 import { SvgSidebar } from "@opal/icons";
+import { useSettingsContext } from "@/components/settings/SettingsProvider";
 
 interface LogoSectionProps {
   folded?: boolean;
