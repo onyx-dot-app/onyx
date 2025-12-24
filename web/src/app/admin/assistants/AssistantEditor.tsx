@@ -55,7 +55,7 @@ import {
 import { debounce } from "lodash";
 import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
 import StarterMessagesList from "@/app/admin/assistants/StarterMessageList";
-import UnlabeledSwitchField from "@/refresh-components/formik-fields/UnlabeledSwitchField";
+import UnlabeledSwitchField from "@/refresh-components/form/UnlabeledSwitchField";
 import CustomAgentAvatar from "@/refresh-components/avatars/CustomAgentAvatar";
 import BackButton from "@/refresh-components/buttons/BackButton";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";

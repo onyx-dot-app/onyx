@@ -11,7 +11,7 @@ import {
 import { BrainIcon } from "@/components/icons/icons";
 import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
-import UnlabeledSwitchField from "@/refresh-components/formik-fields/UnlabeledSwitchField";
+import UnlabeledSwitchField from "@/refresh-components/form/UnlabeledSwitchField";
 import { Form, Formik, FormikState, useFormikContext } from "formik";
 import { useState } from "react";
 import * as Yup from "yup";
