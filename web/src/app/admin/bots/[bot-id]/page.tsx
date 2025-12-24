@@ -1,7 +1,7 @@
 "use client";
 
 import { use } from "react";
-import { BackButton } from "@/refresh-components/buttons/BackButton";
+import BackButton from "@/refresh-components/buttons/BackButton";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";

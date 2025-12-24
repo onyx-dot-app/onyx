@@ -6,7 +6,7 @@ import { useSpecificUserGroup } from "./hook";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { useConnectorStatus, useUsers } from "@/lib/hooks";
 import { useRouter } from "next/navigation";
-import { BackButton } from "@/refresh-components/buttons/BackButton";
+import BackButton from "@/refresh-components/buttons/BackButton";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { SvgUsers } from "@opal/icons";
 const Page = (props: { params: Promise<{ groupId: string }> }) => {

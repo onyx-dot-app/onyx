@@ -7,7 +7,7 @@ import Separator from "@/refresh-components/Separator";
 import { ChatSessionSnapshot, MessageSnapshot } from "../../usage/types";
 import { FiBook } from "react-icons/fi";
 import { timestampToReadableDate } from "@/lib/dateUtils";
-import { BackButton } from "@/refresh-components/buttons/BackButton";
+import BackButton from "@/refresh-components/buttons/BackButton";
 import { FeedbackBadge } from "../FeedbackBadge";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR from "swr";

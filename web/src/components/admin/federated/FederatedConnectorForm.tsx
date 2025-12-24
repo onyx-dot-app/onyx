@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { useRouter } from "next/navigation";
 import Text from "@/refresh-components/texts/Text";
 import { AlertTriangle, Check, Loader2, Trash2Icon, Info } from "lucide-react";
-import { BackButton } from "@/refresh-components/buttons/BackButton";
+import BackButton from "@/refresh-components/buttons/BackButton";
 import Title from "@/components/ui/title";
 import {
   DropdownMenu,

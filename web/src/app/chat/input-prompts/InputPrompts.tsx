@@ -6,7 +6,7 @@ import Button from "@/refresh-components/buttons/Button";
 import Title from "@/components/ui/title";
 import Text from "@/components/ui/text";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { BackButton } from "@/refresh-components/buttons/BackButton";
+import BackButton from "@/refresh-components/buttons/BackButton";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import {
   DropdownMenu,
