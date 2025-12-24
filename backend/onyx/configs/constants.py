@@ -160,6 +160,7 @@ TMP_DRALPHA_PERSONA_NAME = "KG Beta"
 
 class DocumentSource(str, Enum):
     # Special case, document passed in via Onyx APIs without specifying a source type
+    JIRA_SERVICE_MANAGEMENT = "jira_service_management"
     INGESTION_API = "ingestion_api"
     SLACK = "slack"
     WEB = "web"
