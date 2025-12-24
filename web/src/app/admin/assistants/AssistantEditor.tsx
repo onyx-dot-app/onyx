@@ -55,7 +55,7 @@ import {
 import { debounce } from "lodash";
 import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
 import StarterMessagesList from "@/app/admin/assistants/StarterMessageList";
-import UnlabeledSwitchField from "@/refresh-components/form/UnlabeledSwitchField";
+import SwitchField from "@/refresh-components/form/SwitchField";
 import CustomAgentAvatar from "@/refresh-components/avatars/CustomAgentAvatar";
 import BackButton from "@/refresh-components/buttons/BackButton";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
@@ -846,7 +846,7 @@ export default function AssistantEditor({
                                   : ""
                               }`}
                             >
-                              <UnlabeledSwitchField
+                              <SwitchField
                                 onCheckedChange={() =>
                                   toggleToolInValues(searchTool?.id || -1)
                                 }
@@ -1283,7 +1283,7 @@ export default function AssistantEditor({
                             side="top"
                           >
                             <div>
-                              <UnlabeledSwitchField
+                              <SwitchField
                                 name="is_public"
                                 onCheckedChange={(checked) => {
                                   if (values.is_default_persona && !checked) {
