@@ -120,7 +120,7 @@ export default function SidebarTab({
       onClick={onClick}
     >
       {href ? (
-        <Link href={href as Route} scroll={false}>
+        <Link href={href as Route} scroll={false} className="w-full">
           {baseContent}
         </Link>
       ) : (
