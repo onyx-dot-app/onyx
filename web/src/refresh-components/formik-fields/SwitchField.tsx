@@ -23,7 +23,6 @@ export default function SwitchField({
         helpers.setTouched(true);
         onCheckedChange?.(checked);
       }}
-      }}
       {...props}
     />
   );
