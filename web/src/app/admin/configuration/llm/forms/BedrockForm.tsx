@@ -101,7 +101,6 @@ export function BedrockForm({
             existingLlmProvider,
             modelConfigurations
           ),
-          default_model_name: existingLlmProvider?.default_model_name ?? "",
           custom_config: {
             AWS_REGION_NAME:
               (existingLlmProvider?.custom_config?.AWS_REGION_NAME as string) ??

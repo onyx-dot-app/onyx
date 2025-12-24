@@ -78,7 +78,6 @@ export function AzureForm({
           ),
           api_key: existingLlmProvider?.api_key ?? "",
           target_uri: buildTargetUri(existingLlmProvider),
-          default_model_name: existingLlmProvider?.default_model_name ?? "",
         };
 
         const validationSchema = buildDefaultValidationSchema().shape({

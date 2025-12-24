@@ -123,7 +123,6 @@ export function OpenRouterForm({
           ),
           api_key: existingLlmProvider?.api_key ?? "",
           api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
-          default_model_name: existingLlmProvider?.default_model_name ?? "",
         };
 
         const validationSchema = buildDefaultValidationSchema().shape({

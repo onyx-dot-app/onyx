@@ -72,7 +72,6 @@ export function OllamaForm({
             modelConfigurations
           ),
           api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
-          default_model_name: existingLlmProvider?.default_model_name ?? "",
           custom_config: {
             OLLAMA_API_KEY:
               (existingLlmProvider?.custom_config?.OLLAMA_API_KEY as string) ??
