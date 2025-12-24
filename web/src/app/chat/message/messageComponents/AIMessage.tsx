@@ -33,6 +33,7 @@ import {
   isStreamingComplete,
   isToolPacket,
 } from "@/app/chat/services/packetUtils";
+import { removeThinkingTokens } from "@/app/chat/services/thinkingTokens";
 import { useMessageSwitching } from "@/app/chat/message/messageComponents/hooks/useMessageSwitching";
 import MultiToolRenderer from "@/app/chat/message/messageComponents/MultiToolRenderer";
 import { RendererComponent } from "@/app/chat/message/messageComponents/renderMessageComponent";
@@ -73,6 +74,7 @@ export default function AIMessage({
   onMessageSelection,
 }: AIMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
+  const finalAnswerRef = useRef<HTMLDivElement>(null);
   const { popup, setPopup } = usePopup();
   const { handleFeedbackChange } = useFeedbackController({ setPopup });
 
@@ -520,29 +522,31 @@ export default function AIMessage({
                         )}
 
                         {/* Render all display groups (messages + image generation) in main area */}
-                        {displayGroups.map((displayGroup, index) => (
-                          <RendererComponent
-                            key={`${displayGroup.turn_index}-${displayGroup.tab_index}`}
-                            packets={displayGroup.packets}
-                            chatState={effectiveChatState}
-                            onComplete={() => {
-                              // if we've reverted to final answer not coming, don't set display complete
-                              // this happens when using claude and a tool calling packet comes after
-                              // some message packets
-                              // Only mark complete on the last display group
-                              if (
-                                finalAnswerComingRef.current &&
-                                index === displayGroups.length - 1
-                              ) {
-                                setDisplayComplete(true);
-                              }
-                            }}
-                            animate={false}
-                            stopPacketSeen={stopPacketSeen}
-                          >
-                            {({ content }) => <div>{content}</div>}
-                          </RendererComponent>
-                        ))}
+                        <div ref={finalAnswerRef}>
+                          {displayGroups.map((displayGroup, index) => (
+                            <RendererComponent
+                              key={`${displayGroup.turn_index}-${displayGroup.tab_index}`}
+                              packets={displayGroup.packets}
+                              chatState={effectiveChatState}
+                              onComplete={() => {
+                                // if we've reverted to final answer not coming, don't set display complete
+                                // this happens when using claude and a tool calling packet comes after
+                                // some message packets
+                                // Only mark complete on the last display group
+                                if (
+                                  finalAnswerComingRef.current &&
+                                  index === displayGroups.length - 1
+                                ) {
+                                  setDisplayComplete(true);
+                                }
+                              }}
+                              animate={false}
+                              stopPacketSeen={stopPacketSeen}
+                            >
+                              {({ content }) => <div>{content}</div>}
+                            </RendererComponent>
+                          ))}
+                        </div>
                       </>
                     );
                   })()
@@ -583,10 +587,14 @@ export default function AIMessage({
 
                       <CopyIconButton
                         getCopyText={() =>
-                          convertMarkdownTablesToTsv(getTextContent(rawPackets))
+                          convertMarkdownTablesToTsv(
+                            removeThinkingTokens(
+                              getTextContent(rawPackets)
+                            ) as string
+                          )
                         }
                         getHtmlContent={() =>
-                          markdownRef.current?.innerHTML || ""
+                          finalAnswerRef.current?.innerHTML || ""
                         }
                         tertiary
                         data-testid="AIMessage/copy-button"
