@@ -356,6 +356,7 @@ class LitellmLLM(LLM):
                     if structured_response_format
                     else {}
                 ),
+                allowed_openai_params=["tool_choice"],
                 **completion_kwargs,
             )
             return response
