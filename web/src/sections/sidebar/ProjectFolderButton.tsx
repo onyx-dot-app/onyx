@@ -153,7 +153,7 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
                 onClick={noProp(handleIconClick)}
               />
             )}
-            active={
+            transient={
               activeSidebar.isProject() &&
               activeSidebar.getId() === String(project.id)
             }
