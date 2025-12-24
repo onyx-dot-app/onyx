@@ -1,6 +1,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import { ComboBoxOption } from "../types";
+import { sanitizeOptionId } from "../utils/aria";
 
 interface OptionItemProps {
   option: ComboBoxOption;
@@ -62,7 +63,7 @@ export const OptionItem = React.memo(
   }: OptionItemProps) => {
     return (
       <div
-        id={`${fieldId}-option-${option.value}`}
+        id={`${fieldId}-option-${sanitizeOptionId(option.value)}`}
         data-index={index}
         role="option"
         aria-selected={isSelected}
