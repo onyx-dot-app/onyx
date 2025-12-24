@@ -38,7 +38,6 @@ import LoginPage from "../../auth/login/LoginPage";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
 import { ReadonlyRequestCookies } from "next/dist/server/web/spec-extension/adapters/request-cookies";
 import { CHROME_MESSAGE } from "@/lib/extension/constants";
-import ApiKeyModal from "@/components/llm/ApiKeyModal";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { SvgUser } from "@opal/icons";
 
@@ -354,9 +353,15 @@ export default function NRFPage({
           </Modal.Content>
         </Modal>
       ) : (
-        (!llmProviders || llmProviders.length === 0) && (
-          <ApiKeyModal setPopup={setPopup} />
-        )
+        <Button
+          className="w-full"
+          secondary
+          onClick={() => {
+            window.location.href = "/admin/configuration/llm";
+          }}
+        >
+          Set up an LLM.
+        </Button>
       )}
     </div>
   );

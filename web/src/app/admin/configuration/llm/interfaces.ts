@@ -8,6 +8,7 @@ export enum LLMProviderName {
   OPENROUTER = "openrouter",
   VERTEX_AI = "vertex_ai",
   BEDROCK = "bedrock",
+  CUSTOM = "custom",
 }
 
 export interface CustomConfigOption {
