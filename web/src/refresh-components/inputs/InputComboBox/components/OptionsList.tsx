@@ -69,6 +69,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
       {/* Create New Option */}
       {showCreateOption && (
         <div
+          id={`${fieldId}-option-${inputValue}`}
           data-index={0}
           role="option"
           aria-selected={false}
