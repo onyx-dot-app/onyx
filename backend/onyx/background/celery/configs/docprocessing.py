@@ -25,7 +25,7 @@ task_acks_late = shared_config.task_acks_late
 # task_track_started = True
 
 worker_concurrency = CELERY_WORKER_DOCPROCESSING_CONCURRENCY
-worker_pool = "threads"
+worker_pool = "prefork"
 worker_prefetch_multiplier = 1
 
 # Restart worker threads after N tasks to prevent Python memory fragmentation
