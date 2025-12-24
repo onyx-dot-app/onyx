@@ -9,22 +9,18 @@ import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import { cn } from "@/lib/utils";
 import { Formik, Form, FieldArray } from "formik";
 import * as Yup from "yup";
-import InputTypeInField from "@/refresh-components/formik-fields/InputTypeInField";
-import InputTextAreaField from "@/refresh-components/formik-fields/InputTextAreaField";
-import InputTypeInElementField from "@/refresh-components/formik-fields/InputTypeInElementField";
+import InputTypeInField from "@/refresh-components/form/InputTypeInField";
+import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
+import InputTypeInElementField from "@/refresh-components/form/InputTypeInElementField";
 import Separator from "@/refresh-components/Separator";
-import {
-  FieldLabel,
-  HorizontalLabelWrapper,
-  VerticalLabelWrapper,
-} from "@/layouts/input-layouts";
+import * as InputLayouts from "@/layouts/input-layouts";
 import { useFormikContext } from "formik";
 import { CONVERSATION_STARTERS } from "@/lib/constants";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/Card";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
-import SwitchField from "@/refresh-components/formik-fields/SwitchField";
-import InputSelectField from "@/refresh-components/formik-fields/InputSelectField";
+import SwitchField from "@/refresh-components/form/SwitchField";
+import InputSelectField from "@/refresh-components/form/InputSelectField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
@@ -654,14 +650,14 @@ export default function AgentEditorPage({
                   <SettingsLayouts.Body>
                     <div className="flex flex-row gap-10 justify-between items-start w-full">
                       <Section>
-                        <VerticalLabelWrapper name="name" label="Name">
+                        <InputLayouts.Vertical name="name" label="Name">
                           <InputTypeInField
                             name="name"
                             placeholder="Name your agent"
                           />
-                        </VerticalLabelWrapper>
+                        </InputLayouts.Vertical>
 
-                        <VerticalLabelWrapper
+                        <InputLayouts.Vertical
                           name="description"
                           label="Description"
                         >
@@ -669,11 +665,11 @@ export default function AgentEditorPage({
                             name="description"
                             placeholder="What does this agent do?"
                           />
-                        </VerticalLabelWrapper>
+                        </InputLayouts.Vertical>
                       </Section>
 
                       <Section className="flex flex-col items-center w-fit gap-1">
-                        <FieldLabel
+                        <InputLayouts.Label
                           name="agent_avatar"
                           label="Agent Avatar"
                           className="w-fit"
@@ -685,7 +681,7 @@ export default function AgentEditorPage({
                     <Separator noPadding />
 
                     <Section>
-                      <VerticalLabelWrapper
+                      <InputLayouts.Vertical
                         name="instructions"
                         label="Instructions"
                         optional
@@ -695,38 +691,38 @@ export default function AgentEditorPage({
                           name="instructions"
                           placeholder="Think step by step and show reasoning for complex problems. Use specific examples. Emphasize action items, and leave blanks for the human to fill in when you have unknown. Use a polite enthusiastic tone."
                         />
-                      </VerticalLabelWrapper>
+                      </InputLayouts.Vertical>
 
-                      <VerticalLabelWrapper
+                      <InputLayouts.Vertical
                         name="conversation_starters"
                         label="Conversation Starters"
                         description="Example messages that help users understand what this agent can do and how to interact with it effectively."
                         optional
                       >
                         <ConversationStarters />
-                      </VerticalLabelWrapper>
+                      </InputLayouts.Vertical>
                     </Section>
 
                     <Separator noPadding />
 
                     <Section>
                       <div className="flex flex-col gap-4">
-                        <FieldLabel
+                        <InputLayouts.Label
                           name="knowledge"
                           label="Knowledge"
                           description="Add specific connectors and documents for this agent should use to inform its responses."
                         />
 
                         <Card>
-                          <HorizontalLabelWrapper
+                          <InputLayouts.Horizontal
                             name="enable_knowledge"
                             label="Enable Knowledge"
                           >
                             <SwitchField name="enable_knowledge" />
-                          </HorizontalLabelWrapper>
+                          </InputLayouts.Horizontal>
 
                           {values.enable_knowledge && (
-                            <HorizontalLabelWrapper
+                            <InputLayouts.Horizontal
                               name="knowledge_source"
                               label="Knowledge Source"
                               description="Choose the sources of truth this agent refers to."
@@ -745,7 +741,7 @@ export default function AgentEditorPage({
                                   </InputSelect.Item>
                                 </InputSelect.Content>
                               </InputSelectField>
-                            </HorizontalLabelWrapper>
+                            </InputLayouts.Horizontal>
                           )}
 
                           {values.enable_knowledge &&
@@ -869,33 +865,33 @@ export default function AgentEditorPage({
                     >
                       <Section className="gap-2">
                         <Card>
-                          <HorizontalLabelWrapper
+                          <InputLayouts.Horizontal
                             name="image_generation"
                             label="Image Generation"
                             description="Generate and manipulate images using AI-powered tools."
                           >
                             <SwitchField name="image_generation" />
-                          </HorizontalLabelWrapper>
+                          </InputLayouts.Horizontal>
                         </Card>
 
                         <Card>
-                          <HorizontalLabelWrapper
+                          <InputLayouts.Horizontal
                             name="web_search"
                             label="Web Search"
                             description="Search the web for real-time information and up-to-date results."
                           >
                             <SwitchField name="web_search" />
-                          </HorizontalLabelWrapper>
+                          </InputLayouts.Horizontal>
                         </Card>
 
                         <Card>
-                          <HorizontalLabelWrapper
+                          <InputLayouts.Horizontal
                             name="code_interpreter"
                             label="Code Interpreter"
                             description="Generate and run code."
                           >
                             <SwitchField name="code_interpreter" />
-                          </HorizontalLabelWrapper>
+                          </InputLayouts.Horizontal>
                         </Card>
 
                         <Separator noPadding className="py-1" />
@@ -958,24 +954,24 @@ export default function AgentEditorPage({
                     >
                       <Section>
                         <Card>
-                          <HorizontalLabelWrapper
+                          <InputLayouts.Horizontal
                             name="current_datetime_aware"
                             label="Current Datetime Aware"
                             description='Include the current date and time explicitly in the agent prompt (formatted as "Thursday Jan 1, 1970 00:01"). To inject it in a specific place in the prompt, use the pattern [[CURRENT_DATETIME]].'
                           >
                             <SwitchField name="current_datetime_aware" />
-                          </HorizontalLabelWrapper>
-                          <HorizontalLabelWrapper
+                          </InputLayouts.Horizontal>
+                          <InputLayouts.Horizontal
                             name="overwrite_system_prompts"
                             label="Overwrite System Prompts"
                             description='Completely replace the base system prompt. This might affect response quality since it will also overwrite useful system instructions (e.g. "You (the LLM) can provide markdown and it will be rendered").'
                           >
                             <SwitchField name="overwrite_system_prompts" />
-                          </HorizontalLabelWrapper>
+                          </InputLayouts.Horizontal>
                         </Card>
 
                         <div className="flex flex-col gap-1">
-                          <VerticalLabelWrapper
+                          <InputLayouts.Vertical
                             name="reminders"
                             label="Reminders"
                           >
@@ -983,7 +979,7 @@ export default function AgentEditorPage({
                               name="reminders"
                               placeholder="Remember, I want you to always format your response as a numbered list."
                             />
-                          </VerticalLabelWrapper>
+                          </InputLayouts.Vertical>
                           <Text text03 secondaryBody>
                             Append a brief reminder to the prompt messages. Use
                             this to remind the agent if you find that it tends

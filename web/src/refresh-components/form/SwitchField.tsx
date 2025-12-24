@@ -20,6 +20,7 @@ export default function SwitchField({
       checked={field.value}
       onCheckedChange={(checked) => {
         helpers.setValue(Boolean(checked));
+        helpers.setTouched(true);
         onCheckedChange?.(checked);
       }}
       {...props}

@@ -5,6 +5,7 @@ import { APIFormFieldState } from "@/refresh-components/form/types";
 import { MODAL_CONTENT_MAP, PROVIDER_TAB_CONFIG } from "../constants";
 import { LLM_PROVIDERS_ADMIN_URL } from "@/app/admin/configuration/llm/constants";
 import { fetchModels } from "@/app/admin/configuration/llm/utils";
+import { parseAzureTargetUri } from "@/lib/azureTargetUri";
 import {
   buildInitialValues,
   getModelOptions,
@@ -210,6 +211,23 @@ export default function LLMConnectionModal({
           ...finalValues,
           model_configurations: modelConfigsToUse,
         };
+
+        // Azure OpenAI: derive required fields from the single Target URI input
+        if (llmDescriptor?.name === "azure" && payload?.target_uri) {
+          try {
+            const { url, apiVersion, deploymentName } = parseAzureTargetUri(
+              payload.target_uri
+            );
+            payload.api_base = url.origin;
+            payload.api_version = apiVersion;
+            if (deploymentName) {
+              payload.deployment_name = deploymentName;
+            }
+          } catch (error) {
+            // Should be prevented by validation, but handle gracefully.
+            console.error("Failed to parse target_uri:", error);
+          }
+        }
 
         setApiStatus("loading");
         setShowApiMessage(true);

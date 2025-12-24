@@ -5,69 +5,83 @@ import Text from "@/refresh-components/texts/Text";
 import { SvgXOctagon } from "@opal/icons";
 import { useField } from "formik";
 
-export interface LabelWrapperProps extends FieldLabelProps {
+export interface VerticalLayoutProps extends FieldLabelLayoutProps {
   name: string;
   children?: React.ReactNode;
 }
 
 /**
- * VerticalLabelWrapper - A layout component for form fields with vertical label arrangement
+ * VerticalInputLayout - A layout component for form fields with vertical label arrangement
  *
- * Use this wrapper when you want the label, input, and error message stacked vertically.
+ * Use this layout when you want the label, input, and error message stacked vertically.
  * Common for most form inputs where the label appears above the input field.
+ *
+ * Exported as `Vertical` for convenient usage.
  *
  * @example
  * ```tsx
- * <VerticalLabelWrapper
+ * import { Vertical } from "@/layouts/input-layouts";
+ *
+ * <Vertical
  *   name="email"
  *   label="Email Address"
  *   description="We'll never share your email"
  *   optional
  * >
  *   <InputTypeIn name="email" type="email" />
- * </VerticalLabelWrapper>
+ * </Vertical>
  * ```
  */
-export function VerticalLabelWrapper({
+function VerticalInputLayout({
   children,
 
   name,
   ...fieldLabelProps
-}: LabelWrapperProps) {
+}: VerticalLayoutProps) {
   return (
     <div className="flex flex-col w-full h-full gap-1">
-      <FieldLabel name={name} {...fieldLabelProps} />
+      <LabelLayout name={name} {...fieldLabelProps} />
       {children}
-      <FieldError name={name} />
+      <ErrorLayout name={name} />
     </div>
   );
 }
 
+export interface HorizontalLayoutProps extends FieldLabelLayoutProps {
+  name: string;
+  children?: React.ReactNode;
+  className?: string;
+}
+
 /**
- * HorizontalLabelWrapper - A layout component for form fields with horizontal label arrangement
+ * HorizontalInputLayout - A layout component for form fields with horizontal label arrangement
  *
- * Use this wrapper when you want the label on the left and the input control on the right.
+ * Use this layout when you want the label on the left and the input control on the right.
  * Commonly used for toggles, switches, and checkboxes where the label and control
  * should be side-by-side.
  *
+ * Exported as `Horizontal` for convenient usage.
+ *
  * @example
  * ```tsx
- * <HorizontalLabelWrapper
+ * import { Horizontal } from "@/layouts/input-layouts";
+ *
+ * <Horizontal
  *   name="notifications"
  *   label="Enable Notifications"
  *   description="Receive updates about your account"
  * >
  *   <Switch name="notifications" />
- * </HorizontalLabelWrapper>
+ * </Horizontal>
  * ```
  */
-export function HorizontalLabelWrapper({
+function HorizontalInputLayout({
   children,
 
   name,
   className,
   ...fieldLabelProps
-}: LabelWrapperProps) {
+}: HorizontalLayoutProps) {
   return (
     <div className="flex flex-col gap-1 h-full w-full">
       <label
@@ -78,19 +92,19 @@ export function HorizontalLabelWrapper({
         )}
       >
         <div className="min-w-[70%]">
-          <FieldLabel
+          <LabelLayout
             className={cn("cursor-pointer", className)}
             {...fieldLabelProps}
           />
         </div>
         {children}
       </label>
-      <FieldError name={name} />
+      <ErrorLayout name={name} />
     </div>
   );
 }
 
-export interface FieldLabelProps {
+export interface FieldLabelLayoutProps {
   name?: string;
   label?: string;
   optional?: boolean;
@@ -99,10 +113,12 @@ export interface FieldLabelProps {
 }
 
 /**
- * FieldLabel - A reusable label component for form fields
+ * LabelLayout - A reusable label component for form fields
  *
  * Renders a semantic label element with optional description and "Optional" indicator.
  * If no `name` prop is provided, renders a `div` instead of a `label` element.
+ *
+ * Exported as `Label` for convenient usage.
  *
  * @param name - The field name to associate the label with (renders as `<label>` if provided)
  * @param label - The main label text
@@ -112,7 +128,9 @@ export interface FieldLabelProps {
  *
  * @example
  * ```tsx
- * <FieldLabel
+ * import { Label } from "@/layouts/input-layouts";
+ *
+ * <Label
  *   name="username"
  *   label="Username"
  *   description="Choose a unique username"
@@ -120,13 +138,13 @@ export interface FieldLabelProps {
  * />
  * ```
  */
-export function FieldLabel({
+function LabelLayout({
   name,
   label,
   optional,
   description,
   className,
-}: FieldLabelProps) {
+}: FieldLabelLayoutProps) {
   const finalClassName = cn("flex flex-col w-full", className);
   const content = label ? (
     <>
@@ -157,29 +175,33 @@ export function FieldLabel({
   );
 }
 
-interface FieldErrorProps {
+interface FieldErrorLayoutProps {
   name: string;
 }
 
 /**
- * FieldError - Displays Formik field validation errors
+ * ErrorLayout - Displays Formik field validation errors
  *
  * Automatically shows error messages from Formik's validation state.
  * Only displays when the field has been touched and has an error.
+ *
+ * Exported as `Error` for convenient usage.
  *
  * @param name - The Formik field name to display errors for
  *
  * @example
  * ```tsx
+ * import { Error } from "@/layouts/input-layouts";
+ *
  * <InputTypeIn name="email" />
- * <FieldError name="email" />
+ * <Error name="email" />
  * ```
  *
  * @remarks
  * This component uses Formik's `useField` hook internally and requires
  * the component to be rendered within a Formik context.
  */
-function FieldError({ name }: FieldErrorProps) {
+function ErrorLayout({ name }: FieldErrorLayoutProps) {
   const [, meta] = useField(name);
   const hasError = meta.touched && meta.error;
 
@@ -194,3 +216,10 @@ function FieldError({ name }: FieldErrorProps) {
     </div>
   );
 }
+
+export {
+  VerticalInputLayout as Vertical,
+  HorizontalInputLayout as Horizontal,
+  LabelLayout as Label,
+  ErrorLayout as Error,
+};
