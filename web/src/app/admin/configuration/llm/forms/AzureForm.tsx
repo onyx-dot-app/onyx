@@ -1,6 +1,6 @@
 import { Form, Formik } from "formik";
 import { TextFormField } from "@/components/Field";
-import { LLMProviderView } from "../interfaces";
+import { LLMProviderFormProps, LLMProviderView } from "../interfaces";
 import * as Yup from "yup";
 import {
   ProviderFormEntrypointWrapper,
@@ -35,11 +35,6 @@ interface AzureFormValues extends BaseLLMFormValues {
   deployment_name?: string;
 }
 
-interface AzureFormProps {
-  existingLlmProvider?: LLMProviderView;
-  shouldMarkAsDefault?: boolean;
-}
-
 // Build the target_uri from existing provider data
 const buildTargetUri = (existingLlmProvider?: LLMProviderView): string => {
   if (!existingLlmProvider?.api_base || !existingLlmProvider?.api_version) {
@@ -54,7 +49,7 @@ const buildTargetUri = (existingLlmProvider?: LLMProviderView): string => {
 export function AzureForm({
   existingLlmProvider,
   shouldMarkAsDefault,
-}: AzureFormProps) {
+}: LLMProviderFormProps) {
   return (
     <ProviderFormEntrypointWrapper
       providerName={AZURE_DISPLAY_NAME}

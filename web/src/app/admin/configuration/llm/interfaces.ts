@@ -128,3 +128,8 @@ export interface BedrockModelResponse {
   max_input_tokens: number;
   supports_image_input: boolean;
 }
+
+export interface LLMProviderFormProps {
+  existingLlmProvider?: LLMProviderView;
+  shouldMarkAsDefault?: boolean;
+}

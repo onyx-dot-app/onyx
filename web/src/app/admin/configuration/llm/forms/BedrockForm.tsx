@@ -6,7 +6,7 @@ import {
   Label,
   SubLabel,
 } from "@/components/Field";
-import { LLMProviderView, ModelConfiguration } from "../interfaces";
+import { LLMProviderFormProps, ModelConfiguration } from "../interfaces";
 import * as Yup from "yup";
 import {
   ProviderFormEntrypointWrapper,
@@ -70,15 +70,10 @@ interface BedrockFormValues extends BaseLLMFormValues {
   };
 }
 
-interface BedrockFormProps {
-  existingLlmProvider?: LLMProviderView;
-  shouldMarkAsDefault?: boolean;
-}
-
 export function BedrockForm({
   existingLlmProvider,
   shouldMarkAsDefault,
-}: BedrockFormProps) {
+}: LLMProviderFormProps) {
   const [fetchedModels, setFetchedModels] = useState<ModelConfiguration[]>([]);
 
   return (

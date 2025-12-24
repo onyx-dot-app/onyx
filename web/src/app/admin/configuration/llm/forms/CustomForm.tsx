@@ -7,7 +7,7 @@ import {
   Formik,
   ErrorMessage,
 } from "formik";
-import { LLMProviderView } from "../interfaces";
+import { LLMProviderFormProps, LLMProviderView } from "../interfaces";
 import * as Yup from "yup";
 import { ProviderFormEntrypointWrapper } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";
@@ -28,11 +28,6 @@ import { SvgX } from "@opal/icons";
 
 export const CUSTOM_PROVIDER_NAME = "custom";
 
-interface CustomFormProps {
-  existingLlmProvider?: LLMProviderView;
-  shouldMarkAsDefault?: boolean;
-}
-
 function customConfigProcessing(customConfigsList: [string, string][]) {
   const customConfig: { [key: string]: string } = {};
   customConfigsList.forEach(([key, value]) => {
@@ -44,7 +39,7 @@ function customConfigProcessing(customConfigsList: [string, string][]) {
 export function CustomForm({
   existingLlmProvider,
   shouldMarkAsDefault,
-}: CustomFormProps) {
+}: LLMProviderFormProps) {
   return (
     <ProviderFormEntrypointWrapper
       providerName="Custom LLM Provider"

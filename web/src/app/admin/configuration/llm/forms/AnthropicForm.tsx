@@ -1,5 +1,5 @@
 import { Form, Formik } from "formik";
-import { LLMProviderView } from "../interfaces";
+import { LLMProviderFormProps } from "../interfaces";
 import * as Yup from "yup";
 import {
   ProviderFormEntrypointWrapper,
@@ -20,15 +20,10 @@ import { DisplayModels } from "./components/DisplayModels";
 export const ANTHROPIC_PROVIDER_NAME = "anthropic";
 const DEFAULT_DEFAULT_MODEL_NAME = "claude-sonnet-4-5";
 
-interface AnthropicFormProps {
-  existingLlmProvider?: LLMProviderView;
-  shouldMarkAsDefault?: boolean;
-}
-
 export function AnthropicForm({
   existingLlmProvider,
   shouldMarkAsDefault,
-}: AnthropicFormProps) {
+}: LLMProviderFormProps) {
   return (
     <ProviderFormEntrypointWrapper
       providerName="Anthropic"

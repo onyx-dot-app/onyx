@@ -6,7 +6,7 @@ import { Callout } from "@/components/ui/callout";
 import Text from "@/refresh-components/texts/Text";
 import Title from "@/components/ui/title";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { LLMProviderView, WellKnownLLMProviderDescriptor } from "./interfaces";
+import { LLMProviderView } from "./interfaces";
 import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import { OpenAIForm } from "./forms/OpenAIForm";
 import { AnthropicForm } from "./forms/AnthropicForm";
