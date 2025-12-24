@@ -6,7 +6,7 @@ import Separator from "@/refresh-components/Separator";
 import { Callout } from "@/components/ui/callout";
 import Text from "@/refresh-components/texts/Text";
 import Modal from "@/refresh-components/Modal";
-import SvgKey from "@/icons/key";
+import { SvgKey } from "@opal/icons";
 import {
   OAuthConfig,
   OAuthConfigCreate,
