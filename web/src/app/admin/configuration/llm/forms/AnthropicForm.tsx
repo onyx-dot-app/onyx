@@ -12,6 +12,7 @@ import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
   submitLLMProvider,
+  LLM_FORM_CLASS_NAME,
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
@@ -52,7 +53,9 @@ export function AnthropicForm({
           ),
           api_key: existingLlmProvider?.api_key ?? "",
           api_base: existingLlmProvider?.api_base ?? "",
-          default_model_name: DEFAULT_DEFAULT_MODEL_NAME,
+          default_model_name:
+            existingLlmProvider?.default_model_name ??
+            DEFAULT_DEFAULT_MODEL_NAME,
         };
 
         const validationSchema = buildDefaultValidationSchema().shape({
@@ -84,7 +87,7 @@ export function AnthropicForm({
             >
               {(formikProps) => {
                 return (
-                  <Form className="gap-y-4 items-stretch mt-6">
+                  <Form className={LLM_FORM_CLASS_NAME}>
                     <DisplayNameField disabled={!!existingLlmProvider} />
 
                     <ApiKeyField />

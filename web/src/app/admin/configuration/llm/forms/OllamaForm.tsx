@@ -1,5 +1,4 @@
-import Separator from "@/refresh-components/Separator";
-import { Form, Formik } from "formik";
+import { Form, Formik, FormikProps } from "formik";
 import { TextFormField } from "@/components/Field";
 import {
   LLMProviderView,
@@ -18,6 +17,7 @@ import {
   buildDefaultValidationSchema,
   submitLLMProvider,
   BaseLLMFormValues,
+  LLM_FORM_CLASS_NAME,
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
@@ -39,17 +39,120 @@ interface OllamaFormProps {
   shouldMarkAsDefault?: boolean;
 }
 
-export function OllamaForm({
+interface OllamaFormContentProps {
+  formikProps: FormikProps<OllamaFormValues>;
+  existingLlmProvider?: LLMProviderView;
+  isTesting: boolean;
+  testError: string;
+  mutate: () => void;
+  onClose: () => void;
+}
+
+function OllamaFormContent({
+  formikProps,
   existingLlmProvider,
-  shouldMarkAsDefault,
-}: OllamaFormProps) {
+  isTesting,
+  testError,
+  mutate,
+  onClose,
+}: OllamaFormContentProps) {
   const [availableModels, setAvailableModels] = useState<ModelConfiguration[]>(
     []
   );
   const [isLoadingModels, setIsLoadingModels] = useState(true);
 
-  console.log("availableModels", availableModels);
+  useEffect(() => {
+    if (formikProps.values.api_base) {
+      setIsLoadingModels(true);
+      fetch(OLLAMA_MODELS_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          api_base: formikProps.values.api_base,
+        }),
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            let errorMessage = "Failed to fetch models";
+            try {
+              const errorData = await response.json();
+              errorMessage = errorData.detail || errorMessage;
+            } catch {
+              // ignore JSON parsing errors
+            }
+            throw new Error(errorMessage);
+          }
+          return response.json();
+        })
+        .then((data: OllamaModelResponse[]) => {
+          setAvailableModels(
+            data.map((model) => ({
+              name: model.name,
+              display_name: model.display_name,
+              is_visible: true,
+              max_input_tokens: model.max_input_tokens,
+              supports_image_input: model.supports_image_input,
+            }))
+          );
+          setIsLoadingModels(false);
+        })
+        .catch((error) => {
+          console.error("Error fetching models:", error);
+          setAvailableModels([]);
+          setIsLoadingModels(false);
+        });
+    }
+  }, [formikProps.values.api_base]);
 
+  return (
+    <Form className={LLM_FORM_CLASS_NAME}>
+      <DisplayNameField disabled={!!existingLlmProvider} />
+
+      <TextFormField
+        name="api_base"
+        label="API Base URL"
+        subtext="The base URL for your Ollama instance (e.g., http://127.0.0.1:11434)"
+        placeholder={DEFAULT_API_BASE}
+      />
+
+      <TextFormField
+        name="custom_config.OLLAMA_API_KEY"
+        label="API Key (Optional)"
+        subtext="Optional API key for Ollama Cloud (https://ollama.com). Leave blank for local instances."
+        placeholder=""
+        type="password"
+        showPasswordToggle
+      />
+
+      <DisplayModels
+        modelConfigurations={availableModels}
+        formikProps={formikProps}
+        noModelConfigurationsMessage="No models found. Please provide a valid API base URL."
+        isLoading={isLoadingModels}
+      />
+
+      <AdvancedOptions
+        currentModelConfigurations={availableModels}
+        formikProps={formikProps}
+      />
+
+      <FormActionButtons
+        isTesting={isTesting}
+        testError={testError}
+        existingLlmProvider={existingLlmProvider}
+        mutate={mutate}
+        onClose={onClose}
+      />
+    </Form>
+  );
+}
+
+export function OllamaForm({
+  existingLlmProvider,
+  shouldMarkAsDefault,
+}: OllamaFormProps) {
   return (
     <ProviderFormEntrypointWrapper
       providerName="Ollama"
@@ -121,80 +224,16 @@ export function OllamaForm({
                 });
               }}
             >
-              {(formikProps) => {
-                useEffect(() => {
-                  if (formikProps.values.api_base) {
-                    fetch(OLLAMA_MODELS_API_URL, {
-                      method: "POST",
-                      headers: {
-                        "Content-Type": "application/json",
-                      },
-                      body: JSON.stringify({
-                        api_base: formikProps.values.api_base,
-                      }),
-                    })
-                      .then((response) => response.json())
-                      .then((data: OllamaModelResponse[]) => {
-                        setAvailableModels(
-                          data.map((model) => ({
-                            name: model.name,
-                            display_name: model.display_name,
-                            is_visible: true,
-                            max_input_tokens: model.max_input_tokens,
-                            supports_image_input: model.supports_image_input,
-                          }))
-                        );
-                        setIsLoadingModels(false);
-                      })
-                      .catch((error) => {
-                        console.error("Error fetching models:", error);
-                        setIsLoadingModels(false);
-                      });
-                  }
-                }, [formikProps.values.api_base]);
-
-                return (
-                  <Form className="gap-y-4 items-stretch mt-6">
-                    <DisplayNameField disabled={!!existingLlmProvider} />
-
-                    <TextFormField
-                      name="api_base"
-                      label="API Base URL"
-                      subtext="The base URL for your Ollama instance (e.g., http://127.0.0.1:11434)"
-                      placeholder={DEFAULT_API_BASE}
-                    />
-
-                    <TextFormField
-                      name="custom_config.OLLAMA_API_KEY"
-                      label="API Key (Optional)"
-                      subtext="Optional API key for Ollama Cloud (https://ollama.com). Leave blank for local instances."
-                      placeholder=""
-                      type="password"
-                      showPasswordToggle
-                    />
-
-                    <DisplayModels
-                      modelConfigurations={availableModels}
-                      formikProps={formikProps}
-                      noModelConfigurationsMessage="No models found. Please provide a valid API base URL."
-                      isLoading={isLoadingModels}
-                    />
-
-                    <AdvancedOptions
-                      currentModelConfigurations={availableModels}
-                      formikProps={formikProps}
-                    />
-
-                    <FormActionButtons
-                      isTesting={isTesting}
-                      testError={testError}
-                      existingLlmProvider={existingLlmProvider}
-                      mutate={mutate}
-                      onClose={onClose}
-                    />
-                  </Form>
-                );
-              }}
+              {(formikProps) => (
+                <OllamaFormContent
+                  formikProps={formikProps}
+                  existingLlmProvider={existingLlmProvider}
+                  isTesting={isTesting}
+                  testError={testError}
+                  mutate={mutate}
+                  onClose={onClose}
+                />
+              )}
             </Formik>
           </>
         );
