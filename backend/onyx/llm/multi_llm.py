@@ -251,10 +251,12 @@ class LitellmLLM(LLM):
         # NOTE: OpenAI Responses API is disabled for parallel tool calls because LiteLLM's transformation layer
         # doesn't properly pass parallel_tool_calls to the API, causing the model to
         # always return sequential tool calls. For this reason parallel tool calls won't work with OpenAI models
-        if (
+
+        use_responses_api = (
             is_true_openai_model(self.config.model_provider, self.config.model_name)
             or self.config.model_provider == AZURE_PROVIDER_NAME
-        ):
+        )
+        if use_responses_api:
             model_provider = f"{self.config.model_provider}/responses"
         else:
             model_provider = self.config.model_provider
@@ -340,8 +342,13 @@ class LitellmLLM(LLM):
                 # OpenAI and other providers use reasoning_effort
                 # (litellm maps this to thinking_level for Gemini 3 models)
                 **(
-                    {"reasoning_effort": OPENAI_REASONING_EFFORT[reasoning_effort]}
-                    if is_reasoning and "claude" not in self.config.model_name.lower()
+                    {
+                        "reasoning": {
+                            "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
+                            "summary": "auto",
+                        }
+                    }
+                    if is_reasoning and use_responses_api
                     else {}
                 ),
                 **(

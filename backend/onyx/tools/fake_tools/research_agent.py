@@ -34,7 +34,7 @@ from onyx.prompts.deep_research.dr_tool_prompts import (
     OPEN_URLS_TOOL_DESCRIPTION_REASONING,
 )
 from onyx.prompts.deep_research.dr_tool_prompts import WEB_SEARCH_TOOL_DESCRIPTION
-from onyx.prompts.deep_research.research_agent import OPEN_URL_REMINDER_REASEARCH_AGENT
+from onyx.prompts.deep_research.research_agent import OPEN_URL_REMINDER_RESEARCH_AGENT
 from onyx.prompts.deep_research.research_agent import RESEARCH_AGENT_PROMPT
 from onyx.prompts.deep_research.research_agent import RESEARCH_AGENT_PROMPT_REASONING
 from onyx.prompts.deep_research.research_agent import RESEARCH_REPORT_PROMPT
@@ -288,7 +288,7 @@ def run_research_agent_call(
 
                 if just_ran_web_search:
                     reminder_message = ChatMessageSimple(
-                        message=OPEN_URL_REMINDER_REASEARCH_AGENT,
+                        message=OPEN_URL_REMINDER_RESEARCH_AGENT,
                         token_count=100,
                         message_type=MessageType.USER,
                     )

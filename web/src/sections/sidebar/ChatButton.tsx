@@ -52,8 +52,6 @@ import {
 } from "@opal/icons";
 import useOnMount from "@/hooks/useOnMount";
 
-// (no local constants; use shared constants/imports)
-
 export interface PopoverSearchInputProps {
   setShowMoveOptions: (show: boolean) => void;
   onSearch: (term: string) => void;
@@ -103,7 +101,7 @@ export function PopoverSearchInput({
   );
 }
 
-interface ChatButtonProps {
+export interface ChatButtonProps {
   chatSession: ChatSession;
   project?: Project;
   draggable?: boolean;

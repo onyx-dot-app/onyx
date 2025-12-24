@@ -56,10 +56,10 @@ NEVER output normal response tokens, you must only call tools.
 You have currently used {{current_cycle_count}} of {{max_cycles}} max research cycles. You do not need to use all cycles.
 
 ## {RESEARCH_AGENT_TOOL_NAME}
-The research task provided to the {RESEARCH_AGENT_TOOL_NAME} should be reasonably high level rather with a clear direction for investigation. \
+The research task provided to the {RESEARCH_AGENT_TOOL_NAME} should be reasonably high level with a clear direction for investigation. \
 It should not be a single short query, rather it should be 1 or 2 descriptive sentences that outline the direction of the investigation.
 
-CRITICAL - the {RESEARCH_AGENT_TOOL_NAME} only received the task and has no additional context about the user's query, research plan, or message history. \
+CRITICAL - the {RESEARCH_AGENT_TOOL_NAME} only receives the task and has no additional context about the user's query, research plan, or message history. \
 You absolutely must provide all of the context needed to complete the task in the argument to the {RESEARCH_AGENT_TOOL_NAME}.
 
 You should call the {RESEARCH_AGENT_TOOL_NAME} MANY times before completing with the {GENERATE_REPORT_TOOL_NAME} tool.
@@ -138,10 +138,10 @@ NEVER output normal response tokens, you must only call tools.
 You have currently used {{current_cycle_count}} of {{max_cycles}} max research cycles. You do not need to use all cycles.
 
 ## {RESEARCH_AGENT_TOOL_NAME}
-The research task provided to the {RESEARCH_AGENT_TOOL_NAME} should be reasonably high level rather with a clear direction for investigation. \
+The research task provided to the {RESEARCH_AGENT_TOOL_NAME} should be reasonably high level with a clear direction for investigation. \
 It should not be a single short query, rather it should be 1 or 2 descriptive sentences that outline the direction of the investigation.
 
-CRITICAL - the {RESEARCH_AGENT_TOOL_NAME} only received the task and has no additional context about the user's query, research plan, or message history. \
+CRITICAL - the {RESEARCH_AGENT_TOOL_NAME} only receives the task and has no additional context about the user's query, research plan, or message history. \
 You absolutely must provide all of the context needed to complete the task in the argument to the {RESEARCH_AGENT_TOOL_NAME}.
 
 You should call the {RESEARCH_AGENT_TOOL_NAME} MANY times before completing with the {GENERATE_REPORT_TOOL_NAME} tool.

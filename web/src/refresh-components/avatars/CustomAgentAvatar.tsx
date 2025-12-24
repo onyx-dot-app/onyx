@@ -18,10 +18,10 @@ interface IconConfig {
   className?: string;
 }
 
-const iconMap: Record<string, IconConfig> = {
-  search: { Icon: SvgSearch, className: "stroke-green-500" },
-  check: { Icon: SvgCheck, className: "stroke-green-500" },
-  code: { Icon: SvgCode, className: "stroke-orange-500" },
+const avatarIconMap: Record<string, IconConfig> = {
+  search: { Icon: SvgSearch, className: "stroke-theme-green-05" },
+  check: { Icon: SvgCheck, className: "stroke-theme-green-05" },
+  code: { Icon: SvgCode, className: "stroke-theme-orange-04" },
 };
 
 interface SvgOctagonWrapperProps {
@@ -72,7 +72,7 @@ export default function CustomAgentAvatar({
     );
   }
 
-  const iconConfig = iconName && iconMap[iconName];
+  const iconConfig = iconName && avatarIconMap[iconName];
   if (iconConfig) {
     const { Icon, className } = iconConfig;
     return (

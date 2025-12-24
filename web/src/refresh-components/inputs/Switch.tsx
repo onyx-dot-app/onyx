@@ -12,6 +12,7 @@ export interface SwitchProps
   defaultChecked?: boolean;
   onCheckedChange?: (checked: boolean) => void;
 }
+
 const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
   (
     {

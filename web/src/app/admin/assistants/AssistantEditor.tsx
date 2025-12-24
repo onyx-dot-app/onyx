@@ -57,7 +57,7 @@ import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
 import StarterMessagesList from "@/app/admin/assistants/StarterMessageList";
 import UnlabeledSwitchField from "@/refresh-components/formik-fields/UnlabeledSwitchField";
 import CustomAgentAvatar from "@/refresh-components/avatars/CustomAgentAvatar";
-import { BackButton } from "@/components/BackButton";
+import BackButton from "@/refresh-components/buttons/BackButton";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { MinimalUserSnapshot } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";

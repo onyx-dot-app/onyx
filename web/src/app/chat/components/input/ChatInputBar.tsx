@@ -629,8 +629,7 @@ const ChatInputBar = React.memo(
                       disabled={disabled}
                     />
                   )}
-                  {/* Temporarily disabled - to re-enable, change false to showDeepResearch */}
-                  {false && showDeepResearch && (
+                  {showDeepResearch && (
                     <SelectButton
                       leftIcon={SvgHourglass}
                       onClick={toggleDeepResearch}

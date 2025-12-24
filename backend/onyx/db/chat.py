@@ -626,7 +626,7 @@ def reserve_message_id(
         chat_session_id=chat_session_id,
         parent_message_id=parent_message,
         latest_child_message_id=None,
-        message="Response was termination prior to completion, try regenerating.",
+        message="Response was terminated prior to completion, try regenerating.",
         token_count=15,
         message_type=message_type,
     )
