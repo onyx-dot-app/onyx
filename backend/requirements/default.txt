@@ -351,6 +351,7 @@ grpcio==1.67.1
     #   googleapis-common-protos
     #   grpc-google-iam-v1
     #   grpcio-status
+    #   litellm
 grpcio-status==1.67.1
     # via google-api-core
 h11==0.16.0
@@ -485,7 +486,7 @@ langsmith==0.3.45
     #   langchain-core
 lazy-imports==1.0.1
     # via onyx
-litellm==1.79.0
+litellm==1.80.8
     # via onyx
 locket==1.0.0
     # via
@@ -593,7 +594,7 @@ office365-rest-python-client==2.5.9
     # via onyx
 onnxruntime==1.20.1
     # via magika
-openai==2.6.1
+openai==2.14.0
     # via
     #   exa-py
     #   langfuse
