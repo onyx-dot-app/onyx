@@ -126,24 +126,3 @@ export interface BedrockModelResponse {
   max_input_tokens: number;
   supports_image_input: boolean;
 }
-
-export interface DynamicProviderConfig<
-  TApiResponse = any,
-  TProcessedResponse = ModelConfiguration,
-> {
-  endpoint: string;
-  isDisabled: (values: any) => boolean;
-  disabledReason: string;
-  buildRequestBody: (args: {
-    values: any;
-    existingLlmProvider?: LLMProviderView;
-  }) => Record<string, any>;
-  processResponse: (
-    data: TApiResponse,
-    llmProviderDescriptor: WellKnownLLMProviderDescriptor
-  ) => TProcessedResponse[];
-  getModelNames: (data: TApiResponse) => string[];
-  successMessage: (count: number) => string;
-  // If true, uses models from the descriptor instead of making an API call
-  isStatic?: boolean;
-}

@@ -4,12 +4,14 @@ import { Form, Formik, FormikProps, useFormikContext } from "formik";
 import { APIFormFieldState } from "@/refresh-components/form/types";
 import { MODAL_CONTENT_MAP, PROVIDER_TAB_CONFIG } from "../constants";
 import { LLM_PROVIDERS_ADMIN_URL } from "@/app/admin/configuration/llm/constants";
-import { fetchModels } from "@/app/admin/configuration/llm/utils";
 import { parseAzureTargetUri } from "@/lib/azureTargetUri";
+import {
+  canProviderFetchModels,
+  fetchModels,
+} from "@/app/admin/configuration/llm/utils";
 import {
   buildInitialValues,
   getModelOptions,
-  canProviderFetchModels,
   testApiKeyHelper,
   testCustomProvider,
 } from "./llmConnectionHelpers";
@@ -81,7 +83,7 @@ export default function LLMConnectionModal({
   }, [fetchedModelConfigurations, isFetchingModels]);
 
   const canFetchModels = useMemo(
-    () => canProviderFetchModels(llmDescriptor),
+    () => canProviderFetchModels(llmDescriptor?.name),
     [llmDescriptor]
   );
 
@@ -299,26 +301,15 @@ export default function LLMConnectionModal({
         const handleFetchModels = async () => {
           if (!llmDescriptor) return;
 
-          await fetchModels(
-            llmDescriptor,
-            undefined, // existingLlmProvider
-            formikProps.values,
-            (field: string, value: any) => {
-              // Custom setFieldValue to handle our state
-              if (field === "fetched_model_configurations") {
-                setFetchedModelConfigurations(value);
-              } else if (field === "default_model_name") {
-                formikProps.setFieldValue("default_model_name", value);
-              } else if (field === "_modelListUpdated") {
-                // Ignore this field as it's just for forcing re-renders
-                return;
-              } else {
-                formikProps.setFieldValue(field, value);
-              }
-            },
-            setIsFetchingModels,
-            setFetchModelsError
+          const { models, error } = await fetchModels(
+            llmDescriptor.name,
+            formikProps.values
           );
+          if (error) {
+            setFetchModelsError(error);
+          } else {
+            setFetchedModelConfigurations(models);
+          }
         };
 
         return (
