@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import Settings from "@/layouts/settings-pages";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Button from "@/refresh-components/buttons/Button";
 import { FullPersona } from "@/app/admin/assistants/interfaces";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
@@ -625,8 +625,8 @@ export default function AgentEditorPage({
               </userFilesModal.Provider>
 
               <Form className="h-full w-full">
-                <Settings.Root>
-                  <Settings.Header
+                <SettingsLayouts.Root>
+                  <SettingsLayouts.Header
                     icon={SvgOnyxOctagon}
                     title={existingAgent ? "Edit Agent" : "Create Agent"}
                     rightChildren={
@@ -651,7 +651,7 @@ export default function AgentEditorPage({
                   />
 
                   {/* Agent Form Content */}
-                  <Settings.Body>
+                  <SettingsLayouts.Body>
                     <div className="flex flex-row gap-10 justify-between items-start w-full">
                       <Section>
                         <VerticalLabelWrapper name="name" label="Name">
@@ -994,8 +994,8 @@ export default function AgentEditorPage({
                         </div>
                       </Section>
                     </SimpleCollapsible>
-                  </Settings.Body>
-                </Settings.Root>
+                  </SettingsLayouts.Body>
+                </SettingsLayouts.Root>
               </Form>
             </>
           )}
