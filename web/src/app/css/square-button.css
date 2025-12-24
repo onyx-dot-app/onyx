@@ -6,7 +6,6 @@
   justify-content: center;
   aspect-ratio: 1 / 1;
   border-radius: var(--radius-08);
-  background-color: var(--background-tint-00);
   padding: 0.5rem;
   background-color: var(--background-tint-01);
 }

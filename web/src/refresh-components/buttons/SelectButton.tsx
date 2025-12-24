@@ -118,8 +118,6 @@ export default function SelectButton({
   const state = disabled ? "disabled" : "enabled";
 
   // Refs and state for measuring foldedContent width
-  // const measureRef = useRef<HTMLDivElement>(null);
-  // const [foldedContentWidth, setFoldedContentWidth] = useState<number>(0);
   const [hovered, setHovered] = useState<boolean>(false);
 
   // Memoize class name invocations

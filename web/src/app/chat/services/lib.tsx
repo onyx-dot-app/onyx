@@ -119,7 +119,7 @@ export interface SendMessageParams {
   alternateAssistantId?: number;
   signal?: AbortSignal;
   currentMessageFiles?: FileDescriptor[];
-  useAgentSearch?: boolean;
+  deepResearch?: boolean;
   enabledToolIds?: number[];
   forcedToolIds?: number[];
 }
@@ -142,7 +142,7 @@ export async function* sendMessage({
   useExistingUserMessage,
   alternateAssistantId,
   signal,
-  useAgentSearch,
+  deepResearch,
   enabledToolIds,
   forcedToolIds,
 }: SendMessageParams): AsyncGenerator<PacketType, void, unknown> {
@@ -183,7 +183,7 @@ export async function* sendMessage({
           }
         : null,
     use_existing_user_message: useExistingUserMessage,
-    use_agentic_search: useAgentSearch ?? false,
+    deep_research: deepResearch ?? false,
     allowed_tool_ids: enabledToolIds,
     forced_tool_ids: forcedToolIds,
   };

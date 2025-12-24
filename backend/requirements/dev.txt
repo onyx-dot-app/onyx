@@ -178,6 +178,7 @@ grpcio==1.67.1
     #   googleapis-common-protos
     #   grpc-google-iam-v1
     #   grpcio-status
+    #   litellm
 grpcio-status==1.67.1
     # via google-api-core
 h11==0.16.0
@@ -241,7 +242,7 @@ jupyter-core==5.9.1
     #   jupyter-client
 kiwisolver==1.4.9
     # via matplotlib
-litellm==1.79.0
+litellm==1.80.11
     # via onyx
 manygo==0.2.0
     # via onyx
@@ -278,7 +279,7 @@ numpy==1.26.4
     #   voyageai
 onyx-devtools==0.2.0
     # via onyx
-openai==2.6.1
+openai==2.14.0
     # via
     #   litellm
     #   onyx

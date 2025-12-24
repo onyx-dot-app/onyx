@@ -246,6 +246,7 @@ def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
             stream=False,
             temperature=0.0,  # Default value from GEN_AI_TEMPERATURE
             timeout=30,
+            max_tokens=None,
             parallel_tool_calls=True,
             mock_response=MOCK_LLM_RESPONSE,
         )
@@ -398,9 +399,10 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
             stream=True,
             temperature=0.0,  # Default value from GEN_AI_TEMPERATURE
             timeout=30,
+            max_tokens=None,
+            stream_options={"include_usage": True},
             parallel_tool_calls=True,
             mock_response=MOCK_LLM_RESPONSE,
-            stream_options={"include_usage": True},
         )
 
 

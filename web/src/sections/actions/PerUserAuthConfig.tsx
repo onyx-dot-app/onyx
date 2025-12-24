@@ -59,8 +59,9 @@ export function PerUserAuthConfig({
     updateRequiredFields(headersObject);
   };
 
-  // Extract required fields from placeholders in header values
-  const updateRequiredFields = (headers: Record<string, string>) => {
+  const computeRequiredFieldsFromHeaders = (
+    headers: Record<string, string>
+  ): string[] => {
     const placeholderRegex = /\{([^}]+)\}/g;
     const requiredFields = new Set<string>();
 
@@ -76,8 +77,13 @@ export function PerUserAuthConfig({
         });
       }
     });
+    return Array.from(requiredFields);
+  };
 
-    setFieldValue("auth_template.required_fields", Array.from(requiredFields));
+  // Extract required fields from placeholders in header values
+  const updateRequiredFields = (headers: Record<string, string>) => {
+    const requiredFields = computeRequiredFieldsFromHeaders(headers);
+    setFieldValue("auth_template.required_fields", requiredFields);
   };
 
   // Update user credential value
@@ -89,7 +95,9 @@ export function PerUserAuthConfig({
     });
   };
 
-  const requiredFields: string[] = values.auth_template?.required_fields || [];
+  const requiredFields: string[] = values.auth_template?.required_fields?.length
+    ? values.auth_template.required_fields
+    : computeRequiredFieldsFromHeaders(values.auth_template?.headers || {});
   const userCredentials = values.user_credentials || {};
 
   return (
@@ -111,11 +119,11 @@ export function PerUserAuthConfig({
         <FormField.Description>
           Format headers for each user to fill in their individual credentials.
           Use placeholders like{" "}
-          <Text text03 secondaryMono className="inline">
+          <Text text03 secondaryMono className="inline" as="span">
             {"{api_key}"}
           </Text>{" "}
           or{" "}
-          <Text text03 secondaryMono className="inline">
+          <Text text03 secondaryMono className="inline" as="span">
             {"{user_email}"}
           </Text>
           . Users will be prompted to provide values for placeholders (except

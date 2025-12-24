@@ -89,6 +89,30 @@ _AUTH_ERROR_UNAUTHORIZED = "unauthorized"
 _AUTH_ERROR_INVALID_API_KEY = "invalid api key"
 _AUTH_ERROR_PERMISSION = "permission"
 
+# Thread-local storage for event loops
+# This prevents creating thousands of event loops during batch processing,
+# which was causing severe memory leaks with API-based embedding providers
+_thread_local = threading.local()
+
+
+def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
+    """Get or create a thread-local event loop for API embedding calls.
+
+    This prevents creating a new event loop for every batch during embedding,
+    which was causing memory leaks. Instead, each thread reuses the same loop.
+
+    Returns:
+        asyncio.AbstractEventLoop: The thread-local event loop
+    """
+    if (
+        not hasattr(_thread_local, "loop")
+        or _thread_local.loop is None
+        or _thread_local.loop.is_closed()
+    ):
+        _thread_local.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(_thread_local.loop)
+    return _thread_local.loop
+
 
 WARM_UP_STRINGS = [
     "Onyx is amazing!",
@@ -302,11 +326,6 @@ class CloudEmbedding:
             auto_truncate=True,
         )
 
-        batches = [
-            texts[i : i + VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE]
-            for i in range(0, len(texts), VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE)
-        ]
-
         async def _embed_batch(batch_texts: list[str]) -> list[Embedding]:
             content_requests: list[Any] = [
                 genai_types.Content(parts=[genai_types.Part(text=text)])
@@ -330,15 +349,44 @@ class CloudEmbedding:
                 embeddings.append(embedding.values)
             return embeddings
 
+        # Process VertexAI batches sequentially to avoid additional intra-task fanout.
+        # The higher-level thread pool already provides concurrency; running these
+        # requests in parallel here was causing excessive memory usage.
+        batches = [
+            texts[i : i + VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE]
+            for i in range(0, len(texts), VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE)
+        ]
+        all_embeddings: list[Embedding] = []
+
+        logger.debug(
+            f"VertexAI embedding: processing {len(texts)} texts in {len(batches)} batches "
+            f"(batch_size={VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE})"
+        )
+
         try:
-            results = await asyncio.gather(*[_embed_batch(batch) for batch in batches])
-            return [
-                embedding
-                for batch_embeddings in results
-                for embedding in batch_embeddings
-            ]
+            for batch_idx, batch in enumerate(batches):
+                batch_embeddings = await _embed_batch(batch)
+                all_embeddings.extend(batch_embeddings)
+
+                # Log progress for large batches to track memory usage patterns
+                if batch_idx % 10 == 0 and batch_idx > 0:
+                    logger.debug(
+                        f"VertexAI embedding progress: batch {batch_idx}/{len(batches)}, "
+                        f"total_embeddings={len(all_embeddings)}"
+                    )
+
+            logger.debug(
+                f"VertexAI embedding completed: {len(all_embeddings)} embeddings generated"
+            )
+            return all_embeddings
         finally:
-            await client.aio.aclose()
+            # Ensure client is closed with a timeout to prevent hanging on stuck sessions
+            try:
+                await asyncio.wait_for(client.aio.aclose(), timeout=5.0)
+            except asyncio.TimeoutError:
+                logger.warning("Google GenAI client aclose() timed out after 5s")
+            except Exception as e:
+                logger.warning(f"Error closing Google GenAI client: {e}")
 
     async def _embed_litellm_proxy(
         self, texts: list[str], model_name: str | None
@@ -776,16 +824,14 @@ class EmbeddingModel:
             # Route between direct API calls and model server calls
             if self.provider_type is not None:
                 # For API providers, make direct API call
-                loop = asyncio.new_event_loop()
-                try:
-                    asyncio.set_event_loop(loop)
-                    response = loop.run_until_complete(
-                        self._make_direct_api_call(
-                            embed_request, tenant_id=tenant_id, request_id=request_id
-                        )
+                # Use thread-local event loop to prevent memory leaks from creating
+                # thousands of event loops during batch processing
+                loop = _get_or_create_event_loop()
+                response = loop.run_until_complete(
+                    self._make_direct_api_call(
+                        embed_request, tenant_id=tenant_id, request_id=request_id
                     )
-                finally:
-                    loop.close()
+                )
             else:
                 # For local models, use model server
                 response = self._make_model_server_request(

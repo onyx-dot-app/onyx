@@ -8,7 +8,7 @@ import { useAgents } from "@/hooks/useAgents";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import Settings from "@/layouts/settings-pages";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import CounterSeparator from "@/refresh-components/CounterSeparator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import FilterButton from "@/refresh-components/buttons/FilterButton";
@@ -413,8 +413,11 @@ export default function AgentsNavigationPage() {
   }, [selectedActionIds, selectedMcpServerIds, uniqueActions]);
 
   return (
-    <Settings.Root data-testid="AgentsPage/container" aria-label="Agents Page">
-      <Settings.Header
+    <SettingsLayouts.Root
+      data-testid="AgentsPage/container"
+      aria-label="Agents Page"
+    >
+      <SettingsLayouts.Header
         icon={SvgOnyxOctagon}
         title="Agents & Assistants"
         description="Customize AI behavior and knowledge for you and your team’s use cases."
@@ -627,10 +630,10 @@ export default function AgentsNavigationPage() {
             </Popover>
           </div>
         </div>
-      </Settings.Header>
+      </SettingsLayouts.Header>
 
       {/* Agents List */}
-      <Settings.Body>
+      <SettingsLayouts.Body>
         {agentCount === 0 ? (
           <Text
             className="w-full h-full flex flex-col items-center justify-center py-12"
@@ -652,7 +655,7 @@ export default function AgentsNavigationPage() {
             />
           </>
         )}
-      </Settings.Body>
-    </Settings.Root>
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }

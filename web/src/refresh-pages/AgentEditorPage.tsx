@@ -48,7 +48,7 @@ import {
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { SvgImage, SvgOnyxOctagon } from "@opal/icons";
 import CustomAgentAvatar, {
-  iconMap,
+  agentAvatarIconMap,
 } from "@/refresh-components/avatars/CustomAgentAvatar";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import SquareButton from "@/refresh-components/buttons/SquareButton";
@@ -203,7 +203,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
                   onClick={() => handleIconClick(null)}
                   transient={!imageSrc && values.icon_name === null}
                 />
-                {Object.keys(iconMap).map((iconName) => (
+                {Object.keys(agentAvatarIconMap).map((iconName) => (
                   <SquareButton
                     key={iconName}
                     onClick={() => handleIconClick(iconName)}

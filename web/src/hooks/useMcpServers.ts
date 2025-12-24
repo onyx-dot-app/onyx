@@ -8,8 +8,7 @@ import useSWR from "swr";
  * Fetches MCP (Model Context Protocol) servers configuration.
  *
  * MCP servers provide additional tools and capabilities to agents through
- * the Model Context Protocol. This hook polls the MCP servers endpoint
- * every 10 seconds to keep the data fresh.
+ * the Model Context Protocol.
  *
  * @returns Object containing:
  *   - mcpData: MCPServersResponse data or null if not loaded
@@ -30,8 +29,7 @@ export default function useMcpServers() {
     mutate: mutateMcpServers,
   } = useSWR<MCPServersResponse>(
     "/api/admin/mcp/servers",
-    errorHandlingFetcher,
-    { refreshInterval: 10000 }
+    errorHandlingFetcher
   );
 
   return {

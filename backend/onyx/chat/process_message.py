@@ -565,6 +565,7 @@ def stream_chat_message_objects(
                 db_session=db_session,
                 skip_clarification=skip_clarification,
                 user_identity=user_identity,
+                chat_session_id=str(chat_session_id),
             )
         else:
             yield from run_chat_loop_with_state_containers(
@@ -587,6 +588,7 @@ def stream_chat_message_objects(
                     else None
                 ),
                 user_identity=user_identity,
+                chat_session_id=str(chat_session_id),
             )
 
         # Determine if stopped by user

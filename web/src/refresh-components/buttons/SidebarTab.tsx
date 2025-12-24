@@ -81,16 +81,29 @@ export default function SidebarTab({
 }: SidebarTabProps) {
   const variant = lowlight ? "lowlight" : focused ? "focused" : "defaulted";
 
-  const innerContent = (
+  const content = (
     <div
       className={cn(
-        "flex flex-row justify-start items-start p-1.5 gap-1 rounded-08 cursor-pointer group/SidebarTab w-full select-none",
+        "relative flex flex-row justify-start items-start p-1.5 gap-1 rounded-08 cursor-pointer group/SidebarTab w-full select-none",
         backgroundClasses(active)[variant],
         className
       )}
       onClick={onClick}
     >
-      <div className="flex-1 h-[1.5rem] flex flex-row items-center px-1 py-0.5 gap-2 justify-start">
+      {href && (
+        <Link
+          href={href as Route}
+          scroll={false}
+          className="absolute inset-0 rounded-08"
+          tabIndex={-1}
+        />
+      )}
+      <div
+        className={cn(
+          "relative flex-1 h-[1.5rem] flex flex-row items-center px-1 py-0.5 gap-2 justify-start",
+          !focused && "pointer-events-none"
+        )}
+      >
         {LeftIcon && (
           <div className="w-[1rem] h-[1rem] flex flex-col items-center justify-center">
             <LeftIcon
@@ -115,16 +128,8 @@ export default function SidebarTab({
             children
           ))}
       </div>
-      {!folded && rightChildren}
+      {!folded && <div className="relative">{rightChildren}</div>}
     </div>
-  );
-
-  const content = href ? (
-    <Link href={href as Route} scroll={false}>
-      {innerContent}
-    </Link>
-  ) : (
-    innerContent
   );
 
   if (typeof children !== "string") return content;

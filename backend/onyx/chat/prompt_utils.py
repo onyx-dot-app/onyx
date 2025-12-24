@@ -156,7 +156,7 @@ def build_system_prompt(
             system_prompt += company_context
         if memories:
             system_prompt += "\n".join(
-                memory.strip() for memory in memories if memory.strip()
+                "- " + memory.strip() for memory in memories if memory.strip()
             )
 
     # Append citation guidance after company context if placeholder was not present

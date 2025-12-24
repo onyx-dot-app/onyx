@@ -1,10 +1,10 @@
 import AgentsNavigationPage from "@/refresh-pages/AgentsNavigationPage";
-import { AppPageLayout } from "@/layouts/app-pages";
+import * as AppLayouts from "@/layouts/app-layouts";
 
 export default async function Page() {
   return (
-    <AppPageLayout>
+    <AppLayouts.Root>
       <AgentsNavigationPage />
-    </AppPageLayout>
+    </AppLayouts.Root>
   );
 }

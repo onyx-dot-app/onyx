@@ -48,7 +48,7 @@ export interface ChatUIProps {
     message: string;
     messageIdToResend?: number;
     currentMessageFiles: ProjectFile[];
-    useAgentSearch: boolean;
+    deepResearch: boolean;
     modelOverride?: LlmDescriptor;
     regenerationRequest?: {
       messageId: number;
@@ -114,7 +114,7 @@ const ChatUI = React.memo(
             return await onSubmit({
               message: regenerationRequest.parentMessage.message,
               currentMessageFiles,
-              useAgentSearch: deepResearchEnabled,
+              deepResearch: deepResearchEnabled,
               modelOverride,
               messageIdToResend: regenerationRequest.parentMessage.messageId,
               regenerationRequest,
@@ -131,7 +131,7 @@ const ChatUI = React.memo(
             message: editedContent,
             messageIdToResend: msgId,
             currentMessageFiles: [],
-            useAgentSearch: deepResearchEnabled,
+            deepResearch: deepResearchEnabled,
           });
         },
         [onSubmit, deepResearchEnabled]

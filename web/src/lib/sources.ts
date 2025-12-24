@@ -44,6 +44,7 @@ import {
   AirtableIcon,
   GitbookIcon,
   HighspotIcon,
+  DrupalWikiIcon,
   EmailIcon,
   TestRailIcon,
 } from "@/components/icons/icons";
@@ -299,6 +300,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Gmail",
     category: SourceCategory.Messaging,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/gmail/overview`,
+  },
+  drupal_wiki: {
+    icon: DrupalWikiIcon,
+    displayName: "Drupal Wiki",
+    category: SourceCategory.Wiki,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/drupal_wiki`,
   },
   imap: {
     icon: EmailIcon,

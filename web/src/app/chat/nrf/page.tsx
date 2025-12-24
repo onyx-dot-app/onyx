@@ -3,18 +3,18 @@ import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { cookies } from "next/headers";
 import NRFPage from "./NRFPage";
 import { NRFPreferencesProvider } from "../../../components/context/NRFPreferencesContext";
-import { AppPageLayout } from "@/layouts/app-pages";
+import * as AppLayouts from "@/layouts/app-layouts";
 
 export default async function Page() {
   noStore();
   const requestCookies = await cookies();
 
   return (
-    <AppPageLayout>
+    <AppLayouts.Root>
       <InstantSSRAutoRefresh />
       <NRFPreferencesProvider>
         <NRFPage requestCookies={requestCookies} />
       </NRFPreferencesProvider>
-    </AppPageLayout>
+    </AppLayouts.Root>
   );
 }
