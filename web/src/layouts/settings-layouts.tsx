@@ -33,7 +33,7 @@
 
 "use client";
 
-import { BackButton } from "@/components/BackButton";
+import BackButton from "@/refresh-components/buttons/BackButton";
 import { cn } from "@/lib/utils";
 import Separator from "@/refresh-components/Separator";
 import Spacer from "@/refresh-components/Spacer";
