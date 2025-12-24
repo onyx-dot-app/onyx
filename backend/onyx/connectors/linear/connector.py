@@ -142,7 +142,7 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
         elif (
             "access_token" in credentials
             and "expire_at" in credentials
-            and credentials["expire_at"] < time.time()
+            and credentials["expire_at"] < time.time() + 300  # 5-minute buffer
         ):
             new_credentials = self.refresh_token(credentials)
             self.linear_api_key = "Bearer " + cast(str, new_credentials["access_token"])
