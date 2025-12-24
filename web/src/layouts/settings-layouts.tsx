@@ -220,9 +220,9 @@ function SettingsHeader({
             {rightChildren}
           </div>
           <div className="flex flex-col">
-            <Text headingH2 aria-label="admin-page-title">
-              {title}
-            </Text>
+            <div aria-label="admin-page-title">
+              <Text headingH2>{title}</Text>
+            </div>
             {description &&
               (typeof description === "string" ? (
                 <Text secondaryBody text03>
