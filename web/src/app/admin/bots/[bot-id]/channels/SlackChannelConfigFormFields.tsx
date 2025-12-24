@@ -38,7 +38,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import Separator from "@/refresh-components/Separator";
-import { CheckboxField } from "@/refresh-components/form/CheckboxField";
+import { CheckboxField } from "@/refresh-components/form/LabeledCheckboxField";
 
 export interface SlackChannelConfigFormFieldsProps {
   isUpdate: boolean;
