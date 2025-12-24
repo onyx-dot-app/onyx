@@ -465,7 +465,7 @@ kombu==5.5.4
     # via celery
 langchain==0.3.23
     # via onyx
-langchain-core==0.3.51
+langchain-core==0.3.81
     # via
     #   langchain
     #   langchain-text-splitters
