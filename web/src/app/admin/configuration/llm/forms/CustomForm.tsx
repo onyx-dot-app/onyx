@@ -17,6 +17,7 @@ import {
   submitLLMProvider,
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
+  LLM_FORM_CLASS_NAME,
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { TextFormField, Label, SubLabel } from "@/components/Field";
@@ -117,7 +118,7 @@ export function CustomForm({
                     name: mc.name,
                     is_visible: mc.is_visible,
                     max_input_tokens: mc.max_input_tokens ?? null,
-                    supports_image_input: false,
+                    supports_image_input: null,
                   }))
                   .filter(
                     (mc) =>
@@ -161,7 +162,7 @@ export function CustomForm({
             >
               {(formikProps) => {
                 return (
-                  <Form className="gap-y-4 items-stretch mt-6">
+                  <Form className={LLM_FORM_CLASS_NAME}>
                     <DisplayNameField disabled={!!existingLlmProvider} />
 
                     <TextFormField

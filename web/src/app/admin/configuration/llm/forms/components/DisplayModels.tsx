@@ -130,6 +130,7 @@ export function DisplayModels<T extends BaseLLMFormValues>({
               </div>
               <button
                 type="button"
+                disabled={!isSelected}
                 onClick={() => handleSetDefault(modelConfiguration.name)}
                 className={`text-xs px-2 py-0.5 rounded transition-all duration-200 ease-in-out ${
                   isSelected

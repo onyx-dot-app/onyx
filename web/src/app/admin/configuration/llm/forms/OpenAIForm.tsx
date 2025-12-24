@@ -11,6 +11,7 @@ import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
   submitLLMProvider,
+  LLM_FORM_CLASS_NAME,
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
@@ -84,7 +85,7 @@ export function OpenAIForm({
             >
               {(formikProps) => {
                 return (
-                  <Form className="gap-y-4 items-stretch mt-6">
+                  <Form className={LLM_FORM_CLASS_NAME}>
                     <DisplayNameField disabled={!!existingLlmProvider} />
 
                     <ApiKeyField />

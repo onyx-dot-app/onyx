@@ -130,6 +130,7 @@ export function ProviderFormEntrypointWrapper({
   // Card mode: card-based UI with modal
   return (
     <div>
+      {popup}
       <div className="border p-3 bg-background-neutral-01 rounded-16 w-96 flex shadow-md">
         {existingLlmProvider ? (
           <>

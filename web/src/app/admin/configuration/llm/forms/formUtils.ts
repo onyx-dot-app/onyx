@@ -4,6 +4,9 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 
+// Common class names for the Form component across all LLM provider forms
+export const LLM_FORM_CLASS_NAME = "flex flex-col gap-y-4 items-stretch mt-6";
+
 export const buildDefaultInitialValues = (
   existingLlmProvider?: LLMProviderView,
   modelConfigurations?: ModelConfiguration[]
@@ -143,6 +146,7 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
     if (!response.ok) {
       const errorMsg = (await response.json()).detail;
       setTestError(errorMsg);
+      setSubmitting(false);
       return;
     }
   }

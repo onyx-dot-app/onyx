@@ -20,6 +20,7 @@ import {
   buildDefaultValidationSchema,
   submitLLMProvider,
   BaseLLMFormValues,
+  LLM_FORM_CLASS_NAME,
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
@@ -190,7 +191,7 @@ export function BedrockForm({
                   !isAuthComplete;
 
                 return (
-                  <Form className="gap-y-4 items-stretch mt-6">
+                  <Form className={LLM_FORM_CLASS_NAME}>
                     <DisplayNameField disabled={!!existingLlmProvider} />
 
                     <SelectorFormField
