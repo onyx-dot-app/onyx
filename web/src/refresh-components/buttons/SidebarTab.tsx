@@ -69,11 +69,7 @@ export default function SidebarTab({
           <div className="w-[1rem] h-[1rem] flex flex-col items-center justify-center">
             <LeftIcon
               data-state={state}
-              className={cn(
-                "h-[1rem]",
-                "w-[1rem]",
-                `sidebar-tab-icon-${variant}`
-              )}
+              className={`h-[1rem] w-[1rem] sidebar-tab-icon-${variant}`}
             />
           </div>
         )}
@@ -81,7 +77,7 @@ export default function SidebarTab({
           (typeof children === "string" ? (
             <Truncated
               data-state={state}
-              className={cn(`sidebar-tab-text-${variant}`)}
+              className={`sidebar-tab-text-${variant}`}
               side="right"
               sideOffset={40}
             >

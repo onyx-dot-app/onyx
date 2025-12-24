@@ -417,6 +417,8 @@ def _patch_openai_responses_chunk_parser() -> None:
             # New output item added
             output_item = parsed_chunk.get("item", {})
             if output_item.get("type") == "function_call":
+                # Don't set is_finished=True here - for parallel tool calls,
+                # more tool calls may follow. Wait for response.completed.
                 return GenericStreamingChunk(
                     text="",
                     tool_use=ChatCompletionToolCallChunk(
@@ -428,8 +430,8 @@ def _patch_openai_responses_chunk_parser() -> None:
                             arguments="",  # responses API sends everything again, we don't
                         ),
                     ),
-                    is_finished=True,
-                    finish_reason="tool_calls",
+                    is_finished=False,
+                    finish_reason="",
                     usage=None,
                 )
             elif output_item.get("type") == "message":
@@ -487,6 +489,24 @@ def _patch_openai_responses_chunk_parser() -> None:
                     ]
                 )
 
+        elif event_type == "response.completed":
+            # Final event signaling all output items (including parallel tool calls) are done
+            response_data = parsed_chunk.get("response", {})
+            # Determine finish reason based on response content
+            finish_reason = "stop"
+            if response_data.get("output"):
+                for item in response_data["output"]:
+                    if isinstance(item, dict) and item.get("type") == "function_call":
+                        finish_reason = "tool_calls"
+                        break
+            return GenericStreamingChunk(
+                text="",
+                tool_use=None,
+                is_finished=True,
+                finish_reason=finish_reason,
+                usage=None,
+            )
+
         else:
             pass
 
@@ -502,7 +522,7 @@ def _patch_openai_responses_chunk_parser() -> None:
     _patched_openai_responses_chunk_parser.__name__ = (
         "_patched_openai_responses_chunk_parser"
     )
-    OpenAiResponsesToChatCompletionStreamIterator.chunk_parser = _patched_openai_responses_chunk_parser  # type: ignore[method-assign]
+    OpenAiResponsesToChatCompletionStreamIterator.chunk_parser = _patched_openai_responses_chunk_parser  # type: ignore
 
 
 def _patch_openai_responses_transform_response() -> None:
