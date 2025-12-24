@@ -81,6 +81,35 @@ export default function SidebarTab({
 }: SidebarTabProps) {
   const variant = lowlight ? "lowlight" : focused ? "focused" : "defaulted";
 
+  const baseContent = (
+    <div
+      className={cn(
+        "relative flex-1 h-[1.5rem] flex flex-row items-center px-1 py-0.5 gap-2 justify-start",
+        !focused && "pointer-events-none"
+      )}
+    >
+      {LeftIcon && (
+        <div className="w-[1rem] h-[1rem] flex flex-col items-center justify-center">
+          <LeftIcon
+            className={cn("h-[1rem]", "w-[1rem]", iconClasses(active)[variant])}
+          />
+        </div>
+      )}
+      {!folded &&
+        (typeof children === "string" ? (
+          <Truncated
+            className={cn(textClasses(active)[variant])}
+            side="right"
+            sideOffset={40}
+          >
+            {children}
+          </Truncated>
+        ) : (
+          children
+        ))}
+    </div>
+  );
+
   const content = (
     <div
       className={cn(
@@ -90,44 +119,18 @@ export default function SidebarTab({
       )}
       onClick={onClick}
     >
-      {href && (
+      {href ? (
         <Link
           href={href as Route}
           scroll={false}
           className="absolute inset-0 rounded-08"
           tabIndex={-1}
-        />
+        >
+          {baseContent}
+        </Link>
+      ) : (
+        baseContent
       )}
-      <div
-        className={cn(
-          "relative flex-1 h-[1.5rem] flex flex-row items-center px-1 py-0.5 gap-2 justify-start",
-          !focused && "pointer-events-none"
-        )}
-      >
-        {LeftIcon && (
-          <div className="w-[1rem] h-[1rem] flex flex-col items-center justify-center">
-            <LeftIcon
-              className={cn(
-                "h-[1rem]",
-                "w-[1rem]",
-                iconClasses(active)[variant]
-              )}
-            />
-          </div>
-        )}
-        {!folded &&
-          (typeof children === "string" ? (
-            <Truncated
-              className={cn(textClasses(active)[variant])}
-              side="right"
-              sideOffset={40}
-            >
-              {children}
-            </Truncated>
-          ) : (
-            children
-          ))}
-      </div>
       {!folded && <div className="relative">{rightChildren}</div>}
     </div>
   );
