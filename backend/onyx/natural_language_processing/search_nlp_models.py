@@ -114,6 +114,68 @@ def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
     return _thread_local.loop
 
 
+def cleanup_embedding_thread_locals() -> None:
+    """Clean up thread-local event loops to prevent memory leaks.
+
+    This should be called after each task completes to ensure that
+    event loops and their associated resources are properly released.
+    Thread-local storage persists across Celery tasks when using the
+    thread pool, so explicit cleanup is necessary.
+
+    NOTE: This must be called from the SAME thread that created the event loop.
+    For ThreadPoolExecutor-based embedding, this cleanup happens automatically
+    via the _cleanup_thread_local wrapper.
+    """
+    if hasattr(_thread_local, "loop") and _thread_local.loop is not None:
+        loop = _thread_local.loop
+        if not loop.is_closed():
+            # Cancel all pending tasks in the event loop
+            try:
+                pending = asyncio.all_tasks(loop)
+                if pending:
+                    logger.debug(
+                        f"Cleaning up event loop with {len(pending)} pending tasks in thread {threading.current_thread().name}"
+                    )
+                for task in pending:
+                    task.cancel()
+                # Run the loop briefly to allow cancelled tasks to complete
+                if pending:
+                    loop.run_until_complete(
+                        asyncio.gather(*pending, return_exceptions=True)
+                    )
+            except Exception as e:
+                # If gathering tasks fails, just close the loop
+                logger.debug(f"Error gathering tasks during cleanup: {e}")
+
+            # Close the event loop
+            loop.close()
+            logger.debug(
+                f"Closed event loop in thread {threading.current_thread().name}"
+            )
+
+        # Clear the thread-local reference
+        _thread_local.loop = None
+
+
+def _cleanup_thread_local(func: Callable) -> Callable:
+    """Decorator to ensure thread-local cleanup after function execution.
+
+    This wraps functions that run in ThreadPoolExecutor threads to ensure
+    that thread-local event loops are cleaned up after each execution,
+    preventing memory leaks from persistent thread-local storage.
+    """
+
+    @wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return func(*args, **kwargs)
+        finally:
+            # Clean up thread-local event loop after this thread's work is done
+            cleanup_embedding_thread_locals()
+
+    return wrapper
+
+
 WARM_UP_STRINGS = [
     "Onyx is amazing!",
     "Check out our easy deployment guide at",
@@ -790,6 +852,7 @@ class EmbeddingModel:
 
         embeddings: list[Embedding] = []
 
+        @_cleanup_thread_local
         def process_batch(
             batch_idx: int,
             batch_len: int,
