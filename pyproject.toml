@@ -14,7 +14,7 @@ dependencies = [
     "fastapi==0.116.1",
     "google-cloud-aiplatform==1.121.0",
     "google-genai==1.52.0",
-    "litellm==1.80.8",
+    "litellm==1.80.11",
     "openai==2.14.0",
     "pydantic==2.11.7",
     "prometheus_client==0.21.0",

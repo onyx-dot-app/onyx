@@ -242,7 +242,7 @@ jupyter-core==5.9.1
     #   jupyter-client
 kiwisolver==1.4.9
     # via matplotlib
-litellm==1.80.8
+litellm==1.80.11
     # via onyx
 manygo==0.2.0
     # via onyx

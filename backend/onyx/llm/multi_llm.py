@@ -340,7 +340,10 @@ class LitellmLLM(LLM):
                 # OpenAI and other providers use reasoning_effort
                 # (litellm maps this to thinking_level for Gemini 3 models)
                 **(
-                    {"reasoning_effort": OPENAI_REASONING_EFFORT[reasoning_effort]}
+                    {
+                        "reasoning_effort": OPENAI_REASONING_EFFORT[reasoning_effort],
+                        "summary": "auto",
+                    }
                     if is_reasoning and "claude" not in self.config.model_name.lower()
                     else {}
                 ),
