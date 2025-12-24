@@ -43,8 +43,8 @@ export default function InputDatePicker({
           {selectedDate ? selectedDate.toLocaleDateString() : "Select Date"}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="flex w-full flex-col p-2 gap-y-2 data-[state=open]:animate-fade-in-scale data-[state=closed]:animate-fade-out-scale">
-        <div className="flex flex-row items-center gap-x-2">
+      <PopoverContent className="flex w-full flex-col items-center p-4 gap-y-3 data-[state=open]:animate-fade-in-scale data-[state=closed]:animate-fade-out-scale">
+        <div className="flex flex-row items-center justify-center gap-x-2 w-full">
           <InputSelect
             value={`${extractYear(shownDate)}`}
             onValueChange={(value) => {
@@ -71,18 +71,19 @@ export default function InputDatePicker({
           </Button>
         </div>
         <Calendar
+          mode="single"
           selected={selectedDate ?? undefined}
-          onDayClick={(date) => {
-            setShownDate(date);
-            setSelectedDate(date);
-            setOpen(false);
+          onSelect={(date) => {
+            if (date) {
+              setShownDate(date);
+              setSelectedDate(date);
+              setOpen(false);
+            }
           }}
-          month={shownDate}
-          onMonthChange={(date) => {
-            setShownDate(date);
-          }}
+          defaultMonth={shownDate}
           startMonth={new Date(validStartYear, 0)}
           endMonth={new Date()}
+          className="rounded-md"
         />
         <Button
           secondary
