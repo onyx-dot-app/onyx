@@ -76,12 +76,7 @@ function SettingsRoot(props: SettingsRootProps) {
           to detect scroll position and show/hide the scroll shadow.
           DO NOT REMOVE this ID without updating SettingsHeader accordingly. */}
       <div className="h-full w-[min(50rem,100%)]">
-        <div
-          // We add a default aria-label.
-          // Users should ideally aim to override this and set their own custom label.
-          aria-label="admin-page-title"
-          {...props}
-        />
+        <div {...props} />
       </div>
     </div>
   );
@@ -225,7 +220,9 @@ function SettingsHeader({
             {rightChildren}
           </div>
           <div className="flex flex-col">
-            <Text headingH2>{title}</Text>
+            <Text headingH2 aria-label="admin-page-title">
+              {title}
+            </Text>
             {description &&
               (typeof description === "string" ? (
                 <Text secondaryBody text03>
