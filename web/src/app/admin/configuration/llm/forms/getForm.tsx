@@ -1,27 +1,31 @@
-import { LLMProviderName } from "../interfaces";
+import { LLMProviderName, LLMProviderView } from "../interfaces";
 import { AnthropicForm } from "./AnthropicForm";
 import { OpenAIForm } from "./OpenAIForm";
 import { OllamaForm } from "./OllamaForm";
 import { AzureForm } from "./AzureForm";
 import { VertexAIForm } from "./VertexAIForm";
 import { OpenRouterForm } from "./OpenRouterForm";
-import { CustomLLMProviderUpdateForm } from "../CustomLLMProviderUpdateForm";
+import { CustomForm } from "./CustomForm";
+import { BedrockForm } from "./BedrockForm";
 
-export const getFormForProvider = (providerName: LLMProviderName) => {
-  switch (providerName) {
+export const getFormForExistingProvider = (provider: LLMProviderView) => {
+  console.log("provider", provider);
+  switch (provider.provider) {
     case LLMProviderName.OPENAI:
-      return <OpenAIForm />;
+      return <OpenAIForm existingLlmProvider={provider} />;
     case LLMProviderName.ANTHROPIC:
-      return <AnthropicForm />;
+      return <AnthropicForm existingLlmProvider={provider} />;
     case LLMProviderName.OLLAMA_CHAT:
-      return <OllamaForm />;
+      return <OllamaForm existingLlmProvider={provider} />;
     case LLMProviderName.AZURE:
-      return <AzureForm />;
+      return <AzureForm existingLlmProvider={provider} />;
     case LLMProviderName.VERTEX_AI:
-      return <VertexAIForm />;
+      return <VertexAIForm existingLlmProvider={provider} />;
+    case LLMProviderName.BEDROCK:
+      return <BedrockForm existingLlmProvider={provider} />;
     case LLMProviderName.OPENROUTER:
-      return <OpenRouterForm />;
-    // default:
-    //   return <CustomLLMProviderUpdateForm />;
+      return <OpenRouterForm existingLlmProvider={provider} />;
+    default:
+      return <CustomForm existingLlmProvider={provider} />;
   }
 };
