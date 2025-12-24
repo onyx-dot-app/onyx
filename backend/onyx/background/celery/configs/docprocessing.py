@@ -27,3 +27,9 @@ task_acks_late = shared_config.task_acks_late
 worker_concurrency = CELERY_WORKER_DOCPROCESSING_CONCURRENCY
 worker_pool = "threads"
 worker_prefetch_multiplier = 1
+
+# Restart worker threads after N tasks to prevent Python memory fragmentation
+# Python's allocator doesn't always return memory to the OS, causing gradual
+# memory growth even when objects are properly freed. Restarting threads
+# periodically ensures memory is actually released back to the system.
+worker_max_tasks_per_child = 50
