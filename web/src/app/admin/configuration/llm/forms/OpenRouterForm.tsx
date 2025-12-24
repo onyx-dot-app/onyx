@@ -2,7 +2,7 @@ import Separator from "@/refresh-components/Separator";
 import { Form, Formik } from "formik";
 import { TextFormField } from "@/components/Field";
 import {
-  LLMProviderView,
+  LLMProviderFormProps,
   ModelConfiguration,
   OpenRouterModelResponse,
 } from "../interfaces";
@@ -34,11 +34,6 @@ const OPENROUTER_MODELS_API_URL = "/api/admin/llm/openrouter/available-models";
 interface OpenRouterFormValues extends BaseLLMFormValues {
   api_key: string;
   api_base: string;
-}
-
-interface OpenRouterFormProps {
-  existingLlmProvider?: LLMProviderView;
-  shouldMarkAsDefault?: boolean;
 }
 
 async function fetchOpenRouterModels(params: {
@@ -97,7 +92,7 @@ async function fetchOpenRouterModels(params: {
 export function OpenRouterForm({
   existingLlmProvider,
   shouldMarkAsDefault,
-}: OpenRouterFormProps) {
+}: LLMProviderFormProps) {
   const [fetchedModels, setFetchedModels] = useState<ModelConfiguration[]>([]);
 
   return (

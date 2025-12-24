@@ -1,7 +1,6 @@
-import Separator from "@/refresh-components/Separator";
 import { Form, Formik } from "formik";
-import { SelectorFormField } from "@/components/Field";
-import { LLMProviderView } from "../interfaces";
+
+import { LLMProviderFormProps } from "../interfaces";
 import * as Yup from "yup";
 import { ProviderFormEntrypointWrapper } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";
@@ -19,15 +18,10 @@ import { DisplayModels } from "./components/DisplayModels";
 export const OPENAI_PROVIDER_NAME = "openai";
 const DEFAULT_DEFAULT_MODEL_NAME = "gpt-4o";
 
-interface OpenAIFormProps {
-  existingLlmProvider?: LLMProviderView;
-  shouldMarkAsDefault?: boolean;
-}
-
 export function OpenAIForm({
   existingLlmProvider,
   shouldMarkAsDefault,
-}: OpenAIFormProps) {
+}: LLMProviderFormProps) {
   return (
     <ProviderFormEntrypointWrapper
       providerName="OpenAI"

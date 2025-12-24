@@ -1,6 +1,7 @@
 import { Form, Formik, FormikProps } from "formik";
 import { TextFormField } from "@/components/Field";
 import {
+  LLMProviderFormProps,
   LLMProviderView,
   ModelConfiguration,
   OllamaModelResponse,
@@ -32,11 +33,6 @@ interface OllamaFormValues extends BaseLLMFormValues {
   custom_config: {
     OLLAMA_API_KEY?: string;
   };
-}
-
-interface OllamaFormProps {
-  existingLlmProvider?: LLMProviderView;
-  shouldMarkAsDefault?: boolean;
 }
 
 interface OllamaFormContentProps {
@@ -152,7 +148,7 @@ function OllamaFormContent({
 export function OllamaForm({
   existingLlmProvider,
   shouldMarkAsDefault,
-}: OllamaFormProps) {
+}: LLMProviderFormProps) {
   return (
     <ProviderFormEntrypointWrapper
       providerName="Ollama"

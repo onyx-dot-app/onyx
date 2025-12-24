@@ -1,6 +1,6 @@
 import { Form, Formik } from "formik";
 import { TextFormField, FileUploadFormField } from "@/components/Field";
-import { LLMProviderView } from "../interfaces";
+import { LLMProviderFormProps } from "../interfaces";
 import * as Yup from "yup";
 import {
   ProviderFormEntrypointWrapper,
@@ -31,15 +31,10 @@ interface VertexAIFormValues extends BaseLLMFormValues {
   };
 }
 
-interface VertexAIFormProps {
-  existingLlmProvider?: LLMProviderView;
-  shouldMarkAsDefault?: boolean;
-}
-
 export function VertexAIForm({
   existingLlmProvider,
   shouldMarkAsDefault,
-}: VertexAIFormProps) {
+}: LLMProviderFormProps) {
   return (
     <ProviderFormEntrypointWrapper
       providerName={VERTEXAI_DISPLAY_NAME}
