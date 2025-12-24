@@ -93,8 +93,7 @@ export interface SelectButtonProps {
 
   // Content
   children: string;
-  leftIcon?: React.FunctionComponent<IconProps>;
-  rightIcon?: React.FunctionComponent<IconProps>;
+  leftIcon: React.FunctionComponent<IconProps>;
   rightChevronIcon?: boolean;
   onClick?: () => void;
   className?: string;
@@ -111,13 +110,10 @@ export default function SelectButton({
 
   children,
   leftIcon: LeftIcon,
-  rightIcon: RightIcon,
   rightChevronIcon,
   onClick,
   className,
 }: SelectButtonProps) {
-  const hasRightIcon = !!RightIcon;
-  const hasLeftIcon = !!LeftIcon;
   const variant = main ? "main" : action ? "action" : "main";
   const state = disabled ? "disabled" : "enabled";
 
@@ -182,10 +178,8 @@ export default function SelectButton({
         onMouseOver={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
-        {/* Left icon */}
-        {hasLeftIcon && LeftIcon && (
-          <LeftIcon className={cn("w-[1rem] h-[1rem]", iconClasses)} />
-        )}
+        {/* Static icon component */}
+        <LeftIcon className={cn("w-[1rem] h-[1rem]", iconClasses)} />
 
         {/* Animation component */}
         <div
@@ -205,22 +199,13 @@ export default function SelectButton({
               : `${foldedContentWidth}px`,
             margin: folded
               ? engaged || transient || hovered
-                ? hasRightIcon
-                  ? `0px ${MARGIN}px 0px 0px`
-                  : `0px 0px 0px ${MARGIN}px`
+                ? `0px 0px 0px ${MARGIN}px`
                 : "0px"
-              : hasRightIcon
-                ? `0px ${MARGIN}px 0px 0px`
-                : `0px 0px 0px ${MARGIN}px`,
+              : `0px 0px 0px ${MARGIN}px`,
           }}
         >
           {content}
         </div>
-
-        {/* Right icon */}
-        {hasRightIcon && RightIcon && (
-          <RightIcon className={cn("w-[1rem] h-[1rem]", iconClasses)} />
-        )}
       </button>
     </>
   );
