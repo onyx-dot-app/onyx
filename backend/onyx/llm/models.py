@@ -36,7 +36,7 @@ CLAUDE_REASONING_BUDGET_TOKENS: dict[ReasoningEffort, int] = {
 
 # OpenAI reasoning effort mapping
 OPENAI_REASONING_EFFORT: dict[ReasoningEffort | None, str] = {
-    None: "default",
+    None: "low",
     ReasoningEffort.OFF: "none",
     ReasoningEffort.LOW: "low",
     ReasoningEffort.MEDIUM: "medium",

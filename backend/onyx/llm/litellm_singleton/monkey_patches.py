@@ -351,7 +351,12 @@ def _patch_openai_responses_chunk_parser() -> None:
         # Handle different event types from responses API
 
         event_type = parsed_chunk.get("type")
+        # Allow enum-like event types
+        if hasattr(event_type, "value"):
+            event_type = getattr(event_type, "value")
         verbose_logger.debug(f"Chat provider: Processing event type: {event_type}")
+
+        output_index = parsed_chunk.get("output_index", 0) or 0
 
         if event_type == "response.created":
             # Initial response creation event
@@ -368,7 +373,7 @@ def _patch_openai_responses_chunk_parser() -> None:
                     text="",
                     tool_use=ChatCompletionToolCallChunk(
                         id=output_item.get("call_id"),
-                        index=0,
+                        index=output_index,
                         type="function",
                         function=ChatCompletionToolCallFunctionChunk(
                             name=output_item.get("name", None),
@@ -393,7 +398,7 @@ def _patch_openai_responses_chunk_parser() -> None:
                     text="",
                     tool_use=ChatCompletionToolCallChunk(
                         id=None,
-                        index=0,
+                        index=output_index,
                         type="function",
                         function=ChatCompletionToolCallFunctionChunk(
                             name=None, arguments=content_part
@@ -416,7 +421,7 @@ def _patch_openai_responses_chunk_parser() -> None:
                     text="",
                     tool_use=ChatCompletionToolCallChunk(
                         id=output_item.get("call_id"),
-                        index=0,
+                        index=output_index,
                         type="function",
                         function=ChatCompletionToolCallFunctionChunk(
                             name=parsed_chunk.get("name", None),
