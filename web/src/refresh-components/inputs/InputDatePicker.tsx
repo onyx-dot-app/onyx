@@ -1,17 +1,15 @@
 import Button from "@/refresh-components/buttons/Button";
-import Text from "./text";
-import { Calendar } from "./calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "./popover";
+import { Calendar } from "@/components/ui/calendar";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "./select";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { useState } from "react";
 import { SvgCalendar } from "@opal/icons";
-export interface DatePickerProps {
+
+export interface InputDatePickerProps {
   selectedDate: Date | null;
   setSelectedDate: (date: Date | null) => void;
   startYear?: number;
@@ -23,13 +21,13 @@ function extractYear(date: Date | null): number {
   return (date ?? new Date()).getFullYear();
 }
 
-export function DatePicker({
+export default function InputDatePicker({
   selectedDate,
   setSelectedDate,
   startYear = 1970,
   disabled = false,
   onClear,
-}: DatePickerProps) {
+}: InputDatePickerProps) {
   const validStartYear = Math.max(startYear, 1970);
   const currYear = extractYear(new Date());
   const years = Array(currYear - validStartYear + 1)
@@ -52,23 +50,21 @@ export function DatePicker({
       </PopoverTrigger>
       <PopoverContent className="flex w-full flex-col p-2 gap-y-2 data-[state=open]:animate-fade-in-scale data-[state=closed]:animate-fade-out-scale">
         <div className="flex flex-row items-center gap-x-2">
-          <Select
+          <InputSelect
+            value={`${extractYear(shownDate)}`}
             onValueChange={(value) => {
               setShownDate(new Date(parseInt(value), 0));
             }}
-            defaultValue={`${extractYear(shownDate)}`}
           >
-            <SelectTrigger>
-              <SelectValue>{extractYear(shownDate)}</SelectValue>
-            </SelectTrigger>
-            <SelectContent position="popper">
+            <InputSelect.Trigger />
+            <InputSelect.Content>
               {years.map((year) => (
-                <SelectItem key={year} value={`${year}`}>
+                <InputSelect.Item key={year} value={`${year}`}>
                   {year}
-                </SelectItem>
+                </InputSelect.Item>
               ))}
-            </SelectContent>
-          </Select>
+            </InputSelect.Content>
+          </InputSelect>
           <Button
             onClick={() => {
               const now = new Date();
@@ -80,7 +76,6 @@ export function DatePicker({
           </Button>
         </div>
         <Calendar
-          className="px-0"
           selected={selectedDate ?? undefined}
           onDayClick={(date) => {
             setShownDate(date);
@@ -91,8 +86,8 @@ export function DatePicker({
           onMonthChange={(date) => {
             setShownDate(date);
           }}
-          toMonth={new Date()}
-          fromMonth={new Date(validStartYear, 0)}
+          startMonth={new Date(validStartYear, 0)}
+          endMonth={new Date()}
         />
         <Button
           secondary
@@ -100,8 +95,9 @@ export function DatePicker({
             setSelectedDate(null);
             onClear?.();
           }}
+          className="w-full"
         >
-          <Text className="text-red-600">Clear</Text>
+          Clear
         </Button>
       </PopoverContent>
     </Popover>
