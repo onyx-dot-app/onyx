@@ -35,6 +35,7 @@ from onyx.llm.factory import get_default_llm
 from onyx.llm.factory import get_llm
 from onyx.llm.factory import get_max_input_tokens_from_llm_provider
 from onyx.llm.llm_provider_options import fetch_available_well_known_llms
+from onyx.llm.llm_provider_options import fetch_model_configurations_for_provider
 from onyx.llm.llm_provider_options import WellKnownLLMProviderDescriptor
 from onyx.llm.utils import get_bedrock_token_limit
 from onyx.llm.utils import get_llm_contextual_cost
@@ -47,6 +48,7 @@ from onyx.server.manage.llm.models import LLMProviderDescriptor
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.models import ModelConfigurationView
 from onyx.server.manage.llm.models import OllamaFinalModelResponse
 from onyx.server.manage.llm.models import OllamaModelDetails
 from onyx.server.manage.llm.models import OllamaModelsRequest
@@ -81,6 +83,14 @@ def fetch_llm_options(
     _: User | None = Depends(current_admin_user),
 ) -> list[WellKnownLLMProviderDescriptor]:
     return fetch_available_well_known_llms()
+
+
+@admin_router.get("/built-in/options/{provider_name}")
+def fetch_llm_provider_options(
+    provider_name: str,
+    _: User | None = Depends(current_admin_user),
+) -> list[ModelConfigurationView]:
+    return fetch_model_configurations_for_provider(provider_name)
 
 
 @admin_router.post("/test")

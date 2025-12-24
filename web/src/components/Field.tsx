@@ -181,7 +181,11 @@ export const FieldLabel = ({
       } gap-x-2 items-start`}
     >
       <div className="flex gap-x-2 items-center">
-        {!removeLabel && <Label small={false}>{label}</Label>}
+        {!removeLabel && (
+          <Label small={false} htmlFor={name}>
+            {label}
+          </Label>
+        )}
         {optional ? <span>(optional) </span> : ""}
         {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
       </div>
