@@ -352,9 +352,11 @@ class LitellmLLM(LLM):
                     if structured_response_format
                     else {}
                 ),
-                # TODO: Litellm erroenously drops tool_choice for OpenAI
-                # This is silent and does not raise error via litellm.drop_params = True
-                # However, this param breaks Anthropic models, so we only include it for non-Anthropic models
+                # TODO: Litellm erroenously drops tool_choice for OpenAI,
+                # which we use to control tool calls (auto, required, none, etc.).
+                # This drop is silent and does not raise error because we set litellm.drop_params = True.
+                # Force tool use for OpenAI was re-enabled via allowed_openai_params.
+                # However, this param breaks Anthropic models, so we only include it for non-Anthropic models.
                 # This should be removed when either 1) we switch to responses API 2) Litellm fixes this issue
                 **(
                     {"allowed_openai_params": ["tool_choice"]}
