@@ -1,4 +1,5 @@
 import os
+import time
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -123,20 +124,72 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
 
         token_data = response.json()
 
+        expire_at = time.time() + token_data["expires_in"]
+
         return {
             "access_token": token_data["access_token"],
+            "expire_at": int(expire_at),
+            "refresh_token": token_data["refresh_token"],
         }
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+        new_credentials = None
+
         if "linear_api_key" in credentials:
             self.linear_api_key = cast(str, credentials["linear_api_key"])
-        elif "access_token" in credentials:
+        elif "access_token" in credentials and "expire_at" not in credentials:
+            self.linear_api_key = "Bearer " + cast(str, credentials["access_token"])
+        elif (
+            "access_token" in credentials
+            and "expire_at" in credentials
+            and credentials["expire_at"] < time.time()
+        ):
+            new_credentials = self.refresh_token(credentials)
+            self.linear_api_key = "Bearer " + cast(str, new_credentials["access_token"])
+        elif (
+            "access_token" in credentials
+            and "expire_at" in credentials
+            and credentials["expire_at"] >= time.time()
+        ):
             self.linear_api_key = "Bearer " + cast(str, credentials["access_token"])
         else:
             # May need to handle case in the future if the OAuth flow expires
             raise ConnectorMissingCredentialError("Linear")
 
-        return None
+        return new_credentials
+
+    def refresh_token(self, credentials: dict[str, Any]) -> dict[str, Any]:
+        if "refresh_token" not in credentials:
+            raise ConnectorMissingCredentialError("Linear")
+
+        data = {
+            "refresh_token": credentials["refresh_token"],
+            "client_id": LINEAR_CLIENT_ID,
+            "client_secret": LINEAR_CLIENT_SECRET,
+            "grant_type": "refresh_token",
+        }
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+
+        response = request_with_retries(
+            method="POST",
+            url="https://api.linear.app/oauth/token",
+            data=data,
+            headers=headers,
+            backoff=0,
+            delay=0.1,
+        )
+        if not response.ok:
+            raise RuntimeError(f"Failed to refresh token: {response.text}")
+
+        token_data = response.json()
+
+        expire_at = time.time() + token_data["expires_in"]
+
+        return {
+            "access_token": token_data["access_token"],
+            "expire_at": int(expire_at),
+            "refresh_token": token_data["refresh_token"],
+        }
 
     def _process_issues(
         self, start_str: datetime | None = None, end_str: datetime | None = None
