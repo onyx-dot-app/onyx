@@ -18,7 +18,7 @@ interface IconConfig {
   className?: string;
 }
 
-export const avatarIconMap: Record<string, IconConfig> = {
+const avatarIconMap: Record<string, IconConfig> = {
   search: { Icon: SvgSearch, className: "stroke-theme-green-05" },
   check: { Icon: SvgCheck, className: "stroke-theme-green-05" },
   code: { Icon: SvgCode, className: "stroke-theme-orange-04" },
@@ -72,7 +72,7 @@ export default function CustomAgentAvatar({
     );
   }
 
-  const iconConfig = iconName && iconMap[iconName];
+  const iconConfig = iconName && avatarIconMap[iconName];
   if (iconConfig) {
     const { Icon, className } = iconConfig;
     return (
