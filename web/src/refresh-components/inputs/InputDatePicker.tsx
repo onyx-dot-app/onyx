@@ -10,7 +10,7 @@ import { useState } from "react";
 import { SvgCalendar } from "@opal/icons";
 
 export interface InputDatePickerProps {
-  selectedDate: Date | null;
+  selectedDate?: Date | null;
   setSelectedDate?: (date: Date | null) => void;
   startYear?: number;
   disabled?: boolean;
@@ -21,7 +21,7 @@ function extractYear(date: Date | null): number {
 }
 
 export default function InputDatePicker({
-  selectedDate,
+  selectedDate: selectedDateProp,
   setSelectedDate,
   startYear = 1970,
   disabled = false,
@@ -32,9 +32,17 @@ export default function InputDatePicker({
     .fill(currYear)
     .map((currYear, index) => currYear - index);
   const [open, setOpen] = useState(false);
+  const [internalDate, setInternalDate] = useState<Date | null>(null);
   const [displayedMonth, setDisplayedMonth] = useState<Date>(
-    selectedDate ?? new Date()
+    selectedDateProp ?? new Date()
   );
+
+  // Use prop if provided (controlled), otherwise use internal state (uncontrolled)
+  const selectedDate = selectedDateProp ?? internalDate;
+  const handleDateChange = (date: Date | null) => {
+    setSelectedDate?.(date);
+    setInternalDate(date);
+  };
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -64,7 +72,7 @@ export default function InputDatePicker({
           <Button
             onClick={() => {
               const now = new Date();
-              setSelectedDate?.(now);
+              handleDateChange(now);
               setDisplayedMonth(now);
             }}
           >
@@ -76,7 +84,7 @@ export default function InputDatePicker({
           selected={selectedDate ?? undefined}
           onSelect={(date) => {
             if (date) {
-              setSelectedDate?.(date);
+              handleDateChange(date);
               setOpen(false);
             }
           }}
