@@ -29,7 +29,7 @@ import {
   SearchToolStep1Renderer,
   SearchToolStep2Renderer,
   constructCurrentSearchState,
-} from "./renderers/SearchToolRendererV2";
+} from "./renderers/SearchToolRenderer";
 import { SvgChevronDown, SvgChevronDownSmall } from "@opal/icons";
 import { LoadingSpinner } from "../../chat_search/LoadingSpinner";
 
