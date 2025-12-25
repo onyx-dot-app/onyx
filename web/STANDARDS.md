@@ -96,7 +96,7 @@ function UserCard({
 **Exception:** The `createLogoIcon` helper in `web/src/components/icons/icons.tsx` uses `dark:` modifiers (`dark:invert`, `dark:hidden`, `dark:block`) to handle third-party logo icons that cannot automatically adapt through `colors.css`. This is the ONLY acceptable use of dark mode modifiers.
 
 ```typescript
-// ✅ Good - Standard components use `tailwind/themes/tailwind.config/js` / `src/app/css/colors.css`
+// ✅ Good - Standard components use `tailwind-themes/tailwind.config.js` / `src/app/css/colors.css`
 <div className="bg-background-neutral-03 text-text-02">
   Content
 </div>
