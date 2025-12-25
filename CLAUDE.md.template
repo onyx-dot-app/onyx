@@ -462,7 +462,7 @@ function ContactForm() {
 
 **Prefer using `useSWR` for data fetching. Data should generally be fetched on the client side. Components that need data should display a loader / placeholder while waiting for that data. Prefer loading data within the component that needs it rather than at the top level and passing it down.**
 
-**Reason:** Client side fetching allows use to load the skeleton of the page without waiting for data to load, leading to a snappeir UX. Loading data where needed reduces dependencies between a component and its parent component(s).
+**Reason:** Client side fetching allows us to load the skeleton of the page without waiting for data to load, leading to a snappier UX. Loading data where needed reduces dependencies between a component and its parent component(s).
 
 ## Database & Migrations
 
