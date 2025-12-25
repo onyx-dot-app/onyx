@@ -8,6 +8,7 @@ import React, {
   useMemo,
   useRef,
   useState,
+  memo,
 } from "react";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { Message } from "@/app/chat/interfaces";
@@ -63,6 +64,87 @@ export interface ChatUIProps {
   stopGenerating: () => void;
   handleResubmitLastMessage: () => void;
 }
+
+// Memoized wrapper component for AI messages to stabilize chatStateData
+interface AIMessageWrapperProps {
+  message: Message;
+  previousMessage: Message | null;
+  liveAssistant: MinimalPersonaSnapshot;
+  emptyDocs: OnyxDocument[];
+  setPresentingDocument: (doc: MinimalOnyxDocument | null) => void;
+  createRegenerator: (regenerationRequest: {
+    messageId: number;
+    parentMessage: Message;
+    forceSearch?: boolean;
+  }) => (modelOverride: LlmDescriptor) => Promise<void>;
+  llmManager: LlmManager;
+  parentMessage: Message | null;
+  emptyChildrenIds: number[];
+  onMessageSelection: (nodeId: number) => void;
+}
+
+const AIMessageWrapper = memo(function AIMessageWrapper({
+  message,
+  previousMessage,
+  liveAssistant,
+  emptyDocs,
+  setPresentingDocument,
+  createRegenerator,
+  llmManager,
+  parentMessage,
+  emptyChildrenIds,
+  onMessageSelection,
+}: AIMessageWrapperProps) {
+  const regenerate = useMemo(
+    () =>
+      message.messageId !== undefined && previousMessage
+        ? createRegenerator({
+            messageId: message.messageId,
+            parentMessage: previousMessage,
+          })
+        : undefined,
+    [message.messageId, previousMessage, createRegenerator]
+  );
+
+  const chatStateData = useMemo(
+    () => ({
+      assistant: liveAssistant,
+      docs: message.documents ?? emptyDocs,
+      citations: message.citations,
+      setPresentingDocument,
+      regenerate,
+      overriddenModel: llmManager.currentLlm?.modelName,
+      researchType: message.researchType,
+    }),
+    [
+      liveAssistant,
+      message.documents,
+      message.citations,
+      message.researchType,
+      setPresentingDocument,
+      regenerate,
+      llmManager.currentLlm?.modelName,
+      emptyDocs,
+    ]
+  );
+
+  return (
+    <div id={`message-${message.nodeId}`} key={`message-${message.nodeId}`}>
+      <AIMessage
+        rawPackets={message.packets}
+        chatState={chatStateData}
+        nodeId={message.nodeId}
+        messageId={message.messageId}
+        currentFeedback={message.currentFeedback}
+        llmManager={llmManager}
+        otherMessagesCanSwitchTo={
+          parentMessage?.childrenNodeIds ?? emptyChildrenIds
+        }
+        onMessageSelection={onMessageSelection}
+      />
+    </div>
+  );
+});
 
 const ChatUI = React.memo(
   React.forwardRef(
@@ -245,9 +327,10 @@ const ChatUI = React.memo(
           >
             {messages.map((message, i) => {
               const messageReactComponentKey = `message-${message.nodeId}`;
-              const parentMessage = message.parentNodeId
-                ? messageTree?.get(message.parentNodeId)
-                : null;
+              const parentMessage: Message | null =
+                message.parentNodeId && messageTree
+                  ? messageTree.get(message.parentNodeId) ?? null
+                  : null;
 
               if (message.type === "user") {
                 const nextMessage =
@@ -306,41 +389,22 @@ const ChatUI = React.memo(
                 // NOTE: it's fine to use the previous entry in messageHistory
                 // since this is a "parsed" version of the message tree
                 // so the previous message is guaranteed to be the parent of the current message
-                const previousMessage = i !== 0 ? messages[i - 1] : null;
-                const regenerate =
-                  message.messageId !== undefined && previousMessage
-                    ? createRegenerator({
-                        messageId: message.messageId,
-                        parentMessage: previousMessage,
-                      })
-                    : undefined;
-                const chatStateData = {
-                  assistant: liveAssistant,
-                  docs: message.documents ?? emptyDocs,
-                  citations: message.citations,
-                  setPresentingDocument,
-                  regenerate,
-                  overriddenModel: llmManager.currentLlm?.modelName,
-                  researchType: message.researchType,
-                };
+                const previousMessage: Message | null =
+                  i !== 0 ? messages[i - 1] ?? null : null;
                 return (
-                  <div
-                    id={`message-${message.nodeId}`}
+                  <AIMessageWrapper
                     key={messageReactComponentKey}
-                  >
-                    <AIMessage
-                      rawPackets={message.packets}
-                      chatState={chatStateData}
-                      nodeId={message.nodeId}
-                      messageId={message.messageId}
-                      currentFeedback={message.currentFeedback}
-                      llmManager={llmManager}
-                      otherMessagesCanSwitchTo={
-                        parentMessage?.childrenNodeIds ?? emptyChildrenIds
-                      }
-                      onMessageSelection={onMessageSelection}
-                    />
-                  </div>
+                    message={message}
+                    previousMessage={previousMessage}
+                    liveAssistant={liveAssistant}
+                    emptyDocs={emptyDocs}
+                    setPresentingDocument={setPresentingDocument}
+                    createRegenerator={createRegenerator}
+                    llmManager={llmManager}
+                    parentMessage={parentMessage}
+                    emptyChildrenIds={emptyChildrenIds}
+                    onMessageSelection={onMessageSelection}
+                  />
                 );
               }
             })}

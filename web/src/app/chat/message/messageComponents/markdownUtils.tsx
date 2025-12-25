@@ -48,6 +48,30 @@ export const useMarkdownComponents = (
   processedContent: string,
   className?: string
 ) => {
+  // Memoize state values to prevent unnecessary callback recreation
+  // when state object reference changes but values remain the same
+  // Use content-based keys to detect actual changes
+  const docsKey = useMemo(
+    () => (state?.docs ? state.docs.map((d) => d.document_id).join(",") : ""),
+    [state?.docs]
+  );
+  const userFilesKey = useMemo(
+    () =>
+      state?.userFiles
+        ? state.userFiles.map((f) => f.id || f.file_id).join(",")
+        : "",
+    [state?.userFiles]
+  );
+  const citationsKey = useMemo(
+    () =>
+      state?.citations
+        ? Object.keys(state.citations)
+            .map((k) => `${k}:${state.citations?.[Number(k)]}`)
+            .join(",")
+        : "",
+    [state?.citations]
+  );
+
   const paragraphCallback = useCallback(
     (props: any) => (
       <MemoizedParagraph className={className}>
@@ -69,12 +93,7 @@ export const useMarkdownComponents = (
         {props.children}
       </MemoizedAnchor>
     ),
-    [
-      state?.docs,
-      state?.userFiles,
-      state?.citations,
-      state?.setPresentingDocument,
-    ]
+    [state?.setPresentingDocument, docsKey, userFilesKey, citationsKey]
   );
 
   const markdownComponents = useMemo(

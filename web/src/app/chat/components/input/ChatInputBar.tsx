@@ -712,7 +712,88 @@ const ChatInputBar = React.memo(
         </>
       );
     }
-  )
+  ),
+  (prevProps, nextProps) => {
+    // Compare primitive props
+    if (
+      prevProps.retrievalEnabled !== nextProps.retrievalEnabled ||
+      prevProps.deepResearchEnabled !== nextProps.deepResearchEnabled ||
+      prevProps.disabled !== nextProps.disabled ||
+      prevProps.chatState !== nextProps.chatState ||
+      prevProps.currentSessionFileTokenCount !==
+        nextProps.currentSessionFileTokenCount ||
+      prevProps.availableContextTokens !== nextProps.availableContextTokens ||
+      prevProps.initialMessage !== nextProps.initialMessage
+    ) {
+      return false;
+    }
+
+    // Compare selectedDocuments array
+    if (
+      prevProps.selectedDocuments.length !== nextProps.selectedDocuments.length
+    ) {
+      return false;
+    }
+    for (let i = 0; i < prevProps.selectedDocuments.length; i++) {
+      if (
+        prevProps.selectedDocuments[i]?.document_id !==
+        nextProps.selectedDocuments[i]?.document_id
+      ) {
+        return false;
+      }
+    }
+
+    // Compare selectedAssistant
+    if (prevProps.selectedAssistant?.id !== nextProps.selectedAssistant?.id) {
+      return false;
+    }
+
+    // Compare filterManager - check key properties
+    const prevFilter = prevProps.filterManager;
+    const nextFilter = nextProps.filterManager;
+    if (
+      prevFilter.timeRange?.from !== nextFilter.timeRange?.from ||
+      prevFilter.timeRange?.to !== nextFilter.timeRange?.to ||
+      prevFilter.selectedDocumentSets.length !==
+        nextFilter.selectedDocumentSets.length
+    ) {
+      return false;
+    }
+    for (let i = 0; i < prevFilter.selectedDocumentSets.length; i++) {
+      if (
+        prevFilter.selectedDocumentSets[i] !==
+        nextFilter.selectedDocumentSets[i]
+      ) {
+        return false;
+      }
+    }
+
+    // Compare llmManager - check current model
+    if (
+      prevProps.llmManager.currentLlm?.modelName !==
+        nextProps.llmManager.currentLlm?.modelName ||
+      prevProps.llmManager.isLoadingProviders !==
+        nextProps.llmManager.isLoadingProviders
+    ) {
+      return false;
+    }
+
+    // Compare function props by reference (they should be stable via useCallback)
+    if (
+      prevProps.removeDocs !== nextProps.removeDocs ||
+      prevProps.toggleDocumentSidebar !== nextProps.toggleDocumentSidebar ||
+      prevProps.stopGenerating !== nextProps.stopGenerating ||
+      prevProps.onSubmit !== nextProps.onSubmit ||
+      prevProps.onHeightChange !== nextProps.onHeightChange ||
+      prevProps.handleFileUpload !== nextProps.handleFileUpload ||
+      prevProps.toggleDeepResearch !== nextProps.toggleDeepResearch ||
+      prevProps.setPresentingDocument !== nextProps.setPresentingDocument
+    ) {
+      return false;
+    }
+
+    return true;
+  }
 );
 ChatInputBar.displayName = "ChatInputBar";
 

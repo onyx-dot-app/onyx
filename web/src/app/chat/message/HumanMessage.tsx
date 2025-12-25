@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { FileDescriptor } from "@/app/chat/interfaces";
 import "katex/dist/katex.min.css";
 import MessageSwitcher from "@/app/chat/message/MessageSwitcher";
@@ -102,7 +102,7 @@ interface HumanMessageProps {
   disableSwitchingForStreaming?: boolean;
 }
 
-export default function HumanMessage({
+function HumanMessage({
   content: initialContent,
   files,
   messageId,
@@ -257,3 +257,56 @@ export default function HumanMessage({
     </div>
   );
 }
+
+// Comparison function for React.memo
+function areHumanMessagePropsEqual(
+  prevProps: HumanMessageProps,
+  nextProps: HumanMessageProps
+): boolean {
+  // Compare primitive props
+  if (
+    prevProps.content !== nextProps.content ||
+    prevProps.messageId !== nextProps.messageId ||
+    prevProps.disableSwitchingForStreaming !==
+      nextProps.disableSwitchingForStreaming
+  ) {
+    return false;
+  }
+
+  // Compare files array
+  const prevFiles = prevProps.files || [];
+  const nextFiles = nextProps.files || [];
+  if (prevFiles.length !== nextFiles.length) {
+    return false;
+  }
+  for (let i = 0; i < prevFiles.length; i++) {
+    if (prevFiles[i]?.id !== nextFiles[i]?.id) {
+      return false;
+    }
+  }
+
+  // Compare otherMessagesCanSwitchTo array
+  const prevOther = prevProps.otherMessagesCanSwitchTo || [];
+  const nextOther = nextProps.otherMessagesCanSwitchTo || [];
+  if (prevOther.length !== nextOther.length) {
+    return false;
+  }
+  for (let i = 0; i < prevOther.length; i++) {
+    if (prevOther[i] !== nextOther[i]) {
+      return false;
+    }
+  }
+
+  // Compare function props by reference (they should be stable via useCallback)
+  if (
+    prevProps.onEdit !== nextProps.onEdit ||
+    prevProps.onMessageSelection !== nextProps.onMessageSelection ||
+    prevProps.stopGenerating !== nextProps.stopGenerating
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+export default React.memo(HumanMessage, areHumanMessagePropsEqual);

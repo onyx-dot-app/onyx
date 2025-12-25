@@ -13,7 +13,13 @@ import { FeedbackType } from "@/app/chat/interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import CitedSourcesToggle from "@/app/chat/message/messageComponents/CitedSourcesToggle";
 import { TooltipGroup } from "@/components/tooltip/CustomTooltip";
-import { useRef, useState, useEffect, useCallback, RefObject } from "react";
+import React, {
+  useRef,
+  useState,
+  useEffect,
+  useCallback,
+  RefObject,
+} from "react";
 import {
   useChatSessionStore,
   useDocumentSidebarVisible,
@@ -63,7 +69,7 @@ export interface AIMessageProps {
   onMessageSelection?: (nodeId: number) => void;
 }
 
-export default function AIMessage({
+function AIMessage({
   rawPackets,
   chatState,
   nodeId,
@@ -674,3 +680,103 @@ export default function AIMessage({
     </>
   );
 }
+
+// Comparison function for React.memo
+function areAIMessagePropsEqual(
+  prevProps: AIMessageProps,
+  nextProps: AIMessageProps
+): boolean {
+  // Compare primitive props
+  if (
+    prevProps.nodeId !== nextProps.nodeId ||
+    prevProps.messageId !== nextProps.messageId ||
+    prevProps.currentFeedback !== nextProps.currentFeedback
+  ) {
+    return false;
+  }
+
+  // Compare rawPackets - check length and last packet (since packets are appended during streaming)
+  if (prevProps.rawPackets.length !== nextProps.rawPackets.length) {
+    return false;
+  }
+  // Compare the last packet if arrays are non-empty
+  if (prevProps.rawPackets.length > 0) {
+    const prevLastPacket =
+      prevProps.rawPackets[prevProps.rawPackets.length - 1];
+    const nextLastPacket =
+      nextProps.rawPackets[nextProps.rawPackets.length - 1];
+    if (
+      prevLastPacket?.placement?.turn_index !==
+        nextLastPacket?.placement?.turn_index ||
+      prevLastPacket?.placement?.tab_index !==
+        nextLastPacket?.placement?.tab_index ||
+      prevLastPacket?.obj?.type !== nextLastPacket?.obj?.type
+    ) {
+      return false;
+    }
+  }
+
+  // Shallow compare chatState
+  const prevState = prevProps.chatState;
+  const nextState = nextProps.chatState;
+  if (
+    prevState.assistant?.id !== nextState.assistant?.id ||
+    prevState.overriddenModel !== nextState.overriddenModel ||
+    prevState.researchType !== nextState.researchType
+  ) {
+    return false;
+  }
+
+  // Compare docs array
+  const prevDocs = prevState.docs || [];
+  const nextDocs = nextState.docs || [];
+  if (prevDocs.length !== nextDocs.length) {
+    return false;
+  }
+  for (let i = 0; i < prevDocs.length; i++) {
+    if (prevDocs[i]?.document_id !== nextDocs[i]?.document_id) {
+      return false;
+    }
+  }
+
+  // Compare citations object (shallow)
+  const prevCitations = prevState.citations || {};
+  const nextCitations = nextState.citations || {};
+  const prevCitationKeys = Object.keys(prevCitations);
+  const nextCitationKeys = Object.keys(nextCitations);
+  if (prevCitationKeys.length !== nextCitationKeys.length) {
+    return false;
+  }
+  for (const keyStr of prevCitationKeys) {
+    const key = Number(keyStr);
+    if (prevCitations[key] !== nextCitations[key]) {
+      return false;
+    }
+  }
+
+  // Compare function props by reference (they should be stable via useCallback)
+  if (
+    prevState.setPresentingDocument !== nextState.setPresentingDocument ||
+    prevState.regenerate !== nextState.regenerate ||
+    prevProps.llmManager !== nextProps.llmManager ||
+    prevProps.onMessageSelection !== nextProps.onMessageSelection
+  ) {
+    return false;
+  }
+
+  // Compare otherMessagesCanSwitchTo array
+  const prevOther = prevProps.otherMessagesCanSwitchTo || [];
+  const nextOther = nextProps.otherMessagesCanSwitchTo || [];
+  if (prevOther.length !== nextOther.length) {
+    return false;
+  }
+  for (let i = 0; i < prevOther.length; i++) {
+    if (prevOther[i] !== nextOther[i]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+export default React.memo(AIMessage, areAIMessagePropsEqual);
