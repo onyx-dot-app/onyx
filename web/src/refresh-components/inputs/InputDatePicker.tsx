@@ -11,7 +11,7 @@ import { SvgCalendar } from "@opal/icons";
 
 export interface InputDatePickerProps {
   selectedDate: Date | null;
-  setSelectedDate: (date: Date | null) => void;
+  setSelectedDate?: (date: Date | null) => void;
   startYear?: number;
   disabled?: boolean;
 }
@@ -64,7 +64,7 @@ export default function InputDatePicker({
           <Button
             onClick={() => {
               const now = new Date();
-              setSelectedDate(now);
+              setSelectedDate?.(now);
               setDisplayedMonth(now);
             }}
           >
@@ -76,7 +76,7 @@ export default function InputDatePicker({
           selected={selectedDate ?? undefined}
           onSelect={(date) => {
             if (date) {
-              setSelectedDate(date);
+              setSelectedDate?.(date);
               setOpen(false);
             }
           }}
