@@ -147,10 +147,7 @@ export function AzureForm({
                     <SingleDefaultModelField placeholder="E.g. gpt-4o" />
                     <Separator />
 
-                    <AdvancedOptions
-                      currentModelConfigurations={[]}
-                      formikProps={formikProps}
-                    />
+                    <AdvancedOptions formikProps={formikProps} />
 
                     <FormActionButtons
                       isTesting={isTesting}

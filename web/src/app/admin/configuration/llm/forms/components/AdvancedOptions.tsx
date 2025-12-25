@@ -1,30 +1,17 @@
 import { FormikProps } from "formik";
-import { ModelConfiguration } from "../../interfaces";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
-import { MultiSelectField } from "@/components/Field";
-import Separator from "@/refresh-components/Separator";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import { AgentsMultiSelect } from "@/components/AgentsMultiSelect";
 import Text from "@/refresh-components/texts/Text";
-import useSWR from "swr";
-import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useState } from "react";
+import { useAgents } from "@/hooks/useAgents";
 
 export function AdvancedOptions({
-  currentModelConfigurations,
   formikProps,
 }: {
-  currentModelConfigurations: ModelConfiguration[];
   formikProps: FormikProps<any>;
 }) {
-  const {
-    data: agents,
-    isLoading: agentsLoading,
-    error: agentsError,
-  } = useSWR<Array<{ id: number; name: string; description: string }>>(
-    "/api/persona",
-    errorHandlingFetcher
-  );
+  const { agents, isLoading: agentsLoading, error: agentsError } = useAgents();
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
 
   return (

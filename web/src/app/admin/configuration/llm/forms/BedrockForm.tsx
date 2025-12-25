@@ -316,10 +316,7 @@ export function BedrockForm({
 
                     <Separator />
 
-                    <AdvancedOptions
-                      currentModelConfigurations={currentModels}
-                      formikProps={formikProps}
-                    />
+                    <AdvancedOptions formikProps={formikProps} />
 
                     <FormActionButtons
                       isTesting={isTesting}

@@ -300,10 +300,7 @@ export function CustomForm({
                       placeholder="e.g. gpt-4"
                     />
 
-                    <AdvancedOptions
-                      currentModelConfigurations={[]}
-                      formikProps={formikProps}
-                    />
+                    <AdvancedOptions formikProps={formikProps} />
 
                     <FormActionButtons
                       isTesting={isTesting}

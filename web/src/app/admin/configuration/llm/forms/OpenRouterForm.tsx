@@ -204,10 +204,7 @@ export function OpenRouterForm({
                       }
                     />
 
-                    <AdvancedOptions
-                      currentModelConfigurations={currentModels}
-                      formikProps={formikProps}
-                    />
+                    <AdvancedOptions formikProps={formikProps} />
 
                     <FormActionButtons
                       isTesting={isTesting}

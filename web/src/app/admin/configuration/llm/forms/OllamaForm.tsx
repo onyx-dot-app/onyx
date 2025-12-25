@@ -129,10 +129,7 @@ function OllamaFormContent({
         isLoading={isLoadingModels}
       />
 
-      <AdvancedOptions
-        currentModelConfigurations={availableModels}
-        formikProps={formikProps}
-      />
+      <AdvancedOptions formikProps={formikProps} />
 
       <FormActionButtons
         isTesting={isTesting}

@@ -92,10 +92,7 @@ export function AnthropicForm({
                       formikProps={formikProps}
                     />
 
-                    <AdvancedOptions
-                      currentModelConfigurations={modelConfigurations}
-                      formikProps={formikProps}
-                    />
+                    <AdvancedOptions formikProps={formikProps} />
 
                     <FormActionButtons
                       isTesting={isTesting}
