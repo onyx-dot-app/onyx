@@ -246,7 +246,7 @@ function ContactForm() {
 
 ## 11. Colors
 
-We use Tailwind CSS, but with custom overrides for colors and borders. These overrides live in `web/tailwind-themes/tailwind.config.js`. Do NOT use any standard Tailwind colors.
+**Always use custom overrides for colors and borders rather than built in Tailwind CSS colors. These overrides live in `web/tailwind-themes/tailwind.config.js`.**
 
 **Reason:** Our custom color system uses CSS variables that automatically handle dark mode and maintain design consistency across the app. Standard Tailwind colors bypass this system.
 
@@ -276,6 +276,6 @@ We use Tailwind CSS, but with custom overrides for colors and borders. These ove
 
 ## 12. Data Fetching
 
-Prefer using `useSWR` for data fetching. Data should generally be fetched on the client side. Components that need data should display a loader / placeholder while waiting for that data to avoid blocking initial page render.
+**Prefer using `useSWR` for data fetching. Data should generally be fetched on the client side. Components that need data should display a loader / placeholder while waiting for that data. Prefer loading data within the component that needs it rather than at the top level and passing it down.**
 
-Prefer loading data within the component that needs it rather than at the top level and passing it down.
+**Reason:** Client side fetching allows use to load the skeleton of the page without waiting for data to load, leading to a snappeir UX. Loading data where needed reduces dependencies between a component and its parent component(s).
