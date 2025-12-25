@@ -1,3 +1,5 @@
+"use client";
+
 import Button from "@/refresh-components/buttons/Button";
 import Calendar from "@/refresh-components/Calendar";
 import {
@@ -6,7 +8,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { SvgCalendar } from "@opal/icons";
 
 export interface InputDatePickerProps {
@@ -28,9 +30,13 @@ export default function InputDatePicker({
 }: InputDatePickerProps) {
   const validStartYear = Math.max(startYear, 1970);
   const currYear = extractYear(new Date());
-  const years = Array(currYear - validStartYear + 1)
-    .fill(currYear)
-    .map((currYear, index) => currYear - index);
+  const years = useMemo(
+    () =>
+      Array(currYear - validStartYear + 1)
+        .fill(currYear)
+        .map((currYear, index) => currYear - index),
+    [currYear, validStartYear]
+  );
   const [open, setOpen] = useState(false);
   const [internalDate, setInternalDate] = useState<Date | null>(
     selectedDateProp ?? null
