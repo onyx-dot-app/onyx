@@ -7,7 +7,42 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgChevronDown, SvgChevronLeft, SvgChevronRight } from "@opal/icons";
 import Button from "@/refresh-components/buttons/Button";
 
-function Calendar({
+function CalendarDayButton({
+  className,
+  day,
+  modifiers,
+  ...props
+}: React.ComponentProps<typeof DayButton>) {
+  const ref = React.useRef<HTMLButtonElement>(null);
+  React.useEffect(() => {
+    if (modifiers.focused) ref.current?.focus();
+  }, [modifiers.focused]);
+
+  return (
+    <Button
+      ref={ref}
+      tertiary
+      className={cn(
+        "w-full"
+        // modifiers.selected && "bg-background-tint-04 border"
+      )}
+      transient={modifiers.selected}
+      data-day={day.date.toLocaleDateString()}
+      data-selected-single={
+        modifiers.selected &&
+        !modifiers.range_start &&
+        !modifiers.range_end &&
+        !modifiers.range_middle
+      }
+      data-range-start={modifiers.range_start}
+      data-range-end={modifiers.range_end}
+      data-range-middle={modifiers.range_middle}
+      {...props}
+    />
+  );
+}
+
+export default function Calendar({
   className,
   classNames,
   showOutsideDays = true,
@@ -149,40 +184,3 @@ function Calendar({
     />
   );
 }
-
-function CalendarDayButton({
-  className,
-  day,
-  modifiers,
-  ...props
-}: React.ComponentProps<typeof DayButton>) {
-  const ref = React.useRef<HTMLButtonElement>(null);
-  React.useEffect(() => {
-    if (modifiers.focused) ref.current?.focus();
-  }, [modifiers.focused]);
-
-  return (
-    <Button
-      ref={ref}
-      tertiary
-      className={cn(
-        "w-full"
-        // modifiers.selected && "bg-background-tint-04 border"
-      )}
-      transient={modifiers.selected}
-      data-day={day.date.toLocaleDateString()}
-      data-selected-single={
-        modifiers.selected &&
-        !modifiers.range_start &&
-        !modifiers.range_end &&
-        !modifiers.range_middle
-      }
-      data-range-start={modifiers.range_start}
-      data-range-end={modifiers.range_end}
-      data-range-middle={modifiers.range_middle}
-      {...props}
-    />
-  );
-}
-
-export { Calendar, CalendarDayButton };

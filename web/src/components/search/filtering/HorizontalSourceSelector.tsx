@@ -6,7 +6,7 @@ import {
 } from "@/components/ui/popover"; // shadcn popover
 import { FiBook, FiMap, FiTag, FiCalendar } from "react-icons/fi";
 import { SourceMetadata } from "@/lib/search/interfaces";
-import { Calendar } from "@/components/ui/calendar"; // or wherever your Calendar component lives
+import Calendar from "@/refresh-components/Calendar";
 import { FilterDropdown } from "@/components/search/filtering/FilterDropdown";
 import { listSourceMetadata } from "@/lib/sources";
 import { getDateRangeString } from "@/lib/dateUtils";
@@ -97,8 +97,8 @@ export function HorizontalSourceSelector({
         <PopoverTrigger asChild>
           <button
             className="
-              flex items-center space-x-1 border 
-              border-border rounded-lg px-3 py-1.5 
+              flex items-center space-x-1 border
+              border-border rounded-lg px-3 py-1.5
               hover:bg-accent-background-hovered text-sm cursor-pointer
               bg-background-search-filter
             "
