@@ -4,25 +4,25 @@ import { useField } from "formik";
 import InputDatePicker, {
   InputDatePickerProps,
 } from "@/refresh-components/inputs/InputDatePicker";
+import { useFormInputCallback } from "@/hooks/formHooks";
 
 interface InputDatePickerFieldProps
-  extends Omit<InputDatePickerProps, "selectedDate" | "setSelectedDate"> {
+  extends Omit<InputDatePickerProps, "selectedDate"> {
   name: string;
 }
 
 export default function InputDatePickerField({
   name,
+  setSelectedDate,
   ...props
 }: InputDatePickerFieldProps) {
-  const [field, , helpers] = useField<Date | null>(name);
+  const [field] = useField<Date | null>(name);
+  const onChange = useFormInputCallback(name, setSelectedDate);
 
   return (
     <InputDatePicker
       selectedDate={field.value}
-      setSelectedDate={(date) => {
-        helpers.setValue(date);
-        helpers.setTouched(true);
-      }}
+      setSelectedDate={onChange}
       {...props}
     />
   );

@@ -6,9 +6,10 @@ import InputTypeIn, {
 } from "@/refresh-components/inputs/InputTypeIn";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgMinusCircle } from "@opal/icons";
+import { useFormInputCallback } from "@/hooks/formHooks";
 
 export interface InputTypeInElementFieldProps
-  extends Omit<InputTypeInProps, "value" | "onChange" | "onClear"> {
+  extends Omit<InputTypeInProps, "value" | "onClear"> {
   name: string;
   onRemove?: () => void;
 }
@@ -17,9 +18,11 @@ export interface InputTypeInElementFieldProps
 export default function InputTypeInElementField({
   name,
   onRemove,
+  onChange: onChangeProp,
   ...inputProps
 }: InputTypeInElementFieldProps) {
   const [field, meta] = useField(name);
+  const onChange = useFormInputCallback(name, onChangeProp);
   const hasError = meta.touched && meta.error;
   const isEmpty = !field.value || field.value.trim() === "";
 
@@ -31,7 +34,7 @@ export default function InputTypeInElementField({
         id={name}
         name={name}
         value={field.value || ""}
-        onChange={field.onChange}
+        onChange={onChange}
         onBlur={field.onBlur}
         error={!!hasError}
         showClearButton={false}
