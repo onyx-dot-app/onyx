@@ -213,7 +213,7 @@ function UserCard({ name }: { name: string }) {
 
 ## 10. Component Usage
 
-**Heavily avoid raw HTML input components. Always use components from the `refresh-components` directory.**
+**Heavily avoid raw HTML input components. Always use components from the `web/src/refresh-components` or `web/lib/opal/src` directory.**
 
 **Reason:** We've put in a lot of effort to unify the components that are rendered in the Onyx app. Using raw components breaks the entire UI of the application, and leaves it in a muddier state than before.
 
