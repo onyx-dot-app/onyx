@@ -2,7 +2,7 @@
 
 import { useField } from "formik";
 import Switch, { SwitchProps } from "@/refresh-components/inputs/Switch";
-import { useOnChange } from "./FieldContext";
+import { useOnChange } from "@/hooks/useFormInputChange";
 
 interface SwitchFieldProps extends Omit<SwitchProps, "checked"> {
   name: string;

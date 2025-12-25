@@ -4,7 +4,7 @@ import { useField } from "formik";
 import InputSelect, {
   InputSelectRootProps,
 } from "@/refresh-components/inputs/InputSelect";
-import { useOnChange } from "./FieldContext";
+import { useOnChange } from "@/hooks/useFormInputChange";
 
 export interface InputSelectFieldProps
   extends Omit<InputSelectRootProps, "value" | "onValueChange"> {
