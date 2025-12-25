@@ -362,7 +362,7 @@ export default function AgentEditorPage({
     remove_image: Yup.boolean().optional(),
     uploaded_image_id: Yup.string().nullable(),
     name: Yup.string().required("Agent name is required."),
-    description: Yup.string().required("Description is required."),
+    description: Yup.string().optional(),
 
     // Prompts
     instructions: Yup.string().optional(),
@@ -659,6 +659,7 @@ export default function AgentEditorPage({
                         <InputLayouts.Vertical
                           name="description"
                           label="Description"
+                          optional
                         >
                           <InputTextAreaField
                             name="description"
