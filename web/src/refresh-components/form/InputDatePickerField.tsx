@@ -7,8 +7,9 @@ import InputDatePicker, {
 import { useFormInputCallback } from "@/hooks/formHooks";
 
 interface InputDatePickerFieldProps
-  extends Omit<InputDatePickerProps, "selectedDate"> {
+  extends Omit<InputDatePickerProps, "selectedDate" | "setSelectedDate"> {
   name: string;
+  setSelectedDate?: (date: Date | null) => void;
 }
 
 export default function InputDatePickerField({

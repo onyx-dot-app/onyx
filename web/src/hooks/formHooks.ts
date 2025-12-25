@@ -11,14 +11,14 @@ import { useField } from "formik";
  * @example
  * ```tsx
  * function MyField({ name }: { name: string }) {
- *   const [field, meta] = useField(name);
+ *   const [field] = useField(name);
  *   const onChange = useFormInputCallback(name);
  *
  *   return (
  *     <input
  *       name={name}
  *       value={field.value}
- *       onChange={(e) => onChange(e.target.value)}
+ *       onChange={onChange}
  *     />
  *   );
  * }
@@ -39,12 +39,12 @@ import { useField } from "formik";
  */
 export function useFormInputCallback<T = any>(
   name: string,
-  f?: (value: T) => void
+  f?: (event: T) => void
 ) {
-  const [, , helpers] = useField<T>(name);
-  return (value: T) => {
-    f?.(value);
+  const [field, , helpers] = useField<T>(name);
+  return (event: T) => {
+    f?.(event);
     helpers.setTouched(true);
-    helpers.setValue(value);
+    field.onChange(event);
   };
 }
