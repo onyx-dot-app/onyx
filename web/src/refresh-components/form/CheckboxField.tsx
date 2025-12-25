@@ -2,6 +2,7 @@
 
 import { useField } from "formik";
 import Checkbox, { CheckboxProps } from "@/refresh-components/inputs/Checkbox";
+import { useOnChange } from "./FieldContext";
 
 interface CheckboxFieldProps extends Omit<CheckboxProps, "checked"> {
   name: string;
@@ -12,16 +13,13 @@ export default function UnlabeledCheckboxField({
   onCheckedChange,
   ...props
 }: CheckboxFieldProps) {
-  const [field, , helpers] = useField<boolean>({ name, type: "checkbox" });
+  const [field] = useField<boolean>({ name, type: "checkbox" });
+  const onChange = useOnChange<boolean>(name, onCheckedChange);
 
   return (
     <Checkbox
       checked={field.value}
-      onCheckedChange={(checked) => {
-        helpers.setValue(Boolean(checked));
-        helpers.setTouched(true);
-        onCheckedChange?.(checked);
-      }}
+      onCheckedChange={(checked) => onChange(Boolean(checked))}
       {...props}
     />
   );

@@ -4,30 +4,26 @@ import { useField } from "formik";
 import InputSelect, {
   InputSelectRootProps,
 } from "@/refresh-components/inputs/InputSelect";
+import { useOnChange } from "./FieldContext";
 
 export interface InputSelectFieldProps
   extends Omit<InputSelectRootProps, "value" | "onValueChange"> {
   name: string;
-  onValueChange?: (value: string) => void;
 }
 
 export default function InputSelectField({
   name,
-  onValueChange,
   children,
   ...selectProps
 }: InputSelectFieldProps) {
-  const [field, meta, helpers] = useField(name);
+  const [field, meta] = useField(name);
+  const onValueChange = useOnChange(name);
   const hasError = meta.touched && meta.error;
 
   return (
     <InputSelect
       value={field.value}
-      onValueChange={(value) => {
-        helpers.setValue(value);
-        helpers.setTouched(true);
-        onValueChange?.(value);
-      }}
+      onValueChange={onValueChange}
       error={!!hasError}
       {...selectProps}
     >
