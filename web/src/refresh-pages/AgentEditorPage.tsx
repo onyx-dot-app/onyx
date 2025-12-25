@@ -330,22 +330,16 @@ export default function AgentEditorPage({
       (_, i) => existingAgent?.starter_messages?.[i]?.message ?? ""
     ),
 
-    // Knowledge - enabled if there are doc sets, user files, OR num_chunks is set
-    enable_knowledge: (() => {
-      const hasDocSets = (existingAgent?.document_sets?.length ?? 0) > 0;
-      const hasUserFiles = (existingAgent?.user_file_ids?.length ?? 0) > 0;
-      const hasNumChunks =
-        existingAgent?.num_chunks !== null &&
-        existingAgent?.num_chunks !== undefined;
-      return hasDocSets || hasUserFiles || hasNumChunks;
-    })(),
+    // Knowledge - enabled if num_chunks is greater than 0
+    // (num_chunks of 0 or null means knowledge is disabled)
+    enable_knowledge: (existingAgent?.num_chunks ?? 0) > 0,
     knowledge_source:
       existingAgent?.user_file_ids && existingAgent.user_file_ids.length > 0
         ? "user_knowledge"
         : ("team_knowledge" as "team_knowledge" | "user_knowledge"),
     document_set_ids: existingAgent?.document_sets?.map((ds) => ds.id) ?? [],
     user_file_ids: existingAgent?.user_file_ids ?? [],
-    num_chunks: existingAgent?.num_chunks ?? null,
+    num_chunks: existingAgent?.num_chunks ?? 0,
 
     // Access
     general_access:
@@ -388,7 +382,7 @@ export default function AgentEditorPage({
     knowledge_source: Yup.string().oneOf(["team_knowledge", "user_knowledge"]),
     document_set_ids: Yup.array().of(Yup.number()),
     user_file_ids: Yup.array().of(Yup.string()),
-    num_chunks: Yup.number().nullable().positive().integer(),
+    num_chunks: Yup.number().nullable(),
 
     // Access
     general_access: Yup.string().oneOf(["restricted", "public"]).required(),
