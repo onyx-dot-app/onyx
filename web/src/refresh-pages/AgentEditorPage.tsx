@@ -382,7 +382,19 @@ export default function AgentEditorPage({
     knowledge_source: Yup.string().oneOf(["team_knowledge", "user_knowledge"]),
     document_set_ids: Yup.array().of(Yup.number()),
     user_file_ids: Yup.array().of(Yup.string()),
-    num_chunks: Yup.number().nullable(),
+    num_chunks: Yup.number()
+      .nullable()
+      .transform((value, originalValue) =>
+        originalValue === "" || originalValue === null ? null : value
+      )
+      .test(
+        "is-non-negative-integer",
+        "The number of chunks must be a non-negative integer (0, 1, 2, etc.)",
+        (value) =>
+          value === null ||
+          value === undefined ||
+          (Number.isInteger(value) && value >= 0)
+      ),
 
     // Access
     general_access: Yup.string().oneOf(["restricted", "public"]).required(),
