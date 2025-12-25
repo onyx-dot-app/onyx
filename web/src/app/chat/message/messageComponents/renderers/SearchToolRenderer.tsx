@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo, JSX } from "react";
-import { FiSearch, FiGlobe, FiBookOpen } from "react-icons/fi";
+import { SvgSearch, SvgGlobe, SvgBookOpen } from "@opal/icons";
 import {
   PacketType,
   SearchToolPacket,
@@ -108,7 +108,7 @@ export function SearchToolStep1Renderer({
   const [queriesToShow, setQueriesToShow] = useState(INITIAL_QUERIES_TO_SHOW);
 
   return children({
-    icon: FiSearch,
+    icon: SvgSearch,
     status: "Searching internally",
     content: (
       <div className="flex flex-col">
@@ -123,7 +123,7 @@ export function SearchToolStep1Renderer({
               }}
             >
               <SourceChip2
-                icon={<FiSearch size={10} />}
+                icon={<SvgSearch size={10} />}
                 title={truncateString(query, MAX_TITLE_LENGTH)}
               />
             </div>
@@ -170,7 +170,7 @@ export function SearchToolStep2Renderer({
   const [resultsToShow, setResultsToShow] = useState(INITIAL_RESULTS_TO_SHOW);
 
   return children({
-    icon: FiBookOpen,
+    icon: SvgBookOpen,
     status: "Reading",
     content: (
       <div className="flex flex-col">
@@ -375,7 +375,7 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   ]);
 
   // Determine the icon based on search type
-  const icon = isInternetSearch ? FiGlobe : FiSearch;
+  const icon = isInternetSearch ? SvgGlobe : SvgSearch;
 
   // Don't render anything if search hasn't started
   if (queries.length === 0) {
@@ -403,7 +403,7 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
                 }}
               >
                 <SourceChip2
-                  icon={<FiSearch size={10} />}
+                  icon={<SvgSearch size={10} />}
                   title={truncateString(query, MAX_TITLE_LENGTH)}
                 />
               </div>

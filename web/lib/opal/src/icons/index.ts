@@ -55,6 +55,7 @@ export { default as SvgFolderPartialOpen } from "@opal/icons/folder-partial-open
 export { default as SvgFolderPlus } from "@opal/icons/folder-plus";
 export { default as SvgFolder } from "@opal/icons/folder";
 export { default as SvgGlobe } from "@opal/icons/globe";
+export { default as SvgBookOpen } from "@opal/icons/book-open";
 export { default as SvgHardDrive } from "@opal/icons/hard-drive";
 export { default as SvgHeadsetMic } from "@opal/icons/headset-mic";
 export { default as SvgHourglass } from "@opal/icons/hourglass";
