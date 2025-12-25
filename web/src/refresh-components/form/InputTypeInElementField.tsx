@@ -9,7 +9,7 @@ import { SvgMinusCircle } from "@opal/icons";
 import { useFormInputCallback } from "@/hooks/formHooks";
 
 export interface InputTypeInElementFieldProps
-  extends Omit<InputTypeInProps, "value" | "onChange" | "onClear"> {
+  extends Omit<InputTypeInProps, "value" | "onClear"> {
   name: string;
   onRemove?: () => void;
 }
@@ -18,10 +18,11 @@ export interface InputTypeInElementFieldProps
 export default function InputTypeInElementField({
   name,
   onRemove,
+  onChange: onChangeProp,
   ...inputProps
 }: InputTypeInElementFieldProps) {
   const [field, meta] = useField(name);
-  const onChange = useFormInputCallback(name);
+  const onChange = useFormInputCallback(name, onChangeProp);
   const hasError = meta.touched && meta.error;
   const isEmpty = !field.value || field.value.trim() === "";
 

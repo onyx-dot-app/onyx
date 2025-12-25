@@ -7,23 +7,24 @@ import InputSelect, {
 import { useFormInputCallback } from "@/hooks/formHooks";
 
 export interface InputSelectFieldProps
-  extends Omit<InputSelectRootProps, "value" | "onValueChange"> {
+  extends Omit<InputSelectRootProps, "value"> {
   name: string;
 }
 
 export default function InputSelectField({
   name,
   children,
+  onValueChange,
   ...selectProps
 }: InputSelectFieldProps) {
   const [field, meta] = useField(name);
-  const onValueChange = useFormInputCallback(name);
+  const onChange = useFormInputCallback(name, onValueChange);
   const hasError = meta.touched && meta.error;
 
   return (
     <InputSelect
       value={field.value}
-      onValueChange={onValueChange}
+      onValueChange={onChange}
       error={!!hasError}
       {...selectProps}
     >

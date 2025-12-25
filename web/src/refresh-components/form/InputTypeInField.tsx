@@ -7,16 +7,17 @@ import InputTypeIn, {
 import { useFormInputCallback } from "@/hooks/formHooks";
 
 export interface InputTypeInFieldProps
-  extends Omit<InputTypeInProps, "value" | "onChange" | "onClear"> {
+  extends Omit<InputTypeInProps, "value" | "onClear"> {
   name: string;
 }
 
 export default function InputTypeInField({
   name,
+  onChange: onChangeProp,
   ...inputProps
 }: InputTypeInFieldProps) {
   const [field, meta, helpers] = useField(name);
-  const onChange = useFormInputCallback(name);
+  const onChange = useFormInputCallback(name, onChangeProp);
   const hasError = meta.touched && meta.error;
 
   return (

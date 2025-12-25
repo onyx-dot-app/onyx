@@ -1,3 +1,5 @@
+"use client";
+
 import Button from "@/refresh-components/buttons/Button";
 import Calendar from "@/refresh-components/Calendar";
 import {
