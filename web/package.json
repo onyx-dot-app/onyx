@@ -10,7 +10,6 @@
     "dev": "next dev",
     "dev:profile": "NEXT_PUBLIC_ENABLE_STATS=true next dev",
     "build": "next build",
-    "build:e2e": "E2E_TESTING=true next build",
     "start": "next start",
     "lint": "next lint",
     "lint:unused": "eslint --ext .js,.jsx,.ts,.tsx --rule 'unused-imports/no-unused-imports: error' --quiet --fix=false src/",
