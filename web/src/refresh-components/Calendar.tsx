@@ -22,10 +22,7 @@ function CalendarDayButton({
     <Button
       ref={ref}
       tertiary
-      className={cn(
-        "w-full"
-        // modifiers.selected && "bg-background-tint-04 border"
-      )}
+      className="w-full"
       transient={modifiers.selected}
       data-day={day.date.toLocaleDateString()}
       data-selected-single={
@@ -117,37 +114,19 @@ export default function Calendar({
           defaultClassNames.weekday
         ),
         week: cn("flex w-full", defaultClassNames.week),
-        // week_number_header: cn(
-        //   "w-[--cell-size] select-none",
-        //   defaultClassNames.week_number_header
-        // ),
-        // week_number: cn(
-        //   "text-text-03 select-none text-[0.8rem]",
-        //   defaultClassNames.week_number
-        // ),
         day: cn(
           "group/day relative h-full w-full select-none",
           defaultClassNames.day
         ),
-        // range_start: cn(
-        //   "bg-neutral-100 rounded-l-md dark:bg-neutral-800",
-        //   defaultClassNames.range_start
-        // ),
-        // range_middle: cn("rounded-none", defaultClassNames.range_middle),
-        // range_end: cn(
-        //   "bg-neutral-100 rounded-r-md dark:bg-neutral-800",
-        //   defaultClassNames.range_end
-        // ),
-        // today: cn(
-        //   "bg-neutral-100 text-neutral-900 rounded-md data-[selected=true]:rounded-none dark:bg-neutral-800 dark:text-neutral-50",
-        //   defaultClassNames.today
-        // ),
-        // outside: cn(
-        //   "text-neutral-500 aria-selected:text-neutral-500 dbg-red dark:text-neutral-400 dark:aria-selected:text-neutral-400",
-        //   defaultClassNames.outside
-        // ),
-        disabled: cn("text-text-03 opacity-50", defaultClassNames.disabled),
-        hidden: cn("invisible", defaultClassNames.hidden),
+        // week_number_header: cn(defaultClassNames.week_number_header),
+        // week_number: cn(defaultClassNames.week_number),
+        // range_start: cn(defaultClassNames.range_start),
+        // range_middle: cn(defaultClassNames.range_middle),
+        // range_end: cn(defaultClassNames.range_end),
+        // today: cn(defaultClassNames.today),
+        // outside: cn(defaultClassNames.outside),
+        // disabled: cn(defaultClassNames.disabled),
+        // hidden: cn(defaultClassNames.hidden),
         ...classNames,
       }}
       components={{
