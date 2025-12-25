@@ -7,7 +7,39 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgChevronDown, SvgChevronLeft, SvgChevronRight } from "@opal/icons";
 import Button from "@/refresh-components/buttons/Button";
 
-function Calendar({
+function CalendarDayButton({
+  className,
+  day,
+  modifiers,
+  ...props
+}: React.ComponentProps<typeof DayButton>) {
+  const ref = React.useRef<HTMLButtonElement>(null);
+  React.useEffect(() => {
+    if (modifiers.focused) ref.current?.focus();
+  }, [modifiers.focused]);
+
+  return (
+    <Button
+      ref={ref}
+      tertiary
+      className="w-full"
+      transient={modifiers.selected}
+      data-day={day.date.toLocaleDateString()}
+      data-selected-single={
+        modifiers.selected &&
+        !modifiers.range_start &&
+        !modifiers.range_end &&
+        !modifiers.range_middle
+      }
+      data-range-start={modifiers.range_start}
+      data-range-end={modifiers.range_end}
+      data-range-middle={modifiers.range_middle}
+      {...props}
+    />
+  );
+}
+
+export default function Calendar({
   className,
   classNames,
   showOutsideDays = true,
@@ -22,7 +54,7 @@ function Calendar({
     <DayPicker
       showOutsideDays={showOutsideDays}
       className={cn(
-        "bg-white group/calendar p-3 [--cell-size:2rem] [[data-slot=card-content]_&]:bg-transparent [[data-slot=popover-content]_&]:bg-transparent dark:bg-neutral-950",
+        "group/calendar p-0 [--cell-size:2rem] [[data-slot=card-content]_&]:bg-transparent [[data-slot=popover-content]_&]:bg-transparent",
         String.raw`rtl:**:[.rdp-button\_next>svg]:rotate-180`,
         String.raw`rtl:**:[.rdp-button\_previous>svg]:rotate-180`,
         className
@@ -61,61 +93,40 @@ function Calendar({
           defaultClassNames.dropdowns
         ),
         dropdown_root: cn(
-          "has-focus:border-neutral-950 border-neutral-200 shadow-xs has-focus:ring-neutral-950/50 has-focus:ring-[3px] relative rounded-md border dark:has-focus:border-neutral-300 dark:border-neutral-800 dark:has-focus:ring-neutral-300/50",
+          "has-focus:border-border-05 border-border-03 shadow-xs has-focus:ring-border-05/50 has-focus:ring-[3px] relative rounded-md border",
           defaultClassNames.dropdown_root
         ),
         dropdown: cn(
-          "bg-white absolute inset-0 opacity-0 dark:bg-neutral-950",
+          "bg-background-neutral-00 absolute inset-0 opacity-0",
           defaultClassNames.dropdown
         ),
         caption_label: cn(
           "select-none font-medium",
           captionLayout === "label"
             ? "text-sm"
-            : "[&>svg]:text-neutral-500 flex h-8 items-center gap-1 rounded-md pl-2 pr-1 text-sm [&>svg]:size-3.5 dark:[&>svg]:text-neutral-400",
+            : "[&>svg]:text-text-03 flex h-8 items-center gap-1 rounded-md pl-2 pr-1 text-sm [&>svg]:size-3.5",
           defaultClassNames.caption_label
         ),
         table: "w-full border-collapse",
         weekdays: cn("flex", defaultClassNames.weekdays),
         weekday: cn(
-          "text-neutral-500 flex-1 select-none rounded-md text-[0.8rem] font-normal dark:text-neutral-400",
+          "text-text-02 flex-1 select-none font-secondary-mono pb-2",
           defaultClassNames.weekday
         ),
-        week: cn("mt-2 flex w-full", defaultClassNames.week),
-        week_number_header: cn(
-          "w-[--cell-size] select-none",
-          defaultClassNames.week_number_header
-        ),
-        week_number: cn(
-          "text-neutral-500 select-none text-[0.8rem] dark:text-neutral-400",
-          defaultClassNames.week_number
-        ),
+        week: cn("flex w-full", defaultClassNames.week),
         day: cn(
-          "group/day relative aspect-square h-full w-full select-none p-0 text-center [&:first-child[data-selected=true]_button]:rounded-l-md [&:last-child[data-selected=true]_button]:rounded-r-md",
+          "group/day relative h-full w-full select-none",
           defaultClassNames.day
         ),
-        range_start: cn(
-          "bg-neutral-100 rounded-l-md dark:bg-neutral-800",
-          defaultClassNames.range_start
-        ),
-        range_middle: cn("rounded-none", defaultClassNames.range_middle),
-        range_end: cn(
-          "bg-neutral-100 rounded-r-md dark:bg-neutral-800",
-          defaultClassNames.range_end
-        ),
-        today: cn(
-          "bg-neutral-100 text-neutral-900 rounded-md data-[selected=true]:rounded-none dark:bg-neutral-800 dark:text-neutral-50",
-          defaultClassNames.today
-        ),
-        outside: cn(
-          "text-neutral-500 aria-selected:text-neutral-500 dark:text-neutral-400 dark:aria-selected:text-neutral-400",
-          defaultClassNames.outside
-        ),
-        disabled: cn(
-          "text-neutral-500 opacity-50 dark:text-neutral-400",
-          defaultClassNames.disabled
-        ),
-        hidden: cn("invisible", defaultClassNames.hidden),
+        // week_number_header: cn(defaultClassNames.week_number_header),
+        // week_number: cn(defaultClassNames.week_number),
+        // range_start: cn(defaultClassNames.range_start),
+        // range_middle: cn(defaultClassNames.range_middle),
+        // range_end: cn(defaultClassNames.range_end),
+        // today: cn(defaultClassNames.today),
+        // outside: cn(defaultClassNames.outside),
+        // disabled: cn(defaultClassNames.disabled),
+        // hidden: cn(defaultClassNames.hidden),
         ...classNames,
       }}
       components={{
@@ -152,36 +163,3 @@ function Calendar({
     />
   );
 }
-
-function CalendarDayButton({
-  className,
-  day,
-  modifiers,
-  ...props
-}: React.ComponentProps<typeof DayButton>) {
-  const ref = React.useRef<HTMLButtonElement>(null);
-  React.useEffect(() => {
-    if (modifiers.focused) ref.current?.focus();
-  }, [modifiers.focused]);
-
-  return (
-    <Button
-      ref={ref}
-      tertiary
-      className="w-full"
-      data-day={day.date.toLocaleDateString()}
-      data-selected-single={
-        modifiers.selected &&
-        !modifiers.range_start &&
-        !modifiers.range_end &&
-        !modifiers.range_middle
-      }
-      data-range-start={modifiers.range_start}
-      data-range-end={modifiers.range_end}
-      data-range-middle={modifiers.range_middle}
-      {...props}
-    />
-  );
-}
-
-export { Calendar, CalendarDayButton };

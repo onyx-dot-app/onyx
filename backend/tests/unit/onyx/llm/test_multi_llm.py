@@ -249,6 +249,7 @@ def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
             max_tokens=None,
             parallel_tool_calls=True,
             mock_response=MOCK_LLM_RESPONSE,
+            allowed_openai_params=["tool_choice"],
         )
 
 
@@ -403,6 +404,7 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
             stream_options={"include_usage": True},
             parallel_tool_calls=True,
             mock_response=MOCK_LLM_RESPONSE,
+            allowed_openai_params=["tool_choice"],
         )
 
 

@@ -248,10 +248,6 @@ class LitellmLLM(LLM):
         )
 
         # Needed to get reasoning tokens from the model
-        # NOTE: OpenAI Responses API is disabled for parallel tool calls because LiteLLM's transformation layer
-        # doesn't properly pass parallel_tool_calls to the API, causing the model to
-        # always return sequential tool calls. For this reason parallel tool calls won't work with OpenAI models
-
         use_responses_api = (
             is_true_openai_model(self.config.model_provider, self.config.model_name)
             or self.config.model_provider == AZURE_PROVIDER_NAME
@@ -354,6 +350,17 @@ class LitellmLLM(LLM):
                 **(
                     {"response_format": structured_response_format}
                     if structured_response_format
+                    else {}
+                ),
+                # TODO: Litellm erroenously drops tool_choice for OpenAI,
+                # which we use to control tool calls (auto, required, none, etc.).
+                # This drop is silent and does not raise error because we set litellm.drop_params = True.
+                # Force tool use for OpenAI was re-enabled via allowed_openai_params.
+                # However, this param breaks Anthropic models, so we only include it for non-Anthropic models.
+                # This should be removed when either 1) we switch to responses API 2) Litellm fixes this issue
+                **(
+                    {"allowed_openai_params": ["tool_choice"]}
+                    if "claude" not in self.config.model_name.lower()
                     else {}
                 ),
                 **completion_kwargs,
