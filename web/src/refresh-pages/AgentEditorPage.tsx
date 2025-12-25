@@ -16,7 +16,11 @@ import InputDatePickerField from "@/refresh-components/form/InputDatePickerField
 import Separator from "@/refresh-components/Separator";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { useFormikContext } from "formik";
-import { CONVERSATION_STARTERS } from "@/lib/constants";
+import {
+  STARTER_MESSAGES_EXAMPLES,
+  MAX_CHARACTERS_STARTER_MESSAGE,
+  MAX_CHARACTERS_AGENT_DESCRIPTION,
+} from "@/lib/constants";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/Card";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
@@ -228,14 +232,14 @@ function Section({
   );
 }
 
-function ConversationStarters() {
-  const max_starters = CONVERSATION_STARTERS.length;
+function StarterMessages() {
+  const max_starters = STARTER_MESSAGES_EXAMPLES.length;
 
   const { values } = useFormikContext<{
-    conversation_starters: string[];
+    starter_messages: string[];
   }>();
 
-  const starters = values.conversation_starters || [];
+  const starters = values.starter_messages || [];
 
   // Count how many non-empty starters we have
   const filledStarters = starters.filter((s) => s).length;
@@ -251,15 +255,16 @@ function ConversationStarters() {
   );
 
   return (
-    <FieldArray name="conversation_starters">
+    <FieldArray name="starter_messages">
       {(arrayHelpers) => (
         <div className="flex flex-col gap-2">
           {Array.from({ length: visibleCount }, (_, i) => (
             <InputTypeInElementField
-              key={`conversation_starters.${i}`}
-              name={`conversation_starters.${i}`}
+              key={`starter_messages.${i}`}
+              name={`starter_messages.${i}`}
               placeholder={
-                CONVERSATION_STARTERS[i] || "Enter a conversation starter..."
+                STARTER_MESSAGES_EXAMPLES[i] ||
+                "Enter a conversation starter..."
               }
               onRemove={() => arrayHelpers.remove(i)}
             />
@@ -320,8 +325,8 @@ export default function AgentEditorPage({
 
     // Prompts
     instructions: existingAgent?.system_prompt ?? "",
-    conversation_starters: Array.from(
-      { length: CONVERSATION_STARTERS.length },
+    starter_messages: Array.from(
+      { length: STARTER_MESSAGES_EXAMPLES.length },
       (_, i) => existingAgent?.starter_messages?.[i]?.message ?? ""
     ),
 
@@ -362,11 +367,21 @@ export default function AgentEditorPage({
     remove_image: Yup.boolean().optional(),
     uploaded_image_id: Yup.string().nullable(),
     name: Yup.string().required("Agent name is required."),
-    description: Yup.string().optional(),
+    description: Yup.string()
+      .max(
+        MAX_CHARACTERS_AGENT_DESCRIPTION,
+        `Description must be ${MAX_CHARACTERS_AGENT_DESCRIPTION} characters or less`
+      )
+      .optional(),
 
     // Prompts
     instructions: Yup.string().optional(),
-    conversation_starters: Yup.array().of(Yup.string()),
+    starter_messages: Yup.array().of(
+      Yup.string().max(
+        MAX_CHARACTERS_STARTER_MESSAGE,
+        `Conversation starter must be ${MAX_CHARACTERS_STARTER_MESSAGE} characters or less`
+      )
+    ),
 
     // Knowledge
     enable_knowledge: Yup.boolean(),
@@ -391,7 +406,7 @@ export default function AgentEditorPage({
   const handleSubmit = async (values: typeof initialValues) => {
     try {
       // Map conversation starters
-      const starterMessages = values.conversation_starters
+      const starterMessages = values.starter_messages
         .filter((message: string) => message.trim() !== "")
         .map((message: string) => ({
           message: message,
@@ -668,13 +683,14 @@ export default function AgentEditorPage({
                         </InputLayouts.Vertical>
                       </Section>
 
-                      <Section className="flex flex-col items-center w-fit gap-1">
-                        <InputLayouts.Label
+                      <Section className="w-fit">
+                        <InputLayouts.Vertical
                           name="agent_avatar"
                           label="Agent Avatar"
-                          className="w-fit"
-                        />
-                        <AgentIconEditor existingAgent={existingAgent} />
+                          className="items-center"
+                        >
+                          <AgentIconEditor existingAgent={existingAgent} />
+                        </InputLayouts.Vertical>
                       </Section>
                     </div>
 
@@ -694,12 +710,12 @@ export default function AgentEditorPage({
                       </InputLayouts.Vertical>
 
                       <InputLayouts.Vertical
-                        name="conversation_starters"
+                        name="starter_messages"
                         label="Conversation Starters"
                         description="Example messages that help users understand what this agent can do and how to interact with it effectively."
                         optional
                       >
-                        <ConversationStarters />
+                        <StarterMessages />
                       </InputLayouts.Vertical>
                     </Section>
 
