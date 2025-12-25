@@ -4,7 +4,7 @@ import { useField } from "formik";
 import InputTextArea, {
   InputTextAreaProps,
 } from "@/refresh-components/inputs/InputTextArea";
-import { useOnChange } from "@/hooks/useFormInputChange";
+import { useFormInputCallback } from "@/hooks/form-hooks";
 
 export interface InputTextAreaFieldProps
   extends Omit<InputTextAreaProps, "value" | "onChange"> {
@@ -16,7 +16,7 @@ export default function InputTextAreaField({
   ...textareaProps
 }: InputTextAreaFieldProps) {
   const [field, meta] = useField(name);
-  const onChange = useOnChange(name);
+  const onChange = useFormInputCallback(name);
   const hasError = meta.touched && meta.error;
 
   return (

@@ -4,7 +4,7 @@ import { useField } from "formik";
 import InputTypeIn, {
   InputTypeInProps,
 } from "@/refresh-components/inputs/InputTypeIn";
-import { useOnChange } from "@/hooks/useFormInputChange";
+import { useFormInputCallback } from "@/hooks/form-hooks";
 
 export interface InputTypeInFieldProps
   extends Omit<InputTypeInProps, "value" | "onChange" | "onClear"> {
@@ -16,7 +16,7 @@ export default function InputTypeInField({
   ...inputProps
 }: InputTypeInFieldProps) {
   const [field, meta, helpers] = useField(name);
-  const onChange = useOnChange(name);
+  const onChange = useFormInputCallback(name);
   const hasError = meta.touched && meta.error;
 
   return (

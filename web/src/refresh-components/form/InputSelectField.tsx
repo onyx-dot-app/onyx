@@ -4,7 +4,7 @@ import { useField } from "formik";
 import InputSelect, {
   InputSelectRootProps,
 } from "@/refresh-components/inputs/InputSelect";
-import { useOnChange } from "@/hooks/useFormInputChange";
+import { useFormInputCallback } from "@/hooks/form-hooks";
 
 export interface InputSelectFieldProps
   extends Omit<InputSelectRootProps, "value" | "onValueChange"> {
@@ -17,7 +17,7 @@ export default function InputSelectField({
   ...selectProps
 }: InputSelectFieldProps) {
   const [field, meta] = useField(name);
-  const onValueChange = useOnChange(name);
+  const onValueChange = useFormInputCallback(name);
   const hasError = meta.touched && meta.error;
 
   return (

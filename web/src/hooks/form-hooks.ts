@@ -8,16 +8,11 @@ import { useField } from "formik";
  * This hook automatically sets the field as "touched" when its value changes,
  * enabling immediate validation feedback after the first user interaction.
  *
- * @template T - The type of the field value
- * @param {string} name - The name of the Formik field
- * @param {(value: T) => void} [f] - Optional callback function to execute when the value changes
- * @returns {(value: T) => void} A function that updates the field value and marks it as touched
- *
  * @example
  * ```tsx
  * function MyField({ name }: { name: string }) {
  *   const [field, meta] = useField(name);
- *   const onChange = useOnChange(name);
+ *   const onChange = useFormInputCallback(name);
  *
  *   return (
  *     <input
@@ -34,7 +29,7 @@ import { useField } from "formik";
  * // With callback
  * function MySelect({ name, onValueChange }: Props) {
  *   const [field] = useField(name);
- *   const onChange = useOnChange(name, onValueChange);
+ *   const onChange = useFormInputCallback(name, onValueChange);
  *
  *   return (
  *     <Select value={field.value} onValueChange={onChange} />
@@ -42,11 +37,14 @@ import { useField } from "formik";
  * }
  * ```
  */
-export function useOnChange<T = any>(name: string, f?: (value: T) => void) {
-  const [field, , helpers] = useField<T>(name);
+export function useFormInputCallback<T = any>(
+  name: string,
+  f?: (value: T) => void
+) {
+  const [, , helpers] = useField<T>(name);
   return (value: T) => {
     f?.(value);
     helpers.setTouched(true);
-    field.onChange(value);
+    helpers.setValue(value);
   };
 }

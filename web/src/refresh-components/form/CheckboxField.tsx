@@ -2,7 +2,7 @@
 
 import { useField } from "formik";
 import Checkbox, { CheckboxProps } from "@/refresh-components/inputs/Checkbox";
-import { useOnChange } from "@/hooks/useFormInputChange";
+import { useFormInputCallback } from "@/hooks/form-hooks";
 
 interface CheckboxFieldProps extends Omit<CheckboxProps, "checked"> {
   name: string;
@@ -14,7 +14,7 @@ export default function UnlabeledCheckboxField({
   ...props
 }: CheckboxFieldProps) {
   const [field] = useField<boolean>({ name, type: "checkbox" });
-  const onChange = useOnChange<boolean>(name, onCheckedChange);
+  const onChange = useFormInputCallback<boolean>(name, onCheckedChange);
 
   return (
     <Checkbox

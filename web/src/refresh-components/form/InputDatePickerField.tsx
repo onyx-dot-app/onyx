@@ -4,7 +4,7 @@ import { useField } from "formik";
 import InputDatePicker, {
   InputDatePickerProps,
 } from "@/refresh-components/inputs/InputDatePicker";
-import { useOnChange } from "@/hooks/useFormInputChange";
+import { useFormInputCallback } from "@/hooks/form-hooks";
 
 interface InputDatePickerFieldProps
   extends Omit<InputDatePickerProps, "selectedDate"> {
@@ -17,7 +17,7 @@ export default function InputDatePickerField({
   ...props
 }: InputDatePickerFieldProps) {
   const [field] = useField<Date | null>(name);
-  const onChange = useOnChange(name, setSelectedDate);
+  const onChange = useFormInputCallback(name, setSelectedDate);
 
   return (
     <InputDatePicker
