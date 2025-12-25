@@ -43,8 +43,8 @@ export function useFormInputCallback<T = any>(
 ) {
   const [field, , helpers] = useField<T>(name);
   return (event: T) => {
-    f?.(event);
     helpers.setTouched(true);
+    f?.(event);
     field.onChange(event);
   };
 }
