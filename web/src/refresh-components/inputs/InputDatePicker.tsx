@@ -32,16 +32,23 @@ export default function InputDatePicker({
     .fill(currYear)
     .map((currYear, index) => currYear - index);
   const [open, setOpen] = useState(false);
-  const [internalDate, setInternalDate] = useState<Date | null>(null);
+  const [internalDate, setInternalDate] = useState<Date | null>(
+    selectedDateProp ?? null
+  );
   const [displayedMonth, setDisplayedMonth] = useState<Date>(
     selectedDateProp ?? new Date()
   );
 
-  // Use prop if provided (controlled), otherwise use internal state (uncontrolled)
-  const selectedDate = selectedDateProp ?? internalDate;
+  // Component is controlled only if setSelectedDate is provided
+  const isControlled = setSelectedDate !== undefined;
+  const selectedDate = isControlled ? selectedDateProp ?? null : internalDate;
+
   const handleDateChange = (date: Date | null) => {
-    setSelectedDate?.(date);
-    setInternalDate(date);
+    if (isControlled) {
+      setSelectedDate(date);
+    } else {
+      setInternalDate(date);
+    }
   };
 
   return (
