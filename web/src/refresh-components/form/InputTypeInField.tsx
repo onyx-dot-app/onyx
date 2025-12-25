@@ -4,7 +4,7 @@ import { useField } from "formik";
 import InputTypeIn, {
   InputTypeInProps,
 } from "@/refresh-components/inputs/InputTypeIn";
-import { useFormInputCallback } from "@/hooks/form-hooks";
+import { useFormInputCallback } from "@/hooks/formHooks";
 
 export interface InputTypeInFieldProps
   extends Omit<InputTypeInProps, "value" | "onChange" | "onClear"> {

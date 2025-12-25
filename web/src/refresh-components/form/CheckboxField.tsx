@@ -2,7 +2,7 @@
 
 import { useField } from "formik";
 import Checkbox, { CheckboxProps } from "@/refresh-components/inputs/Checkbox";
-import { useFormInputCallback } from "@/hooks/form-hooks";
+import { useFormInputCallback } from "@/hooks/formHooks";
 
 interface CheckboxFieldProps extends Omit<CheckboxProps, "checked"> {
   name: string;

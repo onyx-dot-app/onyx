@@ -4,7 +4,7 @@ import { useField } from "formik";
 import InputDatePicker, {
   InputDatePickerProps,
 } from "@/refresh-components/inputs/InputDatePicker";
-import { useFormInputCallback } from "@/hooks/form-hooks";
+import { useFormInputCallback } from "@/hooks/formHooks";
 
 interface InputDatePickerFieldProps
   extends Omit<InputDatePickerProps, "selectedDate"> {

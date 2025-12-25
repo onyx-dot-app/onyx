@@ -6,7 +6,7 @@ import InputTypeIn, {
 } from "@/refresh-components/inputs/InputTypeIn";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgMinusCircle } from "@opal/icons";
-import { useFormInputCallback } from "@/hooks/form-hooks";
+import { useFormInputCallback } from "@/hooks/formHooks";
 
 export interface InputTypeInElementFieldProps
   extends Omit<InputTypeInProps, "value" | "onChange" | "onClear"> {
