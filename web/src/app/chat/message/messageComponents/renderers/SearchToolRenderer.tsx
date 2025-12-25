@@ -14,6 +14,8 @@ import { SourceChip2 } from "@/app/chat/components/SourceChip2";
 import { BlinkingDot } from "../../BlinkingDot";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { ResultIcon } from "@/components/chat/sources/SourceCard";
+import { IconType } from "react-icons";
+import { OnyxIconType } from "@/components/icons/icons";
 
 const MAX_TITLE_LENGTH = 25;
 
@@ -94,28 +96,47 @@ export const constructCurrentSearchState = (
   };
 };
 
-// Step 1 Renderer: "Searching internally" with queries
-export function SearchToolStep1Renderer({
+// Generic step renderer for search tool steps
+function SearchToolStepRenderer<T>({
   packets,
   isActive,
   children,
+  icon,
+  status,
+  getItems,
+  getChipIcon,
+  getChipTitle,
+  getChipKey,
+  getChipOnClick,
+  initialItemsToShow,
+  itemsPerExpansion,
 }: {
   packets: SearchToolPacket[];
   isActive: boolean;
   children: (result: RendererResult) => JSX.Element;
+  icon: IconType | OnyxIconType;
+  status: string;
+  getItems: (state: SearchState) => T[];
+  getChipIcon: (item: T, index: number) => JSX.Element;
+  getChipTitle: (item: T) => string;
+  getChipKey: (item: T, index: number) => string | number;
+  getChipOnClick?: (item: T) => void;
+  initialItemsToShow: number;
+  itemsPerExpansion: number;
 }) {
-  const { queries } = constructCurrentSearchState(packets);
-  const [queriesToShow, setQueriesToShow] = useState(INITIAL_QUERIES_TO_SHOW);
+  const state = constructCurrentSearchState(packets);
+  const items = getItems(state);
+  const [itemsToShow, setItemsToShow] = useState(initialItemsToShow);
 
   return children({
-    icon: SvgSearch,
-    status: "Searching internally",
+    icon,
+    status,
     content: (
       <div className="flex flex-col">
         <div className="flex flex-wrap gap-x-2 gap-y-2 ml-1">
-          {queries.slice(0, queriesToShow).map((query, index) => (
+          {items.slice(0, itemsToShow).map((item, index) => (
             <div
-              key={index}
+              key={getChipKey(item, index)}
               className="text-xs animate-in fade-in slide-in-from-left-2 duration-150"
               style={{
                 animationDelay: `${index * 30}ms`,
@@ -123,41 +144,41 @@ export function SearchToolStep1Renderer({
               }}
             >
               <SourceChip2
-                icon={<SvgSearch size={10} />}
-                title={truncateString(query, MAX_TITLE_LENGTH)}
+                icon={getChipIcon(item, index)}
+                title={truncateString(getChipTitle(item), MAX_TITLE_LENGTH)}
+                onClick={
+                  getChipOnClick ? () => getChipOnClick(item) : undefined
+                }
               />
             </div>
           ))}
-          {queries.length > queriesToShow && (
+          {items.length > itemsToShow && (
             <div
               className="text-xs animate-in fade-in slide-in-from-left-2 duration-150"
               style={{
-                animationDelay: `${queriesToShow * 30}ms`,
+                animationDelay: `${Math.min(itemsToShow, items.length) * 30}ms`,
                 animationFillMode: "backwards",
               }}
             >
               <SourceChip2
-                title={`${queries.length - queriesToShow} more...`}
+                title={`${items.length - itemsToShow} more...`}
                 onClick={() => {
-                  setQueriesToShow((prevQueries) =>
-                    Math.min(
-                      prevQueries + QUERIES_PER_EXPANSION,
-                      queries.length
-                    )
+                  setItemsToShow((prevItems) =>
+                    Math.min(prevItems + itemsPerExpansion, items.length)
                   );
                 }}
               />
             </div>
           )}
-          {queries.length === 0 && <BlinkingDot />}
+          {items.length === 0 && <BlinkingDot />}
         </div>
       </div>
     ),
   });
 }
 
-// Step 2 Renderer: "Reading" with documents
-export function SearchToolStep2Renderer({
+// Step 1 Renderer: "Searching internally" with queries
+export function SourceRetrievalStepRenderer({
   packets,
   isActive,
   children,
@@ -166,66 +187,55 @@ export function SearchToolStep2Renderer({
   isActive: boolean;
   children: (result: RendererResult) => JSX.Element;
 }) {
-  const { results } = constructCurrentSearchState(packets);
-  const [resultsToShow, setResultsToShow] = useState(INITIAL_RESULTS_TO_SHOW);
+  return (
+    <SearchToolStepRenderer
+      packets={packets}
+      isActive={isActive}
+      icon={SvgSearch}
+      status="Searching internally"
+      getItems={(state) => state.queries}
+      getChipIcon={() => <SvgSearch size={10} />}
+      getChipTitle={(query: string) => query}
+      getChipKey={(_, index: number) => index}
+      initialItemsToShow={INITIAL_QUERIES_TO_SHOW}
+      itemsPerExpansion={QUERIES_PER_EXPANSION}
+    >
+      {children}
+    </SearchToolStepRenderer>
+  );
+}
 
-  return children({
-    icon: SvgBookOpen,
-    status: "Reading",
-    content: (
-      <div className="flex flex-col">
-        <div className="flex flex-wrap gap-x-2 gap-y-2 ml-1">
-          {results.slice(0, resultsToShow).map((result, index) => (
-            <div
-              key={result.document_id}
-              className="text-xs animate-in fade-in slide-in-from-left-2 duration-150"
-              style={{
-                animationDelay: `${index * 30}ms`,
-                animationFillMode: "backwards",
-              }}
-            >
-              <SourceChip2
-                icon={<ResultIcon doc={result} size={10} />}
-                title={truncateString(
-                  result.semantic_identifier || "",
-                  MAX_TITLE_LENGTH
-                )}
-                onClick={() => {
-                  if (result.link) {
-                    window.open(result.link, "_blank");
-                  }
-                }}
-              />
-            </div>
-          ))}
-          {results.length > resultsToShow && (
-            <div
-              className="text-xs animate-in fade-in slide-in-from-left-2 duration-150"
-              style={{
-                animationDelay: `${
-                  Math.min(resultsToShow, results.length) * 30
-                }ms`,
-                animationFillMode: "backwards",
-              }}
-            >
-              <SourceChip2
-                title={`${results.length - resultsToShow} more...`}
-                onClick={() => {
-                  setResultsToShow((prevResults) =>
-                    Math.min(
-                      prevResults + RESULTS_PER_EXPANSION,
-                      results.length
-                    )
-                  );
-                }}
-              />
-            </div>
-          )}
-          {results.length === 0 && <BlinkingDot />}
-        </div>
-      </div>
-    ),
-  });
+// Step 2 Renderer: "Reading" with documents
+export function ReadDocumentsStepRenderer({
+  packets,
+  isActive,
+  children,
+}: {
+  packets: SearchToolPacket[];
+  isActive: boolean;
+  children: (result: RendererResult) => JSX.Element;
+}) {
+  return (
+    <SearchToolStepRenderer
+      packets={packets}
+      isActive={isActive}
+      icon={SvgBookOpen}
+      status="Reading"
+      getItems={(state) => state.results}
+      getChipIcon={(doc: OnyxDocument) => <ResultIcon doc={doc} size={10} />}
+      getChipTitle={(doc: OnyxDocument) => doc.semantic_identifier || ""}
+      getChipKey={(doc: OnyxDocument) => doc.document_id}
+      getChipOnClick={(doc: OnyxDocument) => {
+        if (doc.link) {
+          window.open(doc.link, "_blank");
+        }
+      }}
+      initialItemsToShow={INITIAL_RESULTS_TO_SHOW}
+      itemsPerExpansion={RESULTS_PER_EXPANSION}
+    >
+      {children}
+    </SearchToolStepRenderer>
+  );
 }
 
 export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
