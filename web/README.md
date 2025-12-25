@@ -66,6 +66,8 @@ Bring up the entire application.
 npx playwright install
 ```
 
+**Note:** If you're building the web app for E2E testing (e.g., in CI or Docker), use `npm run build:e2e` instead of `npm run build`. This preserves `data-testid` attributes that Playwright tests rely on. In production builds, these attributes are stripped for smaller bundle sizes.
+
 1. Reset the instance
 
 ```cd backend

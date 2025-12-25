@@ -161,7 +161,7 @@ You will need Docker installed to run these containers.
 First navigate to `onyx/deployment/docker_compose`, then start up Postgres/Vespa/Redis/MinIO with:
 
 ```bash
-docker compose up -d index relational_db cache minio
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d index relational_db cache minio
 ```
 
 (index refers to Vespa, relational_db refers to Postgres, and cache refers to Redis)
