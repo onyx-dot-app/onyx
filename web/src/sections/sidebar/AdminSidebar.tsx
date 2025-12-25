@@ -42,14 +42,17 @@ import {
   SvgUser,
   SvgUsers,
   SvgZoomIn,
+  SvgPieChart
 } from "@opal/icons";
 import SvgMcp from "@opal/icons/mcp";
+import { FarmIcon } from "@phosphor-icons/react";
 const connectors_items = () => [
   {
     name: "Existing Connectors",
     icon: NotebookIconSkeleton,
     link: "/admin/indexing/status",
   },
+    
   {
     name: "Add Connector",
     icon: SvgUploadCloud,
@@ -85,6 +88,11 @@ const custom_assistants_items = (
       icon: SvgOnyxOctagon,
       link: "/admin/assistants",
     },
+    {
+    name: "Chart",
+    icon: SvgPieChart,
+    link: "/admin/charts",
+  },
   ];
 
   if (!isCurator) {
@@ -187,6 +195,11 @@ const collections = (
               name: "Document Processing",
               icon: SvgFileText,
               link: "/admin/configuration/document-processing",
+            },
+            {
+              name: "Create Farm",
+              icon: FarmIcon,
+              link: "/admin/farm",
             },
             ...(kgExposed
               ? [
@@ -358,7 +371,7 @@ export default function AdminSidebar({
                 <SidebarTab
                   key={index}
                   href={link}
-                  transient={pathname.startsWith(link)}
+                  active={pathname.startsWith(link)}
                   leftIcon={({ className }) => (
                     <Icon className={className} size={16} />
                   )}
