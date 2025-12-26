@@ -29,6 +29,7 @@ from onyx.db.models import FederatedConnector__DocumentSet
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserRole
+from onyx.redis.redis_cache_helper import redis_cache_query
 from onyx.server.features.document_set.models import DocumentSetCreationRequest
 from onyx.server.features.document_set.models import DocumentSetUpdateRequest
 from onyx.utils.logger import setup_logger
@@ -388,6 +389,9 @@ def update_document_set(
             )
 
         db_session.commit()
+
+        # Invalidate cache after successful update
+        fetch_document_sets.invalidate_cache()  # type: ignore
     except:
         db_session.rollback()
         raise
@@ -419,6 +423,9 @@ def delete_document_set(
     )
     db_session.delete(document_set_row)
     db_session.commit()
+
+    # Invalidate cache after successful deletion
+    fetch_document_sets.invalidate_cache()  # type: ignore
 
 
 def mark_document_set_as_to_be_deleted(
@@ -494,12 +501,17 @@ def delete_document_set_cc_pair_relationship__no_commit(
     return result.rowcount  # type: ignore
 
 
+@redis_cache_query("document_sets", ttl_seconds=60)
 def fetch_document_sets(
     user_id: UUID | None, db_session: Session, include_outdated: bool = False
 ) -> list[tuple[DocumentSetDBModel, list[ConnectorCredentialPair]]]:
     """Return is a list where each element contains a tuple of:
     1. The document set itself
-    2. All CC pairs associated with the document set"""
+    2. All CC pairs associated with the document set
+
+    Note: This function is cached in Redis for 60 seconds to reduce
+    database load from frequent polling (check-for-vespa-sync runs every 20s).
+    Cache is shared across all pods."""
     stmt = (
         select(DocumentSetDBModel, ConnectorCredentialPair)
         .join(
@@ -764,6 +776,9 @@ def get_or_create_document_set_by_name(
 
     db_session.add(new_doc_set)
     db_session.commit()
+
+    # Invalidate cache after creating new document set
+    fetch_document_sets.invalidate_cache()  # type: ignore
 
     return new_doc_set
 
