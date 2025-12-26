@@ -76,6 +76,15 @@ class BaseConnector(abc.ABC, Generic[CT]):
         """Implement if the underlying connector wants to skip/allow image downloading
         based on the application level image analysis setting."""
 
+    @classmethod
+    def normalize_url(cls, url: str) -> str | None:
+        """Normalize a URL to match the canonical Document.id format used during ingestion.
+
+        Connectors that use URLs as document IDs should override this method.
+        Returns None if the URL doesn't belong to this connector or normalization fails.
+        """
+        return None
+
     def build_dummy_checkpoint(self) -> CT:
         # TODO: find a way to make this work without type: ignore
         return ConnectorCheckpoint(has_more=True)  # type: ignore

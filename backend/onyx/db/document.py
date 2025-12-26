@@ -225,6 +225,27 @@ def get_documents_by_ids(
     return list(documents)
 
 
+def filter_existing_document_ids(
+    db_session: Session,
+    document_ids: list[str],
+) -> set[str]:
+    """Filter a list of document IDs to only those that exist in the database.
+
+    This queries only by Document.id (which is indexed) for performance.
+
+    Args:
+        db_session: Database session
+        document_ids: List of document IDs to check for existence
+
+    Returns:
+        Set of document IDs from the input list that exist in the database
+    """
+    if not document_ids:
+        return set()
+    stmt = select(DbDocument.id).where(DbDocument.id.in_(document_ids))
+    return set(db_session.execute(stmt).scalars().all())
+
+
 def get_document_connector_count(
     db_session: Session,
     document_id: str,

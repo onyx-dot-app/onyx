@@ -1,25 +1,22 @@
 import json
 from collections import defaultdict
 from typing import Any
-from typing import cast
 
 from pydantic import BaseModel
-from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
 from onyx.chat.emitter import Emitter
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
 from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
 from onyx.context.search.utils import convert_inference_sections_to_search_docs
 from onyx.context.search.utils import inference_section_from_chunks
+from onyx.db.document import filter_existing_document_ids
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.models import Document
 from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import VespaChunkRequest
@@ -31,6 +28,9 @@ from onyx.tools.models import OpenURLToolOverrideKwargs
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.open_url.models import WebContentProvider
+from onyx.tools.tool_implementations.open_url.url_normalization import (
+    _default_url_normalizer,
+)
 from onyx.tools.tool_implementations.open_url.url_normalization import normalize_url
 from onyx.tools.tool_implementations.web_search.providers import (
     get_default_content_provider,
@@ -39,13 +39,13 @@ from onyx.tools.tool_implementations.web_search.utils import (
     inference_section_from_internet_page_scrape,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
 URLS_FIELD = "urls"
-DOCUMENT_IDENTIFIERS_FIELD = "document_identifiers"
 
 
 class IndexedDocumentRequest(BaseModel):
@@ -71,16 +71,26 @@ def _dedupe_preserve_order(values: list[str]) -> list[str]:
     return ordered
 
 
+def _normalize_string_list(value: str | list[str] | None) -> list[str]:
+    """Normalize a value that may be a string, list of strings, or None into a cleaned list.
+
+    Returns a deduplicated list of non-empty stripped strings.
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        value = [value]
+    return _dedupe_preserve_order(
+        [stripped for item in value if (stripped := str(item).strip())]
+    )
+
+
 def _url_lookup_variants(url: str) -> set[str]:
     """Generate URL variants (with/without trailing slash) for database lookup.
 
     This is used after normalize_url() to create variants for fuzzy matching
     in the database, since URLs may be stored with or without trailing slashes.
     """
-    from onyx.tools.tool_implementations.open_url.url_normalization import (
-        _default_url_normalizer,
-    )
-
     # Use default normalizer to strip query/fragment, then create variants
     normalized = _default_url_normalizer(url)
     if not normalized:
@@ -169,7 +179,13 @@ def _convert_sections_to_llm_string_with_citations(
 
 class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
     NAME = "open_url"
-    DESCRIPTION = "Open and read the content of one or more URLs."
+    DESCRIPTION = (
+        "Open and read the full content of URLs or document identifiers. "
+        "Use this tool when: (1) Search results mention a document but don't include its full content, "
+        "(2) You need to read a specific document that was referenced but not fully retrieved, "
+        "(3) Search returned incomplete or truncated content for a document. "
+        "This tool retrieves the complete document content, either from indexed storage or by crawling the URL."
+    )
     DISPLAY_NAME = "Open URL"
 
     def __init__(
@@ -242,21 +258,30 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             "type": "function",
             "function": {
                 "name": self.name,
-                "description": "Open and read the content of one or more URLs. Returns the text content of the pages.",
+                "description": (
+                    "Open and read the full content of URLs or document identifiers. "
+                    "IMPORTANT: Use this tool when search results reference documents but don't include their full content, "
+                    "or when you need complete information from a specific document. "
+                    "This tool retrieves complete document content, either from indexed storage or by crawling the URL. "
+                    "Returns the full text content of the pages."
+                ),
                 "parameters": {
                     "type": "object",
                     "properties": {
                         URLS_FIELD: {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "List of URLs to open and read. Can be a single URL or multiple URLs.",
-                        },
-                        DOCUMENT_IDENTIFIERS_FIELD: {
-                            "type": "array",
-                            "items": {"type": "string"},
                             "description": (
-                                "List of Onyx document identifiers (returned by internal search). "
-                                "Use when available for faster, permission-aware retrieval."
+                                "List of URLs or document identifiers to open and read. "
+                                "Can be a single URL/identifier or multiple. "
+                                "Accepts: (1) Raw URLs (e.g., 'https://docs.google.com/document/d/123/edit'), "
+                                "(2) Normalized document IDs from search results "
+                                "(e.g., 'https://docs.google.com/document/d/123'), "
+                                "or (3) Non-URL document identifiers for file connectors "
+                                "(e.g., 'FILE_CONNECTOR__abc-123'). "
+                                "Use the 'document_identifier' field from search results when 'url' is not available. "
+                                "You can extract URLs or document_identifier values from search results "
+                                "to read those documents in full."
                             ),
                         },
                     },
@@ -281,28 +306,10 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         **llm_kwargs: Any,
     ) -> ToolResponse:
         """Execute the OpenURL tool using document identifiers when possible."""
-        raw_urls = llm_kwargs.get(URLS_FIELD, [])
-        if isinstance(raw_urls, str):
-            raw_urls = [raw_urls]
-        urls = _dedupe_preserve_order(
-            [str(url).strip() for url in cast(list[str], raw_urls) if str(url).strip()]
-        )
+        urls = _normalize_string_list(llm_kwargs.get(URLS_FIELD))
 
-        raw_identifiers = llm_kwargs.get(DOCUMENT_IDENTIFIERS_FIELD, [])
-        if isinstance(raw_identifiers, str):
-            raw_identifiers = [raw_identifiers]
-        document_identifiers = _dedupe_preserve_order(
-            [
-                str(identifier).strip()
-                for identifier in cast(list[str], raw_identifiers)
-                if str(identifier).strip()
-            ]
-        )
-
-        if not urls and not document_identifiers:
-            raise ValueError(
-                "OpenURL requires at least one URL or document identifier to run."
-            )
+        if not urls:
+            raise ValueError("OpenURL requires at least one URL to run.")
 
         self.emitter.emit(
             Packet(
@@ -311,48 +318,66 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             )
         )
 
-        logger.info(
-            f"OpenURL tool called with {len(urls)} URLs and {len(document_identifiers)} document identifiers"
-        )
+        logger.info(f"OpenURL tool called with {len(urls)} URLs")
 
         with get_session_with_current_tenant() as db_session:
-            doc_id_requests = self._build_requests_from_identifiers(
-                document_identifiers
-            )
+            # Resolve URLs to document IDs for indexed retrieval
+            # Handles both raw URLs and already-normalized document IDs
+            url_requests, _ = self._resolve_urls_to_document_ids(urls, db_session)
             logger.info(
-                f"Built {len(doc_id_requests)} requests from document identifiers"
+                f"Resolved {len(url_requests)} URLs to indexed document IDs for parallel retrieval"
             )
 
-            url_requests, urls_to_crawl = self._resolve_urls_to_document_ids(
-                urls, db_session
-            )
-            logger.info(
-                f"Resolved URLs: {len(url_requests)} matched to indexed documents, "
-                f"{len(urls_to_crawl)} will be crawled"
-            )
-
-            all_requests = self._dedupe_document_requests(
-                doc_id_requests + url_requests
-            )
+            all_requests = self._dedupe_document_requests(url_requests)
             logger.info(f"Total unique document requests: {len(all_requests)}")
 
-            all_results = self._retrieve_indexed_documents(all_requests, db_session)
+            # Create mapping from URL to document_id for result merging
+            url_to_doc_id: dict[str, str] = {}
+            for request in url_requests:
+                if request.original_url:
+                    url_to_doc_id[request.original_url] = request.document_id
 
-        crawl_urls = _dedupe_preserve_order(urls_to_crawl)
-        if crawl_urls:
-            logger.info(
-                f"Falling back to web crawling for {len(crawl_urls)} URLs: {crawl_urls}"
+            # Build filters before parallel execution (session-safe)
+            filters = self._build_index_filters(db_session)
+
+            # Create wrapper function for parallel execution
+            # Filters are already built, so we just need to pass them
+            def _retrieve_indexed_with_filters(
+                requests: list[IndexedDocumentRequest],
+            ) -> IndexedRetrievalResult:
+                """Wrapper for parallel execution with pre-built filters."""
+                return self._retrieve_indexed_documents_with_filters(requests, filters)
+
+            # Run indexed retrieval and crawling in parallel for all URLs
+            # This allows us to compare results and pick the best representation
+            indexed_result, crawled_result = run_functions_tuples_in_parallel(
+                [
+                    (_retrieve_indexed_with_filters, (all_requests,)),
+                    (self._fetch_web_content, (urls,)),
+                ],
+                allow_failures=True,
             )
-        web_sections, failed_web_urls = self._fetch_web_content(crawl_urls)
 
-        inference_sections: list[InferenceSection] = all_results.sections + web_sections
+            indexed_result = indexed_result or IndexedRetrievalResult(
+                sections=[], missing_document_ids=[]
+            )
+            crawled_sections, failed_web_urls = crawled_result or ([], [])
+
+            # Merge results: prefer indexed when available, fallback to crawled
+            inference_sections = self._merge_indexed_and_crawled_results(
+                indexed_result.sections,
+                crawled_sections,
+                url_to_doc_id,
+                urls,
+                failed_web_urls,
+            )
 
         if not inference_sections:
             failure_descriptions = []
-            if all_results.missing_document_ids:
+            if indexed_result.missing_document_ids:
                 failure_descriptions.append(
                     "documents "
-                    + ", ".join(sorted(set(all_results.missing_document_ids)))
+                    + ", ".join(sorted(set(indexed_result.missing_document_ids)))
                 )
             if failed_web_urls:
                 cleaned_failures = sorted({url for url in failed_web_urls if url})
@@ -365,19 +390,10 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             )
             return ToolResponse(rich_response=None, llm_facing_response=failure_msg)
 
-        search_docs: list[SearchDoc] = []
-        if all_results.sections:
-            search_docs.extend(
-                convert_inference_sections_to_search_docs(
-                    all_results.sections, is_internet=False
-                )
-            )
-        if web_sections:
-            search_docs.extend(
-                convert_inference_sections_to_search_docs(
-                    web_sections, is_internet=True
-                )
-            )
+        # Convert sections to search docs, preserving source information
+        search_docs = convert_inference_sections_to_search_docs(
+            inference_sections, is_internet=False
+        )
 
         self.emitter.emit(
             Packet(
@@ -399,15 +415,6 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             ),
             llm_facing_response=docs_str,
         )
-
-    def _build_requests_from_identifiers(
-        self, identifiers: list[str]
-    ) -> list[IndexedDocumentRequest]:
-        return [
-            IndexedDocumentRequest(document_id=identifier)
-            for identifier in identifiers
-            if identifier
-        ]
 
     def _dedupe_document_requests(
         self, requests: list[IndexedDocumentRequest]
@@ -446,42 +453,36 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                 else:
                     unresolved.append(url)
             else:
-                # No normalizer found, try generic normalization as fallback
-                variants = _url_lookup_variants(url)
-                if variants:
-                    normalized_map[url] = variants
+                # No normalizer found - could be a non-URL document ID (e.g., FILE_CONNECTOR__...)
+                if url and not url.startswith(("http://", "https://")):
+                    # Likely a document ID, use it directly
+                    normalized_map[url] = {url}
                 else:
-                    unresolved.append(url)
+                    # Try generic normalization as fallback
+                    variants = _url_lookup_variants(url)
+                    if variants:
+                        normalized_map[url] = variants
+                    else:
+                        unresolved.append(url)
 
         if not normalized_map:
             return matches, unresolved
 
         # Query database with all normalized variants
+        # Note: We only query by Document.id (indexed) since normalization ensures
+        # URLs match the canonical Document.id format. Document.link has no index
+        # and would be slow to query.
         all_variants = {
             variant for variants in normalized_map.values() for variant in variants
         }
-        document_rows = (
-            db_session.query(Document.id, Document.link)
-            .filter(or_(Document.id.in_(all_variants), Document.link.in_(all_variants)))
-            .all()
+        existing_document_ids = filter_existing_document_ids(
+            db_session, list(all_variants)
         )
-
-        # Map both document_id and link to actual document_id
-        value_to_doc_id: dict[str, str] = {}
-        for doc_id, link in document_rows:
-            if doc_id:
-                value_to_doc_id[doc_id] = doc_id
-            if link:
-                value_to_doc_id[link] = doc_id
 
         # Match URLs to documents
         for url, variants in normalized_map.items():
             matched_doc_id = next(
-                (
-                    value_to_doc_id[variant]
-                    for variant in variants
-                    if variant in value_to_doc_id
-                ),
+                (variant for variant in variants if variant in existing_document_ids),
                 None,
             )
             if matched_doc_id:
@@ -496,9 +497,16 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
 
         return matches, unresolved
 
-    def _retrieve_indexed_documents(
-        self, all_requests: list[IndexedDocumentRequest], db_session: Session
+    def _retrieve_indexed_documents_with_filters(
+        self,
+        all_requests: list[IndexedDocumentRequest],
+        filters: IndexFilters,
     ) -> IndexedRetrievalResult:
+        """Retrieve indexed documents using pre-built filters (for parallel execution).
+
+        This method is thread-safe as it doesn't require a database session.
+        Filters should be built before calling this method.
+        """
         if not all_requests:
             return IndexedRetrievalResult(sections=[], missing_document_ids=[])
 
@@ -507,8 +515,6 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             f"Retrieving {len(all_requests)} indexed documents from Vespa. "
             f"Document IDs: {document_ids}"
         )
-
-        filters = self._build_index_filters(db_session)
         chunk_requests = [
             VespaChunkRequest(document_id=request.document_id)
             for request in all_requests
@@ -584,6 +590,70 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             user_file_ids=None,
             project_id=self._project_id,
         )
+
+    def _merge_indexed_and_crawled_results(
+        self,
+        indexed_sections: list[InferenceSection],
+        crawled_sections: list[InferenceSection],
+        url_to_doc_id: dict[str, str],
+        all_urls: list[str],
+        failed_web_urls: list[str],
+    ) -> list[InferenceSection]:
+        """Merge indexed and crawled results, preferring indexed when available.
+
+        For each URL:
+        - If indexed result exists and has content, use it (better/cleaner representation)
+        - Otherwise, use crawled result if available
+        - If both fail, the URL will be in failed_web_urls for error reporting
+        """
+        # Map indexed sections by document_id
+        indexed_by_doc_id: dict[str, InferenceSection] = {}
+        for section in indexed_sections:
+            indexed_by_doc_id[section.center_chunk.document_id] = section
+
+        # Map crawled sections by URL (from source_links)
+        crawled_by_url: dict[str, InferenceSection] = {}
+        for section in crawled_sections:
+            # Extract URL from source_links (crawled sections store URL here)
+            if section.center_chunk.source_links:
+                url = next(iter(section.center_chunk.source_links.values()))
+                if url:
+                    crawled_by_url[url] = section
+
+        merged_sections: list[InferenceSection] = []
+        used_doc_ids: set[str] = set()
+
+        # Process URLs: prefer indexed, fallback to crawled
+        for url in all_urls:
+            doc_id = url_to_doc_id.get(url)
+            indexed_section = indexed_by_doc_id.get(doc_id) if doc_id else None
+            crawled_section = crawled_by_url.get(url)
+
+            if indexed_section and indexed_section.combined_content:
+                # Prefer indexed
+                merged_sections.append(indexed_section)
+                if doc_id:
+                    used_doc_ids.add(doc_id)
+                logger.debug(f"Using indexed content for URL: {url} (doc_id: {doc_id})")
+            elif crawled_section and crawled_section.combined_content:
+                # Fallback to crawled if indexed unavailable or empty
+                # (e.g., auth issues, document not indexed, etc.)
+                merged_sections.append(crawled_section)
+                logger.debug(f"Using crawled content for URL: {url}")
+
+        # Add any indexed sections that weren't matched to URLs
+        for doc_id, section in indexed_by_doc_id.items():
+            # Skip if this doc_id was already used for a URL
+            if doc_id not in used_doc_ids:
+                merged_sections.append(section)
+
+        logger.info(
+            f"Merged results: {len(merged_sections)} total sections "
+            f"({len([s for s in merged_sections if s.center_chunk.document_id in indexed_by_doc_id])} indexed, "
+            f"{len([s for s in merged_sections if s.center_chunk.document_id not in indexed_by_doc_id])} crawled)"
+        )
+
+        return merged_sections
 
     def _fetch_web_content(
         self, urls: list[str]

@@ -15,6 +15,7 @@ from http.client import RemoteDisconnected
 from typing import Any
 from typing import cast
 from urllib.error import URLError
+from urllib.parse import urlparse
 
 from pydantic import BaseModel
 from redis import Redis
@@ -625,6 +626,37 @@ class SlackConnector(
         self.use_redis: bool = use_redis
         # self.delay_lock: str | None = None  # the redis key for the shared lock
         # self.delay_key: str | None = None  # the redis key for the shared delay
+
+    @classmethod
+    @override
+    def normalize_url(cls, url: str) -> str | None:
+        """Normalize a Slack URL to extract channel_id__thread_ts format."""
+        parsed = urlparse(url)
+        if "slack.com" not in parsed.netloc.lower():
+            return None
+
+        # Slack document IDs are format: channel_id__thread_ts
+        # Extract from URL pattern: .../archives/{channel_id}/p{timestamp}
+        path_parts = parsed.path.split("/")
+        try:
+            archives_idx = path_parts.index("archives")
+            if archives_idx + 1 < len(path_parts):
+                channel_id = path_parts[archives_idx + 1]
+                if archives_idx + 2 < len(path_parts):
+                    thread_part = path_parts[archives_idx + 2]
+                    if thread_part.startswith("p"):
+                        # Convert p1234567890123456 to 1234567890.123456 format
+                        timestamp_str = thread_part[1:]  # Remove 'p' prefix
+                        if len(timestamp_str) == 16:
+                            # Insert dot at position 10 to match canonical format
+                            thread_ts = f"{timestamp_str[:10]}.{timestamp_str[10:]}"
+                        else:
+                            thread_ts = timestamp_str
+                        return f"{channel_id}__{thread_ts}"
+        except (ValueError, IndexError):
+            pass
+
+        return None
 
     @staticmethod
     def make_credential_prefix(key: str) -> str:

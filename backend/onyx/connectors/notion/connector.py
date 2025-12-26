@@ -1,9 +1,12 @@
+import re
 from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
 from typing import Any
 from typing import cast
 from typing import Optional
+from urllib.parse import parse_qs
+from urllib.parse import urlparse
 
 import requests
 from pydantic import BaseModel
@@ -100,6 +103,42 @@ class NotionConnector(LoadConnector, PollConnector):
         # all pages regardless of if they are updated. If the notion workspace is
         # very large, this may not be practical.
         self.recursive_index_enabled = recursive_index_enabled or self.root_page_id
+
+    @classmethod
+    def normalize_url(cls, url: str) -> str | None:
+        """Normalize a Notion URL to extract the page ID (UUID format)."""
+        parsed = urlparse(url)
+        netloc = parsed.netloc.lower()
+
+        if not ("notion.so" in netloc or "notion.site" in netloc):
+            return None
+
+        # Extract page ID from path (format: "Title-PageID")
+        path_last = parsed.path.split("/")[-1]
+        candidate = path_last.split("-")[-1] if "-" in path_last else path_last
+
+        # Clean and format as UUID
+        candidate = re.sub(r"[^0-9a-fA-F-]", "", candidate)
+        cleaned = candidate.replace("-", "")
+
+        if len(cleaned) == 32 and re.fullmatch(r"[0-9a-fA-F]{32}", cleaned):
+            return (
+                f"{cleaned[0:8]}-{cleaned[8:12]}-{cleaned[12:16]}-"
+                f"{cleaned[16:20]}-{cleaned[20:]}"
+            ).lower()
+
+        # Try query params
+        params = parse_qs(parsed.query)
+        for key in ("p", "page_id"):
+            if key in params and params[key]:
+                candidate = params[key][0].replace("-", "")
+                if len(candidate) == 32 and re.fullmatch(r"[0-9a-fA-F]{32}", candidate):
+                    return (
+                        f"{candidate[0:8]}-{candidate[8:12]}-{candidate[12:16]}-"
+                        f"{candidate[16:20]}-{candidate[20:]}"
+                    ).lower()
+
+        return None
 
     @retry(tries=3, delay=1, backoff=2)
     def _fetch_child_blocks(
