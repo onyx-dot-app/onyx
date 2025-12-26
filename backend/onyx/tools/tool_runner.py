@@ -1,11 +1,13 @@
 import traceback
 from collections import defaultdict
+from collections.abc import Callable
 from typing import Any
 
 import onyx.tracing.framework._error_tracing as _error_tracing
 from onyx.chat.models import ChatMessageSimple
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
+from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.interface import Tool
@@ -95,11 +97,27 @@ def _run_single_tool(
     tool: Tool,
     tool_call: ToolCallKickoff,
     override_kwargs: Any,
+    is_connected: Callable[[], bool] | None = None,
 ) -> ToolResponse:
     """Execute a single tool and return its response.
 
     This function is designed to be run in parallel via run_functions_tuples_in_parallel.
     """
+    # Check for stop signal before executing this tool
+    if is_connected is not None and not is_connected():
+        tool.emitter.emit(
+            Packet(
+                placement=tool_call.placement,
+                obj=OverallStop(type="stop", stop_reason="user_cancelled"),
+            )
+        )
+        # Return empty response to indicate tool was cancelled
+        return ToolResponse(
+            rich_response=None,
+            llm_facing_response="Tool execution cancelled by user.",
+            tool_call=tool_call,
+        )
+
     with function_span(tool.name) as span_fn:
         span_fn.span_data.input = str(tool_call.tool_args)
         try:
@@ -150,6 +168,7 @@ def run_tool_calls(
     next_citation_num: int,
     # Skip query expansion for repeat search tool calls
     skip_search_query_expansion: bool = False,
+    is_connected: Callable[[], bool] | None = None,
 ) -> tuple[list[ToolResponse], dict[int, str]]:
     """Run multiple tool calls in parallel and update citation mappings.
 
@@ -254,7 +273,7 @@ def run_tool_calls(
 
     # Run all tools in parallel
     functions_with_args = [
-        (_run_single_tool, (tool, tool_call, override_kwargs))
+        (_run_single_tool, (tool, tool_call, override_kwargs, is_connected))
         for tool, tool_call, override_kwargs in tool_run_params
     ]
 

@@ -117,22 +117,30 @@ def _create_and_link_tool_calls(
         tool_call_map[tool_call_obj.tool_call_id] = tool_call_obj.id
 
     # Update parent_tool_call_id for all tool calls
+    # Filter out orphaned children (whose parents don't exist) - this can happen
+    # when generation is stopped mid-execution and parent tool calls were cancelled
+    valid_tool_calls: list[ToolCall] = []
     for tool_call_obj in tool_call_objects:
         tool_call_info = tool_call_info_map[tool_call_obj.tool_call_id]
         if tool_call_info.parent_tool_call_id is not None:
             parent_id = tool_call_map.get(tool_call_info.parent_tool_call_id)
             if parent_id is not None:
                 tool_call_obj.parent_tool_call_id = parent_id
+                valid_tool_calls.append(tool_call_obj)
             else:
-                # This would cause chat sessions to fail if this function is miscalled with
-                # tool calls that have bad parent pointers but this falls under "fail loudly"
-                raise ValueError(
-                    f"Parent tool call with tool_call_id '{tool_call_info.parent_tool_call_id}' "
-                    f"not found for tool call '{tool_call_obj.tool_call_id}'"
+                # Parent doesn't exist (likely cancelled) - skip this orphaned child
+                logger.warning(
+                    f"Skipping tool call '{tool_call_obj.tool_call_id}' with missing parent "
+                    f"'{tool_call_info.parent_tool_call_id}' (likely cancelled during execution)"
                 )
+                # Remove from DB session to prevent saving
+                db_session.delete(tool_call_obj)
+        else:
+            # Top-level tool call (no parent)
+            valid_tool_calls.append(tool_call_obj)
 
-    # Link SearchDocs to ToolCalls
-    for tool_call_obj in tool_call_objects:
+    # Link SearchDocs only to valid ToolCalls
+    for tool_call_obj in valid_tool_calls:
         search_doc_ids = tool_call_to_search_doc_ids.get(tool_call_obj.tool_call_id, [])
         if search_doc_ids:
             add_search_docs_to_tool_call(
