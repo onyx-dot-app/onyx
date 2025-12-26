@@ -402,6 +402,7 @@ def run_deep_research_llm_loop(
                     turn_index=report_turn_index,
                     citation_mapping=citation_mapping,
                     user_identity=user_identity,
+                    is_connected=is_connected,
                 )
                 # Update final_turn_index: base + 1 for the report itself + 1 if reasoning occurred
                 final_turn_index = report_turn_index + (1 if report_reasoned else 0)
@@ -485,6 +486,7 @@ def run_deep_research_llm_loop(
                     turn_index=report_turn_index,
                     citation_mapping=citation_mapping,
                     user_identity=user_identity,
+                    is_connected=is_connected,
                 )
                 final_turn_index = report_turn_index + (1 if report_reasoned else 0)
                 break
@@ -505,6 +507,7 @@ def run_deep_research_llm_loop(
                     citation_mapping=citation_mapping,
                     user_identity=user_identity,
                     saved_reasoning=most_recent_reasoning,
+                    is_connected=is_connected,
                 )
                 final_turn_index = report_turn_index + (1 if report_reasoned else 0)
                 break
@@ -564,6 +567,7 @@ def run_deep_research_llm_loop(
                         turn_index=report_turn_index,
                         citation_mapping=citation_mapping,
                         user_identity=user_identity,
+                        is_connected=is_connected,
                     )
                     final_turn_index = report_turn_index + (1 if report_reasoned else 0)
                     break
