@@ -26,10 +26,10 @@ import {
   isToolComplete,
 } from "./toolDisplayHelpers";
 import {
-  SearchToolStep1Renderer,
-  SearchToolStep2Renderer,
+  SourceRetrievalStepRenderer,
+  ReadDocumentsStepRenderer,
   constructCurrentSearchState,
-} from "./renderers/SearchToolRendererV2";
+} from "./renderers/SearchToolRenderer";
 import { SvgChevronDown, SvgChevronDownSmall } from "@opal/icons";
 import { LoadingSpinner } from "../../chat_search/LoadingSpinner";
 
@@ -348,7 +348,7 @@ function ParallelToolTabs({
 
             if (item.type === DisplayType.SEARCH_STEP_1) {
               return (
-                <SearchToolStep1Renderer
+                <SourceRetrievalStepRenderer
                   key={item.key}
                   packets={item.packets as SearchToolPacket[]}
                   isActive={!shouldStopShimmering}
@@ -356,11 +356,11 @@ function ParallelToolTabs({
                   {(props) => (
                     <ToolItemRow {...props} isLastItem={isLastItem} />
                   )}
-                </SearchToolStep1Renderer>
+                </SourceRetrievalStepRenderer>
               );
             } else if (item.type === DisplayType.SEARCH_STEP_2) {
               return (
-                <SearchToolStep2Renderer
+                <ReadDocumentsStepRenderer
                   key={item.key}
                   packets={item.packets as SearchToolPacket[]}
                   isActive={!shouldStopShimmering}
@@ -368,7 +368,7 @@ function ParallelToolTabs({
                   {(props) => (
                     <ToolItemRow {...props} isLastItem={isLastItem} />
                   )}
-                </SearchToolStep2Renderer>
+                </ReadDocumentsStepRenderer>
               );
             } else {
               // Regular tool
@@ -620,23 +620,23 @@ export default function MultiToolRenderer({
   ) => {
     if (item.type === DisplayType.SEARCH_STEP_1) {
       return (
-        <SearchToolStep1Renderer
+        <SourceRetrievalStepRenderer
           key={item.key}
           packets={item.packets as SearchToolPacket[]}
           isActive={isStreaming}
         >
           {childrenCallback}
-        </SearchToolStep1Renderer>
+        </SourceRetrievalStepRenderer>
       );
     } else if (item.type === DisplayType.SEARCH_STEP_2) {
       return (
-        <SearchToolStep2Renderer
+        <ReadDocumentsStepRenderer
           key={item.key}
           packets={item.packets as SearchToolPacket[]}
           isActive={isStreaming}
         >
           {childrenCallback}
-        </SearchToolStep2Renderer>
+        </ReadDocumentsStepRenderer>
       );
     } else {
       // Regular tool - use RendererComponent

@@ -21,12 +21,6 @@ const nextConfig = {
   transpilePackages: ["@onyx/opal"],
   typedRoutes: true,
   reactCompiler: true,
-  compiler: {
-    // Strip data-testid props in production for smaller bundles, but keep them
-    // in CI/test environments (E2E_TESTING=true) so Playwright tests work
-    reactRemoveProperties:
-      process.env.NODE_ENV === "production" && !process.env.E2E_TESTING,
-  },
   images: {
     // Used to fetch favicons
     remotePatterns: [
