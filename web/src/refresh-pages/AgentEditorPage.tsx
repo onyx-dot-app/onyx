@@ -80,6 +80,7 @@ import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { MCPServer } from "@/lib/tools/interfaces";
 import useServerTools from "@/hooks/useServerTools";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import useFilter from "@/hooks/useFilter";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
@@ -254,6 +255,12 @@ function MCPServerCard({ server }: MCPServerCardProps) {
   const serverFieldName = `mcp_server_${server.id}`;
   const isServerEnabled = values[serverFieldName]?.enabled ?? false;
 
+  const {
+    query,
+    setQuery,
+    filtered: filteredTools,
+  } = useFilter(tools, (tool) => `${tool.name} ${tool.description}`);
+
   // Watch for server toggle to enable/disable all tools
   useEffect(() => {
     tools.forEach((tool) => {
@@ -262,7 +269,6 @@ function MCPServerCard({ server }: MCPServerCardProps) {
 
     // When server is enabled, unfold the card
     if (isServerEnabled) {
-      console.log(0);
       actionsLayout.setIsFolded(false);
     }
   }, [
@@ -287,6 +293,8 @@ function MCPServerCard({ server }: MCPServerCardProps) {
               placeholder="Search tools..."
               internal
               leftSearchIcon
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
             />
             <Button
               internal
@@ -300,10 +308,10 @@ function MCPServerCard({ server }: MCPServerCardProps) {
         <ActionsLayouts.Content>
           {isLoading ? (
             <ActionsLayouts.ToolSkeleton />
-          ) : tools.length === 0 ? (
+          ) : filteredTools.length === 0 ? (
             <ActionsLayouts.NoToolsFound />
           ) : (
-            tools.map((tool) => (
+            filteredTools.map((tool) => (
               <ActionsLayouts.Tool
                 key={tool.id}
                 name={`${serverFieldName}.tool_${tool.id}`}
