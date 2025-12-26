@@ -486,10 +486,27 @@ export default function AgentEditorPage({
 
     // MCP servers - dynamically add fields for each server with nested tool fields
     ...Object.fromEntries(
-      mcpServers.map((server) => [
-        `mcp_server_${server.id}`,
-        { enabled: false }, // Empty object with enabled flag that will hold tool_{id}: boolean fields dynamically
-      ])
+      mcpServers.map((server) => {
+        // Find all tools from existingAgent that belong to this MCP server
+        const serverTools =
+          existingAgent?.tools?.filter(
+            (tool) => tool.mcp_server_id === server.id
+          ) ?? [];
+
+        // Build the tool field object with tool_{id}: true for each enabled tool
+        const toolFields: Record<string, boolean> = {};
+        serverTools.forEach((tool) => {
+          toolFields[`tool_${tool.id}`] = true;
+        });
+
+        return [
+          `mcp_server_${server.id}`,
+          {
+            enabled: serverTools.length > 0, // Server is enabled if it has any tools
+            ...toolFields, // Add individual tool states
+          },
+        ];
+      })
     ),
   };
 
@@ -581,6 +598,29 @@ export default function AgentEditorPage({
       if (values.code_interpreter && codeInterpreterTool) {
         toolIds.push(codeInterpreterTool.id);
       }
+
+      // Collect enabled MCP tool IDs
+      mcpServers.forEach((server) => {
+        const serverFieldName = `mcp_server_${server.id}`;
+        const serverData = (values as any)[serverFieldName];
+
+        if (
+          serverData &&
+          typeof serverData === "object" &&
+          serverData.enabled
+        ) {
+          // Server is enabled, collect all enabled tools
+          Object.keys(serverData).forEach((key) => {
+            if (key.startsWith("tool_") && serverData[key] === true) {
+              // Extract tool ID from key (e.g., "tool_123" -> 123)
+              const toolId = parseInt(key.replace("tool_", ""), 10);
+              if (!isNaN(toolId)) {
+                toolIds.push(toolId);
+              }
+            }
+          });
+        }
+      });
 
       // Build submission data
       const submissionData: PersonaUpsertParameters = {
