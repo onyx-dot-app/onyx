@@ -52,7 +52,13 @@ import {
   PopoverMenu,
 } from "@/components/ui/popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import { SvgImage, SvgOnyxOctagon, SvgSliders } from "@opal/icons";
+import {
+  SvgExpand,
+  SvgFold,
+  SvgImage,
+  SvgOnyxOctagon,
+  SvgSliders,
+} from "@opal/icons";
 import CustomAgentAvatar, {
   agentAvatarIconMap,
 } from "@/refresh-components/avatars/CustomAgentAvatar";
@@ -68,6 +74,7 @@ import useMcpServers from "@/hooks/useMcpServers";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import * as ActionsLayouts from "@/layouts/actions-layouts";
+import { useActionsLayout } from "@/layouts/actions-layouts";
 import OpenApiActionCard from "@/sections/actions/OpenApiActionCard";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { MCPServer } from "@/lib/tools/interfaces";
@@ -240,6 +247,7 @@ interface MCPServerCardProps {
 }
 
 function MCPServerCard({ server }: MCPServerCardProps) {
+  const actionsLayout = useActionsLayout();
   const { tools, isLoading } = useServerTools(server, true);
   const { values, setFieldValue } = useFormikContext<any>();
 
@@ -254,39 +262,55 @@ function MCPServerCard({ server }: MCPServerCardProps) {
   }, [isServerEnabled, tools, serverFieldName, setFieldValue]);
 
   return (
-    <ActionsLayouts.Root>
-      <ActionsLayouts.Header
-        title={server.name}
-        description={server.description ?? server.server_url}
-        icon={getActionIcon(server.server_url, server.name)}
-        rightChildren={<SwitchField name={`${serverFieldName}.enabled`} />}
-      >
-        <InputTypeIn placeholder="Search tools..." internal leftSearchIcon />
-      </ActionsLayouts.Header>
-      <ActionsLayouts.Content>
-        {isLoading ? (
-          <ActionsLayouts.ToolSkeleton />
-        ) : tools.length === 0 ? (
-          <ActionsLayouts.NoToolsFound />
-        ) : (
-          tools.map((tool) => (
-            <ActionsLayouts.Tool
-              name={`${serverFieldName}.tool_${tool.id}`}
-              title={tool.name}
-              description={tool.description}
-              icon={tool.icon ?? SvgSliders}
-              disabled={!tool.isAvailable || !tool.isEnabled}
-              rightChildren={
-                <SwitchField
-                  name={`${serverFieldName}.tool_${tool.id}`}
-                  disabled={!isServerEnabled}
-                />
-              }
+    <actionsLayout.Provider>
+      <ActionsLayouts.Root>
+        <ActionsLayouts.Header
+          title={server.name}
+          description={server.description ?? server.server_url}
+          icon={getActionIcon(server.server_url, server.name)}
+          rightChildren={<SwitchField name={`${serverFieldName}.enabled`} />}
+        >
+          <div className="flex flex-row gap-2 items-center justify-center">
+            <InputTypeIn
+              placeholder="Search tools..."
+              internal
+              leftSearchIcon
             />
-          ))
-        )}
-      </ActionsLayouts.Content>
-    </ActionsLayouts.Root>
+            <Button
+              internal
+              rightIcon={actionsLayout.isFolded ? SvgExpand : SvgFold}
+              onClick={() => actionsLayout.setIsFolded((prev) => !prev)}
+            >
+              {actionsLayout.isFolded ? "Expand" : "Fold"}
+            </Button>
+          </div>
+        </ActionsLayouts.Header>
+        <ActionsLayouts.Content>
+          {isLoading ? (
+            <ActionsLayouts.ToolSkeleton />
+          ) : tools.length === 0 ? (
+            <ActionsLayouts.NoToolsFound />
+          ) : (
+            tools.map((tool) => (
+              <ActionsLayouts.Tool
+                key={tool.id}
+                name={`${serverFieldName}.tool_${tool.id}`}
+                title={tool.name}
+                description={tool.description}
+                icon={tool.icon ?? SvgSliders}
+                disabled={!tool.isAvailable || !tool.isEnabled}
+                rightChildren={
+                  <SwitchField
+                    name={`${serverFieldName}.tool_${tool.id}`}
+                    disabled={!isServerEnabled}
+                  />
+                }
+              />
+            ))
+          )}
+        </ActionsLayouts.Content>
+      </ActionsLayouts.Root>
+    </actionsLayout.Provider>
   );
 }
 

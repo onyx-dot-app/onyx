@@ -46,13 +46,93 @@
 
 "use client";
 
-import React, { HtmlHTMLAttributes } from "react";
+import React, {
+  HtmlHTMLAttributes,
+  createContext,
+  useContext,
+  useState,
+  useMemo,
+  Dispatch,
+  SetStateAction,
+} from "react";
 import { cn } from "@/lib/utils";
 import type { IconProps } from "@opal/types";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { WithoutStyles } from "@/types";
 import Text from "@/refresh-components/texts/Text";
 import { SvgMcp } from "@opal/icons";
+
+/**
+ * Actions Layout Context
+ *
+ * Provides folding state management for action cards without prop drilling.
+ */
+interface ActionsLayoutContextValue {
+  isFolded: boolean;
+  setIsFolded: Dispatch<SetStateAction<boolean>>;
+}
+
+const ActionsLayoutContext = createContext<
+  ActionsLayoutContextValue | undefined
+>(undefined);
+
+/**
+ * Hook to create an ActionsLayout context provider and controller.
+ *
+ * @returns An object containing the Provider component and toggleFold function
+ *
+ * @example
+ * ```tsx
+ * function MyActionCard() {
+ *   const { Provider, toggleFold } = useActionsLayout();
+ *
+ *   return (
+ *     <Provider>
+ *       <ActionsLayouts.Root>
+ *         <ActionsLayouts.Header
+ *           title="My Server"
+ *           description="Description"
+ *           icon={SvgServer}
+ *           rightChildren={
+ *             <button onClick={() => toggleFold(true)}>Fold</button>
+ *           }
+ *         />
+ *         <ActionsLayouts.Content>
+ *         </ActionsLayouts.Content>
+ *       </ActionsLayouts.Root>
+ *     </Provider>
+ *   );
+ * }
+ * ```
+ */
+export function useActionsLayout() {
+  const [isFolded, setIsFolded] = useState(false);
+
+  const Provider = useMemo(
+    () =>
+      ({ children }: { children: React.ReactNode }) => (
+        <ActionsLayoutContext.Provider value={{ isFolded, setIsFolded }}>
+          {children}
+        </ActionsLayoutContext.Provider>
+      ),
+    [isFolded]
+  );
+
+  return { Provider, isFolded, setIsFolded };
+}
+
+/**
+ * Internal hook to access the ActionsLayout context.
+ */
+function useActionsLayoutContext() {
+  const context = useContext(ActionsLayoutContext);
+  if (!context) {
+    throw new Error(
+      "ActionsLayout components must be used within an ActionsLayout Provider"
+    );
+  }
+  return context;
+}
 
 /**
  * Actions Root Component
@@ -132,8 +212,15 @@ function ActionsHeader({
 
   ...props
 }: ActionsHeaderProps) {
+  const { isFolded } = useActionsLayoutContext();
+
   return (
-    <div className="flex flex-col border rounded-t-16 bg-background-neutral-00 w-full gap-2 pt-4 pb-2">
+    <div
+      className={cn(
+        "flex flex-col border bg-background-neutral-00 w-full gap-2 pt-4 pb-2",
+        isFolded ? "rounded-16" : "rounded-t-16"
+      )}
+    >
       <div className="px-4">
         <label
           className="flex items-start justify-between gap-2 cursor-pointer"
@@ -181,6 +268,12 @@ export type ActionsContentProps = WithoutStyles<
 >;
 
 function ActionsContent(props: ActionsContentProps) {
+  const { isFolded } = useActionsLayoutContext();
+
+  if (isFolded) {
+    return null;
+  }
+
   return (
     <div
       className="flex flex-col border-x border-b rounded-b-16 p-2 gap-2 max-h-[20rem] overflow-y-auto"
