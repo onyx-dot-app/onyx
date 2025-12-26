@@ -38,6 +38,11 @@ GENERATIVE_MODEL_ACCESS_CHECK_FREQ = int(
     os.environ.get("GENERATIVE_MODEL_ACCESS_CHECK_FREQ") or 86400
 )  # 1 day
 
+# Controls whether the question qualification system is enabled to block sensitive questions (disabled by default)
+ENABLE_QUESTION_QUALIFICATION = (
+    os.environ.get("ENABLE_QUESTION_QUALIFICATION", "false").lower() == "true"
+)
+
 # Controls whether users can use User Knowledge (personal documents) in assistants
 DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() == "true"
 
