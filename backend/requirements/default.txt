@@ -256,7 +256,7 @@ fastapi-users-db-sqlalchemy==5.0.0
     # via onyx
 fastavro==1.12.1
     # via cohere
-fastmcp==2.14.0
+fastmcp==2.13.3
     # via onyx
 fastuuid==0.14.0
     # via litellm
