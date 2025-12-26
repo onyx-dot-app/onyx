@@ -63,6 +63,13 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
+          fetch-depth: 0
+
+      - name: Sync with HEAD
+        if: github.event_name == 'pull_request'
+        uses: ./.github/actions/sync-with-head
+        with:
+          base_ref: ${{ github.base_ref }}
 
       - name: Format branch name for cache
         id: format-branch
@@ -118,6 +125,13 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
+          fetch-depth: 0
+
+      - name: Sync with HEAD
+        if: github.event_name == 'pull_request'
+        uses: ./.github/actions/sync-with-head
+        with:
+          base_ref: ${{ github.base_ref }}
 
       - name: Format branch name for cache
         id: format-branch
@@ -173,6 +187,13 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
+          fetch-depth: 0
+
+      - name: Sync with HEAD
+        if: github.event_name == 'pull_request'
+        uses: ./.github/actions/sync-with-head
+        with:
+          base_ref: ${{ github.base_ref }}
 
       - name: Format branch name for cache
         id: format-branch
@@ -238,8 +259,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
-          fetch-depth: 0
           persist-credentials: false
+          fetch-depth: 0
+
+      - name: Sync with HEAD
+        if: github.event_name == 'pull_request'
+        uses: ./.github/actions/sync-with-head
+        with:
+          base_ref: ${{ github.base_ref }}
 
       - name: Setup node
         uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # ratchet:actions/setup-node@v4

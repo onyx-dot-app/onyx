@@ -26,8 +26,14 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
       with:
-        fetch-depth: 0
         persist-credentials: false
+        fetch-depth: 0
+
+    - name: Sync with HEAD
+      if: github.event_name == 'pull_request'
+      uses: ./.github/actions/sync-with-head
+      with:
+        base_ref: ${{ github.base_ref }}
 
     - name: Set up Helm
       uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # ratchet:azure/setup-helm@v4.3.1

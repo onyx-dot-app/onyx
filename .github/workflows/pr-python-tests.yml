@@ -35,6 +35,13 @@ jobs:
       uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
       with:
         persist-credentials: false
+        fetch-depth: 0
+
+    - name: Sync with HEAD
+      if: github.event_name == 'pull_request'
+      uses: ./.github/actions/sync-with-head
+      with:
+        base_ref: ${{ github.base_ref }}
 
     - name: Setup Python and Install Dependencies
       uses: ./.github/actions/setup-python-and-install-dependencies

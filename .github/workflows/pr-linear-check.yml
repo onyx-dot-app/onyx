@@ -15,6 +15,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Sync with HEAD
+        if: github.event_name == 'pull_request'
+        uses: ./.github/actions/sync-with-head
+        with:
+          base_ref: ${{ github.base_ref }}
+
       - name: Check PR body for Linear link or override
         env:
           PR_BODY: ${{ github.event.pull_request.body }}

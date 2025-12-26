@@ -20,10 +20,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
-          fetch-depth: 0
           persist-credentials: false
+          fetch-depth: 0
+
+      - name: Sync with HEAD
+        if: github.event_name == 'pull_request'
+        uses: ./.github/actions/sync-with-head
+        with:
+          base_ref: ${{ github.base_ref }}
+
       - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # ratchet:actions/setup-python@v6
         with:
           python-version: "3.11"

@@ -1,0 +1,44 @@
+name: "Merge on Main or Release"
+description: "Merges in the specific release branch if targeted, otherwise defaults to merging in main."
+inputs:
+  base_ref:
+    description: "The branch the PR is targeting"
+    required: true
+  remote_name:
+    description: "The remote name"
+    required: false
+    default: "origin"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Merge Upstream Target
+      shell: bash
+      env:
+        INPUT_TARGET: ${{ inputs.base_ref }}
+        REMOTE: ${{ inputs.remote_name }}
+      run: |
+
+        if [[ "$INPUT_TARGET" =~ ^release/ ]]; then
+          UPSTREAM_TARGET="$INPUT_TARGET"
+          echo "PR targets a release branch. Using: $UPSTREAM_TARGET"
+        else
+          UPSTREAM_TARGET="main"
+          # Stacked PRs default to `main` upstream. This avoids needing to re-run the tests
+          # against HEAD when the base branch is changed.
+          echo "PR targets '$INPUT_TARGET'. Defaulting merge to: $UPSTREAM_TARGET"
+        fi
+
+        # Configure Identity
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+        # Fetch and Merge
+        echo "Fetching latest changes from $REMOTE/$UPSTREAM_TARGET..."
+        git fetch "$REMOTE" "$UPSTREAM_TARGET"
+
+        echo "Merging in $REMOTE/$UPSTREAM_TARGET..."
+        if ! git merge "$REMOTE/$UPSTREAM_TARGET" --no-edit; then
+          echo "::error::Merge failed. Pull latest changes from $UPSTREAM_TARGET into your branch to resolve conflicts locally."
+          exit 1
+        fi
