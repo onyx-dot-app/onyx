@@ -59,8 +59,7 @@ export interface PersonaUpsertParameters {
 
 function buildPersonaUpsertRequest(
   creationRequest: PersonaUpsertParameters,
-  uploaded_image_id: string | null,
-  icon_name: string | null
+  uploaded_image_id: string | null
 ): PersonaUpsertRequest {
   const {
     name,
@@ -77,6 +76,7 @@ function buildPersonaUpsertRequest(
     remove_image,
     search_start_date,
     user_file_ids,
+    icon_name,
   } = creationRequest;
 
   return {
@@ -138,11 +138,7 @@ export async function createPersona(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(
-      buildPersonaUpsertRequest(
-        personaUpsertParams,
-        fileId,
-        personaUpsertParams.icon_name
-      )
+      buildPersonaUpsertRequest(personaUpsertParams, fileId)
     ),
     credentials: "include",
   });
@@ -161,11 +157,7 @@ export async function updatePersona(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(
-      buildPersonaUpsertRequest(
-        personaUpsertParams,
-        fileId,
-        personaUpsertParams.icon_name
-      )
+      buildPersonaUpsertRequest(personaUpsertParams, fileId)
     ),
     credentials: "include",
   });
