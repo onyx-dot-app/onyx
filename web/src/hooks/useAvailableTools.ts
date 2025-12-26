@@ -7,8 +7,7 @@ export function useAvailableTools() {
     "/api/tool",
     errorHandlingFetcher,
     {
-      revalidateOnFocus: false,
-      dedupingInterval: 60000,
+      revalidateOnFocus: true,
     }
   );
 
