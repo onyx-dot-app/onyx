@@ -259,7 +259,19 @@ function MCPServerCard({ server }: MCPServerCardProps) {
     tools.forEach((tool) => {
       setFieldValue(`${serverFieldName}.tool_${tool.id}`, isServerEnabled);
     });
-  }, [isServerEnabled, tools, serverFieldName, setFieldValue]);
+
+    // When server is enabled, unfold the card
+    if (isServerEnabled) {
+      console.log(0);
+      actionsLayout.setIsFolded(false);
+    }
+  }, [
+    isServerEnabled,
+    tools,
+    serverFieldName,
+    setFieldValue,
+    actionsLayout.setIsFolded,
+  ]);
 
   return (
     <actionsLayout.Provider>
