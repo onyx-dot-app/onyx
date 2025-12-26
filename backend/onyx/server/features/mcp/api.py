@@ -20,6 +20,7 @@ from fastapi import HTTPException
 from fastapi import Request
 from mcp.client.auth import OAuthClientProvider
 from mcp.client.auth import TokenStorage
+from mcp.client.auth.utils import create_oauth_metadata_request
 from mcp.shared.auth import OAuthClientInformationFull
 from mcp.shared.auth import OAuthClientMetadata
 from mcp.shared.auth import OAuthToken
@@ -343,9 +344,7 @@ async def discover_auth_server_url(
     """
     Only call this function when the client provider's context contains a non-None oauth_metadata
     """
-    oauth_metadata_request = oauth_auth._create_oauth_metadata_request(
-        well_known_override
-    )
+    oauth_metadata_request = create_oauth_metadata_request(well_known_override)
     import httpx
 
     async with httpx.AsyncClient() as client:
@@ -930,7 +929,7 @@ def _db_mcp_server_to_api_mcp_server(
                     )
                 if client_info:
                     admin_credentials = {
-                        "client_id": client_info.client_id,
+                        "client_id": client_info.client_id or "",
                         "client_secret": client_info.client_secret or "",
                     }
                 else:
@@ -962,7 +961,7 @@ def _db_mcp_server_to_api_mcp_server(
                 client_info = OAuthClientInformationFull.model_validate(client_info_raw)
             if client_info:
                 admin_credentials = {
-                    "client_id": client_info.client_id,
+                    "client_id": client_info.client_id or "",
                     "client_secret": client_info.client_secret or "",
                 }
             else:
