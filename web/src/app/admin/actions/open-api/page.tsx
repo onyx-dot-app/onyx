@@ -1,21 +1,19 @@
 "use client";
 
 import { SvgActions } from "@opal/icons";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { AdminPageTitle } from "@/components/admin/Title";
 import OpenApiPageContent from "@/sections/actions/OpenApiPageContent";
+import Text from "@/refresh-components/texts/Text";
 
 export default function Main() {
   return (
-    <SettingsLayouts.Root>
-      <SettingsLayouts.Header
-        icon={SvgActions}
-        title="OpenAPI Actions"
-        description="Connect OpenAPI servers to add custom actions and tools for your assistants."
-        separator
-      />
-      <SettingsLayouts.Body>
-        <OpenApiPageContent />
-      </SettingsLayouts.Body>
-    </SettingsLayouts.Root>
+    <div className="container">
+      <AdminPageTitle icon={SvgActions} title="OpenAPI Actions" />
+      <Text secondaryBody text03 className="pt-4 pb-6">
+        Connect OpenAPI servers to add custom actions and tools for your
+        assistants.
+      </Text>
+      <OpenApiPageContent />
+    </div>
   );
 }
