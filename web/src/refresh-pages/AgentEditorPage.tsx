@@ -617,6 +617,9 @@ export default function AgentEditorPage({
     }
   }
 
+  const mcpServers = mcpData?.mcp_servers ?? [];
+  const tools = openApiTools ?? [];
+
   return (
     <>
       {popup}
@@ -969,14 +972,17 @@ export default function AgentEditorPage({
                           </InputLayouts.Horizontal>
                         </Card>
 
-                        <Separator noPadding className="py-1" />
+                        {/* Tools */}
+                        <>
+                          {/* render the separator if there is at least one mcp-server or open-api-tool */}
+                          {(mcpServers.length > 0 || tools.length > 0) && (
+                            <Separator noPadding className="py-1" />
+                          )}
 
-                        {/* MCP tools */}
-                        {mcpData &&
-                          mcpData.mcp_servers &&
-                          mcpData.mcp_servers.length > 0 && (
+                          {/* MCP tools */}
+                          {mcpServers.length > 0 && (
                             <div className="flex flex-col gap-2">
-                              {mcpData.mcp_servers.map((server) => {
+                              {mcpServers.map((server) => {
                                 const status = getActionStatusForServer(server);
                                 return (
                                   <MCPActionCard
@@ -1000,20 +1006,21 @@ export default function AgentEditorPage({
                             </div>
                           )}
 
-                        {/* OpenAPI tools */}
-                        {openApiTools && openApiTools.length > 0 && (
-                          <div className="flex flex-col gap-2">
-                            {openApiTools.map((tool) => (
-                              <OpenApiActionCard
-                                key={tool.id}
-                                tool={tool}
-                                onAuthenticate={() => {}}
-                                mutateOpenApiTools={mutateOpenApiTools}
-                                setPopup={setPopup}
-                              />
-                            ))}
-                          </div>
-                        )}
+                          {/* OpenAPI tools */}
+                          {tools.length > 0 && (
+                            <div className="flex flex-col gap-2">
+                              {tools.map((tool) => (
+                                <OpenApiActionCard
+                                  key={tool.id}
+                                  tool={tool}
+                                  onAuthenticate={() => {}}
+                                  mutateOpenApiTools={mutateOpenApiTools}
+                                  setPopup={setPopup}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </>
                       </Section>
                     </SimpleCollapsible>
 
