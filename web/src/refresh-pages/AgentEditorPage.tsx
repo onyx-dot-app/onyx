@@ -21,6 +21,11 @@ import {
   MAX_CHARACTERS_STARTER_MESSAGE,
   MAX_CHARACTERS_AGENT_DESCRIPTION,
 } from "@/lib/constants";
+import {
+  IMAGE_GENERATION_TOOL_ID,
+  WEB_SEARCH_TOOL_ID,
+  PYTHON_TOOL_ID,
+} from "@/app/chat/components/tools/constants";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/Card";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
@@ -300,9 +305,10 @@ export default function AgentEditorPage({
 
   const { mcpData } = useMcpServers();
   const { openApiTools, mutateOpenApiTools } = useOpenApiTools();
+  const { tools: availableTools } = useAvailableTools();
 
   // Helper to determine action status from server status
-  const getActionStatusForServer = (server: MCPServer): ActionStatus => {
+  function getActionStatusForServer(server: MCPServer): ActionStatus {
     if (server.status === MCPServerStatus.CONNECTED) {
       return ActionStatus.CONNECTED;
     } else if (
@@ -314,7 +320,18 @@ export default function AgentEditorPage({
       return ActionStatus.FETCHING;
     }
     return ActionStatus.DISCONNECTED;
-  };
+  }
+
+  // Check if specific tools are available
+  const imageGenTool = availableTools?.find(
+    (t) => t.in_code_tool_id === IMAGE_GENERATION_TOOL_ID
+  );
+  const webSearchTool = availableTools?.find(
+    (t) => t.in_code_tool_id === WEB_SEARCH_TOOL_ID
+  );
+  const codeInterpreterTool = availableTools?.find(
+    (t) => t.in_code_tool_id === PYTHON_TOOL_ID
+  );
 
   const initialValues = {
     // General
@@ -342,18 +359,28 @@ export default function AgentEditorPage({
     user_file_ids: existingAgent?.user_file_ids ?? [],
     num_chunks: existingAgent?.num_chunks ?? 0,
 
-    // Access
-    general_access:
-      existingAgent?.is_public === false ? "restricted" : "public",
-    feature_this_agent: false,
-
     // Advanced
     knowledge_cutoff_date: new Date(),
     overwrite_system_prompts: false,
     reminders: "",
-    image_generation: false,
-    web_search: false,
-    code_interpreter: false,
+    image_generation:
+      (!!imageGenTool &&
+        existingAgent?.tools?.some(
+          (tool) => tool.in_code_tool_id === IMAGE_GENERATION_TOOL_ID
+        )) ??
+      false,
+    web_search:
+      (!!webSearchTool &&
+        existingAgent?.tools?.some(
+          (tool) => tool.in_code_tool_id === WEB_SEARCH_TOOL_ID
+        )) ??
+      false,
+    code_interpreter:
+      (!!codeInterpreterTool &&
+        existingAgent?.tools?.some(
+          (tool) => tool.in_code_tool_id === PYTHON_TOOL_ID
+        )) ??
+      false,
   };
 
   const validationSchema = Yup.object().shape({
@@ -397,10 +424,6 @@ export default function AgentEditorPage({
           (Number.isInteger(value) && value >= 0)
       ),
 
-    // Access
-    general_access: Yup.string().oneOf(["restricted", "public"]).required(),
-    feature_this_agent: Yup.boolean(),
-
     // Advanced
     knowledge_cutoff_date: Yup.date().optional(),
     overwrite_system_prompts: Yup.boolean(),
@@ -410,7 +433,7 @@ export default function AgentEditorPage({
     code_interpreter: Yup.boolean(),
   });
 
-  const handleSubmit = async (values: typeof initialValues) => {
+  async function handleSubmit(values: typeof initialValues) {
     try {
       // Map conversation starters
       const starterMessages = values.starter_messages
@@ -428,40 +451,58 @@ export default function AgentEditorPage({
       const teamKnowledge = values.knowledge_source === "team_knowledge";
       const numChunks = values.enable_knowledge ? values.num_chunks || 25 : 0;
 
+      // Always look up tools in availableTools to ensure we can find all tools
+
+      const toolIds = [];
+      if (values.image_generation && imageGenTool) {
+        toolIds.push(imageGenTool.id);
+      }
+      if (values.web_search && webSearchTool) {
+        toolIds.push(webSearchTool.id);
+      }
+      if (values.code_interpreter && codeInterpreterTool) {
+        toolIds.push(codeInterpreterTool.id);
+      }
+
       // Build submission data
       const submissionData: PersonaUpsertParameters = {
         name: values.name,
         description: values.description,
-        system_prompt: values.instructions,
-        task_prompt: "",
-        datetime_aware: false,
         document_set_ids:
           teamKnowledge && values.enable_knowledge
             ? values.document_set_ids
             : [],
-        user_file_ids:
-          !teamKnowledge && values.enable_knowledge ? values.user_file_ids : [],
         num_chunks: numChunks,
-        is_public: values.general_access === "public",
+        is_public: existingAgent?.is_public ?? true,
+        // recency_bias: ...,
+        // llm_filter_extraction: ...,
         llm_relevance_filter: false,
         llm_model_provider_override: null,
         llm_model_version_override: null,
         starter_messages: finalStarterMessages,
         users: undefined, // TODO: Handle restricted access users
         groups: [], // TODO: Handle groups
-        tool_ids: [], // Temporarily empty - will add back later
+        tool_ids: toolIds,
+        // uploaded_image: null, // Already uploaded separately
         remove_image: values.remove_image ?? false,
-        search_start_date: null,
-        uploaded_image: null, // Already uploaded separately
         uploaded_image_id: values.uploaded_image_id,
         icon_name: values.icon_name,
-        is_default_persona: false,
+        search_start_date: null,
         label_ids: null,
+        is_default_persona: false,
+        // display_priority: ...,
+
+        user_file_ids:
+          !teamKnowledge && values.enable_knowledge ? values.user_file_ids : [],
+
+        system_prompt: values.instructions,
+        task_prompt: "",
+        datetime_aware: false,
       };
 
       // Call API
       let personaResponse;
-      if (existingAgent) {
+      if (!!existingAgent) {
         personaResponse = await updatePersona(existingAgent.id, submissionData);
       } else {
         personaResponse = await createPersona(submissionData);
@@ -493,7 +534,7 @@ export default function AgentEditorPage({
       // Refresh agents list and the specific agent
       await refreshAgents();
       if (refreshAgent) {
-        await refreshAgent();
+        refreshAgent();
       }
 
       // Navigate back
@@ -505,7 +546,7 @@ export default function AgentEditorPage({
         message: `An error occurred: ${error}`,
       });
     }
-  };
+  }
 
   // FilePickerPopover callbacks - defined outside render to avoid inline functions
   function handlePickRecentFile(
@@ -893,7 +934,10 @@ export default function AgentEditorPage({
                             label="Image Generation"
                             description="Generate and manipulate images using AI-powered tools."
                           >
-                            <SwitchField name="image_generation" />
+                            <SwitchField
+                              name="image_generation"
+                              disabled={!imageGenTool}
+                            />
                           </InputLayouts.Horizontal>
                         </Card>
 
@@ -903,7 +947,10 @@ export default function AgentEditorPage({
                             label="Web Search"
                             description="Search the web for real-time information and up-to-date results."
                           >
-                            <SwitchField name="web_search" />
+                            <SwitchField
+                              name="web_search"
+                              disabled={!webSearchTool}
+                            />
                           </InputLayouts.Horizontal>
                         </Card>
 
@@ -913,7 +960,10 @@ export default function AgentEditorPage({
                             label="Code Interpreter"
                             description="Generate and run code."
                           >
-                            <SwitchField name="code_interpreter" />
+                            <SwitchField
+                              name="code_interpreter"
+                              disabled={!codeInterpreterTool}
+                            />
                           </InputLayouts.Horizontal>
                         </Card>
 

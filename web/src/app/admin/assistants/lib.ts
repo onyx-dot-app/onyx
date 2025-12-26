@@ -50,7 +50,6 @@ export interface PersonaUpsertParameters {
   tool_ids: number[];
   remove_image?: boolean;
   search_start_date: Date | null;
-  uploaded_image: File | null;
   uploaded_image_id: string | null;
   icon_name: string | null;
   is_default_persona: boolean;
@@ -132,13 +131,7 @@ export async function uploadFile(file: File): Promise<string | null> {
 export async function createPersona(
   personaUpsertParams: PersonaUpsertParameters
 ): Promise<Response | null> {
-  let fileId = personaUpsertParams.uploaded_image_id;
-  if (personaUpsertParams.uploaded_image) {
-    fileId = await uploadFile(personaUpsertParams.uploaded_image);
-    if (!fileId) {
-      return null;
-    }
-  }
+  const fileId = personaUpsertParams.uploaded_image_id;
   const createPersonaResponse = await fetch("/api/persona", {
     method: "POST",
     headers: {
@@ -161,14 +154,7 @@ export async function updatePersona(
   id: number,
   personaUpsertParams: PersonaUpsertParameters
 ): Promise<Response | null> {
-  let fileId = personaUpsertParams.uploaded_image_id;
-  if (personaUpsertParams.uploaded_image) {
-    fileId = await uploadFile(personaUpsertParams.uploaded_image);
-    if (!fileId) {
-      return null;
-    }
-  }
-
+  const fileId = personaUpsertParams.uploaded_image_id;
   const updatePersonaResponse = await fetch(`/api/persona/${id}`, {
     method: "PATCH",
     headers: {

@@ -13,15 +13,15 @@ export interface PageProps {
 export default function Page(props: PageProps) {
   const router = useRouter();
   const { id } = use(props.params);
-  const personaId = parseInt(id);
+  const agentId = parseInt(id);
 
   // Handle invalid ID (NaN)
-  if (isNaN(personaId)) {
+  if (isNaN(agentId)) {
     router.push("/chat");
     return null;
   }
 
-  const { agent, isLoading, refresh } = useAgent(personaId);
+  const { agent, isLoading, refresh } = useAgent(agentId);
 
   // Redirect to home if agent not found after loading completes
   useEffect(() => {
