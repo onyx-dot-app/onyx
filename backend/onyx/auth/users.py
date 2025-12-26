@@ -356,6 +356,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         raise error
 
                     if MULTI_TENANT:
+                        db_session.expire_all()
                         user_by_session = await db_session.get(User, user.id)
                         if user_by_session:
                             user = user_by_session
