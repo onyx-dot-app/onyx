@@ -134,7 +134,7 @@ def _create_and_link_tool_calls(
                     f"'{tool_call_info.parent_tool_call_id}' (likely cancelled during execution)"
                 )
                 # Remove from DB session to prevent saving
-                db_session.expunge(tool_call_obj)
+                db_session.delete(tool_call_obj)
         else:
             # Top-level tool call (no parent)
             valid_tool_calls.append(tool_call_obj)
