@@ -52,7 +52,7 @@ import {
   PopoverMenu,
 } from "@/components/ui/popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import { SvgImage, SvgOnyxOctagon } from "@opal/icons";
+import { SvgImage, SvgOnyxOctagon, SvgSliders } from "@opal/icons";
 import CustomAgentAvatar, {
   agentAvatarIconMap,
 } from "@/refresh-components/avatars/CustomAgentAvatar";
@@ -71,6 +71,7 @@ import * as ActionsLayouts from "@/layouts/actions-layouts";
 import OpenApiActionCard from "@/sections/actions/OpenApiActionCard";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { MCPServerStatus, MCPServer } from "@/lib/tools/interfaces";
+import useServerTools from "@/hooks/useServerTools";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 
 interface AgentIconEditorProps {
@@ -234,6 +235,50 @@ function Section({
   );
 }
 
+interface MCPServerCardProps {
+  server: MCPServer;
+}
+
+function MCPServerCard({ server }: MCPServerCardProps) {
+  const { tools, isLoading } = useServerTools(server, true);
+
+  return (
+    <ActionsLayouts.Root>
+      <ActionsLayouts.Header
+        title={server.name}
+        description={server.description ?? server.server_url}
+        icon={getActionIcon(server.server_url, server.name)}
+        rightChildren={<SwitchField name={`mcp_server_${server.id}`} />}
+      >
+        <InputTypeIn placeholder="Search tools..." internal leftSearchIcon />
+      </ActionsLayouts.Header>
+      <ActionsLayouts.Content>
+        {isLoading ? (
+          <Text text03 mainUiBody>
+            Loading tools...
+          </Text>
+        ) : tools.length === 0 ? (
+          <Text text03 mainUiBody>
+            No tools available
+          </Text>
+        ) : (
+          tools.map((tool) => (
+            <ActionsLayouts.Tool
+              name={tool.name}
+              description={tool.description}
+              icon={tool.icon ?? SvgSliders}
+              disabled={!tool.isAvailable || !tool.isEnabled}
+              rightChildren={
+                <SwitchField name={`mcp_server_${server.id}.tool_${tool.id}`} />
+              }
+            />
+          ))
+        )}
+      </ActionsLayouts.Content>
+    </ActionsLayouts.Root>
+  );
+}
+
 function StarterMessages() {
   const max_starters = STARTER_MESSAGES_EXAMPLES.length;
 
@@ -368,9 +413,12 @@ export default function AgentEditorPage({
         )) ??
       false,
 
-    // MCP servers - dynamically add fields for each server
+    // MCP servers - dynamically add fields for each server with nested tool fields
     ...Object.fromEntries(
-      mcpServers.map((server) => [`mcp_server_${server.id}`, false])
+      mcpServers.map((server) => [
+        `mcp_server_${server.id}`,
+        {}, // Empty object that will hold tool_{id}: boolean fields dynamically
+      ])
     ),
   };
 
@@ -423,9 +471,12 @@ export default function AgentEditorPage({
     web_search: Yup.boolean(),
     code_interpreter: Yup.boolean(),
 
-    // MCP servers - dynamically add validation for each server
+    // MCP servers - dynamically add validation for each server with nested tool validation
     ...Object.fromEntries(
-      mcpServers.map((server) => [`mcp_server_${server.id}`, Yup.boolean()])
+      mcpServers.map((server) => [
+        `mcp_server_${server.id}`,
+        Yup.object(), // Allow any nested tool fields as booleans
+      ])
     ),
   });
 
@@ -973,52 +1024,12 @@ export default function AgentEditorPage({
                           {/* MCP tools */}
                           {mcpServers.length > 0 && (
                             <div className="flex flex-col gap-2">
-                              {mcpServers.map((server) => {
-                                const status =
-                                  server.status === MCPServerStatus.CONNECTED
-                                    ? "connected"
-                                    : server.status ===
-                                          MCPServerStatus.AWAITING_AUTH ||
-                                        server.status ===
-                                          MCPServerStatus.CREATED
-                                      ? "pending"
-                                      : server.status ===
-                                          MCPServerStatus.FETCHING_TOOLS
-                                        ? "fetching"
-                                        : "disconnected";
-
-                                return (
-                                  <ActionsLayouts.Root key={server.id}>
-                                    <ActionsLayouts.Header
-                                      name={`mcp_server_${server.id}`}
-                                      title={server.name}
-                                      description={
-                                        server.description ?? server.server_url
-                                      }
-                                      icon={getActionIcon(
-                                        server.server_url,
-                                        server.name
-                                      )}
-                                      rightChildren={
-                                        <SwitchField
-                                          name={`mcp_server_${server.id}`}
-                                        />
-                                      }
-                                    >
-                                      <InputTypeIn
-                                        placeholder="Search tools..."
-                                        leftSearchIcon
-                                        internal
-                                      />
-                                    </ActionsLayouts.Header>
-                                    <ActionsLayouts.Content
-                                    // totalCount={0}
-                                    // enabledCount={0}
-                                    // emptyMessage="No tools available"
-                                    />
-                                  </ActionsLayouts.Root>
-                                );
-                              })}
+                              {mcpServers.map((server) => (
+                                <MCPServerCard
+                                  key={server.id}
+                                  server={server}
+                                />
+                              ))}
                             </div>
                           )}
 

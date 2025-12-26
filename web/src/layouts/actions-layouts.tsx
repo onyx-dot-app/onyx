@@ -49,11 +49,9 @@
 import React, { HtmlHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 import type { IconProps } from "@opal/types";
-import { SvgAlertTriangle } from "@opal/icons";
-import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
-import Switch from "@/refresh-components/inputs/Switch";
 import { WithoutStyles } from "@/types";
+import Text from "@/refresh-components/texts/Text";
 
 /**
  * Actions Root Component
@@ -134,7 +132,7 @@ function ActionsHeader({
   ...props
 }: ActionsHeaderProps) {
   return (
-    <div className="flex flex-col border rounded-16 bg-background-neutral-00 w-full gap-2 pt-4 pb-2">
+    <div className="flex flex-col border rounded-t-16 bg-background-neutral-00 w-full gap-2 pt-4 pb-2">
       <div className="px-4">
         <label
           className="flex items-start justify-between gap-2 cursor-pointer"
@@ -181,7 +179,12 @@ export type ActionsContentProps = WithoutStyles<
 >;
 
 function ActionsContent(props: ActionsContentProps) {
-  return <div className="flex flex-col" {...props} />;
+  return (
+    <div
+      className="flex flex-col border-x border-b rounded-b-16 p-2 gap-2"
+      {...props}
+    />
+  );
 }
 
 /**
@@ -232,109 +235,42 @@ export type ActionsToolProps = WithoutStyles<{
   // Core content
   name: string;
   description: string;
-  icon?: React.FunctionComponent<IconProps>;
+  icon: React.FunctionComponent<IconProps>;
 
   // State
-  isAvailable?: boolean;
-  isEnabled: boolean;
-  onToggle?: (enabled: boolean) => void;
+  disabled?: boolean;
+  rightChildren?: React.ReactNode;
 }>;
 
-function ActionsTool(props: ActionsToolProps) {
-  const {
-    name,
-    description,
-    icon: Icon,
-    isAvailable = true,
-    isEnabled = true,
-    onToggle,
-  } = props;
-
-  const unavailableStyles = !isAvailable
-    ? "bg-background-neutral-02"
-    : "bg-background-tint-00";
-
-  const textOpacity = !isAvailable ? "opacity-50" : "";
-
+function ActionsTool({
+  name,
+  description,
+  icon: Icon,
+  disabled,
+  rightChildren,
+}: ActionsToolProps) {
   return (
-    <div
-      className={cn(
-        "flex items-start justify-between w-full p-2 rounded-08 border border-border-01 gap-2",
-        unavailableStyles
-      )}
-    >
+    <div className="flex items-start justify-between w-full p-2 rounded-12 border gap-2 bg-background-tint-00">
       {/* Left Section: Icon and Content */}
-      <div className="flex gap-1 items-start flex-1 min-w-0 pr-2">
+      <div className="flex flex-col gap-1 items-start">
         {/* Icon Container */}
-        {Icon && (
-          <div
-            className={cn(
-              "flex items-center justify-center shrink-0",
-              textOpacity
-            )}
+        <div className={cn("flex items-center justify-center gap-1")}>
+          <Icon size={18} className="stroke-text-04" />
+          <Truncated
+            mainUiAction
+            text04
+            className={cn("truncate", disabled && "line-through")}
           >
-            <Icon size={20} className="h-5 w-5 stroke-text-04" />
-          </div>
-        )}
-
-        {/* Content Container */}
-        <div className="flex flex-col items-start flex-1 min-w-0">
-          {/* Tool Name */}
-          <div className="flex items-center w-full min-h-[20px] px-0.5">
-            <Truncated
-              mainUiAction
-              text04
-              className={cn(
-                "truncate",
-                textOpacity,
-                !isAvailable && "line-through"
-              )}
-            >
-              {name}
-            </Truncated>
-          </div>
-
-          {/* Description */}
-          <div className="px-0.5 w-full">
-            <Truncated
-              text03
-              secondaryBody
-              className={cn("whitespace-pre-wrap", textOpacity)}
-            >
-              {description}
-            </Truncated>
-          </div>
+            {name}
+          </Truncated>
         </div>
+        <Text text03 secondaryBody className="whitespace-pre-wrap pl-6">
+          {description}
+        </Text>
       </div>
 
       {/* Right Section */}
-      <div className="flex gap-2 items-start justify-end shrink-0">
-        {/* Unavailable Badge */}
-        {!isAvailable && (
-          <div className="flex items-center min-h-[20px] px-0 py-0.5">
-            <div className="flex gap-0.5 items-center">
-              <div className="flex items-center px-0.5">
-                <Text text03 secondaryBody className="text-right">
-                  Tool unavailable
-                </Text>
-              </div>
-              <div className="flex items-center justify-center p-0.5 w-4 h-4">
-                <SvgAlertTriangle className="w-3 h-3 stroke-status-warning-05" />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Switch */}
-        <div className="flex items-center justify-center gap-1 h-5 px-0.5 py-0.5">
-          <Switch
-            checked={isEnabled}
-            onCheckedChange={onToggle}
-            disabled={!isAvailable}
-            aria-label={`tool-toggle-${name}`}
-          />
-        </div>
-      </div>
+      {rightChildren}
     </div>
   );
 }
