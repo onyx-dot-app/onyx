@@ -41,22 +41,15 @@
  * ```
  */
 
-import { cn } from "@/lib/utils";
+import { WithoutStyles } from "@/types";
 
-export default function Card({
-  children,
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
+export type CardProps = WithoutStyles<React.HTMLAttributes<HTMLDivElement>>;
+
+export default function Card(props: CardProps) {
   return (
     <div
-      className={cn(
-        "bg-background-tint-00 p-4 flex flex-col gap-4 border rounded-16",
-        className
-      )}
+      className="bg-background-tint-00 p-4 flex flex-col gap-4 border rounded-16"
       {...props}
-    >
-      {children}
-    </div>
+    />
   );
 }
