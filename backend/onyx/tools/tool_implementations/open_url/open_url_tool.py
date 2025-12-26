@@ -473,9 +473,6 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             return matches, unresolved
 
         # Query database with all normalized variants
-        # Note: We only query by Document.id (indexed) since normalization ensures
-        # URLs match the canonical Document.id format. Document.link has no index
-        # and would be slow to query.
         all_variants = {
             variant for variants in normalized_map.values() for variant in variants
         }
@@ -506,11 +503,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         all_requests: list[IndexedDocumentRequest],
         filters: IndexFilters,
     ) -> IndexedRetrievalResult:
-        """Retrieve indexed documents using pre-built filters (for parallel execution).
-
-        This method is thread-safe as it doesn't require a database session.
-        Filters should be built before calling this method.
-        """
+        """Retrieve indexed documents using pre-built filters (for parallel execution)."""
         if not all_requests:
             return IndexedRetrievalResult(sections=[], missing_document_ids=[])
 
