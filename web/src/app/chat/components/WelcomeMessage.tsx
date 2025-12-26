@@ -1,11 +1,14 @@
 "use client";
 
 import Logo from "@/refresh-components/Logo";
-import { getRandomGreeting } from "@/lib/chat/greetingMessages";
+import {
+  GREETING_MESSAGES,
+  getRandomGreeting,
+} from "@/lib/chat/greetingMessages";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 
 export interface WelcomeMessageProps {
   agent?: MinimalPersonaSnapshot;
@@ -16,10 +19,15 @@ export default function WelcomeMessage({
   agent,
   isDefaultAgent,
 }: WelcomeMessageProps) {
+  const [greeting, setGreeting] = useState(() => GREETING_MESSAGES[0] ?? "");
+
+  useEffect(() => {
+    setGreeting(getRandomGreeting());
+  }, []);
+
   let content: React.ReactNode = null;
 
   if (isDefaultAgent) {
-    const greeting = useMemo(getRandomGreeting, []);
     content = (
       <div data-testid="onyx-logo" className="flex flex-row items-center gap-4">
         <Logo folded size={32} />
