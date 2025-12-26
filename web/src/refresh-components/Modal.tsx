@@ -363,7 +363,7 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
       <div
         ref={ref}
         className={cn(
-          "relative z-10 flex flex-col gap-4 p-4",
+          "relative flex flex-col gap-4 p-4",
           withBottomShadow && "shadow-01",
           className
         )}

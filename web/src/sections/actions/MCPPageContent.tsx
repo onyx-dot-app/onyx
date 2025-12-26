@@ -28,6 +28,7 @@ import {
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import useMcpServers from "@/hooks/useMcpServers";
+import Modal from "@/refresh-components/Modal";
 
 export default function MCPPageContent() {
   // Data fetching
@@ -539,7 +540,7 @@ export default function MCPPageContent() {
       {/* Shared overlay that persists across modal transitions */}
       {showSharedOverlay && (
         <div
-          className="fixed inset-0 z-[2000] bg-mask-03 backdrop-blur-03 pointer-events-none data-[state=open]:animate-in data-[state=open]:fade-in-0"
+          className="fixed inset-0 z-modal-overlay bg-mask-03 backdrop-blur-03 pointer-events-none data-[state=open]:animate-in data-[state=open]:fade-in-0"
           data-state="open"
           aria-hidden="true"
         />
