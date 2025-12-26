@@ -61,6 +61,7 @@ import {
 } from "@/app/admin/assistants/lib";
 import useMcpServers from "@/hooks/useMcpServers";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
+import { useAvailableTools } from "@/hooks/useAvailableTools";
 import MCPActionCard from "@/sections/actions/MCPActionCard";
 import OpenApiActionCard from "@/sections/actions/OpenApiActionCard";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
