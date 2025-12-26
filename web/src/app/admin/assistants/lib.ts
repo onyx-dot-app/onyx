@@ -57,28 +57,30 @@ export interface PersonaUpsertParameters {
   user_file_ids: string[];
 }
 
-function buildPersonaUpsertRequest(
-  creationRequest: PersonaUpsertParameters,
-  uploaded_image_id: string | null
-): PersonaUpsertRequest {
-  const {
-    name,
-    description,
-    system_prompt,
-    task_prompt,
-    document_set_ids,
-    num_chunks,
-    is_public,
-    groups,
-    datetime_aware,
-    users,
-    tool_ids,
-    remove_image,
-    search_start_date,
-    user_file_ids,
-    icon_name,
-  } = creationRequest;
-
+function buildPersonaUpsertRequest({
+  name,
+  description,
+  system_prompt,
+  task_prompt,
+  document_set_ids,
+  num_chunks,
+  is_public,
+  groups,
+  datetime_aware,
+  users,
+  tool_ids,
+  remove_image,
+  search_start_date,
+  user_file_ids,
+  icon_name,
+  uploaded_image_id,
+  is_default_persona,
+  llm_relevance_filter,
+  llm_model_provider_override,
+  llm_model_version_override,
+  starter_messages,
+  label_ids,
+}: PersonaUpsertParameters): PersonaUpsertRequest {
   return {
     name,
     description,
@@ -95,17 +97,15 @@ function buildPersonaUpsertRequest(
     remove_image,
     search_start_date,
     datetime_aware,
-    is_default_persona: creationRequest.is_default_persona ?? false,
+    is_default_persona: is_default_persona ?? false,
     recency_bias: "base_decay",
     llm_filter_extraction: false,
-    llm_relevance_filter: creationRequest.llm_relevance_filter ?? null,
-    llm_model_provider_override:
-      creationRequest.llm_model_provider_override ?? null,
-    llm_model_version_override:
-      creationRequest.llm_model_version_override ?? null,
-    starter_messages: creationRequest.starter_messages ?? null,
+    llm_relevance_filter: llm_relevance_filter ?? null,
+    llm_model_provider_override: llm_model_provider_override ?? null,
+    llm_model_version_override: llm_model_version_override ?? null,
+    starter_messages: starter_messages ?? null,
     display_priority: null,
-    label_ids: creationRequest.label_ids ?? null,
+    label_ids: label_ids ?? null,
     user_file_ids: user_file_ids ?? null,
   };
 }
@@ -131,15 +131,12 @@ export async function uploadFile(file: File): Promise<string | null> {
 export async function createPersona(
   personaUpsertParams: PersonaUpsertParameters
 ): Promise<Response | null> {
-  const fileId = personaUpsertParams.uploaded_image_id;
   const createPersonaResponse = await fetch("/api/persona", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(
-      buildPersonaUpsertRequest(personaUpsertParams, fileId)
-    ),
+    body: JSON.stringify(buildPersonaUpsertRequest(personaUpsertParams)),
     credentials: "include",
   });
 
@@ -156,9 +153,7 @@ export async function updatePersona(
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(
-      buildPersonaUpsertRequest(personaUpsertParams, fileId)
-    ),
+    body: JSON.stringify(buildPersonaUpsertRequest(personaUpsertParams)),
     credentials: "include",
   });
 
