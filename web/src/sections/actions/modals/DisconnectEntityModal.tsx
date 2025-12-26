@@ -13,7 +13,6 @@ interface DisconnectEntityModalProps {
   onConfirmDisconnect: () => void;
   onConfirmDisconnectAndDelete?: () => void;
   isDisconnecting?: boolean;
-  skipOverlay?: boolean;
 }
 
 export default function DisconnectEntityModal({
@@ -23,7 +22,6 @@ export default function DisconnectEntityModal({
   onConfirmDisconnect,
   onConfirmDisconnectAndDelete,
   isDisconnecting = false,
-  skipOverlay = false,
 }: DisconnectEntityModalProps) {
   const disconnectButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -41,7 +39,6 @@ export default function DisconnectEntityModal({
       <Modal.Content
         mini
         preventAccidentalClose={false}
-        skipOverlay={skipOverlay}
         onOpenAutoFocus={(e) => {
           e.preventDefault();
           disconnectButtonRef.current?.focus();
@@ -52,7 +49,6 @@ export default function DisconnectEntityModal({
             <SvgUnplug className={cn(className, "stroke-action-danger-05")} />
           )}
           title={`Disconnect ${name}`}
-          className="p-4"
           onClose={onClose}
         />
 

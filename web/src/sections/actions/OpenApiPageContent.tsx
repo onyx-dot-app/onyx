@@ -410,7 +410,6 @@ export default function OpenApiPageContent() {
 
       <addOpenAPIActionModal.Provider>
         <AddOpenAPIActionModal
-          skipOverlay
           setPopup={setPopup}
           existingTool={toolBeingEdited}
           onEditAuthentication={handleEditAuthenticationFromModal}
@@ -432,7 +431,6 @@ export default function OpenApiPageContent() {
       <openAPIAuthModal.Provider>
         <OpenAPIAuthenticationModal
           isOpen={openAPIAuthModal.isOpen}
-          skipOverlay
           onClose={resetAuthModal}
           title={authenticationModalTitle}
           entityName={selectedTool?.name ?? null}
@@ -455,7 +453,6 @@ export default function OpenApiPageContent() {
         onConfirmDisconnect={handleConfirmDisconnectFromModal}
         onConfirmDisconnectAndDelete={handleDeleteToolFromModal}
         isDisconnecting={isDisconnecting || isDeleting}
-        skipOverlay
       />
     </div>
   );

@@ -22,7 +22,6 @@ import { ModalCreationInterface } from "@/refresh-components/contexts/ModalConte
 import { SvgCheckCircle, SvgServer, SvgUnplug } from "@opal/icons";
 
 interface AddMCPServerModalProps {
-  skipOverlay?: boolean;
   activeServer: MCPServer | null;
   setActiveServer: (server: MCPServer | null) => void;
   disconnectModal: ModalCreationInterface;
@@ -42,7 +41,6 @@ const validationSchema = Yup.object().shape({
 });
 
 export default function AddMCPServerModal({
-  skipOverlay = false,
   activeServer,
   setActiveServer,
   disconnectModal,
@@ -131,11 +129,7 @@ export default function AddMCPServerModal({
 
   return (
     <Modal open={isOpen} onOpenChange={handleModalClose}>
-      <Modal.Content
-        tall
-        preventAccidentalClose={false}
-        skipOverlay={skipOverlay}
-      >
+      <Modal.Content tall preventAccidentalClose={false}>
         <Formik
           initialValues={initialValues}
           validationSchema={validationSchema}

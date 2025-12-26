@@ -28,7 +28,6 @@ import {
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import useMcpServers from "@/hooks/useMcpServers";
-import Modal from "@/refresh-components/Modal";
 
 export default function MCPPageContent() {
   // Data fetching
@@ -537,15 +536,6 @@ export default function MCPPageContent() {
     <div className="flex flex-col h-full overflow-hidden">
       {popup}
 
-      {/* Shared overlay that persists across modal transitions */}
-      {showSharedOverlay && (
-        <div
-          className="fixed inset-0 z-modal-overlay bg-mask-03 backdrop-blur-03 pointer-events-none data-[state=open]:animate-in data-[state=open]:fade-in-0"
-          data-state="open"
-          aria-hidden="true"
-        />
-      )}
-
       <div className="flex-shrink-0 mb-4">
         <Actionbar
           hasActions={isLoading || mcpServers.length > 0}
@@ -598,7 +588,6 @@ export default function MCPPageContent() {
       <authModal.Provider>
         <MCPAuthenticationModal
           mcpServer={activeServer}
-          skipOverlay
           setPopup={setPopup}
           onTriggerFetchTools={triggerFetchToolsInPlace}
           mutateMcpServers={mutateMcpServers}
@@ -607,7 +596,6 @@ export default function MCPPageContent() {
 
       <manageServerModal.Provider>
         <AddMCPServerModal
-          skipOverlay
           activeServer={activeServer}
           setActiveServer={setActiveServer}
           disconnectModal={disconnectModal}
@@ -631,7 +619,6 @@ export default function MCPPageContent() {
         onConfirmDisconnect={handleConfirmDisconnect}
         onConfirmDisconnectAndDelete={handleConfirmDisconnectAndDelete}
         isDisconnecting={isDisconnecting}
-        skipOverlay
       />
     </div>
   );

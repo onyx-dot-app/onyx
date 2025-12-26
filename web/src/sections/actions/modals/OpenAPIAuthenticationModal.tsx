@@ -39,7 +39,6 @@ interface OpenAPIAuthenticationModalProps {
   onClose: () => void;
   title: string;
   description?: string;
-  skipOverlay?: boolean;
   defaultMethod?: AuthMethod;
   oauthConfigId?: number | null;
   initialHeaders?: KeyValue[] | null;
@@ -71,7 +70,6 @@ export default function OpenAPIAuthenticationModal({
   onClose,
   title,
   description = "Authenticate your connection to start using the OpenAPI actions.",
-  skipOverlay = false,
   defaultMethod = "oauth",
   oauthConfigId = null,
   initialHeaders = null,
@@ -314,7 +312,7 @@ export default function OpenAPIAuthenticationModal({
         }
       }}
     >
-      <Modal.Content tall skipOverlay={skipOverlay}>
+      <Modal.Content tall>
         <Modal.Header
           icon={SvgArrowExchange}
           title={title}

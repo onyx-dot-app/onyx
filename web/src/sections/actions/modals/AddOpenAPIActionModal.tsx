@@ -35,7 +35,6 @@ import InfoBlock from "@/refresh-components/messages/InfoBlock";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 
 interface AddOpenAPIActionModalProps {
-  skipOverlay?: boolean;
   onSuccess?: (tool: ToolSnapshot) => void;
   onUpdate?: (tool: ToolSnapshot) => void;
   setPopup: (popup: PopupSpec) => void;
@@ -92,7 +91,6 @@ function SchemaActions({ definition, onFormat }: SchemaActionsProps) {
   );
 }
 export default function AddOpenAPIActionModal({
-  skipOverlay = false,
   onSuccess,
   onUpdate,
   setPopup,
@@ -327,7 +325,7 @@ export default function AddOpenAPIActionModal({
   return (
     <>
       <Modal open={isOpen} onOpenChange={handleModalClose}>
-        <Modal.Content tall skipOverlay={skipOverlay}>
+        <Modal.Content tall>
           <Formik
             initialValues={initialValues}
             validationSchema={validationSchema}

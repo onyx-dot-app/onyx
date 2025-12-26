@@ -39,7 +39,6 @@ import { AuthType } from "@/lib/constants";
 
 interface MCPAuthenticationModalProps {
   mcpServer: MCPServer | null;
-  skipOverlay?: boolean;
   setPopup?: (spec: PopupSpec) => void;
   onTriggerFetchTools?: (serverId: number) => Promise<void> | void;
   mutateMcpServers: KeyedMutator<MCPServersResponse>;
@@ -105,7 +104,6 @@ const validationSchema = Yup.object().shape({
 
 export default function MCPAuthenticationModal({
   mcpServer,
-  skipOverlay = false,
   setPopup,
   onTriggerFetchTools,
   mutateMcpServers,
@@ -322,7 +320,7 @@ export default function MCPAuthenticationModal({
 
   return (
     <Modal open={isOpen} onOpenChange={toggle}>
-      <Modal.Content tall skipOverlay={skipOverlay}>
+      <Modal.Content tall>
         <Modal.Header
           icon={SvgArrowExchange}
           title={`Authenticate ${mcpServer?.name || "MCP Server"}`}
