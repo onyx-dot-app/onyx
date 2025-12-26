@@ -323,12 +323,14 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         with get_session_with_current_tenant() as db_session:
             # Resolve URLs to document IDs for indexed retrieval
             # Handles both raw URLs and already-normalized document IDs
-            url_requests, _ = self._resolve_urls_to_document_ids(urls, db_session)
+            url_requests, _ = OpenURLTool._resolve_urls_to_document_ids(
+                urls, db_session
+            )
             logger.info(
                 f"Resolved {len(url_requests)} URLs to indexed document IDs for parallel retrieval"
             )
 
-            all_requests = self._dedupe_document_requests(url_requests)
+            all_requests = OpenURLTool._dedupe_document_requests(url_requests)
             logger.info(f"Total unique document requests: {len(all_requests)}")
 
             # Create mapping from URL to document_id for result merging
@@ -416,8 +418,9 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             llm_facing_response=docs_str,
         )
 
+    @staticmethod
     def _dedupe_document_requests(
-        self, requests: list[IndexedDocumentRequest]
+        requests: list[IndexedDocumentRequest],
     ) -> list[IndexedDocumentRequest]:
         seen: set[str] = set()
         deduped: list[IndexedDocumentRequest] = []
@@ -428,8 +431,9 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             deduped.append(request)
         return deduped
 
+    @staticmethod
     def _resolve_urls_to_document_ids(
-        self, urls: list[str], db_session: Session
+        urls: list[str], db_session: Session
     ) -> tuple[list[IndexedDocumentRequest], list[str]]:
         """Resolve URLs to document IDs using connector-owned normalization.
 
