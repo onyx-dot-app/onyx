@@ -6,7 +6,7 @@ import InputTypeIn, {
 } from "@/refresh-components/inputs/InputTypeIn";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgMinusCircle } from "@opal/icons";
-import { useFormInputCallback } from "@/hooks/formHooks";
+import { useOnChangeEvent } from "@/hooks/formHooks";
 
 export interface InputTypeInElementFieldProps
   extends Omit<InputTypeInProps, "value" | "onClear"> {
@@ -22,7 +22,7 @@ export default function InputTypeInElementField({
   ...inputProps
 }: InputTypeInElementFieldProps) {
   const [field, meta] = useField(name);
-  const onChange = useFormInputCallback(name, onChangeProp);
+  const onChange = useOnChangeEvent(name, onChangeProp);
   const hasError = meta.touched && meta.error;
   const isEmpty = !field.value || field.value.trim() === "";
 

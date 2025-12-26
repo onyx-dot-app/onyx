@@ -2,7 +2,7 @@
 
 import { useField } from "formik";
 import Switch, { SwitchProps } from "@/refresh-components/inputs/Switch";
-import { useFormInputCallback } from "@/hooks/formHooks";
+import { useOnChangeValue } from "@/hooks/formHooks";
 
 interface SwitchFieldProps extends Omit<SwitchProps, "checked"> {
   name: string;
@@ -14,13 +14,13 @@ export default function SwitchField({
   ...props
 }: SwitchFieldProps) {
   const [field] = useField<boolean>({ name, type: "checkbox" });
-  const onChange = useFormInputCallback<boolean>(name, onCheckedChange);
+  const onChange = useOnChangeValue(name, onCheckedChange);
 
   return (
     <Switch
       id={name}
       checked={field.value}
-      onCheckedChange={(checked) => onChange(Boolean(checked))}
+      onCheckedChange={onChange}
       {...props}
     />
   );
