@@ -231,8 +231,6 @@ def filter_existing_document_ids(
 ) -> set[str]:
     """Filter a list of document IDs to only those that exist in the database.
 
-    This queries only by Document.id (which is indexed) for performance.
-
     Args:
         db_session: Database session
         document_ids: List of document IDs to check for existence
