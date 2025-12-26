@@ -67,15 +67,11 @@ import {
 import useMcpServers from "@/hooks/useMcpServers";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
-import MCPActionCard from "@/sections/actions/MCPActionCard";
+import * as ActionsLayouts from "@/layouts/actions-layouts";
 import OpenApiActionCard from "@/sections/actions/OpenApiActionCard";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
-import {
-  ActionStatus,
-  MCPServerStatus,
-  MCPServer,
-  ToolSnapshot,
-} from "@/lib/tools/interfaces";
+import { MCPServerStatus, MCPServer } from "@/lib/tools/interfaces";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
@@ -307,20 +303,8 @@ export default function AgentEditorPage({
   const { openApiTools, mutateOpenApiTools } = useOpenApiTools();
   const { tools: availableTools } = useAvailableTools();
 
-  // Helper to determine action status from server status
-  function getActionStatusForServer(server: MCPServer): ActionStatus {
-    if (server.status === MCPServerStatus.CONNECTED) {
-      return ActionStatus.CONNECTED;
-    } else if (
-      server.status === MCPServerStatus.AWAITING_AUTH ||
-      server.status === MCPServerStatus.CREATED
-    ) {
-      return ActionStatus.PENDING;
-    } else if (server.status === MCPServerStatus.FETCHING_TOOLS) {
-      return ActionStatus.FETCHING;
-    }
-    return ActionStatus.DISCONNECTED;
-  }
+  const mcpServers = mcpData?.mcp_servers ?? [];
+  const tools = openApiTools ?? [];
 
   // Check if specific tools are available
   const imageGenTool = availableTools?.find(
@@ -383,6 +367,11 @@ export default function AgentEditorPage({
           (tool) => tool.in_code_tool_id === PYTHON_TOOL_ID
         )) ??
       false,
+
+    // MCP servers - dynamically add fields for each server
+    ...Object.fromEntries(
+      mcpServers.map((server) => [`mcp_server_${server.id}`, false])
+    ),
   };
 
   const validationSchema = Yup.object().shape({
@@ -433,6 +422,11 @@ export default function AgentEditorPage({
     image_generation: Yup.boolean(),
     web_search: Yup.boolean(),
     code_interpreter: Yup.boolean(),
+
+    // MCP servers - dynamically add validation for each server
+    ...Object.fromEntries(
+      mcpServers.map((server) => [`mcp_server_${server.id}`, Yup.boolean()])
+    ),
   });
 
   async function handleSubmit(values: typeof initialValues) {
@@ -616,9 +610,6 @@ export default function AgentEditorPage({
       console.error("Upload error:", error);
     }
   }
-
-  const mcpServers = mcpData?.mcp_servers ?? [];
-  const tools = openApiTools ?? [];
 
   return (
     <>
@@ -983,24 +974,49 @@ export default function AgentEditorPage({
                           {mcpServers.length > 0 && (
                             <div className="flex flex-col gap-2">
                               {mcpServers.map((server) => {
-                                const status = getActionStatusForServer(server);
+                                const status =
+                                  server.status === MCPServerStatus.CONNECTED
+                                    ? "connected"
+                                    : server.status ===
+                                          MCPServerStatus.AWAITING_AUTH ||
+                                        server.status ===
+                                          MCPServerStatus.CREATED
+                                      ? "pending"
+                                      : server.status ===
+                                          MCPServerStatus.FETCHING_TOOLS
+                                        ? "fetching"
+                                        : "disconnected";
+
                                 return (
-                                  <MCPActionCard
-                                    key={server.id}
-                                    serverId={server.id}
-                                    server={server}
-                                    title={server.name}
-                                    description={
-                                      server.description || server.server_url
-                                    }
-                                    logo={getActionIcon(
-                                      server.server_url,
-                                      server.name
-                                    )}
-                                    status={status}
-                                    toolCount={server.tool_count}
-                                    initialExpanded={false}
-                                  />
+                                  <ActionsLayouts.Root key={server.id}>
+                                    <ActionsLayouts.Header
+                                      name={`mcp_server_${server.id}`}
+                                      title={server.name}
+                                      description={
+                                        server.description ?? server.server_url
+                                      }
+                                      icon={getActionIcon(
+                                        server.server_url,
+                                        server.name
+                                      )}
+                                      rightChildren={
+                                        <SwitchField
+                                          name={`mcp_server_${server.id}`}
+                                        />
+                                      }
+                                    >
+                                      <InputTypeIn
+                                        placeholder="Search tools..."
+                                        leftSearchIcon
+                                        internal
+                                      />
+                                    </ActionsLayouts.Header>
+                                    <ActionsLayouts.Content
+                                    // totalCount={0}
+                                    // enabledCount={0}
+                                    // emptyMessage="No tools available"
+                                    />
+                                  </ActionsLayouts.Root>
                                 );
                               })}
                             </div>

@@ -79,7 +79,6 @@ function HorizontalInputLayout({
   children,
 
   name,
-  className,
   ...fieldLabelProps
 }: HorizontalLayoutProps) {
   return (
@@ -92,10 +91,7 @@ function HorizontalInputLayout({
         )}
       >
         <div className="min-w-[70%]">
-          <LabelLayout
-            className={cn("cursor-pointer", className)}
-            {...fieldLabelProps}
-          />
+          <LabelLayout {...fieldLabelProps} />
         </div>
         {children}
       </label>
