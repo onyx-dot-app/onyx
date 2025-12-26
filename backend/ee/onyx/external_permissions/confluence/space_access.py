@@ -148,12 +148,14 @@ def get_all_space_permissions(
     ]
 
     # Gets the permissions for each space
-    logger.debug(f"Got {len(all_space_keys)} spaces from confluence")
     space_permissions_by_space_key: dict[str, ExternalAccess] = {}
     for space_key in all_space_keys:
+        logger.info(f"Getting space permissions for {space_key}")
         space_permissions = get_space_permission(confluence_client, space_key, is_cloud)
 
         # Stores the permissions for each space
         space_permissions_by_space_key[space_key] = space_permissions
+
+        logger.info(f"Got space permissions for {space_key}: {space_permissions}")
 
     return space_permissions_by_space_key
