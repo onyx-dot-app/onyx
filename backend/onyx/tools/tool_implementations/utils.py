@@ -11,35 +11,9 @@ def convert_inference_sections_to_llm_string(
     include_link: bool = False,
     include_document_id: bool = False,
 ) -> tuple[str, dict[int, str]]:
-    """Convert a list of InferenceSection objects to a JSON string for LLM consumption.
+    """Convert InferenceSection objects to a JSON string for LLM.
 
-    Args:
-        top_sections: List of InferenceSection objects to convert (contains full combined content)
-        citation_start: Starting citation number (default: 1)
-        limit: Maximum number of sections to include (None for no limit)
-        include_source_type: Whether to include source_type in the result (default: True)
-        include_link: Whether to include link from the center chunk (default: False)
-
-    Returns:
-        Tuple of (JSON string, citation_mapping) where:
-        - JSON string has the structure:
-        {
-            "results": [
-                {
-                    "document": int,
-                    "title": str,  # semantic_identifier
-                    "updated_at": str | None,  # ISO format
-                    "authors": list[str] | None,
-                    "source_type": str,  # Only included if include_source_type is True
-                    "link": str | None,  # Only included if include_link is True
-                    "document_identifier": str,  # Only included if include_document_id is True
-                    "metadata": str,  # JSON string
-                    "content": str  # combined_content (full content)
-                }
-            ]
-        }
-        - citation_mapping: dict mapping citation_id -> document_id
-          Multiple sections from the same document share the same citation_id
+    Returns a JSON string with document results and a citation mapping.
     """
     # Apply limit if specified
     if limit is not None:
