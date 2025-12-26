@@ -233,7 +233,8 @@ function ActionsContent(props: ActionsContentProps) {
  */
 export type ActionsToolProps = WithoutStyles<{
   // Core content
-  name: string;
+  name?: string;
+  title: string;
   description: string;
   icon: React.FunctionComponent<IconProps>;
 
@@ -244,13 +245,17 @@ export type ActionsToolProps = WithoutStyles<{
 
 function ActionsTool({
   name,
+  title,
   description,
   icon: Icon,
   disabled,
   rightChildren,
 }: ActionsToolProps) {
   return (
-    <div className="flex items-start justify-between w-full p-2 rounded-12 border gap-2 bg-background-tint-00">
+    <label
+      className="flex items-start justify-between w-full p-3 rounded-12 border gap-2 bg-background-tint-00 cursor"
+      htmlFor={name}
+    >
       {/* Left Section: Icon and Content */}
       <div className="flex flex-col gap-1 items-start">
         {/* Icon Container */}
@@ -261,17 +266,21 @@ function ActionsTool({
             text04
             className={cn("truncate", disabled && "line-through")}
           >
-            {name}
+            {title}
           </Truncated>
         </div>
-        <Text text03 secondaryBody className="whitespace-pre-wrap pl-6">
+        <Text
+          text03
+          secondaryBody
+          className="whitespace-pre-wrap line-clamp-2 pl-6"
+        >
           {description}
         </Text>
       </div>
 
       {/* Right Section */}
       {rightChildren}
-    </div>
+    </label>
   );
 }
 

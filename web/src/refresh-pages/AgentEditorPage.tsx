@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Button from "@/refresh-components/buttons/Button";
@@ -70,7 +70,7 @@ import { useAvailableTools } from "@/hooks/useAvailableTools";
 import * as ActionsLayouts from "@/layouts/actions-layouts";
 import OpenApiActionCard from "@/sections/actions/OpenApiActionCard";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
-import { MCPServerStatus, MCPServer } from "@/lib/tools/interfaces";
+import { MCPServer } from "@/lib/tools/interfaces";
 import useServerTools from "@/hooks/useServerTools";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 
@@ -241,6 +241,19 @@ interface MCPServerCardProps {
 
 function MCPServerCard({ server }: MCPServerCardProps) {
   const { tools, isLoading } = useServerTools(server, true);
+  const { values, setFieldValue } = useFormikContext<any>();
+
+  const serverFieldName = `mcp_server_${server.id}`;
+  const isServerEnabled = values[serverFieldName]?.enabled ?? false;
+
+  // Watch for server toggle to disable all tools when turned off
+  useEffect(() => {
+    if (!isServerEnabled) {
+      tools.forEach((tool) => {
+        setFieldValue(`${serverFieldName}.tool_${tool.id}`, false);
+      });
+    }
+  }, [isServerEnabled, tools, serverFieldName, setFieldValue]);
 
   return (
     <ActionsLayouts.Root>
@@ -248,7 +261,7 @@ function MCPServerCard({ server }: MCPServerCardProps) {
         title={server.name}
         description={server.description ?? server.server_url}
         icon={getActionIcon(server.server_url, server.name)}
-        rightChildren={<SwitchField name={`mcp_server_${server.id}`} />}
+        rightChildren={<SwitchField name={`${serverFieldName}.enabled`} />}
       >
         <InputTypeIn placeholder="Search tools..." internal leftSearchIcon />
       </ActionsLayouts.Header>
@@ -264,12 +277,16 @@ function MCPServerCard({ server }: MCPServerCardProps) {
         ) : (
           tools.map((tool) => (
             <ActionsLayouts.Tool
-              name={tool.name}
+              name={`${serverFieldName}.tool_${tool.id}`}
+              title={tool.name}
               description={tool.description}
               icon={tool.icon ?? SvgSliders}
               disabled={!tool.isAvailable || !tool.isEnabled}
               rightChildren={
-                <SwitchField name={`mcp_server_${server.id}.tool_${tool.id}`} />
+                <SwitchField
+                  name={`${serverFieldName}.tool_${tool.id}`}
+                  disabled={!isServerEnabled}
+                />
               }
             />
           ))
@@ -417,7 +434,7 @@ export default function AgentEditorPage({
     ...Object.fromEntries(
       mcpServers.map((server) => [
         `mcp_server_${server.id}`,
-        {}, // Empty object that will hold tool_{id}: boolean fields dynamically
+        { enabled: false }, // Empty object with enabled flag that will hold tool_{id}: boolean fields dynamically
       ])
     ),
   };
