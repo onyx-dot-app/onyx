@@ -81,6 +81,7 @@ import { MCPServer } from "@/lib/tools/interfaces";
 import useServerTools from "@/hooks/useServerTools";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
+import EnabledCount from "@/refresh-components/EnabledCount";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
@@ -261,6 +262,13 @@ function MCPServerCard({ server }: MCPServerCardProps) {
     filtered: filteredTools,
   } = useFilter(tools, (tool) => `${tool.name} ${tool.description}`);
 
+  // Calculate enabled and total tool counts
+  const totalCount = tools.length;
+  const enabledCount = tools.filter((tool) => {
+    const toolFieldValue = values[serverFieldName]?.[`tool_${tool.id}`];
+    return toolFieldValue === true;
+  }).length;
+
   // Watch for server toggle to enable/disable all tools
   useEffect(() => {
     tools.forEach((tool) => {
@@ -286,7 +294,15 @@ function MCPServerCard({ server }: MCPServerCardProps) {
           title={server.name}
           description={server.description ?? server.server_url}
           icon={getActionIcon(server.server_url, server.name)}
-          rightChildren={<SwitchField name={`${serverFieldName}.enabled`} />}
+          rightChildren={
+            <div className="flex flex-row gap-2 items-center justify-center">
+              <EnabledCount
+                enabledCount={enabledCount}
+                totalCount={totalCount}
+              />
+              <SwitchField name={`${serverFieldName}.enabled`} />
+            </div>
+          }
         >
           <div className="flex flex-row gap-2 items-center justify-center">
             <InputTypeIn
