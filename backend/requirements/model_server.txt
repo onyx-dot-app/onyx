@@ -325,7 +325,7 @@ parameterized==0.9.0
     # via cohere
 pillow==12.0.0
     # via sentence-transformers
-prometheus-client==0.21.0
+prometheus-client==0.23.1
     # via
     #   onyx
     #   prometheus-fastapi-instrumentator
