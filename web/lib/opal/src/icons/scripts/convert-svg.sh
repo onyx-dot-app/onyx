@@ -29,10 +29,39 @@ BASE_NAME="${SVG_FILE%.svg}"
 bunx @svgr/cli "$SVG_FILE" --typescript --svgo-config '{"plugins":[{"name":"removeAttrs","params":{"attrs":["stroke","stroke-opacity","width","height"]}}]}' --template "scripts/icon-template.js" > "${BASE_NAME}.tsx"
 
 if [ $? -eq 0 ]; then
-  # Add width and height attributes bound to size prop
-  sed -i '' 's/<svg/<svg width={size} height={size}/g' "${BASE_NAME}.tsx"
-  # Add stroke="currentColor" before {...props} for proper override behavior
-  sed -i '' 's/{\.\.\.props}/stroke="currentColor" {...props}/g' "${BASE_NAME}.tsx"
+  # Verify the output file was created and has content
+  if [ ! -s "${BASE_NAME}.tsx" ]; then
+    echo "Error: Output file was not created or is empty"
+    exit 1
+  fi
+
+  # Post-process the file to add width, height, and stroke attributes
+  # Using perl for cross-platform compatibility (works on macOS, Linux, Windows with WSL)
+  # Note: perl -i returns 0 even on some failures, so we validate the output
+
+  perl -i -pe 's/<svg/<svg width={size} height={size}/g' "${BASE_NAME}.tsx"
+  if [ $? -ne 0 ]; then
+    echo "Error: Failed to add width/height attributes"
+    exit 1
+  fi
+
+  perl -i -pe 's/\{\.\.\.props\}/stroke="currentColor" {...props}/g' "${BASE_NAME}.tsx"
+  if [ $? -ne 0 ]; then
+    echo "Error: Failed to add stroke attribute"
+    exit 1
+  fi
+
+  # Verify the file still exists and has content after post-processing
+  if [ ! -s "${BASE_NAME}.tsx" ]; then
+    echo "Error: Output file corrupted during post-processing"
+    exit 1
+  fi
+
+  # Verify required attributes are present in the output
+  if ! grep -q 'width={size}' "${BASE_NAME}.tsx" || ! grep -q 'stroke="currentColor"' "${BASE_NAME}.tsx"; then
+    echo "Error: Post-processing did not add required attributes"
+    exit 1
+  fi
 
   echo "Created ${BASE_NAME}.tsx"
   rm "$SVG_FILE"
