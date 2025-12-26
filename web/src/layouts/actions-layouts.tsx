@@ -52,6 +52,7 @@ import type { IconProps } from "@opal/types";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { WithoutStyles } from "@/types";
 import Text from "@/refresh-components/texts/Text";
+import { SvgMcp } from "@opal/icons";
 
 /**
  * Actions Root Component
@@ -165,6 +166,7 @@ function ActionsHeader({
  *
  * A container for the content area of an action card.
  * Use this to wrap tools, settings, or other expandable content.
+ * Features a maximum height with scrollable overflow.
  *
  * @example
  * ```tsx
@@ -181,7 +183,7 @@ export type ActionsContentProps = WithoutStyles<
 function ActionsContent(props: ActionsContentProps) {
   return (
     <div
-      className="flex flex-col border-x border-b rounded-b-16 p-2 gap-2"
+      className="flex flex-col border-x border-b rounded-b-16 p-2 gap-2 max-h-[20rem] overflow-y-auto"
       {...props}
     />
   );
@@ -284,9 +286,89 @@ function ActionsTool({
   );
 }
 
+/**
+ * Actions No Tools Found Component
+ *
+ * A simple empty state component that displays when no tools are found.
+ * Shows the MCP icon with "No tools found" message.
+ *
+ * @example
+ * ```tsx
+ * <ActionsLayouts.Content>
+ *   {tools.length === 0 ? (
+ *     <ActionsLayouts.NoToolsFound />
+ *   ) : (
+ *     tools.map(tool => <ActionsLayouts.Tool key={tool.id} {...tool} />)
+ *   )}
+ * </ActionsLayouts.Content>
+ * ```
+ */
+function ActionsNoToolsFound() {
+  return (
+    <div className="flex items-center justify-center gap-2 p-4">
+      <SvgMcp className="stroke-text-04" size={18} />
+      <Text text03>No tools found</Text>
+    </div>
+  );
+}
+
+/**
+ * Actions Tool Skeleton Component
+ *
+ * A loading skeleton that mimics the appearance of ActionsTool.
+ * Renders 3 pulsing skeleton items to indicate loading state.
+ *
+ * Features:
+ * - Animated pulsing effect
+ * - Matches ActionsTool layout
+ * - Renders 3 skeleton items by default
+ *
+ * @example
+ * ```tsx
+ * // Show loading state
+ * <ActionsLayouts.Content>
+ *   {isLoading ? (
+ *     <ActionsLayouts.ToolSkeleton />
+ *   ) : (
+ *     tools.map(tool => <ActionsLayouts.Tool key={tool.id} {...tool} />)
+ *   )}
+ * </ActionsLayouts.Content>
+ * ```
+ */
+function ActionsToolSkeleton() {
+  return (
+    <>
+      {Array.from({ length: 3 }).map((_, index) => (
+        <div
+          key={index}
+          className="flex items-start justify-between w-full p-3 rounded-12 border gap-2 bg-background-tint-00"
+        >
+          {/* Left Section: Icon and Content */}
+          <div className="flex flex-col gap-1 items-start flex-1">
+            {/* Icon and Title */}
+            <div className="flex items-center gap-1 w-full">
+              <div className="h-[18px] w-[18px] bg-background-neutral-02 rounded-04 animate-pulse" />
+              <div className="h-4 bg-background-neutral-02 rounded-04 w-1/3 animate-pulse" />
+            </div>
+            {/* Description */}
+            <div className="pl-6 w-full">
+              <div className="h-3 bg-background-neutral-02 rounded-04 w-2/3 animate-pulse" />
+            </div>
+          </div>
+
+          {/* Right Section: Switch skeleton */}
+          <div className="h-5 w-10 bg-background-neutral-02 rounded-full animate-pulse" />
+        </div>
+      ))}
+    </>
+  );
+}
+
 export {
   ActionsRoot as Root,
   ActionsHeader as Header,
   ActionsContent as Content,
   ActionsTool as Tool,
+  ActionsNoToolsFound as NoToolsFound,
+  ActionsToolSkeleton as ToolSkeleton,
 };

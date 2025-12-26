@@ -246,13 +246,11 @@ function MCPServerCard({ server }: MCPServerCardProps) {
   const serverFieldName = `mcp_server_${server.id}`;
   const isServerEnabled = values[serverFieldName]?.enabled ?? false;
 
-  // Watch for server toggle to disable all tools when turned off
+  // Watch for server toggle to enable/disable all tools
   useEffect(() => {
-    if (!isServerEnabled) {
-      tools.forEach((tool) => {
-        setFieldValue(`${serverFieldName}.tool_${tool.id}`, false);
-      });
-    }
+    tools.forEach((tool) => {
+      setFieldValue(`${serverFieldName}.tool_${tool.id}`, isServerEnabled);
+    });
   }, [isServerEnabled, tools, serverFieldName, setFieldValue]);
 
   return (
@@ -267,13 +265,9 @@ function MCPServerCard({ server }: MCPServerCardProps) {
       </ActionsLayouts.Header>
       <ActionsLayouts.Content>
         {isLoading ? (
-          <Text text03 mainUiBody>
-            Loading tools...
-          </Text>
+          <ActionsLayouts.ToolSkeleton />
         ) : tools.length === 0 ? (
-          <Text text03 mainUiBody>
-            No tools available
-          </Text>
+          <ActionsLayouts.NoToolsFound />
         ) : (
           tools.map((tool) => (
             <ActionsLayouts.Tool
