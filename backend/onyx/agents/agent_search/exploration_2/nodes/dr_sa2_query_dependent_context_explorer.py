@@ -168,4 +168,9 @@ def query_dependent_context_explorer(
 
     new_messages.append(HumanMessage(content=dynamic_learnings_string))
 
-    return OrchestrationUpdate(message_history_for_continuation=new_messages)
+    return OrchestrationUpdate(
+        message_history_for_continuation=new_messages,
+        traces=[
+            f"The Query-Dependent-Context Tool was used and resulted in the following learnings: {dynamic_learnings_string}"
+        ],
+    )

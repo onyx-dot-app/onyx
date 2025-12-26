@@ -30,9 +30,11 @@ _SEARCH_TOOL = {
     "type": "function",
     "function": {
         "name": "search_tool",
-        "description": """The search tool's functionality is described in the system prompt. \
+        "description": """The INTERNAL search tool's functionality is described in the system prompt. \
 Use it if you think you have one or  more questions that you believe are \
-suitable for the search tool.  Make sure that each question has the sufficient context to be answered. \
+suitable for the INTERNAL search tool which can search internal documents. If provided, the 'covered' and 'not_covered' \
+lists in the system prompt MAY give an indication whether the question is likely suitable for the INTERNAL search tool.
+Make sure that each question has the sufficient context to be answered. \
 If available, use information from the memory that may be available \
 in the conversation history to provide sharper/better context to the questions you want to have done \
 a search for. As an example, if \
@@ -41,16 +43,86 @@ explicit list of products that enhance availability, you probably want to use th
 the questions for the search tool. \
 Or, if should a question refer to 'typical customers' and the memory extraction contains characteristics \
 of typical customers, you probably want \
-to use those characteristics for the question generation for the search tool. """,
+to use those characteristics for the question generation for the search tool.
+
+The tool takes a list of requests, and for each request, it mandatory requires a search query, reasoning information, \
+but can optionally take a source filters, a start date filter, and an end date filter.
+Source filters can be 'github', 'slack', 'confluence', 'jira', 'email', 'file', 'linear', 'call'.. This field is a list \
+of strings. If the list is kept empty, no filters are applied.
+The date fields should be in the format 'YYYY-MM-DD'. If the date fields are kept empty, no date filters are applied.
+
+NOTE: don't be redundant, NEVER use source or date filter information in the search query itself! If the original question \
+had implied a filter, pupulate the source_filters and date_filter_start and date_filter_end fields accordingly, but \
+do not insert the information into the search query itself! \
+If a filter is chosen, the filter content MUST NOT be repeated in the search query itself! \
+(Example: if the  source filter is ['github'], the search query MUST NOT contain 'github' in the search query itself. \
+Similar for date filters!)!
+
+""",
         "parameters": {
             "type": "object",
             "properties": {
                 "request": {
                     "type": "array",
-                    "description": "The list of questions to be asked of the search tool.",
+                    "description": "The list of questions to be asked of the internal search tool.",
+                    "items": {
+                        "type": "object",
+                        "description": "The individual question with optional filters to be asked of the internal search tool",
+                        "properties": {
+                            "source_filters": {
+                                "type": "array",
+                                "description": "Optional filter to restrict the search to specific sources.",
+                                "items": {
+                                    "type": "string",
+                                    "description": "Individual source to filter by",
+                                },
+                            },
+                            "date_filter_start": {
+                                "type": "string",
+                                "description": "Optional start date for filtering search results.",
+                            },
+                            "date_filter_end": {
+                                "type": "string",
+                                "description": "Optional end date for filtering search results.",
+                            },
+                            "query": {
+                                "type": "string",
+                                "description": "The search query to be asked of the internal search tool, NOT containing \
+source or date filter information anymore!!",
+                            },
+                            "reasoning": {
+                                "type": "string",
+                                "description": "A brief explanation of why the query was chosen,  \
+particularly if and why filters are present in the query \
+when you are explicitly told not to repeat source or date filters! Please comment on filter usage in query!",
+                            },
+                        },
+                        "required": ["question"],
+                    },
+                },
+            },
+            "required": ["request"],
+        },
+    },
+}
+
+_WEB_SEARCH_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "web_search_tool",
+        "description": """This tool is used to search the web for information. It should be used if information \
+is public and either internal searches (if available) have already been done, or the information requested \
+is unlikely to be found in the internal documents.
+""",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "request": {
+                    "type": "array",
+                    "description": "The list of questions to be asked of the web search tool.",
                     "items": {
                         "type": "string",
-                        "description": "The individual question to be asked of the search tool",
+                        "description": "The individual question to be asked of the web search tool",
                     },
                 },
             },
@@ -108,9 +180,11 @@ _QUERY_INDEPENDENT_CONTEXT_EXPLORER_TOOL = {
 information about the user, their \
 company. If you think that the question implicitly relates to something the user \
 expects you to know about them or their company in order to answer the question, you should use this tool to acquire the \
-necessary context. Common - but not exclusive(!) - signals may be a 'I', 'we', 'our', etc. in the question. (In fact, if these \
-signals are present, you should use this tool even if you think you have all the information you need to answer the question.) \
-Use this tool though if you think it can help TO PROVIDE CONTEXT or INSTRUCTIONS FOR THE user question, but do NOT use \
+necessary context. Common - but not exclusive(!) - signals may be a 'I', 'we', 'our', 'us', etc. in the question. \
+(In fact, if these \
+signals are present, you must use this tool if available, even if you think you have all the information you need \
+to answer the question.) \
+Use this tool if you think it can help TO PROVIDE CONTEXT or INSTRUCTIONS FOR THE  question, but do NOT use \
 this tool to find actual answer information; it is just for providing context and instructions!""",
         "parameters": {
             "type": "object",
@@ -212,6 +286,8 @@ def orchestrator(
 
     plan_of_record = state.plan_of_record
 
+    response_wrapper = ""
+
     message_history_for_continuation = state.message_history_for_continuation
     new_messages_for_continuation: list[SystemMessage | HumanMessage | AIMessage] = []
 
@@ -298,6 +374,9 @@ def orchestrator(
     ):
         tools.append(_THINKING_TOOL)
 
+    if "Web Search" in [tool.name for tool in state.available_tools.values()]:
+        tools.append(_WEB_SEARCH_TOOL)
+
     if (
         _EXPLORATION_TEST_USE_CALRIFIER
         and previous_tool_call_name != DRPath.CLARIFIER.value
@@ -353,6 +432,9 @@ def orchestrator(
                 elif tool_call["name"] == "thinking_tool":
                     reasoning_result = tool_call["args"]["request"]
                     next_tool_name = DRPath.THINKING.value
+                elif tool_call["name"] == "web_search_tool":
+                    query_list = tool_call["args"]["request"]
+                    next_tool_name = DRPath.WEB_SEARCH.value
                 elif tool_call["name"] == "closer_tool":
                     reasoning_result = "Time to wrap up."
                     next_tool_name = DRPath.CLOSER.value
@@ -380,6 +462,12 @@ def orchestrator(
                     )
                 else:
                     raise ValueError(f"Unknown tool: {tool_call['name']}")
+
+        else:
+            reasoning_result = "Time to wrap up. All information is available"
+            new_messages_for_continuation.append(AIMessage(content=reasoning_result))
+            next_tool_name = DRPath.CLOSER.value
+            response_wrapper = "No further tool calls were requested."
 
     else:
         reasoning_result = "Time to wrap up. All information is available"
@@ -412,4 +500,5 @@ def orchestrator(
         iteration_responses=[],
         num_search_iterations=num_search_iterations,
         iteration_available_tools_for_thinking_string=iteration_available_tools_for_thinking_string,
+        traces=[response_wrapper],
     )

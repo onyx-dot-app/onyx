@@ -27,6 +27,14 @@ def upgrade() -> None:
             nullable=True,
         ),
     )
+    op.add_column(
+        "chat_message",
+        sa.Column(
+            "traces",
+            sa.String(),
+            nullable=True,
+        ),
+    )
 
     op.add_column(
         "research_agent_iteration_sub_step",
@@ -86,3 +94,4 @@ def downgrade() -> None:
 
     op.drop_column("chat_message", "query_embeddings")
     op.drop_column("research_agent_iteration_sub_step", "sub_step_tool_name")
+    op.drop_column("chat_message", "traces")

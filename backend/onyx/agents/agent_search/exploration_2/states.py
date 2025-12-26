@@ -27,7 +27,7 @@ class LoggerUpdate(BaseModel):
 
 class OrchestrationUpdate(LoggerUpdate):
     tools_used: Annotated[list[str], add] = []
-    query_list: list[str] = []
+    query_list: list[str] | list[dict[str, Any]] = []
     iteration_nr: int = 0
     current_step_nr: int = 1
     plan_of_record: OrchestrationPlan | None = None  # None for Thoughtful
@@ -43,6 +43,7 @@ class OrchestrationUpdate(LoggerUpdate):
     iteration_responses: Annotated[list[IterationAnswer], add] = []
     num_search_iterations: int = 0
     iteration_available_tools_for_thinking_string: str = ""
+    traces: Annotated[list[str], add] = []
 
 
 class CSUpdate(BaseModel):
@@ -87,6 +88,7 @@ class OrchestrationSetup(OrchestrationUpdate):
     use_corpus_history: bool = False
     use_dc: bool = False
     use_context_explorer: bool = False
+    use_temporary_db_session: bool = False
 
 
 class AnswerUpdate(LoggerUpdate):

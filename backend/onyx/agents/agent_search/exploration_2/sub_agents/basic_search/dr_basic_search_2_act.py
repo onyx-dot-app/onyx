@@ -147,6 +147,27 @@ def basic_search(
     retrieved_docs: list[InferenceSection] = []
     callback_container: list[list[InferenceSection]] = []
 
+    rewritten_sources = []
+    if state.source_filters:
+        for source in state.source_filters:
+            if source == "call":
+                rewritten_sources.append(DocumentSource.FIREFLIES)
+            elif source == "slack":
+                rewritten_sources.append(DocumentSource.SLACK)
+            elif source == "github":
+                rewritten_sources.append(DocumentSource.GITHUB)
+            elif source == "email":
+                rewritten_sources.append(DocumentSource.GMAIL)
+            elif source == "file":
+                rewritten_sources.append(DocumentSource.FILE)
+            elif source == "jira":
+                rewritten_sources.append(DocumentSource.JIRA)
+            else:
+                rewritten_sources.append(source)
+
+    if rewritten_sources:
+        specified_source_types = rewritten_sources
+
     user_file_ids: list[UUID] | None = None
     project_id: int | None = None
     if force_use_tool.override_kwargs and isinstance(
@@ -170,6 +191,7 @@ def basic_search(
                 original_query=rewritten_query,
                 user_file_ids=user_file_ids,
                 project_id=project_id,
+                document_sources=rewritten_sources or None,
             ),
         ):
             # get retrieved docs to send to the rest of the graph

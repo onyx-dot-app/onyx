@@ -8,10 +8,6 @@ from onyx.agents.agent_search.exploration_2.nodes.dr_a0_opener import opener
 from onyx.agents.agent_search.exploration_2.nodes.dr_a1_orchestrator import orchestrator
 from onyx.agents.agent_search.exploration_2.nodes.dr_a2_closer import closer
 from onyx.agents.agent_search.exploration_2.nodes.dr_a2b_clarifier import clarifier
-from onyx.agents.agent_search.exploration_2.nodes.dr_a3a_cs_changes import cs_changes
-from onyx.agents.agent_search.exploration_2.nodes.dr_a3b_cs_update_consolidator import (
-    cs_update_consolidator,
-)
 from onyx.agents.agent_search.exploration_2.nodes.dr_a4_logger import logging
 from onyx.agents.agent_search.exploration_2.nodes.dr_sa1_query_independent_context_explorer import (
     query_independent_context_explorer,
@@ -40,6 +36,11 @@ from onyx.agents.agent_search.exploration_2.sub_agents.web_search.dr_ws_graph_bu
     dr_ws_graph_builder,
 )
 from onyx.agents.agent_search.exploration_2.tools.dr_sa3_thinking import thinking
+
+# from onyx.agents.agent_search.exploration_2.nodes.dr_a3a_cs_changes import cs_changes
+# from onyx.agents.agent_search.exploration_2.nodes.dr_a3b_cs_update_consolidator import (
+#     cs_update_consolidator,
+# )
 
 # from onyx.agents.agent_search.exploration_2.sub_agents.basic_search.dr_basic_search_2_act import search
 
@@ -86,8 +87,8 @@ def exploration_graph_builder() -> StateGraph:
     )
 
     graph.add_node(DRPath.CLOSER, closer)
-    graph.add_node("cs_changes", cs_changes)
-    graph.add_node("cs_consolidator", cs_update_consolidator)
+    # graph.add_node("cs_changes", cs_changes)
+    # graph.add_node("cs_consolidator", cs_update_consolidator)
     graph.add_node(DRPath.LOGGER, logging)
 
     ### Add edges ###

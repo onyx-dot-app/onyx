@@ -40,6 +40,9 @@ class SubAgentMainState(
 class BranchInput(SubAgentInput):
     parallelization_nr: int = 0
     branch_question: str
+    source_filters: list[str] | None = None
+    date_filter_start: str | None = None
+    date_filter_end: str | None = None
 
 
 class CustomToolBranchInput(LoggerUpdate):

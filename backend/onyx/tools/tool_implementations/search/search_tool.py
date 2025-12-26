@@ -373,10 +373,13 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
             # Handle document sources
             if document_sources:
-                source_types = retrieval_options.filters.source_type or []
-                retrieval_options.filters.source_type = list(
-                    set(source_types + document_sources)
-                )
+                # source_types = retrieval_options.filters.source_type or []
+                # retrieval_options.filters.source_type = list(
+                #     set(source_types + document_sources)
+                # )
+
+                # EXPERIMENTAL_ONLY -
+                retrieval_options.filters.source_type = list(set(document_sources))
 
             # Handle time cutoff
             if time_cutoff:

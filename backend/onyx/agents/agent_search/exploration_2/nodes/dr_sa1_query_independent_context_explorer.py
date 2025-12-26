@@ -1,5 +1,4 @@
 import copy
-from typing import cast
 
 from langchain_core.messages import AIMessage
 from langchain_core.messages import HumanMessage
@@ -10,7 +9,6 @@ from langgraph.types import StreamWriter
 from onyx.agents.agent_search.exploration_2.states import FinalUpdate
 from onyx.agents.agent_search.exploration_2.states import MainState
 from onyx.agents.agent_search.exploration_2.states import OrchestrationUpdate
-from onyx.agents.agent_search.models import GraphConfig
 from onyx.utils.logger import setup_logger
 
 
@@ -28,9 +26,7 @@ def query_independent_context_explorer(
     # (right now, answers from each step are concatenated onto each other)
     # Also, add missing fields once usage in UI is clear.
 
-    graph_config = cast(GraphConfig, config["metadata"]["config"])
     base_question = state.original_question
-    graph_config.persistence.db_session
 
     if not base_question:
         raise ValueError("Question is required for closer")
@@ -41,9 +37,13 @@ def query_independent_context_explorer(
 
     del relevant_cheat_sheet_context["answer_preferences"]
 
-    cheat_sheet_string = f"""\n\nHere is additional context learned that may inform the \
-process (plan generation if applicable, reasoning, tool calls, etc.):\n{str(relevant_cheat_sheet_context)}\n###\n\n"""
+    cheat_sheet_string = f"""\n\nThe Query-Dependent-Context Tool was used and resulted in the \
+following learnings that may inform the \
+process (plan generation if applicable, reasoning, \
+tool calls, etc.):\n{str(relevant_cheat_sheet_context)}\n###\n\n"""
 
     new_messages.append(HumanMessage(content=cheat_sheet_string))
 
-    return OrchestrationUpdate(message_history_for_continuation=new_messages)
+    return OrchestrationUpdate(
+        message_history_for_continuation=new_messages, traces=[cheat_sheet_string]
+    )

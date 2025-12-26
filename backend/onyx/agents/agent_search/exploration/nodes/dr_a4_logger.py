@@ -285,7 +285,7 @@ def logging(
     length_new_knowledge = len(llm_tokenizer.encode(json.dumps(new_knowledge)))
 
     logger.info(f"Length of original knowledge: {length_original_knowledge}")
-    logger.info(f"Length of new knowledge: {length_new_knowledge}")
+    logger.info(f"Length of new knowledge - old flow: {length_new_knowledge}")
     logger.info(
         f"Length of knowledge increase: {length_new_knowledge - length_original_knowledge}"
     )

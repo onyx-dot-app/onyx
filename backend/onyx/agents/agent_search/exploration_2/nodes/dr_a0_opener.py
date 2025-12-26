@@ -1,3 +1,4 @@
+import copy
 import json
 import re
 from datetime import datetime
@@ -42,6 +43,9 @@ from onyx.configs.agent_configs import TF_DR_TIMEOUT_SHORT
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import DocumentSourceDescription
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
+from onyx.configs.exploration_research_configs import (
+    EXPLORATION_TEST_SCRIPT_USE_DEFAULT,
+)
 from onyx.configs.exploration_research_configs import (
     EXPLORATION_TEST_USE_CALRIFIER_DEFAULT,
 )
@@ -483,6 +487,8 @@ def opener(
     # _EXPLORATION_TEST_USE_CONTEXT_EXPLORER = EXPLORATION_TEST_USE_CONTEXT_EXPLORER_DEFAULT
     _EXPLORATION_TEST_USE_CONTEXT_EXPLORER = True
     # _EXPLORATION_TEST_USE_CONTEXT_EXPLORER = False
+    _EXPLORATION_TEST_SCRIPT_USE_DEFAULT = EXPLORATION_TEST_SCRIPT_USE_DEFAULT
+    _EXPLORATION_TEST_USE_INTERNAL_TOPICS = True
 
     _EXPLORATION_TEST_USE_PLAN = False
 
@@ -504,7 +510,19 @@ def opener(
         model_provider=llm_provider,
     )
 
-    graph_config.tooling.using_tool_calling_llm
+    user = (
+        graph_config.tooling.search_tool.user
+        if graph_config.tooling.search_tool
+        else None
+    )
+
+    USE_TEMPORARY_DB_SESSION = False
+    if _EXPLORATION_TEST_SCRIPT_USE_DEFAULT:
+        USE_TEMPORARY_DB_SESSION = True
+
+    # if USE_TEMPORARY_DB_SESSION:
+    #     db_session = temp_db_session
+    # else:
     db_session = graph_config.persistence.db_session
 
     original_question = graph_config.inputs.prompt_builder.raw_user_query
@@ -517,7 +535,7 @@ def opener(
 
     # get the connected tools and format for the Deep Research flow
     kg_enabled = graph_config.behavior.kg_config_settings.KG_ENABLED
-    db_session = graph_config.persistence.db_session
+    # db_session = graph_config.persistence.db_session
     active_source_types = fetch_unique_document_sources(db_session)
 
     available_tools = _get_available_tools(
@@ -571,11 +589,6 @@ def opener(
             + PROJECT_INSTRUCTIONS_SEPARATOR
             + graph_config.inputs.project_instructions
         )
-    user = (
-        graph_config.tooling.search_tool.user
-        if graph_config.tooling.search_tool
-        else None
-    )
 
     memories = get_memories(user, db_session)
     assistant_system_prompt = handle_company_awareness(assistant_system_prompt)
@@ -634,11 +647,18 @@ def opener(
         dynamic_learnings_string = get_query_dependent_context(
             db_session, user, original_question
         )
+
+        relevant_cheat_sheet_context = copy.deepcopy(original_cheat_sheet_context)
+        del relevant_cheat_sheet_context["internal_search_topics"]
+        del relevant_cheat_sheet_context["answer_preferences"]
+
         cheat_sheet_string = f"""\n\nHere is additional context learned that may inform the \
-process (plan generation if applicable, reasoning, tool calls, etc.):\n{str(original_cheat_sheet_context)}\n###\n\n"""
+process (plan generation if applicable, reasoning, tool calls, etc.):\n{str(relevant_cheat_sheet_context)}\n###\n\n"""
     elif original_cheat_sheet_context and _EXPLORATION_TEST_USE_CONTEXT_EXPLORER:
         cs_key_string_components = []
         for key, key_info in original_cheat_sheet_context.items():
+            if key in ("internal_search_topics", "answer_preferences"):
+                continue
             cs_key_string_components.append(f"- {key}:")
             for sub_key in key_info.keys():
                 cs_key_string_components.append(f"  - {sub_key}")
@@ -658,6 +678,23 @@ hold relevant information to provide context for the user question:\n\n###\n"
     else:
         plan_instruction_insertion = ""
 
+    internal_search_topic_string = ""
+    if (
+        _EXPLORATION_TEST_USE_INTERNAL_TOPICS
+        and original_cheat_sheet_context
+        and original_cheat_sheet_context.get("internal_search_topics", {})
+        and "Internal Search" in [tool.name for tool in available_tools.values()]
+    ):
+        internal_search_topic_string = f"""\n\nHere is additional context learned that may inform whether \
+a given question may benefit from an internal search. We list the topics we think are likely covered \
+in the internal documents ('covered')\
+and those we think may likely not be covered ('not_covered'). (If topics are not listed, we don't have the \
+information yet. Also, if \
+topics are listed as 'not_covered', it does not mean that there are no documents covering the topic. \
+It just means that it is \
+less likely and other search options or going straight to the answer generation may \
+be more appropriate):\n\n{str(original_cheat_sheet_context["internal_search_topics"])}\n###\n\n"""
+
     system_message = (
         BASE_SYSTEM_MESSAGE_TEMPLATE.replace(
             "---user_prompt---", assistant_system_prompt
@@ -675,6 +712,10 @@ hold relevant information to provide context for the user question:\n\n###\n"
             cheat_sheet_string,
         )
         .replace(
+            "---internal_search_topic_string---",
+            internal_search_topic_string,
+        )
+        .replace(
             "---dynamic_learnings---",
             dynamic_learnings_string,
         )
@@ -684,7 +725,8 @@ hold relevant information to provide context for the user question:\n\n###\n"
     message_history_for_continuation.append(SystemMessage(content=system_message))
     message_history_for_continuation.append(
         HumanMessage(
-            content=f"""Here is the questions to answer:\n{original_question}"""
+            content=f"""Here is the ORIGINAL QUESTION that you need to gather \
+information for to (later) answer:\n{original_question}"""
         )
     )
     message_history_for_continuation.append(
@@ -693,14 +735,17 @@ hold relevant information to provide context for the user question:\n\n###\n"
 
     if _EXPLORATION_TEST_USE_PLAN:
 
-        user_plan_instructions_prompt = """Think carefully how you want to address the question. You may use multiple iterations \
+        user_plan_instructions_prompt = """Think carefully how you want to address the question. \
+You may use multiple iterations \
 of tool calls, reasoning, etc.
 
 Note:
 
-    - the plan should be HIGH-LEVEL! Do not specify any specific tools, but think about what you want to learn in each iteration.
+    - the plan should be HIGH-LEVEL! Do not specify any specific tools, but think about what you \
+want to learn in each iteration.
     - if the question is simple, one iteration may be enough.
-    - DO NOT close with 'summarize...' etc as the last steps. Just focus on the information gathering steps.
+    - DO NOT close with 'summarize...' etc as the last steps. Just focus on the information \
+gathering steps.
 
 """
 
@@ -762,4 +807,5 @@ Note:
         use_plan_updates=_EXPLORATION_TEST_USE_PLAN_UPDATES,
         use_corpus_history=_EXPLORATION_TEST_USE_CORPUS_HISTORY,
         use_dc=_EXPLORATION_TEST_USE_DC,
+        use_temporary_db_session=USE_TEMPORARY_DB_SESSION,
     )

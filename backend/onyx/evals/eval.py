@@ -58,12 +58,49 @@ def isolated_ephemeral_session_factory(
         conn.close()
 
 
+@contextmanager
+def persistent_session_factory(
+    engine: Engine,
+) -> Generator[Callable[[], Session], None, None]:
+    """
+    Create a session factory that creates sessions that run in a transaction that gets committed.
+    This is useful for running operations where you want the changes to persist to the database.
+    """
+    tenant_id = get_current_tenant_id()
+    schema_translate_map = {None: tenant_id}
+    conn = engine.connect().execution_options(schema_translate_map=schema_translate_map)
+    outer_tx = conn.begin()
+    Maker = sessionmaker(bind=conn, expire_on_commit=False, future=True)
+
+    def make_session() -> Session:
+        s = Maker()
+        s.begin_nested()
+
+        @event.listens_for(s, "after_transaction_end")
+        def _restart_savepoint(
+            session: Session, transaction: SessionTransaction
+        ) -> None:
+            if transaction.nested and not (
+                transaction._parent is not None and transaction._parent.nested
+            ):
+                session.begin_nested()
+
+        return s
+
+    try:
+        yield make_session
+        outer_tx.commit()
+    finally:
+        conn.close()
+
+
 def _get_answer(
     eval_input: dict[str, str],
     configuration: EvalConfigurationOptions,
 ) -> str:
     engine = get_sqlalchemy_engine()
-    with isolated_ephemeral_session_factory(engine) as SessionLocal:
+    # with isolated_ephemeral_session_factory(engine) as SessionLocal:
+    with persistent_session_factory(engine) as SessionLocal:
         with SessionLocal() as db_session:
             full_configuration = configuration.get_configuration(db_session)
             user = (

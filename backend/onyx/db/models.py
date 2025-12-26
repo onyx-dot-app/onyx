@@ -2275,6 +2275,7 @@ class ChatMessage(Base):
     query_embeddings: Mapped[list[float] | None] = mapped_column(
         postgresql.ARRAY(Float), nullable=True
     )
+    traces: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class AgentSubQuestion(Base):

@@ -107,11 +107,16 @@ def save_iteration(
     is_internet_marker_dict: dict[str, bool],
     num_tokens: int,
     new_cheat_sheet_context: dict[str, Any] | None = None,
+    # db_session: Session | None = None,
 ) -> None:
-    db_session = graph_config.persistence.db_session
+
     message_id = graph_config.persistence.message_id
     research_type = graph_config.behavior.research_type
     db_session = graph_config.persistence.db_session
+
+    logger.info("Save Iteration - start")
+
+    trace_str = "\n\n".join([x for x in state.traces if x])
 
     # first, insert the search_docs
     search_docs = [
@@ -156,6 +161,7 @@ def save_iteration(
         update_parent_message=True,
         research_answer_purpose=ResearchAnswerPurpose.ANSWER,
         token_count=num_tokens,
+        trace_str=trace_str,
     )
 
     for iteration_preparation in state.iteration_instructions:
@@ -254,13 +260,19 @@ def logging(
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
 
+    state.use_temporary_db_session
+
+    # if USE_TEMPORARY_DB_SESSION:
+    #     db_session = temp_db_session
+    # else:
+    db_session = graph_config.persistence.db_session
+
     user = (
         graph_config.tooling.search_tool.user
         if graph_config.tooling.search_tool
         else None
     )
     chat_message_id = graph_config.persistence.message_id
-    db_session = graph_config.persistence.db_session
 
     new_base_knowledge = state.extended_base_knowledge
     consolidated_knowledge_updates = state.consolidated_updates
@@ -303,31 +315,39 @@ def logging(
     length_new_knowledge = len(llm_tokenizer.encode(json.dumps(new_knowledge)))
 
     logger.info(f"Length of original knowledge: {length_original_knowledge}")
-    logger.info(f"Length of new knowledge: {length_new_knowledge}")
+    logger.info(f"Length of new knowledge - new flow: {length_new_knowledge}")
     logger.info(
         f"Length of knowledge increase: {length_new_knowledge - length_original_knowledge}"
     )
 
+    logger.info(f"_EXPLORATION_TEST_USE_DC 1: {str(_EXPLORATION_TEST_USE_DC)}")
     if EXPLORATION_TEST_SCRIPT_USE_DEFAULT:
-        save_new_cs(
-            graph_config=graph_config,
-            new_cheat_sheet_context=new_knowledge,
-        )
-        logger.info("New CS Updated")
-    else:
-        # Log the research agent steps
-        save_iteration(
-            state,
-            graph_config,
-            aggregated_context,
-            final_answer,
-            all_cited_documents,
-            is_internet_marker_dict,
-            num_tokens,
-            new_cheat_sheet_context=new_knowledge,
-        )
+        pass
 
+        # save_new_cs(
+        #     graph_config=graph_config,
+        #     new_cheat_sheet_context=new_knowledge,
+        # )
+        # logger.info("New CS Updated")
+    else:
+        pass
+        # Log the research agent steps
+    logger.info("Save Iteration")
+    save_iteration(
+        state,
+        graph_config,
+        aggregated_context,
+        final_answer,
+        all_cited_documents,
+        is_internet_marker_dict,
+        num_tokens,
+        new_cheat_sheet_context=new_knowledge,
+        # db_session=db_session,
+    )
+
+    logger.debug(f"_EXPLORATION_TEST_USE_DC 2: {str(_EXPLORATION_TEST_USE_DC)}")
     if _EXPLORATION_TEST_USE_DC:
+        logger.debug(f"chat_message_id: {str(chat_message_id)}")
         if not user:
             raise ValueError("User is required for closer")
         _ = extract_insights_for_chat_message(
@@ -339,6 +359,8 @@ def logging(
             db_session=db_session,
         )
 
+    db_session.commit()
+    logger.debug("Logger Update done")
     return LoggerUpdate(
         log_messages=[
             get_langgraph_node_log_string(

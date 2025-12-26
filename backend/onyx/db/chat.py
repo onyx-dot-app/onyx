@@ -1197,6 +1197,7 @@ def update_db_session_with_messages(
     update_parent_message: bool = True,
     research_answer_purpose: ResearchAnswerPurpose | None = None,
     files: list[FileDescriptor] | None = None,
+    trace_str: str | None = None,
     commit: bool = False,
 ) -> ChatMessage:
     chat_message = (
@@ -1236,6 +1237,8 @@ def update_db_session_with_messages(
     if is_agentic is not None:
         chat_message.is_agentic = is_agentic
 
+    if trace_str:
+        chat_message.traces = trace_str.strip()
     if research_answer_purpose:
         chat_message.research_answer_purpose = research_answer_purpose
 

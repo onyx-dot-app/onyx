@@ -1,5 +1,6 @@
 from operator import add
 from typing import Annotated
+from typing import Any
 
 from onyx.agents.agent_search.exploration_2.models import IterationAnswer
 from onyx.agents.agent_search.exploration_2.models import OrchestratorTool
@@ -19,7 +20,7 @@ class BranchUpdate(LoggerUpdate):
 class SubAgentInput(LoggerUpdate):
     iteration_nr: int = 0
     current_step_nr: int = 1
-    query_list: list[str] = []
+    query_list: list[str] | list[dict[str, Any]] = []
     context: str | None = None
     active_source_types: list[DocumentSource] | None = None
     tools_used: Annotated[list[str], add] = []
@@ -40,6 +41,9 @@ class SubAgentMainState(
 class BranchInput(SubAgentInput):
     parallelization_nr: int = 0
     branch_question: str
+    source_filters: list[str] | None = None
+    date_filter_start: str | None = None
+    date_filter_end: str | None = None
 
 
 class CustomToolBranchInput(LoggerUpdate):

@@ -47,15 +47,23 @@ Note that the search tool is not well suited for time-ordered questions (e.g., '
 for answering those questions, use them instead.
 
 Each request to the {INTERNAL_SEARCH} tool should largely be written as a SEARCH QUERY that has \
-the sufficient context. Note that you can refer to the base knowledge to fill in context that is \
-missing from the question.
+the sufficient context, please optional filters (source_filters, date_filter_start, date_filter_end). \
+Note that you can refer to the base knowledge/memory to fill in context that is missing from the question.
 
 Also, \
 the {INTERNAL_SEARCH} tool DOES support parallel calls of up to {MAX_DR_PARALLEL_SEARCH} queries. So \
-rather a call to this tool should be written as a list of up to {MAX_DR_PARALLEL_SEARCH} search queries, \
-where each query is focussed on a specific aspect of the question. For example, rather than \
-asking ['which PRs and Support tickets are addressed by jira 123?'], ', you should ask \
-['which PRs are addressed by jira 123?', 'which Support tickets are addressed by jira 123?']. \
+rather a call to this tool should be written as a list of up to {MAX_DR_PARALLEL_SEARCH} search requests \
+('query', 'reasoning', 'source_filters' (a list of strings, empty list if no filters. Options are 'github', 'slack', \
+'confluence', 'jira', 'email', 'file', 'linear', 'call'), 'date_filter_start', \
+'date_filter_end', both in 'YYYY-MM-DD' format), \
+where each request is focussed on a specific aspect of the question.
+
+NOTE:
+  - don't be redundant! If a filter is chosen, the filter content MUST NOT be repeated in the query itself! \
+(Example: if the implied source filter is 'github', the query MUST NOT contain 'github' in the query itself)!
+  - The 'reasoning' should be a brief explanation of why the query was chosen, particularly if and why \
+filters are present in the query \
+when you are explicitly told not to repeat source or date filters! Please comment on filter usage in query!
 """
 
 TOOL_DESCRIPTION[

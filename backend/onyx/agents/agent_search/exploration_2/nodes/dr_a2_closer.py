@@ -113,11 +113,14 @@ def save_iteration(
     final_answer: str,
     all_cited_documents: list[InferenceSection],
     is_internet_marker_dict: dict[str, bool],
+    use_temporary_db_session: bool = False,
 ) -> None:
+
     db_session = graph_config.persistence.db_session
+
     message_id = graph_config.persistence.message_id
     research_type = graph_config.behavior.research_type
-    db_session = graph_config.persistence.db_session
+    # db_session = graph_config.persistence.db_session
 
     # first, insert the search_docs
     search_docs = [

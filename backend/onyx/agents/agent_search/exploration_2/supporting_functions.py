@@ -13,6 +13,9 @@ from onyx.agents.agent_search.exploration_2.dr_experimentation_prompts import (
     CS_COMPRESSION_PROMPT_TEMPLATE,
 )
 from onyx.agents.agent_search.exploration_2.dr_experimentation_prompts import (
+    INTERNAL_SEARCH_TOPIC_ANALYSIS_SYSTEM_PROMPT,
+)
+from onyx.agents.agent_search.exploration_2.dr_experimentation_prompts import (
     NEGATIVE_QUERY_DEPENDENT_CONTEXT_EXTRACTION_SYSTEM_PROMPT,
 )
 from onyx.agents.agent_search.exploration_2.dr_experimentation_prompts import (
@@ -217,13 +220,17 @@ def _update_query_independent_learnings(
         "user_background": result_dict.get("user_background", {}),
         "company_background": result_dict.get("company_background", {}),
         "answer_preferences": result_dict.get("answer_preferences", {}),
+        "internal_search_topics": result_dict.get("internal_search_topics", {}),
     }
 
     new_cheat_sheet_str = str(new_cheat_sheet)
     num_words_new_cheat_sheet = len(new_cheat_sheet_str.split())
-    logger.debug(f"Number of words in new cheat sheet: {num_words_new_cheat_sheet}")
-    if num_words_new_cheat_sheet > 3000:
+    logger.info(f"Number of words in new cheat sheet: {num_words_new_cheat_sheet}")
+    if num_words_new_cheat_sheet > 2000:
         new_cheat_sheet = _compress_cheet_sheet(new_cheat_sheet_str)
+        logger.info(
+            f"Number of words in compressed cheat sheet: {len(str(new_cheat_sheet).split())}"
+        )
 
     user_record.cheat_sheet_context = new_cheat_sheet
     db_session.commit()
@@ -268,10 +275,14 @@ def extract_insights_for_chat_message(
     trace_components: dict[int, dict[int, str]] = defaultdict(lambda: defaultdict(str))
     fact_components: dict[int, dict[int, str]] = defaultdict(lambda: defaultdict(str))
 
+    internal_search_history: list[str] = []
+
     for message_sub_step in message_sub_steps:
 
         sub_step_iteration_nr = message_sub_step.iteration_nr
         sub_step_iteration_sub_step_nr = message_sub_step.iteration_sub_step_nr
+
+        sub_step_tool_name = message_sub_step.sub_step_tool_name
 
         sub_step_instructions = (
             f"\n   - Tool Call Instruction/Question: {message_sub_step.sub_step_instructions}"
@@ -300,7 +311,9 @@ def extract_insights_for_chat_message(
         )
 
         if sub_step_iteration_sub_step_nr == 0:
-            tool_name_string = f"\n\nIteration: {sub_step_iteration_nr} - Tool: {message_sub_step.sub_step_tool_name}"
+            tool_name_string = (
+                f"\n\nIteration: {sub_step_iteration_nr} - Tool: {sub_step_tool_name}"
+            )
         else:
             tool_name_string = ""
 
@@ -319,6 +332,12 @@ def extract_insights_for_chat_message(
 
         sorted_trace_components = sorted(trace_components.items(), key=lambda x: x[0])
         sorted_fact_components = sorted(fact_components.items(), key=lambda x: x[0])
+
+        if sub_step_tool_name == "Internal Search":
+            internal_search_history.append(
+                f"""Search Question: {message_sub_step.sub_step_instructions}\n--\n \
+    Search Answer:\n{message_sub_step.sub_answer}\n--\n\n"""
+            )
 
     full_trace_components = []
     fact_string_components = []
@@ -401,12 +420,60 @@ feedback text: \n{feedback_text}\n###\n"""
             db_session,
         )
 
+    internal_search_topic_update_string = ""
+    if internal_search_history:
+        internal_search_history_string = "\n".join(internal_search_history)
+
+        topic_update_result = invoke_llm_raw(
+            prompt=[
+                SystemMessage(content=INTERNAL_SEARCH_TOPIC_ANALYSIS_SYSTEM_PROMPT),
+                HumanMessage(
+                    content=f"""History of search questions and answers: \n{internal_search_history_string}"""
+                ),
+            ],
+            # schema=QueryDependentContextExtractionResponse,
+            llm=get_default_llms()[0],
+        )
+
+        topic_update_result_dict = json.loads(
+            _strip_markdown_json(topic_update_result.content)
+        )
+
+        if not isinstance(topic_update_result_dict, dict):
+            raise ValueError("Result dict is not a dictionary")
+
+        well_represented_topics = topic_update_result_dict.get("covered", [])
+        not_well_represented_topics = topic_update_result_dict.get("not_covered", [])
+
+        if well_represented_topics:
+            internal_search_topic_update_string += (
+                f"""\n\nWell-represented topics: \n{well_represented_topics}"""
+            )
+        if not_well_represented_topics:
+            internal_search_topic_update_string += (
+                f"""\n\nNot-well-represented topics: \n{not_well_represented_topics}"""
+            )
+
+    if internal_search_topic_update_string:
+        if not result_dict.get("query_independent_learnings", {}):
+            result_dict["query_independent_learnings"] = {}
+        if not result_dict["query_independent_learnings"].get(
+            "internal_search_topics", {}
+        ):
+            result_dict["query_independent_learnings"]["internal_search_topics"] = {}
+        result_dict["query_independent_learnings"][
+            "internal_search_topics"
+        ] = internal_search_topic_update_string
+
     new_cheat_sheet = None
     if user_id:
         new_cheat_sheet = _update_query_independent_learnings(
             result_dict.get("query_independent_learnings", {}), user_id, db_session
         )
 
+    logger.info(
+        f"\n-----\nWords in updated cheat sheet: {len(str(new_cheat_sheet).split())}\n-----\n\n"
+    )
     return new_cheat_sheet
 
 
