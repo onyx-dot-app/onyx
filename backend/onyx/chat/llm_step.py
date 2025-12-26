@@ -35,6 +35,7 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningDone
@@ -447,6 +448,7 @@ def run_llm_step_pkt_generator(
     # TODO: Temporary handling of nested tool calls with agents, figure out a better way to handle this
     use_existing_tab_index: bool = False,
     is_deep_research: bool = False,
+    is_connected: Callable[[], bool] | None = None,
 ) -> Generator[Packet, None, tuple[LlmStepResult, bool]]:
     """Run an LLM step and stream the response as packets.
     NOTE: DO NOT TOUCH THIS FUNCTION BEFORE ASKING YUHONG, this is very finicky and
@@ -535,6 +537,25 @@ def run_llm_step_pkt_generator(
             reasoning_effort=reasoning_effort,
             user_identity=user_identity,
         ):
+            # Check for stop signal before processing each packet
+            if is_connected is not None and not is_connected():
+                yield Packet(
+                    placement=Placement(
+                        turn_index=turn_index,
+                        tab_index=tab_index,
+                        sub_turn_index=sub_turn_index,
+                    ),
+                    obj=OverallStop(type="stop", stop_reason="user_cancelled"),
+                )
+                # Return empty result to signal early termination
+                return (
+                    LlmStepResult(
+                        answer=None,
+                        tool_calls=[],
+                        reasoning=None,
+                    ),
+                    False,
+                )
             if packet.usage:
                 usage = packet.usage
                 span_generation.span_data.usage = {
@@ -826,6 +847,7 @@ def run_llm_step(
     max_tokens: int | None = None,
     use_existing_tab_index: bool = False,
     is_deep_research: bool = False,
+    is_connected: Callable[[], bool] | None = None,
 ) -> tuple[LlmStepResult, bool]:
     """Wrapper around run_llm_step_pkt_generator that consumes packets and emits them.
 
@@ -847,6 +869,7 @@ def run_llm_step(
         max_tokens=max_tokens,
         use_existing_tab_index=use_existing_tab_index,
         is_deep_research=is_deep_research,
+        is_connected=is_connected,
     )
 
     while True:
