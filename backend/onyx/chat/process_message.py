@@ -58,6 +58,9 @@ from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
+from onyx.server.query_and_chat.question_qualification import (
+    QuestionQualificationService,
+)
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
@@ -360,6 +363,29 @@ def stream_chat_message_objects(
         retrieval_options = new_msg_req.retrieval_options
         new_msg_req.alternate_assistant_id
         user_selected_filters = retrieval_options.filters if retrieval_options else None
+
+        # Question Qualification Check - Block sensitive questions early
+        if message_text and not use_existing_user_message:
+            try:
+                qualification_service = QuestionQualificationService()
+                qualification_result = qualification_service.qualify_question(
+                    message_text, db_session
+                )
+
+                if qualification_result.is_blocked:
+                    logger.info(
+                        f"Question blocked by qualification service: "
+                        f"confidence={qualification_result.similarity_score:.3f}, "
+                        f"matched_index={qualification_result.matched_question_index}"
+                    )
+
+                    # Return error immediately - don't create chat messages
+                    yield StreamingError(error=qualification_result.standard_response)
+                    return  # Exit early, question is blocked
+
+            except Exception as e:
+                logger.warning(f"Question qualification check failed: {e}")
+                # Continue with normal processing if qualification fails
 
         # permanent "log" store, used primarily for debugging
         long_term_logger = LongTermLogger(
@@ -752,8 +778,24 @@ def gather_stream(
         elif isinstance(packet, MessageResponseIDInfo):
             message_id = packet.reserved_assistant_message_id
 
-    if message_id is None:
+    # Only require message_id when there's no error
+    # When a question is blocked early (e.g., by qualification service),
+    # we may return an error without creating a message
+    if message_id is None and error_msg is None:
         raise ValueError("Message ID is required")
+
+    # If there's an error (e.g., question blocked), return response with error
+    if error_msg:
+        # For blocked questions, we may not have a message_id or answer
+        # Use a default message_id of 0 if not set (shouldn't happen, but safe fallback)
+        return ChatBasicResponse(
+            answer="",
+            answer_citationless="",
+            citation_info=[],
+            message_id=message_id if message_id is not None else 0,
+            error_msg=error_msg,
+            top_documents=[],
+        )
 
     if answer is None:
         # This should never be the case as these non-streamed flows do not have a stop-generation signal
