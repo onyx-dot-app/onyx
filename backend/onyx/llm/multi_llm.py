@@ -248,10 +248,14 @@ class LitellmLLM(LLM):
         )
 
         # Needed to get reasoning tokens from the model
+        # TODO: GPT 5 chat models are listed as reasoning models in the model_cost_map
+        # However, OpenAI's responses API does not accept reasoning.effort
+        # as a parameter for chat models, despite what is documented.
+        # If/when this is fixed, we can use the responses api with chat models.
         use_responses_api = (
             is_true_openai_model(self.config.model_provider, self.config.model_name)
             or self.config.model_provider == AZURE_PROVIDER_NAME
-        )
+        ) and "-chat" not in self.config.model_name
         if use_responses_api:
             model_provider = f"{self.config.model_provider}/responses"
         else:
