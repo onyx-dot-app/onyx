@@ -360,9 +360,11 @@ export default function AgentEditorPage({
     num_chunks: existingAgent?.num_chunks ?? 0,
 
     // Advanced
-    knowledge_cutoff_date: new Date(),
-    overwrite_system_prompts: false,
-    reminders: "",
+    knowledge_cutoff_date: existingAgent?.search_start_date
+      ? new Date(existingAgent.search_start_date)
+      : null,
+    overwrite_system_prompts: false, // Not used in backend
+    reminders: existingAgent?.task_prompt ?? "",
     image_generation:
       (!!imageGenTool &&
         existingAgent?.tools?.some(
@@ -425,7 +427,7 @@ export default function AgentEditorPage({
       ),
 
     // Advanced
-    knowledge_cutoff_date: Yup.date().optional(),
+    knowledge_cutoff_date: Yup.date().nullable().optional(),
     overwrite_system_prompts: Yup.boolean(),
     reminders: Yup.string().optional(),
     image_generation: Yup.boolean(),
@@ -487,7 +489,7 @@ export default function AgentEditorPage({
         remove_image: values.remove_image ?? false,
         uploaded_image_id: values.uploaded_image_id,
         icon_name: values.icon_name,
-        search_start_date: null,
+        search_start_date: values.knowledge_cutoff_date || null,
         label_ids: null,
         is_default_persona: false,
         // display_priority: ...,
@@ -496,7 +498,7 @@ export default function AgentEditorPage({
           !teamKnowledge && values.enable_knowledge ? values.user_file_ids : [],
 
         system_prompt: values.instructions,
-        task_prompt: "",
+        task_prompt: values.reminders || "",
         datetime_aware: false,
       };
 
