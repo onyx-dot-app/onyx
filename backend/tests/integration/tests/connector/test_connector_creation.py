@@ -118,10 +118,11 @@ def test_connector_pause_while_indexing(reset: None) -> None:
         input_type=InputType.POLL,
     )
 
-    # A bit flaky in our CI due to varying indexing times
-    # 120s timeout is relatively arbitrary, but hopefully enough to catch the flakiness
+    # NOTE: A bit flaky in our CI due to varying indexing times. Empirically
+    # 120s was not always enough to index 16 docs from Confluence so trying to
+    # bump down the indexing progress to wait for to 4 docs from 16.
     CCPairManager.wait_for_indexing_in_progress(
-        cc_pair_1, timeout=120, num_docs=16, user_performing_action=admin_user
+        cc_pair_1, timeout=120, num_docs=4, user_performing_action=admin_user
     )
 
     CCPairManager.pause_cc_pair(cc_pair_1, user_performing_action=admin_user)
