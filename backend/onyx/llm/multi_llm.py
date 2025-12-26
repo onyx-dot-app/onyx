@@ -144,7 +144,12 @@ class LitellmLLM(LLM):
                         model_kwargs[k] = v
                         continue
                     elif k == VERTEX_LOCATION_KWARG:
-                        model_kwargs[k] = v
+                        if not v or v.strip() == "":
+                            # Default vertex_location to "global" if not provided for Vertex AI
+                            # Latest gemini models are only available through the global region
+                            model_kwargs[k] = "global"
+                        else:
+                            model_kwargs[k] = v
                         continue
 
                 # If there are any empty or null values,
