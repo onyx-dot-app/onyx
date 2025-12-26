@@ -61,6 +61,7 @@ import Truncated from "@/refresh-components/texts/Truncated";
 import { WithoutStyles } from "@/types";
 import Text from "@/refresh-components/texts/Text";
 import { SvgMcp } from "@opal/icons";
+import ShadowDiv from "@/refresh-components/ShadowDiv";
 
 /**
  * Actions Layout Context
@@ -275,10 +276,12 @@ function ActionsContent(props: ActionsContentProps) {
   }
 
   return (
-    <div
-      className="flex flex-col border-x border-b rounded-b-16 p-2 gap-2 max-h-[20rem] overflow-y-auto"
-      {...props}
-    />
+    <div className="border-x border-b rounded-b-16 overflow-hidden">
+      <ShadowDiv
+        className="flex flex-col gap-2 rounded-b-16 max-h-[20rem] p-2"
+        {...props}
+      />
+    </div>
   );
 }
 
