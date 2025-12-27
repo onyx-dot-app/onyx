@@ -84,6 +84,7 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
 import useOnMount from "@/hooks/useOnMount";
+import Link from "next/link";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
@@ -1019,9 +1020,9 @@ export default function AgentEditorPage({
 
                           {values.enable_knowledge &&
                             values.knowledge_source === "team_knowledge" &&
-                            documentSets && (
+                            ((documentSets?.length ?? 0) > 0 ? (
                               <div className="flex gap-2 flex-wrap">
-                                {documentSets.map((documentSet) => (
+                                {documentSets!.map((documentSet) => (
                                   <DocumentSetSelectable
                                     key={documentSet.id}
                                     documentSet={documentSet}
@@ -1052,7 +1053,11 @@ export default function AgentEditorPage({
                                   />
                                 ))}
                               </div>
-                            )}
+                            ) : (
+                              <CreateButton href="/admin/documents/sets/new">
+                                Create a Document Set
+                              </CreateButton>
+                            ))}
 
                           {values.enable_knowledge &&
                             values.knowledge_source === "user_knowledge" && (
