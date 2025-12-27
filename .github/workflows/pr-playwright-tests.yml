@@ -48,6 +48,7 @@ env:
   MCP_TEST_SERVER_PUBLIC_URL: http://host.docker.internal:8004/mcp
   MCP_TEST_SERVER_BIND_HOST: 0.0.0.0
   MCP_TEST_SERVER_PUBLIC_HOST: host.docker.internal
+  MCP_SERVER_ENABLED: true
   MCP_SERVER_HOST: 0.0.0.0
   MCP_SERVER_PUBLIC_HOST: host.docker.internal
   MCP_SERVER_PUBLIC_URL: http://host.docker.internal:8004/mcp
