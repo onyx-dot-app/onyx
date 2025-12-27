@@ -19,6 +19,7 @@ from onyx.configs.model_configs import GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import LLMProvider
 from onyx.db.models import ModelConfiguration
+from onyx.llm.constants import ProviderName
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.model_response import ModelResponse
@@ -767,8 +768,11 @@ def is_true_openai_model(model_provider: str, model_name: str) -> bool:
     OpenAI models from OpenAI and Azure should use responses.
     """
 
-    # NOTE: not using the OPENAI_PROVIDER_NAME constant here due to circular import issues
-    if model_provider not in {"openai", "litellm_proxy", "azure"}:
+    if model_provider not in {
+        ProviderName.OPENAI,
+        ProviderName.LITELLM_PROXY,
+        ProviderName.AZURE,
+    }:
         return False
 
     model_map = get_model_map()
@@ -776,18 +780,18 @@ def is_true_openai_model(model_provider: str, model_name: str) -> bool:
     def _check_if_model_name_is_openai_provider(model_name: str) -> bool:
         if model_name not in model_map:
             return False
-        return model_map[model_name].get("litellm_provider") == "openai"
+        return model_map[model_name].get("litellm_provider") == ProviderName.OPENAI
 
     try:
         # Check if any model exists in litellm's registry with openai prefix
         # If it's registered as "openai/model-name", it's a real OpenAI model
-        if f"openai/{model_name}" in model_map:
+        if f"{ProviderName.OPENAI}/{model_name}" in model_map:
             return True
 
         if _check_if_model_name_is_openai_provider(model_name):
             return True
 
-        if model_name.startswith("azure/"):
+        if model_name.startswith(f"{ProviderName.AZURE}/"):
             model_name_with_azure_removed = "/".join(model_name.split("/")[1:])
             if _check_if_model_name_is_openai_provider(model_name_with_azure_removed):
                 return True

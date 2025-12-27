@@ -1,21 +1,36 @@
+from enum import Enum
+
 """
 LLM Constants
 
 Centralized constants for LLM providers, vendors, and display names.
 """
 
+
+# Provider names
+class ProviderName(str, Enum):
+    OPENAI = "openai"
+    AZURE = "azure"
+    OPENROUTER = "openrouter"
+    OLLAMA = "ollama_chat"
+    VERTEXAI = "vertex_ai"
+    BEDROCK = "bedrock"
+    ANTHROPIC = "anthropic"
+    LITELLM_PROXY = "litellm_proxy"
+
+
 # Proper capitalization for known providers and vendors
 PROVIDER_DISPLAY_NAMES: dict[str, str] = {
-    "openai": "OpenAI",
-    "anthropic": "Anthropic",
+    ProviderName.OPENAI: "OpenAI",
+    ProviderName.ANTHROPIC: "Anthropic",
     "google": "Google",
-    "bedrock": "Bedrock",
+    ProviderName.BEDROCK: "Bedrock",
     "bedrock_converse": "Bedrock",
-    "vertex_ai": "Vertex AI",
-    "openrouter": "OpenRouter",
-    "azure": "Azure",
+    ProviderName.VERTEXAI: "Vertex AI",
+    ProviderName.OPENROUTER: "OpenRouter",
+    ProviderName.AZURE: "Azure",
     "ollama": "Ollama",
-    "ollama_chat": "Ollama",
+    ProviderName.OLLAMA: "Ollama",
     "groq": "Groq",
     "anyscale": "Anyscale",
     "deepseek": "DeepSeek",

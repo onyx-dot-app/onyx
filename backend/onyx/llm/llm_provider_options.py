@@ -3,6 +3,7 @@ from enum import Enum
 from pydantic import BaseModel
 
 from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
+from onyx.llm.constants import ProviderName
 from onyx.llm.utils import model_supports_image_input
 from onyx.server.manage.llm.models import ModelConfigurationView
 
@@ -54,7 +55,6 @@ class WellKnownLLMProviderDescriptor(BaseModel):
     single_model_supported: bool = False
 
 
-OPENAI_PROVIDER_NAME = "openai"
 # Curated list of OpenAI models to show by default in the UI
 OPENAI_VISIBLE_MODEL_NAMES = {
     "gpt-5",
@@ -65,7 +65,7 @@ OPENAI_VISIBLE_MODEL_NAMES = {
     "gpt-4o-mini",
 }
 
-BEDROCK_PROVIDER_NAME = "bedrock"
+
 BEDROCK_DEFAULT_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0"
 
 
@@ -120,13 +120,9 @@ def _build_bedrock_region_options() -> list[CustomConfigOption]:
 
 BEDROCK_REGION_OPTIONS = _build_bedrock_region_options()
 
-OLLAMA_PROVIDER_NAME = "ollama_chat"
 OLLAMA_API_KEY_CONFIG_KEY = "OLLAMA_API_KEY"
 
-# OpenRouter
-OPENROUTER_PROVIDER_NAME = "openrouter"
 
-ANTHROPIC_PROVIDER_NAME = "anthropic"
 # Models to exclude from Anthropic's model list (deprecated or duplicates)
 _IGNORABLE_ANTHROPIC_MODELS = {
     "claude-2",
@@ -140,10 +136,6 @@ ANTHROPIC_VISIBLE_MODEL_NAMES = {
     "claude-haiku-4-5",
 }
 
-AZURE_PROVIDER_NAME = "azure"
-
-
-VERTEXAI_PROVIDER_NAME = "vertex_ai"
 VERTEX_CREDENTIALS_FILE_KWARG = "vertex_credentials"
 VERTEX_LOCATION_KWARG = "vertex_location"
 VERTEXAI_DEFAULT_MODEL = "gemini-2.5-flash"
@@ -164,7 +156,7 @@ def is_obsolete_model(model_name: str, provider: str) -> bool:
     model_lower = model_name.lower()
 
     # OpenAI obsolete models
-    if provider == "openai":
+    if provider == ProviderName.OPENAI:
         # GPT-3 models are obsolete
         if "gpt-3" in model_lower:
             return True
@@ -184,12 +176,12 @@ def is_obsolete_model(model_name: str, provider: str) -> bool:
             return True
 
     # Anthropic obsolete models
-    if provider == "anthropic":
+    if provider == ProviderName.ANTHROPIC:
         if "claude-2" in model_lower or "claude-instant" in model_lower:
             return True
 
     # Vertex AI obsolete models
-    if provider == "vertex_ai":
+    if provider == ProviderName.VERTEXAI:
         if "gemini-1.0" in model_lower:
             return True
         if "palm" in model_lower or "bison" in model_lower:
@@ -206,12 +198,12 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
     more up-to-date than LiteLLM's static lists.
     """
     return {
-        OPENAI_PROVIDER_NAME: get_openai_model_names(),
-        BEDROCK_PROVIDER_NAME: [],  # Dynamic - fetched from AWS API
-        ANTHROPIC_PROVIDER_NAME: get_anthropic_model_names(),
-        VERTEXAI_PROVIDER_NAME: get_vertexai_model_names(),
-        OLLAMA_PROVIDER_NAME: [],  # Dynamic - fetched from Ollama API
-        OPENROUTER_PROVIDER_NAME: [],  # Dynamic - fetched from OpenRouter API
+        ProviderName.OPENAI: get_openai_model_names(),
+        ProviderName.BEDROCK: [],  # Dynamic - fetched from AWS API
+        ProviderName.ANTHROPIC: get_anthropic_model_names(),
+        ProviderName.VERTEXAI: get_vertexai_model_names(),
+        ProviderName.OLLAMA: [],  # Dynamic - fetched from Ollama API
+        ProviderName.OPENROUTER: [],  # Dynamic - fetched from OpenRouter API
     }
 
 
@@ -267,7 +259,7 @@ def get_anthropic_model_names() -> list[str]:
             model
             for model in litellm.anthropic_models
             if model not in _IGNORABLE_ANTHROPIC_MODELS
-            and not is_obsolete_model(model, ANTHROPIC_PROVIDER_NAME)
+            and not is_obsolete_model(model, ProviderName.ANTHROPIC)
         ],
         reverse=True,
     )
@@ -313,7 +305,7 @@ def get_vertexai_model_names() -> list[str]:
             and "/" not in model  # filter out prefixed models like openai/gpt-oss
             and "search_api" not in model.lower()  # not a model
             and "-maas" not in model.lower()  # marketplace models
-            and not is_obsolete_model(model, VERTEXAI_PROVIDER_NAME)
+            and not is_obsolete_model(model, ProviderName.VERTEXAI)
         ],
         reverse=True,
     )
@@ -322,7 +314,7 @@ def get_vertexai_model_names() -> list[str]:
 def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
     return [
         WellKnownLLMProviderDescriptor(
-            name=OPENAI_PROVIDER_NAME,
+            name=ProviderName.OPENAI,
             display_name="OpenAI",
             title="GPT",
             api_key_required=True,
@@ -330,12 +322,12 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             api_version_required=False,
             custom_config_keys=[],
             model_configurations=fetch_model_configurations_for_provider(
-                OPENAI_PROVIDER_NAME
+                ProviderName.OPENAI
             ),
             default_model="gpt-4o",
         ),
         WellKnownLLMProviderDescriptor(
-            name=OLLAMA_PROVIDER_NAME,
+            name=ProviderName.OLLAMA,
             display_name="Ollama",
             title="Ollama",
             api_key_required=False,
@@ -351,13 +343,13 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                 )
             ],
             model_configurations=fetch_model_configurations_for_provider(
-                OLLAMA_PROVIDER_NAME
+                ProviderName.OLLAMA
             ),
             default_model=None,
             default_api_base="http://127.0.0.1:11434",
         ),
         WellKnownLLMProviderDescriptor(
-            name=ANTHROPIC_PROVIDER_NAME,
+            name=ProviderName.ANTHROPIC,
             display_name="Anthropic",
             title="Claude",
             api_key_required=True,
@@ -365,12 +357,12 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             api_version_required=False,
             custom_config_keys=[],
             model_configurations=fetch_model_configurations_for_provider(
-                ANTHROPIC_PROVIDER_NAME
+                ProviderName.ANTHROPIC
             ),
             default_model="claude-sonnet-4-5-20250929",
         ),
         WellKnownLLMProviderDescriptor(
-            name=AZURE_PROVIDER_NAME,
+            name=ProviderName.AZURE,
             display_name="Microsoft Azure Cloud",
             title="Azure OpenAI",
             api_key_required=True,
@@ -378,13 +370,13 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             api_version_required=True,
             custom_config_keys=[],
             model_configurations=fetch_model_configurations_for_provider(
-                AZURE_PROVIDER_NAME
+                ProviderName.AZURE
             ),
             deployment_name_required=True,
             single_model_supported=True,
         ),
         WellKnownLLMProviderDescriptor(
-            name=BEDROCK_PROVIDER_NAME,
+            name=ProviderName.BEDROCK,
             display_name="AWS",
             title="Amazon Bedrock",
             api_key_required=False,
@@ -447,19 +439,19 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                 ),
             ],
             model_configurations=fetch_model_configurations_for_provider(
-                BEDROCK_PROVIDER_NAME
+                ProviderName.BEDROCK
             ),
             default_model=None,
         ),
         WellKnownLLMProviderDescriptor(
-            name=VERTEXAI_PROVIDER_NAME,
+            name=ProviderName.VERTEXAI,
             display_name="Google Cloud Vertex AI",
             title="Gemini",
             api_key_required=False,
             api_base_required=False,
             api_version_required=False,
             model_configurations=fetch_model_configurations_for_provider(
-                VERTEXAI_PROVIDER_NAME
+                ProviderName.VERTEXAI
             ),
             custom_config_keys=[
                 CustomConfigKey(
@@ -485,7 +477,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             default_model=VERTEXAI_DEFAULT_MODEL,
         ),
         WellKnownLLMProviderDescriptor(
-            name=OPENROUTER_PROVIDER_NAME,
+            name=ProviderName.OPENROUTER,
             display_name="OpenRouter",
             title="OpenRouter",
             api_key_required=True,
@@ -493,7 +485,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             api_version_required=False,
             custom_config_keys=[],
             model_configurations=fetch_model_configurations_for_provider(
-                OPENROUTER_PROVIDER_NAME
+                ProviderName.OPENROUTER
             ),
             default_model=None,
             default_api_base="https://openrouter.ai/api/v1",
@@ -525,13 +517,13 @@ def fetch_visible_model_names_for_provider_as_set(
 # Display names for Onyx-supported LLM providers (used in admin UI provider selection).
 # These override PROVIDER_DISPLAY_NAMES for Onyx-specific branding.
 _ONYX_PROVIDER_DISPLAY_NAMES: dict[str, str] = {
-    OPENAI_PROVIDER_NAME: "ChatGPT (OpenAI)",
-    OLLAMA_PROVIDER_NAME: "Ollama",
-    ANTHROPIC_PROVIDER_NAME: "Claude (Anthropic)",
-    AZURE_PROVIDER_NAME: "Azure OpenAI",
-    BEDROCK_PROVIDER_NAME: "Amazon Bedrock",
-    VERTEXAI_PROVIDER_NAME: "Google Vertex AI",
-    OPENROUTER_PROVIDER_NAME: "OpenRouter",
+    ProviderName.OPENAI: "ChatGPT (OpenAI)",
+    ProviderName.OLLAMA: "Ollama",
+    ProviderName.ANTHROPIC: "Claude (Anthropic)",
+    ProviderName.AZURE: "Azure OpenAI",
+    ProviderName.BEDROCK: "Amazon Bedrock",
+    ProviderName.VERTEXAI: "Google Vertex AI",
+    ProviderName.OPENROUTER: "OpenRouter",
 }
 
 
@@ -551,9 +543,9 @@ def get_provider_display_name(provider_name: str) -> str:
 def _get_visible_models_for_provider(provider_name: str) -> set[str]:
     """Get the set of models that should be visible by default for a provider."""
     _PROVIDER_TO_VISIBLE_MODELS: dict[str, set[str]] = {
-        OPENAI_PROVIDER_NAME: OPENAI_VISIBLE_MODEL_NAMES,
-        ANTHROPIC_PROVIDER_NAME: ANTHROPIC_VISIBLE_MODEL_NAMES,
-        VERTEXAI_PROVIDER_NAME: VERTEXAI_VISIBLE_MODEL_NAMES,
+        ProviderName.OPENAI: OPENAI_VISIBLE_MODEL_NAMES,
+        ProviderName.ANTHROPIC: ANTHROPIC_VISIBLE_MODEL_NAMES,
+        ProviderName.VERTEXAI: VERTEXAI_VISIBLE_MODEL_NAMES,
     }
     return _PROVIDER_TO_VISIBLE_MODELS.get(provider_name, set())
 
