@@ -759,9 +759,13 @@ export default function Page() {
     <>
       <div className="container">
         <AdminPageTitle icon={SvgGlobe} title="Web Search" />
-        <Text secondaryBody text03 className="pt-4 pb-6">
-          Search settings for external search across the internet.
-        </Text>
+        <div className="pt-4 pb-4">
+          <Text className="text-text-dark">
+            Search settings for external search across the internet.
+          </Text>
+        </div>
+
+        <Separator />
 
         <div className="flex w-full flex-col gap-8 pb-6">
           <div className="flex w-full max-w-[960px] flex-col gap-3">
