@@ -8,7 +8,7 @@ Centralized constants for LLM providers, vendors, and display names.
 
 
 # Provider names
-class ProviderName(str, Enum):
+class LlmProviderNames(str, Enum):
     OPENAI = "openai"
     AZURE = "azure"
     OPENROUTER = "openrouter"
@@ -21,16 +21,16 @@ class ProviderName(str, Enum):
 
 # Proper capitalization for known providers and vendors
 PROVIDER_DISPLAY_NAMES: dict[str, str] = {
-    ProviderName.OPENAI: "OpenAI",
-    ProviderName.ANTHROPIC: "Anthropic",
+    LlmProviderNames.OPENAI: "OpenAI",
+    LlmProviderNames.ANTHROPIC: "Anthropic",
     "google": "Google",
-    ProviderName.BEDROCK: "Bedrock",
+    LlmProviderNames.BEDROCK: "Bedrock",
     "bedrock_converse": "Bedrock",
-    ProviderName.VERTEXAI: "Vertex AI",
-    ProviderName.OPENROUTER: "OpenRouter",
-    ProviderName.AZURE: "Azure",
+    LlmProviderNames.VERTEXAI: "Vertex AI",
+    LlmProviderNames.OPENROUTER: "OpenRouter",
+    LlmProviderNames.AZURE: "Azure",
     "ollama": "Ollama",
-    ProviderName.OLLAMA: "Ollama",
+    LlmProviderNames.OLLAMA: "Ollama",
     "groq": "Groq",
     "anyscale": "Anyscale",
     "deepseek": "DeepSeek",

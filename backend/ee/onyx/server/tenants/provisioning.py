@@ -37,7 +37,7 @@ from onyx.db.models import AvailableTenant
 from onyx.db.models import IndexModelStatus
 from onyx.db.models import SearchSettings
 from onyx.db.models import UserTenantMapping
-from onyx.llm.constants import ProviderName
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.llm_provider_options import get_anthropic_model_names
 from onyx.llm.llm_provider_options import get_openai_model_names
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
@@ -265,7 +265,7 @@ def configure_default_api_keys(db_session: Session) -> None:
     if ANTHROPIC_DEFAULT_API_KEY:
         anthropic_provider = LLMProviderUpsertRequest(
             name="Anthropic",
-            provider=ProviderName.ANTHROPIC,
+            provider=LlmProviderNames.ANTHROPIC,
             api_key=ANTHROPIC_DEFAULT_API_KEY,
             default_model_name="claude-3-7-sonnet-20250219",
             model_configurations=[
@@ -291,7 +291,7 @@ def configure_default_api_keys(db_session: Session) -> None:
     if OPENAI_DEFAULT_API_KEY:
         openai_provider = LLMProviderUpsertRequest(
             name="OpenAI",
-            provider=ProviderName.OPENAI,
+            provider=LlmProviderNames.OPENAI,
             api_key=OPENAI_DEFAULT_API_KEY,
             default_model_name="gpt-4o",
             model_configurations=[

@@ -13,7 +13,7 @@ from onyx.configs.chat_configs import QA_TIMEOUT
 from onyx.configs.model_configs import DEFAULT_REASONING_EFFORT
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
-from onyx.llm.constants import ProviderName
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
@@ -127,7 +127,7 @@ class LitellmLLM(LLM):
             # model_kwarg to the completion call for vertex AI. More details here:
             # https://docs.litellm.ai/docs/providers/vertex
             for k, v in custom_config.items():
-                if model_provider == ProviderName.VERTEXAI:
+                if model_provider == LlmProviderNames.VERTEXAI:
                     if k == VERTEX_CREDENTIALS_FILE_KWARG:
                         model_kwargs[k] = v
                         continue
@@ -145,13 +145,13 @@ class LitellmLLM(LLM):
         # Default vertex_location to "global" if not provided for Vertex AI
         # Latest gemini models are only available through the global region
         if (
-            model_provider == ProviderName.VERTEXAI
+            model_provider == LlmProviderNames.VERTEXAI
             and VERTEX_LOCATION_KWARG not in model_kwargs
         ):
             model_kwargs[VERTEX_LOCATION_KWARG] = "global"
 
         # This is needed for Ollama to do proper function calling
-        if model_provider == ProviderName.OLLAMA and api_base is not None:
+        if model_provider == LlmProviderNames.OLLAMA and api_base is not None:
             os.environ["OLLAMA_API_BASE"] = api_base
         if extra_headers:
             model_kwargs.update({"extra_headers": extra_headers})
