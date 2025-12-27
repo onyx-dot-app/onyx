@@ -1019,10 +1019,9 @@ export default function AgentEditorPage({
 
                           {values.enable_knowledge &&
                             values.knowledge_source === "team_knowledge" &&
-                            documentSets &&
-                            (documentSets?.length ?? 0) > 0 && (
+                            documentSets && (
                               <div className="flex gap-2 flex-wrap">
-                                {documentSets!.map((documentSet) => (
+                                {documentSets.map((documentSet) => (
                                   <DocumentSetSelectable
                                     key={documentSet.id}
                                     documentSet={documentSet}
