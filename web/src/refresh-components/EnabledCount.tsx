@@ -16,7 +16,7 @@ const EnabledCount = memo(
         <Text mainUiBody className="text-action-link-05" as="span">
           {enabledCount}
         </Text>
-        {` of ${totalCount} ${name ? name : ""}${
+        {` of ${totalCount} ${name ?? ""}${
           name && totalCount !== 1 ? "s" : ""
         }`}
       </Text>
