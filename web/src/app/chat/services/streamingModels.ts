@@ -70,8 +70,14 @@ export interface MessageEnd extends BaseObj {
 }
 
 // Control Packets
+export enum StopReason {
+  FINISHED = "finished",
+  USER_CANCELLED = "user_cancelled",
+}
+
 export interface Stop extends BaseObj {
   type: "stop";
+  stop_reason?: StopReason;
 }
 
 export interface SectionEnd extends BaseObj {
