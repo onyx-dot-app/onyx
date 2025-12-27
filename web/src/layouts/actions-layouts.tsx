@@ -62,6 +62,7 @@ import React, {
   useMemo,
   Dispatch,
   SetStateAction,
+  useCallback,
 } from "react";
 import { cn } from "@/lib/utils";
 import type { IconProps } from "@opal/types";
@@ -119,13 +120,16 @@ const ActionsLayoutContext = createContext<
  */
 export function useActionsLayout() {
   const [isFolded, setIsFolded] = useState(false);
-
   const contextValue = useMemo(() => ({ isFolded, setIsFolded }), [isFolded]);
 
-  const Provider = ({ children }: { children: React.ReactNode }) => (
-    <ActionsLayoutContext.Provider value={contextValue}>
-      {children}
-    </ActionsLayoutContext.Provider>
+  // Wrap children directly, no component creation
+  const Provider = useCallback(
+    ({ children }: { children: React.ReactNode }) => (
+      <ActionsLayoutContext.Provider value={contextValue}>
+        {children}
+      </ActionsLayoutContext.Provider>
+    ),
+    [contextValue]
   );
 
   return { Provider, isFolded, setIsFolded };
