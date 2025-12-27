@@ -282,24 +282,27 @@ function MCPServerCard({ server }: MCPServerCardProps) {
   const serverFieldName = `mcp_server_${server.id}`;
   const isServerEnabled = values[serverFieldName]?.enabled ?? false;
 
+  // Filter out globally disabled tools
+  const enabledTools = tools.filter((tool) => tool.isEnabled);
+
   const {
     query,
     setQuery,
     filtered: filteredTools,
-  } = useFilter(tools, (tool) => `${tool.name} ${tool.description}`);
+  } = useFilter(enabledTools, (tool) => `${tool.name} ${tool.description}`);
 
   // Calculate enabled and total tool counts
-  const enabledCount = tools.filter((tool) => {
+  const enabledCount = enabledTools.filter((tool) => {
     const toolFieldValue = values[serverFieldName]?.[`tool_${tool.id}`];
     return toolFieldValue === true;
   }).length;
 
   // Watch for server toggle to enable/disable all tools
   useEffect(() => {
-    tools.forEach((tool) => {
+    enabledTools.forEach((tool) => {
       setFieldValue(`${serverFieldName}.tool_${tool.id}`, isServerEnabled);
     });
-  }, [tools, isServerEnabled, serverFieldName, setFieldValue]);
+  }, [enabledTools, isServerEnabled, serverFieldName, setFieldValue]);
 
   return (
     <actionsLayouts.Provider>
@@ -354,7 +357,7 @@ function MCPServerCard({ server }: MCPServerCardProps) {
                 title={tool.name}
                 description={tool.description}
                 icon={tool.icon ?? SvgSliders}
-                disabled={!tool.isAvailable || !tool.isEnabled}
+                disabled={!tool.isAvailable}
                 rightChildren={
                   <SwitchField
                     name={`${serverFieldName}.tool_${tool.id}`}
