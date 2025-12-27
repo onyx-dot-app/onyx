@@ -369,7 +369,7 @@ function ActionsTool({
 }: ActionsToolProps) {
   return (
     <label
-      className="flex items-start justify-between w-full p-3 rounded-12 border gap-2 bg-background-tint-00 cursor"
+      className="flex items-start justify-between w-full p-3 rounded-12 border gap-2 bg-background-tint-00 cursor-pointer"
       htmlFor={name}
     >
       {/* Left Section: Icon and Content */}
