@@ -62,7 +62,7 @@ def truncate_litellm_user_id(user_id: str) -> str:
     if len(user_id) <= MAX_LITELLM_USER_ID_LENGTH:
         return user_id
     logger.warning(
-        "User's ID exceeds %d chars (len=%d); truncating for Litellm logging compa.",
+        "User's ID exceeds %d chars (len=%d); truncating for Litellm logging compatibility.",
         MAX_LITELLM_USER_ID_LENGTH,
         len(user_id),
     )
@@ -773,7 +773,7 @@ def is_true_openai_model(model_provider: str, model_name: str) -> bool:
     def _check_if_model_name_is_openai_provider(model_name: str) -> bool:
         if model_name not in model_map:
             return False
-        return model_map[model_name].get("litellm_provider") in {"openai", "azure"}
+        return model_map[model_name].get("litellm_provider") == "openai"
 
     try:
         # Check if any model exists in litellm's registry with openai prefix
