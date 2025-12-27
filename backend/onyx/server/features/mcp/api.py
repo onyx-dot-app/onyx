@@ -84,8 +84,6 @@ from onyx.tools.tool_implementations.mcp.mcp_client import discover_mcp_tools
 from onyx.tools.tool_implementations.mcp.mcp_client import initialize_mcp_client
 from onyx.tools.tool_implementations.mcp.mcp_client import log_exception_group
 from onyx.utils.logger import setup_logger
-from onyx.utils.url import SSRFException
-from onyx.utils.url import validate_url_for_ssrf
 
 logger = setup_logger()
 
@@ -1351,22 +1349,6 @@ def _upsert_mcp_server(
     """
     Creates a new or edits an existing MCP server. Returns the DB model
     """
-    # Validate server URL for SSRF before proceeding
-    if request.server_url:
-        try:
-            validate_url_for_ssrf(request.server_url)
-        except SSRFException as e:
-            logger.warning(f"SSRF attempt blocked for MCP server URL: {e}")
-            raise HTTPException(
-                status_code=400,
-                detail=f"Access to the specified server URL is not allowed: {e}",
-            )
-        except ValueError as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid server URL format: {e}",
-            )
-
     mcp_server = None
     admin_config = None
 
@@ -1869,22 +1851,6 @@ def create_mcp_server_simple(
 ) -> MCPServer:
     """Create MCP server with minimal information - auth to be configured later"""
 
-    # Validate server URL for SSRF before creating
-    if request.server_url:
-        try:
-            validate_url_for_ssrf(request.server_url)
-        except SSRFException as e:
-            logger.warning(f"SSRF attempt blocked for MCP server URL: {e}")
-            raise HTTPException(
-                status_code=400,
-                detail=f"Access to the specified server URL is not allowed: {e}",
-            )
-        except ValueError as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid server URL format: {e}",
-            )
-
     mcp_server = create_mcp_server__no_commit(
         owner_email=user.email if user else "",
         name=request.name,
@@ -1930,22 +1896,6 @@ def update_mcp_server_simple(
             status_code=401,
             detail="Must be logged in as a curator or admin to update MCP server",
         )
-
-    # Validate server URL for SSRF if being updated
-    if request.server_url:
-        try:
-            validate_url_for_ssrf(request.server_url)
-        except SSRFException as e:
-            logger.warning(f"SSRF attempt blocked for MCP server URL: {e}")
-            raise HTTPException(
-                status_code=400,
-                detail=f"Access to the specified server URL is not allowed: {e}",
-            )
-        except ValueError as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid server URL format: {e}",
-            )
 
     try:
         mcp_server = get_mcp_server_by_id(server_id, db_session)
