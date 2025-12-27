@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from onyx.configs.app_configs import LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS
 from onyx.configs.app_configs import MAX_TOKENS_FOR_FULL_INCLUSION
+from onyx.configs.app_configs import SEND_USER_METADATA_TO_LLM_PROVIDER
 from onyx.configs.app_configs import USE_CHUNK_SUMMARY
 from onyx.configs.app_configs import USE_DOCUMENT_SUMMARY
 from onyx.configs.model_configs import GEN_AI_MAX_TOKENS
@@ -19,6 +20,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import LLMProvider
 from onyx.db.models import ModelConfiguration
 from onyx.llm.interfaces import LLM
+from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.model_response import ModelResponse
 from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_TOKEN_ESTIMATE
 from onyx.prompts.contextual_retrieval import DOCUMENT_SUMMARY_TOKEN_ESTIMATE
@@ -35,6 +37,7 @@ logger = setup_logger()
 MAX_CONTEXT_TOKENS = 100
 ONE_MILLION = 1_000_000
 CHUNKS_PER_DOC_ESTIMATE = 5
+MAX_LITELLM_USER_ID_LENGTH = 64
 _TWELVE_LABS_PEGASUS_MODEL_NAMES = [
     "us.twelvelabs.pegasus-1-2-v1:0",
     "us.twelvelabs.pegasus-1-2-v1",
@@ -52,6 +55,53 @@ CUSTOM_LITELLM_MODEL_OVERRIDES: dict[str, dict[str, Any]] = {
     }
     for model_name in _TWELVE_LABS_PEGASUS_MODEL_NAMES
 }
+
+
+def truncate_litellm_user_id(user_id: str) -> str:
+    """Truncate the LiteLLM `user` field maximum length."""
+    if len(user_id) <= MAX_LITELLM_USER_ID_LENGTH:
+        return user_id
+    logger.warning(
+        "User's ID exceeds %d chars (len=%d); truncating for Litellm logging compatibility.",
+        MAX_LITELLM_USER_ID_LENGTH,
+        len(user_id),
+    )
+    return user_id[:MAX_LITELLM_USER_ID_LENGTH]
+
+
+def build_litellm_passthrough_kwargs(
+    model_kwargs: dict[str, Any],
+    user_identity: LLMUserIdentity | None,
+) -> dict[str, Any]:
+    """Build kwargs passed through directly to LiteLLM.
+
+    Returns `model_kwargs` unchanged unless we need to add user/session metadata,
+    in which case a copy is returned to avoid cross-request mutation.
+    """
+
+    if not (SEND_USER_METADATA_TO_LLM_PROVIDER and user_identity):
+        return model_kwargs
+
+    passthrough_kwargs = dict(model_kwargs)
+
+    if user_identity.user_id:
+        passthrough_kwargs["user"] = truncate_litellm_user_id(user_identity.user_id)
+
+    if user_identity.session_id:
+        existing_metadata = passthrough_kwargs.get("metadata")
+        metadata: dict[str, Any] | None
+        if existing_metadata is None:
+            metadata = {}
+        elif isinstance(existing_metadata, dict):
+            metadata = dict(existing_metadata)
+        else:
+            metadata = None
+
+        if metadata is not None:
+            metadata["session_id"] = user_identity.session_id
+            passthrough_kwargs["metadata"] = metadata
+
+    return passthrough_kwargs
 
 
 def _unwrap_nested_exception(error: Exception) -> Exception:
