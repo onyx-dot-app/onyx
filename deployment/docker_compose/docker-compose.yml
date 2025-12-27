@@ -280,7 +280,7 @@ services:
         max-file: "6"
 
   relational_db:
-    image: postgres:15.2-alpine
+    image: ${POSTGRES_IMAGE_NAMESPACE:-}postgres:15.2-alpine
     shm_size: 1g
     command: -c 'max_connections=250'
     env_file:
