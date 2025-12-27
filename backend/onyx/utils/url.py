@@ -118,7 +118,7 @@ def validate_url_for_ssrf(url: str) -> None:
         # Check all resolved IP addresses
         for info in addr_info:
             ip_str = info[4][0]  # IP address is in the 5th element, first item
-            if _is_ip_private_or_reserved(ip_str):
+            if _is_ip_private_or_reserved(str(ip_str)):
                 raise SSRFException(
                     f"Hostname '{hostname}' resolves to internal/private IP address '{ip_str}'. "
                     "Access to internal networks is not allowed."
