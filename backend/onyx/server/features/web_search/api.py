@@ -33,6 +33,8 @@ from onyx.tools.tool_implementations.web_search.utils import (
     truncate_search_result_content,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import SSRFException
+from onyx.utils.url import validate_url_for_ssrf
 from shared_configs.enums import WebContentProviderType
 from shared_configs.enums import WebSearchProviderType
 
@@ -173,10 +175,28 @@ def _open_urls(
     urls: list[str],
     db_session: Session,
 ) -> tuple[WebContentProviderType | None, list[LlmOpenUrlResult]]:
+    # Validate URLs for SSRF before fetching
+    validated_urls: list[str] = []
+    for url in urls:
+        try:
+            validate_url_for_ssrf(url)
+            validated_urls.append(url)
+        except SSRFException as e:
+            logger.warning(f"SSRF attempt blocked for URL '{url}': {e}")
+            # Skip this URL but continue with others
+            continue
+        except ValueError as e:
+            logger.warning(f"Invalid URL '{url}': {e}")
+            continue
+
+    if not validated_urls:
+        # All URLs were blocked or invalid
+        return None, []
+
     provider_view, provider = _get_active_content_provider(db_session)
 
     try:
-        docs = provider.contents(urls)
+        docs = provider.contents(validated_urls)
     except HTTPException:
         raise
     except Exception as exc:

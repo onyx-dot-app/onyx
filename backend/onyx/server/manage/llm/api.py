@@ -62,6 +62,8 @@ from onyx.server.manage.llm.utils import is_valid_bedrock_model
 from onyx.server.manage.llm.utils import ModelMetadata
 from onyx.server.manage.llm.utils import strip_openrouter_vendor_prefix
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import SSRFException
+from onyx.utils.url import validate_url_for_ssrf
 
 logger = setup_logger()
 
@@ -700,6 +702,24 @@ def get_ollama_available_models(
             detail="API base URL is required to fetch Ollama models.",
         )
 
+    # Validate URL for SSRF before making requests
+    try:
+        validate_url_for_ssrf(cleaned_api_base)
+    except SSRFException as e:
+        logger.warning(f"SSRF attempt blocked for Ollama API base URL: {e}")
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Access to the specified URL is not allowed: {e}. "
+                "If you need to access an internal Ollama server, please contact your administrator."
+            ),
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid URL format: {e}",
+        )
+
     model_names = _get_ollama_available_model_names(cleaned_api_base)
     if not model_names:
         raise HTTPException(
@@ -789,6 +809,22 @@ def get_ollama_available_models(
 def _get_openrouter_models_response(api_base: str, api_key: str) -> dict:
     """Perform GET to OpenRouter /models and return parsed JSON."""
     cleaned_api_base = api_base.strip().rstrip("/")
+
+    # Validate URL for SSRF before making requests
+    try:
+        validate_url_for_ssrf(cleaned_api_base)
+    except SSRFException as e:
+        logger.warning(f"SSRF attempt blocked for OpenRouter API base URL: {e}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Access to the specified URL is not allowed: {e}",
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid URL format: {e}",
+        )
+
     url = f"{cleaned_api_base}/models"
     headers = {
         "Authorization": f"Bearer {api_key}",
