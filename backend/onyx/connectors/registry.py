@@ -12,6 +12,10 @@ class ConnectorMapping(BaseModel):
 
 # Mapping of DocumentSource to connector details for lazy loading
 CONNECTOR_CLASS_MAP = {
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: ConnectorDescriptor(
+    module_path="onyx.connectors.jira_service_management.connector",
+    class_name="JiraServiceManagementConnector",
+),
     DocumentSource.WEB: ConnectorMapping(
         module_path="onyx.connectors.web.connector",
         class_name="WebConnector",
