@@ -131,11 +131,7 @@ export default function MCPActionCard({
   }, [server.status]);
 
   // Lazy load tools only when expanded
-  const { tools, isLoading, mutate } = useServerTools({
-    serverId,
-    server,
-    isExpanded: isToolsExpanded,
-  });
+  const { tools, isLoading, mutate } = useServerTools(server, isToolsExpanded);
 
   // Retry tools fetch when server transitions from FETCHING_TOOLS to CONNECTED
   useEffect(() => {
