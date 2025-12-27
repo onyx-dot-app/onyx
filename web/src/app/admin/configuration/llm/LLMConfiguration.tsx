@@ -43,11 +43,17 @@ export function LLMConfiguration() {
             use case!
           </Text>
           <div className="flex flex-col gap-y-4">
-            {existingLlmProviders.map((llmProvider) => (
-              <div key={llmProvider.id}>
-                {getFormForExistingProvider(llmProvider)}
-              </div>
-            ))}
+            {[...existingLlmProviders]
+              .sort((a, b) => {
+                if (a.is_default_provider && !b.is_default_provider) return -1;
+                if (!a.is_default_provider && b.is_default_provider) return 1;
+                return 0;
+              })
+              .map((llmProvider) => (
+                <div key={llmProvider.id}>
+                  {getFormForExistingProvider(llmProvider)}
+                </div>
+              ))}
           </div>
         </>
       ) : (

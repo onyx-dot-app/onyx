@@ -1,18 +1,20 @@
-import { Label, SubLabel } from "@/components/Field";
 import { ModelConfiguration } from "../../interfaces";
 import { FormikProps } from "formik";
 import { BaseLLMFormValues } from "../formUtils";
 
 import Checkbox from "@/refresh-components/inputs/Checkbox";
+import Text from "@/refresh-components/texts/Text";
 
 function DisplayModelHeader({ alternativeText }: { alternativeText?: string }) {
   return (
     <div className="mb-2">
-      <label className="block font-medium text-base">Available Models</label>
-      <span className="block text-sm text-text-03">
+      <Text mainUiAction className="block">
+        Available Models
+      </Text>
+      <Text secondaryBody text03 className="block">
         {alternativeText ??
           "Select which models to make available for this provider."}
-      </span>
+      </Text>
     </div>
   );
 }
@@ -124,9 +126,9 @@ export function DisplayModels<T extends BaseLLMFormValues>({
                     }
                   />
                 </div>
-                <span className="text-sm select-none leading-none">
+                <Text secondaryBody className="select-none leading-none">
                   {modelConfiguration.name}
-                </span>
+                </Text>
               </div>
               <button
                 type="button"

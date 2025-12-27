@@ -1,11 +1,6 @@
 import { useState } from "react";
 import { Form, Formik } from "formik";
-import {
-  SelectorFormField,
-  TextFormField,
-  Label,
-  SubLabel,
-} from "@/components/Field";
+import { SelectorFormField, TextFormField } from "@/components/Field";
 import { LLMProviderFormProps, ModelConfiguration } from "../interfaces";
 import * as Yup from "yup";
 import {
@@ -197,10 +192,10 @@ export function BedrockForm({
                     />
 
                     <div>
-                      <Label>Authentication Method</Label>
-                      <SubLabel>
+                      <Text mainUiAction>Authentication Method</Text>
+                      <Text secondaryBody text03>
                         Choose how Onyx should authenticate with Bedrock.
-                      </SubLabel>
+                      </Text>
                       <Tabs
                         value={authMethod || AUTH_METHOD_ACCESS_KEY}
                         onValueChange={(value) =>

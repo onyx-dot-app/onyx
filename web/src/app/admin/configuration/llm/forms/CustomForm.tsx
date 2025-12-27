@@ -20,8 +20,9 @@ import {
   LLM_FORM_CLASS_NAME,
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
-import { TextFormField, Label, SubLabel } from "@/components/Field";
+import { TextFormField } from "@/components/Field";
 import { ModelConfigurationField } from "../ModelConfigurationField";
+import Text from "@/refresh-components/texts/Text";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgX } from "@opal/icons";
@@ -182,11 +183,11 @@ export function CustomForm({
 
                     <Separator />
 
-                    <SubLabel>
+                    <Text secondaryBody text03>
                       Fill in the following as needed. Refer to the LiteLLM
                       documentation for the provider specified above to
                       determine which fields are required.
-                    </SubLabel>
+                    </Text>
 
                     <ApiKeyField label="[Optional] API Key" />
 
@@ -204,21 +205,19 @@ export function CustomForm({
 
                     <Separator />
 
-                    <Label>[Optional] Custom Configs</Label>
-                    <SubLabel>
-                      <>
-                        <div>
-                          Additional configurations needed by the model
-                          provider. These are passed to LiteLLM via environment
-                          variables and as arguments into the completion call.
-                        </div>
-                        <div className="mt-2">
-                          For example, when configuring the Cloudflare provider,
-                          you would need to set CLOUDFLARE_ACCOUNT_ID as the key
-                          and your Cloudflare account ID as the value.
-                        </div>
-                      </>
-                    </SubLabel>
+                    <Text mainUiAction>[Optional] Custom Configs</Text>
+                    <Text secondaryBody text03>
+                      <div>
+                        Additional configurations needed by the model provider.
+                        These are passed to LiteLLM via environment variables
+                        and as arguments into the completion call.
+                      </div>
+                      <div className="mt-2">
+                        For example, when configuring the Cloudflare provider,
+                        you would need to set CLOUDFLARE_ACCOUNT_ID as the key
+                        and your Cloudflare account ID as the value.
+                      </div>
+                    </Text>
 
                     <FieldArray
                       name="custom_config_list"
@@ -235,7 +234,7 @@ export function CustomForm({
                                 <div className="flex w-full">
                                   <div className="w-full mr-6 border border-border p-3 rounded">
                                     <div>
-                                      <Label>Key</Label>
+                                      <Text mainUiAction>Key</Text>
                                       <Field
                                         name={`custom_config_list[${index}][0]`}
                                         className="border border-border bg-background rounded w-full py-2 px-3 mr-4"
@@ -248,7 +247,7 @@ export function CustomForm({
                                       />
                                     </div>
                                     <div className="mt-3">
-                                      <Label>Value</Label>
+                                      <Text mainUiAction>Value</Text>
                                       <Field
                                         name={`custom_config_list[${index}][1]`}
                                         className="border border-border bg-background rounded w-full py-2 px-3 mr-4"
