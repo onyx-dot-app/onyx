@@ -764,7 +764,7 @@ export default function Page() {
         </Text>
 
         <div className="flex w-full flex-col gap-8 pb-6">
-          <div className="flex flex-col gap-3 self-stretch">
+          <div className="flex w-full max-w-[960px] flex-col gap-3">
             <div className="flex flex-col gap-0.5">
               <Text mainContentEmphasis text05>
                 Search Engine
@@ -813,7 +813,7 @@ export default function Page() {
               </div>
             )}
 
-            <div className="flex flex-col gap-2 self-stretch">
+            <div className="flex flex-col gap-2">
               {combinedSearchProviders.map(
                 ({ key, providerType, label, subtitle, logoSrc, provider }) => {
                   const isConfigured = isSearchProviderConfigured(
@@ -971,7 +971,7 @@ export default function Page() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 self-stretch">
+          <div className="flex w-full max-w-[960px] flex-col gap-3">
             <div className="flex flex-col gap-0.5">
               <Text mainContentEmphasis text05>
                 Web Crawler
@@ -991,7 +991,7 @@ export default function Page() {
               </Callout>
             )}
 
-            <div className="flex flex-col gap-2 self-stretch">
+            <div className="flex flex-col gap-2">
               {combinedContentProviders.map((provider) => {
                 const label =
                   provider.name ||
