@@ -275,8 +275,8 @@ interface MCPServerCardProps {
 }
 
 function MCPServerCard({ server }: MCPServerCardProps) {
-  const actionsLayout = useActionsLayout();
-  const { tools, isLoading } = useServerTools(server, !actionsLayout.isFolded);
+  const actionsLayouts = useActionsLayout();
+  const { tools, isLoading } = useServerTools(server, true);
   const { values, setFieldValue } = useFormikContext<any>();
 
   const serverFieldName = `mcp_server_${server.id}`;
@@ -289,7 +289,6 @@ function MCPServerCard({ server }: MCPServerCardProps) {
   } = useFilter(tools, (tool) => `${tool.name} ${tool.description}`);
 
   // Calculate enabled and total tool counts
-  const totalCount = tools.length;
   const enabledCount = tools.filter((tool) => {
     const toolFieldValue = values[serverFieldName]?.[`tool_${tool.id}`];
     return toolFieldValue === true;
@@ -300,21 +299,10 @@ function MCPServerCard({ server }: MCPServerCardProps) {
     tools.forEach((tool) => {
       setFieldValue(`${serverFieldName}.tool_${tool.id}`, isServerEnabled);
     });
-
-    // When server is enabled, unfold the card
-    if (isServerEnabled) {
-      actionsLayout.setIsFolded(false);
-    }
-  }, [
-    isServerEnabled,
-    tools,
-    serverFieldName,
-    setFieldValue,
-    actionsLayout.setIsFolded,
-  ]);
+  }, [tools, isServerEnabled, serverFieldName, setFieldValue]);
 
   return (
-    <actionsLayout.Provider>
+    <actionsLayouts.Provider>
       <ActionsLayouts.Root>
         <ActionsLayouts.Header
           title={server.name}
@@ -324,9 +312,15 @@ function MCPServerCard({ server }: MCPServerCardProps) {
             <div className="flex flex-row gap-2 items-center justify-center">
               <EnabledCount
                 enabledCount={enabledCount}
-                totalCount={totalCount}
+                totalCount={server.tool_count}
               />
-              <SwitchField name={`${serverFieldName}.enabled`} />
+              <SwitchField
+                name={`${serverFieldName}.enabled`}
+                onCheckedChange={(checked) => {
+                  if (!checked) return;
+                  actionsLayouts.setIsFolded(false);
+                }}
+              />
             </div>
           }
         >
@@ -340,10 +334,10 @@ function MCPServerCard({ server }: MCPServerCardProps) {
             />
             <Button
               internal
-              rightIcon={actionsLayout.isFolded ? SvgExpand : SvgFold}
-              onClick={() => actionsLayout.setIsFolded((prev) => !prev)}
+              rightIcon={actionsLayouts.isFolded ? SvgExpand : SvgFold}
+              onClick={() => actionsLayouts.setIsFolded((prev) => !prev)}
             >
-              {actionsLayout.isFolded ? "Expand" : "Fold"}
+              {actionsLayouts.isFolded ? "Expand" : "Fold"}
             </Button>
           </div>
         </ActionsLayouts.Header>
@@ -372,7 +366,7 @@ function MCPServerCard({ server }: MCPServerCardProps) {
           )}
         </ActionsLayouts.Content>
       </ActionsLayouts.Root>
-    </actionsLayout.Provider>
+    </actionsLayouts.Provider>
   );
 }
 
