@@ -10,35 +10,43 @@
  * ```tsx
  * import * as ActionsLayouts from "@/layouts/actions-layouts";
  * import { SvgServer } from "@opal/icons";
+ * import Switch from "@/components/ui/switch";
  *
  * function MyActionCard() {
- *   const [isExpanded, setIsExpanded] = useState(false);
+ *   const { Provider } = useActionsLayout();
  *
  *   return (
- *     <ActionsLayouts.Root>
- *       <ActionsLayouts.Header
- *         title="My MCP Server"
- *         description="A powerful MCP server for automation"
- *         icon={SvgServer}
- *         rightChildren={
- *           <Button onClick={handleDisconnect}>Disconnect</Button>
- *         }
- *       />
- *       <ActionsLayouts.Content>
- *         <ActionsLayouts.Tool
- *           name="file_reader"
- *           description="Read files from the filesystem"
- *           isEnabled={true}
- *           onToggle={(enabled) => handleToolToggle('file_reader', enabled)}
+ *     <Provider>
+ *       <ActionsLayouts.Root>
+ *         <ActionsLayouts.Header
+ *           title="My MCP Server"
+ *           description="A powerful MCP server for automation"
+ *           icon={SvgServer}
+ *           rightChildren={
+ *             <Button onClick={handleDisconnect}>Disconnect</Button>
+ *           }
  *         />
- *         <ActionsLayouts.Tool
- *           name="web_search"
- *           description="Search the web"
- *           isEnabled={false}
- *           onToggle={(enabled) => handleToolToggle('web_search', enabled)}
- *         />
- *       </ActionsLayouts.Content>
- *     </ActionsLayouts.Root>
+ *         <ActionsLayouts.Content>
+ *           <ActionsLayouts.Tool
+ *             title="File Reader"
+ *             description="Read files from the filesystem"
+ *             icon={SvgFile}
+ *             rightChildren={
+ *               <Switch checked={enabled} onCheckedChange={setEnabled} />
+ *             }
+ *           />
+ *           <ActionsLayouts.Tool
+ *             title="Web Search"
+ *             description="Search the web"
+ *             icon={SvgGlobe}
+ *             disabled={true}
+ *             rightChildren={
+ *               <Switch checked={false} disabled />
+ *             }
+ *           />
+ *         </ActionsLayouts.Content>
+ *       </ActionsLayouts.Root>
+ *     </Provider>
  *   );
  * }
  * ```
@@ -80,12 +88,15 @@ const ActionsLayoutContext = createContext<
 /**
  * Hook to create an ActionsLayout context provider and controller.
  *
- * @returns An object containing the Provider component and toggleFold function
+ * @returns An object containing:
+ *   - Provider: Context provider component to wrap action card
+ *   - isFolded: Current folding state
+ *   - setIsFolded: Function to update folding state
  *
  * @example
  * ```tsx
  * function MyActionCard() {
- *   const { Provider, toggleFold } = useActionsLayout();
+ *   const { Provider, isFolded, setIsFolded } = useActionsLayout();
  *
  *   return (
  *     <Provider>
@@ -95,7 +106,7 @@ const ActionsLayoutContext = createContext<
  *           description="Description"
  *           icon={SvgServer}
  *           rightChildren={
- *             <button onClick={() => toggleFold(true)}>Fold</button>
+ *             <button onClick={() => setIsFolded(true)}>Fold</button>
  *           }
  *         />
  *         <ActionsLayouts.Content>
@@ -109,14 +120,12 @@ const ActionsLayoutContext = createContext<
 export function useActionsLayout() {
   const [isFolded, setIsFolded] = useState(false);
 
-  const Provider = useMemo(
-    () =>
-      ({ children }: { children: React.ReactNode }) => (
-        <ActionsLayoutContext.Provider value={{ isFolded, setIsFolded }}>
-          {children}
-        </ActionsLayoutContext.Provider>
-      ),
-    [isFolded]
+  const contextValue = useMemo(() => ({ isFolded, setIsFolded }), [isFolded]);
+
+  const Provider = ({ children }: { children: React.ReactNode }) => (
+    <ActionsLayoutContext.Provider value={contextValue}>
+      {children}
+    </ActionsLayoutContext.Provider>
   );
 
   return { Provider, isFolded, setIsFolded };
@@ -291,43 +300,48 @@ function ActionsContent(props: ActionsContentProps) {
  * Actions Tool Component
  *
  * Represents a single tool within an actions content area. Displays the tool's
- * name, description, icon, availability status, and provides a toggle for
- * enabling/disabling the tool.
+ * title, description, and icon. The component provides a label wrapper for
+ * custom right-aligned controls (like toggle switches).
  *
  * Features:
- * - Tool name and description
- * - Optional custom icon
- * - Availability indicator (with warning badge and strikethrough)
- * - Enable/disable toggle switch
- * - Disabled state when tool is unavailable
+ * - Tool title and description
+ * - Custom icon
+ * - Disabled state (applies strikethrough to title)
+ * - Custom right-aligned content via rightChildren
  * - Responsive layout with truncated text
  *
  * @example
  * ```tsx
- * // Basic tool
+ * // Basic tool with switch
  * <ActionsLayouts.Tool
- *   name="file_read"
+ *   title="File Reader"
  *   description="Read files from the filesystem"
- *   isEnabled={true}
- *   onToggle={(enabled) => handleToggle('file_read', enabled)}
+ *   icon={SvgFile}
+ *   rightChildren={
+ *     <Switch checked={enabled} onCheckedChange={setEnabled} />
+ *   }
  * />
  *
- * // With custom icon
+ * // Disabled tool
  * <ActionsLayouts.Tool
- *   name="web_search"
- *   description="Search the web for information"
- *   icon={SvgGlobe}
- *   isAvailable={true}
- *   isEnabled={false}
- *   onToggle={(enabled) => handleToggle('web_search', enabled)}
- * />
- *
- * // Unavailable tool
- * <ActionsLayouts.Tool
- *   name="premium_feature"
+ *   title="Premium Feature"
  *   description="This feature requires a premium subscription"
- *   isAvailable={false}
- *   isEnabled={false}
+ *   icon={SvgLock}
+ *   disabled={true}
+ *   rightChildren={
+ *     <Switch checked={false} disabled />
+ *   }
+ * />
+ *
+ * // Tool with custom action
+ * <ActionsLayouts.Tool
+ *   name="config_tool"
+ *   title="Configuration"
+ *   description="Configure system settings"
+ *   icon={SvgSettings}
+ *   rightChildren={
+ *     <Button onClick={openSettings}>Configure</Button>
+ *   }
  * />
  * ```
  */
@@ -353,7 +367,7 @@ function ActionsTool({
 }: ActionsToolProps) {
   return (
     <label
-      className="flex items-start justify-between w-full p-3 rounded-12 border gap-2 bg-background-tint-00 cursor"
+      className="flex items-start justify-between w-full p-3 rounded-12 border gap-2 bg-background-tint-00 cursor-pointer"
       htmlFor={name}
     >
       {/* Left Section: Icon and Content */}

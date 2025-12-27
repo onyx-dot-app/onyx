@@ -38,8 +38,8 @@ import { useMemo, useState } from "react";
  * - Returns all items if the query is empty or whitespace-only
  * - Performs case-insensitive matching
  * - Uses substring matching (includes)
- * - The extractor function is intentionally excluded from dependencies to avoid
- *   unnecessary re-computation. This assumes the extractor logic is static.
+ * - The extractor function is included in dependencies to prevent stale closures.
+ *   For optimal performance, memoize the extractor with useCallback if it's expensive.
  */
 export default function useFilter<T>(
   items: T[],
@@ -61,7 +61,7 @@ export default function useFilter<T>(
       const searchableText = extractor(item).toLowerCase();
       return searchableText.includes(lowerQuery);
     });
-  }, [query, items]); // Intentionally exclude extractor from dependencies
+  }, [query, items, extractor]);
 
   return { query, setQuery, filtered };
 }
