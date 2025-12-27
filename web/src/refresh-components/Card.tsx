@@ -9,8 +9,8 @@
  * - Padding: 1rem (p-4)
  * - Flex column layout with 1rem gap (gap-4)
  * - Border with rounded-16 corners
- * - Accepts all standard div HTML attributes
- * - Supports className overrides for customization
+ * - Accepts all standard div HTML attributes except className (enforced by WithoutStyles)
+ * - Fixed styling - className prop not supported
  *
  * @example
  * ```tsx
@@ -22,13 +22,8 @@
  *   <p>Card content goes here</p>
  * </Card>
  *
- * // With custom className
- * <Card className="max-w-md">
- *   <div>Custom styled card</div>
- * </Card>
- *
  * // With onClick handler
- * <Card onClick={handleClick} className="cursor-pointer hover:opacity-80">
+ * <Card onClick={handleClick}>
  *   <div>Clickable card</div>
  * </Card>
  *
