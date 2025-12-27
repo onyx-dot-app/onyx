@@ -120,14 +120,12 @@ const ActionsLayoutContext = createContext<
 export function useActionsLayout() {
   const [isFolded, setIsFolded] = useState(false);
 
-  const Provider = useMemo(
-    () =>
-      ({ children }: { children: React.ReactNode }) => (
-        <ActionsLayoutContext.Provider value={{ isFolded, setIsFolded }}>
-          {children}
-        </ActionsLayoutContext.Provider>
-      ),
-    [isFolded]
+  const contextValue = useMemo(() => ({ isFolded, setIsFolded }), [isFolded]);
+
+  const Provider = ({ children }: { children: React.ReactNode }) => (
+    <ActionsLayoutContext.Provider value={contextValue}>
+      {children}
+    </ActionsLayoutContext.Provider>
   );
 
   return { Provider, isFolded, setIsFolded };
