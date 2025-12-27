@@ -23,6 +23,7 @@ from onyx.llm.model_response import Choice
 from onyx.llm.model_response import Message
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.utils import get_max_input_tokens
+from onyx.llm.utils import LlmProviderNames
 from onyx.natural_language_processing.search_nlp_models import (
     ContentClassificationPrediction,
 )
@@ -309,7 +310,7 @@ def test_contextual_rag(
 
     mock_llm = Mock()
     mock_llm.config.max_input_tokens = get_max_input_tokens(
-        model_provider="openai", model_name="gtp-4o"
+        model_provider=LlmProviderNames.OPENAI, model_name="gtp-4o"
     )
     mock_llm.invoke = mock_llm_invoke
 

@@ -7,6 +7,7 @@ import os
 import pytest
 import requests
 
+from onyx.llm.constants import LlmProviderNames
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.persona import PersonaManager
@@ -90,7 +91,7 @@ def test_authorized_persona_access_returns_filtered_providers(
     restricted_provider = LLMProviderManager.create(
         user_performing_action=admin_user,
         name="Restricted Provider",
-        provider="openai",
+        provider=LlmProviderNames.OPENAI,
         api_key="test-key",
         default_model_name="gpt-4o",
         is_public=False,
@@ -123,7 +124,7 @@ def test_persona_id_zero_applies_rbac(
     restricted_provider = LLMProviderManager.create(
         user_performing_action=admin_user,
         name="Group2 Only Provider",
-        provider="openai",
+        provider=LlmProviderNames.OPENAI,
         api_key="test-key",
         default_model_name="gpt-4o",
         is_public=False,
@@ -165,7 +166,7 @@ def test_admin_can_query_any_persona(
     restricted_provider = LLMProviderManager.create(
         user_performing_action=admin_user,
         name="Admin Test Provider",
-        provider="openai",
+        provider=LlmProviderNames.OPENAI,
         api_key="test-key",
         default_model_name="gpt-4o",
         is_public=False,
@@ -198,7 +199,7 @@ def test_public_persona_accessible_to_all(
     public_provider = LLMProviderManager.create(
         user_performing_action=admin_user,
         name="Public Provider",
-        provider="openai",
+        provider=LlmProviderNames.OPENAI,
         api_key="test-key",
         default_model_name="gpt-4o",
         is_public=True,

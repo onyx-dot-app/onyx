@@ -13,6 +13,7 @@ from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.file_store.utils import build_frontend_file_url
 from onyx.file_store.utils import save_files
+from onyx.llm.constants import LlmProviderNames
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
@@ -28,7 +29,6 @@ from onyx.tools.tool_implementations.images.models import ImageGenerationRespons
 from onyx.tools.tool_implementations.images.models import ImageShape
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
-
 
 logger = setup_logger()
 
@@ -86,8 +86,14 @@ class ImageGenerationTool(Tool[None]):
         try:
             providers = fetch_existing_llm_providers(db_session)
             return any(
-                (provider.provider == "openai" and provider.api_key is not None)
-                or (provider.provider == "azure" and AZURE_IMAGE_API_KEY is not None)
+                (
+                    provider.provider == LlmProviderNames.OPENAI
+                    and provider.api_key is not None
+                )
+                or (
+                    provider.provider == LlmProviderNames.AZURE
+                    and AZURE_IMAGE_API_KEY is not None
+                )
                 for provider in providers
             )
         except Exception:
