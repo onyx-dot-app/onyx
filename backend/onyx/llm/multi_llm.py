@@ -19,7 +19,6 @@ from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.interfaces import ReasoningEffort
 from onyx.llm.interfaces import ToolChoiceOptions
-from onyx.llm.llm_provider_options import AZURE_PROVIDER_NAME
 from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
 from onyx.llm.llm_provider_options import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.llm_provider_options import VERTEX_LOCATION_KWARG
@@ -228,7 +227,7 @@ class LitellmLLM(LLM):
         tool_choice: ToolChoiceOptions | None,
         stream: bool,
         parallel_tool_calls: bool,
-        reasoning_effort: ReasoningEffort | None,
+        reasoning_effort: ReasoningEffort | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
@@ -247,9 +246,8 @@ class LitellmLLM(LLM):
         )
         # All OpenAI models will use responses API for consistency
         # Responses API is needed to get reasoning packets from OpenAI models
-        is_openai_model = (
-            is_true_openai_model(self.config.model_provider, self.config.model_name)
-            or self.config.model_provider == AZURE_PROVIDER_NAME
+        is_openai_model = is_true_openai_model(
+            self.config.model_provider, self.config.model_name
         )
 
         #########################
@@ -271,11 +269,14 @@ class LitellmLLM(LLM):
             # let it choose tools automatically so reasoning can still be used
             tool_choice = ToolChoiceOptions.AUTO
 
+        # If no tools are provided, tool_choice should be None
+        if not tools:
+            tool_choice = None
+
         # Temperature
         temperature = 1 if is_reasoning else self._temperature
 
-        # Optional kwargs
-        # Thould only be passed to LiteLLM under certain conditions
+        # Optional kwargs - should only be passed to LiteLLM under certain conditions
         optional_kwargs: dict[str, Any] = {}
 
         if stream:
