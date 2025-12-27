@@ -1,5 +1,4 @@
 import ipaddress
-import os
 import socket
 from urllib.parse import parse_qs
 from urllib.parse import urlencode
@@ -9,12 +8,6 @@ from urllib.parse import urlunparse
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-# Environment variable to disable SSRF protection (for development/internal use only)
-# WARNING: Do not disable in production environments
-DISABLE_SSRF_PROTECTION = (
-    os.environ.get("DISABLE_SSRF_PROTECTION", "").lower() == "true"
-)
 
 # Hostnames that should always be blocked
 BLOCKED_HOSTNAMES = {
@@ -70,13 +63,6 @@ def validate_url_for_ssrf(url: str) -> None:
         SSRFException: If the URL could be used for SSRF attack
         ValueError: If the URL is malformed
     """
-    if DISABLE_SSRF_PROTECTION:
-        logger.warning(
-            "SSRF protection is disabled via DISABLE_SSRF_PROTECTION environment variable. "
-            "This should only be used in development environments."
-        )
-        return
-
     if not url:
         raise ValueError("URL cannot be empty")
 

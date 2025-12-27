@@ -1359,10 +1359,7 @@ def _upsert_mcp_server(
             logger.warning(f"SSRF attempt blocked for MCP server URL: {e}")
             raise HTTPException(
                 status_code=400,
-                detail=(
-                    f"Access to the specified server URL is not allowed: {e}. "
-                    "If you need to access an internal MCP server, please contact your administrator."
-                ),
+                detail=f"Access to the specified server URL is not allowed: {e}",
             )
         except ValueError as e:
             raise HTTPException(
@@ -1880,10 +1877,7 @@ def create_mcp_server_simple(
             logger.warning(f"SSRF attempt blocked for MCP server URL: {e}")
             raise HTTPException(
                 status_code=400,
-                detail=(
-                    f"Access to the specified server URL is not allowed: {e}. "
-                    "If you need to access an internal MCP server, please contact your administrator."
-                ),
+                detail=f"Access to the specified server URL is not allowed: {e}",
             )
         except ValueError as e:
             raise HTTPException(
@@ -1945,10 +1939,7 @@ def update_mcp_server_simple(
             logger.warning(f"SSRF attempt blocked for MCP server URL: {e}")
             raise HTTPException(
                 status_code=400,
-                detail=(
-                    f"Access to the specified server URL is not allowed: {e}. "
-                    "If you need to access an internal MCP server, please contact your administrator."
-                ),
+                detail=f"Access to the specified server URL is not allowed: {e}",
             )
         except ValueError as e:
             raise HTTPException(

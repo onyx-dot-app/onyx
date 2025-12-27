@@ -5,7 +5,6 @@ These tests verify that the validate_url_for_ssrf function correctly blocks
 requests to internal/private IP addresses and other potentially dangerous destinations.
 """
 
-import os
 from unittest.mock import patch
 
 import pytest
@@ -200,26 +199,3 @@ class TestValidateUrlForSsrf:
             mock_getaddrinfo.side_effect = socket.gaierror("Name resolution failed")
             with pytest.raises(SSRFException, match="Could not resolve hostname"):
                 validate_url_for_ssrf("http://nonexistent-domain-12345.invalid/")
-
-
-class TestSsrfProtectionDisabled:
-    """Tests for when SSRF protection is disabled via environment variable."""
-
-    def test_disabled_allows_localhost(self) -> None:
-        """Test that localhost is allowed when protection is disabled."""
-        with patch.dict(os.environ, {"DISABLE_SSRF_PROTECTION": "true"}):
-            # Need to reload the module to pick up the env change
-            # For this test, we'll just verify the behavior by checking
-            # the function doesn't raise
-            from importlib import reload
-
-            import onyx.utils.url as url_module
-
-            reload(url_module)
-
-            # This should not raise when protection is disabled
-            url_module.validate_url_for_ssrf("http://127.0.0.1/")
-
-            # Restore the module
-            with patch.dict(os.environ, {"DISABLE_SSRF_PROTECTION": ""}):
-                reload(url_module)
