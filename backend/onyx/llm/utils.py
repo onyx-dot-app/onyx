@@ -762,6 +762,9 @@ def is_true_openai_model(model_provider: str, model_name: str) -> bool:
 
     LiteLLM uses the "openai" provider for any OpenAI-compatible server (e.g. vLLM, LiteLLM proxy),
     but this function checks if the model is actually from OpenAI's model registry.
+
+    This function is used primarily to determine if we should use the responses API.
+    OpenAI models from OpenAI and Azure should use responses.
     """
 
     # NOTE: not using the OPENAI_PROVIDER_NAME constant here due to circular import issues

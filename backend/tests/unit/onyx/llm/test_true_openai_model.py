@@ -94,11 +94,6 @@ class TestIsTrueOpenAIModel:
         # vLLM hosting a custom model with OpenAI-compatible API
         assert is_true_openai_model("openai", "TheBloke/Llama-2-7B-GPTQ") is False
 
-    def test_azure_openai_model(self) -> None:
-        """Test that Azure OpenAI models are not identified as true OpenAI."""
-        # Azure uses a different provider
-        assert is_true_openai_model("azure", "gpt-4") is False
-
     def test_openrouter_openai_model(self) -> None:
         """Test that OpenRouter proxied OpenAI models return False."""
         # OpenRouter is a proxy service, not true OpenAI
