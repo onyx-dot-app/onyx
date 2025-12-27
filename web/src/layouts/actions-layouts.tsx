@@ -123,12 +123,13 @@ export function useActionsLayout() {
   const contextValue = useMemo(() => ({ isFolded, setIsFolded }), [isFolded]);
 
   // Wrap children directly, no component creation
-  const Provider = useCallback(
-    ({ children }: { children: React.ReactNode }) => (
-      <ActionsLayoutContext.Provider value={contextValue}>
-        {children}
-      </ActionsLayoutContext.Provider>
-    ),
+  const Provider = useMemo(
+    () =>
+      ({ children }: { children: React.ReactNode }) => (
+        <ActionsLayoutContext.Provider value={contextValue}>
+          {children}
+        </ActionsLayoutContext.Provider>
+      ),
     [contextValue]
   );
 
