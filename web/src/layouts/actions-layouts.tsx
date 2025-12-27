@@ -85,6 +85,11 @@ const ActionsLayoutContext = createContext<
   ActionsLayoutContextValue | undefined
 >(undefined);
 
+interface ActionsLayoutProviderProps {
+  children: React.ReactNode;
+  value: ActionsLayoutContextValue;
+}
+
 /**
  * ActionsLayout Provider Component
  *
@@ -94,10 +99,7 @@ const ActionsLayoutContext = createContext<
 function ActionsLayoutProvider({
   children,
   value,
-}: {
-  children: React.ReactNode;
-  value: ActionsLayoutContextValue;
-}) {
+}: ActionsLayoutProviderProps) {
   return (
     <ActionsLayoutContext.Provider value={value}>
       {children}
