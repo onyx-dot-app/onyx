@@ -18,7 +18,7 @@ import {
   MCPServerStatus,
   MCPServer,
 } from "@/lib/tools/interfaces";
-import { useServerTools } from "@/sections/actions/useServerTools";
+import useServerTools from "@/hooks/useServerTools";
 import { KeyedMutator } from "swr";
 import type { IconProps } from "@opal/types";
 import { SvgRefreshCw, SvgServer, SvgTrash } from "@opal/icons";
