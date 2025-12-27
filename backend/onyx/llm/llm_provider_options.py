@@ -473,12 +473,13 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                 CustomConfigKey(
                     name=VERTEX_LOCATION_KWARG,
                     display_name="Location",
-                    description="The location of the Vertex AI model. Please refer to the "
-                    "[Vertex AI configuration docs](https://docs.onyx.app/admins/ai_models/google_ai) for all possible values.",
+                    description="The location of Google model deployment. Please refer to the "
+                    "[Vertex AI docs](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations) "
+                    "to decide which location to use.",
                     is_required=False,
                     is_secret=False,
                     key_type=CustomConfigKeyType.TEXT_INPUT,
-                    default_value="us-east1",
+                    default_value="global",
                 ),
             ],
             default_model=VERTEXAI_DEFAULT_MODEL,

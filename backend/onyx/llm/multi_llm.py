@@ -153,6 +153,12 @@ class LitellmLLM(LLM):
                     os.environ[k] = v
                 else:
                     os.environ.pop(k, None)
+
+        # Default vertex_location to "global" if not provided for Vertex AI
+        # Latest gemini models are only available through the global region
+        if model_provider == "vertex_ai" and VERTEX_LOCATION_KWARG not in model_kwargs:
+            model_kwargs[VERTEX_LOCATION_KWARG] = "global"
+
         # This is needed for Ollama to do proper function calling
         if model_provider == OLLAMA_PROVIDER_NAME and api_base is not None:
             os.environ["OLLAMA_API_BASE"] = api_base
