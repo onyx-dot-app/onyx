@@ -173,6 +173,9 @@ def _open_urls(
     urls: list[str],
     db_session: Session,
 ) -> tuple[WebContentProviderType | None, list[LlmOpenUrlResult]]:
+    # SSRF protection is handled inside the content provider (OnyxWebCrawler)
+    # which uses ssrf_safe_get() to validate and fetch atomically,
+    # preventing DNS rebinding attacks
     provider_view, provider = _get_active_content_provider(db_session)
 
     try:

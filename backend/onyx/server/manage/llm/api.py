@@ -700,6 +700,10 @@ def get_ollama_available_models(
             detail="API base URL is required to fetch Ollama models.",
         )
 
+    # NOTE: most people run Ollama locally, so we don't disallow internal URLs
+    # the only way this could be used for SSRF is if there's another endpoint that
+    # is not protected + exposes sensitive information on the `/api/tags` endpoint
+    # with the same response format
     model_names = _get_ollama_available_model_names(cleaned_api_base)
     if not model_names:
         raise HTTPException(

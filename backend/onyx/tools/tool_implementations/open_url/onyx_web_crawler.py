@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-import requests
-
 from onyx.file_processing.html_utils import ParsedHTML
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.tools.tool_implementations.open_url.models import (
@@ -13,6 +11,8 @@ from onyx.tools.tool_implementations.open_url.models import (
     WebContentProvider,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import ssrf_safe_get
+from onyx.utils.url import SSRFException
 
 logger = setup_logger()
 
@@ -47,8 +47,22 @@ class OnyxWebCrawler(WebContentProvider):
 
     def _fetch_url(self, url: str) -> WebContent:
         try:
-            response = requests.get(
+            # Use SSRF-safe request to prevent DNS rebinding attacks
+            response = ssrf_safe_get(
                 url, headers=self._headers, timeout=self._timeout_seconds
+            )
+        except SSRFException as exc:
+            logger.error(
+                "SSRF protection blocked request to %s: %s",
+                url,
+                str(exc),
+            )
+            return WebContent(
+                title="",
+                link=url,
+                full_content="",
+                published_date=None,
+                scrape_successful=False,
             )
         except Exception as exc:  # pragma: no cover - network failures vary
             logger.warning(
