@@ -62,6 +62,8 @@ backoff==2.2.1
     # via
     #   langfuse
     #   unstructured
+backports-tarfile==1.2.0 ; python_full_version < '3.12'
+    # via jaraco-context
 bcrypt==4.3.0
     # via pwdlib
 beartype==0.22.6
@@ -159,6 +161,7 @@ cloudpickle==3.1.2
     # via
     #   dask
     #   distributed
+    #   pydocket
 cobble==0.1.4
     # via mammoth
 cohere==5.6.1
@@ -178,6 +181,7 @@ cryptography==46.0.3
     #   msal
     #   pdfminer-six
     #   pyjwt
+    #   secretstorage
     #   sendgrid
 cyclopts==4.2.4
     # via fastmcp
@@ -241,6 +245,8 @@ exceptiongroup==1.3.0
     # via
     #   braintrust
     #   fastmcp
+fakeredis==2.33.0
+    # via pydocket
 fastapi==0.116.1
     # via
     #   fastapi-limiter
@@ -256,7 +262,7 @@ fastapi-users-db-sqlalchemy==5.0.0
     # via onyx
 fastavro==1.12.1
     # via cohere
-fastmcp==2.13.3
+fastmcp==2.14.0
     # via onyx
 fastuuid==0.14.0
     # via litellm
@@ -415,6 +421,7 @@ idna==3.11
 importlib-metadata==8.7.0
     # via
     #   dask
+    #   keyring
     #   litellm
     #   opentelemetry-api
 inflection==0.5.1
@@ -427,6 +434,16 @@ isodate==0.7.2
     # via
     #   python3-saml
     #   zeep
+jaraco-classes==3.4.0
+    # via keyring
+jaraco-context==6.0.2
+    # via keyring
+jaraco-functools==4.4.0
+    # via keyring
+jeepney==0.9.0 ; sys_platform == 'linux'
+    # via
+    #   keyring
+    #   secretstorage
 jinja2==3.1.6
     # via
     #   distributed
@@ -461,6 +478,8 @@ jsonschema-specifications==2025.9.1
     # via jsonschema
 justext==3.0.2
     # via trafilatura
+keyring==25.7.0
+    # via py-key-value-aio
 kombu==5.5.4
     # via celery
 langchain==0.3.23
@@ -492,6 +511,8 @@ locket==1.0.0
     # via
     #   distributed
     #   partd
+lupa==2.6
+    # via fakeredis
 lxml==5.3.0
     # via
     #   htmldate
@@ -535,7 +556,7 @@ marshmallow==3.26.1
     #   unstructured-client
 matrix-client==0.3.2
     # via zulip
-mcp==1.19.0
+mcp==1.25.0
     # via
     #   fastmcp
     #   onyx
@@ -544,7 +565,10 @@ mdurl==0.1.2
 mistune==0.8.4
     # via onyx
 more-itertools==10.8.0
-    # via simple-salesforce
+    # via
+    #   jaraco-classes
+    #   jaraco-functools
+    #   simple-salesforce
 mpmath==1.3.0
     # via sympy
 msal==1.34.0
@@ -616,12 +640,16 @@ opentelemetry-api==1.38.0
     #   langfuse
     #   openinference-instrumentation
     #   opentelemetry-exporter-otlp-proto-http
+    #   opentelemetry-exporter-prometheus
     #   opentelemetry-sdk
     #   opentelemetry-semantic-conventions
+    #   pydocket
 opentelemetry-exporter-otlp-proto-common==1.38.0
     # via opentelemetry-exporter-otlp-proto-http
 opentelemetry-exporter-otlp-proto-http==1.38.0
     # via langfuse
+opentelemetry-exporter-prometheus==0.59b0
+    # via pydocket
 opentelemetry-proto==1.38.0
     # via
     #   onyx
@@ -632,6 +660,7 @@ opentelemetry-sdk==1.38.0
     #   langfuse
     #   openinference-instrumentation
     #   opentelemetry-exporter-otlp-proto-http
+    #   opentelemetry-exporter-prometheus
 opentelemetry-semantic-conventions==0.59b0
     # via opentelemetry-sdk
 orderly-set==5.5.0
@@ -684,10 +713,12 @@ pluggy==1.6.0
     # via pytest
 ply==3.11
     # via stone
-prometheus-client==0.21.0
+prometheus-client==0.23.1
     # via
     #   onyx
+    #   opentelemetry-exporter-prometheus
     #   prometheus-fastapi-instrumentator
+    #   pydocket
 prometheus-fastapi-instrumentator==7.1.0
     # via onyx
 prompt-toolkit==3.0.52
@@ -726,9 +757,11 @@ pwdlib==0.2.1
     # via fastapi-users
 py==1.11.0
     # via retry
-py-key-value-aio==0.2.8
-    # via fastmcp
-py-key-value-shared==0.2.8
+py-key-value-aio==0.3.0
+    # via
+    #   fastmcp
+    #   pydocket
+py-key-value-shared==0.3.0
     # via py-key-value-aio
 pyairtable==3.0.1
     # via onyx
@@ -765,6 +798,8 @@ pydantic-core==2.33.2
     # via pydantic
 pydantic-settings==2.12.0
     # via mcp
+pydocket==0.15.4
+    # via fastmcp
 pyee==13.0.0
     # via playwright
 pygithub==2.5.0
@@ -774,6 +809,7 @@ pygments==2.19.2
 pyjwt==2.10.1
     # via
     #   fastapi-users
+    #   mcp
     #   msal
     #   pygithub
     #   simple-salesforce
@@ -832,6 +868,8 @@ python-http-client==3.3.7
     # via sendgrid
 python-iso639==2025.11.16
     # via unstructured
+python-json-logger==4.0.0
+    # via pydocket
 python-magic==0.4.27
     # via unstructured
 python-multipart==0.0.20
@@ -861,6 +899,8 @@ pywin32==311 ; sys_platform == 'win32'
     # via
     #   mcp
     #   pympler
+pywin32-ctypes==0.2.3 ; sys_platform == 'win32'
+    # via keyring
 pyyaml==6.0.3
     # via
     #   dask
@@ -875,8 +915,11 @@ rapidfuzz==3.13.0
     #   unstructured
 redis==5.0.8
     # via
+    #   fakeredis
     #   fastapi-limiter
     #   onyx
+    #   py-key-value-aio
+    #   pydocket
 referencing==0.36.2
     # via
     #   jsonschema
@@ -951,6 +994,7 @@ rich==14.2.0
     # via
     #   cyclopts
     #   fastmcp
+    #   pydocket
     #   rich-rst
     #   typer
 rich-rst==1.3.2
@@ -963,6 +1007,8 @@ rsa==4.9.1
     # via google-auth
 s3transfer==0.13.1
     # via boto3
+secretstorage==3.5.0 ; sys_platform == 'linux'
+    # via keyring
 sendgrid==6.12.5
     # via onyx
 sentry-sdk==2.14.0
@@ -996,7 +1042,9 @@ sniffio==1.3.1
     #   anyio
     #   openai
 sortedcontainers==2.4.0
-    # via distributed
+    # via
+    #   distributed
+    #   fakeredis
 soupsieve==2.8
     # via beautifulsoup4
 sqlalchemy==2.0.15
@@ -1065,7 +1113,9 @@ tqdm==4.67.1
 trafilatura==1.12.2
     # via onyx
 typer==0.20.0
-    # via mcp
+    # via
+    #   mcp
+    #   pydocket
 types-awscrt==0.28.4
     # via botocore-stubs
 types-openpyxl==3.0.4.7
@@ -1093,6 +1143,7 @@ typing-extensions==4.15.0
     #   huggingface-hub
     #   jira
     #   langchain-core
+    #   mcp
     #   mypy
     #   mypy-boto3-s3
     #   office365-rest-python-client
@@ -1105,6 +1156,7 @@ typing-extensions==4.15.0
     #   pyairtable
     #   pydantic
     #   pydantic-core
+    #   pydocket
     #   pyee
     #   pygithub
     #   python-docx
@@ -1125,6 +1177,7 @@ typing-inspect==0.9.0
     #   unstructured-client
 typing-inspection==0.4.2
     # via
+    #   mcp
     #   pydantic
     #   pydantic-settings
 tzdata==2025.2
