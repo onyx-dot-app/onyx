@@ -2,10 +2,9 @@ import { buildCCPairInfoUrl } from "@/app/admin/connector/[ccPairId]/lib";
 import { PageSelector } from "@/components/PageSelector";
 import { IndexAttemptStatus } from "@/components/Status";
 import { deleteCCPair } from "@/lib/documentDeletion";
-import { FailedConnectorIndexingStatus, UserRole } from "@/lib/types";
+import { FailedConnectorIndexingStatus } from "@/lib/types";
 import Button from "@/refresh-components/buttons/Button";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
-import { useUser } from "@/components/user/UserProvider";
 import {
   Table,
   TableBody,
@@ -37,9 +36,7 @@ export function FailedReIndexAttempts({
     name: string;
   } | null>(null);
 
-  const { user, isAdmin } = useUser();
-  const shouldConfirmConnectorDeletion =
-    !user || isAdmin || user.role === UserRole.GLOBAL_CURATOR;
+  const shouldConfirmConnectorDeletion = true;
 
   const anyDeletable = failedIndexingStatuses.some(
     (status) => status.is_deletable
@@ -55,14 +52,23 @@ export function FailedReIndexAttempts({
           additionalDetails="Deleting this connector schedules a deletion job that removes its indexed documents and deletes it for every user."
           onClose={() => setPendingConnectorDeletion(null)}
           onSubmit={async () => {
-            await deleteCCPair(
-              pendingConnectorDeletion.connectorId,
-              pendingConnectorDeletion.credentialId,
-              setPopup,
-              () =>
-                mutate(buildCCPairInfoUrl(pendingConnectorDeletion.ccPairId))
-            );
-            setPendingConnectorDeletion(null);
+            try {
+              await deleteCCPair(
+                pendingConnectorDeletion.connectorId,
+                pendingConnectorDeletion.credentialId,
+                setPopup,
+                () =>
+                  mutate(buildCCPairInfoUrl(pendingConnectorDeletion.ccPairId))
+              );
+            } catch (error) {
+              console.error("Error deleting connector:", error);
+              setPopup({
+                message: "Failed to delete connector. Please try again.",
+                type: "error",
+              });
+            } finally {
+              setPendingConnectorDeletion(null);
+            }
           }}
         />
       )}
@@ -141,20 +147,29 @@ export function FailedReIndexAttempts({
                             return;
                           }
 
-                          await deleteCCPair(
-                            reindexingProgress.connector_id,
-                            reindexingProgress.credential_id,
-                            setPopup,
-                            () =>
-                              mutate(
-                                buildCCPairInfoUrl(
-                                  reindexingProgress.cc_pair_id
+                          try {
+                            await deleteCCPair(
+                              reindexingProgress.connector_id,
+                              reindexingProgress.credential_id,
+                              setPopup,
+                              () =>
+                                mutate(
+                                  buildCCPairInfoUrl(
+                                    reindexingProgress.cc_pair_id
+                                  )
                                 )
-                              )
-                          );
+                            );
+                          } catch (error) {
+                            console.error("Error deleting connector:", error);
+                            setPopup({
+                              message:
+                                "Failed to delete connector. Please try again.",
+                              type: "error",
+                            });
+                          }
                         }}
                         leftIcon={SvgTrash}
-                        disabled={reindexingProgress.is_deletable}
+                        disabled={!reindexingProgress.is_deletable}
                       >
                         Delete
                       </Button>

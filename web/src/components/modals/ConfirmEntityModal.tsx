@@ -61,7 +61,7 @@ export function ConfirmEntityModal({
     >
       <div className="flex flex-col gap-4">
         {!removeConfirmationText && (
-          <Text>
+          <Text text03>
             Are you sure you want to {actionText} <b>{entityName}</b>?
           </Text>
         )}
