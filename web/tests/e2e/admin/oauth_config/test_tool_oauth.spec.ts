@@ -177,7 +177,7 @@ test("Tool OAuth Configuration: Creation, Selection, and Assistant Integration",
 
   // --- Step 6: Create Assistant and Verify Tool Availability ---
   // Navigate to the assistant creation page
-  await page.goto("http://localhost:3000/assistants/new");
+  await page.goto("http://localhost:3000/chat/agents/create");
   await page.waitForLoadState("networkidle");
 
   // Fill in basic assistant details

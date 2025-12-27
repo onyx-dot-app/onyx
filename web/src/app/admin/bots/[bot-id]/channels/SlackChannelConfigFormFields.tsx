@@ -385,7 +385,9 @@ export function SlackChannelConfigFormFields({
                       <button
                         type="button"
                         onClick={() =>
-                          router.push(`/assistants/edit/${persona.id}` as Route)
+                          router.push(
+                            `/chat/agents/edit/${persona.id}` as Route
+                          )
                         }
                         key={persona.id}
                         className="p-2 bg-background-100 cursor-pointer rounded-md flex items-center gap-2"
