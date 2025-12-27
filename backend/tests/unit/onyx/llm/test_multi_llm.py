@@ -411,7 +411,7 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
 def test_user_identity_metadata_enabled(default_multi_llm: LitellmLLM) -> None:
     with (
         patch("litellm.completion") as mock_completion,
-        patch("onyx.llm.multi_llm.SEND_USER_METADATA_TO_LLM_PROVIDER", True),
+        patch("onyx.llm.utils.SEND_USER_METADATA_TO_LLM_PROVIDER", True),
     ):
         mock_response = litellm.ModelResponse(
             id="chatcmpl-123",
@@ -445,7 +445,7 @@ def test_user_identity_user_id_truncated_to_64_chars(
 ) -> None:
     with (
         patch("litellm.completion") as mock_completion,
-        patch("onyx.llm.multi_llm.SEND_USER_METADATA_TO_LLM_PROVIDER", True),
+        patch("onyx.llm.utils.SEND_USER_METADATA_TO_LLM_PROVIDER", True),
     ):
         mock_response = litellm.ModelResponse(
             id="chatcmpl-123",
@@ -479,7 +479,7 @@ def test_user_identity_metadata_disabled_omits_identity(
 ) -> None:
     with (
         patch("litellm.completion") as mock_completion,
-        patch("onyx.llm.multi_llm.SEND_USER_METADATA_TO_LLM_PROVIDER", False),
+        patch("onyx.llm.utils.SEND_USER_METADATA_TO_LLM_PROVIDER", False),
     ):
         mock_response = litellm.ModelResponse(
             id="chatcmpl-123",
@@ -526,7 +526,7 @@ def test_existing_metadata_pass_through_when_identity_disabled() -> None:
 
     with (
         patch("litellm.completion") as mock_completion,
-        patch("onyx.llm.multi_llm.SEND_USER_METADATA_TO_LLM_PROVIDER", False),
+        patch("onyx.llm.utils.SEND_USER_METADATA_TO_LLM_PROVIDER", False),
     ):
         mock_response = litellm.ModelResponse(
             id="chatcmpl-123",
