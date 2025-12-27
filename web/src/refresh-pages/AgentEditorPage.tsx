@@ -315,7 +315,7 @@ function MCPServerCard({ server }: MCPServerCardProps) {
             <div className="flex flex-row gap-2 items-center justify-center">
               <EnabledCount
                 enabledCount={enabledCount}
-                totalCount={server.tool_count}
+                totalCount={enabledTools.length}
               />
               <SwitchField
                 name={`${serverFieldName}.enabled`}
