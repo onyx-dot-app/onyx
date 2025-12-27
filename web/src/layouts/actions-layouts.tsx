@@ -13,10 +13,10 @@
  * import Switch from "@/components/ui/switch";
  *
  * function MyActionCard() {
- *   const { Provider } = useActionsLayout();
+ *   const { Provider, contextValue } = useActionsLayout();
  *
  *   return (
- *     <Provider>
+ *     <Provider value={contextValue}>
  *       <ActionsLayouts.Root>
  *         <ActionsLayouts.Header
  *           title="My MCP Server"
@@ -86,20 +86,41 @@ const ActionsLayoutContext = createContext<
 >(undefined);
 
 /**
- * Hook to create an ActionsLayout context provider and controller.
+ * ActionsLayout Provider Component
+ *
+ * A stable provider component for the ActionsLayout context.
+ * Defined at module level to prevent unmount/remount cycles.
+ */
+function ActionsLayoutProvider({
+  children,
+  value,
+}: {
+  children: React.ReactNode;
+  value: ActionsLayoutContextValue;
+}) {
+  return (
+    <ActionsLayoutContext.Provider value={value}>
+      {children}
+    </ActionsLayoutContext.Provider>
+  );
+}
+
+/**
+ * Hook to create an ActionsLayout context controller.
  *
  * @returns An object containing:
- *   - Provider: Context provider component to wrap action card
+ *   - Provider: Stable context provider component to wrap action card
+ *   - contextValue: Memoized context value to pass to Provider
  *   - isFolded: Current folding state
  *   - setIsFolded: Function to update folding state
  *
  * @example
  * ```tsx
  * function MyActionCard() {
- *   const { Provider, isFolded, setIsFolded } = useActionsLayout();
+ *   const { Provider, contextValue, isFolded, setIsFolded } = useActionsLayout();
  *
  *   return (
- *     <Provider>
+ *     <Provider value={contextValue}>
  *       <ActionsLayouts.Root>
  *         <ActionsLayouts.Header
  *           title="My Server"
@@ -122,17 +143,12 @@ export function useActionsLayout() {
 
   const contextValue = useMemo(() => ({ isFolded, setIsFolded }), [isFolded]);
 
-  const Provider = useMemo(
-    () =>
-      ({ children }: { children: React.ReactNode }) => (
-        <ActionsLayoutContext.Provider value={contextValue}>
-          {children}
-        </ActionsLayoutContext.Provider>
-      ),
-    [contextValue]
-  );
-
-  return { Provider, isFolded, setIsFolded };
+  return {
+    Provider: ActionsLayoutProvider,
+    contextValue,
+    isFolded,
+    setIsFolded,
+  };
 }
 
 /**
