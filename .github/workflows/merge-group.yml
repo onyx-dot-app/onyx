@@ -1,0 +1,23 @@
+name: Merge Group Specific
+
+on:
+  merge_group:
+
+permissions:
+  contents: read
+
+jobs:
+  # This is required on presubmit and optional on merge_group, so we no-op succeed for the latter.
+  required:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Success
+        run: true
+  # This is required on presubmit and optional on merge_group, so we no-op succeed for the latter.
+  playwright-required:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Success
+        run: true
