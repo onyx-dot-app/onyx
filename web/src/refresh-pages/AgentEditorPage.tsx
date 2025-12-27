@@ -53,6 +53,7 @@ import {
 } from "@/components/ui/popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import {
+  SvgActions,
   SvgExpand,
   SvgFold,
   SvgImage,
@@ -75,13 +76,14 @@ import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import * as ActionsLayouts from "@/layouts/actions-layouts";
 import { useActionsLayout } from "@/layouts/actions-layouts";
-import OpenApiActionCard from "@/sections/actions/OpenApiActionCard";
+
 import { getActionIcon } from "@/lib/tools/mcpUtils";
-import { MCPServer } from "@/lib/tools/interfaces";
+import { MCPServer, ToolSnapshot } from "@/lib/tools/interfaces";
 import useServerTools from "@/hooks/useServerTools";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
+import useOnMount from "@/hooks/useOnMount";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
@@ -244,13 +246,37 @@ function Section({
   );
 }
 
+interface OpenApiToolCardProps {
+  tool: ToolSnapshot;
+}
+
+function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
+  const toolFieldName = `openapi_tool_${tool.id}`;
+  const actionsLayouts = useActionsLayout();
+
+  useOnMount(() => actionsLayouts.setIsFolded(true));
+
+  return (
+    <actionsLayouts.Provider>
+      <ActionsLayouts.Root>
+        <ActionsLayouts.Header
+          title={tool.display_name || tool.name}
+          description={tool.description}
+          icon={SvgActions}
+          rightChildren={<SwitchField name={toolFieldName} />}
+        />
+      </ActionsLayouts.Root>
+    </actionsLayouts.Provider>
+  );
+}
+
 interface MCPServerCardProps {
   server: MCPServer;
 }
 
 function MCPServerCard({ server }: MCPServerCardProps) {
   const actionsLayout = useActionsLayout();
-  const { tools, isLoading } = useServerTools(server, true);
+  const { tools, isLoading } = useServerTools(server, !actionsLayout.isFolded);
   const { values, setFieldValue } = useFormikContext<any>();
 
   const serverFieldName = `mcp_server_${server.id}`;
@@ -416,13 +442,17 @@ export default function AgentEditorPage({
   } | null>(null);
 
   const { mcpData } = useMcpServers();
-  const { openApiTools, mutateOpenApiTools } = useOpenApiTools();
-  const { tools: availableTools } = useAvailableTools();
-
+  const { openApiTools: openApiToolsRaw, mutateOpenApiTools } =
+    useOpenApiTools();
   const mcpServers = mcpData?.mcp_servers ?? [];
-  const tools = openApiTools ?? [];
+  const openApiTools = openApiToolsRaw ?? [];
 
-  // Check if specific tools are available
+  // Check if the *BUILT-IN* tools are available.
+  // The built-in tools are:
+  // - image-gen
+  // - web-search
+  // - code-interpreter
+  const { tools: availableTools } = useAvailableTools();
   const imageGenTool = availableTools?.find(
     (t) => t.in_code_tool_id === IMAGE_GENERATION_TOOL_ID
   );
@@ -508,6 +538,14 @@ export default function AgentEditorPage({
         ];
       })
     ),
+
+    // OpenAPI tools - add a boolean field for each tool
+    ...Object.fromEntries(
+      openApiTools.map((openApiTool) => [
+        `openapi_tool_${openApiTool.id}`,
+        existingAgent?.tools?.some((t) => t.id === openApiTool.id) ?? false,
+      ])
+    ),
   };
 
   const validationSchema = Yup.object().shape({
@@ -566,6 +604,14 @@ export default function AgentEditorPage({
         Yup.object(), // Allow any nested tool fields as booleans
       ])
     ),
+
+    // OpenAPI tools - add boolean validation for each tool
+    ...Object.fromEntries(
+      openApiTools.map((openApiTool) => [
+        `openapi_tool_${openApiTool.id}`,
+        Yup.boolean(),
+      ])
+    ),
   });
 
   async function handleSubmit(values: typeof initialValues) {
@@ -619,6 +665,14 @@ export default function AgentEditorPage({
               }
             }
           });
+        }
+      });
+
+      // Collect enabled OpenAPI tool IDs
+      openApiTools.forEach((openApiTool) => {
+        const toolFieldName = `openapi_tool_${openApiTool.id}`;
+        if ((values as any)[toolFieldName] === true) {
+          toolIds.push(openApiTool.id);
         }
       });
 
@@ -1128,7 +1182,8 @@ export default function AgentEditorPage({
                         {/* Tools */}
                         <>
                           {/* render the separator if there is at least one mcp-server or open-api-tool */}
-                          {(mcpServers.length > 0 || tools.length > 0) && (
+                          {(mcpServers.length > 0 ||
+                            openApiTools.length > 0) && (
                             <Separator noPadding className="py-1" />
                           )}
 
@@ -1145,16 +1200,10 @@ export default function AgentEditorPage({
                           )}
 
                           {/* OpenAPI tools */}
-                          {tools.length > 0 && (
+                          {openApiTools.length > 0 && (
                             <div className="flex flex-col gap-2">
-                              {tools.map((tool) => (
-                                <OpenApiActionCard
-                                  key={tool.id}
-                                  tool={tool}
-                                  onAuthenticate={() => {}}
-                                  mutateOpenApiTools={mutateOpenApiTools}
-                                  setPopup={setPopup}
-                                />
+                              {openApiTools.map((tool) => (
+                                <OpenApiToolCard key={tool.id} tool={tool} />
                               ))}
                             </div>
                           )}

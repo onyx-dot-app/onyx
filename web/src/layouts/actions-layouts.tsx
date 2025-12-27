@@ -230,7 +230,9 @@ function ActionsHeader({
           {/* Left: Icon, Title, Description */}
           <div className="flex flex-col items-start">
             <div className="flex items-center justify-center gap-2">
-              <Icon className="stroke-text-04" size={18} />
+              <div className="min-w-[18px]">
+                <Icon className="stroke-text-04" size={18} />
+              </div>
               <Truncated mainContentEmphasis text04>
                 {title}
               </Truncated>
