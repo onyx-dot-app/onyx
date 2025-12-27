@@ -19,7 +19,7 @@ from onyx.configs.model_configs import GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import LLMProvider
 from onyx.db.models import ModelConfiguration
-from onyx.llm.constants import ProviderName
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.model_response import ModelResponse
@@ -769,9 +769,9 @@ def is_true_openai_model(model_provider: str, model_name: str) -> bool:
     """
 
     if model_provider not in {
-        ProviderName.OPENAI,
-        ProviderName.LITELLM_PROXY,
-        ProviderName.AZURE,
+        LlmProviderNames.OPENAI.value,
+        LlmProviderNames.LITELLM_PROXY.value,
+        LlmProviderNames.AZURE.value,
     }:
         return False
 
@@ -780,18 +780,21 @@ def is_true_openai_model(model_provider: str, model_name: str) -> bool:
     def _check_if_model_name_is_openai_provider(model_name: str) -> bool:
         if model_name not in model_map:
             return False
-        return model_map[model_name].get("litellm_provider") == ProviderName.OPENAI
+        return (
+            model_map[model_name].get("litellm_provider")
+            == LlmProviderNames.OPENAI.value
+        )
 
     try:
         # Check if any model exists in litellm's registry with openai prefix
         # If it's registered as "openai/model-name", it's a real OpenAI model
-        if f"{ProviderName.OPENAI}/{model_name}" in model_map:
+        if f"{LlmProviderNames.OPENAI.value}/{model_name}" in model_map:
             return True
 
         if _check_if_model_name_is_openai_provider(model_name):
             return True
 
-        if model_name.startswith(f"{ProviderName.AZURE}/"):
+        if model_name.startswith(f"{LlmProviderNames.AZURE.value}/"):
             model_name_with_azure_removed = "/".join(model_name.split("/")[1:])
             if _check_if_model_name_is_openai_provider(model_name_with_azure_removed):
                 return True

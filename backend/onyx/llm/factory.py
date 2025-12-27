@@ -14,7 +14,7 @@ from onyx.db.llm import fetch_llm_provider_view
 from onyx.db.llm import fetch_user_group_ids
 from onyx.db.models import Persona
 from onyx.db.models import User
-from onyx.llm.constants import ProviderName
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.llm_provider_options import OLLAMA_API_KEY_CONFIG_KEY
@@ -34,7 +34,7 @@ logger = setup_logger()
 def _build_provider_extra_headers(
     provider: str, custom_config: dict[str, str] | None
 ) -> dict[str, str]:
-    if provider == ProviderName.OLLAMA and custom_config:
+    if provider == LlmProviderNames.OLLAMA.value and custom_config:
         raw_api_key = custom_config.get(OLLAMA_API_KEY_CONFIG_KEY)
         api_key = raw_api_key.strip() if raw_api_key else None
         if not api_key:
@@ -44,7 +44,7 @@ def _build_provider_extra_headers(
         return {"Authorization": api_key}
 
     # Passing these will put Onyx on the OpenRouter leaderboard
-    elif provider == ProviderName.OPENROUTER:
+    elif provider == LlmProviderNames.OPENROUTER.value:
         return {
             "HTTP-Referer": "https://onyx.app",
             "X-Title": "Onyx",

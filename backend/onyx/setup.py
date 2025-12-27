@@ -43,7 +43,7 @@ from onyx.indexing.models import IndexingSetting
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.llm.llm_provider_options import get_openai_model_names
-from onyx.llm.utils import OPENAI_PROVIDER_NAME
+from onyx.llm.utils import LlmProviderNames
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder
 from onyx.natural_language_processing.search_nlp_models import warm_up_cross_encoder
@@ -297,7 +297,7 @@ def setup_postgres(db_session: Session) -> None:
         llm_model = GEN_AI_MODEL_VERSION or "gpt-4o-mini"
         model_req = LLMProviderUpsertRequest(
             name="DevEnvPresetOpenAI",
-            provider=OPENAI_PROVIDER_NAME,
+            provider=LlmProviderNames.OPENAI.value,
             api_key=GEN_AI_API_KEY,
             api_base=None,
             api_version=None,
