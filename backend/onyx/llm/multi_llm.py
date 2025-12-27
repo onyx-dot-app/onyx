@@ -297,7 +297,7 @@ class LitellmLLM(LLM):
                 }
             elif is_openai_model:
                 # OpenAI API does not accept reasoning params for GPT 5 chat models
-                # (neither reasonning nor reasoning_effort are accepted)
+                # (neither reasoning nor reasoning_effort are accepted)
                 # even though they are reasoning models (bug in OpenAI)
                 if "-chat" not in model:
                     optional_kwargs["reasoning"] = {
