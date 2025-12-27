@@ -125,10 +125,7 @@ const LLMStepInner = ({
             </Button>
           </div>
         </div>
-
-        <div className="p-2 w-full">
-          <Separator className="my-2" />
-        </div>
+        <Separator />
         <div className="flex flex-wrap gap-1 [&>*:last-child:nth-child(odd)]:basis-full">
           {isLoading ? (
             Array.from({ length: 8 }).map((_, idx) => (

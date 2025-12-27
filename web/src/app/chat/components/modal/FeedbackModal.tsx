@@ -9,8 +9,8 @@ import { useKeyPress } from "@/hooks/useKeyPress";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useFeedbackController } from "../../hooks/useFeedbackController";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
-import DefaultModalLayout from "@/refresh-components/layouts/DefaultModalLayout";
 import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
+import Modal from "@/refresh-components/Modal";
 
 const predefinedPositiveFeedbackOptions = process.env
   .NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS
@@ -92,39 +92,41 @@ export default function FeedbackModal({
     <>
       {popup}
 
-      <DefaultModalLayout
-        className="flex flex-col gap-1"
-        title="Provide Additional Feedback"
-        icon={icon}
-        mini
-      >
-        {predefinedFeedbackOptions.length > 0 && (
-          <div className="flex flex-col p-4 gap-1">
-            {predefinedFeedbackOptions.map((feedback, index) => (
-              <LineItem
-                key={index}
-                onClick={() => setPredefinedFeedback(feedback)}
-              >
-                {feedback}
-              </LineItem>
-            ))}
-          </div>
-        )}
-        <div className="flex flex-col p-4 items-center justify-center bg-background-tint-01">
-          <FieldInput
-            label="Feedback"
-            placeholder={`What did you ${feedbackType} about this response?`}
-            className="!w-full"
-            ref={fieldInputRef}
+      <Modal open={modal.isOpen} onOpenChange={modal.toggle}>
+        <Modal.Content mini>
+          <Modal.Header
+            icon={icon}
+            title="Provide Additional Feedback"
+            onClose={() => modal.toggle(false)}
           />
-        </div>
-        <div className="flex flex-row p-4 items-center justify-end w-full gap-2">
-          <Button onClick={() => modal.toggle(false)} secondary>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit}>Submit</Button>
-        </div>
-      </DefaultModalLayout>
+          {predefinedFeedbackOptions.length > 0 && (
+            <div className="flex flex-col p-4 gap-1">
+              {predefinedFeedbackOptions.map((feedback, index) => (
+                <LineItem
+                  key={index}
+                  onClick={() => setPredefinedFeedback(feedback)}
+                >
+                  {feedback}
+                </LineItem>
+              ))}
+            </div>
+          )}
+          <Modal.Body className="flex flex-col p-4 items-center justify-center bg-background-tint-01">
+            <FieldInput
+              label="Feedback"
+              placeholder={`What did you ${feedbackType} about this response?`}
+              className="!w-full"
+              ref={fieldInputRef}
+            />
+          </Modal.Body>
+          <Modal.Footer className="flex flex-row p-4 items-center justify-end w-full gap-2">
+            <Button onClick={() => modal.toggle(false)} secondary>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmit}>Submit</Button>
+          </Modal.Footer>
+        </Modal.Content>
+      </Modal>
     </>
   );
 }
