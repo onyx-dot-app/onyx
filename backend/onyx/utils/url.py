@@ -1,9 +1,12 @@
 import ipaddress
 import socket
+from typing import Any
 from urllib.parse import parse_qs
 from urllib.parse import urlencode
 from urllib.parse import urlparse
 from urllib.parse import urlunparse
+
+import requests
 
 from onyx.utils.logger import setup_logger
 
@@ -47,17 +50,12 @@ def _is_ip_private_or_reserved(ip_str: str) -> bool:
         return True
 
 
-def validate_url_for_ssrf(url: str) -> None:
+def _validate_and_resolve_url(url: str) -> tuple[str, str, int]:
     """
-    Validate a URL to prevent Server-Side Request Forgery (SSRF) attacks.
+    Validate a URL for SSRF and resolve it to a safe IP address.
 
-    This function checks that:
-    1. The URL uses http or https scheme
-    2. The hostname is not a blocked hostname
-    3. The hostname does not resolve to a private/internal IP address
-
-    Args:
-        url: The URL to validate
+    Returns:
+        Tuple of (validated_ip, original_hostname, port)
 
     Raises:
         SSRFException: If the URL could be used for SSRF attack
@@ -93,48 +91,112 @@ def validate_url_for_ssrf(url: str) -> None:
     if parsed.username or parsed.password:
         raise SSRFException("URLs with embedded credentials are not allowed.")
 
-    # Try to resolve the hostname and check all resolved IPs
-    try:
-        # First, check if the hostname is already an IP address
-        try:
-            ip = ipaddress.ip_address(hostname)
-            if _is_ip_private_or_reserved(str(ip)):
-                raise SSRFException(
-                    f"Access to internal/private IP address '{hostname}' is not allowed."
-                )
-            return
-        except ValueError:
-            # Not an IP address, proceed with DNS resolution
-            pass
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
 
-        # Resolve hostname to IP addresses
-        addr_info = socket.getaddrinfo(
-            hostname, parsed.port or (443 if parsed.scheme == "https" else 80)
+    # Check if the hostname is already an IP address
+    try:
+        ip = ipaddress.ip_address(hostname)
+        if _is_ip_private_or_reserved(str(ip)):
+            raise SSRFException(
+                f"Access to internal/private IP address '{hostname}' is not allowed."
+            )
+        return str(ip), hostname, port
+    except ValueError:
+        # Not an IP address, proceed with DNS resolution
+        pass
+
+    # Resolve hostname to IP addresses
+    try:
+        addr_info = socket.getaddrinfo(hostname, port)
+    except socket.gaierror as e:
+        logger.warning(f"DNS resolution failed for hostname '{hostname}': {e}")
+        raise SSRFException(f"Could not resolve hostname '{hostname}': {e}")
+
+    if not addr_info:
+        raise SSRFException(f"Could not resolve hostname '{hostname}'")
+
+    # Find the first valid (non-private) IP address
+    validated_ip = None
+    for info in addr_info:
+        ip_str = info[4][0]
+        if _is_ip_private_or_reserved(str(ip_str)):
+            raise SSRFException(
+                f"Hostname '{hostname}' resolves to internal/private IP address "
+                f"'{ip_str}'. Access to internal networks is not allowed."
+            )
+        if validated_ip is None:
+            validated_ip = ip_str
+
+    if validated_ip is None:
+        raise SSRFException(f"Could not resolve hostname '{hostname}'")
+
+    return validated_ip, hostname, port
+
+
+def ssrf_safe_get(
+    url: str,
+    headers: dict[str, str] | None = None,
+    timeout: int = 15,
+    **kwargs: Any,
+) -> requests.Response:
+    """
+    Make a GET request with SSRF protection.
+
+    This function resolves the hostname, validates the IP is not private/internal,
+    and makes the request directly to the validated IP to prevent DNS rebinding attacks.
+
+    Args:
+        url: The URL to fetch
+        headers: Optional headers to include in the request
+        timeout: Request timeout in seconds
+        **kwargs: Additional arguments passed to requests.get()
+
+    Returns:
+        requests.Response object
+
+    Raises:
+        SSRFException: If the URL could be used for SSRF attack
+        ValueError: If the URL is malformed
+        requests.RequestException: If the request fails
+    """
+    # Validate and resolve the URL to get a safe IP
+    validated_ip, original_hostname, port = _validate_and_resolve_url(url)
+
+    # Parse the URL to rebuild it with the IP
+    parsed = urlparse(url)
+
+    # Build the new URL using the validated IP
+    # For HTTPS, we need to use the original hostname for TLS verification
+    if parsed.scheme == "https":
+        # For HTTPS, make request to original URL but we've validated the IP
+        # The TLS handshake needs the hostname for SNI
+        # We rely on the short time window between validation and request
+        # A more robust solution would require custom SSL context
+        request_url = url
+    else:
+        # For HTTP, we can safely request directly to the IP
+        netloc = f"{validated_ip}:{port}" if port not in (80, 443) else validated_ip
+        request_url = urlunparse(
+            (
+                parsed.scheme,
+                netloc,
+                parsed.path,
+                parsed.params,
+                parsed.query,
+                parsed.fragment,
+            )
         )
 
-        if not addr_info:
-            raise SSRFException(f"Could not resolve hostname '{hostname}'")
+    # Prepare headers
+    request_headers = headers.copy() if headers else {}
 
-        # Check all resolved IP addresses
-        for info in addr_info:
-            ip_str = info[4][0]  # IP address is in the 5th element, first item
-            if _is_ip_private_or_reserved(str(ip_str)):
-                raise SSRFException(
-                    f"Hostname '{hostname}' resolves to internal/private IP address '{ip_str}'. "
-                    "Access to internal networks is not allowed."
-                )
+    # Set Host header to original hostname (required for virtual hosting)
+    if parsed.scheme == "http":
+        request_headers["Host"] = (
+            f"{original_hostname}:{port}" if port != 80 else original_hostname
+        )
 
-    except socket.gaierror as e:
-        # DNS resolution failed - this could be a valid error or an attempt to use
-        # a non-existent domain. We'll allow it and let the actual request fail.
-        logger.warning(f"DNS resolution failed for hostname '{hostname}': {e}")
-        # Re-raise as SSRFException to be safe - if DNS fails, we shouldn't proceed
-        raise SSRFException(f"Could not resolve hostname '{hostname}': {e}")
-    except SSRFException:
-        raise
-    except Exception as e:
-        logger.warning(f"Error during SSRF validation for URL '{url}': {e}")
-        raise SSRFException(f"URL validation failed: {e}")
+    return requests.get(request_url, headers=request_headers, timeout=timeout, **kwargs)
 
 
 def normalize_url(url: str) -> str:

@@ -1,17 +1,19 @@
 """
 Unit tests for SSRF protection in URL validation utilities.
 
-These tests verify that the validate_url_for_ssrf function correctly blocks
+These tests verify that the SSRF protection correctly blocks
 requests to internal/private IP addresses and other potentially dangerous destinations.
 """
 
+from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
 
 from onyx.utils.url import _is_ip_private_or_reserved
+from onyx.utils.url import _validate_and_resolve_url
+from onyx.utils.url import ssrf_safe_get
 from onyx.utils.url import SSRFException
-from onyx.utils.url import validate_url_for_ssrf
 
 
 class TestIsIpPrivateOrReserved:
@@ -75,127 +77,221 @@ class TestIsIpPrivateOrReserved:
         assert _is_ip_private_or_reserved("") is True
 
 
-class TestValidateUrlForSsrf:
-    """Tests for the validate_url_for_ssrf function."""
+class TestValidateAndResolveUrl:
+    """Tests for the _validate_and_resolve_url function."""
 
     def test_empty_url(self) -> None:
         """Test that empty URLs raise ValueError."""
         with pytest.raises(ValueError, match="URL cannot be empty"):
-            validate_url_for_ssrf("")
+            _validate_and_resolve_url("")
 
     def test_invalid_scheme_ftp(self) -> None:
         """Test that non-HTTP schemes are rejected."""
         with pytest.raises(SSRFException, match="Invalid URL scheme"):
-            validate_url_for_ssrf("ftp://example.com/file.txt")
+            _validate_and_resolve_url("ftp://example.com/file.txt")
 
     def test_invalid_scheme_file(self) -> None:
         """Test that file:// scheme is rejected."""
         with pytest.raises(SSRFException, match="Invalid URL scheme"):
-            validate_url_for_ssrf("file:///etc/passwd")
+            _validate_and_resolve_url("file:///etc/passwd")
 
     def test_invalid_scheme_gopher(self) -> None:
         """Test that gopher:// scheme is rejected."""
         with pytest.raises(SSRFException, match="Invalid URL scheme"):
-            validate_url_for_ssrf("gopher://localhost:70/")
+            _validate_and_resolve_url("gopher://localhost:70/")
 
     def test_valid_http_scheme(self) -> None:
         """Test that http scheme is accepted for public URLs."""
-        # This should not raise for a public URL
-        # Note: This may fail if example.com doesn't resolve in the test env
-        with patch("socket.getaddrinfo") as mock_getaddrinfo:
+        with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
             mock_getaddrinfo.return_value = [
                 (2, 1, 6, "", ("93.184.216.34", 80))  # example.com's IP
             ]
-            validate_url_for_ssrf("http://example.com/")
+            ip, hostname, port = _validate_and_resolve_url("http://example.com/")
+            assert ip == "93.184.216.34"
+            assert hostname == "example.com"
+            assert port == 80
 
     def test_valid_https_scheme(self) -> None:
         """Test that https scheme is accepted for public URLs."""
-        with patch("socket.getaddrinfo") as mock_getaddrinfo:
+        with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
             mock_getaddrinfo.return_value = [(2, 1, 6, "", ("93.184.216.34", 443))]
-            validate_url_for_ssrf("https://example.com/")
+            ip, hostname, port = _validate_and_resolve_url("https://example.com/")
+            assert ip == "93.184.216.34"
+            assert hostname == "example.com"
+            assert port == 443
 
     def test_localhost_ipv4(self) -> None:
         """Test that localhost (127.0.0.1) is blocked."""
         with pytest.raises(SSRFException, match="internal/private IP"):
-            validate_url_for_ssrf("http://127.0.0.1/")
+            _validate_and_resolve_url("http://127.0.0.1/")
 
     def test_localhost_hostname(self) -> None:
         """Test that 'localhost' hostname is blocked."""
-        with patch("socket.getaddrinfo") as mock_getaddrinfo:
+        with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
             mock_getaddrinfo.return_value = [(2, 1, 6, "", ("127.0.0.1", 80))]
             with pytest.raises(SSRFException, match="internal/private IP"):
-                validate_url_for_ssrf("http://localhost/")
+                _validate_and_resolve_url("http://localhost/")
 
     def test_private_ip_10_network(self) -> None:
         """Test that 10.x.x.x addresses are blocked."""
         with pytest.raises(SSRFException, match="internal/private IP"):
-            validate_url_for_ssrf("http://10.0.0.1/")
+            _validate_and_resolve_url("http://10.0.0.1/")
 
     def test_private_ip_172_network(self) -> None:
         """Test that 172.16-31.x.x addresses are blocked."""
         with pytest.raises(SSRFException, match="internal/private IP"):
-            validate_url_for_ssrf("http://172.16.0.1/")
+            _validate_and_resolve_url("http://172.16.0.1/")
 
     def test_private_ip_192_168_network(self) -> None:
         """Test that 192.168.x.x addresses are blocked."""
         with pytest.raises(SSRFException, match="internal/private IP"):
-            validate_url_for_ssrf("http://192.168.1.1/")
+            _validate_and_resolve_url("http://192.168.1.1/")
 
     def test_aws_metadata_endpoint(self) -> None:
         """Test that AWS metadata endpoint is blocked."""
         with pytest.raises(SSRFException, match="internal/private IP"):
-            validate_url_for_ssrf("http://169.254.169.254/latest/meta-data/")
+            _validate_and_resolve_url("http://169.254.169.254/latest/meta-data/")
 
     def test_blocked_hostname_kubernetes(self) -> None:
         """Test that Kubernetes internal hostnames are blocked."""
         with pytest.raises(SSRFException, match="not allowed"):
-            validate_url_for_ssrf("http://kubernetes.default.svc.cluster.local/")
+            _validate_and_resolve_url("http://kubernetes.default.svc.cluster.local/")
 
     def test_blocked_hostname_metadata_google(self) -> None:
         """Test that Google metadata hostname is blocked."""
         with pytest.raises(SSRFException, match="not allowed"):
-            validate_url_for_ssrf("http://metadata.google.internal/")
+            _validate_and_resolve_url("http://metadata.google.internal/")
 
     def test_url_with_credentials(self) -> None:
         """Test that URLs with embedded credentials are blocked."""
         with pytest.raises(SSRFException, match="embedded credentials"):
-            validate_url_for_ssrf("http://user:pass@example.com/")
+            _validate_and_resolve_url("http://user:pass@example.com/")
 
     def test_url_with_port(self) -> None:
         """Test that URLs with ports are handled correctly."""
         # Internal IP with custom port should be blocked
         with pytest.raises(SSRFException, match="internal/private IP"):
-            validate_url_for_ssrf("http://127.0.0.1:8080/metrics")
+            _validate_and_resolve_url("http://127.0.0.1:8080/metrics")
 
         # Public IP with custom port should be allowed
-        with patch("socket.getaddrinfo") as mock_getaddrinfo:
+        with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
             mock_getaddrinfo.return_value = [(2, 1, 6, "", ("93.184.216.34", 8080))]
-            validate_url_for_ssrf("http://example.com:8080/")
+            ip, hostname, port = _validate_and_resolve_url("http://example.com:8080/")
+            assert ip == "93.184.216.34"
+            assert port == 8080
 
     def test_hostname_resolving_to_private_ip(self) -> None:
         """Test that hostnames resolving to private IPs are blocked."""
-        with patch("socket.getaddrinfo") as mock_getaddrinfo:
-            # Simulate a domain that resolves to a private IP
+        with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
             mock_getaddrinfo.return_value = [(2, 1, 6, "", ("192.168.1.100", 80))]
             with pytest.raises(SSRFException, match="internal/private IP"):
-                validate_url_for_ssrf("http://internal-service.company.com/")
+                _validate_and_resolve_url("http://internal-service.company.com/")
 
     def test_multiple_dns_records_one_private(self) -> None:
         """Test that a hostname with mixed public/private IPs is blocked."""
-        with patch("socket.getaddrinfo") as mock_getaddrinfo:
-            # Simulate a domain with both public and private IPs
+        with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
             mock_getaddrinfo.return_value = [
                 (2, 1, 6, "", ("93.184.216.34", 80)),  # Public
                 (2, 1, 6, "", ("10.0.0.1", 80)),  # Private
             ]
             with pytest.raises(SSRFException, match="internal/private IP"):
-                validate_url_for_ssrf("http://dual-stack.example.com/")
+                _validate_and_resolve_url("http://dual-stack.example.com/")
 
     def test_dns_resolution_failure(self) -> None:
         """Test that DNS resolution failures are handled safely."""
-        with patch("socket.getaddrinfo") as mock_getaddrinfo:
+        with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
             import socket
 
             mock_getaddrinfo.side_effect = socket.gaierror("Name resolution failed")
             with pytest.raises(SSRFException, match="Could not resolve hostname"):
-                validate_url_for_ssrf("http://nonexistent-domain-12345.invalid/")
+                _validate_and_resolve_url("http://nonexistent-domain-12345.invalid/")
+
+
+class TestSsrfSafeGet:
+    """Tests for the ssrf_safe_get function."""
+
+    def test_blocks_private_ip(self) -> None:
+        """Test that requests to private IPs are blocked."""
+        with pytest.raises(SSRFException, match="internal/private IP"):
+            ssrf_safe_get("http://192.168.1.1/")
+
+    def test_blocks_localhost(self) -> None:
+        """Test that requests to localhost are blocked."""
+        with pytest.raises(SSRFException, match="internal/private IP"):
+            ssrf_safe_get("http://127.0.0.1/")
+
+    def test_blocks_metadata_endpoint(self) -> None:
+        """Test that requests to cloud metadata endpoints are blocked."""
+        with pytest.raises(SSRFException, match="internal/private IP"):
+            ssrf_safe_get("http://169.254.169.254/")
+
+    def test_makes_request_to_validated_ip_http(self) -> None:
+        """Test that HTTP requests are made to the validated IP."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+
+        with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
+            mock_getaddrinfo.return_value = [(2, 1, 6, "", ("93.184.216.34", 80))]
+
+            with patch("onyx.utils.url.requests.get") as mock_get:
+                mock_get.return_value = mock_response
+
+                response = ssrf_safe_get("http://example.com/path")
+
+                # Verify the request was made to the IP, not the hostname
+                mock_get.assert_called_once()
+                call_args = mock_get.call_args
+                assert "93.184.216.34" in call_args[0][0]
+                # Verify Host header is set
+                assert call_args[1]["headers"]["Host"] == "example.com"
+                assert response == mock_response
+
+    def test_makes_request_with_original_url_https(self) -> None:
+        """Test that HTTPS requests use original URL for TLS."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+
+        with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
+            mock_getaddrinfo.return_value = [(2, 1, 6, "", ("93.184.216.34", 443))]
+
+            with patch("onyx.utils.url.requests.get") as mock_get:
+                mock_get.return_value = mock_response
+
+                response = ssrf_safe_get("https://example.com/path")
+
+                # For HTTPS, we use original URL for TLS
+                mock_get.assert_called_once()
+                call_args = mock_get.call_args
+                assert call_args[0][0] == "https://example.com/path"
+                assert response == mock_response
+
+    def test_passes_custom_headers(self) -> None:
+        """Test that custom headers are passed through."""
+        mock_response = MagicMock()
+
+        with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
+            mock_getaddrinfo.return_value = [(2, 1, 6, "", ("93.184.216.34", 80))]
+
+            with patch("onyx.utils.url.requests.get") as mock_get:
+                mock_get.return_value = mock_response
+
+                custom_headers = {"User-Agent": "TestBot/1.0"}
+                ssrf_safe_get("http://example.com/", headers=custom_headers)
+
+                call_args = mock_get.call_args
+                assert call_args[1]["headers"]["User-Agent"] == "TestBot/1.0"
+
+    def test_passes_timeout(self) -> None:
+        """Test that timeout is passed through."""
+        mock_response = MagicMock()
+
+        with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
+            mock_getaddrinfo.return_value = [(2, 1, 6, "", ("93.184.216.34", 80))]
+
+            with patch("onyx.utils.url.requests.get") as mock_get:
+                mock_get.return_value = mock_response
+
+                ssrf_safe_get("http://example.com/", timeout=30)
+
+                call_args = mock_get.call_args
+                assert call_args[1]["timeout"] == 30
