@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { FiUsers, FiCircle, FiTarget } from "react-icons/fi";
 import { SvgChevronDown } from "@opal/icons";
 import { cn } from "@/lib/utils";
@@ -15,7 +15,6 @@ import { RendererComponent } from "../renderMessageComponent";
 import { getToolName } from "../toolDisplayHelpers";
 import { STANDARD_TEXT_COLOR } from "../constants";
 import Text from "@/refresh-components/texts/Text";
-import { usePacketAnimationAndCollapse } from "../hooks/usePacketAnimationAndCollapse";
 import { useMarkdownRenderer } from "../markdownUtils";
 
 interface NestedToolGroup {
@@ -164,17 +163,7 @@ export const ResearchAgentRenderer: MessageRenderer<
   const isComplete = parentPackets.some(
     (p) => p.obj.type === PacketType.SECTION_END
   );
-
-  // Use shared hook for animation and auto-collapse logic
-  // Use preventDoubleComplete since this renderer needs to avoid double-calling onComplete
-  const { displayedPacketCount, isExpanded, toggleExpanded } =
-    usePacketAnimationAndCollapse({
-      packets,
-      animate,
-      isComplete,
-      onComplete,
-      preventDoubleComplete: true,
-    });
+  const [isExpanded, toggleExpanded] = useState(true);
 
   // Get the full report content from parent packets only
   const fullReportContent = parentPackets
@@ -252,7 +241,7 @@ export const ResearchAgentRenderer: MessageRenderer<
   const statusElement = (
     <div
       className="flex items-center justify-between gap-2 cursor-pointer group w-full"
-      onClick={toggleExpanded}
+      onClick={() => toggleExpanded(!isExpanded)}
     >
       <span>{statusText}</span>
       <div className="flex items-center gap-2">
