@@ -226,13 +226,16 @@ class TestSsrfSafeGet:
 
     def test_blocks_metadata_endpoint(self) -> None:
         """Test that requests to cloud metadata endpoints are blocked."""
-        with pytest.raises(SSRFException, match="internal/private IP"):
+        with pytest.raises(
+            SSRFException, match="Access to hostname '169.254.169.254' is not allowed."
+        ):
             ssrf_safe_get("http://169.254.169.254/")
 
     def test_makes_request_to_validated_ip_http(self) -> None:
         """Test that HTTP requests are made to the validated IP."""
         mock_response = MagicMock()
         mock_response.status_code = 200
+        mock_response.is_redirect = False
 
         with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
             mock_getaddrinfo.return_value = [(2, 1, 6, "", ("93.184.216.34", 80))]
@@ -254,6 +257,7 @@ class TestSsrfSafeGet:
         """Test that HTTPS requests use original URL for TLS."""
         mock_response = MagicMock()
         mock_response.status_code = 200
+        mock_response.is_redirect = False
 
         with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
             mock_getaddrinfo.return_value = [(2, 1, 6, "", ("93.184.216.34", 443))]
@@ -272,6 +276,7 @@ class TestSsrfSafeGet:
     def test_passes_custom_headers(self) -> None:
         """Test that custom headers are passed through."""
         mock_response = MagicMock()
+        mock_response.is_redirect = False
 
         with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
             mock_getaddrinfo.return_value = [(2, 1, 6, "", ("93.184.216.34", 80))]
@@ -288,6 +293,7 @@ class TestSsrfSafeGet:
     def test_passes_timeout(self) -> None:
         """Test that timeout is passed through."""
         mock_response = MagicMock()
+        mock_response.is_redirect = False
 
         with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
             mock_getaddrinfo.return_value = [(2, 1, 6, "", ("93.184.216.34", 80))]
