@@ -1,0 +1,11 @@
+Resources in this directory are used to debug LiteLLM and other AI providers.
+Note that the requests are meant to be identical to what the Onyx application sends to litellm.
+Double check that the this is the case before using these scripts.
+
+## Files
+
+- **payload.json**: Contains a typical request from Onyx
+
+- **test_litellm.py**: Imports Onyx's LiteLLM instance (with monkey patches) and outputs the raw stream events received back from LiteLLM as JSON. Does not use payload.json, but has a similar request body. Consider directly importing litellm to skip monkey patching.
+
+- **directly_hit_azure_api.py**: Directly hits Azure OpenAI endpoints using payload.json. Bypasses LiteLLM for debugging purposes.

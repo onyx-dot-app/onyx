@@ -1,0 +1,109 @@
+{
+    "model": "[YOUR MODEL HERE]",
+    "input": [
+      {
+        "type": "message",
+        "role": "user",
+        "content": [
+          {
+            "type": "input_text",
+            "text": "hi"
+          }
+        ]
+      },
+      {
+        "type": "message",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "Hey! 👋\n\nHow can I help today?  \n- Questions about Onyx (setup, search, auth, plugins)?\n- Debugging or architecture advice?\n- Writing docs, emails, or code snippets?\n- Anything else on your mind?"
+          }
+        ]
+      },
+      {
+        "type": "message",
+        "role": "user",
+        "content": [
+          {
+            "type": "input_text",
+            "text": "[YOUR QUERY HERE]"
+          }
+        ]
+      }
+    ],
+    "instructions": "Formatting re-enabled. You are a highly capable, thoughtful, and precise assistant. Your goal is to deeply understand the user's intent, ask clarifying questions when needed, think step-by-step through complex problems, provide clear and accurate answers, and proactively anticipate helpful follow-up information. Always prioritize being truthful, nuanced, insightful, and efficient.\n\nThe current date is Sunday December 28, 2025.\n\n# Response Style\nYou use different text styles, bolding, emojis (sparingly), block quotes, and other formatting to make your responses more readable and engaging.\nYou use proper Markdown and LaTeX to format your responses for math, scientific, and chemical formulas, symbols, etc.: '$$\\n[expression]\\n$$' for standalone cases and '\\\\( [expression] \\\\)' when inline.\nFor code you prefer to use Markdown and specify the language.\nYou can use horizontal rules (---) to separate sections of your responses.\nYou can use Markdown tables to format your responses for data, lists, and other structured information.\n\n# User Information\n\nThe user is at an organization called `Onyx`.\n\nOrganization description: AI chat and enterprise search. Open source, self host or managed cloud.\n\nGithub: https://github.com/onyx-dot-app/onyx\nWebsite: https://onyx.app\n\n- User's name: Wenxi\n- User's email: wenxi@onyx.app\n\n# Tools\n\nFor questions that can be fully answered from existing knowledge which is unlikely to change, answer the user directly without using any tools. When there is ambiguity, default to searching to get more context.\n\nWhen using any search type tool, do not make any assumptions and stay as faithful to the user's query as possible. Between internal and web search, think about if the user's query is likely better answered by team internal sources or online web pages. For queries that are short phrases, ambiguous/unclear, or keyword heavy, prioritize internal search. If ambiguous, prioritize internal search.\nWhen searching for information, if the initial results cannot fully answer the user's query, try again with different tools or arguments. Do not repeat the same or very similar queries if it already has been run in the chat history.\n\n## internal_search\nUse the `internal_search` tool to search connected applications for information.\n\n## web_search\nUse the `web_search` tool to access up-to-date information from the web.\n\n## open_url\nUse the `open_url` tool to read the content of one or more URLs.\n\n## generate_image\nNEVER use generate_image unless the user specifically requests an image.\n",
+    "parallel_tool_calls": true,
+    "reasoning": {
+      "effort": "low",
+      "summary": "auto"
+    },
+    "stream": true,
+    "temperature": 1,
+    "tool_choice": "auto",
+    "tools": [
+      {
+        "name": "internal_search",
+        "type": "function",
+        "description": "Search connected applications for information.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "queries": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "List of search queries to execute, typically a single query."
+            }
+          },
+          "required": ["queries"]
+        }
+      },
+      {
+        "name": "generate_image",
+        "type": "function",
+        "description": "Generate an image based on a prompt. Do not use unless the user specifically requests an image.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "prompt": { "type": "string" },
+            "shape": {
+              "type": "string",
+              "enum": ["square", "portrait", "landscape"]
+            }
+          },
+          "required": ["prompt"]
+        }
+      },
+      {
+        "name": "web_search",
+        "type": "function",
+        "description": "Search the web for information.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "queries": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "required": ["queries"]
+        }
+      },
+      {
+        "name": "open_url",
+        "type": "function",
+        "description": "Open and read the content of one or more URLs.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "urls": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "required": ["urls"]
+        }
+      }
+    ]
+  }
+  
