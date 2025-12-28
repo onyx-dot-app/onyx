@@ -90,8 +90,7 @@ stream = litellm.completion(
         {
             "type": "function",
             "function": {
-                "name": "web_search",
-                "description": "Search the web for information."
+                "description": "Search the web for information. "
                 "Returns a list of search results with titles, metadata, and snippets.",
                 "parameters": {
                     "type": "object",
