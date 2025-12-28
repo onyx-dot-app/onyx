@@ -444,7 +444,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
             supports_image_input=None,
         ),
         ModelConfigurationUpsertRequest(
-            name="gpt-3.5-turbo",
+            name="gpt-4-turbo",
             is_visible=False,
             max_input_tokens=None,
             supports_image_input=None,
@@ -460,7 +460,6 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
             "provider": "openai",
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "default_model_name": "gpt-4o",
-            "fast_default_model_name": "gpt-4o-mini",
             "model_configurations": [config.dict() for config in model_configs],
             "is_public": True,
             "groups": [],
@@ -495,7 +494,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
             supports_image_input=None,
         ),
         ModelConfigurationUpsertRequest(
-            name="gpt-3.5-turbo",
+            name="gpt-4-turbo",
             is_visible=True,  # Now visible
             max_input_tokens=None,
             supports_image_input=None,
@@ -510,7 +509,6 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
             "provider": "openai",
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "default_model_name": "gpt-4o",
-            "fast_default_model_name": "gpt-4o-mini",
             "model_configurations": [
                 config.dict() for config in edit_configs_all_visible
             ],
@@ -544,7 +542,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
             supports_image_input=None,
         ),
         ModelConfigurationUpsertRequest(
-            name="gpt-3.5-turbo",
+            name="gpt-4-turbo",
             is_visible=False,
             max_input_tokens=None,
             supports_image_input=None,
@@ -559,7 +557,6 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
             "provider": "openai",
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "default_model_name": "gpt-4o",
-            "fast_default_model_name": "gpt-4o",  # Set to same as default to have only 1 visible
             "model_configurations": [
                 config.dict() for config in edit_configs_one_visible
             ],
@@ -570,7 +567,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
     )
     assert edit_response_2.status_code == 200
 
-    # Verify only 1 model is visible (both default and fast_default point to the same model)
+    # Verify only 1 model is visible
     provider_data = _get_provider_by_id(admin_user, created_provider["id"])
     assert provider_data is not None
     visible_models = [

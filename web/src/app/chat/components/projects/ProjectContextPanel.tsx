@@ -14,10 +14,6 @@ import AddInstructionModal from "@/components/modals/AddInstructionModal";
 import UserFilesModal from "@/components/modals/UserFilesModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import Text from "@/refresh-components/texts/Text";
-import SvgFolderOpen from "@/icons/folder-open";
-import SvgAddLines from "@/icons/add-lines";
-import SvgFiles from "@/icons/files";
-import SvgEdit from "@/icons/edit";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { FileCard } from "../input/FileCard";
 import { hasNonImageFiles } from "@/lib/utils";
@@ -25,6 +21,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import { FileCardSkeleton } from "@/app/chat/components/input/FileCard";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import { UserFileStatus } from "../../projects/projectsService";
+import { SvgAddLines, SvgEdit, SvgFiles, SvgFolderOpen } from "@opal/icons";
 export interface ProjectContextPanelProps {
   projectTokenCount?: number;
   availableContextTokens?: number;
@@ -127,9 +124,8 @@ export default function ProjectContextPanel({
 
       <projectFilesModal.Provider>
         <UserFilesModal
-          title="Project files"
+          title="Project Files"
           description="Sessions in this project can access the files here."
-          icon={SvgFiles}
           recentFiles={[...allCurrentProjectFiles]}
           onView={handleOnView}
           handleUploadChange={handleUploadChange}
@@ -139,7 +135,7 @@ export default function ProjectContextPanel({
           }}
         />
       </projectFilesModal.Provider>
-      <div className="flex flex-col gap-6 w-full max-w-[800px] mx-auto mt-10 mb-[1.5rem]">
+      <div className="flex flex-col gap-6 w-full max-w-[min(50rem,100%)] mx-auto p-4 pt-14 pb-6">
         <div className="flex flex-col gap-1 text-text-04">
           <SvgFolderOpen className="h-8 w-8 text-text-04" />
           <div className="group flex items-center gap-2">

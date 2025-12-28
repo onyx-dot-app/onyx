@@ -3,7 +3,7 @@ import {
   getAuthTypeMetadataSS,
   getCurrentUserSS,
 } from "@/lib/userSS";
-import { Verify } from "./Verify";
+import Verify from "./Verify";
 import { User } from "@/lib/types";
 import { redirect } from "next/navigation";
 

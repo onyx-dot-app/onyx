@@ -5,25 +5,27 @@ import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
-import SvgBubbleText from "@/icons/bubble-text";
 import { Card } from "@/components/ui/card";
 import { useAppRouter } from "@/hooks/appNavigation";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgPin from "@/icons/pin";
 import Truncated from "@/refresh-components/texts/Truncated";
-import { IconProps } from "@/icons";
-import SvgUser from "@/icons/user";
-import SvgActions from "@/icons/actions";
-import { usePinnedAgentsWithDetails } from "@/lib/hooks/useAgents";
+import type { IconProps } from "@opal/types";
+import { usePinnedAgents } from "@/hooks/useAgents";
 import { cn, noProp } from "@/lib/utils";
-import SvgEdit from "@/icons/edit";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { checkUserOwnsAssistant } from "@/lib/assistants/utils";
 import { useUser } from "@/components/user/UserProvider";
-import SvgBarChart from "@/icons/bar-chart";
-import SvgPinned from "@/icons/pinned";
-
+import {
+  SvgActions,
+  SvgBarChart,
+  SvgBubbleText,
+  SvgEdit,
+  SvgPin,
+  SvgPinned,
+  SvgUser,
+} from "@opal/icons";
 interface IconLabelProps {
   icon: React.FunctionComponent<IconProps>;
   children: string;
@@ -47,7 +49,7 @@ export interface AgentCardProps {
 export default function AgentCard({ agent }: AgentCardProps) {
   const route = useAppRouter();
   const router = useRouter();
-  const { pinnedAgents, togglePinnedAgent } = usePinnedAgentsWithDetails();
+  const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const pinned = useMemo(
     () => pinnedAgents.some((pinnedAgent) => pinnedAgent.id === agent.id),
     [agent.id, pinnedAgents]
@@ -84,7 +86,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                   icon={SvgBarChart}
                   tertiary
                   onClick={noProp(() =>
-                    router.push(`/assistants/stats/${agent.id}`)
+                    router.push(`/ee/assistants/stats/${agent.id}` as Route)
                   )}
                   tooltip="View Agent Stats"
                   className="hidden group-hover/AgentCard:flex"
@@ -95,7 +97,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                   icon={SvgEdit}
                   tertiary
                   onClick={noProp(() =>
-                    router.push(`/assistants/edit/${agent.id}`)
+                    router.push(`/assistants/edit/${agent.id}` as Route)
                   )}
                   tooltip="Edit Agent"
                   className="hidden group-hover/AgentCard:flex"

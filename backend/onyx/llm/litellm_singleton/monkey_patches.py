@@ -351,7 +351,12 @@ def _patch_openai_responses_chunk_parser() -> None:
         # Handle different event types from responses API
 
         event_type = parsed_chunk.get("type")
+        # Allow enum-like event types
+        if hasattr(event_type, "value"):
+            event_type = getattr(event_type, "value")
         verbose_logger.debug(f"Chat provider: Processing event type: {event_type}")
+
+        output_index = parsed_chunk.get("output_index", 0) or 0
 
         if event_type == "response.created":
             # Initial response creation event
@@ -368,7 +373,7 @@ def _patch_openai_responses_chunk_parser() -> None:
                     text="",
                     tool_use=ChatCompletionToolCallChunk(
                         id=output_item.get("call_id"),
-                        index=0,
+                        index=output_index,
                         type="function",
                         function=ChatCompletionToolCallFunctionChunk(
                             name=output_item.get("name", None),
@@ -393,7 +398,7 @@ def _patch_openai_responses_chunk_parser() -> None:
                     text="",
                     tool_use=ChatCompletionToolCallChunk(
                         id=None,
-                        index=0,
+                        index=output_index,
                         type="function",
                         function=ChatCompletionToolCallFunctionChunk(
                             name=None, arguments=content_part
@@ -412,19 +417,21 @@ def _patch_openai_responses_chunk_parser() -> None:
             # New output item added
             output_item = parsed_chunk.get("item", {})
             if output_item.get("type") == "function_call":
+                # Don't set is_finished=True here - for parallel tool calls,
+                # more tool calls may follow. Wait for response.completed.
                 return GenericStreamingChunk(
                     text="",
                     tool_use=ChatCompletionToolCallChunk(
                         id=output_item.get("call_id"),
-                        index=0,
+                        index=output_index,
                         type="function",
                         function=ChatCompletionToolCallFunctionChunk(
                             name=parsed_chunk.get("name", None),
                             arguments="",  # responses API sends everything again, we don't
                         ),
                     ),
-                    is_finished=True,
-                    finish_reason="tool_calls",
+                    is_finished=False,
+                    finish_reason="",
                     usage=None,
                 )
             elif output_item.get("type") == "message":
@@ -482,6 +489,24 @@ def _patch_openai_responses_chunk_parser() -> None:
                     ]
                 )
 
+        elif event_type == "response.completed":
+            # Final event signaling all output items (including parallel tool calls) are done
+            response_data = parsed_chunk.get("response", {})
+            # Determine finish reason based on response content
+            finish_reason = "stop"
+            if response_data.get("output"):
+                for item in response_data["output"]:
+                    if isinstance(item, dict) and item.get("type") == "function_call":
+                        finish_reason = "tool_calls"
+                        break
+            return GenericStreamingChunk(
+                text="",
+                tool_use=None,
+                is_finished=True,
+                finish_reason=finish_reason,
+                usage=None,
+            )
+
         else:
             pass
 
@@ -497,7 +522,7 @@ def _patch_openai_responses_chunk_parser() -> None:
     _patched_openai_responses_chunk_parser.__name__ = (
         "_patched_openai_responses_chunk_parser"
     )
-    OpenAiResponsesToChatCompletionStreamIterator.chunk_parser = _patched_openai_responses_chunk_parser  # type: ignore[method-assign]
+    OpenAiResponsesToChatCompletionStreamIterator.chunk_parser = _patched_openai_responses_chunk_parser  # type: ignore
 
 
 def _patch_openai_responses_transform_response() -> None:
@@ -615,6 +640,7 @@ def apply_monkey_patches() -> None:
     - Patching OllamaChatCompletionResponseIterator.chunk_parser for streaming content
     - Patching OpenAiResponsesToChatCompletionStreamIterator.chunk_parser for OpenAI Responses API
     - Patching LiteLLMResponsesTransformationHandler.transform_response for non-streaming responses
+    - Patching LiteLLMResponsesTransformationHandler._convert_content_str_to_input_text for tool content types
     """
     _patch_ollama_transform_request()
     _patch_ollama_chunk_parser()

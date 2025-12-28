@@ -21,25 +21,23 @@ import { useAssistantPreferences } from "@/app/chat/hooks/useAssistantPreference
 import { useUser } from "@/components/user/UserProvider";
 import { FilterManager, useSourcePreferences } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";
-import SvgChevronRight from "@/icons/chevron-right";
-import SvgKey from "@/icons/key";
 import MCPApiKeyModal from "@/components/chat/MCPApiKeyModal";
 import { ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
-import { useAvailableTools } from "@/lib/hooks/useAvailableTools";
+import { useAvailableTools } from "@/hooks/useAvailableTools";
 import { useCCPairs } from "@/lib/hooks/useCCPairs";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgSliders from "@/icons/sliders";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import SvgActions from "@/icons/actions";
 import ActionLineItem from "@/refresh-components/popovers/ActionsPopover/ActionLineItem";
 import MCPLineItem, {
   MCPServer,
 } from "@/refresh-components/popovers/ActionsPopover/MCPLineItem";
+import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
+import { SvgActions, SvgChevronRight, SvgKey, SvgSliders } from "@opal/icons";
 
 // Get source metadata for configured sources - deduplicated by source type
 function getConfiguredSources(
@@ -141,10 +139,11 @@ export default function ActionsPopover({
     useAssistantPreferences();
   const { forcedToolIds, setForcedToolIds } = useForcedTools();
 
-  const { user, isAdmin, isCurator } = useUser();
+  const { isAdmin, isCurator } = useUser();
 
   const { tools: availableTools } = useAvailableTools();
   const { ccPairs } = useCCPairs();
+  const { currentProjectId, allCurrentProjectFiles } = useProjectsContext();
   const availableToolIds = availableTools.map((tool) => tool.id);
 
   // Check if there are any connectors available
@@ -186,6 +185,16 @@ export default function ActionsPopover({
 
     // Filter out tools that are not chat-selectable (visibility set by backend)
     if (!tool.chat_selectable) return false;
+
+    // Special handling for Project Search
+    // Ensure Project Search is hidden if no files exist
+    if (tool.in_code_tool_id === SEARCH_TOOL_ID && !!currentProjectId) {
+      if (!allCurrentProjectFiles || allCurrentProjectFiles.length === 0) {
+        return false;
+      }
+      // If files exist, show it (even if backend thinks it's strictly unavailable due to no connectors)
+      return true;
+    }
 
     // Advertise to admin/curator users that they can connect an internal search tool
     // even if it's not available or has no connectors
@@ -467,6 +476,14 @@ export default function ActionsPopover({
     }
   };
 
+  const handleOpenChange = (newOpen: boolean) => {
+    setOpen(newOpen);
+    if (newOpen) {
+      setSecondaryView(null);
+      setSearchTerm("");
+    }
+  };
+
   const mcpFooter = showActiveReauthRow ? (
     <LineItem
       onClick={handleFooterReauthClick}
@@ -513,14 +530,12 @@ export default function ActionsPopover({
             disabled={disabledToolIds.includes(tool.id)}
             isForced={forcedToolIds.includes(tool.id)}
             onToggle={() => toggleToolForCurrentAssistant(tool.id)}
-            onForceToggle={() => {
-              toggleForcedTool(tool.id);
-              setOpen(false);
-            }}
+            onForceToggle={() => toggleForcedTool(tool.id)}
             onSourceManagementOpen={() => setSecondaryView({ type: "sources" })}
             hasNoConnectors={hasNoConnectors}
             toolAuthStatus={getToolAuthStatus(tool)}
             onOAuthAuthenticate={() => authenticateTool(tool)}
+            onClose={() => setOpen(false)}
           />
         )),
 
@@ -603,7 +618,7 @@ export default function ActionsPopover({
 
   return (
     <>
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover open={open} onOpenChange={handleOpenChange}>
         <PopoverTrigger asChild>
           <div data-testid="action-management-toggle">
             <IconButton

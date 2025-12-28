@@ -34,7 +34,6 @@ import {
   ConnectorBase,
 } from "@/lib/connectors/connectors";
 import Modal from "@/refresh-components/Modal";
-import SvgKey from "@/icons/key";
 import { GmailMain } from "@/app/admin/connectors/[connector]/pages/gmail/GmailPage";
 import {
   useGmailCredentials,
@@ -60,6 +59,7 @@ import Button from "@/refresh-components/buttons/Button";
 import { deleteConnector } from "@/lib/connector";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
 import Text from "@/refresh-components/texts/Text";
+import { SvgKey } from "@opal/icons";
 
 export interface AdvancedConfig {
   refreshFreq: number;

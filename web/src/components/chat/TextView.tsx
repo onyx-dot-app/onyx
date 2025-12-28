@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Button from "@/refresh-components/buttons/Button";
 import {
   Table,
@@ -10,21 +10,21 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Download, XIcon, ZoomIn, ZoomOut } from "lucide-react";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgX from "@/icons/x";
-import SvgDownloadCloud from "@/icons/download-cloud";
-import SvgZoomIn from "@/icons/zoom-in";
-import SvgZoomOut from "@/icons/zoom-out";
-
+import Modal from "@/refresh-components/Modal";
+import Text from "@/refresh-components/texts/Text";
+import {
+  SvgDownloadCloud,
+  SvgFileText,
+  SvgX,
+  SvgZoomIn,
+  SvgZoomOut,
+} from "@opal/icons";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
+import { cn } from "@/lib/utils";
 export interface TextViewProps {
   presentingDocument: MinimalOnyxDocument;
   onClose: () => void;
@@ -39,14 +39,19 @@ export default function TextView({
   const [fileUrl, setFileUrl] = useState("");
   const [fileName, setFileName] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [fileType, setFileType] = useState("application/octet-stream");
-  const [renderCount, setRenderCount] = useState(0);
+  const csvData = useMemo(() => {
+    if (!fileType.startsWith("text/csv")) {
+      return null;
+    }
 
-  // Log render count on each render
-  useEffect(() => {
-    setRenderCount((prevCount) => prevCount + 1);
-    console.log(`TextView component rendered ${renderCount + 1} times`);
-  }, []);
+    const lines = fileContent.split(/\r?\n/).filter((l) => l.length > 0);
+    const headers = lines.length > 0 ? lines[0]?.split(",") ?? [] : [];
+    const rows = lines.slice(1).map((line) => line.split(","));
+
+    return { headers, rows } as { headers: string[]; rows: string[][] };
+  }, [fileContent, fileType]);
 
   // Detect if a given MIME type is one of the recognized markdown formats
   const isMarkdownFormat = (mimeType: string): boolean => {
@@ -83,68 +88,101 @@ export default function TextView({
     return supportedFormats.some((format) => mimeType.startsWith(format));
   };
 
-  const fetchFile = useCallback(async () => {
-    console.log("fetching file");
-    setIsLoading(true);
-    const fileIdLocal =
-      presentingDocument.document_id.split("__")[1] ||
-      presentingDocument.document_id;
+  const fetchFile = useCallback(
+    async (signal?: AbortSignal) => {
+      setIsLoading(true);
+      setLoadError(null);
+      setFileContent("");
+      const fileIdLocal =
+        presentingDocument.document_id.split("__")[1] ||
+        presentingDocument.document_id;
 
-    try {
-      const response = await fetch(
-        `/api/chat/file/${encodeURIComponent(fileIdLocal)}`,
-        {
-          method: "GET",
+      try {
+        const response = await fetch(
+          `/api/chat/file/${encodeURIComponent(fileIdLocal)}`,
+          {
+            method: "GET",
+            signal,
+            cache: "force-cache",
+          }
+        );
+
+        if (!response.ok) {
+          setLoadError("Failed to load document.");
+          return;
         }
-      );
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      setFileUrl(url);
 
-      const originalFileName =
-        presentingDocument.semantic_identifier || "document";
-      setFileName(originalFileName);
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        setFileUrl((prev) => {
+          if (prev) {
+            window.URL.revokeObjectURL(prev);
+          }
+          return url;
+        });
 
-      let contentType =
-        response.headers.get("Content-Type") || "application/octet-stream";
+        const originalFileName =
+          presentingDocument.semantic_identifier || "document";
+        setFileName(originalFileName);
 
-      // If it's octet-stream but file name suggests a text-based extension, override accordingly
-      if (contentType === "application/octet-stream") {
-        const lowerName = originalFileName.toLowerCase();
-        if (lowerName.endsWith(".md") || lowerName.endsWith(".markdown")) {
-          contentType = "text/markdown";
-        } else if (lowerName.endsWith(".txt")) {
-          contentType = "text/plain";
-        } else if (lowerName.endsWith(".csv")) {
-          contentType = "text/csv";
+        let contentType =
+          response.headers.get("Content-Type") || "application/octet-stream";
+
+        // If it's octet-stream but file name suggests a text-based extension, override accordingly
+        if (contentType === "application/octet-stream") {
+          const lowerName = originalFileName.toLowerCase();
+          if (lowerName.endsWith(".md") || lowerName.endsWith(".markdown")) {
+            contentType = "text/markdown";
+          } else if (lowerName.endsWith(".txt")) {
+            contentType = "text/plain";
+          } else if (lowerName.endsWith(".csv")) {
+            contentType = "text/csv";
+          }
+        }
+        setFileType(contentType);
+
+        // If the final content type looks like markdown, read its text
+        if (isMarkdownFormat(contentType)) {
+          const text = await blob.text();
+          setFileContent(text);
+        }
+      } catch (error) {
+        // Abort is expected on unmount / doc change
+        if (signal?.aborted) {
+          return;
+        }
+        setLoadError("Failed to load document.");
+      } finally {
+        // Prevent stale/aborted requests from clobbering the loading state.
+        // This is especially important in React StrictMode where effects can run twice.
+        if (!signal?.aborted) {
+          setIsLoading(false);
         }
       }
-      setFileType(contentType);
-
-      // If the final content type looks like markdown, read its text
-      if (isMarkdownFormat(contentType)) {
-        const text = await blob.text();
-        setFileContent(text);
-      }
-    } catch (error) {
-      console.error("Error fetching file:", error);
-    } finally {
-      // Keep the slight delay for a smoother loading experience
-      setTimeout(() => {
-        setIsLoading(false);
-        console.log("finished loading");
-      }, 1000);
-    }
-  }, [presentingDocument]);
+    },
+    [presentingDocument]
+  );
 
   useEffect(() => {
-    fetchFile();
-  }, []);
+    const controller = new AbortController();
+    fetchFile(controller.signal);
+    return () => {
+      controller.abort();
+    };
+  }, [fetchFile]);
+
+  useEffect(() => {
+    return () => {
+      if (fileUrl) {
+        window.URL.revokeObjectURL(fileUrl);
+      }
+    };
+  }, [fileUrl]);
 
   const handleDownload = () => {
     const link = document.createElement("a");
     link.href = fileUrl;
-    link.download = presentingDocument.document_id || fileName;
+    link.download = fileName || presentingDocument.document_id;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -154,25 +192,35 @@ export default function TextView({
   const handleZoomOut = () => setZoom((prev) => Math.max(prev - 25, 100));
 
   return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent
-        hideCloseIcon
-        overlayClassName="z-[3000]"
-        className="z-[3001] max-w-4xl w-[90vw] flex flex-col justify-between gap-y-0 h-[90vh] max-h-[90vh] p-0"
+    <Modal
+      open
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose();
+        }
+      }}
+    >
+      <Modal.Content
+        medium
+        preventAccidentalClose={false}
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        className="overflow-hidden h-[80dvh] max-h-[calc(100dvh-4rem)]"
       >
-        <DialogHeader className="px-4 mb-0 pt-2 pb-3 flex flex-row items-center justify-between border-b">
-          <DialogTitle className="text-lg font-medium truncate">
-            {fileName}
-          </DialogTitle>
-
-          <div className="flex items-center space-x-2">
+        <div className="relative flex flex-row items-center gap-2 p-4 shadow-01">
+          <SvgFileText className="w-[1.5rem] h-[1.5rem] stroke-text-04 shrink-0" />
+          <Text className="flex-1 min-w-0 truncate" mainUiBody>
+            {fileName || "Document"}
+          </Text>
+          <div className="flex flex-row items-center justify-end gap-1">
             <IconButton
               internal
               onClick={handleZoomOut}
               icon={SvgZoomOut}
               tooltip="Zoom Out"
-            ></IconButton>
-            <span className="text-sm">{zoom}%</span>
+            />
+            <Text text03 mainUiBody>
+              {zoom}%
+            </Text>
             <IconButton
               internal
               onClick={handleZoomIn}
@@ -192,92 +240,100 @@ export default function TextView({
               tooltip="Close"
             />
           </div>
-        </DialogHeader>
-        <div className="mt-0 rounded-b-lg flex-1 overflow-hidden">
-          <div className="flex items-center justify-center w-full h-full">
-            {isLoading ? (
-              <div className="flex flex-col items-center justify-center h-full">
-                <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-primary"></div>
-                <p className="mt-6 text-lg font-medium text-muted-foreground">
-                  Loading document...
-                </p>
-              </div>
-            ) : (
-              <div
-                className="w-full h-full transform origin-center transition-transform duration-300 ease-in-out"
-                style={{ transform: `scale(${zoom / 100})` }}
-              >
-                {isImageFormat(fileType) ? (
-                  <img
-                    src={fileUrl}
-                    alt={fileName}
-                    className="w-full h-full object-contain object-center"
-                  />
-                ) : isSupportedIframeFormat(fileType) ? (
-                  <iframe
-                    src={`${fileUrl}#toolbar=0`}
-                    className="w-full h-full border-none"
-                    title="File Viewer"
-                  />
-                ) : isMarkdownFormat(fileType) ? (
-                  <div className="w-full h-full p-6 overflow-y-scroll overflow-x-hidden">
-                    {fileType.startsWith("text/csv") ? (
-                      (() => {
-                        const lines = fileContent
-                          .split(/\r?\n/)
-                          .filter((l) => l.length > 0);
-                        const headers =
-                          lines.length > 0 ? lines[0]?.split(",") : [];
-                        const rows = lines
-                          .slice(1)
-                          .map((line) => line.split(","));
-                        return (
-                          <div className="w-full h-full overflow-auto">
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  {headers?.map((h, i) => (
-                                    <TableHead key={i}>{h}</TableHead>
-                                  ))}
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {rows.map((row, rIdx) => (
-                                  <TableRow key={rIdx}>
-                                    {headers?.map((_, cIdx) => (
-                                      <TableCell key={cIdx}>
-                                        {row?.[cIdx] ?? ""}
-                                      </TableCell>
-                                    ))}
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </div>
-                        );
-                      })()
-                    ) : (
-                      <MinimalMarkdown
-                        content={fileContent}
-                        className="w-full pb-4 h-full text-lg break-words"
-                      />
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full">
-                    <p className="text-lg font-medium text-muted-foreground">
-                      This file format is not supported for preview.
-                    </p>
-                    <Button className="mt-4" onClick={handleDownload}>
-                      Download File
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
         </div>
-      </DialogContent>
-    </Dialog>
+
+        <Modal.Body className="p-0 flex-1 min-h-0 overflow-hidden bg-background-tint-01">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center flex-1 min-h-0 p-6 gap-4">
+              <SimpleLoader className="h-8 w-8" />
+              <Text text03 mainUiBody>
+                Loading document...
+              </Text>
+            </div>
+          ) : loadError ? (
+            <div className="flex flex-col items-center justify-center flex-1 min-h-0 p-6 gap-4">
+              <Text text03 mainUiBody>
+                {loadError}
+              </Text>
+              <Button onClick={handleDownload}>Download File</Button>
+            </div>
+          ) : (
+            <div
+              className="flex flex-col flex-1 min-h-0 min-w-0 w-full transform origin-center transition-transform duration-300 ease-in-out"
+              style={{ transform: `scale(${zoom / 100})` }}
+            >
+              {isImageFormat(fileType) ? (
+                <img
+                  src={fileUrl}
+                  alt={fileName}
+                  className="w-full flex-1 min-h-0 object-contain object-center"
+                />
+              ) : isSupportedIframeFormat(fileType) ? (
+                <iframe
+                  src={`${fileUrl}#toolbar=0`}
+                  className="w-full h-full flex-1 min-h-0 border-none"
+                  title="File Viewer"
+                />
+              ) : isMarkdownFormat(fileType) ? (
+                <ScrollIndicatorDiv
+                  className="flex-1 min-h-0 p-4"
+                  variant="shadow"
+                >
+                  {csvData ? (
+                    <Table>
+                      <TableHeader className="sticky top-0 z-sticky">
+                        <TableRow className="bg-background-tint-02">
+                          {csvData.headers.map((h, i) => (
+                            <TableHead key={i}>
+                              <Text
+                                className="line-clamp-2 font-medium"
+                                text03
+                                mainUiBody
+                              >
+                                {h}
+                              </Text>
+                            </TableHead>
+                          ))}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {csvData.rows.map((row, rIdx) => (
+                          <TableRow key={rIdx}>
+                            {csvData.headers.map((_, cIdx) => (
+                              <TableCell
+                                key={cIdx}
+                                className={cn(
+                                  cIdx === 0 &&
+                                    "sticky left-0 bg-background-tint-01",
+                                  "py-0 px-4 whitespace-normal break-words"
+                                )}
+                              >
+                                {row?.[cIdx] ?? ""}
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <MinimalMarkdown
+                      content={fileContent}
+                      className="w-full pb-4 h-full text-lg break-words"
+                    />
+                  )}
+                </ScrollIndicatorDiv>
+              ) : (
+                <div className="flex flex-col items-center justify-center flex-1 min-h-0 p-6 gap-4">
+                  <Text text03 mainUiBody>
+                    This file format is not supported for preview.
+                  </Text>
+                  <Button onClick={handleDownload}>Download File</Button>
+                </div>
+              )}
+            </div>
+          )}
+        </Modal.Body>
+      </Modal.Content>
+    </Modal>
   );
 }

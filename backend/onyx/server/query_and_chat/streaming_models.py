@@ -7,15 +7,19 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from onyx.context.search.models import SearchDoc
+from onyx.server.query_and_chat.placement import Placement
 
 
 class StreamingType(Enum):
     """Enum defining all streaming packet types. This is the single source of truth for type strings."""
 
+    SECTION_END = "section_end"
+    STOP = "stop"
+    TOP_LEVEL_BRANCHING = "top_level_branching"
+    ERROR = "error"
+
     MESSAGE_START = "message_start"
     MESSAGE_DELTA = "message_delta"
-    ERROR = "error"
-    STOP = "stop"
     SEARCH_TOOL_START = "search_tool_start"
     SEARCH_TOOL_QUERIES_DELTA = "search_tool_queries_delta"
     SEARCH_TOOL_DOCUMENTS_DELTA = "search_tool_documents_delta"
@@ -34,14 +38,48 @@ class StreamingType(Enum):
     REASONING_DONE = "reasoning_done"
     CITATION_INFO = "citation_info"
 
+    DEEP_RESEARCH_PLAN_START = "deep_research_plan_start"
+    DEEP_RESEARCH_PLAN_DELTA = "deep_research_plan_delta"
+    RESEARCH_AGENT_START = "research_agent_start"
+    INTERMEDIATE_REPORT_START = "intermediate_report_start"
+    INTERMEDIATE_REPORT_DELTA = "intermediate_report_delta"
+    INTERMEDIATE_REPORT_CITED_DOCS = "intermediate_report_cited_docs"
+
 
 class BaseObj(BaseModel):
     type: str = ""
 
 
-"""Reasoning Packets"""
+################################################
+# Control Packets
+################################################
+# This one isn't strictly necessary, remove in the future
+class SectionEnd(BaseObj):
+    type: Literal["section_end"] = StreamingType.SECTION_END.value
 
 
+class OverallStop(BaseObj):
+    type: Literal["stop"] = StreamingType.STOP.value
+
+
+class TopLevelBranching(BaseObj):
+    # This class is used to give advanced heads up to the frontend that the top level flow is branching
+    # This is used to avoid having the frontend render the first call then rerendering the other parallel branches
+    type: Literal["top_level_branching"] = StreamingType.TOP_LEVEL_BRANCHING.value
+
+    num_parallel_branches: int
+
+
+class PacketException(BaseObj):
+    type: Literal["error"] = StreamingType.ERROR.value
+
+    exception: Exception
+    model_config = {"arbitrary_types_allowed": True}
+
+
+################################################
+# Reasoning Packets
+################################################
 # Tells the frontend to display the reasoning block
 class ReasoningStart(BaseObj):
     type: Literal["reasoning_start"] = StreamingType.REASONING_START.value
@@ -58,9 +96,9 @@ class ReasoningDone(BaseObj):
     type: Literal["reasoning_done"] = StreamingType.REASONING_DONE.value
 
 
-"""Final Agent Response Packets"""
-
-
+################################################
+# Final Agent Response Packets
+################################################
 # Start of the final answer
 class AgentResponseStart(BaseObj):
     type: Literal["message_start"] = StreamingType.MESSAGE_START.value
@@ -87,28 +125,9 @@ class CitationInfo(BaseObj):
     document_id: str
 
 
-"""Control Packets"""
-
-
-# This one isn't strictly necessary, remove in the future
-class SectionEnd(BaseObj):
-    type: Literal["section_end"] = "section_end"
-
-
-class PacketException(BaseObj):
-    type: Literal["error"] = StreamingType.ERROR.value
-
-    exception: Exception
-    model_config = {"arbitrary_types_allowed": True}
-
-
-class OverallStop(BaseObj):
-    type: Literal["stop"] = StreamingType.STOP.value
-
-
-"""Tool Packets"""
-
-
+################################################
+# Tool Packets
+################################################
 # Search tool is called and the UI block needs to start
 class SearchToolStart(BaseObj):
     type: Literal["search_tool_start"] = StreamingType.SEARCH_TOOL_START.value
@@ -222,18 +241,61 @@ class CustomToolDelta(BaseObj):
     file_ids: list[str] | None = None
 
 
-"""Packet"""
+################################################
+# Deep Research Packets
+################################################
+class DeepResearchPlanStart(BaseObj):
+    type: Literal["deep_research_plan_start"] = (
+        StreamingType.DEEP_RESEARCH_PLAN_START.value
+    )
 
+
+class DeepResearchPlanDelta(BaseObj):
+    type: Literal["deep_research_plan_delta"] = (
+        StreamingType.DEEP_RESEARCH_PLAN_DELTA.value
+    )
+
+    content: str
+
+
+class ResearchAgentStart(BaseObj):
+    type: Literal["research_agent_start"] = StreamingType.RESEARCH_AGENT_START.value
+    research_task: str
+
+
+class IntermediateReportStart(BaseObj):
+    type: Literal["intermediate_report_start"] = (
+        StreamingType.INTERMEDIATE_REPORT_START.value
+    )
+
+
+class IntermediateReportDelta(BaseObj):
+    type: Literal["intermediate_report_delta"] = (
+        StreamingType.INTERMEDIATE_REPORT_DELTA.value
+    )
+    content: str
+
+
+class IntermediateReportCitedDocs(BaseObj):
+    type: Literal["intermediate_report_cited_docs"] = (
+        StreamingType.INTERMEDIATE_REPORT_CITED_DOCS.value
+    )
+    cited_docs: list[SearchDoc] | None = None
+
+
+################################################
+# Packet Object
+################################################
 # Discriminated union of all possible packet object types
 PacketObj = Union[
-    # Agent Response Packets
-    AgentResponseStart,
-    AgentResponseDelta,
     # Control Packets
     OverallStop,
     SectionEnd,
-    # Error Packets
+    TopLevelBranching,
     PacketException,
+    # Agent Response Packets
+    AgentResponseStart,
+    AgentResponseDelta,
     # Tool Packets
     SearchToolStart,
     SearchToolQueriesDelta,
@@ -254,15 +316,17 @@ PacketObj = Union[
     ReasoningDone,
     # Citation Packets
     CitationInfo,
+    # Deep Research Packets
+    DeepResearchPlanStart,
+    DeepResearchPlanDelta,
+    ResearchAgentStart,
+    IntermediateReportStart,
+    IntermediateReportDelta,
+    IntermediateReportCitedDocs,
 ]
 
 
 class Packet(BaseModel):
-    turn_index: int | None
+    placement: Placement
+
     obj: Annotated[PacketObj, Field(discriminator="type")]
-
-
-# This is for replaying it back from the DB to the frontend
-class EndStepPacketList(BaseModel):
-    turn_index: int
-    packet_list: list[Packet]

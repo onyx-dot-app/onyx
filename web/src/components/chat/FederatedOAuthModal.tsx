@@ -8,10 +8,10 @@ import { ValidSources } from "@/lib/types";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { getSourceMetadata } from "@/lib/sources";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
 import Text from "@/refresh-components/texts/Text";
-import SvgLink from "@/icons/link";
-
+import { SvgLink } from "@opal/icons";
 export interface FederatedConnectorOAuthStatus {
   federated_connector_id: number;
   source: string;
@@ -141,7 +141,7 @@ export default function FederatedOAuthModal() {
 
   const handleAuthorize = (authorizeUrl: string) => {
     // Redirect to OAuth URL in the same window
-    router.push(authorizeUrl);
+    router.push(authorizeUrl as Route);
   };
 
   const applicationName =

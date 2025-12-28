@@ -50,10 +50,10 @@ from onyx.indexing.models import IndexChunk
 from onyx.indexing.models import IndexingBatchAdapter
 from onyx.indexing.models import UpdatableChunkData
 from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_backoff
-from onyx.llm.chat_llm import LLMRateLimitError
 from onyx.llm.factory import get_default_llm_with_vision
 from onyx.llm.factory import get_llm_for_contextual_rag
 from onyx.llm.interfaces import LLM
+from onyx.llm.multi_llm import LLMRateLimitError
 from onyx.llm.utils import llm_response_to_string
 from onyx.llm.utils import MAX_CONTEXT_TOKENS
 from onyx.natural_language_processing.search_nlp_models import (
@@ -356,6 +356,9 @@ def index_doc_batch_prepare(
 
 def filter_documents(document_batch: list[Document]) -> list[Document]:
     documents: list[Document] = []
+    total_chars_in_batch = 0
+    skipped_too_long = []
+
     for document in document_batch:
         empty_contents = not any(
             isinstance(section, TextSection)
@@ -393,22 +396,40 @@ def filter_documents(document_batch: list[Document]) -> list[Document]:
             )
             for section in document.sections
         )
-        if (
-            MAX_DOCUMENT_CHARS
-            and len(document.title or document.semantic_identifier) + section_chars
-            > MAX_DOCUMENT_CHARS
-        ):
+        doc_total_chars = (
+            len(document.title or document.semantic_identifier) + section_chars
+        )
+
+        if MAX_DOCUMENT_CHARS and doc_total_chars > MAX_DOCUMENT_CHARS:
             # Skip documents that are too long, later on there are more memory intensive steps done on the text
             # and the container will run out of memory and crash. Several other checks are included upstream but
             # those are at the connector level so a catchall is still needed.
             # Assumption here is that files that are that long, are generated files and not the type users
             # generally care for.
             logger.warning(
-                f"Skipping document with ID {document.id} as it is too long."
+                f"Skipping document with ID {document.id} as it is too long "
+                f"({doc_total_chars:,} chars, max={MAX_DOCUMENT_CHARS:,})"
             )
+            skipped_too_long.append((document.id, doc_total_chars))
             continue
 
+        total_chars_in_batch += doc_total_chars
         documents.append(document)
+
+    # Log batch statistics for OOM debugging
+    if documents:
+        avg_chars = total_chars_in_batch / len(documents)
+        # Get the source from the first document (all in batch should be same source)
+        source = documents[0].source.value if documents[0].source else "unknown"
+        logger.debug(
+            f"Document batch filter [{source}]: {len(documents)} docs kept, {len(skipped_too_long)} skipped (too long). "
+            f"Total chars: {total_chars_in_batch:,}, Avg: {avg_chars:,.0f} chars/doc"
+        )
+        if skipped_too_long:
+            logger.warning(
+                f"Skipped oversized documents [{source}]: {skipped_too_long[:5]}"
+            )  # Log first 5
+
     return documents
 
 
@@ -680,6 +701,15 @@ def index_doc_batch(
 
     Returns a tuple where the first element is the number of new docs and the
     second element is the number of chunks."""
+
+    # Log connector info for debugging OOM issues
+    connector_id = getattr(adapter, "connector_id", None)
+    credential_id = getattr(adapter, "credential_id", None)
+    logger.debug(
+        f"Starting index_doc_batch: connector_id={connector_id}, "
+        f"credential_id={credential_id}, tenant_id={tenant_id}, "
+        f"num_docs={len(document_batch)}"
+    )
 
     filtered_documents = filter_fnc(document_batch)
     context = adapter.prepare(filtered_documents, ignore_time_skip)

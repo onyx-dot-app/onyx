@@ -9,6 +9,7 @@ import {
 import { StreamStopInfo } from "@/lib/search/interfaces";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Route } from "next";
 import { usePostHog } from "posthog-js/react";
 import { stopChatSession } from "../chat_search/utils";
 import {
@@ -58,7 +59,7 @@ import {
   useRouter,
   useSearchParams,
 } from "next/navigation";
-import { useChatSessions } from "@/lib/hooks/useChatSessions";
+import useChatSessions from "@/hooks/useChatSessions";
 import {
   useChatSessionStore,
   useCurrentMessageTree,
@@ -80,7 +81,7 @@ export interface OnSubmitProps {
   currentMessageFiles: ProjectFile[];
   // from the chat bar???
 
-  useAgentSearch: boolean;
+  deepResearch: boolean;
 
   // optional params
   messageIdToResend?: number;
@@ -89,7 +90,6 @@ export interface OnSubmitProps {
   isSeededChat?: boolean;
   modelOverride?: LlmDescriptor;
   regenerationRequest?: RegenerationRequest | null;
-  overrideFileDescriptors?: FileDescriptor[];
 }
 
 interface RegenerationRequest {
@@ -107,10 +107,6 @@ interface UseChatControllerProps {
   selectedDocuments: OnyxDocument[];
   searchParams: ReadonlyURLSearchParams;
   setPopup: (popup: PopupSpec) => void;
-
-  // scroll/focus related stuff
-  clientScrollToBottom: (fast?: boolean) => void;
-
   resetInputBar: () => void;
   setSelectedAssistantFromId: (assistantId: number | null) => void;
 }
@@ -122,10 +118,6 @@ export function useChatController({
   liveAssistant,
   existingChatSessionId,
   selectedDocuments,
-
-  // scroll/focus related stuff
-  clientScrollToBottom,
-
   setPopup,
   resetInputBar,
   setSelectedAssistantFromId,
@@ -245,7 +237,7 @@ export function useChatController({
 
     // Navigate immediately if still on chat page
     if (pathname === "/chat" && !navigatingAway.current) {
-      router.push(newUrl, { scroll: false });
+      router.push(newUrl as Route, { scroll: false });
     }
 
     // Refresh sidebar so chat appears (will show as "New Chat" initially)
@@ -358,10 +350,10 @@ export function useChatController({
         if (!hasStop) {
           const maxTurnIndex =
             packets.length > 0
-              ? Math.max(...packets.map((p) => p.turn_index))
+              ? Math.max(...packets.map((p) => p.placement.turn_index))
               : 0;
           const stopPacket: Packet = {
-            turn_index: maxTurnIndex + 1,
+            placement: { turn_index: maxTurnIndex + 1 },
             obj: { type: PacketType.STOP },
           } as Packet;
 
@@ -383,14 +375,13 @@ export function useChatController({
     async ({
       message,
       currentMessageFiles,
-      useAgentSearch,
+      deepResearch,
       messageIdToResend,
       queryOverride,
       forceSearch,
       isSeededChat,
       modelOverride,
       regenerationRequest,
-      overrideFileDescriptors,
     }: OnSubmitProps) => {
       const projectId = params(SEARCH_PARAM_NAMES.PROJECT_ID);
       {
@@ -400,7 +391,7 @@ export function useChatController({
           const newUrl = params.toString()
             ? `${pathname}?${params.toString()}`
             : pathname;
-          router.replace(newUrl, { scroll: false });
+          router.replace(newUrl as Route, { scroll: false });
         }
       }
 
@@ -487,13 +478,16 @@ export function useChatController({
         return;
       }
 
-      clientScrollToBottom();
-
       let currChatSessionId: string;
       const isNewSession = existingChatSessionId === null;
 
       const searchParamBasedChatSessionName =
         searchParams?.get(SEARCH_PARAM_NAMES.TITLE) || null;
+      // Auto-name only once, after the first assistant response, and only when the chat isn't
+      // already explicitly named (e.g. `?title=...`).
+      const hadAnyUserMessagesBeforeSubmit = currentHistory.some(
+        (m) => m.type === "user"
+      );
       if (isNewSession) {
         currChatSessionId = await createChatSession(
           liveAssistant?.id || 0,
@@ -528,6 +522,11 @@ export function useChatController({
       if (isNewSession) {
         handleNewSessionNavigation(currChatSessionId);
       }
+
+      const shouldAutoNameChatSessionAfterResponse =
+        !searchParamBasedChatSessionName &&
+        !hadAnyUserMessagesBeforeSubmit &&
+        !sessions.get(currChatSessionId)?.description;
 
       // set the ability to cancel the request
       const controller = new AbortController();
@@ -637,6 +636,9 @@ export function useChatController({
       let aiMessageImages: FileDescriptor[] | null = null;
       let error: string | null = null;
       let stackTrace: string | null = null;
+      let errorCode: string | null = null;
+      let isRetryable: boolean = true;
+      let errorDetails: Record<string, any> | null = null;
 
       let finalMessage: BackendMessage | null = null;
       let toolCall: ToolCallMetadata | null = null;
@@ -659,7 +661,7 @@ export function useChatController({
           signal: controller.signal,
           message: currMessage,
           alternateAssistantId: liveAssistant?.id,
-          fileDescriptors: overrideFileDescriptors,
+          fileDescriptors: projectFilesToFileDescriptors(currentMessageFiles),
           parentMessageId: (() => {
             const parentId =
               regenerationRequest?.parentMessage.messageId ||
@@ -702,7 +704,7 @@ export function useChatController({
           systemPromptOverride:
             searchParams?.get(SEARCH_PARAM_NAMES.SYSTEM_PROMPT) || undefined,
           useExistingUserMessage: isSeededChat,
-          useAgentSearch,
+          deepResearch,
           enabledToolIds:
             disabledToolIds && liveAssistant
               ? liveAssistant.tools
@@ -768,14 +770,18 @@ export function useChatController({
               Object.hasOwn(packet, "error") &&
               (packet as any).error != null
             ) {
-              setUncaughtError(
-                frozenSessionId,
-                (packet as StreamingError).error
-              );
+              const streamingError = packet as StreamingError;
+              error = streamingError.error;
+              stackTrace = streamingError.stack_trace || null;
+              errorCode = streamingError.error_code || null;
+              isRetryable = streamingError.is_retryable ?? true;
+              errorDetails = streamingError.details || null;
+
+              setUncaughtError(frozenSessionId, streamingError.error);
               updateChatStateAction(frozenSessionId, "input");
               updateSubmittedMessage(getCurrentSessionId(), "");
 
-              throw new Error((packet as StreamingError).error);
+              throw new Error(streamingError.error);
             } else if (Object.hasOwn(packet, "message_id")) {
               finalMessage = packet as BackendMessage;
             } else if (Object.hasOwn(packet, "stop_reason")) {
@@ -878,6 +884,10 @@ export function useChatController({
               toolCall: null,
               parentNodeId: initialUserNode.nodeId,
               packets: [],
+              stackTrace: stackTrace,
+              errorCode: errorCode,
+              isRetryable: isRetryable,
+              errorDetails: errorDetails,
             },
           ],
           completeMessageTreeOverride: currentMessageTreeLocal,
@@ -888,8 +898,8 @@ export function useChatController({
       resetRegenerationState(frozenSessionId);
       updateChatStateAction(frozenSessionId, "input");
 
-      // Name the chat now that we have AI response (navigation already happened before streaming)
-      if (isNewSession && !searchParamBasedChatSessionName) {
+      // Name the chat now that we have the first AI response (navigation already happened before streaming)
+      if (shouldAutoNameChatSessionAfterResponse) {
         handleNewSessionNaming(currChatSessionId);
       }
     },
@@ -908,7 +918,6 @@ export function useChatController({
       selectedDocuments,
       searchParams,
       setPopup,
-      clientScrollToBottom,
       resetInputBar,
       setSelectedAssistantFromId,
       updateSelectedNodeForDocDisplay,

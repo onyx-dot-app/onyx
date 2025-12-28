@@ -2,9 +2,6 @@
 
 import { useState, useEffect } from "react";
 import useSWR from "swr";
-import SvgTrash from "@/icons/trash";
-import SvgCopy from "@/icons/copy";
-import SvgCheck from "@/icons/check";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { humanReadableFormat, humanReadableFormatWithTime } from "@/lib/time";
@@ -14,6 +11,7 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { SvgCheck, SvgCopy, SvgTrash } from "@opal/icons";
 
 interface PAT {
   id: number;

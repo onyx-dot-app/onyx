@@ -19,29 +19,31 @@ import {
   SlackIconSkeleton,
   BrainIcon,
 } from "@/components/icons/icons";
-import OnyxLogo from "@/icons/onyx-logo";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
-import SvgSearch from "@/icons/search";
-import SvgShield from "@/icons/shield";
-import SvgThumbsUp from "@/icons/thumbs-up";
-import SvgUsers from "@/icons/users";
-import SvgZoomIn from "@/icons/zoom-in";
-import SvgCpu from "@/icons/cpu";
-import SvgOnyxOctagon from "@/icons/onyx-octagon";
-import SvgGlobe from "@/icons/globe";
-import SvgActivity from "@/icons/activity";
-import SvgBarChart from "@/icons/bar-chart";
-import SvgSettings from "@/icons/settings";
-import SvgKey from "@/icons/key";
-import SvgUploadCloud from "@/icons/upload-cloud";
-import SvgFolder from "@/icons/folder";
-import SvgActions from "@/icons/actions";
-import SvgUser from "@/icons/user";
-import SvgFileText from "@/icons/file-text";
-import SvgServer from "@/icons/server";
-
+import {
+  SvgActions,
+  SvgActivity,
+  SvgBarChart,
+  SvgCpu,
+  SvgFileText,
+  SvgFolder,
+  SvgGlobe,
+  SvgKey,
+  SvgOnyxLogo,
+  SvgOnyxOctagon,
+  SvgSearch,
+  SvgServer,
+  SvgSettings,
+  SvgShield,
+  SvgThumbsUp,
+  SvgUploadCloud,
+  SvgUser,
+  SvgUsers,
+  SvgZoomIn,
+} from "@opal/icons";
+import SvgMcp from "@opal/icons/mcp";
 const connectors_items = () => [
   {
     name: "Existing Connectors",
@@ -86,25 +88,25 @@ const custom_assistants_items = (
   ];
 
   if (!isCurator) {
-    items.push(
-      {
-        name: "Slack Bots",
-        icon: SlackIconSkeleton,
-        link: "/admin/bots",
-      },
-      {
-        name: "Actions",
-        icon: SvgActions,
-        link: "/admin/actions",
-      }
-    );
-  } else {
     items.push({
-      name: "Actions",
-      icon: SvgActions,
-      link: "/admin/actions",
+      name: "Slack Bots",
+      icon: SlackIconSkeleton,
+      link: "/admin/bots",
     });
   }
+
+  items.push(
+    {
+      name: "MCP Actions",
+      icon: SvgMcp,
+      link: "/admin/actions/mcp",
+    },
+    {
+      name: "OpenAPI Actions",
+      icon: SvgActions,
+      link: "/admin/actions/open-api",
+    }
+  );
 
   if (enableEnterprise) {
     items.push({
@@ -158,7 +160,7 @@ const collections = (
           items: [
             {
               name: "Default Assistant",
-              icon: OnyxLogo,
+              icon: SvgOnyxLogo,
               link: "/admin/configuration/default-assistant",
             },
             {
@@ -327,6 +329,7 @@ export default function AdminSidebar({
   return (
     <SidebarWrapper>
       <SidebarBody
+        scrollKey="admin-sidebar"
         actionButton={
           <SidebarTab
             leftIcon={({ className }) => (
@@ -355,7 +358,7 @@ export default function AdminSidebar({
                 <SidebarTab
                   key={index}
                   href={link}
-                  active={pathname.startsWith(link)}
+                  transient={pathname.startsWith(link)}
                   leftIcon={({ className }) => (
                     <Icon className={className} size={16} />
                   )}

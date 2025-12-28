@@ -1,8 +1,6 @@
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
-import SvgChevronLeft from "@/icons/chevron-left";
-import SvgChevronRight from "@/icons/chevron-right";
-
+import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
 const DISABLED_MESSAGE = "Wait for agent message to complete";
 
 interface MessageSwitcherProps {

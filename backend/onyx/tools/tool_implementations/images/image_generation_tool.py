@@ -13,13 +13,14 @@ from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.file_store.utils import build_frontend_file_url
 from onyx.file_store.utils import save_files
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolHeartbeat
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.tools.interface import Tool
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
 )
@@ -120,10 +121,10 @@ class ImageGenerationTool(Tool[None]):
             },
         }
 
-    def emit_start(self, turn_index: int) -> None:
+    def emit_start(self, placement: Placement) -> None:
         self.emitter.emit(
             Packet(
-                turn_index=turn_index,
+                placement=placement,
                 obj=ImageGenerationToolStart(),
             )
         )
@@ -131,7 +132,7 @@ class ImageGenerationTool(Tool[None]):
     def _generate_image(
         self, prompt: str, shape: ImageShape
     ) -> tuple[ImageGenerationResponse, Any]:
-        from litellm import image_generation  # type: ignore
+        from litellm import image_generation
 
         if shape == ImageShape.LANDSCAPE:
             if "gpt-image-1" in self.model:
@@ -208,8 +209,8 @@ class ImageGenerationTool(Tool[None]):
 
     def run(
         self,
-        turn_index: int,
-        override_kwargs: None,
+        placement: Placement,
+        override_kwargs: None = None,
         **llm_kwargs: Any,
     ) -> ToolResponse:
         prompt = cast(str, llm_kwargs["prompt"])
@@ -257,7 +258,7 @@ class ImageGenerationTool(Tool[None]):
             # Emit a heartbeat packet to prevent timeout
             self.emitter.emit(
                 Packet(
-                    turn_index=turn_index,
+                    placement=placement,
                     obj=ImageGenerationToolHeartbeat(),
                 )
             )
@@ -301,7 +302,7 @@ class ImageGenerationTool(Tool[None]):
         # Emit final packet with generated images
         self.emitter.emit(
             Packet(
-                turn_index=turn_index,
+                placement=placement,
                 obj=ImageGenerationFinal(images=generated_images_metadata),
             )
         )

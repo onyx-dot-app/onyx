@@ -4,19 +4,14 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import AgentCard from "@/refresh-components/AgentCard";
 import { useUser } from "@/components/user/UserProvider";
 import { checkUserOwnsAssistant as checkUserOwnsAgent } from "@/lib/assistants/checkOwnership";
-import { useAgents } from "@/lib/hooks/useAgents";
+import { useAgents } from "@/hooks/useAgents";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import PageHeader from "@/refresh-components/headers/PageHeader";
-import SvgOnyxOctagon from "@/icons/onyx-octagon";
-import PageLayout from "@/refresh-components/layouts/PageLayout";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import CounterSeparator from "@/refresh-components/CounterSeparator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import SvgUser from "@/icons/user";
-import SvgCheck from "@/icons/check";
 import FilterButton from "@/refresh-components/buttons/FilterButton";
-import SvgActions from "@/icons/actions";
 import {
   Popover,
   PopoverContent,
@@ -25,13 +20,19 @@ import {
 } from "@/components/ui/popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Button from "@/refresh-components/buttons/Button";
-import SvgPlus from "@/icons/plus";
 import {
   SEARCH_TOOL_ID,
   IMAGE_GENERATION_TOOL_ID,
   WEB_SEARCH_TOOL_ID,
   SYSTEM_TOOL_ICONS,
 } from "@/app/chat/components/tools/constants";
+import {
+  SvgActions,
+  SvgCheck,
+  SvgOnyxOctagon,
+  SvgPlus,
+  SvgUser,
+} from "@opal/icons";
 
 interface AgentsSectionProps {
   title: string;
@@ -411,12 +412,14 @@ export default function AgentsPage() {
   }, [selectedActionIds, selectedMcpServerIds, uniqueActions]);
 
   return (
-    <PageLayout data-testid="AgentsPage/container" aria-label="Agents Page">
-      <PageHeader
+    <SettingsLayouts.Root
+      data-testid="AgentsPage/container"
+      aria-label="Agents Page"
+    >
+      <SettingsLayouts.Header
         icon={SvgOnyxOctagon}
         title="Agents & Assistants"
         description="Customize AI behavior and knowledge for you and your team’s use cases."
-        className="bg-background-tint-01"
         rightChildren={
           <div data-testid="AgentsPage/new-agent-button">
             <Button href="/assistants/new" leftIcon={SvgPlus}>
@@ -626,7 +629,7 @@ export default function AgentsPage() {
             </Popover>
           </div>
         </div>
-      </PageHeader>
+      </SettingsLayouts.Header>
 
       {/* Agents List */}
       <div className="p-4 flex flex-col gap-8">
@@ -652,6 +655,6 @@ export default function AgentsPage() {
           </>
         )}
       </div>
-    </PageLayout>
+    </SettingsLayouts.Root>
   );
 }

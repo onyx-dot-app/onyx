@@ -15,7 +15,7 @@ import { SearchDateRangeSelector } from "@/components/dateRangeSelectors/SearchD
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { listSourceMetadata } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
-import { Calendar } from "@/components/ui/calendar";
+import Calendar from "@/refresh-components/Calendar";
 import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { PopoverContent } from "@radix-ui/react-popover";
 import { CalendarIcon } from "lucide-react";
@@ -274,11 +274,11 @@ export function HorizontalSourceSelector({
         <PopoverTrigger asChild>
           <div
             className={`
-              border 
+              border
               max-w-36
-              border-border 
-              rounded-lg 
-              max-h-96 
+              border-border
+              rounded-lg
+              max-h-96
               overflow-y-scroll
               overscroll-contain
               px-3

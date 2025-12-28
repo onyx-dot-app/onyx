@@ -1,5 +1,5 @@
 import React, { memo, useState } from "react";
-import { Calendar } from "@/components/ui/calendar";
+import Calendar from "@/refresh-components/Calendar";
 import {
   Popover,
   PopoverContent,
@@ -9,8 +9,7 @@ import Button from "@/refresh-components/buttons/Button";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { getXDaysAgo } from "./dateUtils";
-import SvgCalendar from "@/icons/calendar";
-
+import { SvgCalendar } from "@opal/icons";
 export const THIRTY_DAYS = "30d";
 
 export type DateRangePickerValue = DateRange & {

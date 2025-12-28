@@ -3,9 +3,9 @@ import { useState, useEffect, useContext } from "react";
 import { CustomTooltip } from "../tooltip/CustomTooltip";
 import { SettingsContext } from "../settings/SettingsProvider";
 import Link from "next/link";
+import type { Route } from "next";
 import Cookies from "js-cookie";
-import SvgX from "@/icons/x";
-
+import { SvgX } from "@opal/icons";
 const DISMISSED_NOTIFICATION_COOKIE_PREFIX = "dismissed_notification_";
 const COOKIE_EXPIRY_DAYS = 1;
 
@@ -82,7 +82,7 @@ export function AnnouncementBanner() {
                   Your trial is ending soon - submit your billing information to
                   continue using Onyx.{" "}
                   <Link
-                    href="/admin/billing"
+                    href={"/ee/admin/billing" as Route}
                     className="ml-2 underline cursor-pointer"
                   >
                     Update here

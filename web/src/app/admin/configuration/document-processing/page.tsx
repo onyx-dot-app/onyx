@@ -9,8 +9,8 @@ import useSWR from "swr";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
 import Text from "@/refresh-components/texts/Text";
-import SvgLock from "@/icons/lock";
 import { cn } from "@/lib/utils";
+import { SvgLock } from "@opal/icons";
 
 function Main() {
   const {
@@ -143,7 +143,7 @@ function Main() {
 
 export default function Page() {
   return (
-    <div className="mx-auto container">
+    <div className="container">
       <AdminPageTitle
         title="Document Processing"
         icon={<DocumentIcon2 size={32} className="my-auto" />}

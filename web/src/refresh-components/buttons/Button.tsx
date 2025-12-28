@@ -4,7 +4,8 @@ import React, { useMemo } from "react";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { IconProps } from "@/icons";
+import type { Route } from "next";
+import type { IconProps } from "@opal/types";
 
 const variantClasses = (transient?: boolean) =>
   ({
@@ -383,7 +384,7 @@ function ButtonInner(
   );
 
   if (!href) return content;
-  return <Link href={href}>{content}</Link>;
+  return <Link href={href as Route}>{content}</Link>;
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(ButtonInner);

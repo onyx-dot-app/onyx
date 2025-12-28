@@ -1,9 +1,9 @@
-import { BackButton } from "@/components/BackButton";
+import BackButton from "@/refresh-components/buttons/BackButton";
 import { NewSlackBotForm } from "../SlackBotCreationForm";
 
 export default async function NewSlackBotPage() {
   return (
-    <div className="container mx-auto">
+    <div className="container">
       <BackButton routerOverride="/admin/bots" />
 
       <NewSlackBotForm />

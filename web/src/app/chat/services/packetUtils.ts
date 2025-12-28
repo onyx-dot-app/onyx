@@ -23,9 +23,16 @@ export function isToolPacket(
     PacketType.FETCH_TOOL_START,
     PacketType.FETCH_TOOL_URLS,
     PacketType.FETCH_TOOL_DOCUMENTS,
+    PacketType.DEEP_RESEARCH_PLAN_START,
+    PacketType.DEEP_RESEARCH_PLAN_DELTA,
+    PacketType.RESEARCH_AGENT_START,
+    PacketType.INTERMEDIATE_REPORT_START,
+    PacketType.INTERMEDIATE_REPORT_DELTA,
+    PacketType.INTERMEDIATE_REPORT_CITED_DOCS,
   ];
   if (includeSectionEnd) {
     toolPacketTypes.push(PacketType.SECTION_END);
+    toolPacketTypes.push(PacketType.ERROR);
   }
   return toolPacketTypes.includes(packet.obj.type as PacketType);
 }
@@ -72,36 +79,51 @@ export function isFinalAnswerComplete(packets: Packet[]) {
     return false;
   }
 
-  // Check if there's a corresponding SECTION_END with the same turn_index
+  // Check if there's a corresponding SECTION_END or ERROR with the same turn_index
   return packets.some(
     (packet) =>
-      packet.obj.type === PacketType.SECTION_END &&
-      packet.turn_index === messageStartPacket.turn_index
+      (packet.obj.type === PacketType.SECTION_END ||
+        packet.obj.type === PacketType.ERROR) &&
+      packet.placement.turn_index === messageStartPacket.placement.turn_index
   );
 }
 
 export function groupPacketsByTurnIndex(
   packets: Packet[]
-): { turn_index: number; packets: Packet[] }[] {
+): { turn_index: number; tab_index: number; packets: Packet[] }[] {
   /*
-  Group packets by turn_index. Ordered from lowest turn_index to highest turn_index.
+  Group packets by (turn_index, tab_index). 
+  Ordered from lowest turn_index to highest, then by tab_index within each turn.
+  This supports parallel tool calls where multiple tools share the same turn_index
+  but have different tab_index values.
   */
-  const groups = packets.reduce((acc: Map<number, Packet[]>, packet) => {
-    const turn_index = packet.turn_index;
-    if (!acc.has(turn_index)) {
-      acc.set(turn_index, []);
-    }
-    acc.get(turn_index)!.push(packet);
-    return acc;
-  }, new Map());
+  const groups = packets.reduce(
+    (
+      acc: Map<
+        string,
+        { turn_index: number; tab_index: number; packets: Packet[] }
+      >,
+      packet
+    ) => {
+      const turn_index = packet.placement.turn_index;
+      const tab_index = packet.placement.tab_index ?? 0;
+      const key = `${turn_index}-${tab_index}`;
+      if (!acc.has(key)) {
+        acc.set(key, { turn_index, tab_index, packets: [] });
+      }
+      acc.get(key)!.packets.push(packet);
+      return acc;
+    },
+    new Map()
+  );
 
-  // Convert to array and sort by turn_index (lowest to highest)
-  return Array.from(groups.entries())
-    .map(([turn_index, packets]) => ({
-      turn_index,
-      packets,
-    }))
-    .sort((a, b) => a.turn_index - b.turn_index);
+  // Convert to array and sort by turn_index first, then tab_index
+  return Array.from(groups.values()).sort((a, b) => {
+    if (a.turn_index !== b.turn_index) {
+      return a.turn_index - b.turn_index;
+    }
+    return a.tab_index - b.tab_index;
+  });
 }
 
 export function getTextContent(packets: Packet[]) {

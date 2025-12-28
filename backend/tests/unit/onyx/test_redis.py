@@ -10,7 +10,7 @@ logger = setup_logger()
 
 
 @pytest.mark.skipif(
-    os.getenv("REDIS_CLOUD_PYTEST_PASSWORD") is None,
+    os.getenv("REDIS_CLOUD_PYTEST_PASSWORD", "") == "",
     reason="Environment variable REDIS_CLOUD_PYTEST_PASSWORD is not set",
 )
 def test_redis_ssl() -> None:

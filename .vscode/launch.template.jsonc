@@ -508,7 +508,6 @@
       ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
-      "stopOnEntry": true,
       "presentation": {
         "group": "3"
       }

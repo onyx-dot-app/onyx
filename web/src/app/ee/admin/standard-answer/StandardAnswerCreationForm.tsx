@@ -6,6 +6,7 @@ import CardSection from "@/components/admin/CardSection";
 import Button from "@/refresh-components/buttons/Button";
 import { Form, Formik } from "formik";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import * as Yup from "yup";
 import {
   createStandardAnswer,
@@ -94,7 +95,7 @@ export const StandardAnswerCreationForm = ({
             }
             formikHelpers.setSubmitting(false);
             if (response.ok) {
-              router.push(`/admin/standard-answer?u=${Date.now()}`);
+              router.push(`/ee/admin/standard-answer?u=${Date.now()}` as Route);
             } else {
               const responseJson = await response.json();
               const errorMsg = responseJson.detail || responseJson.message;

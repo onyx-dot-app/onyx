@@ -15,10 +15,10 @@ from typing import cast
 import aioboto3  # type: ignore
 import httpx
 import requests
-import voyageai  # type: ignore
+import voyageai  # type: ignore[import-untyped]
 from cohere import AsyncClient as CohereAsyncClient
 from cohere.core.api_error import ApiError
-from google.oauth2 import service_account  # type: ignore
+from google.oauth2 import service_account
 from httpx import HTTPError
 from requests import JSONDecodeError
 from requests import RequestException
@@ -88,6 +88,93 @@ _AUTH_ERROR_401 = "401"
 _AUTH_ERROR_UNAUTHORIZED = "unauthorized"
 _AUTH_ERROR_INVALID_API_KEY = "invalid api key"
 _AUTH_ERROR_PERMISSION = "permission"
+
+# Thread-local storage for event loops
+# This prevents creating thousands of event loops during batch processing,
+# which was causing severe memory leaks with API-based embedding providers
+_thread_local = threading.local()
+
+
+def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
+    """Get or create a thread-local event loop for API embedding calls.
+
+    This prevents creating a new event loop for every batch during embedding,
+    which was causing memory leaks. Instead, each thread reuses the same loop.
+
+    Returns:
+        asyncio.AbstractEventLoop: The thread-local event loop
+    """
+    if (
+        not hasattr(_thread_local, "loop")
+        or _thread_local.loop is None
+        or _thread_local.loop.is_closed()
+    ):
+        _thread_local.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(_thread_local.loop)
+    return _thread_local.loop
+
+
+def cleanup_embedding_thread_locals() -> None:
+    """Clean up thread-local event loops to prevent memory leaks.
+
+    This should be called after each task completes to ensure that
+    event loops and their associated resources are properly released.
+    Thread-local storage persists across Celery tasks when using the
+    thread pool, so explicit cleanup is necessary.
+
+    NOTE: This must be called from the SAME thread that created the event loop.
+    For ThreadPoolExecutor-based embedding, this cleanup happens automatically
+    via the _cleanup_thread_local wrapper.
+    """
+    if hasattr(_thread_local, "loop") and _thread_local.loop is not None:
+        loop = _thread_local.loop
+        if not loop.is_closed():
+            # Cancel all pending tasks in the event loop
+            try:
+                # Ensure loop is set as current event loop before accessing tasks
+                asyncio.set_event_loop(loop)
+                pending = asyncio.all_tasks(loop)
+                if pending:
+                    logger.debug(
+                        f"Cleaning up event loop with {len(pending)} pending tasks in thread {threading.current_thread().name}"
+                    )
+                    for task in pending:
+                        task.cancel()
+                    # Run the loop briefly to allow cancelled tasks to complete
+                    loop.run_until_complete(
+                        asyncio.gather(*pending, return_exceptions=True)
+                    )
+            except Exception as e:
+                # If gathering tasks fails, just close the loop
+                logger.debug(f"Error gathering tasks during cleanup: {e}")
+
+            # Close the event loop
+            loop.close()
+            logger.debug(
+                f"Closed event loop in thread {threading.current_thread().name}"
+            )
+
+        # Clear the thread-local reference
+        _thread_local.loop = None
+
+
+def _cleanup_thread_local(func: Callable) -> Callable:
+    """Decorator to ensure thread-local cleanup after function execution.
+
+    This wraps functions that run in ThreadPoolExecutor threads to ensure
+    that thread-local event loops are cleaned up after each execution,
+    preventing memory leaks from persistent thread-local storage.
+    """
+
+    @wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return func(*args, **kwargs)
+        finally:
+            # Clean up thread-local event loop after this thread's work is done
+            cleanup_embedding_thread_locals()
+
+    return wrapper
 
 
 WARM_UP_STRINGS = [
@@ -271,8 +358,8 @@ class CloudEmbedding:
         embedding_type: str,
         reduced_dimension: int | None,
     ) -> list[Embedding]:
-        from google import genai  # type: ignore[import-untyped]
-        from google.genai import types as genai_types  # type: ignore[import-untyped]
+        from google import genai
+        from google.genai import types as genai_types
 
         if not model:
             model = DEFAULT_VERTEX_MODEL
@@ -302,11 +389,6 @@ class CloudEmbedding:
             auto_truncate=True,
         )
 
-        batches = [
-            texts[i : i + VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE]
-            for i in range(0, len(texts), VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE)
-        ]
-
         async def _embed_batch(batch_texts: list[str]) -> list[Embedding]:
             content_requests: list[Any] = [
                 genai_types.Content(parts=[genai_types.Part(text=text)])
@@ -330,15 +412,44 @@ class CloudEmbedding:
                 embeddings.append(embedding.values)
             return embeddings
 
+        # Process VertexAI batches sequentially to avoid additional intra-task fanout.
+        # The higher-level thread pool already provides concurrency; running these
+        # requests in parallel here was causing excessive memory usage.
+        batches = [
+            texts[i : i + VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE]
+            for i in range(0, len(texts), VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE)
+        ]
+        all_embeddings: list[Embedding] = []
+
+        logger.debug(
+            f"VertexAI embedding: processing {len(texts)} texts in {len(batches)} batches "
+            f"(batch_size={VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE})"
+        )
+
         try:
-            results = await asyncio.gather(*[_embed_batch(batch) for batch in batches])
-            return [
-                embedding
-                for batch_embeddings in results
-                for embedding in batch_embeddings
-            ]
+            for batch_idx, batch in enumerate(batches):
+                batch_embeddings = await _embed_batch(batch)
+                all_embeddings.extend(batch_embeddings)
+
+                # Log progress for large batches to track memory usage patterns
+                if batch_idx % 10 == 0 and batch_idx > 0:
+                    logger.debug(
+                        f"VertexAI embedding progress: batch {batch_idx}/{len(batches)}, "
+                        f"total_embeddings={len(all_embeddings)}"
+                    )
+
+            logger.debug(
+                f"VertexAI embedding completed: {len(all_embeddings)} embeddings generated"
+            )
+            return all_embeddings
         finally:
-            await client.aio.aclose()
+            # Ensure client is closed with a timeout to prevent hanging on stuck sessions
+            try:
+                await asyncio.wait_for(client.aio.aclose(), timeout=5.0)
+            except asyncio.TimeoutError:
+                logger.warning("Google GenAI client aclose() timed out after 5s")
+            except Exception as e:
+                logger.warning(f"Error closing Google GenAI client: {e}")
 
     async def _embed_litellm_proxy(
         self, texts: list[str], model_name: str | None
@@ -742,6 +853,7 @@ class EmbeddingModel:
 
         embeddings: list[Embedding] = []
 
+        @_cleanup_thread_local
         def process_batch(
             batch_idx: int,
             batch_len: int,
@@ -776,16 +888,14 @@ class EmbeddingModel:
             # Route between direct API calls and model server calls
             if self.provider_type is not None:
                 # For API providers, make direct API call
-                loop = asyncio.new_event_loop()
-                try:
-                    asyncio.set_event_loop(loop)
-                    response = loop.run_until_complete(
-                        self._make_direct_api_call(
-                            embed_request, tenant_id=tenant_id, request_id=request_id
-                        )
+                # Use thread-local event loop to prevent memory leaks from creating
+                # thousands of event loops during batch processing
+                loop = _get_or_create_event_loop()
+                response = loop.run_until_complete(
+                    self._make_direct_api_call(
+                        embed_request, tenant_id=tenant_id, request_id=request_id
                     )
-                finally:
-                    loop.close()
+                )
             else:
                 # For local models, use model server
                 response = self._make_model_server_request(

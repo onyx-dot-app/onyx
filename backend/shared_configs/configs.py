@@ -86,7 +86,7 @@ API_BASED_EMBEDDING_TIMEOUT = int(os.environ.get("API_BASED_EMBEDDING_TIMEOUT", 
 # Local batch size for VertexAI embedding models currently calibrated for item size of 512 tokens
 # NOTE: increasing this value may lead to API errors due to token limit exhaustion per call.
 VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE = int(
-    os.environ.get("VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE", "25")
+    os.environ.get("VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE", "50")
 )
 
 # Only used for OpenAI

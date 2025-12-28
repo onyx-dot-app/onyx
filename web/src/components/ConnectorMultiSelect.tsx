@@ -6,8 +6,7 @@ import { ErrorMessage } from "formik";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgX from "@/icons/x";
-
+import { SvgX } from "@opal/icons";
 interface ConnectorMultiSelectProps {
   name: string;
   label: string;

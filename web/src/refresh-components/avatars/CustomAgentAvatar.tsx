@@ -1,25 +1,70 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import SvgCheck from "@/icons/check";
-import SvgCode from "@/icons/code";
-import SvgTwoLineSmall from "@/icons/two-line-small";
-import SvgOnyxOctagon from "@/icons/onyx-octagon";
-import SvgSearch from "@/icons/search";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import Image from "next/image";
 import { DEFAULT_AGENT_AVATAR_SIZE_PX } from "@/lib/constants";
+import {
+  SvgActivitySmall,
+  SvgAudioEqSmall,
+  SvgBarChartSmall,
+  SvgBooksLineSmall,
+  SvgBooksStackSmall,
+  SvgCheckSmall,
+  SvgClockHandsSmall,
+  SvgFileSmall,
+  SvgHashSmall,
+  SvgImageSmall,
+  SvgInfoSmall,
+  SvgMusicSmall,
+  SvgOnyxOctagon,
+  SvgPenSmall,
+  SvgQuestionMarkSmall,
+  SvgSearchSmall,
+  SvgSlidersSmall,
+  SvgTerminalSmall,
+  SvgTextLinesSmall,
+  SvgTwoLineSmall,
+} from "@opal/icons";
 
 interface IconConfig {
   Icon: React.FunctionComponent<IconProps>;
   className?: string;
 }
 
-const iconMap: Record<string, IconConfig> = {
-  search: { Icon: SvgSearch, className: "stroke-green-500" },
-  check: { Icon: SvgCheck, className: "stroke-green-500" },
-  code: { Icon: SvgCode, className: "stroke-orange-500" },
+export const agentAvatarIconMap: Record<string, IconConfig> = {
+  Info: { Icon: SvgInfoSmall, className: "stroke-theme-primary-05" },
+  QuestionMark: {
+    Icon: SvgQuestionMarkSmall,
+    className: "stroke-theme-primary-05",
+  },
+
+  // blue
+  TextLines: { Icon: SvgTextLinesSmall, className: "stroke-theme-blue-05" },
+  Pen: { Icon: SvgPenSmall, className: "stroke-theme-blue-05" },
+  ClockHands: { Icon: SvgClockHandsSmall, className: "stroke-theme-blue-05" },
+  Hash: { Icon: SvgHashSmall, className: "stroke-theme-blue-05" },
+
+  // green
+  Search: { Icon: SvgSearchSmall, className: "stroke-theme-green-05" },
+  Check: { Icon: SvgCheckSmall, className: "stroke-theme-green-05" },
+  BarChart: { Icon: SvgBarChartSmall, className: "stroke-theme-green-05" },
+  Activity: { Icon: SvgActivitySmall, className: "stroke-theme-green-05" },
+
+  // purple
+  File: { Icon: SvgFileSmall, className: "stroke-theme-purple-05" },
+  Image: { Icon: SvgImageSmall, className: "stroke-theme-purple-05" },
+  BooksStack: { Icon: SvgBooksStackSmall, className: "stroke-theme-purple-05" },
+  BooksLine: { Icon: SvgBooksLineSmall, className: "stroke-theme-purple-05" },
+
+  // orange
+  Terminal: { Icon: SvgTerminalSmall, className: "stroke-theme-orange-04" },
+  Sliders: { Icon: SvgSlidersSmall, className: "stroke-theme-orange-04" },
+
+  // amber
+  AudioEq: { Icon: SvgAudioEqSmall, className: "stroke-theme-amber-04" },
+  Music: { Icon: SvgMusicSmall, className: "stroke-theme-amber-04" },
 };
 
 interface SvgOctagonWrapperProps {
@@ -70,14 +115,15 @@ export default function CustomAgentAvatar({
     );
   }
 
-  const iconConfig = iconName && iconMap[iconName];
+  const iconConfig = iconName && agentAvatarIconMap[iconName];
   if (iconConfig) {
     const { Icon, className } = iconConfig;
+    const multiplier = 0.7;
     return (
       <SvgOctagonWrapper size={size}>
         <Icon
           className={cn("stroke-text-04", className)}
-          style={{ width: size * 0.4, height: size * 0.4 }}
+          style={{ width: size * multiplier, height: size * multiplier }}
         />
       </SvgOctagonWrapper>
     );

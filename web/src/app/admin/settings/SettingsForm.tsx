@@ -10,12 +10,12 @@ import React, { useContext, useState, useEffect } from "react";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import Modal from "@/refresh-components/Modal";
-import SvgAlertTriangle from "@/icons/alert-triangle";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { AnonymousUserPath } from "./AnonymousUserPath";
 import LLMSelector from "@/components/llm/LLMSelector";
 import { useVisionProviders } from "./hooks/useVisionProviders";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
+import { SvgAlertTriangle } from "@opal/icons";
 
 export function Checkbox({
   label,
@@ -284,7 +284,7 @@ export function SettingsForm() {
 
       <Checkbox
         label="Deep Research"
-        sublabel="If set, users will be able to use Deep Research."
+        sublabel="Deep Research is in Alpha. Not recommended to be turned on. Use at your own risk."
         checked={settings.deep_research_enabled ?? true}
         onChange={(e) =>
           handleToggleSettingsField("deep_research_enabled", e.target.checked)

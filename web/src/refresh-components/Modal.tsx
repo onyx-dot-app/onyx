@@ -3,10 +3,11 @@
 import React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { cn } from "@/lib/utils";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgX from "@/icons/x";
+import { SvgX } from "@opal/icons";
+import Truncated from "@/refresh-components/texts/Truncated";
 
 /**
  * Modal Root Component
@@ -41,7 +42,7 @@ const ModalOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 z-[2000] bg-mask-03 backdrop-blur-03 pointer-events-none",
+      "fixed inset-0 z-modal-overlay bg-mask-03 backdrop-blur-03 pointer-events-none",
       "data-[state=open]:animate-in data-[state=closed]:animate-out",
       "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
       className
@@ -283,7 +284,7 @@ const ModalContent = React.forwardRef<
               contentRef(node);
             }}
             className={cn(
-              "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[2001]",
+              "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-modal",
               "bg-background-tint-00 border rounded-16 shadow-2xl",
               "flex flex-col overflow-auto",
               "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
@@ -383,9 +384,9 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
             )}
           </div>
           <DialogPrimitive.Title asChild>
-            <Text headingH3 as="span">
+            <Truncated headingH3 as="span">
               {title}
-            </Text>
+            </Truncated>
           </DialogPrimitive.Title>
           {description && (
             <DialogPrimitive.Description>
@@ -462,7 +463,7 @@ const ModalFooter = React.forwardRef<HTMLDivElement, ModalFooterProps>(
       <div
         ref={ref}
         className={cn(
-          "flex flex-row items-center justify-end gap-1 p-4",
+          "flex flex-row items-center justify-end gap-1 p-4 w-full",
           className
         )}
         {...props}

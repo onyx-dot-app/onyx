@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import datetime
 import hashlib
 import json
 from collections.abc import Awaitable
@@ -40,6 +41,7 @@ from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import MCPTransport
 from onyx.db.mcp import create_connection_config
 from onyx.db.mcp import create_mcp_server__no_commit
+from onyx.db.mcp import delete_all_user_connection_configs_for_server_no_commit
 from onyx.db.mcp import delete_connection_config
 from onyx.db.mcp import delete_mcp_server
 from onyx.db.mcp import delete_user_connection_configs_for_server
@@ -1012,6 +1014,7 @@ def _db_mcp_server_to_api_mcp_server(
         is_authenticated=is_authenticated,
         user_authenticated=user_authenticated,
         status=db_server.status,
+        last_refreshed_at=db_server.last_refreshed_at,
         tool_count=tool_count,
         auth_template=auth_template,
         user_credentials=user_credentials,
@@ -1133,6 +1136,7 @@ def get_mcp_server_tools_snapshots(
                 server_id=server_id,
                 db_session=db,
                 status=MCPServerStatus.CONNECTED,
+                last_refreshed_at=datetime.datetime.now(datetime.timezone.utc),
             )
             db.commit()
         except Exception as e:
@@ -1205,7 +1209,7 @@ def _upsert_db_tools(
             db_session=db,
             passthrough_auth=False,
             mcp_server_id=mcp_server_id,
-            enabled=False,
+            enabled=True,
         )
         new_tool.display_name = display_name
         new_tool.mcp_input_schema = input_schema
@@ -1383,7 +1387,21 @@ def _upsert_mcp_server(
         )
 
         # Cleanup: Delete existing connection configs
-        if changing_connection_config and mcp_server.admin_connection_config_id:
+        # If the auth type is OAUTH, delete all user connection configs
+        # If the auth type is API_TOKEN, delete the admin connection config and the admin user connection configs
+        if (
+            changing_connection_config
+            and mcp_server.admin_connection_config_id
+            and request.auth_type == MCPAuthenticationType.OAUTH
+        ):
+            delete_all_user_connection_configs_for_server_no_commit(
+                mcp_server.id, db_session
+            )
+        elif (
+            changing_connection_config
+            and mcp_server.admin_connection_config_id
+            and request.auth_type == MCPAuthenticationType.API_TOKEN
+        ):
             delete_connection_config(mcp_server.admin_connection_config_id, db_session)
             if user and user.email:
                 delete_user_connection_configs_for_server(
@@ -1712,12 +1730,12 @@ def get_mcp_server_db_tools(
 
 
 @admin_router.post("/servers/create", response_model=MCPServerCreateResponse)
-def upsert_mcp_server_with_tools(
+def upsert_mcp_server(
     request: MCPToolCreateRequest,
     db_session: Session = Depends(get_session),
     user: User | None = Depends(current_curator_or_admin_user),
 ) -> MCPServerCreateResponse:
-    """Create or update an MCP server and associated tools"""
+    """Create or update an MCP server (no tools yet)"""
 
     # Validate auth_performer for non-none auth types
     if request.auth_type != MCPAuthenticationType.NONE and not request.auth_performer:
@@ -1833,14 +1851,8 @@ def create_mcp_server_simple(
 ) -> MCPServer:
     """Create MCP server with minimal information - auth to be configured later"""
 
-    if not user:
-        raise HTTPException(
-            status_code=401,
-            detail="Must be logged in as a curator or admin to create MCP server",
-        )
-
     mcp_server = create_mcp_server__no_commit(
-        owner_email=user.email,
+        owner_email=user.email if user else "",
         name=request.name,
         description=request.description,
         server_url=request.server_url,

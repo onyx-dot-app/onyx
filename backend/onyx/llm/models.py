@@ -29,14 +29,15 @@ class ReasoningEffort(str, Enum):
 # Budget tokens for Claude extended thinking at each reasoning effort level
 CLAUDE_REASONING_BUDGET_TOKENS: dict[ReasoningEffort, int] = {
     ReasoningEffort.OFF: 0,
-    ReasoningEffort.LOW: 1000,
+    ReasoningEffort.LOW: 1024,
     ReasoningEffort.MEDIUM: 5000,
     ReasoningEffort.HIGH: 10000,
 }
 
-# OpenAI reasoning effort mapping (direct string values)
-OPENAI_REASONING_EFFORT: dict[ReasoningEffort, str] = {
-    ReasoningEffort.OFF: "none",  # this only works for the 5 series though
+# OpenAI reasoning effort mapping
+OPENAI_REASONING_EFFORT: dict[ReasoningEffort | None, str] = {
+    None: "low",
+    ReasoningEffort.OFF: "none",
     ReasoningEffort.LOW: "low",
     ReasoningEffort.MEDIUM: "medium",
     ReasoningEffort.HIGH: "high",

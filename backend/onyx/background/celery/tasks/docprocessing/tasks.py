@@ -25,14 +25,14 @@ from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
 from onyx.background.celery.celery_utils import httpx_init_vespa_pool
 from onyx.background.celery.memory_monitoring import emit_process_memory
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
+from onyx.background.celery.tasks.docfetching.task_creation_utils import (
+    try_creating_docfetching_task,
+)
 from onyx.background.celery.tasks.docprocessing.heartbeat import start_heartbeat
 from onyx.background.celery.tasks.docprocessing.heartbeat import stop_heartbeat
 from onyx.background.celery.tasks.docprocessing.utils import IndexingCallback
 from onyx.background.celery.tasks.docprocessing.utils import is_in_repeated_error_state
 from onyx.background.celery.tasks.docprocessing.utils import should_index
-from onyx.background.celery.tasks.docprocessing.utils import (
-    try_creating_docfetching_task,
-)
 from onyx.background.celery.tasks.models import DocProcessingContext
 from onyx.background.indexing.checkpointing_utils import cleanup_checkpoint
 from onyx.background.indexing.checkpointing_utils import (
@@ -45,6 +45,7 @@ from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
 from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_INDEXING_LOCK_TIMEOUT
+from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
@@ -108,6 +109,7 @@ from onyx.redis.redis_utils import is_fence
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.logger import setup_logger
 from onyx.utils.middleware import make_randomized_onyx_request_id
+from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
 from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
@@ -546,6 +548,12 @@ def check_indexing_completion(
                     else ConnectorCredentialPairStatus.ACTIVE
                 )
                 db_session.commit()
+
+            mt_cloud_telemetry(
+                tenant_id=tenant_id,
+                distinct_id=tenant_id,
+                event=MilestoneRecordType.CONNECTOR_SUCCEEDED,
+            )
 
             # Clear repeated error state on success
             if cc_pair.in_repeated_error_state:
@@ -1404,8 +1412,13 @@ def _docprocessing_task(
             )
 
             # Process documents through indexing pipeline
+            connector_source = (
+                index_attempt.connector_credential_pair.connector.source.value
+            )
             task_logger.info(
-                f"Processing {len(documents)} documents through indexing pipeline"
+                f"Processing {len(documents)} documents through indexing pipeline: "
+                f"cc_pair_id={cc_pair_id}, source={connector_source}, "
+                f"batch_num={batch_num}"
             )
 
             adapter = DocumentIndexingBatchAdapter(
@@ -1495,6 +1508,8 @@ def _docprocessing_task(
 
         # FIX: Explicitly clear document batch from memory and force garbage collection
         # This helps prevent memory accumulation across multiple batches
+        # NOTE: Thread-local event loops in embedding threads are cleaned up automatically
+        # via the _cleanup_thread_local decorator in search_nlp_models.py
         del documents
         gc.collect()
 

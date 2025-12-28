@@ -9,9 +9,8 @@ import { mutate } from "swr";
 import { Badge } from "@/components/ui/badge";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
-import { cn, isSubset } from "@/lib/utils";
-import SvgSettings from "@/icons/settings";
-
+import { SvgSettings } from "@opal/icons";
+import { cn } from "@/lib/utils";
 function LLMProviderUpdateModal({
   llmProviderDescriptor,
   onClose,
@@ -186,23 +185,9 @@ export function ConfiguredLLMProviderDisplay({
         return (
           <LLMProviderDisplay
             key={provider.id}
-            // if the user has specified custom model names,
-            // then the provider is custom - don't use the default
-            // provider descriptor
-            llmProviderDescriptor={
-              defaultProviderDesciptor &&
-              (defaultProviderDesciptor.model_configurations.length === 0 ||
-                isSubset(
-                  defaultProviderDesciptor.model_configurations.map(
-                    (model_configuration) => model_configuration.name
-                  ),
-                  provider.model_configurations.map(
-                    (model_configuration) => model_configuration.name
-                  )
-                ))
-                ? defaultProviderDesciptor
-                : null
-            }
+            // Use the well-known provider descriptor if one exists for this provider type
+            // The provider is only "custom" if it doesn't match any well-known provider
+            llmProviderDescriptor={defaultProviderDesciptor || null}
             existingLlmProvider={provider}
           />
         );

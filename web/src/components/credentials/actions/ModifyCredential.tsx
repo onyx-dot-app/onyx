@@ -11,9 +11,7 @@ import {
 } from "@/lib/connectors/credentials";
 import { Connector } from "@/lib/connectors/connectors";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgTrash from "@/icons/trash";
-import SvgAlertTriangle from "@/icons/alert-triangle";
-
+import { SvgAlertTriangle, SvgTrash } from "@opal/icons";
 interface CredentialSelectionTableProps {
   credentials: Credential<any>[];
   editableCredentials: Credential<any>[];
@@ -116,7 +114,7 @@ function CredentialSelectionTable({
                   <td className="p-2">
                     {new Date(credential.time_updated).toLocaleString()}
                   </td>
-                  <td className="pt-3 flex gap-x-2 content-center mt-auto">
+                  <td className="p-2 flex gap-x-2 content-center mt-auto">
                     <IconButton
                       onClick={async () => {
                         onDeleteCredential(credential);

@@ -257,8 +257,8 @@ def _migrate_files_to_external_storage() -> None:
             print(f"File {file_id} not found in PostgreSQL storage.")
             continue
 
-        lobj_id = cast(int, file_record.lobj_oid)  # type: ignore
-        file_metadata = cast(Any, file_record.file_metadata)  # type: ignore
+        lobj_id = cast(int, file_record.lobj_oid)
+        file_metadata = cast(Any, file_record.file_metadata)
 
         # Read file content from PostgreSQL
         try:
@@ -280,7 +280,7 @@ def _migrate_files_to_external_storage() -> None:
             else:
                 # Convert other types to dict if possible, otherwise None
                 try:
-                    file_metadata = dict(file_record.file_metadata)  # type: ignore
+                    file_metadata = dict(file_record.file_metadata)
                 except (TypeError, ValueError):
                     file_metadata = None
 

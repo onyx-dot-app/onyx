@@ -38,7 +38,7 @@ class AsanaAPI:
     def __init__(
         self, api_token: str, workspace_gid: str, team_gid: str | None
     ) -> None:
-        self._user = None  # type: ignore
+        self._user = None
         self.workspace_gid = workspace_gid
         self.team_gid = team_gid
 
@@ -97,28 +97,31 @@ class AsanaAPI:
         self, project_gid: str, start_date: str, start_seconds: int
     ) -> Iterator[AsanaTask]:
         project = self.project_api.get_project(project_gid, opts={})
-        if project["archived"]:
-            logger.info(f"Skipping archived project: {project['name']} ({project_gid})")
-            yield from []
-        if not project["team"] or not project["team"]["gid"]:
+        project_name = project.get("name", project_gid)
+        team = project.get("team") or {}
+        team_gid = team.get("gid")
+
+        if project.get("archived"):
+            logger.info(f"Skipping archived project: {project_name} ({project_gid})")
+            return
+        if not team_gid:
             logger.info(
-                f"Skipping project without a team: {project['name']} ({project_gid})"
+                f"Skipping project without a team: {project_name} ({project_gid})"
             )
-            yield from []
-        if project["privacy_setting"] == "private":
-            if self.team_gid and project["team"]["gid"] != self.team_gid:
+            return
+        if project.get("privacy_setting") == "private":
+            if self.team_gid and team_gid != self.team_gid:
                 logger.info(
-                    f"Skipping private project not in configured team: {project['name']} ({project_gid})"
+                    f"Skipping private project not in configured team: {project_name} ({project_gid})"
                 )
-                yield from []
-            else:
-                logger.info(
-                    f"Processing private project in configured team: {project['name']} ({project_gid})"
-                )
+                return
+            logger.info(
+                f"Processing private project in configured team: {project_name} ({project_gid})"
+            )
 
         simple_start_date = start_date.split(".")[0].split("+")[0]
         logger.info(
-            f"Fetching tasks modified since {simple_start_date} for project: {project['name']} ({project_gid})"
+            f"Fetching tasks modified since {simple_start_date} for project: {project_name} ({project_gid})"
         )
 
         opts = {
@@ -157,7 +160,7 @@ class AsanaAPI:
                     link=data["permalink_url"],
                     last_modified=datetime.fromisoformat(data["modified_at"]),
                     project_gid=project_gid,
-                    project_name=project["name"],
+                    project_name=project_name,
                 )
                 yield task
             except Exception:

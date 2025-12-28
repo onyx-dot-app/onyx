@@ -1,14 +1,11 @@
 import React, { memo, useRef } from "react";
 import Text from "@/refresh-components/texts/Text";
-import SvgUser from "@/icons/user";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { OnboardingState, OnboardingActions, OnboardingStep } from "../types";
-import { Avatar } from "@/components/ui/avatar";
+import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import { cn } from "@/lib/utils";
-import SvgCheckCircle from "@/icons/check-circle";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgEdit from "@/icons/edit";
-
+import { SvgCheckCircle, SvgEdit, SvgUser } from "@opal/icons";
 type NameStepProps = {
   state: OnboardingState;
   actions: OnboardingActions;
@@ -74,7 +71,7 @@ const NameStepInner = ({
       tabIndex={0}
     >
       <div className={cn("flex items-center gap-1", !isActive && "opacity-50")}>
-        <Avatar
+        <InputAvatar
           className={cn(
             "flex items-center justify-center bg-background-neutral-inverted-00",
             "w-5 h-5"
@@ -83,7 +80,7 @@ const NameStepInner = ({
           <Text inverted secondaryBody>
             {userName?.[0]?.toUpperCase()}
           </Text>
-        </Avatar>
+        </InputAvatar>
         <Text text04 mainUiAction>
           {userName}
         </Text>

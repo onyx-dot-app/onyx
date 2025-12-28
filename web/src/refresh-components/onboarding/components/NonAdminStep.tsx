@@ -1,4 +1,3 @@
-import SvgUser from "@/icons/user";
 import React, { useRef, useState, useEffect } from "react";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -6,11 +5,9 @@ import Button from "@/refresh-components/buttons/Button";
 import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/components/user/UserProvider";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgX from "@/icons/x";
-import SvgCheckCircle from "@/icons/check-circle";
-import SvgEdit from "@/icons/edit";
-import { Avatar } from "@/components/ui/avatar";
+import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import { cn } from "@/lib/utils";
+import { SvgCheckCircle, SvgEdit, SvgUser, SvgX } from "@opal/icons";
 
 export default function NonAdminStep() {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -114,7 +111,7 @@ export default function NonAdminStep() {
           }}
         >
           <div className="flex items-center gap-1">
-            <Avatar
+            <InputAvatar
               className={cn(
                 "flex items-center justify-center bg-background-neutral-inverted-00",
                 "w-5 h-5"
@@ -123,7 +120,7 @@ export default function NonAdminStep() {
               <Text inverted secondaryBody>
                 {savedName?.[0]?.toUpperCase()}
               </Text>
-            </Avatar>
+            </InputAvatar>
             <Text text04 mainUiAction>
               {savedName}
             </Text>

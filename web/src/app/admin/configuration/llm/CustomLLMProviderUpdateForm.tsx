@@ -23,11 +23,9 @@ import isEqual from "lodash/isEqual";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { ModelConfigurationField } from "./ModelConfigurationField";
-import SvgTrash from "@/icons/trash";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgX from "@/icons/x";
-
+import { SvgTrash, SvgX } from "@opal/icons";
 function customConfigProcessing(customConfigsList: [string, string][]) {
   const customConfig: { [key: string]: string } = {};
   customConfigsList.forEach(([key, value]) => {
@@ -64,8 +62,6 @@ export function CustomLLMProviderUpdateForm({
     api_base: existingLlmProvider?.api_base ?? "",
     api_version: existingLlmProvider?.api_version ?? "",
     default_model_name: existingLlmProvider?.default_model_name ?? null,
-    fast_default_model_name:
-      existingLlmProvider?.fast_default_model_name ?? null,
     model_configurations: existingLlmProvider?.model_configurations.map(
       (modelConfiguration) => ({
         ...modelConfiguration,
@@ -102,7 +98,6 @@ export function CustomLLMProviderUpdateForm({
       })
     ),
     default_model_name: Yup.string().required("Model name is required"),
-    fast_default_model_name: Yup.string().nullable(),
     custom_config_list: Yup.array(),
     // EE Only
     is_public: Yup.boolean().required(),
@@ -121,8 +116,9 @@ export function CustomLLMProviderUpdateForm({
 
         // build final payload
         const finalValues = { ...values };
-        finalValues.model_configurations = finalValues.model_configurations.map(
-          (modelConfiguration) => ({
+        // Filter out models that are not default, fast default, or visible
+        finalValues.model_configurations = finalValues.model_configurations
+          .map((modelConfiguration) => ({
             ...modelConfiguration,
             max_input_tokens:
               modelConfiguration.max_input_tokens === null ||
@@ -130,8 +126,12 @@ export function CustomLLMProviderUpdateForm({
                 ? null
                 : modelConfiguration.max_input_tokens,
             supports_image_input: false, // doesn't matter, not used
-          })
-        );
+          }))
+          .filter(
+            (modelConfiguration) =>
+              modelConfiguration.name === values.default_model_name ||
+              modelConfiguration.is_visible
+          );
         finalValues.api_key_changed = values.api_key !== initialValues.api_key;
 
         if (values.model_configurations.length === 0) {
@@ -429,15 +429,6 @@ export function CustomLLMProviderUpdateForm({
               label="Default Model"
               placeholder="E.g. gpt-4"
             />
-
-            {!existingLlmProvider?.deployment_name && (
-              <TextFormField
-                name="fast_default_model_name"
-                subtext="The model to use for lighter flows like `LLM Chunk Filter` for this provider. If not set, will use the Default Model configured above."
-                label="[Optional] Fast Model"
-                placeholder="E.g. gpt-4"
-              />
-            )}
 
             {arePaidEnterpriseFeaturesEnabled && (
               <>

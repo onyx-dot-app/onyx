@@ -1,4 +1,4 @@
-import SvgCheckCircle from "@/icons/check-circle";
+import { SvgCheckCircle } from "@opal/icons";
 
 export interface ProgressStepsProps {
   value: number;

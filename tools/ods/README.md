@@ -54,15 +54,26 @@ _Note: bash completion requires the [bash-completion](https://github.com/scop/ba
 
 ## Upgrading
 
-To upgrade the stable version in the `pyproject.toml`,
-
-```shell
-uv add --dev onyx-devtools --upgrade-package onyx-devtools
-```
+To upgrade the stable version, upgrade it as you would any other [requirement](https://github.com/onyx-dot-app/onyx/tree/main/backend/requirements#readme).
 
 ## Building from source
 
 Generally, `go build .` or `go install .` are sufficient.
+
+`go build .` will output a `tools/ods/ods` binary which you can call normally,
+
+```shell
+./ods --version
+```
+
+while `go install .` will output to your [GOPATH](https://go.dev/wiki/SettingGOPATH) (defaults `~/go/bin/ods`),
+
+```shell
+~/go/bin/ods --version
+```
+
+_Typically, `GOPATH` is added to your shell's `PATH`, but this may be confused easily during development
+with the pip version of `ods` installed in the Onyx venv._
 
 To build the wheel,
 

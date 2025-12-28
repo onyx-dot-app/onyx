@@ -121,6 +121,10 @@ export interface SlabCredentialJson {
   slab_bot_token: string;
 }
 
+export interface CodaCredentialJson {
+  coda_bearer_token: string;
+}
+
 export interface NotionCredentialJson {
   notion_integration_token: string;
 }
@@ -268,6 +272,10 @@ export interface HighspotCredentialJson {
   highspot_secret: string;
 }
 
+export interface DrupalWikiCredentialJson {
+  drupal_wiki_api_token: string;
+}
+
 export interface ImapCredentialJson {
   imap_username: string;
   imap_password: string;
@@ -309,6 +317,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
   } as JiraCredentialJson,
   productboard: { productboard_access_token: "" } as ProductboardCredentialJson,
   slab: { slab_bot_token: "" } as SlabCredentialJson,
+  coda: { coda_bearer_token: "" } as CodaCredentialJson,
   notion: { notion_integration_token: "" } as NotionCredentialJson,
   guru: { guru_user: "", guru_user_token: "" } as GuruCredentialJson,
   gong: {
@@ -453,6 +462,9 @@ export const credentialTemplates: Record<ValidSources, any> = {
   airtable: {
     airtable_access_token: "",
   } as AirtableCredentialJson,
+  drupal_wiki: {
+    drupal_wiki_api_token: "",
+  } as DrupalWikiCredentialJson,
   xenforo: null,
   google_sites: null,
   file: null,
@@ -529,6 +541,9 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // Slab
   slab_bot_token: "Slab Bot Token",
+
+  // Coda
+  coda_bearer_token: "Coda Bearer Token",
 
   // Notion
   notion_integration_token: "Notion Integration Token",
@@ -646,6 +661,9 @@ export const credentialDisplayNames: Record<string, string> = {
   highspot_url: "Highspot URL",
   highspot_key: "Highspot Key",
   highspot_secret: "Highspot Secret",
+
+  // Drupal Wiki
+  drupal_wiki_api_token: "Drupal Wiki Personal Access Token",
 
   // Bitbucket
   bitbucket_email: "Bitbucket Account Email",

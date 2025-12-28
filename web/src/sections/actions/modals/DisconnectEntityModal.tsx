@@ -4,8 +4,8 @@ import { useRef } from "react";
 import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
-import SvgUnplug from "@/icons/unplug";
-
+import { cn } from "@/lib/utils";
+import { SvgUnplug } from "@opal/icons";
 interface DisconnectEntityModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -48,7 +48,9 @@ export default function DisconnectEntityModal({
         }}
       >
         <Modal.Header
-          icon={SvgUnplug}
+          icon={({ className }) => (
+            <SvgUnplug className={cn(className, "stroke-action-danger-05")} />
+          )}
           title={`Disconnect ${name}`}
           className="p-4"
           onClose={onClose}
@@ -64,7 +66,7 @@ export default function DisconnectEntityModal({
           </Text>
         </Modal.Body>
 
-        <Modal.Footer className="p-4 gap-2">
+        <Modal.Footer className="gap-2">
           <Button main secondary onClick={onClose} disabled={isDisconnecting}>
             Cancel
           </Button>

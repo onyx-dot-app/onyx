@@ -571,6 +571,17 @@ class FileUploadResponse(BaseModel):
     zip_metadata: dict[str, Any]
 
 
+class ConnectorFileInfo(BaseModel):
+    file_id: str
+    file_name: str
+    file_size: int | None = None
+    upload_date: str | None = None
+
+
+class ConnectorFilesResponse(BaseModel):
+    files: list[ConnectorFileInfo]
+
+
 class ObjectCreationIdResponse(BaseModel):
     id: int
     credential: CredentialSnapshot | None = None

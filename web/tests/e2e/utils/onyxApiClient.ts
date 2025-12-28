@@ -370,7 +370,6 @@ export class OnyxApiClient {
           provider: "openai",
           api_key: "test-key",
           default_model_name: "gpt-4o",
-          fast_default_model_name: "gpt-4o-mini",
           is_public: false,
           groups: [groupId],
           personas: [],
@@ -602,17 +601,20 @@ export class OnyxApiClient {
    * Create and activate a web search provider for testing.
    * Uses a dummy API key that won't actually work, but allows the tool to be available.
    *
-   * @param providerType - Type of provider: "exa", "serper", or "google_pse"
+   * @param providerType - Type of provider: "exa", "serper", "google_pse", "searxng"
    * @param name - Optional name for the provider (defaults to "Test Provider")
    * @returns The created provider ID
    */
   async createWebSearchProvider(
-    providerType: "exa" | "serper" | "google_pse" = "exa",
+    providerType: "exa" | "serper" | "google_pse" | "searxng" = "exa",
     name: string = "Test Provider"
   ): Promise<number> {
     const config: Record<string, string> = {};
     if (providerType === "google_pse") {
       config.search_engine_id = "test-engine-id";
+    }
+    if (providerType === "searxng") {
+      config.searxng_base_url = "https://test-searxng.example.com";
     }
 
     const response = await this.post("/admin/web-search/search-providers", {
@@ -667,7 +669,6 @@ export class OnyxApiClient {
           provider: "openai",
           api_key: "test-image-gen-key",
           default_model_name: "gpt-4o",
-          fast_default_model_name: "gpt-4o-mini",
           is_public: true,
           groups: [],
           personas: [],

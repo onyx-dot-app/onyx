@@ -6,7 +6,7 @@ import Button from "@/refresh-components/buttons/Button";
 import Title from "@/components/ui/title";
 import Text from "@/components/ui/text";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { BackButton } from "@/components/BackButton";
+import BackButton from "@/refresh-components/buttons/BackButton";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import {
   DropdownMenu,
@@ -16,10 +16,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SourceChip } from "../components/input/ChatInputBar";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgX from "@/icons/x";
-import SvgMoreHorizontal from "@/icons/more-horizontal";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-import SvgPlus from "@/icons/plus";
+import { SvgMoreHorizontal, SvgPlus, SvgX } from "@opal/icons";
 
 export default function InputPrompts() {
   const [inputPrompts, setInputPrompts] = useState<InputPrompt[]>([]);
@@ -153,7 +151,7 @@ export default function InputPrompts() {
   };
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="mx-auto max-w-4xl py-8">
       <div className="absolute top-4 left-4">
         <BackButton />
       </div>

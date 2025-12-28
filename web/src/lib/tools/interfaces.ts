@@ -1,20 +1,78 @@
-export enum MCPAuthenticationType {
-  NONE = "NONE",
-  API_TOKEN = "API_TOKEN",
-  OAUTH = "OAUTH",
-  PT_OAUTH = "PT_OAUTH", // Pass-Through OAuth
+import type React from "react";
+import type { IconProps } from "@opal/types";
+
+// Generic action status for UI components
+export enum ActionStatus {
+  CONNECTED = "connected",
+  PENDING = "pending",
+  DISCONNECTED = "disconnected",
+  FETCHING = "fetching",
 }
 
-export enum MCPAuthenticationPerformer {
-  ADMIN = "ADMIN",
-  PER_USER = "PER_USER",
+export enum MCPServerStatus {
+  CREATED = "CREATED",
+  AWAITING_AUTH = "AWAITING_AUTH",
+  FETCHING_TOOLS = "FETCHING_TOOLS",
+  CONNECTED = "CONNECTED",
+  DISCONNECTED = "DISCONNECTED",
 }
 
-export enum MCPTransportType {
-  STDIO = "STDIO",
-  STREAMABLE_HTTP = "STREAMABLE_HTTP",
-  SSE = "SSE",
+export interface MCPServer {
+  id: number;
+  name: string;
+  description?: string;
+  server_url: string;
+  owner: string;
+  transport?: MCPTransportType;
+  auth_type?: MCPAuthenticationType;
+  auth_performer?: MCPAuthenticationPerformer;
+  is_authenticated: boolean;
+  user_authenticated?: boolean;
+  auth_template?: any;
+  admin_credentials?: Record<string, string>;
+  user_credentials?: Record<string, string>;
+  status: MCPServerStatus;
+  last_refreshed_at?: string;
+  tool_count: number;
 }
+
+export interface MCPServersResponse {
+  assistant_id: string;
+  mcp_servers: MCPServer[];
+}
+
+export interface MCPServerCreateRequest {
+  name: string;
+  description?: string;
+  server_url: string;
+}
+
+export interface MCPServerUpdateRequest {
+  name?: string;
+  description?: string;
+  server_url?: string;
+}
+
+export interface MCPTool {
+  id: string;
+  name: string;
+  description: string;
+  icon?: React.FunctionComponent<IconProps>;
+  isAvailable: boolean;
+  isEnabled: boolean;
+}
+
+export interface MethodSpec {
+  /* Defines a single method that is part of a custom tool. Each method maps to a single
+  action that the LLM can choose to take. */
+  name: string;
+  summary: string;
+  path: string;
+  method: string;
+  spec: Record<string, any>;
+  custom_headers: { key: string; value: string }[];
+}
+
 export interface ToolSnapshot {
   id: number;
   name: string;
@@ -51,39 +109,23 @@ export interface ToolSnapshot {
   default_enabled: boolean;
 }
 
-export interface MCPServer {
-  id: number;
-  name: string;
-  description?: string | null;
-  server_url: string;
-  owner: string;
-  transport: MCPTransportType;
-  auth_type: MCPAuthenticationType;
-  auth_performer: MCPAuthenticationPerformer;
-  is_authenticated: boolean;
-  user_authenticated?: boolean | null;
-  auth_template?: any;
-  admin_credentials?: Record<string, string>;
-  user_credentials?: Record<string, string>;
+export enum MCPAuthenticationType {
+  NONE = "NONE",
+  API_TOKEN = "API_TOKEN",
+  OAUTH = "OAUTH",
+  PT_OAUTH = "PT_OAUTH", // Pass-Through OAuth
 }
 
-export interface MCPServersResponse {
-  assistant_id: string;
-  mcp_servers: MCPServer[];
+export enum MCPAuthenticationPerformer {
+  ADMIN = "ADMIN",
+  PER_USER = "PER_USER",
 }
 
-export interface MethodSpec {
-  /* Defines a single method that is part of a custom tool. Each method maps to a single
-  action that the LLM can choose to take. */
-  name: string;
-  summary: string;
-  path: string;
-  method: string;
-  spec: Record<string, any>;
-  custom_headers: { key: string; value: string }[];
+export interface ApiResponse<T> {
+  data: T | null;
+  error: string | null;
 }
 
-// OAuth Configuration Types
 export interface OAuthConfig {
   id: number;
   name: string;
@@ -94,6 +136,12 @@ export interface OAuthConfig {
   tool_count: number;
   created_at: string;
   updated_at: string;
+}
+
+export enum MCPTransportType {
+  STDIO = "STDIO",
+  STREAMABLE_HTTP = "STREAMABLE_HTTP",
+  SSE = "SSE",
 }
 
 export interface OAuthConfigCreate {

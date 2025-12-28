@@ -5,11 +5,7 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { ProjectFile } from "@/app/chat/projects/ProjectsContext";
 import { formatRelativeTime } from "@/app/chat/components/projects/project_utils";
 import Text from "@/refresh-components/texts/Text";
-import { IconProps } from "@/icons";
-import SvgFileText from "@/icons/file-text";
-import SvgImage from "@/icons/image";
-import SvgEye from "@/icons/eye";
-import SvgXCircle from "@/icons/x-circle";
+import type { IconProps } from "@opal/types";
 import { getFileExtension, isImageExtension } from "@/lib/utils";
 import { UserFileStatus } from "@/app/chat/projects/projectsService";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
@@ -21,6 +17,13 @@ import Modal from "@/refresh-components/Modal";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import CounterSeparator from "@/refresh-components/CounterSeparator";
+import {
+  SvgEye,
+  SvgFiles,
+  SvgFileText,
+  SvgImage,
+  SvgXCircle,
+} from "@opal/icons";
 
 function getIcon(
   file: ProjectFile,
@@ -88,7 +91,6 @@ export interface UserFilesModalProps {
   // Modal content
   title: string;
   description: string;
-  icon: React.FunctionComponent<IconProps>;
   recentFiles: ProjectFile[];
   handleUploadChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   selectedFileIds?: string[];
@@ -103,7 +105,6 @@ export interface UserFilesModalProps {
 export default function UserFilesModal({
   title,
   description,
-  icon,
   recentFiles,
   handleUploadChange,
   selectedFileIds,
@@ -182,7 +183,7 @@ export default function UserFilesModal({
           }}
           preventAccidentalClose={false}
         >
-          <Modal.Header icon={icon} title={title} description={description}>
+          <Modal.Header icon={SvgFiles} title={title} description={description}>
             {/* Search bar section */}
             <div className="flex flex-row items-center gap-2">
               <InputTypeIn

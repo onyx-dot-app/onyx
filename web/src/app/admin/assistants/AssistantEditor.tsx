@@ -55,9 +55,9 @@ import {
 import { debounce } from "lodash";
 import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
 import StarterMessagesList from "@/app/admin/assistants/StarterMessageList";
-import UnlabeledSwitchField from "@/refresh-components/formik-fields/UnlabeledSwitchField";
+import SwitchField from "@/refresh-components/form/SwitchField";
 import CustomAgentAvatar from "@/refresh-components/avatars/CustomAgentAvatar";
-import { BackButton } from "@/components/BackButton";
+import BackButton from "@/refresh-components/buttons/BackButton";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { MinimalUserSnapshot } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
@@ -90,14 +90,13 @@ import {
 } from "@/app/chat/projects/projectsService";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
-import SvgTrash from "@/icons/trash";
-import SvgFiles from "@/icons/files";
-import { useAgents } from "@/lib/hooks/useAgents";
+import { useAgents } from "@/hooks/useAgents";
 import Text from "@/refresh-components/texts/Text";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
+import { SvgFiles, SvgTrash } from "@opal/icons";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
@@ -684,7 +683,6 @@ export default function AssistantEditor({
                 <UserFilesModal
                   title="User Files"
                   description="All files selected for this assistant"
-                  icon={SvgFiles}
                   recentFiles={values.user_file_ids.map(
                     (userFileId: string) => {
                       const rf = allRecentFiles.find(
@@ -848,7 +846,7 @@ export default function AssistantEditor({
                                   : ""
                               }`}
                             >
-                              <UnlabeledSwitchField
+                              <SwitchField
                                 onCheckedChange={() =>
                                   toggleToolInValues(searchTool?.id || -1)
                                 }
@@ -1285,7 +1283,7 @@ export default function AssistantEditor({
                             side="top"
                           >
                             <div>
-                              <UnlabeledSwitchField
+                              <SwitchField
                                 name="is_public"
                                 onCheckedChange={(checked) => {
                                   if (values.is_default_persona && !checked) {

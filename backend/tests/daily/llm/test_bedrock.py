@@ -33,7 +33,6 @@ def test_bedrock_llm_configuration(
     test_request: dict[str, Any] = {
         "provider": BEDROCK_PROVIDER_NAME,
         "default_model_name": bedrock_provider.default_model,
-        "fast_default_model_name": bedrock_provider.default_fast_model,
         "api_key": None,
         "api_base": None,
         "api_version": None,
@@ -66,7 +65,6 @@ def test_bedrock_llm_configuration_invalid_key(
     test_request: dict[str, Any] = {
         "provider": BEDROCK_PROVIDER_NAME,
         "default_model_name": bedrock_provider.default_model,
-        "fast_default_model_name": bedrock_provider.default_fast_model,
         "api_key": None,
         "api_base": None,
         "api_version": None,

@@ -37,10 +37,10 @@ Use the `web_search` tool to access up-to-date information from the web. Some ex
 
 OPEN_URLS_GUIDANCE = """
 
-## open_urls
-Use the `open_urls` tool to read the content of one or more URLs. Use this tool to access the contents of the most promising web pages from your searches.
+## open_url
+Use the `open_url` tool to read the content of one or more URLs. Use this tool to access the contents of the most promising web pages from your searches.
 You can open many URLs at once by passing multiple URLs in the array if multiple pages seem promising. Prioritize the most promising pages and reputable sources.
-You should almost always use open_urls after a web_search call. Use this tool when a user asks about a specific provided URL.
+You should almost always use open_url after a web_search call. Use this tool when a user asks about a specific provided URL.
 """
 
 PYTHON_TOOL_GUIDANCE = """
@@ -60,4 +60,8 @@ GENERATE_IMAGE_GUIDANCE = """
 ## generate_image
 NEVER use generate_image unless the user specifically requests an image.
 """
+
+TOOL_CALL_FAILURE_PROMPT = """
+LLM attempted to call a tool but failed. Most likely the tool name was misspelled.
+""".strip()
 # ruff: noqa: E501, W605 end

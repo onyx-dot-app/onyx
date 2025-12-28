@@ -7,7 +7,7 @@ import useSWR, { preload } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { checkUserIsNoAuthUser, logout } from "@/lib/user";
 import { useUser } from "@/components/user/UserProvider";
-import { Avatar } from "@/components/ui/avatar";
+import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import Text from "@/refresh-components/texts/Text";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import {
@@ -16,15 +16,12 @@ import {
   PopoverMenu,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import SvgLogOut from "@/icons/log-out";
-import SvgBell from "@/icons/bell";
-import SvgX from "@/icons/x";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import SvgUser from "@/icons/user";
 import { cn } from "@/lib/utils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import UserSettings from "@/sections/sidebar/Settings/UserSettings";
+import { SvgBell, SvgLogOut, SvgUser, SvgX } from "@opal/icons";
 
 function getDisplayName(email?: string, personalName?: string): string {
   // Prioritize custom personal name if set
@@ -198,7 +195,7 @@ export default function Settings({ folded }: SettingsProps) {
           <div id="onyx-user-dropdown">
             <SidebarTab
               leftIcon={({ className }) => (
-                <Avatar
+                <InputAvatar
                   className={cn(
                     "flex items-center justify-center bg-background-neutral-inverted-00",
                     className,
@@ -208,9 +205,9 @@ export default function Settings({ folded }: SettingsProps) {
                   <Text inverted secondaryBody>
                     {displayName[0]?.toUpperCase()}
                   </Text>
-                </Avatar>
+                </InputAvatar>
               )}
-              active={!!popupState}
+              transient={!!popupState}
               folded={folded}
             >
               {displayName}

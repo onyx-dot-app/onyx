@@ -22,7 +22,7 @@ from onyx.prompts.tool_prompts import PYTHON_TOOL_GUIDANCE
 from onyx.prompts.tool_prompts import TOOL_DESCRIPTION_SEARCH_GUIDANCE
 from onyx.prompts.tool_prompts import TOOL_SECTION_HEADER
 from onyx.prompts.tool_prompts import WEB_SEARCH_GUIDANCE
-from onyx.tools.tool import Tool
+from onyx.tools.interface import Tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -156,7 +156,7 @@ def build_system_prompt(
             system_prompt += company_context
         if memories:
             system_prompt += "\n".join(
-                memory.strip() for memory in memories if memory.strip()
+                "- " + memory.strip() for memory in memories if memory.strip()
             )
 
     # Append citation guidance after company context if placeholder was not present

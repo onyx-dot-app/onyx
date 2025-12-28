@@ -105,6 +105,15 @@ inferenceCapability:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  # Deployment strategy - use Recreate or RollingUpdate with maxSurge: 0 to terminate old pod first
+  # This prevents pending pods when cluster resources are constrained
+  strategy: {}
+  # Example for RollingUpdate that terminates old pod first:
+  # strategy:
+  #   type: RollingUpdate
+  #   rollingUpdate:
+  #     maxSurge: 0
+  #     maxUnavailable: 1
 
 indexCapability:
   service:
@@ -141,6 +150,15 @@ indexCapability:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  # Deployment strategy - use Recreate or RollingUpdate with maxSurge: 0 to terminate old pod first
+  # This prevents pending pods when cluster resources are constrained
+  strategy: {}
+  # Example for RollingUpdate that terminates old pod first:
+  # strategy:
+  #   type: RollingUpdate
+  #   rollingUpdate:
+  #     maxSurge: 0
+  #     maxUnavailable: 1
 config:
   envConfigMapName: env-configmap
 

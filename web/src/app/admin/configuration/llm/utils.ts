@@ -15,9 +15,6 @@ import {
   OllamaIcon,
   ZAIIcon,
 } from "@/components/icons/icons";
-import SvgAws from "@/icons/aws";
-import SvgOpenrouter from "@/icons/openrouter";
-
 import {
   WellKnownLLMProviderDescriptor,
   LLMProviderView,
@@ -28,6 +25,7 @@ import {
   ModelConfiguration,
 } from "./interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { SvgAws, SvgOpenrouter } from "@opal/icons";
 
 // Aggregator providers that host models from multiple vendors
 export const AGGREGATOR_PROVIDERS = new Set([
@@ -316,14 +314,6 @@ export const fetchModels = async (
       availableModelNames.length > 0
     ) {
       setFieldValue("default_model_name", availableModelNames[0]);
-    }
-
-    // Clear fast model if it's not in the new list
-    if (
-      values.fast_default_model_name &&
-      !availableModelNames.includes(values.fast_default_model_name)
-    ) {
-      setFieldValue("fast_default_model_name", null);
     }
 
     // Force a re-render by updating a timestamp or counter
