@@ -29,11 +29,6 @@ from onyx.tools.utils import explicit_tool_calling_supported
             "amazon.titan-text-express-v1",
             False,
         ),
-        (
-            LlmProviderNames.BEDROCK,
-            "amazon.titan-text-express-v1",
-            False,
-        ),
         (LlmProviderNames.OPENAI, "gpt-4o", True),
         (LlmProviderNames.OPENAI, "gpt-3.5-turbo-instruct", False),
     ],
