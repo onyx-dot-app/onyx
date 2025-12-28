@@ -4,8 +4,6 @@ LLM Constants
 Centralized constants for LLM providers, vendors, and display names.
 """
 
-# NOTE: This module intentionally avoids importing other `onyx` modules to
-# minimize circular import risk. Keep it "data-only" (stdlib imports are fine).
 from typing import Final
 
 
