@@ -140,31 +140,19 @@ def _validate_and_resolve_url(url: str) -> tuple[str, str, int]:
     return validated_ip, hostname, port
 
 
-def ssrf_safe_get(
+MAX_REDIRECTS = 10
+
+
+def _make_ssrf_safe_request(
     url: str,
     headers: dict[str, str] | None = None,
     timeout: int = 15,
     **kwargs: Any,
 ) -> requests.Response:
     """
-    Make a GET request with SSRF protection.
+    Make a single GET request with SSRF protection (no redirect following).
 
-    This function resolves the hostname, validates the IP is not private/internal,
-    and makes the request directly to the validated IP to prevent DNS rebinding attacks.
-
-    Args:
-        url: The URL to fetch
-        headers: Optional headers to include in the request
-        timeout: Request timeout in seconds
-        **kwargs: Additional arguments passed to requests.get()
-
-    Returns:
-        requests.Response object
-
-    Raises:
-        SSRFException: If the URL could be used for SSRF attack
-        ValueError: If the URL is malformed
-        requests.RequestException: If the request fails
+    Returns the response which may be a redirect (3xx status).
     """
     # Validate and resolve the URL to get a safe IP
     validated_ip, original_hostname, port = _validate_and_resolve_url(url)
@@ -203,7 +191,85 @@ def ssrf_safe_get(
             f"{original_hostname}:{port}" if port != 80 else original_hostname
         )
 
-    return requests.get(request_url, headers=request_headers, timeout=timeout, **kwargs)
+    # Disable automatic redirects to prevent SSRF bypass via redirect
+    return requests.get(
+        request_url,
+        headers=request_headers,
+        timeout=timeout,
+        allow_redirects=False,
+        **kwargs,
+    )
+
+
+def ssrf_safe_get(
+    url: str,
+    headers: dict[str, str] | None = None,
+    timeout: int = 15,
+    follow_redirects: bool = True,
+    **kwargs: Any,
+) -> requests.Response:
+    """
+    Make a GET request with SSRF protection.
+
+    This function resolves the hostname, validates the IP is not private/internal,
+    and makes the request directly to the validated IP to prevent DNS rebinding attacks.
+    Redirects are followed safely by validating each redirect URL.
+
+    Args:
+        url: The URL to fetch
+        headers: Optional headers to include in the request
+        timeout: Request timeout in seconds
+        follow_redirects: Whether to follow redirects (each redirect URL is validated)
+        **kwargs: Additional arguments passed to requests.get()
+
+    Returns:
+        requests.Response object
+
+    Raises:
+        SSRFException: If the URL could be used for SSRF attack
+        ValueError: If the URL is malformed
+        requests.RequestException: If the request fails
+    """
+    response = _make_ssrf_safe_request(url, headers, timeout, **kwargs)
+
+    if not follow_redirects:
+        return response
+
+    # Manually follow redirects while validating each redirect URL
+    redirect_count = 0
+    current_url = url
+
+    while response.is_redirect and redirect_count < MAX_REDIRECTS:
+        redirect_count += 1
+
+        # Get the redirect location
+        redirect_url = response.headers.get("Location")
+        if not redirect_url:
+            break
+
+        # Handle relative redirects
+        if not redirect_url.startswith(("http://", "https://")):
+            parsed_current = urlparse(current_url)
+            if redirect_url.startswith("/"):
+                redirect_url = (
+                    f"{parsed_current.scheme}://{parsed_current.netloc}{redirect_url}"
+                )
+            else:
+                # Relative path
+                base_path = parsed_current.path.rsplit("/", 1)[0]
+                redirect_url = (
+                    f"{parsed_current.scheme}://{parsed_current.netloc}"
+                    f"{base_path}/{redirect_url}"
+                )
+
+        # Validate and follow the redirect (this will raise SSRFException if invalid)
+        current_url = redirect_url
+        response = _make_ssrf_safe_request(redirect_url, headers, timeout, **kwargs)
+
+    if response.is_redirect and redirect_count >= MAX_REDIRECTS:
+        raise SSRFException(f"Too many redirects (max {MAX_REDIRECTS})")
+
+    return response
 
 
 def normalize_url(url: str) -> str:
