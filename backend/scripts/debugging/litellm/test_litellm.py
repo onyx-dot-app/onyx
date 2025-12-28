@@ -78,7 +78,7 @@ stream = litellm.completion(
                         },
                         "shape": {
                             "type": "string",
-                            "description": "Optional - only specify if you want a specific shape."
+                            "description": "Optional - only specify if you want a specific shape. "
                             "Image shape: 'square', 'portrait', or 'landscape'.",
                             "enum": ["square", "portrait", "landscape"],
                         },
@@ -90,6 +90,7 @@ stream = litellm.completion(
         {
             "type": "function",
             "function": {
+                "name": "web_search",
                 "description": "Search the web for information. "
                 "Returns a list of search results with titles, metadata, and snippets.",
                 "parameters": {

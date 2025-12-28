@@ -1,6 +1,6 @@
 Resources in this directory are used to debug LiteLLM and other AI providers.
 Note that the requests are meant to be identical to what the Onyx application sends to litellm.
-Double check that the this is the case before using these scripts.
+Double check that this is the case before using these scripts.
 
 ## Files
 
