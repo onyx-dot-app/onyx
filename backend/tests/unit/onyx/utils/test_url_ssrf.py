@@ -129,7 +129,9 @@ class TestValidateAndResolveUrl:
         """Test that 'localhost' hostname is blocked."""
         with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
             mock_getaddrinfo.return_value = [(2, 1, 6, "", ("127.0.0.1", 80))]
-            with pytest.raises(SSRFException, match="internal/private IP"):
+            with pytest.raises(
+                SSRFException, match="Access to hostname 'localhost' is not allowed."
+            ):
                 _validate_and_resolve_url("http://localhost/")
 
     def test_private_ip_10_network(self) -> None:
