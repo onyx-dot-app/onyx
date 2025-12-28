@@ -14,8 +14,15 @@ logger = setup_logger()
 
 # Hostnames that should always be blocked
 BLOCKED_HOSTNAMES = {
+    # Localhost variations
+    "localhost",
+    # Cloud metadata endpoints (defense-in-depth, IPs also blocked via _is_ip_private_or_reserved)
+    "169.254.169.254",  # AWS/Azure/GCP metadata IP
+    "fd00:ec2::254",  # AWS IPv6 metadata
+    "metadata.azure.com",
     "metadata.google.internal",
     "metadata.gke.internal",
+    # Kubernetes internal
     "kubernetes.default",
     "kubernetes.default.svc",
     "kubernetes.default.svc.cluster.local",
