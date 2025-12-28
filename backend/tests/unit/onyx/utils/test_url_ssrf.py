@@ -151,7 +151,9 @@ class TestValidateAndResolveUrl:
 
     def test_aws_metadata_endpoint(self) -> None:
         """Test that AWS metadata endpoint is blocked."""
-        with pytest.raises(SSRFException, match="internal/private IP"):
+        with pytest.raises(
+            SSRFException, match="Access to hostname '169.254.169.254' is not allowed."
+        ):
             _validate_and_resolve_url("http://169.254.169.254/latest/meta-data/")
 
     def test_blocked_hostname_kubernetes(self) -> None:
