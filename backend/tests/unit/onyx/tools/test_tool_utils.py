@@ -1,42 +1,41 @@
 import pytest
 
-from onyx.llm.llm_provider_options import ANTHROPIC_PROVIDER_NAME
-from onyx.llm.llm_provider_options import BEDROCK_PROVIDER_NAME
+from onyx.llm.constants import LlmProviderNames
 from onyx.tools.utils import explicit_tool_calling_supported
 
 
 @pytest.mark.parametrize(
     "model_provider, model_name, expected_result",
     [
-        (ANTHROPIC_PROVIDER_NAME, "claude-4-sonnet-20250514", True),
-        (ANTHROPIC_PROVIDER_NAME, "claude-3-opus-20240229", True),
+        (LlmProviderNames.ANTHROPIC, "claude-4-sonnet-20250514", True),
+        (LlmProviderNames.ANTHROPIC, "claude-3-opus-20240229", True),
         (
             "another-provider",
             "claude-3-haiku-20240307",
             True,
         ),
         (
-            ANTHROPIC_PROVIDER_NAME,
+            LlmProviderNames.ANTHROPIC,
             "claude-3-sonnet-20240229",
             False,
         ),
         (
-            BEDROCK_PROVIDER_NAME,
+            LlmProviderNames.BEDROCK,
             "anthropic.claude-3-opus-20240229-v1:0",
             True,
         ),
         (
-            BEDROCK_PROVIDER_NAME,
+            LlmProviderNames.BEDROCK,
             "amazon.titan-text-express-v1",
             False,
         ),
         (
-            BEDROCK_PROVIDER_NAME,
+            LlmProviderNames.BEDROCK,
             "amazon.titan-text-express-v1",
             False,
         ),
-        ("openai", "gpt-4o", True),
-        ("openai", "gpt-3.5-turbo-instruct", False),
+        (LlmProviderNames.OPENAI, "gpt-4o", True),
+        (LlmProviderNames.OPENAI, "gpt-3.5-turbo-instruct", False),
     ],
 )
 def test_explicit_tool_calling_supported(

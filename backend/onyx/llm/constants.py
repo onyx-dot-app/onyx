@@ -4,18 +4,41 @@ LLM Constants
 Centralized constants for LLM providers, vendors, and display names.
 """
 
+# NOTE: This module intentionally avoids importing other `onyx` modules to
+# minimize circular import risk. Keep it "data-only" (stdlib imports are fine).
+from typing import Final
+
+
+# Provider names
+class LlmProviderNames:
+    """
+    Canonical string identifiers for LLM providers.
+    """
+
+    OPENAI: Final[str] = "openai"
+    ANTHROPIC: Final[str] = "anthropic"
+    GOOGLE: Final[str] = "google"
+    BEDROCK: Final[str] = "bedrock"
+    BEDROCK_CONVERSE: Final[str] = "bedrock_converse"
+    VERTEX_AI: Final[str] = "vertex_ai"
+    OPENROUTER: Final[str] = "openrouter"
+    AZURE: Final[str] = "azure"
+    OLLAMA_CHAT: Final[str] = "ollama_chat"
+    LITELLM_PROXY: Final[str] = "litellm_proxy"
+
+
 # Proper capitalization for known providers and vendors
 PROVIDER_DISPLAY_NAMES: dict[str, str] = {
-    "openai": "OpenAI",
-    "anthropic": "Anthropic",
-    "google": "Google",
-    "bedrock": "Bedrock",
-    "bedrock_converse": "Bedrock",
-    "vertex_ai": "Vertex AI",
-    "openrouter": "OpenRouter",
-    "azure": "Azure",
+    LlmProviderNames.OPENAI: "OpenAI",
+    LlmProviderNames.ANTHROPIC: "Anthropic",
+    LlmProviderNames.GOOGLE: "Google",
+    LlmProviderNames.BEDROCK: "Bedrock",
+    LlmProviderNames.BEDROCK_CONVERSE: "Bedrock",
+    LlmProviderNames.VERTEX_AI: "Vertex AI",
+    LlmProviderNames.OPENROUTER: "OpenRouter",
+    LlmProviderNames.AZURE: "Azure",
     "ollama": "Ollama",
-    "ollama_chat": "Ollama",
+    LlmProviderNames.OLLAMA_CHAT: "Ollama",
     "groq": "Groq",
     "anyscale": "Anyscale",
     "deepseek": "DeepSeek",
@@ -59,12 +82,12 @@ VENDOR_BRAND_NAMES: dict[str, str] = {
 
 # Aggregator providers that host models from multiple vendors
 AGGREGATOR_PROVIDERS: set[str] = {
-    "bedrock",
+    LlmProviderNames.BEDROCK,
     "bedrock_converse",
-    "openrouter",
-    "ollama_chat",
-    "vertex_ai",
-    "azure",
+    LlmProviderNames.OPENROUTER,
+    LlmProviderNames.OLLAMA_CHAT,
+    LlmProviderNames.VERTEX_AI,
+    LlmProviderNames.AZURE,
 }
 
 # Model family name mappings for display name generation

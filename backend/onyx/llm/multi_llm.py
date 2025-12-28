@@ -13,13 +13,13 @@ from onyx.configs.chat_configs import QA_TIMEOUT
 from onyx.configs.model_configs import DEFAULT_REASONING_EFFORT
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.interfaces import ReasoningEffort
 from onyx.llm.interfaces import ToolChoiceOptions
-from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
 from onyx.llm.llm_provider_options import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.llm_provider_options import VERTEX_LOCATION_KWARG
 from onyx.llm.model_response import ModelResponse
@@ -148,7 +148,7 @@ class LitellmLLM(LLM):
             model_kwargs[VERTEX_LOCATION_KWARG] = "global"
 
         # This is needed for Ollama to do proper function calling
-        if model_provider == OLLAMA_PROVIDER_NAME and api_base is not None:
+        if model_provider == LlmProviderNames.OLLAMA_CHAT and api_base is not None:
             os.environ["OLLAMA_API_BASE"] = api_base
         if extra_headers:
             model_kwargs.update({"extra_headers": extra_headers})

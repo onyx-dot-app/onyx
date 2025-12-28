@@ -19,6 +19,7 @@ from onyx.indexing.indexing_pipeline import filter_documents
 from onyx.indexing.indexing_pipeline import process_image_sections
 from onyx.indexing.models import ChunkEmbedding
 from onyx.indexing.models import IndexChunk
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_response import Choice
 from onyx.llm.model_response import Message
 from onyx.llm.model_response import ModelResponse
@@ -309,7 +310,7 @@ def test_contextual_rag(
 
     mock_llm = Mock()
     mock_llm.config.max_input_tokens = get_max_input_tokens(
-        model_provider="openai", model_name="gtp-4o"
+        model_provider=LlmProviderNames.OPENAI, model_name="gtp-4o"
     )
     mock_llm.invoke = mock_llm_invoke
 
