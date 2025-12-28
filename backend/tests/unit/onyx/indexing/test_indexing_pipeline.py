@@ -310,7 +310,7 @@ def test_contextual_rag(
 
     mock_llm = Mock()
     mock_llm.config.max_input_tokens = get_max_input_tokens(
-        model_provider=LlmProviderNames.OPENAI, model_name="gtp-4o"
+        model_provider=LlmProviderNames.OPENAI, model_name="gpt-4o"
     )
     mock_llm.invoke = mock_llm_invoke
 

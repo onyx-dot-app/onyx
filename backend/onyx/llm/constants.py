@@ -81,7 +81,7 @@ VENDOR_BRAND_NAMES: dict[str, str] = {
 # Aggregator providers that host models from multiple vendors
 AGGREGATOR_PROVIDERS: set[str] = {
     LlmProviderNames.BEDROCK,
-    "bedrock_converse",
+    LlmProviderNames.BEDROCK_CONVERSE,
     LlmProviderNames.OPENROUTER,
     LlmProviderNames.OLLAMA_CHAT,
     LlmProviderNames.VERTEX_AI,

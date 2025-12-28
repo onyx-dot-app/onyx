@@ -127,7 +127,7 @@ class LitellmLLM(LLM):
             # model_kwarg to the completion call for vertex AI. More details here:
             # https://docs.litellm.ai/docs/providers/vertex
             for k, v in custom_config.items():
-                if model_provider == "vertex_ai":
+                if model_provider == LlmProviderNames.VERTEX_AI:
                     if k == VERTEX_CREDENTIALS_FILE_KWARG:
                         model_kwargs[k] = v
                         continue
@@ -144,7 +144,10 @@ class LitellmLLM(LLM):
 
         # Default vertex_location to "global" if not provided for Vertex AI
         # Latest gemini models are only available through the global region
-        if model_provider == "vertex_ai" and VERTEX_LOCATION_KWARG not in model_kwargs:
+        if (
+            model_provider == LlmProviderNames.VERTEX_AI
+            and VERTEX_LOCATION_KWARG not in model_kwargs
+        ):
             model_kwargs[VERTEX_LOCATION_KWARG] = "global"
 
         # This is needed for Ollama to do proper function calling
