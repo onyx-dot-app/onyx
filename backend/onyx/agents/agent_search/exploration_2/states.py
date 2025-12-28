@@ -44,6 +44,7 @@ class OrchestrationUpdate(LoggerUpdate):
     num_search_iterations: int = 0
     iteration_available_tools_for_thinking_string: str = ""
     traces: Annotated[list[str], add] = []
+    num_iteration_responses: int = 0
 
 
 class CSUpdate(BaseModel):

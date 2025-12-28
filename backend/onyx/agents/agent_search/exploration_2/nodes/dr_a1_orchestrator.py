@@ -47,8 +47,10 @@ to use those characteristics for the question generation for the search tool.
 
 The tool takes a list of requests, and for each request, it mandatory requires a search query, reasoning information, \
 but can optionally take a source filters, a start date filter, and an end date filter.
-Source filters can be 'github', 'slack', 'confluence', 'jira', 'email', 'file', 'linear', 'call'.. This field is a list \
-of strings. If the list is kept empty, no filters are applied.
+Source filters can be 'github', 'slack', 'confluence', 'jira', 'email', 'file', 'linear', 'call', 'google doc'.. \
+This field is a list \
+of strings. If the list is kept empty, no filters are applied. Do not use any source filters unless \
+they are implied in question, but if they are make sure to use them!
 The date fields should be in the format 'YYYY-MM-DD'. If the date fields are kept empty, no date filters are applied.
 
 NOTE: don't be redundant, NEVER use source or date filter information in the search query itself! If the original question \
@@ -177,13 +179,17 @@ _QUERY_INDEPENDENT_CONTEXT_EXPLORER_TOOL = {
     "function": {
         "name": "query_independent_context_explorer_tool",
         "description": """This tool can be used to acquire more context from a 'memory' that has \
-information about the user, their \
-company. If you think that the question implicitly relates to something the user \
+information about the user and their \
+company. This tool should be called if it the context of the question dos not seem to be sufficiently \
+specified. Also, if you think that the question implicitly relates to something the user \
 expects you to know about them or their company in order to answer the question, you should use this tool to acquire the \
 necessary context. Common - but not exclusive(!) - signals may be a 'I', 'we', 'our', 'us', etc. in the question. \
 (In fact, if these \
 signals are present, you must use this tool if available, even if you think you have all the information you need \
 to answer the question.) \
+Note that the company information may have multiple names. That would mean that the same company has multiple \
+names, for example if a name change occured. In these cases, any of these mentions should be interpreted as \
+"the user's company".
 Use this tool if you think it can help TO PROVIDE CONTEXT or INSTRUCTIONS FOR THE  question, but do NOT use \
 this tool to find actual answer information; it is just for providing context and instructions!""",
         "parameters": {
@@ -290,8 +296,10 @@ def orchestrator(
 
     message_history_for_continuation = state.message_history_for_continuation
     new_messages_for_continuation: list[SystemMessage | HumanMessage | AIMessage] = []
+    num_iteration_responses = state.num_iteration_responses
 
-    if iteration_nr > 0:
+    if len(state.iteration_responses) > num_iteration_responses:
+        num_iteration_responses = len(state.iteration_responses)
         last_iteration_responses = [
             x
             for x in state.iteration_responses
@@ -302,7 +310,23 @@ def orchestrator(
     the questions and tasks posed, and responses:\n\n"
             for last_iteration_response in last_iteration_responses:
                 response_wrapper += f"{last_iteration_response.tool}: {last_iteration_response.question}\n"
-                response_wrapper += f"Response: {last_iteration_response.answer}\n\n"
+
+                if last_iteration_response.answer:
+                    response_wrapper += f"Answer: {last_iteration_response.answer}\n"
+                elif last_iteration_response.cited_documents:
+
+                    cited_information_string = ""
+                    for (
+                        cited_document
+                    ) in last_iteration_response.cited_documents.values():
+                        cited_information_string += (
+                            f"  - {cited_document.combined_content}\n"
+                        )
+                    response_wrapper += (
+                        f"Cited Information: {cited_information_string}\n"
+                    )
+                else:
+                    response_wrapper += "No explicit response was provided.\n"
 
             message_history_for_continuation.append(AIMessage(content=response_wrapper))
             new_messages_for_continuation.append(AIMessage(content=response_wrapper))
@@ -501,4 +525,5 @@ def orchestrator(
         num_search_iterations=num_search_iterations,
         iteration_available_tools_for_thinking_string=iteration_available_tools_for_thinking_string,
         traces=[response_wrapper],
+        num_iteration_responses=num_iteration_responses,
     )

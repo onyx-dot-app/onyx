@@ -7,6 +7,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 from sqlalchemy.orm import Session
 
+from onyx.agents.agent_search.exploration_2.models import IterationAnswer
 from onyx.agents.agent_search.exploration_2.states import FinalUpdate
 from onyx.agents.agent_search.exploration_2.states import MainState
 from onyx.agents.agent_search.exploration_2.states import OrchestrationUpdate
@@ -169,8 +170,18 @@ def query_dependent_context_explorer(
     new_messages.append(HumanMessage(content=dynamic_learnings_string))
 
     return OrchestrationUpdate(
-        message_history_for_continuation=new_messages,
-        traces=[
-            f"The Query-Dependent-Context Tool was used and resulted in the following learnings: {dynamic_learnings_string}"
+        # message_history_for_continuation=new_messages,
+        iteration_responses=[
+            IterationAnswer(
+                tool="Query-Dependent-Context-Explorer-Tool",
+                tool_id=105,
+                iteration_nr=state.iteration_nr,
+                parallelization_nr=0,
+                cited_documents={},
+                question="",
+                answer=dynamic_learnings_string,
+                reasoning=None,
+            )
         ],
+        traces=[],
     )

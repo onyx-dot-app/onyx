@@ -94,7 +94,10 @@ def is_summarize(
         answer_string = ""
         reasoning = ""
         claims = []
-        cited_raw_documents = [url_to_raw_document[url] for url in urls]
+        cited_raw_documents = []
+        for url in urls:
+            if url in url_to_raw_document:
+                cited_raw_documents.append(url_to_raw_document[url])
         cited_documents = {
             doc_num + 1: retrieved_doc
             for doc_num, retrieved_doc in enumerate(cited_raw_documents)

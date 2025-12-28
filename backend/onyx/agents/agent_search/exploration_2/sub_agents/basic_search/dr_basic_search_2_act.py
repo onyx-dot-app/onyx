@@ -162,6 +162,8 @@ def basic_search(
                 rewritten_sources.append(DocumentSource.FILE)
             elif source == "jira":
                 rewritten_sources.append(DocumentSource.JIRA)
+            elif source == "google doc":
+                rewritten_sources.append(DocumentSource.GOOGLE_DRIVE)
             else:
                 rewritten_sources.append(source)
 
@@ -285,6 +287,25 @@ def basic_search(
         }
         reasoning = ""
 
+    if state.source_filters:
+        document_filter_string = " - Document Filter: " + ", ".join(
+            state.source_filters
+        )
+    else:
+        document_filter_string = ""
+
+    date_filter_string = ""
+
+    if state.date_filter_start:
+        date_filter_string = " - Start Date Filter: " + state.date_filter_start
+
+    if state.date_filter_end:
+        date_filter_string += " - End Date Filter: " + state.date_filter_end
+
+    full_question_string = (
+        f"Question: {branch_query} {document_filter_string} {date_filter_string}"
+    )
+
     return BranchUpdate(
         branch_iteration_responses=[
             IterationAnswer(
@@ -292,7 +313,7 @@ def basic_search(
                 tool_id=search_tool_info.tool_id,
                 iteration_nr=iteration_nr,
                 parallelization_nr=parallelization_nr,
-                question=branch_query,
+                question=full_question_string,
                 answer=answer_string,
                 claims=claims,
                 cited_documents=cited_documents,

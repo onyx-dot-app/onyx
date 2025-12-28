@@ -142,6 +142,7 @@ def _get_available_tools(
             path = DRPath.INTERNAL_SEARCH
         elif isinstance(tool, KnowledgeGraphTool) and include_kg:
             # TODO (chris): move this into the `is_available` check
+            continue  # No KG for tests
             if len(active_source_types) == 0:
                 logger.error(
                     "No active source types found, skipping Knowledge Graph tool"
@@ -205,6 +206,21 @@ def _get_available_tools(
         tool_object=None,
     )
 
+    if "Web Search" not in [tool.name for tool in available_tools.values()]:
+
+        web_tool = WebSearchTool(tool_id=7)
+
+        description = TOOL_DESCRIPTION[DRPath.WEB_SEARCH]
+        available_tools[DRPath.WEB_SEARCH.value] = OrchestratorTool(
+            tool_id=7,
+            name=DRPath.WEB_SEARCH.value,
+            llm_path=DRPath.WEB_SEARCH.value,
+            path=DRPath.WEB_SEARCH,
+            description=TOOL_DESCRIPTION[DRPath.WEB_SEARCH],
+            metadata={},
+            cost=1.0,
+            tool_object=web_tool,
+        )
     if use_thinking:
         available_tools[DRPath.THINKING.value] = OrchestratorTool(
             tool_id=102,
@@ -248,13 +264,19 @@ Articulate the questions in a bullet form.""",
                 name=DRPath.QUERY_INDEPENDENT_CONTEXT_EXPLORER.value,
                 llm_path=DRPath.QUERY_INDEPENDENT_CONTEXT_EXPLORER.value,
                 path=DRPath.QUERY_INDEPENDENT_CONTEXT_EXPLORER,
-                description="""This tool allows you to aquire more context from a 'memory' that has information about \
-the user and their \
-company. If you think that the question implicitly relates to something the user \
-expects you to know about them or their company in order to answer the question, you should use this tool to aquire the \
-necessary context. Common - but not exclusive(!) - signals may be a 'I', 'we', 'our', etc. in the question. (In fact, if these \
-signals are present, you should use this tool even if you think you have all the information you need to answer the question.) \
-Use this tool if you think it can help TO PROVIDE CONTEXT or INSTRUCTIONS FOR THE user question, but do NOT use \
+                description="""This tool can be used to acquire more context from a 'memory' that has \
+information about the user, their \
+company. This tool should be called if it the context of the question dos not seem to be sufficiently \
+specified. Also, if you think that the question implicitly relates to something the user \
+expects you to know about them or their company in order to answer the question, you should use this tool to acquire the \
+necessary context. Common - but not exclusive(!) - signals may be a 'I', 'we', 'our', 'us', etc. in the question. \
+(In fact, if these \
+signals are present, you must use this tool if available, even if you think you have all the information you need \
+to answer the question.) \
+Note that the company information may have multiple names. That would mean that the same company has multiple \
+names, for example if a name change occured. In these cases, any of these mentions should be interpreted as \
+"the user's company".
+Use this tool if you think it can help TO PROVIDE CONTEXT or INSTRUCTIONS FOR THE  question, but do NOT use \
 this tool to find actual answer information; it is just for providing context and instructions!""",
                 metadata={},
                 cost=0.0,
@@ -268,12 +290,15 @@ this tool to find actual answer information; it is just for providing context an
                 name=DRPath.QUERY_DEPENDENT_CONTEXT_EXPLORER.value,
                 llm_path=DRPath.QUERY_DEPENDENT_CONTEXT_EXPLORER.value,
                 path=DRPath.QUERY_DEPENDENT_CONTEXT_EXPLORER,
-                description="""This tool allows you to aquire more context from a 'memory' that has information about \
-how similar queries were answered in the past. If you think that the question may be somewhat complex \
+                description="""This tool can be used to aquire more context from a 'memory' that has \
+information about how similar queries were answered in the past. If you think that the question may be somewhat complex \
 and using experiences and learnings from similar queries may help to answer the question, you should use this tool.
-Use this tool if you think LEARNINGS and INSTRUCTIONS based on previous, similar queries may be useful to \
-think through the answer process for the user's question/request, but do NOT use this tool to find actual answer \
-information; it is just for providing context and instructions!""",
+Only use this tool though if you think LEARNINGS and INSTRUCTIONS based on previous, similar queries may be useful to \
+answer the user's question/request. NEVER use this tool to find actual answer information and facts for the user's \
+question/request; \
+this is what the non-context and non-thinking tools are for. This tool is just for providing context and instructions \
+to guide \
+the answer process, not providing actual answer information and facts!""",
                 metadata={},
                 cost=0.0,
                 tool_object=None,

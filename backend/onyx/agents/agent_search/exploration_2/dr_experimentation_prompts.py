@@ -72,6 +72,8 @@ to use for reflection.
 where each query could be focussed on a specific aspect of what you want to know.
   - You can ONLY chose from the tools that are available to you in this step! Use the system prompt \
 tool descriptions as guidance what the tools do, but the actual available tools are part of this API call!
+  - pay attention to whether the context of the ORIGINAL QUESTION fully specified! If vague \
+the query-independent context explorer tool should be called, if available.
 
 
 Your task is to select the next tool to call and the questions/requests to ask of that tool.

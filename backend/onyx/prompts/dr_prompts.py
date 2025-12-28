@@ -54,11 +54,15 @@ Also, \
 the {INTERNAL_SEARCH} tool DOES support parallel calls of up to {MAX_DR_PARALLEL_SEARCH} queries. So \
 rather a call to this tool should be written as a list of up to {MAX_DR_PARALLEL_SEARCH} search requests \
 ('query', 'reasoning', 'source_filters' (a list of strings, empty list if no filters. Options are 'github', 'slack', \
-'confluence', 'jira', 'email', 'file', 'linear', 'call'), 'date_filter_start', \
+'confluence', 'jira', 'email', 'file', 'linear', 'call', 'google doc'), 'date_filter_start', \
 'date_filter_end', both in 'YYYY-MM-DD' format), \
 where each request is focussed on a specific aspect of the question.
 
 NOTE:
+  - Do not use any source filters unless they are implied in question, but if they are implied make sure \
+to use them!
+  - Separate questions can have the same source filters, but don't have to.
+The date fields should be in the format 'YYYY-MM-DD'. If the date fields are kept empty, no date filters are applied.
   - don't be redundant! If a filter is chosen, the filter content MUST NOT be repeated in the query itself! \
 (Example: if the implied source filter is 'github', the query MUST NOT contain 'github' in the query itself)!
   - The 'reasoning' should be a brief explanation of why the query was chosen, particularly if and why \

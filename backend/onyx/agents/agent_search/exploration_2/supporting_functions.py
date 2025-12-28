@@ -226,7 +226,7 @@ def _update_query_independent_learnings(
     new_cheat_sheet_str = str(new_cheat_sheet)
     num_words_new_cheat_sheet = len(new_cheat_sheet_str.split())
     logger.info(f"Number of words in new cheat sheet: {num_words_new_cheat_sheet}")
-    if num_words_new_cheat_sheet > 2000:
+    if num_words_new_cheat_sheet > 500:
         new_cheat_sheet = _compress_cheet_sheet(new_cheat_sheet_str)
         logger.info(
             f"Number of words in compressed cheat sheet: {len(str(new_cheat_sheet).split())}"

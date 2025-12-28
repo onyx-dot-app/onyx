@@ -6,6 +6,7 @@ from langchain_core.messages import SystemMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
+from onyx.agents.agent_search.exploration_2.models import IterationAnswer
 from onyx.agents.agent_search.exploration_2.states import FinalUpdate
 from onyx.agents.agent_search.exploration_2.states import MainState
 from onyx.agents.agent_search.exploration_2.states import OrchestrationUpdate
@@ -45,5 +46,18 @@ tool calls, etc.):\n{str(relevant_cheat_sheet_context)}\n###\n\n"""
     new_messages.append(HumanMessage(content=cheat_sheet_string))
 
     return OrchestrationUpdate(
-        message_history_for_continuation=new_messages, traces=[cheat_sheet_string]
+        # message_history_for_continuation=new_messages,
+        iteration_responses=[
+            IterationAnswer(
+                tool="Query-Independent-Context-Explorer-Tool",
+                tool_id=104,
+                iteration_nr=state.iteration_nr,
+                parallelization_nr=0,
+                question="",
+                cited_documents={},
+                answer=cheat_sheet_string,
+                reasoning=None,
+            )
+        ],
+        traces=[],
     )
