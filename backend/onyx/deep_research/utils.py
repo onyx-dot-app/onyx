@@ -103,7 +103,9 @@ def _extract_reasoning_chunk(state: ThinkToolProcessorState) -> str | None:
 
     # If to_emit ends with a backslash, it might be the start of an escape sequence
     # Move it to the remaining buffer to process with the next chunk
-    while to_emit and to_emit[-1] == "\\":
+    # If to_emit ends with a backslash, it might be the start of an escape sequence
+    # Move it to the remaining buffer to process with the next chunk
+    if to_emit and to_emit[-1] == "\\":
         remaining = to_emit[-1] + remaining
         to_emit = to_emit[:-1]
 
