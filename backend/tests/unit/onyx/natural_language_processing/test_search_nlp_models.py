@@ -14,9 +14,6 @@ from onyx.natural_language_processing.search_nlp_models import CloudEmbedding
 from onyx.natural_language_processing.search_nlp_models import (
     ConnectorClassificationModel,
 )
-from onyx.natural_language_processing.search_nlp_models import (
-    InformationContentClassificationModel,
-)
 from shared_configs.enums import EmbeddingProvider
 from shared_configs.enums import EmbedTextType
 
@@ -91,46 +88,6 @@ async def test_rate_limit_handling() -> None:
                 model_name="fake-model",
                 text_type=EmbedTextType.QUERY,
             )
-
-
-class TestInformationContentClassificationModel:
-    """Test cases for InformationContentClassificationModel with DISABLE_MODEL_SERVER"""
-
-    @patch.dict(os.environ, {"DISABLE_MODEL_SERVER": "true"})
-    def test_predict_with_disable_model_server(self) -> None:
-        """Test that predict returns default classifications when DISABLE_MODEL_SERVER is true"""
-        model = InformationContentClassificationModel()
-        queries = ["What is AI?", "How does Python work?"]
-
-        results = model.predict(queries)
-
-        assert len(results) == 2
-        for result in results:
-            assert result.predicted_label == 1  # 1 indicates informational content
-            assert result.content_boost_factor == 1.0  # Default boost factor
-
-    @patch.dict(os.environ, {"DISABLE_MODEL_SERVER": "false"})
-    @patch("requests.post")
-    def test_predict_with_model_server_enabled(self, mock_post: MagicMock) -> None:
-        """Test that predict makes request when DISABLE_MODEL_SERVER is false"""
-        mock_response = MagicMock()
-        mock_response.json.return_value = [
-            {"predicted_label": 1, "content_boost_factor": 1.0},
-            {"predicted_label": 0, "content_boost_factor": 0.8},
-        ]
-        mock_post.return_value = mock_response
-
-        model = InformationContentClassificationModel()
-        queries = ["test1", "test2"]
-
-        results = model.predict(queries)
-
-        assert len(results) == 2
-        assert results[0].predicted_label == 1
-        assert results[0].content_boost_factor == 1.0
-        assert results[1].predicted_label == 0
-        assert results[1].content_boost_factor == 0.8
-        mock_post.assert_called_once()
 
 
 class TestConnectorClassificationModel:

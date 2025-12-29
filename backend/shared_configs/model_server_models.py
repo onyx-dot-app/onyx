@@ -72,16 +72,3 @@ class IntentRequest(BaseModel):
 class IntentResponse(BaseModel):
     is_keyword: bool
     keywords: list[str]
-
-
-class InformationContentClassificationRequests(BaseModel):
-    queries: list[str]
-
-
-class ContentClassificationPrediction(BaseModel):
-    predicted_label: int
-    content_boost_factor: float
-
-
-class InformationContentClassificationResponses(BaseModel):
-    information_content_classifications: list[ContentClassificationPrediction]

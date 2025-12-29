@@ -48,8 +48,6 @@ from onyx.utils.search_nlp_models_utils import pass_aws_key
 from onyx.utils.timing import log_function_time
 from shared_configs.configs import API_BASED_EMBEDDING_TIMEOUT
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
-from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
-from shared_configs.configs import INDEXING_MODEL_SERVER_PORT
 from shared_configs.configs import INDEXING_ONLY
 from shared_configs.configs import MODEL_SERVER_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
@@ -61,11 +59,9 @@ from shared_configs.enums import EmbedTextType
 from shared_configs.enums import RerankerProvider
 from shared_configs.model_server_models import ConnectorClassificationRequest
 from shared_configs.model_server_models import ConnectorClassificationResponse
-from shared_configs.model_server_models import ContentClassificationPrediction
 from shared_configs.model_server_models import Embedding
 from shared_configs.model_server_models import EmbedRequest
 from shared_configs.model_server_models import EmbedResponse
-from shared_configs.model_server_models import InformationContentClassificationResponses
 from shared_configs.model_server_models import IntentRequest
 from shared_configs.model_server_models import IntentResponse
 from shared_configs.model_server_models import RerankRequest
@@ -1163,42 +1159,6 @@ class QueryAnalysisModel:
         return response_model.is_keyword, response_model.keywords
 
 
-class InformationContentClassificationModel:
-    def __init__(
-        self,
-        model_server_host: str = INDEXING_MODEL_SERVER_HOST,
-        model_server_port: int = INDEXING_MODEL_SERVER_PORT,
-    ) -> None:
-        model_server_url = build_model_server_url(model_server_host, model_server_port)
-        self.content_server_endpoint = (
-            model_server_url + "/custom/content-classification"
-        )
-
-    def predict(
-        self,
-        queries: list[str],
-    ) -> list[ContentClassificationPrediction]:
-        if os.environ.get("DISABLE_MODEL_SERVER", "").lower() == "true":
-            logger.info(
-                "DISABLE_MODEL_SERVER is set, returning default classifications"
-            )
-            return [
-                ContentClassificationPrediction(
-                    predicted_label=1, content_boost_factor=1.0
-                )
-                for _ in queries
-            ]
-
-        response = requests.post(self.content_server_endpoint, json=queries)
-        response.raise_for_status()
-
-        model_responses = InformationContentClassificationResponses(
-            information_content_classifications=response.json()
-        )
-
-        return model_responses.information_content_classifications
-
-
 class ConnectorClassificationModel:
     def __init__(
         self,
@@ -1298,6 +1258,7 @@ def warm_up_bi_encoder(
         retry_encode(texts=[warm_up_str], text_type=EmbedTextType.QUERY)
 
 
+# No longer used
 def warm_up_cross_encoder(
     rerank_model_name: str,
     non_blocking: bool = False,

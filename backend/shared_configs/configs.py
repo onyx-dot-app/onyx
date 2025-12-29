@@ -38,9 +38,6 @@ CONNECTOR_CLASSIFIER_MODEL_TAG = "1.0.0"
 INTENT_MODEL_VERSION = "onyx-dot-app/hybrid-intent-token-classifier"
 # INTENT_MODEL_TAG = "v1.0.3"
 INTENT_MODEL_TAG: str | None = None
-INFORMATION_CONTENT_MODEL_VERSION = "onyx-dot-app/information-content-model"
-INFORMATION_CONTENT_MODEL_TAG: str | None = None
-
 # Bi-Encoder, other details
 DOC_EMBEDDING_CONTEXT_SIZE = 512
 
@@ -209,24 +206,6 @@ SKIP_USERFILE_THRESHOLD_TENANT_LIST = (
     ]
     if SKIP_USERFILE_THRESHOLD_TENANT_IDS
     else None
-)
-
-# Maximum (least severe) downgrade factor for chunks above the cutoff
-INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX = float(
-    os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX") or 1.0
-)
-# Minimum (most severe) downgrade factor for short chunks below the cutoff if no content
-INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN = float(
-    os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN") or 0.7
-)
-# Temperature for the information content classification model
-INDEXING_INFORMATION_CONTENT_CLASSIFICATION_TEMPERATURE = float(
-    os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_TEMPERATURE") or 4.0
-)
-# Cutoff below which we start using the information content classification model
-# (cutoff length number itself is still considered 'short'))
-INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH = int(
-    os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH") or 10
 )
 
 ENVIRONMENT = os.environ.get("ENVIRONMENT") or "not_explicitly_set"

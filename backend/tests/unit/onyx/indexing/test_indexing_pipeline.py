@@ -13,23 +13,14 @@ from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
-from onyx.indexing.indexing_pipeline import _get_aggregated_chunk_boost_factor
 from onyx.indexing.indexing_pipeline import add_contextual_summaries
 from onyx.indexing.indexing_pipeline import filter_documents
 from onyx.indexing.indexing_pipeline import process_image_sections
-from onyx.indexing.models import ChunkEmbedding
-from onyx.indexing.models import IndexChunk
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_response import Choice
 from onyx.llm.model_response import Message
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.utils import get_max_input_tokens
-from onyx.natural_language_processing.search_nlp_models import (
-    ContentClassificationPrediction,
-)
-from shared_configs.configs import (
-    INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH,
-)
 
 
 def create_test_document(
@@ -146,123 +137,6 @@ def test_filter_documents_multiple_documents() -> None:
 def test_filter_documents_empty_batch() -> None:
     result = filter_documents([])
     assert len(result) == 0
-
-
-# Tests for get_aggregated_boost_factor
-
-
-def create_test_chunk(
-    content: str, chunk_id: int = 0, doc_id: str = "test_doc"
-) -> IndexChunk:
-    doc = Document(
-        id=doc_id,
-        semantic_identifier="test doc",
-        sections=[],
-        source=DocumentSource.FILE,
-        metadata={},
-    )
-    return IndexChunk(
-        chunk_id=chunk_id,
-        content=content,
-        source_document=doc,
-        blurb=content[:50],  # First 50 chars as blurb
-        source_links={0: "test_link"},
-        section_continuation=False,
-        title_prefix="",
-        metadata_suffix_semantic="",
-        metadata_suffix_keyword="",
-        mini_chunk_texts=None,
-        large_chunk_id=None,
-        large_chunk_reference_ids=[],
-        embeddings=ChunkEmbedding(full_embedding=[], mini_chunk_embeddings=[]),
-        title_embedding=None,
-        image_file_id=None,
-        chunk_context="",
-        doc_summary="",
-        contextual_rag_reserved_tokens=200,
-    )
-
-
-def test_get_aggregated_boost_factor() -> None:
-    # Create test chunks - mix of short and long content
-    chunks = [
-        create_test_chunk("Short content", 0),
-        create_test_chunk(
-            "Long " * (INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH + 1), 1
-        ),
-        create_test_chunk("Another short chunk", 2),
-    ]
-
-    # Mock the classification model
-    mock_model = Mock()
-    mock_model.predict.return_value = [
-        ContentClassificationPrediction(predicted_label=1, content_boost_factor=0.8),
-        ContentClassificationPrediction(predicted_label=1, content_boost_factor=0.9),
-    ]
-
-    # Execute the function
-    boost_scores = _get_aggregated_chunk_boost_factor(
-        chunks=chunks, information_content_classification_model=mock_model
-    )
-
-    # Assertions
-    assert len(boost_scores) == 3
-
-    # Check that long content got default boost
-    assert boost_scores[1] == 1.0
-
-    # Check that short content got predicted boosts
-    assert boost_scores[0] == 0.8
-    assert boost_scores[2] == 0.9
-
-    # Verify model was only called once with the short chunks
-    mock_model.predict.assert_called_once()
-    assert len(mock_model.predict.call_args[0][0]) == 2
-
-
-def test_get_aggregated_boost_factorilure() -> None:
-    chunks = [
-        create_test_chunk("Short content 1", 0),
-        create_test_chunk("Short content 2", 1),
-    ]
-
-    # Mock model to fail on batch prediction but succeed on individual predictions
-    mock_model = Mock()
-    mock_model.predict.side_effect = [
-        Exception("Batch prediction failed"),  # First call fails
-        [
-            ContentClassificationPrediction(predicted_label=1, content_boost_factor=0.7)
-        ],  # Individual calls succeed
-        [ContentClassificationPrediction(predicted_label=1, content_boost_factor=0.8)],
-    ]
-
-    # Execute
-    boost_scores = _get_aggregated_chunk_boost_factor(
-        chunks=chunks, information_content_classification_model=mock_model
-    )
-
-    # Assertions
-    assert len(boost_scores) == 2
-    assert boost_scores == [0.7, 0.8]
-
-
-def test_get_aggregated_boost_factor_individual_failure() -> None:
-    chunks = [
-        create_test_chunk("Short content", 0),
-        create_test_chunk("Short content", 1),
-    ]
-
-    # Mock model to fail on both batch and individual prediction
-    mock_model = Mock()
-    mock_model.predict.side_effect = Exception("Prediction failed")
-
-    # Execute and verify it raises an exception
-    with pytest.raises(Exception) as exc_info:
-        _get_aggregated_chunk_boost_factor(
-            chunks=chunks, information_content_classification_model=mock_model
-        )
-
-    assert "Failed to predict content classification for chunk" in str(exc_info.value)
 
 
 @patch("onyx.llm.utils.GEN_AI_MAX_TOKENS", 4096)
