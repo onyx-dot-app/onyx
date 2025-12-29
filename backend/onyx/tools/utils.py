@@ -6,6 +6,7 @@ from onyx.configs.app_configs import AZURE_IMAGE_API_KEY
 from onyx.db.connector import check_connectors_exist
 from onyx.db.document import check_docs_exist
 from onyx.db.models import LLMProvider
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.utils import find_model_obj
 from onyx.llm.utils import get_model_map
 from onyx.natural_language_processing.utils import BaseTokenizer
@@ -37,7 +38,7 @@ def compute_all_tool_tokens(tools: list[Tool], llm_tokenizer: BaseTokenizer) -> 
 def is_image_generation_available(db_session: Session) -> bool:
     providers = db_session.query(LLMProvider).all()
     for provider in providers:
-        if provider.provider == "openai":
+        if provider.provider == LlmProviderNames.OPENAI:
             return True
 
     return bool(AZURE_IMAGE_API_KEY)

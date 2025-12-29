@@ -7,6 +7,7 @@ from litellm.types.utils import Delta
 from litellm.types.utils import Function as LiteLLMFunction
 
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.model_response import ModelResponseStream
@@ -116,7 +117,7 @@ def _accumulate_stream_to_assistant_message(
 
 @pytest.fixture
 def default_multi_llm() -> LitellmLLM:
-    model_provider = "openai"
+    model_provider = LlmProviderNames.OPENAI
     model_name = "gpt-3.5-turbo"
 
     return LitellmLLM(
@@ -411,7 +412,7 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
 def test_user_identity_metadata_enabled(default_multi_llm: LitellmLLM) -> None:
     with (
         patch("litellm.completion") as mock_completion,
-        patch("onyx.llm.multi_llm.SEND_USER_METADATA_TO_LLM_PROVIDER", True),
+        patch("onyx.llm.utils.SEND_USER_METADATA_TO_LLM_PROVIDER", True),
     ):
         mock_response = litellm.ModelResponse(
             id="chatcmpl-123",
@@ -445,7 +446,7 @@ def test_user_identity_user_id_truncated_to_64_chars(
 ) -> None:
     with (
         patch("litellm.completion") as mock_completion,
-        patch("onyx.llm.multi_llm.SEND_USER_METADATA_TO_LLM_PROVIDER", True),
+        patch("onyx.llm.utils.SEND_USER_METADATA_TO_LLM_PROVIDER", True),
     ):
         mock_response = litellm.ModelResponse(
             id="chatcmpl-123",
@@ -479,7 +480,7 @@ def test_user_identity_metadata_disabled_omits_identity(
 ) -> None:
     with (
         patch("litellm.completion") as mock_completion,
-        patch("onyx.llm.multi_llm.SEND_USER_METADATA_TO_LLM_PROVIDER", False),
+        patch("onyx.llm.utils.SEND_USER_METADATA_TO_LLM_PROVIDER", False),
     ):
         mock_response = litellm.ModelResponse(
             id="chatcmpl-123",
@@ -509,7 +510,7 @@ def test_user_identity_metadata_disabled_omits_identity(
 
 
 def test_existing_metadata_pass_through_when_identity_disabled() -> None:
-    model_provider = "openai"
+    model_provider = LlmProviderNames.OPENAI
     model_name = "gpt-3.5-turbo"
 
     llm = LitellmLLM(
@@ -526,7 +527,7 @@ def test_existing_metadata_pass_through_when_identity_disabled() -> None:
 
     with (
         patch("litellm.completion") as mock_completion,
-        patch("onyx.llm.multi_llm.SEND_USER_METADATA_TO_LLM_PROVIDER", False),
+        patch("onyx.llm.utils.SEND_USER_METADATA_TO_LLM_PROVIDER", False),
     ):
         mock_response = litellm.ModelResponse(
             id="chatcmpl-123",
