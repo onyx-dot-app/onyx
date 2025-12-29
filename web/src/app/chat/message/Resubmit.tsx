@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ChevronDown, ChevronRight, Code } from "lucide-react";
+import { SvgChevronDown, SvgChevronUp } from "@opal/icons";
 import Button from "@/refresh-components/buttons/Button";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import { getErrorIcon, getErrorTitle } from "./errorHelpers";
@@ -57,18 +57,15 @@ export const ErrorBanner = ({
           )}
           {stackTrace && (
             <div className="mt-2 border-t border-neutral-200 dark:border-neutral-700 pt-2">
-              <div className="flex flex-1 justify-between">
-                <button
+              <div className="flex flex-1 items-center justify-between">
+                <Button
+                  leftIcon={
+                    isStackTraceExpanded ? SvgChevronDown : SvgChevronUp
+                  }
                   onClick={() => setIsStackTraceExpanded(!isStackTraceExpanded)}
-                  className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 cursor-pointer"
                 >
-                  {isStackTraceExpanded ? (
-                    <ChevronDown className="h-3 w-3" />
-                  ) : (
-                    <ChevronRight className="h-3 w-3" />
-                  )}
-                  Stack trace
-                </button>
+                  Stack Trace
+                </Button>
                 <CopyIconButton getCopyText={() => stackTrace} />
               </div>
               {isStackTraceExpanded && (
