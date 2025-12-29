@@ -23,6 +23,7 @@ import {
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
 import { useEffect, useState } from "react";
+import { fetchOllamaModels } from "../utils";
 
 export const OLLAMA_PROVIDER_NAME = "ollama_chat";
 const DEFAULT_API_BASE = "http://127.0.0.1:11434";
@@ -62,43 +63,19 @@ function OllamaFormContent({
   useEffect(() => {
     if (formikProps.values.api_base) {
       setIsLoadingModels(true);
-      fetch(OLLAMA_MODELS_API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          api_base: formikProps.values.api_base,
-        }),
+      fetchOllamaModels({
+        api_base: formikProps.values.api_base,
+        provider_name: existingLlmProvider?.name,
       })
-        .then(async (response) => {
-          if (!response.ok) {
-            let errorMessage = "Failed to fetch models";
-            try {
-              const errorData = await response.json();
-              errorMessage = errorData.detail || errorMessage;
-            } catch {
-              // ignore JSON parsing errors
-            }
-            throw new Error(errorMessage);
+        .then((data) => {
+          if (data.error) {
+            console.error("Error fetching models:", data.error);
+            setAvailableModels([]);
+            return;
           }
-          return response.json();
+          setAvailableModels(data.models);
         })
-        .then((data: OllamaModelResponse[]) => {
-          setAvailableModels(
-            data.map((model) => ({
-              name: model.name,
-              display_name: model.display_name,
-              is_visible: true,
-              max_input_tokens: model.max_input_tokens,
-              supports_image_input: model.supports_image_input,
-            }))
-          );
-          setIsLoadingModels(false);
-        })
-        .catch((error) => {
-          console.error("Error fetching models:", error);
-          setAvailableModels([]);
+        .finally(() => {
           setIsLoadingModels(false);
         });
     }
