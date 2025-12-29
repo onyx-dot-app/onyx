@@ -170,7 +170,6 @@ def run_deep_research_llm_loop(
     skip_clarification: bool = False,
     user_identity: LLMUserIdentity | None = None,
     chat_session_id: str | None = None,
-    is_connected: Callable[[], bool] | None = None,
 ) -> None:
     with trace(
         "run_deep_research_llm_loop",
@@ -566,7 +565,6 @@ def run_deep_research_llm_loop(
                     token_counter=token_counter,
                     citation_mapping=citation_mapping,
                     user_identity=user_identity,
-                    is_connected=is_connected,
                 )
 
                 citation_mapping = research_results.citation_mapping

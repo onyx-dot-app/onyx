@@ -199,7 +199,6 @@ def run_research_agent_call(
     is_reasoning_model: bool,
     token_counter: Callable[[str], int],
     user_identity: LLMUserIdentity | None,
-    is_connected: Callable[[], bool] | None = None,
 ) -> ResearchAgentCallResult | None:
     turn_index = research_agent_call.placement.turn_index
     tab_index = research_agent_call.placement.tab_index
@@ -421,7 +420,6 @@ def run_research_agent_call(
                         next_citation_num=citation_processor.get_next_citation_number(),
                         # May be better to not do this step, hard to say, needs to be tested
                         skip_search_query_expansion=False,
-                        is_connected=is_connected,
                     )
 
                     if tool_calls and not tool_responses:
@@ -558,7 +556,6 @@ def run_research_agent_calls(
     token_counter: Callable[[str], int],
     citation_mapping: CitationMapping,
     user_identity: LLMUserIdentity | None = None,
-    is_connected: Callable[[], bool] | None = None,
 ) -> CombinedResearchAgentCallResult:
     # Run all research agent calls in parallel
     functions_with_args = [
@@ -574,7 +571,6 @@ def run_research_agent_calls(
                 is_reasoning_model,
                 token_counter,
                 user_identity,
-                is_connected,
             ),
         )
         for research_agent_call, parent_tool_call_id in zip(
