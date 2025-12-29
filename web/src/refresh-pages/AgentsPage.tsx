@@ -8,8 +8,7 @@ import { useAgents } from "@/hooks/useAgents";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import PageHeader from "@/refresh-components/headers/PageHeader";
-import PageLayout from "@/refresh-components/layouts/PageLayout";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import CounterSeparator from "@/refresh-components/CounterSeparator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import FilterButton from "@/refresh-components/buttons/FilterButton";
@@ -413,12 +412,14 @@ export default function AgentsPage() {
   }, [selectedActionIds, selectedMcpServerIds, uniqueActions]);
 
   return (
-    <PageLayout data-testid="AgentsPage/container" aria-label="Agents Page">
-      <PageHeader
+    <SettingsLayouts.Root
+      data-testid="AgentsPage/container"
+      aria-label="Agents Page"
+    >
+      <SettingsLayouts.Header
         icon={SvgOnyxOctagon}
         title="Agents & Assistants"
         description="Customize AI behavior and knowledge for you and your team’s use cases."
-        className="bg-background-tint-01"
         rightChildren={
           <div data-testid="AgentsPage/new-agent-button">
             <Button href="/assistants/new" leftIcon={SvgPlus}>
@@ -628,7 +629,7 @@ export default function AgentsPage() {
             </Popover>
           </div>
         </div>
-      </PageHeader>
+      </SettingsLayouts.Header>
 
       {/* Agents List */}
       <div className="p-4 flex flex-col gap-8">
@@ -654,6 +655,6 @@ export default function AgentsPage() {
           </>
         )}
       </div>
-    </PageLayout>
+    </SettingsLayouts.Root>
   );
 }

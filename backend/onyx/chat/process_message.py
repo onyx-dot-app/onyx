@@ -1,4 +1,3 @@
-import os
 import re
 import traceback
 from collections.abc import Callable
@@ -545,10 +544,7 @@ def stream_chat_message_objects(
         # for stop signals. run_llm_loop itself doesn't know about stopping.
         # Note: DB session is not thread safe but nothing else uses it and the
         # reference is passed directly so it's ok.
-        if (
-            new_msg_req.deep_research
-            or os.environ.get("FORCE_DEEP_RESEARCH_LOOP", "false").lower() == "true"
-        ):
+        if new_msg_req.deep_research:
             if chat_session.project_id:
                 raise RuntimeError("Deep research is not supported for projects")
 

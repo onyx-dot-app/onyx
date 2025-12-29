@@ -367,7 +367,7 @@ const MemoizedAppSidebarInner = memo(
             leftIcon={SvgEditBig}
             folded={folded}
             href={href}
-            active={activeSidebarTab.isNewSession()}
+            transient={activeSidebarTab.isNewSession()}
           >
             New Session
           </SidebarTab>
@@ -385,7 +385,7 @@ const MemoizedAppSidebarInner = memo(
             }
             href="/chat/agents"
             folded={folded}
-            active={activeSidebarTab.isMoreAgents()}
+            transient={activeSidebarTab.isMoreAgents()}
             lowlight={!folded}
           >
             {visibleAgents.length === 0 ? "Explore Agents" : "More Agents"}
@@ -399,7 +399,7 @@ const MemoizedAppSidebarInner = memo(
         <SidebarTab
           leftIcon={SvgFolderPlus}
           onClick={() => createProjectModal.toggle(true)}
-          active={createProjectModal.isOpen}
+          transient={createProjectModal.isOpen}
           folded={folded}
           lowlight={!folded}
         >

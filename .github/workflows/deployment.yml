@@ -51,20 +51,23 @@ jobs:
           IS_STABLE_STANDALONE=false
           IS_BETA_STANDALONE=false
 
-          if [[ "$TAG" == *cloud* ]]; then
-            IS_CLOUD=true
-            BUILD_WEB_CLOUD=true
-          else
-            BUILD_WEB=true
-            BUILD_DESKTOP=true
-          fi
-
           # Version checks (for web - any stable version)
           if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             IS_STABLE=true
           fi
           if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]]; then
             IS_BETA=true
+          fi
+
+          if [[ "$TAG" == *cloud* ]]; then
+            IS_CLOUD=true
+            BUILD_WEB_CLOUD=true
+          else
+            BUILD_WEB=true
+            # Skip desktop builds on beta tags
+            if [[ "$IS_BETA" != "true" ]]; then
+              BUILD_DESKTOP=true
+            fi
           fi
 
           # Version checks (for backend/model-server - stable version excluding cloud tags)
@@ -103,8 +106,9 @@ jobs:
           fetch-depth: 0
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a # ratchet:astral-sh/setup-uv@v7.1.5
+        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a # ratchet:astral-sh/setup-uv@v7
         with:
+          version: "0.9.9"
           # NOTE: This isn't caching much and zizmor suggests this could be poisoned, so disable.
           enable-cache: false
 
@@ -142,14 +146,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: 'macos-latest' # Build a universal image for macOS.
-            args: '--target universal-apple-darwin'
-          - platform: 'ubuntu-24.04'
-            args: '--bundles deb,rpm'
-          - platform: 'ubuntu-24.04-arm' # Only available in public repos.
-            args: '--bundles deb,rpm'
-          - platform: 'windows-latest'
-            args: ''
+          - platform: "macos-latest" # Build a universal image for macOS.
+            args: "--target universal-apple-darwin"
+          - platform: "ubuntu-24.04"
+            args: "--bundles deb,rpm"
+          - platform: "ubuntu-24.04-arm" # Only available in public repos.
+            args: "--bundles deb,rpm"
+          - platform: "windows-latest"
+            args: ""
 
     runs-on: ${{ matrix.platform }}
     timeout-minutes: 90
@@ -257,7 +261,7 @@ jobs:
         with:
           tagName: ${{ github.event_name != 'workflow_dispatch' && 'v__VERSION__' || format('v0.0.0-dev+{0}', needs.determine-builds.outputs.short-sha) }}
           releaseName: ${{ github.event_name != 'workflow_dispatch' && 'v__VERSION__' || format('v0.0.0-dev+{0}', needs.determine-builds.outputs.short-sha) }}
-          releaseBody: 'See the assets to download this version and install.'
+          releaseBody: "See the assets to download this version and install."
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}

@@ -44,11 +44,11 @@ function SortableItem({ id, children }: SortableItemProps) {
   );
 }
 
-interface AgentButtonProps {
+export interface AgentButtonProps {
   agent: MinimalPersonaSnapshot;
 }
 
-function AgentButtonInner({ agent }: AgentButtonProps) {
+const AgentButton = memo(({ agent }: AgentButtonProps) => {
   const route = useAppRouter();
   const activeSidebarTab = useAppFocus();
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
@@ -63,7 +63,7 @@ function AgentButtonInner({ agent }: AgentButtonProps) {
           key={agent.id}
           leftIcon={() => <AgentAvatar agent={agent} />}
           onClick={() => route({ agentId: agent.id })}
-          active={
+          transient={
             activeSidebarTab.isAgent() &&
             activeSidebarTab.getId() === String(agent.id)
           }
@@ -82,7 +82,7 @@ function AgentButtonInner({ agent }: AgentButtonProps) {
       </div>
     </SortableItem>
   );
-}
+});
+AgentButton.displayName = "AgentButton";
 
-const AgentButton = memo(AgentButtonInner);
 export default AgentButton;

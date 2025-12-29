@@ -29,7 +29,7 @@ import Checkbox from "@/refresh-components/inputs/Checkbox";
 
 import { transformLinkUri } from "@/lib/utils";
 import FileInput from "@/app/admin/connectors/[connector]/pages/ConnectorInput/FileInput";
-import { DatePicker } from "./ui/datePicker";
+import InputDatePicker from "@/refresh-components/inputs/InputDatePicker";
 import { RichTextSubtext } from "./RichTextSubtext";
 import {
   TypedFile,
@@ -1037,7 +1037,7 @@ export function DatePickerField({
   return (
     <div>
       <FieldLabel label={label} name={name} subtext={subtext} />
-      <DatePicker
+      <InputDatePicker
         selectedDate={field.value}
         setSelectedDate={helper.setValue}
         startYear={startYear}

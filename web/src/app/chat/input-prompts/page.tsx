@@ -1,10 +1,10 @@
 import InputPrompts from "@/app/chat/input-prompts/InputPrompts";
-import AppPageLayout from "@/layouts/AppPageLayout";
+import * as AppLayouts from "@/layouts/app-layouts";
 
 export default async function InputPromptsPage() {
   return (
-    <AppPageLayout>
+    <AppLayouts.Root>
       <InputPrompts />
-    </AppPageLayout>
+    </AppLayouts.Root>
   );
 }

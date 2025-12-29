@@ -5,6 +5,7 @@ import pytest
 import requests
 from requests.models import Response
 
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_name_parser import parse_litellm_model_name
 from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import litellm_thinks_model_supports_image_input
@@ -182,7 +183,7 @@ def test_create_llm_provider(
         headers=admin_user.headers,
         json={
             "name": str(uuid.uuid4()),
-            "provider": "openai",
+            "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "default_model_name": default_model_name,
             "model_configurations": [
@@ -281,7 +282,7 @@ def test_update_model_configurations(
         headers=admin_user.headers,
         json={
             "name": name,
-            "provider": "openai",
+            "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "default_model_name": default_model_name,
             "model_configurations": [
@@ -386,7 +387,7 @@ def test_delete_llm_provider(
         headers=admin_user.headers,
         json={
             "name": "test-provider-delete",
-            "provider": "openai",
+            "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "default_model_name": default_model_name,
             "model_configurations": [
@@ -457,7 +458,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
         headers=admin_user.headers,
         json={
             "name": "test-visibility-provider",
-            "provider": "openai",
+            "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "default_model_name": "gpt-4o",
             "model_configurations": [config.dict() for config in model_configs],
@@ -506,7 +507,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
         headers=admin_user.headers,
         json={
             "name": "test-visibility-provider",
-            "provider": "openai",
+            "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "default_model_name": "gpt-4o",
             "model_configurations": [
@@ -554,7 +555,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
         headers=admin_user.headers,
         json={
             "name": "test-visibility-provider",
-            "provider": "openai",
+            "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "default_model_name": "gpt-4o",
             "model_configurations": [

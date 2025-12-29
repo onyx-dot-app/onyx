@@ -65,7 +65,7 @@ import Suggestions from "@/sections/Suggestions";
 import OnboardingFlow from "@/refresh-components/onboarding/OnboardingFlow";
 import { useOnboardingState } from "@/refresh-components/onboarding/useOnboardingState";
 import { OnboardingStep } from "@/refresh-components/onboarding/types";
-import AppPageLayout from "@/layouts/AppPageLayout";
+import * as AppLayouts from "@/layouts/app-layouts";
 import { SvgFileText } from "@opal/icons";
 import Spacer from "@/refresh-components/Spacer";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
@@ -609,7 +609,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
 
       <FederatedOAuthModal />
 
-      <AppPageLayout>
+      <AppLayouts.Root>
         <Dropzone
           onDrop={(acceptedFiles) =>
             handleMessageSpecificFileUpload(acceptedFiles)
@@ -725,7 +725,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
             </div>
           )}
         </Dropzone>
-      </AppPageLayout>
+      </AppLayouts.Root>
 
       {desktopDocumentSidebar}
     </>

@@ -9,6 +9,7 @@ import pytest
 from httpx import AsyncClient
 from litellm.exceptions import RateLimitError
 
+from onyx.llm.constants import LlmProviderNames
 from onyx.natural_language_processing.search_nlp_models import CloudEmbedding
 from onyx.natural_language_processing.search_nlp_models import (
     ConnectorClassificationModel,
@@ -77,7 +78,9 @@ async def test_rate_limit_handling() -> None:
         "onyx.natural_language_processing.search_nlp_models.CloudEmbedding.embed"
     ) as mock_embed:
         mock_embed.side_effect = RateLimitError(
-            "Rate limit exceeded", llm_provider="openai", model="fake-model"
+            "Rate limit exceeded",
+            llm_provider=LlmProviderNames.OPENAI,
+            model="fake-model",
         )
 
         embedding = CloudEmbedding("fake-key", EmbeddingProvider.OPENAI)

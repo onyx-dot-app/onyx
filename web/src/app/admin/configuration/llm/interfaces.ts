@@ -1,5 +1,3 @@
-import { PopupSpec } from "@/components/admin/connectors/Popup";
-
 export enum LLMProviderName {
   OPENAI = "openai",
   ANTHROPIC = "anthropic",

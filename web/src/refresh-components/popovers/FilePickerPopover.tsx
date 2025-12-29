@@ -281,7 +281,6 @@ export default function FilePickerPopover({
         <UserFilesModal
           title="Recent Files"
           description="Upload files or pick from your recent files."
-          icon={SvgFiles}
           recentFiles={recentFilesSnapshot}
           onPickRecent={(file) => {
             onPickRecent && onPickRecent(file);

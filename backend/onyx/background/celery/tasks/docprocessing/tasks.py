@@ -1508,6 +1508,8 @@ def _docprocessing_task(
 
         # FIX: Explicitly clear document batch from memory and force garbage collection
         # This helps prevent memory accumulation across multiple batches
+        # NOTE: Thread-local event loops in embedding threads are cleaned up automatically
+        # via the _cleanup_thread_local decorator in search_nlp_models.py
         del documents
         gc.collect()
 

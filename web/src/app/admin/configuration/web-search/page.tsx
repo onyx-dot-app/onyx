@@ -3,8 +3,7 @@
 import Image from "next/image";
 import { useMemo, useState, useReducer } from "react";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { HealthCheckBanner } from "@/components/health/healthcheck";
-import { GlobeIcon, InfoIcon } from "@/components/icons/icons";
+import { InfoIcon } from "@/components/icons/icons";
 import Text from "@/refresh-components/texts/Text";
 import Separator from "@/refresh-components/Separator";
 import useSWR from "swr";
@@ -13,6 +12,7 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { Callout } from "@/components/ui/callout";
 import Button from "@/refresh-components/buttons/Button";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import { cn } from "@/lib/utils";
 import {
   SvgArrowExchange,
   SvgArrowRightCircle,
@@ -73,18 +73,20 @@ interface WebContentProviderView {
   has_api_key: boolean;
 }
 
-const HoverIconButton = ({
+interface HoverIconButtonProps extends React.ComponentProps<typeof Button> {
+  isHovered: boolean;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+  children: React.ReactNode;
+}
+
+function HoverIconButton({
   isHovered,
   onMouseEnter,
   onMouseLeave,
   children,
   ...buttonProps
-}: {
-  isHovered: boolean;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
-  children: React.ReactNode;
-} & React.ComponentProps<typeof Button>) => {
+}: HoverIconButtonProps) {
   return (
     <div onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
       <Button {...buttonProps} rightIcon={isHovered ? SvgX : SvgCheckSquare}>
@@ -92,7 +94,7 @@ const HoverIconButton = ({
       </Button>
     </div>
   );
-};
+}
 
 export default function Page() {
   const [searchModal, dispatchSearchModal] = useReducer(
@@ -281,7 +283,10 @@ export default function Page() {
 
     return (
       <div
-        className={`flex items-center justify-center ${containerSizeClass} px-0.5 py-0 shrink-0 overflow-clip`}
+        className={cn(
+          "flex items-center justify-center px-0.5 py-0 shrink-0 overflow-clip",
+          containerSizeClass
+        )}
       >
         {logoSrc ? (
           <Image src={logoSrc} alt={alt} width={size} height={size} />
@@ -753,24 +758,17 @@ export default function Page() {
   return (
     <>
       <div className="container">
-        <div className="w-full">
-          <div className="mb-4">
-            <HealthCheckBanner />
-          </div>
-          <div className="w-full flex flex-col gap-0.5 px-4">
-            <Text headingH2 text04 className="flex gap-x-2 items-center">
-              <GlobeIcon size={32} className="my-auto" /> Web Search
-            </Text>
-            <Text secondaryBody text03 className="px-0.5">
-              Search settings for external search across the internet.
-            </Text>
-          </div>
+        <AdminPageTitle icon={SvgGlobe} title="Web Search" />
+        <div className="pt-4 pb-4">
+          <Text className="text-text-dark">
+            Search settings for external search across the internet.
+          </Text>
         </div>
 
-        <div className="mt-1 flex w-full max-w-[960px] flex-col gap-8 px-4 py-6">
-          <Separator className="py-0" />
+        <Separator />
 
-          <div className="flex flex-col gap-3 self-stretch">
+        <div className="flex w-full flex-col gap-8 pb-6">
+          <div className="flex w-full max-w-[960px] flex-col gap-3">
             <div className="flex flex-col gap-0.5">
               <Text mainContentEmphasis text05>
                 Search Engine
@@ -819,7 +817,7 @@ export default function Page() {
               </div>
             )}
 
-            <div className="flex flex-col gap-2 self-stretch">
+            <div className="flex flex-col gap-2">
               {combinedSearchProviders.map(
                 ({ key, providerType, label, subtitle, logoSrc, provider }) => {
                   const isConfigured = isSearchProviderConfigured(
@@ -889,15 +887,14 @@ export default function Page() {
                     <div
                       key={`${key}-${providerType}`}
                       onClick={isCardClickable ? handleCardClick : undefined}
-                      className={`flex items-start justify-between gap-3 rounded-16 border p-1 bg-background-neutral-00 dark:bg-background-neutral-00 ${
+                      className={cn(
+                        "flex items-start justify-between gap-3 rounded-16 border p-1 bg-background-neutral-00",
                         isHighlighted
                           ? "border-action-link-05"
-                          : "border-border-01"
-                      } ${
-                        isCardClickable
-                          ? "cursor-pointer hover:bg-background-tint-01 transition-colors"
-                          : ""
-                      }`}
+                          : "border-border-01",
+                        isCardClickable &&
+                          "cursor-pointer hover:bg-background-tint-01 transition-colors"
+                      )}
                     >
                       <div className="flex flex-1 items-start gap-1 px-2 py-1">
                         {renderLogo({
@@ -978,7 +975,7 @@ export default function Page() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 self-stretch">
+          <div className="flex w-full max-w-[960px] flex-col gap-3">
             <div className="flex flex-col gap-0.5">
               <Text mainContentEmphasis text05>
                 Web Crawler
@@ -998,7 +995,7 @@ export default function Page() {
               </Callout>
             )}
 
-            <div className="flex flex-col gap-2 self-stretch">
+            <div className="flex flex-col gap-2">
               {combinedContentProviders.map((provider) => {
                 const label =
                   provider.name ||
@@ -1082,15 +1079,14 @@ export default function Page() {
                         ? handleContentCardClick
                         : undefined
                     }
-                    className={`flex items-start justify-between gap-3 rounded-16 border p-1 bg-background-neutral-00 dark:bg-background-neutral-00 ${
+                    className={cn(
+                      "flex items-start justify-between gap-3 rounded-16 border p-1 bg-background-neutral-00",
                       isCurrentCrawler
                         ? "border-action-link-05"
-                        : "border-border-01"
-                    } ${
-                      isContentCardClickable
-                        ? "cursor-pointer hover:bg-background-tint-01 transition-colors"
-                        : ""
-                    }`}
+                        : "border-border-01",
+                      isContentCardClickable &&
+                        "cursor-pointer hover:bg-background-tint-01 transition-colors"
+                    )}
                   >
                     <div className="flex flex-1 items-start gap-1 px-2 py-1">
                       {renderLogo({
@@ -1313,11 +1309,7 @@ export default function Page() {
           } logo`,
           fallback:
             selectedContentProviderType === "onyx_web_crawler" ? (
-              <SvgOnyxLogo
-                width={24}
-                height={24}
-                className="text-[#111111] dark:text-[#f5f5f5]"
-              />
+              <SvgOnyxLogo width={24} height={24} className="text-text-05" />
             ) : undefined,
           size: 24,
           containerSize: 28,
