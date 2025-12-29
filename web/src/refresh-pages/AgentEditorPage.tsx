@@ -891,7 +891,7 @@ export default function AgentEditorPage({
               const warnings: Record<string, string> = {};
               if (values.web_search && !values.open_url) {
                 warnings.open_url =
-                  "Web Search without ability to Visit URL can lead to significantly worse web based results.";
+                  "Web Search without the ability to open URLs can lead to significantly worse web based results.";
               }
               setStatus({ warnings });
             }, [values.web_search, values.open_url, setStatus]);
