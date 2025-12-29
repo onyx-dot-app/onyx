@@ -257,6 +257,7 @@ def logging(
     # Also, add missing fields once usage in UI is clear.
 
     _EXPLORATION_TEST_USE_DC = state.use_dc
+    _EXPLORATION_TEST_USE_CS_UPDATES = state.use_cs_updates
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
 
@@ -346,7 +347,7 @@ def logging(
     )
 
     logger.debug(f"_EXPLORATION_TEST_USE_DC 2: {str(_EXPLORATION_TEST_USE_DC)}")
-    if _EXPLORATION_TEST_USE_DC:
+    if _EXPLORATION_TEST_USE_DC and _EXPLORATION_TEST_USE_CS_UPDATES:
         logger.debug(f"chat_message_id: {str(chat_message_id)}")
         if not user:
             raise ValueError("User is required for closer")

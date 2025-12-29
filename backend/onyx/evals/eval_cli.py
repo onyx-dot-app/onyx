@@ -54,10 +54,12 @@ def load_data_local(
         filtered_data = [
             item
             for item in data
-            if item.get("input", {}).get(filter_key) == filter_value
-            or item.get("metadata", {}).get(filter_key) == filter_value
+            if item.get("metadata", {}).get(filter_key) == filter_value
         ]
+        print()
         print(f"Filtered to {len(filtered_data)} items")
+        print(f"Number of dropped examples: {len(data) - len(filtered_data)}")
+        print()
 
         if len(filtered_data) == 0:
             print(f"WARNING: No items matched filter {filter_key}={filter_value}")

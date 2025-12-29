@@ -516,6 +516,7 @@ def opener(
     _EXPLORATION_TEST_USE_INTERNAL_TOPICS = True
 
     _EXPLORATION_TEST_USE_PLAN = False
+    _EXPLORATION_TEST_USE_CS_UPDATES = False
 
     node_start_time = datetime.now()
     current_step_nr = 0
@@ -572,6 +573,8 @@ def opener(
         use_thinking=_EXPLORATION_TEST_USE_THINKING,
         use_context_explorer=_EXPLORATION_TEST_USE_CONTEXT_EXPLORER,
     )
+
+    print(f"Tools: {str(available_tools.keys())}")
 
     available_tool_descriptions_str = "\n -" + "\n -".join(
         [
@@ -833,4 +836,5 @@ gathering steps.
         use_corpus_history=_EXPLORATION_TEST_USE_CORPUS_HISTORY,
         use_dc=_EXPLORATION_TEST_USE_DC,
         use_temporary_db_session=USE_TEMPORARY_DB_SESSION,
+        use_cs_updates=_EXPLORATION_TEST_USE_CS_UPDATES,
     )
