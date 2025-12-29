@@ -5,8 +5,8 @@ import Text from "@/refresh-components/texts/Text";
 import { SvgXOctagon } from "@opal/icons";
 import { useField } from "formik";
 
-export interface VerticalLayoutProps extends FieldLabelLayoutProps {
-  name: string;
+export interface VandHLayoutProps extends LabelLayoutProps {
+  name?: string;
   children?: React.ReactNode;
 }
 
@@ -37,20 +37,14 @@ function VerticalInputLayout({
 
   name,
   ...fieldLabelProps
-}: VerticalLayoutProps) {
+}: VandHLayoutProps) {
   return (
     <div className="flex flex-col w-full h-full gap-1">
       <LabelLayout name={name} {...fieldLabelProps} />
       {children}
-      <ErrorLayout name={name} />
+      {name && <ErrorLayout name={name} />}
     </div>
   );
-}
-
-export interface HorizontalLayoutProps extends FieldLabelLayoutProps {
-  name: string;
-  children?: React.ReactNode;
-  className?: string;
 }
 
 /**
@@ -80,7 +74,7 @@ function HorizontalInputLayout({
 
   name,
   ...fieldLabelProps
-}: HorizontalLayoutProps) {
+}: VandHLayoutProps) {
   return (
     <div className="flex flex-col gap-1 h-full w-full">
       <label
@@ -95,12 +89,12 @@ function HorizontalInputLayout({
         </div>
         {children}
       </label>
-      <ErrorLayout name={name} />
+      {name && <ErrorLayout name={name} />}
     </div>
   );
 }
 
-export interface FieldLabelLayoutProps {
+export interface LabelLayoutProps {
   name?: string;
   label?: string;
   optional?: boolean;
@@ -134,14 +128,8 @@ export interface FieldLabelLayoutProps {
  * />
  * ```
  */
-function LabelLayout({
-  name,
-  label,
-  optional,
-  description,
-  className,
-}: FieldLabelLayoutProps) {
-  const finalClassName = cn("flex flex-col w-full", className);
+function LabelLayout({ name, label, optional, description }: LabelLayoutProps) {
+  const className = "flex flex-col w-full";
   const content = label ? (
     <>
       <div className="flex flex-row gap-1.5">
@@ -163,11 +151,11 @@ function LabelLayout({
   ) : null;
 
   return name ? (
-    <label htmlFor={name} className={finalClassName}>
+    <label htmlFor={name} className={className}>
       {content}
     </label>
   ) : (
-    <div className={finalClassName}>{content}</div>
+    <div className={className}>{content}</div>
   );
 }
 

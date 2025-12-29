@@ -57,7 +57,6 @@ import { useUser } from "@/components/user/UserProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import useScreenSize from "@/hooks/useScreenSize";
-import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import {
   SvgEditBig,
   SvgFolderPlus,
