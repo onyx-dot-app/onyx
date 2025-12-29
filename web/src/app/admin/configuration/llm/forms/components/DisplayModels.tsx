@@ -4,6 +4,7 @@ import { BaseLLMFormValues } from "../formUtils";
 
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import Text from "@/refresh-components/texts/Text";
+import { cn } from "@/lib/utils";
 
 function DisplayModelHeader({ alternativeText }: { alternativeText?: string }) {
   return (
@@ -99,7 +100,15 @@ export function DisplayModels<T extends BaseLLMFormValues>({
   return (
     <div>
       <DisplayModelHeader />
-      <div className="flex flex-col gap-1 max-h-80 overflow-y-auto border border-border-01 rounded-lg p-3">
+      <div
+        className={cn(
+          "flex flex-col gap-1",
+          "max-h-48 4xl:max-h-64",
+          "overflow-y-auto",
+          "border border-border-01",
+          "rounded-lg p-3"
+        )}
+      >
         {sortedModelConfigurations.map((modelConfiguration) => {
           const isSelected = selectedModels.includes(modelConfiguration.name);
           const isDefault = defaultModel === modelConfiguration.name;
