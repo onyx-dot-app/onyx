@@ -25,6 +25,7 @@ import {
   IMAGE_GENERATION_TOOL_ID,
   WEB_SEARCH_TOOL_ID,
   PYTHON_TOOL_ID,
+  SEARCH_TOOL_ID,
 } from "@/app/chat/components/tools/constants";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/Card";
@@ -84,7 +85,6 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
 import useOnMount from "@/hooks/useOnMount";
-import Link from "next/link";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
@@ -451,6 +451,9 @@ export default function AgentEditorPage({
   // - web-search
   // - code-interpreter
   const { tools: availableTools } = useAvailableTools();
+  const searchTool = availableTools?.find(
+    (t) => t.in_code_tool_id === SEARCH_TOOL_ID
+  );
   const imageGenTool = availableTools?.find(
     (t) => t.in_code_tool_id === IMAGE_GENERATION_TOOL_ID
   );
@@ -628,11 +631,14 @@ export default function AgentEditorPage({
 
       // Determine knowledge settings
       const teamKnowledge = values.knowledge_source === "team_knowledge";
-      const numChunks = values.enable_knowledge ? values.num_chunks || 25 : 0;
+      const numChunks = values.enable_knowledge ? values.num_chunks ?? 25 : 0;
 
       // Always look up tools in availableTools to ensure we can find all tools
 
       const toolIds = [];
+      if (values.enable_knowledge && searchTool) {
+        toolIds.push(searchTool.id);
+      }
       if (values.image_generation && imageGenTool) {
         toolIds.push(imageGenTool.id);
       }
