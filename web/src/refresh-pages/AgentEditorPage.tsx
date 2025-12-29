@@ -518,25 +518,25 @@ export default function AgentEditorPage({
         existingAgent?.tools?.some(
           (tool) => tool.in_code_tool_id === IMAGE_GENERATION_TOOL_ID
         )) ??
-      false,
+      true,
     web_search:
       (!!webSearchTool &&
         existingAgent?.tools?.some(
           (tool) => tool.in_code_tool_id === WEB_SEARCH_TOOL_ID
         )) ??
-      false,
+      true,
     open_url:
       (!!openURLTool &&
         existingAgent?.tools?.some(
           (tool) => tool.in_code_tool_id === OPEN_URL_TOOL_ID
         )) ??
-      false,
+      true,
     code_interpreter:
       (!!codeInterpreterTool &&
         existingAgent?.tools?.some(
           (tool) => tool.in_code_tool_id === PYTHON_TOOL_ID
         )) ??
-      false,
+      true,
 
     // MCP servers - dynamically add fields for each server with nested tool fields
     ...Object.fromEntries(
