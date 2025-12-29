@@ -202,7 +202,7 @@ function ErrorLayout({ name }: FieldErrorLayoutProps) {
   const { status } = useFormikContext();
   const warning = status?.warnings?.[name];
   if (warning && typeof warning !== "string")
-    throw "The warning that is set must ALWAYS be a string";
+    throw new Error("The warning that is set must ALWAYS be a string");
 
   const hasError = meta.touched && meta.error;
   const hasWarning = warning; // Don't require touched for warnings
