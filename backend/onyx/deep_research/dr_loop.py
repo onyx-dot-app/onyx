@@ -91,7 +91,6 @@ def generate_final_report(
     citation_mapping: CitationMapping,
     user_identity: LLMUserIdentity | None,
     saved_reasoning: str | None = None,
-    is_connected: Callable[[], bool] | None = None,
 ) -> bool:
     """Generate the final research report.
 
@@ -142,7 +141,6 @@ def generate_final_report(
             user_identity=user_identity,
             max_tokens=MAX_FINAL_REPORT_TOKENS,
             is_deep_research=True,
-            is_connected=is_connected,
         )
 
         final_report = llm_step_result.answer
@@ -240,7 +238,6 @@ def run_deep_research_llm_loop(
                 final_documents=None,
                 user_identity=user_identity,
                 is_deep_research=True,
-                is_connected=is_connected,
             )
 
             if not llm_step_result.tool_calls:
@@ -288,19 +285,9 @@ def run_deep_research_llm_loop(
             final_documents=None,
             user_identity=user_identity,
             is_deep_research=True,
-            is_connected=is_connected,
         )
 
         while True:
-            # Check for stop signal before processing next packet
-            if is_connected is not None and not is_connected():
-                emitter.emit(
-                    Packet(
-                        placement=Placement(turn_index=0),
-                        obj=OverallStop(type="stop", stop_reason="user_cancelled"),
-                    )
-                )
-                return
             try:
                 packet = next(research_plan_generator)
                 # Translate AgentResponseStart/Delta packets to DeepResearchPlanStart/Delta
@@ -374,20 +361,6 @@ def run_deep_research_llm_loop(
             orchestrator_start_turn_index  # Track the final turn_index for stop packet
         )
         for cycle in range(max_orchestrator_cycles):
-            # Check for stop signal at the start of each cycle
-            if is_connected is not None and not is_connected():
-                emitter.emit(
-                    Packet(
-                        placement=Placement(
-                            turn_index=orchestrator_start_turn_index
-                            + cycle
-                            + reasoning_cycles
-                        ),
-                        obj=OverallStop(type="stop", stop_reason="user_cancelled"),
-                    )
-                )
-                return
-
             if cycle == max_orchestrator_cycles - 1:
                 # If it's the last cycle, forcibly generate the final report
                 report_turn_index = (
@@ -402,7 +375,6 @@ def run_deep_research_llm_loop(
                     turn_index=report_turn_index,
                     citation_mapping=citation_mapping,
                     user_identity=user_identity,
-                    is_connected=is_connected,
                 )
                 # Update final_turn_index: base + 1 for the report itself + 1 if reasoning occurred
                 final_turn_index = report_turn_index + (1 if report_reasoned else 0)
@@ -458,7 +430,6 @@ def run_deep_research_llm_loop(
                 user_identity=user_identity,
                 custom_token_processor=custom_processor,
                 is_deep_research=True,
-                is_connected=is_connected,
             )
             if has_reasoned:
                 reasoning_cycles += 1
@@ -486,7 +457,6 @@ def run_deep_research_llm_loop(
                     turn_index=report_turn_index,
                     citation_mapping=citation_mapping,
                     user_identity=user_identity,
-                    is_connected=is_connected,
                 )
                 final_turn_index = report_turn_index + (1 if report_reasoned else 0)
                 break
@@ -507,7 +477,6 @@ def run_deep_research_llm_loop(
                     citation_mapping=citation_mapping,
                     user_identity=user_identity,
                     saved_reasoning=most_recent_reasoning,
-                    is_connected=is_connected,
                 )
                 final_turn_index = report_turn_index + (1 if report_reasoned else 0)
                 break
@@ -567,7 +536,6 @@ def run_deep_research_llm_loop(
                         turn_index=report_turn_index,
                         citation_mapping=citation_mapping,
                         user_identity=user_identity,
-                        is_connected=is_connected,
                     )
                     final_turn_index = report_turn_index + (1 if report_reasoned else 0)
                     break

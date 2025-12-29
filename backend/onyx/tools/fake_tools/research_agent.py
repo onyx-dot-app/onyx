@@ -47,7 +47,6 @@ from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import IntermediateReportCitedDocs
 from onyx.server.query_and_chat.streaming_models import IntermediateReportDelta
 from onyx.server.query_and_chat.streaming_models import IntermediateReportStart
-from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketException
 from onyx.server.query_and_chat.streaming_models import ResearchAgentStart
@@ -83,7 +82,6 @@ def generate_intermediate_report(
     user_identity: LLMUserIdentity | None,
     emitter: Emitter,
     placement: Placement,
-    is_connected: Callable[[], bool] | None = None,
 ) -> str:
     with function_span("generate_intermediate_report") as span:
         span.span_data.input = (
@@ -128,19 +126,9 @@ def generate_intermediate_report(
             max_tokens=MAX_INTERMEDIATE_REPORT_LENGTH_TOKENS,
             use_existing_tab_index=True,
             is_deep_research=True,
-            is_connected=is_connected,
         )
 
         while True:
-            # Check for stop signal before processing next packet
-            if is_connected is not None and not is_connected():
-                emitter.emit(
-                    Packet(
-                        placement=placement,
-                        obj=OverallStop(type="stop", stop_reason="user_cancelled"),
-                    )
-                )
-                return ""
             try:
                 packet = next(intermediate_report_generator)
                 # Translate AgentResponseStart/Delta packets to IntermediateReportStart/Delta
@@ -249,20 +237,6 @@ def run_research_agent_call(
             citation_mapping: dict[int, str] = {}
             most_recent_reasoning: str | None = None
             while research_cycle_count <= RESEARCH_CYCLE_CAP:
-                # Check for stop signal at the start of each cycle
-                if is_connected is not None and not is_connected():
-                    emitter.emit(
-                        Packet(
-                            placement=Placement(
-                                turn_index=turn_index,
-                                tab_index=tab_index,
-                                sub_turn_index=llm_cycle_count + reasoning_cycles,
-                            ),
-                            obj=OverallStop(type="stop", stop_reason="user_cancelled"),
-                        )
-                    )
-                    return None
-
                 if research_cycle_count == RESEARCH_CYCLE_CAP:
                     # For the last cycle, do not use any more searches, only reason or generate a report
                     current_tools = [
@@ -403,7 +377,6 @@ def run_research_agent_call(
                             turn_index=turn_index,
                             tab_index=tab_index,
                         ),
-                        is_connected=is_connected,
                     )
                     span.span_data.output = final_report if final_report else None
                     return ResearchAgentCallResult(
@@ -556,7 +529,6 @@ def run_research_agent_call(
                     turn_index=turn_index,
                     tab_index=tab_index,
                 ),
-                is_connected=is_connected,
             )
             span.span_data.output = final_report if final_report else None
             return ResearchAgentCallResult(

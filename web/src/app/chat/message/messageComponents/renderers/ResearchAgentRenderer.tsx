@@ -35,12 +35,14 @@ function NestedToolItemRow({
   status,
   isLastItem,
   isLoading,
+  isCancelled,
 }: {
   icon: ((props: { size: number }) => React.JSX.Element) | null;
   content: React.JSX.Element | string;
   status: string | React.JSX.Element | null;
   isLastItem: boolean;
   isLoading?: boolean;
+  isCancelled?: boolean;
 }) {
   return (
     <div className="relative">
@@ -76,7 +78,10 @@ function NestedToolItemRow({
         >
           <Text
             text02
-            className={cn("text-sm mb-1", isLoading && "loading-text")}
+            className={cn(
+              "text-sm mb-1",
+              isLoading && !isCancelled && "loading-text"
+            )}
           >
             {status}
           </Text>
@@ -220,7 +225,10 @@ export const ResearchAgentRenderer: MessageRenderer<
     totalGroups: number
   ) => {
     const isLastItem = index === totalGroups - 1;
-    const isLoading = !group.isComplete && !isComplete;
+    // If stopPacketSeen is true, loading is false (cancelled state)
+    const isLoading = !stopPacketSeen && !group.isComplete && !isComplete;
+    // Tool is cancelled if stop was triggered and it's not complete
+    const isCancelled = stopPacketSeen && !group.isComplete;
 
     return (
       <RendererComponent
@@ -239,6 +247,7 @@ export const ResearchAgentRenderer: MessageRenderer<
             status={result.status}
             isLastItem={isLastItem}
             isLoading={isLoading}
+            isCancelled={isCancelled}
           />
         )}
       </RendererComponent>
