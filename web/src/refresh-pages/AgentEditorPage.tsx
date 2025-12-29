@@ -510,7 +510,8 @@ export default function AgentEditorPage({
     knowledge_cutoff_date: existingAgent?.search_start_date
       ? new Date(existingAgent.search_start_date)
       : null,
-    overwrite_system_prompts: false, // Not used in backend
+    replace_base_system_prompt:
+      existingAgent?.replace_base_system_prompt ?? false,
     reminders: existingAgent?.task_prompt ?? "",
     image_generation:
       (!!imageGenTool &&
@@ -617,7 +618,7 @@ export default function AgentEditorPage({
 
     // Advanced
     knowledge_cutoff_date: Yup.date().nullable().optional(),
-    overwrite_system_prompts: Yup.boolean(),
+    replace_base_system_prompt: Yup.boolean(),
     reminders: Yup.string().optional(),
 
     // MCP servers - dynamically add validation for each server with nested tool validation
@@ -737,6 +738,7 @@ export default function AgentEditorPage({
           values.enable_knowledge && !teamKnowledge ? values.user_file_ids : [],
 
         system_prompt: values.instructions,
+        replace_base_system_prompt: values.replace_base_system_prompt,
         task_prompt: values.reminders || "",
         datetime_aware: false,
       };
@@ -1299,11 +1301,11 @@ export default function AgentEditorPage({
                               <InputDatePickerField name="knowledge_cutoff_date" />
                             </InputLayouts.Horizontal>
                             <InputLayouts.Horizontal
-                              name="overwrite_system_prompts"
+                              name="replace_base_system_prompt"
                               label="Overwrite System Prompts"
                               description='Completely replace the base system prompt. This might affect response quality since it will also overwrite useful system instructions (e.g. "You (the LLM) can provide markdown and it will be rendered").'
                             >
-                              <SwitchField name="overwrite_system_prompts" />
+                              <SwitchField name="replace_base_system_prompt" />
                             </InputLayouts.Horizontal>
                           </Card>
 

@@ -36,6 +36,7 @@ export interface PersonaUpsertParameters {
   name: string;
   description: string;
   system_prompt: string;
+  replace_base_system_prompt: boolean;
   task_prompt: string;
   datetime_aware: boolean;
   document_set_ids: number[];
