@@ -27,6 +27,7 @@ import {
   WEB_SEARCH_TOOL_ID,
   PYTHON_TOOL_ID,
   SEARCH_TOOL_ID,
+  OPEN_URL_TOOL_ID,
 } from "@/app/chat/components/tools/constants";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/Card";
@@ -454,6 +455,9 @@ export default function AgentEditorPage({
   const imageGenTool = availableTools?.find(
     (t) => t.in_code_tool_id === IMAGE_GENERATION_TOOL_ID
   );
+  const openURLTool = availableTools?.find(
+    (t) => t.in_code_tool_id === OPEN_URL_TOOL_ID
+  );
   const webSearchTool = availableTools?.find(
     (t) => t.in_code_tool_id === WEB_SEARCH_TOOL_ID
   );
@@ -512,6 +516,12 @@ export default function AgentEditorPage({
       (!!imageGenTool &&
         existingAgent?.tools?.some(
           (tool) => tool.in_code_tool_id === IMAGE_GENERATION_TOOL_ID
+        )) ??
+      false,
+    open_url:
+      (!!openURLTool &&
+        existingAgent?.tools?.some(
+          (tool) => tool.in_code_tool_id === OPEN_URL_TOOL_ID
         )) ??
       false,
     web_search:
@@ -609,9 +619,6 @@ export default function AgentEditorPage({
     knowledge_cutoff_date: Yup.date().nullable().optional(),
     overwrite_system_prompts: Yup.boolean(),
     reminders: Yup.string().optional(),
-    image_generation: Yup.boolean(),
-    web_search: Yup.boolean(),
-    code_interpreter: Yup.boolean(),
 
     // MCP servers - dynamically add validation for each server with nested tool validation
     ...Object.fromEntries(
@@ -656,6 +663,9 @@ export default function AgentEditorPage({
       }
       if (values.image_generation && imageGenTool) {
         toolIds.push(imageGenTool.id);
+      }
+      if (values.open_url && openURLTool) {
+        toolIds.push(openURLTool.id);
       }
       if (values.web_search && webSearchTool) {
         toolIds.push(webSearchTool.id);
@@ -1171,6 +1181,19 @@ export default function AgentEditorPage({
                             <SwitchField
                               name="image_generation"
                               disabled={!imageGenTool}
+                            />
+                          </InputLayouts.Horizontal>
+                        </Card>
+
+                        <Card>
+                          <InputLayouts.Horizontal
+                            name="open_url"
+                            label="Open URL"
+                            description="Fetch and read content from web URLs."
+                          >
+                            <SwitchField
+                              name="open_url"
+                              disabled={!openURLTool}
                             />
                           </InputLayouts.Horizontal>
                         </Card>
