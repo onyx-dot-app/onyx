@@ -700,7 +700,7 @@ export default function AgentEditorPage({
         name: values.name,
         description: values.description,
         document_set_ids:
-          teamKnowledge && values.enable_knowledge
+          values.enable_knowledge && teamKnowledge
             ? values.document_set_ids
             : [],
         num_chunks: numChunks,
@@ -724,7 +724,7 @@ export default function AgentEditorPage({
         // display_priority: ...,
 
         user_file_ids:
-          !teamKnowledge && values.enable_knowledge ? values.user_file_ids : [],
+          values.enable_knowledge && !teamKnowledge ? values.user_file_ids : [],
 
         system_prompt: values.instructions,
         task_prompt: values.reminders || "",
