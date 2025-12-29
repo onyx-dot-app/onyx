@@ -18,13 +18,16 @@ function getInitialTools(
 export function useToolDisplayTiming(
   toolGroups: { turn_index: number; tab_index: number; packets: Packet[] }[],
   isFinalAnswerComing: boolean,
-  isComplete: boolean
+  isComplete: boolean,
+  expectedBranchesPerTurn?: Map<number, number>
 ) {
   /* Adds a "minimum display time" for each tool and makes sure that we 
   display tools one after another (e.g. only after the rendering of a tool is complete,
   do we start showing the next tool). 
   
-  For parallel tools (same turn_index, different tab_index), they are shown together. */
+  For parallel tools (same turn_index, different tab_index), they are shown together.
+  When expectedBranchesPerTurn is provided, we wait for all expected branches before
+  considering a turn complete. */
   const MINIMUM_DISPLAY_TIME_MS = 1500; // 1.5 seconds minimum display time
   const [visibleTools, setVisibleTools] = useState<Set<string>>(() =>
     getInitialTools(toolGroups, isComplete)
@@ -135,9 +138,19 @@ export function useToolDisplayTiming(
 
     // Check if all tools in the last visible turn are completed
     const toolsInLastTurn = toolsByTurnIndex.get(lastVisibleTurnIndex) || [];
-    const allToolsInLastTurnCompleted = toolsInLastTurn.every((tool) =>
-      completedToolInds.has(getToolKey(tool.turn_index, tool.tab_index))
-    );
+    const expectedBranchCount =
+      expectedBranchesPerTurn?.get(lastVisibleTurnIndex) ?? 0;
+
+    // If we expect more branches than we have, this turn is not complete
+    const hasAllExpectedBranches =
+      expectedBranchCount === 0 ||
+      toolsInLastTurn.length >= expectedBranchCount;
+
+    const allToolsInLastTurnCompleted =
+      hasAllExpectedBranches &&
+      toolsInLastTurn.every((tool) =>
+        completedToolInds.has(getToolKey(tool.turn_index, tool.tab_index))
+      );
 
     // If all tools in the last turn are completed and there are more turns, show the next turn
     if (
@@ -165,6 +178,7 @@ export function useToolDisplayTiming(
     visibleTools,
     toolsByTurnIndex,
     turnIndicesInOrder,
+    expectedBranchesPerTurn,
   ]);
 
   // Callback to handle when a tool completes
@@ -239,8 +253,31 @@ export function useToolDisplayTiming(
       completedToolInds.has(getToolKey(group.turn_index, group.tab_index))
     );
 
-    return allVisible && allCompleted && isFinalAnswerComing;
-  }, [toolGroups, visibleTools, completedToolInds, isFinalAnswerComing]);
+    // Also check that we have all expected branches for each turn
+    let hasAllExpectedBranches = true;
+    if (expectedBranchesPerTurn) {
+      expectedBranchesPerTurn.forEach((expectedCount, turnIndex) => {
+        const toolsInTurn = toolsByTurnIndex.get(turnIndex) || [];
+        if (toolsInTurn.length < expectedCount) {
+          hasAllExpectedBranches = false;
+        }
+      });
+    }
+
+    return (
+      allVisible &&
+      allCompleted &&
+      hasAllExpectedBranches &&
+      isFinalAnswerComing
+    );
+  }, [
+    toolGroups,
+    visibleTools,
+    completedToolInds,
+    isFinalAnswerComing,
+    expectedBranchesPerTurn,
+    toolsByTurnIndex,
+  ]);
 
   return {
     visibleTools,

@@ -1,5 +1,3 @@
-import { PopupSpec } from "@/components/admin/connectors/Popup";
-
 export enum LLMProviderName {
   OPENAI = "openai",
   ANTHROPIC = "anthropic",
@@ -8,6 +6,7 @@ export enum LLMProviderName {
   OPENROUTER = "openrouter",
   VERTEX_AI = "vertex_ai",
   BEDROCK = "bedrock",
+  CUSTOM = "custom",
 }
 
 export interface CustomConfigOption {
@@ -129,25 +128,37 @@ export interface BedrockModelResponse {
   supports_image_input: boolean;
 }
 
-export interface DynamicProviderConfig<
-  TApiResponse = any,
-  TProcessedResponse = ModelConfiguration,
-> {
-  endpoint: string;
-  isDisabled: (values: any) => boolean;
-  disabledReason: string;
-  buildRequestBody: (args: {
-    values: any;
-    existingLlmProvider?: LLMProviderView;
-  }) => Record<string, any>;
-  processResponse: (
-    data: TApiResponse,
-    llmProviderDescriptor: WellKnownLLMProviderDescriptor
-  ) => TProcessedResponse[];
-  getModelNames: (data: TApiResponse) => string[];
-  successMessage: (count: number) => string;
-  // If true, uses models from the descriptor instead of making an API call
-  isStatic?: boolean;
-  // If true, requires user to click a button to fetch models (no auto-fetch)
-  requiresManualFetch?: boolean;
+export interface LLMProviderFormProps {
+  existingLlmProvider?: LLMProviderView;
+  shouldMarkAsDefault?: boolean;
 }
+
+// Param types for model fetching functions - use snake_case to match API structure
+export interface BedrockFetchParams {
+  aws_region_name: string;
+  aws_access_key_id?: string;
+  aws_secret_access_key?: string;
+  aws_bearer_token_bedrock?: string;
+  provider_name?: string;
+}
+
+export interface OllamaFetchParams {
+  api_base?: string;
+  provider_name?: string;
+}
+
+export interface OpenRouterFetchParams {
+  api_base?: string;
+  api_key?: string;
+  provider_name?: string;
+}
+
+export interface VertexAIFetchParams {
+  model_configurations?: ModelConfiguration[];
+}
+
+export type FetchModelsParams =
+  | BedrockFetchParams
+  | OllamaFetchParams
+  | OpenRouterFetchParams
+  | VertexAIFetchParams;

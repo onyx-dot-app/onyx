@@ -29,10 +29,10 @@ from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
-from onyx.file_processing.extract_file_text import docx_to_text_and_images
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.extract_file_text import pptx_to_text
+from onyx.file_processing.extract_file_text import read_docx_file
 from onyx.file_processing.extract_file_text import read_pdf_file
 from onyx.file_processing.extract_file_text import xlsx_to_text
 from onyx.file_processing.file_types import OnyxFileExtensions
@@ -214,7 +214,7 @@ def _download_and_extract_sections_basic(
         mime_type
         == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     ):
-        text, _ = docx_to_text_and_images(io.BytesIO(response_call()))
+        text, _ = read_docx_file(io.BytesIO(response_call()))
         return [TextSection(link=link, text=text)]
 
     elif (

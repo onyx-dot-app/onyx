@@ -23,9 +23,16 @@ export function isToolPacket(
     PacketType.FETCH_TOOL_START,
     PacketType.FETCH_TOOL_URLS,
     PacketType.FETCH_TOOL_DOCUMENTS,
+    PacketType.DEEP_RESEARCH_PLAN_START,
+    PacketType.DEEP_RESEARCH_PLAN_DELTA,
+    PacketType.RESEARCH_AGENT_START,
+    PacketType.INTERMEDIATE_REPORT_START,
+    PacketType.INTERMEDIATE_REPORT_DELTA,
+    PacketType.INTERMEDIATE_REPORT_CITED_DOCS,
   ];
   if (includeSectionEnd) {
     toolPacketTypes.push(PacketType.SECTION_END);
+    toolPacketTypes.push(PacketType.ERROR);
   }
   return toolPacketTypes.includes(packet.obj.type as PacketType);
 }
@@ -72,11 +79,12 @@ export function isFinalAnswerComplete(packets: Packet[]) {
     return false;
   }
 
-  // Check if there's a corresponding SECTION_END with the same turn_index
+  // Check if there's a corresponding SECTION_END or ERROR with the same turn_index
   return packets.some(
     (packet) =>
-      packet.obj.type === PacketType.SECTION_END &&
-      packet.turn_index === messageStartPacket.turn_index
+      (packet.obj.type === PacketType.SECTION_END ||
+        packet.obj.type === PacketType.ERROR) &&
+      packet.placement.turn_index === messageStartPacket.placement.turn_index
   );
 }
 
@@ -97,8 +105,8 @@ export function groupPacketsByTurnIndex(
       >,
       packet
     ) => {
-      const turn_index = packet.turn_index;
-      const tab_index = packet.tab_index ?? 0;
+      const turn_index = packet.placement.turn_index;
+      const tab_index = packet.placement.tab_index ?? 0;
       const key = `${turn_index}-${tab_index}`;
       if (!acc.has(key)) {
         acc.set(key, { turn_index, tab_index, packets: [] });

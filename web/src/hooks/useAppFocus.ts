@@ -50,7 +50,7 @@ export default function useAppFocus(): AppFocus {
   const searchParams = useSearchParams();
 
   // Check if we're on the agents page
-  if (pathname === "/chat/agents") {
+  if (pathname.startsWith("/chat/agents")) {
     return new AppFocus("more-agents");
   }
 

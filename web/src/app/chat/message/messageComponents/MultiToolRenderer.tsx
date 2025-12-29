@@ -5,6 +5,7 @@ import {
   FiChevronLeft,
   FiCircle,
   FiGitBranch,
+  FiXCircle,
 } from "react-icons/fi";
 import {
   Packet,
@@ -18,14 +19,20 @@ import { useToolDisplayTiming } from "./hooks/useToolDisplayTiming";
 import { STANDARD_TEXT_COLOR } from "./constants";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
-import { getToolIcon, getToolName } from "./toolDisplayHelpers";
 import {
-  SearchToolStep1Renderer,
-  SearchToolStep2Renderer,
+  getToolIcon,
+  getToolName,
+  hasToolError,
+  isToolComplete,
+} from "./toolDisplayHelpers";
+import {
+  SourceRetrievalStepRenderer,
+  ReadDocumentsStepRenderer,
   constructCurrentSearchState,
-} from "./renderers/SearchToolRendererV2";
+} from "./renderers/SearchToolRenderer";
 import { SvgChevronDown, SvgChevronDownSmall } from "@opal/icons";
 import { LoadingSpinner } from "../../chat_search/LoadingSpinner";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 enum DisplayType {
   REGULAR = "regular",
@@ -69,7 +76,7 @@ function ToolItemRow({
 }: {
   icon: ((props: { size: number }) => JSX.Element) | null;
   content: JSX.Element | string;
-  status: string | null;
+  status: string | JSX.Element | null;
   isLastItem: boolean;
   isLoading?: boolean;
 }) {
@@ -137,20 +144,21 @@ function ParallelToolTabs({
       icon: JSX.Element;
       packets: Packet[];
       isComplete: boolean;
+      hasError: boolean;
     }[] = [];
     items.forEach((item) => {
       if (!seen.has(item.tab_index)) {
         seen.add(item.tab_index);
-        // Check if this tool is complete (has SECTION_END)
-        const isComplete = item.packets.some(
-          (p) => p.obj.type === PacketType.SECTION_END
-        );
+        // Check if this tool is complete using the helper that handles research agents properly
+        const toolComplete = isToolComplete(item.packets);
+        const hasError = hasToolError(item.packets);
         tabs.push({
           tab_index: item.tab_index,
           name: getToolName(item.packets),
           icon: getToolIcon(item.packets),
           packets: item.packets,
-          isComplete,
+          isComplete: toolComplete,
+          hasError,
         });
       }
     });
@@ -247,7 +255,17 @@ function ParallelToolTabs({
                         {tab.name}
                       </span>
                       {isLoading && <LoadingSpinner size="small" />}
-                      {tab.isComplete && !isLoading && (
+                      {tab.isComplete && !isLoading && tab.hasError && (
+                        <FiXCircle
+                          className={cn(
+                            "w-3 h-3",
+                            isActive && isExpanded
+                              ? "text-red-300"
+                              : "text-red-500"
+                          )}
+                        />
+                      )}
+                      {tab.isComplete && !isLoading && !tab.hasError && (
                         <FiCheckCircle
                           className={cn(
                             "w-3 h-3",
@@ -278,43 +296,64 @@ function ParallelToolTabs({
 
         {/* Navigation arrows - navigate between tabs */}
         <div className="flex items-center gap-0.5 ml-2 flex-shrink-0">
-          <button
-            onClick={goToPreviousTab}
+          <SimpleTooltip
+            tooltip="Previous"
+            side="top"
             disabled={!canGoPrevious || !isExpanded}
-            className={cn(
-              "p-1 rounded hover:bg-background-subtle-hover transition-colors",
-              (!canGoPrevious || !isExpanded) && "opacity-30 cursor-not-allowed"
-            )}
-            aria-label="Previous tab"
           >
-            <FiChevronLeft className="w-4 h-4" />
-          </button>
-          <button
-            onClick={goToNextTab}
+            <button
+              onClick={goToPreviousTab}
+              disabled={!canGoPrevious || !isExpanded}
+              className={cn(
+                "p-1 rounded transition-colors",
+                canGoPrevious && isExpanded
+                  ? "hover:bg-background-tint-02 active:bg-background-tint-00"
+                  : "opacity-30 cursor-not-allowed"
+              )}
+              aria-label="Previous tab"
+            >
+              <FiChevronLeft className="w-4 h-4" />
+            </button>
+          </SimpleTooltip>
+          <SimpleTooltip
+            tooltip="Next"
+            side="top"
             disabled={!canGoNext || !isExpanded}
-            className={cn(
-              "p-1 rounded hover:bg-background-subtle-hover transition-colors",
-              (!canGoNext || !isExpanded) && "opacity-30 cursor-not-allowed"
-            )}
-            aria-label="Next tab"
           >
-            <FiChevronRight className="w-4 h-4" />
-          </button>
+            <button
+              onClick={goToNextTab}
+              disabled={!canGoNext || !isExpanded}
+              className={cn(
+                "p-1 rounded transition-colors",
+                canGoNext && isExpanded
+                  ? "hover:bg-background-tint-02 active:bg-background-tint-00"
+                  : "opacity-30 cursor-not-allowed"
+              )}
+              aria-label="Next tab"
+            >
+              <FiChevronRight className="w-4 h-4" />
+            </button>
+          </SimpleTooltip>
 
           {/* Collapse/expand button */}
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="flex-shrink-0 p-1 rounded hover:bg-background-subtle-hover transition-colors ml-0.5"
-            aria-label={isExpanded ? "Collapse" : "Expand"}
-            aria-expanded={isExpanded}
+          <SimpleTooltip
+            tooltip={isExpanded ? "Collapse" : "Expand"}
+            side="top"
           >
-            <SvgChevronDown
-              className={cn(
-                "w-4 h-4 stroke-text-400 transition-transform duration-150 ease-in-out",
-                isExpanded && "rotate-[-180deg]"
-              )}
-            />
-          </button>
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="flex-shrink-0 p-1 rounded hover:bg-background-tint-02 active:bg-background-tint-00 transition-colors ml-0.5"
+              aria-label={isExpanded ? "Collapse" : "Expand"}
+              aria-expanded={isExpanded}
+            >
+              <SvgChevronDown
+                className={cn(
+                  "w-4 h-4 stroke-text-400 transition-transform duration-150 ease-in-out",
+                  isExpanded && "rotate-[-180deg]"
+                )}
+              />
+            </button>
+          </SimpleTooltip>
         </div>
       </div>
 
@@ -329,9 +368,9 @@ function ParallelToolTabs({
           {selectedToolItems.map((item, index) => {
             const isLastItem = index === selectedToolItems.length - 1;
 
-            if (item.type === "search-step-1") {
+            if (item.type === DisplayType.SEARCH_STEP_1) {
               return (
-                <SearchToolStep1Renderer
+                <SourceRetrievalStepRenderer
                   key={item.key}
                   packets={item.packets as SearchToolPacket[]}
                   isActive={!shouldStopShimmering}
@@ -339,11 +378,11 @@ function ParallelToolTabs({
                   {(props) => (
                     <ToolItemRow {...props} isLastItem={isLastItem} />
                   )}
-                </SearchToolStep1Renderer>
+                </SourceRetrievalStepRenderer>
               );
-            } else if (item.type === "search-step-2") {
+            } else if (item.type === DisplayType.SEARCH_STEP_2) {
               return (
-                <SearchToolStep2Renderer
+                <ReadDocumentsStepRenderer
                   key={item.key}
                   packets={item.packets as SearchToolPacket[]}
                   isActive={!shouldStopShimmering}
@@ -351,7 +390,7 @@ function ParallelToolTabs({
                   {(props) => (
                     <ToolItemRow {...props} isLastItem={isLastItem} />
                   )}
-                </SearchToolStep2Renderer>
+                </ReadDocumentsStepRenderer>
               );
             } else {
               // Regular tool
@@ -393,7 +432,7 @@ function ExpandedToolItem({
 }: {
   icon: ((props: { size: number }) => JSX.Element) | null;
   content: JSX.Element | string;
-  status: string | null;
+  status: string | JSX.Element | null;
   isLastItem: boolean;
   showClickableToggle?: boolean;
   onToggleClick?: () => void;
@@ -474,6 +513,7 @@ export default function MultiToolRenderer({
   stopPacketSeen,
   onAllToolsDisplayed,
   isStreaming,
+  expectedBranchesPerTurn,
 }: {
   packetGroups: { turn_index: number; tab_index: number; packets: Packet[] }[];
   chatState: FullChatState;
@@ -482,6 +522,8 @@ export default function MultiToolRenderer({
   stopPacketSeen: boolean;
   onAllToolsDisplayed?: () => void;
   isStreaming?: boolean;
+  // Map of turn_index -> expected number of parallel branches (from TopLevelBranching packet)
+  expectedBranchesPerTurn?: Map<number, number>;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isStreamingExpanded, setIsStreamingExpanded] = useState(false);
@@ -526,7 +568,7 @@ export default function MultiToolRenderer({
           });
         }
       } else {
-        // Regular tool (or internet search): single entry
+        // Regular tool (including deep research plan, internet search, etc.): single entry
         items.push({
           key: `${group.turn_index}-${tab_index}`,
           type: DisplayType.REGULAR,
@@ -542,7 +584,12 @@ export default function MultiToolRenderer({
 
   // Use the custom hook to manage tool display timing
   const { visibleTools, allToolsDisplayed, handleToolComplete } =
-    useToolDisplayTiming(toolGroups, isFinalAnswerComing, isComplete);
+    useToolDisplayTiming(
+      toolGroups,
+      isFinalAnswerComing,
+      isComplete,
+      expectedBranchesPerTurn
+    );
 
   // Notify parent when all tools are displayed
   useEffect(() => {
@@ -574,11 +621,10 @@ export default function MultiToolRenderer({
           handleToolComplete(item.turn_index, item.tab_index);
         }
       } else if (item.type === DisplayType.REGULAR) {
-        // Regular tools (including web search, openUrl, etc.): check for SECTION_END
-        const hasSectionEnd = item.packets.some(
-          (p) => p.obj.type === PacketType.SECTION_END
-        );
-        if (hasSectionEnd && item.turn_index !== undefined) {
+        // Regular tools (including web search, openUrl, research agents, etc.):
+        // Use isToolComplete helper which handles research agents correctly
+        const hasCompletion = isToolComplete(item.packets);
+        if (hasCompletion && item.turn_index !== undefined) {
           handleToolComplete(item.turn_index, item.tab_index);
         }
       }
@@ -594,25 +640,25 @@ export default function MultiToolRenderer({
     isVisible: boolean,
     childrenCallback: (result: RendererResult) => JSX.Element
   ) => {
-    if (item.type === "search-step-1") {
+    if (item.type === DisplayType.SEARCH_STEP_1) {
       return (
-        <SearchToolStep1Renderer
+        <SourceRetrievalStepRenderer
           key={item.key}
           packets={item.packets as SearchToolPacket[]}
           isActive={isStreaming}
         >
           {childrenCallback}
-        </SearchToolStep1Renderer>
+        </SourceRetrievalStepRenderer>
       );
-    } else if (item.type === "search-step-2") {
+    } else if (item.type === DisplayType.SEARCH_STEP_2) {
       return (
-        <SearchToolStep2Renderer
+        <ReadDocumentsStepRenderer
           key={item.key}
           packets={item.packets as SearchToolPacket[]}
           isActive={isStreaming}
         >
           {childrenCallback}
-        </SearchToolStep2Renderer>
+        </ReadDocumentsStepRenderer>
       );
     } else {
       // Regular tool - use RendererComponent
@@ -732,9 +778,9 @@ export default function MultiToolRenderer({
                       );
                       isItemComplete = searchState.isComplete;
                     } else {
-                      isItemComplete = item.packets.some(
-                        (p) => p.obj.type === PacketType.SECTION_END
-                      );
+                      // Use isToolComplete helper which handles research agents correctly
+                      // (only looks at parent-level SECTION_END for research agents)
+                      isItemComplete = isToolComplete(item.packets);
                     }
                     const isLoading = !isItemComplete && !shouldStopShimmering;
 
@@ -770,7 +816,7 @@ export default function MultiToolRenderer({
 
   // If complete, show summary with toggle and render each turn group independently
   return (
-    <div className="pb-1">
+    <div className="pb-4">
       {/* Summary header - clickable */}
       <div
         className="flex flex-row w-fit items-center group/StepsButton select-none"
@@ -899,14 +945,30 @@ export default function MultiToolRenderer({
                         rounded-full
                       "
                     >
-                      <FiCheckCircle className="w-3 h-3 rounded-full" />
+                      {toolGroups.some((group) =>
+                        group.packets.some(
+                          (p) => p.obj.type === PacketType.ERROR
+                        )
+                      ) ? (
+                        <FiXCircle className="w-3 h-3 rounded-full text-red-500" />
+                      ) : (
+                        <FiCheckCircle className="w-3 h-3 rounded-full" />
+                      )}
                     </div>
                   </div>
 
                   {/* Content with padding */}
                   <div className="flex-1">
                     <div className="flex mb-1">
-                      <div className="text-sm">Done</div>
+                      <div className="text-sm">
+                        {toolGroups.some((group) =>
+                          group.packets.some(
+                            (p) => p.obj.type === PacketType.ERROR
+                          )
+                        )
+                          ? "Completed with errors"
+                          : "Done"}
+                      </div>
                     </div>
                   </div>
                 </div>

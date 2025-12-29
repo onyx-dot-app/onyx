@@ -17,7 +17,13 @@ import Modal from "@/refresh-components/Modal";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import CounterSeparator from "@/refresh-components/CounterSeparator";
-import { SvgEye, SvgFileText, SvgImage, SvgXCircle } from "@opal/icons";
+import {
+  SvgEye,
+  SvgFiles,
+  SvgFileText,
+  SvgImage,
+  SvgXCircle,
+} from "@opal/icons";
 
 function getIcon(
   file: ProjectFile,
@@ -85,7 +91,6 @@ export interface UserFilesModalProps {
   // Modal content
   title: string;
   description: string;
-  icon: React.FunctionComponent<IconProps>;
   recentFiles: ProjectFile[];
   handleUploadChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   selectedFileIds?: string[];
@@ -100,7 +105,6 @@ export interface UserFilesModalProps {
 export default function UserFilesModal({
   title,
   description,
-  icon,
   recentFiles,
   handleUploadChange,
   selectedFileIds,
@@ -179,7 +183,7 @@ export default function UserFilesModal({
           }}
           preventAccidentalClose={false}
         >
-          <Modal.Header icon={icon} title={title} description={description}>
+          <Modal.Header icon={SvgFiles} title={title} description={description}>
             {/* Search bar section */}
             <div className="flex flex-row items-center gap-2">
               <InputTypeIn

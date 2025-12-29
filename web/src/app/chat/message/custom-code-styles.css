@@ -166,16 +166,50 @@ pre[class*="language-"] {
     height: 8px; /* Horizontal scrollbar height */
   }
 
+  /* Light mode scrollbar */
+  ::-webkit-scrollbar-track {
+    background: #e5e7eb; /* Light track background color */
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #c9cdd1; /* Light handle color - subtle */
+    border-radius: 10px;
+    transition: background 0.2s ease;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #6b7280; /* Light handle color on hover */
+  }
+
+  scrollbar-width: thin;
+  scrollbar-color: #c9cdd1 #e5e7eb; /* thumb and track colors for light mode */
+}
+
+/* Light mode - highlight scrollbar when hovering code block */
+.prose
+  :where(pre):not(:where([class~="not-prose"], [class~="not-prose"] *)):hover {
+  ::-webkit-scrollbar-thumb {
+    background: #9ca3af; /* More visible on code block hover */
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #6b7280;
+  }
+
+  scrollbar-color: #9ca3af #e5e7eb;
+}
+
+/* Dark mode scrollbar for code blocks */
+.dark
+  .prose
+  :where(pre):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
   ::-webkit-scrollbar-track {
     background: #1f2937; /* Dark track background color */
   }
 
   ::-webkit-scrollbar-thumb {
-    background: #4b5563; /* Dark handle color */
-    border-radius: 10px;
-    transition:
-      background 0.3s ease,
-      box-shadow 0.3s ease; /* Smooth transition for hover effect */
+    background: #374151; /* Dark handle color - subtle */
+    transition: background 0.2s ease;
   }
 
   ::-webkit-scrollbar-thumb:hover {
@@ -183,6 +217,21 @@ pre[class*="language-"] {
     box-shadow: 0 0 10px #6b7280; /* Light up effect on hover */
   }
 
-  scrollbar-width: thin;
-  scrollbar-color: #4b5563 #1f2937; /* thumb and track colors */
+  scrollbar-color: #374151 #1f2937; /* thumb and track colors for dark mode */
+}
+
+/* Dark mode - highlight scrollbar when hovering code block */
+.dark
+  .prose
+  :where(pre):not(:where([class~="not-prose"], [class~="not-prose"] *)):hover {
+  ::-webkit-scrollbar-thumb {
+    background: #4b5563; /* More visible on code block hover */
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #6b7280;
+    box-shadow: 0 0 10px #6b7280;
+  }
+
+  scrollbar-color: #4b5563 #1f2937;
 }

@@ -626,7 +626,7 @@ def reserve_message_id(
         chat_session_id=chat_session_id,
         parent_message_id=parent_message,
         latest_child_message_id=None,
-        message="Response was termination prior to completion, try regenerating.",
+        message="Response was terminated prior to completion, try regenerating.",
         token_count=15,
         message_type=message_type,
     )
@@ -744,29 +744,61 @@ def update_search_docs_table_with_relevance(
     db_session.commit()
 
 
+def _sanitize_for_postgres(value: str) -> str:
+    """Remove NUL (0x00) characters from strings as PostgreSQL doesn't allow them."""
+    sanitized = value.replace("\x00", "")
+    if value and not sanitized:
+        logger.warning("Sanitization removed all characters from string")
+    return sanitized
+
+
+def _sanitize_list_for_postgres(values: list[str]) -> list[str]:
+    """Remove NUL (0x00) characters from all strings in a list."""
+    return [_sanitize_for_postgres(v) for v in values]
+
+
 def create_db_search_doc(
     server_search_doc: ServerSearchDoc,
     db_session: Session,
     commit: bool = True,
 ) -> DBSearchDoc:
+    # Sanitize string fields to remove NUL characters (PostgreSQL doesn't allow them)
     db_search_doc = DBSearchDoc(
-        document_id=server_search_doc.document_id,
+        document_id=_sanitize_for_postgres(server_search_doc.document_id),
         chunk_ind=server_search_doc.chunk_ind,
-        semantic_id=server_search_doc.semantic_identifier or "Unknown",
-        link=server_search_doc.link,
-        blurb=server_search_doc.blurb,
+        semantic_id=_sanitize_for_postgres(server_search_doc.semantic_identifier),
+        link=(
+            _sanitize_for_postgres(server_search_doc.link)
+            if server_search_doc.link is not None
+            else None
+        ),
+        blurb=_sanitize_for_postgres(server_search_doc.blurb),
         source_type=server_search_doc.source_type,
         boost=server_search_doc.boost,
         hidden=server_search_doc.hidden,
         doc_metadata=server_search_doc.metadata,
         is_relevant=server_search_doc.is_relevant,
-        relevance_explanation=server_search_doc.relevance_explanation,
+        relevance_explanation=(
+            _sanitize_for_postgres(server_search_doc.relevance_explanation)
+            if server_search_doc.relevance_explanation is not None
+            else None
+        ),
         # For docs further down that aren't reranked, we can't use the retrieval score
         score=server_search_doc.score or 0.0,
-        match_highlights=server_search_doc.match_highlights,
+        match_highlights=_sanitize_list_for_postgres(
+            server_search_doc.match_highlights
+        ),
         updated_at=server_search_doc.updated_at,
-        primary_owners=server_search_doc.primary_owners,
-        secondary_owners=server_search_doc.secondary_owners,
+        primary_owners=(
+            _sanitize_list_for_postgres(server_search_doc.primary_owners)
+            if server_search_doc.primary_owners is not None
+            else None
+        ),
+        secondary_owners=(
+            _sanitize_list_for_postgres(server_search_doc.secondary_owners)
+            if server_search_doc.secondary_owners is not None
+            else None
+        ),
         is_internet=server_search_doc.is_internet,
     )
 

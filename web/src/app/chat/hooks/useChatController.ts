@@ -9,6 +9,7 @@ import {
 import { StreamStopInfo } from "@/lib/search/interfaces";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Route } from "next";
 import { usePostHog } from "posthog-js/react";
 import { stopChatSession } from "../chat_search/utils";
 import {
@@ -80,7 +81,7 @@ export interface OnSubmitProps {
   currentMessageFiles: ProjectFile[];
   // from the chat bar???
 
-  useAgentSearch: boolean;
+  deepResearch: boolean;
 
   // optional params
   messageIdToResend?: number;
@@ -236,7 +237,7 @@ export function useChatController({
 
     // Navigate immediately if still on chat page
     if (pathname === "/chat" && !navigatingAway.current) {
-      router.push(newUrl, { scroll: false });
+      router.push(newUrl as Route, { scroll: false });
     }
 
     // Refresh sidebar so chat appears (will show as "New Chat" initially)
@@ -349,10 +350,10 @@ export function useChatController({
         if (!hasStop) {
           const maxTurnIndex =
             packets.length > 0
-              ? Math.max(...packets.map((p) => p.turn_index))
+              ? Math.max(...packets.map((p) => p.placement.turn_index))
               : 0;
           const stopPacket: Packet = {
-            turn_index: maxTurnIndex + 1,
+            placement: { turn_index: maxTurnIndex + 1 },
             obj: { type: PacketType.STOP },
           } as Packet;
 
@@ -374,7 +375,7 @@ export function useChatController({
     async ({
       message,
       currentMessageFiles,
-      useAgentSearch,
+      deepResearch,
       messageIdToResend,
       queryOverride,
       forceSearch,
@@ -390,7 +391,7 @@ export function useChatController({
           const newUrl = params.toString()
             ? `${pathname}?${params.toString()}`
             : pathname;
-          router.replace(newUrl, { scroll: false });
+          router.replace(newUrl as Route, { scroll: false });
         }
       }
 
@@ -482,6 +483,11 @@ export function useChatController({
 
       const searchParamBasedChatSessionName =
         searchParams?.get(SEARCH_PARAM_NAMES.TITLE) || null;
+      // Auto-name only once, after the first assistant response, and only when the chat isn't
+      // already explicitly named (e.g. `?title=...`).
+      const hadAnyUserMessagesBeforeSubmit = currentHistory.some(
+        (m) => m.type === "user"
+      );
       if (isNewSession) {
         currChatSessionId = await createChatSession(
           liveAssistant?.id || 0,
@@ -516,6 +522,11 @@ export function useChatController({
       if (isNewSession) {
         handleNewSessionNavigation(currChatSessionId);
       }
+
+      const shouldAutoNameChatSessionAfterResponse =
+        !searchParamBasedChatSessionName &&
+        !hadAnyUserMessagesBeforeSubmit &&
+        !sessions.get(currChatSessionId)?.description;
 
       // set the ability to cancel the request
       const controller = new AbortController();
@@ -693,7 +704,7 @@ export function useChatController({
           systemPromptOverride:
             searchParams?.get(SEARCH_PARAM_NAMES.SYSTEM_PROMPT) || undefined,
           useExistingUserMessage: isSeededChat,
-          useAgentSearch,
+          deepResearch,
           enabledToolIds:
             disabledToolIds && liveAssistant
               ? liveAssistant.tools
@@ -887,8 +898,8 @@ export function useChatController({
       resetRegenerationState(frozenSessionId);
       updateChatStateAction(frozenSessionId, "input");
 
-      // Name the chat now that we have AI response (navigation already happened before streaming)
-      if (isNewSession && !searchParamBasedChatSessionName) {
+      // Name the chat now that we have the first AI response (navigation already happened before streaming)
+      if (shouldAutoNameChatSessionAfterResponse) {
         handleNewSessionNaming(currChatSessionId);
       }
     },

@@ -5,54 +5,13 @@ import type { IconProps } from "@opal/types";
 import { cn } from "@/lib/utils";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Link from "next/link";
+import type { Route } from "next";
 import Truncated from "@/refresh-components/texts/Truncated";
-
-const backgroundClasses = (active?: boolean) =>
-  ({
-    defaulted: [
-      active ? "bg-background-tint-00" : "bg-transparent",
-      "hover:bg-background-tint-03",
-    ],
-    lowlight: [
-      active ? "bg-background-tint-00" : "bg-transparent",
-      "hover:bg-background-tint-03",
-    ],
-    focused: [
-      "border-background-tint-04 border-[2px]",
-      "bg-background-neutral-00",
-    ],
-  }) as const;
-
-const textClasses = (active: boolean | undefined) =>
-  ({
-    defaulted: [
-      active ? "text-text-04" : "text-text-03",
-      "group-hover/SidebarTab:text-text-04",
-    ],
-    lowlight: [
-      active ? "text-text-03" : "text-text-02",
-      "group-hover/SidebarTab:text-text-03",
-    ],
-    focused: ["text-text-03"],
-  }) as const;
-
-const iconClasses = (active: boolean | undefined) =>
-  ({
-    defaulted: [
-      active ? "stroke-text-04" : "stroke-text-03",
-      "group-hover/SidebarTab:stroke-text-04",
-    ],
-    lowlight: [
-      active ? "stroke-text-03" : "stroke-text-02",
-      "group-hover/SidebarTab:stroke-text-03",
-    ],
-    focused: ["stroke-text-02"],
-  }) as const;
 
 export interface SidebarTabProps {
   // Button states:
   folded?: boolean;
-  active?: boolean;
+  transient?: boolean;
   focused?: boolean;
   lowlight?: boolean;
 
@@ -67,7 +26,7 @@ export interface SidebarTabProps {
 
 export default function SidebarTab({
   folded,
-  active,
+  transient,
   focused,
   lowlight,
 
@@ -79,32 +38,46 @@ export default function SidebarTab({
   children,
 }: SidebarTabProps) {
   const variant = lowlight ? "lowlight" : focused ? "focused" : "defaulted";
+  const state = transient ? "active" : "inactive";
 
-  const innerContent = (
+  const content = (
     <div
+      data-state={state}
       className={cn(
-        "flex flex-row justify-start items-start p-1.5 gap-1 rounded-08 cursor-pointer group/SidebarTab w-full select-none",
-        backgroundClasses(active)[variant],
+        "relative flex flex-row justify-start items-start p-1.5 gap-1 rounded-08 cursor-pointer group/SidebarTab w-full select-none",
+        `sidebar-tab-background-${variant}`,
         className
       )}
       onClick={onClick}
     >
-      <div className="flex-1 h-[1.5rem] flex flex-row items-center px-1 py-0.5 gap-2 justify-start">
+      {href && (
+        <Link
+          href={href as Route}
+          scroll={false}
+          className="absolute inset-0 rounded-08"
+          tabIndex={-1}
+        />
+      )}
+      <div
+        data-state={state}
+        className={cn(
+          "relative flex-1 h-[1.5rem] flex flex-row items-center px-1 py-0.5 gap-2 justify-start",
+          !focused && "pointer-events-none"
+        )}
+      >
         {LeftIcon && (
           <div className="w-[1rem] h-[1rem] flex flex-col items-center justify-center">
             <LeftIcon
-              className={cn(
-                "h-[1rem]",
-                "w-[1rem]",
-                iconClasses(active)[variant]
-              )}
+              data-state={state}
+              className={`h-[1rem] w-[1rem] sidebar-tab-icon-${variant}`}
             />
           </div>
         )}
         {!folded &&
           (typeof children === "string" ? (
             <Truncated
-              className={cn(textClasses(active)[variant])}
+              data-state={state}
+              className={`sidebar-tab-text-${variant}`}
               side="right"
               sideOffset={40}
             >
@@ -114,16 +87,8 @@ export default function SidebarTab({
             children
           ))}
       </div>
-      {!folded && rightChildren}
+      {!folded && <div className="relative">{rightChildren}</div>}
     </div>
-  );
-
-  const content = href ? (
-    <Link href={href} scroll={false}>
-      {innerContent}
-    </Link>
-  ) : (
-    innerContent
   );
 
   if (typeof children !== "string") return content;

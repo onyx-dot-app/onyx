@@ -4,7 +4,9 @@ from sqlalchemy.orm import Session
 
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import create_tool_call_failure_messages
+from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.citation_processor import DynamicCitationProcessor
+from onyx.chat.citation_utils import update_citation_processor_from_tool_response
 from onyx.chat.emitter import Emitter
 from onyx.chat.llm_step import run_llm_step
 from onyx.chat.models import ChatMessageSimple
@@ -27,18 +29,18 @@ from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.utils import model_needs_formatting_reenabled
 from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER
 from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import TopLevelBranching
+from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES
+from onyx.tools.built_in_tools import STOPPING_TOOLS_NAMES
+from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallInfo
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool import Tool
-from onyx.tools.tool_implementations.images.image_generation_tool import (
-    ImageGenerationTool,
-)
 from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
 )
-from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_runner import run_tool_calls
@@ -61,7 +63,7 @@ MAX_LLM_CYCLES = 6
 def _build_project_file_citation_mapping(
     project_file_metadata: list[ProjectFileMetadata],
     starting_citation_num: int = 1,
-) -> dict[int, SearchDoc]:
+) -> CitationMapping:
     """Build citation mapping for project files.
 
     Converts project file metadata into SearchDoc objects that can be cited.
@@ -74,7 +76,7 @@ def _build_project_file_citation_mapping(
     Returns:
         Dictionary mapping citation numbers to SearchDoc objects
     """
-    citation_mapping: dict[int, SearchDoc] = {}
+    citation_mapping: CitationMapping = {}
 
     for idx, file_meta in enumerate(project_file_metadata, start=starting_citation_num):
         # Create a SearchDoc for each project file
@@ -290,8 +292,16 @@ def run_llm_loop(
     db_session: Session,
     forced_tool_id: int | None = None,
     user_identity: LLMUserIdentity | None = None,
+    chat_session_id: str | None = None,
 ) -> None:
-    with trace("run_llm_loop", metadata={"tenant_id": get_current_tenant_id()}):
+    with trace(
+        "run_llm_loop",
+        group_id=chat_session_id,
+        metadata={
+            "tenant_id": get_current_tenant_id(),
+            "chat_session_id": chat_session_id,
+        },
+    ):
         # Fix some LiteLLM issues,
         from onyx.llm.litellm_singleton.config import (
             initialize_litellm,
@@ -299,18 +309,11 @@ def run_llm_loop(
 
         initialize_litellm()
 
-        stopping_tools_names: list[str] = [ImageGenerationTool.NAME]
-        citeable_tools_names: list[str] = [
-            SearchTool.NAME,
-            WebSearchTool.NAME,
-            OpenURLTool.NAME,
-        ]
-
         # Initialize citation processor for handling citations dynamically
         citation_processor = DynamicCitationProcessor()
 
         # Add project file citation mappings if project files are present
-        project_citation_mapping: dict[int, SearchDoc] = {}
+        project_citation_mapping: CitationMapping = {}
         if project_files.project_file_metadata:
             project_citation_mapping = _build_project_file_citation_mapping(
                 project_files.project_file_metadata
@@ -443,7 +446,7 @@ def run_llm_loop(
                 tool_definitions=[tool.tool_definition() for tool in final_tools],
                 tool_choice=tool_choice,
                 llm=llm,
-                turn_index=llm_cycle_count + reasoning_cycles,
+                placement=Placement(turn_index=llm_cycle_count + reasoning_cycles),
                 citation_processor=citation_processor,
                 state_container=state_container,
                 # The rich docs representation is passed in so that when yielding the answer, it can also
@@ -463,6 +466,16 @@ def run_llm_loop(
             tool_responses: list[ToolResponse] = []
             tool_calls = llm_step_result.tool_calls or []
 
+            if len(tool_calls) > 1:
+                emitter.emit(
+                    Packet(
+                        placement=Placement(
+                            turn_index=tool_calls[0].placement.turn_index
+                        ),
+                        obj=TopLevelBranching(num_parallel_branches=len(tool_calls)),
+                    )
+                )
+
             # Quick note for why citation_mapping and citation_processors are both needed:
             # 1. Tools return lightweight string mappings, not SearchDoc objects
             # 2. The SearchDoc resolution is deliberately deferred to llm_loop.py
@@ -477,7 +490,7 @@ def run_llm_loop(
                 memories=memories,
                 user_info=None,  # TODO, this is part of memories right now, might want to separate it out
                 citation_mapping=citation_mapping,
-                citation_processor=citation_processor,
+                next_citation_num=citation_processor.get_next_citation_number(),
                 skip_search_query_expansion=has_called_search_tool,
             )
 
@@ -495,7 +508,7 @@ def run_llm_loop(
                     raise ValueError("Tool response missing tool_call reference")
 
                 tool_call = tool_response.tool_call
-                tab_index = tool_call.tab_index
+                tab_index = tool_call.placement.tab_index
 
                 # Track if search tool was called (for skipping query expansion on subsequent calls)
                 if tool_call.tool_name == SearchTool.NAME:
@@ -576,31 +589,9 @@ def run_llm_loop(
                 simple_chat_history.append(tool_response_msg)
 
                 # Update citation processor if this was a search tool
-                if tool_call.tool_name in citeable_tools_names:
-                    # Check if the rich_response is a SearchDocsResponse
-                    if isinstance(tool_response.rich_response, SearchDocsResponse):
-                        search_response = tool_response.rich_response
-
-                        # Create mapping from citation number to SearchDoc
-                        citation_to_doc: dict[int, SearchDoc] = {}
-                        for (
-                            citation_num,
-                            doc_id,
-                        ) in search_response.citation_mapping.items():
-                            # Find the SearchDoc with this doc_id
-                            matching_doc = next(
-                                (
-                                    doc
-                                    for doc in search_response.search_docs
-                                    if doc.document_id == doc_id
-                                ),
-                                None,
-                            )
-                            if matching_doc:
-                                citation_to_doc[citation_num] = matching_doc
-
-                        # Update the citation processor
-                        citation_processor.update_citation_mapping(citation_to_doc)
+                update_citation_processor_from_tool_response(
+                    tool_response, citation_processor
+                )
 
             # If no tool calls, then it must have answered, wrap up
             if not llm_step_result.tool_calls or len(llm_step_result.tool_calls) == 0:
@@ -608,13 +599,13 @@ def run_llm_loop(
 
             # Certain tools do not allow further actions, force the LLM wrap up on the next cycle
             if any(
-                tool.tool_name in stopping_tools_names
+                tool.tool_name in STOPPING_TOOLS_NAMES
                 for tool in llm_step_result.tool_calls
             ):
                 ran_image_gen = True
 
             if llm_step_result.tool_calls and any(
-                tool.tool_name in citeable_tools_names
+                tool.tool_name in CITEABLE_TOOLS_NAMES
                 for tool in llm_step_result.tool_calls
             ):
                 # As long as 1 tool with citeable documents is called at any point, we ask the LLM to try to cite
@@ -625,7 +616,7 @@ def run_llm_loop(
 
         emitter.emit(
             Packet(
-                turn_index=llm_cycle_count + reasoning_cycles,
+                placement=Placement(turn_index=llm_cycle_count + reasoning_cycles),
                 obj=OverallStop(type="stop"),
             )
         )

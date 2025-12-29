@@ -4,6 +4,8 @@
 @import "css/colors.css";
 @import "css/inputs.css";
 @import "css/line-item.css";
+@import "css/square-button.css";
+@import "css/sidebar-tab.css";
 @import "css/switch.css";
 @import "css/z-index.css";
 
@@ -204,6 +206,10 @@
   font-weight: 450;
   line-height: 24px;
   letter-spacing: 0px;
+}
+
+.font-main-content-body strong {
+  font-weight: 700;
 }
 
 .font-main-content-emphasis {

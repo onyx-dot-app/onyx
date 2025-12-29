@@ -1,6 +1,7 @@
 import json
 import pathlib
 
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
@@ -66,7 +67,7 @@ def is_obsolete_model(model_name: str, provider: str) -> bool:
     model_lower = model_name.lower()
 
     # OpenAI obsolete models
-    if provider == "openai":
+    if provider == LlmProviderNames.OPENAI:
         # GPT-3 models are obsolete
         if "gpt-3" in model_lower:
             return True
@@ -86,12 +87,12 @@ def is_obsolete_model(model_name: str, provider: str) -> bool:
             return True
 
     # Anthropic obsolete models
-    if provider == "anthropic":
+    if provider == LlmProviderNames.ANTHROPIC:
         if "claude-2" in model_lower or "claude-instant" in model_lower:
             return True
 
     # Vertex AI obsolete models
-    if provider == "vertex_ai":
+    if provider == LlmProviderNames.VERTEX_AI:
         if "gemini-1.0" in model_lower:
             return True
         if "palm" in model_lower or "bison" in model_lower:
@@ -159,7 +160,7 @@ def get_anthropic_model_names() -> list[str]:
             model
             for model in litellm.anthropic_models
             if model not in _IGNORABLE_ANTHROPIC_MODELS
-            and not is_obsolete_model(model, ANTHROPIC_PROVIDER_NAME)
+            and not is_obsolete_model(model, LlmProviderNames.ANTHROPIC)
         ],
         reverse=True,
     )
@@ -205,7 +206,7 @@ def get_vertexai_model_names() -> list[str]:
             and "/" not in model  # filter out prefixed models like openai/gpt-oss
             and "search_api" not in model.lower()  # not a model
             and "-maas" not in model.lower()  # marketplace models
-            and not is_obsolete_model(model, VERTEXAI_PROVIDER_NAME)
+            and not is_obsolete_model(model, LlmProviderNames.VERTEX_AI)
         ],
         reverse=True,
     )
@@ -214,7 +215,7 @@ def get_vertexai_model_names() -> list[str]:
 def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
     return [
         WellKnownLLMProviderDescriptor(
-            name=OPENAI_PROVIDER_NAME,
+            name=LlmProviderNames.OPENAI,
             display_name="OpenAI",
             title="GPT",
             api_key_required=True,
@@ -222,12 +223,12 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             api_version_required=False,
             custom_config_keys=[],
             model_configurations=fetch_model_configurations_for_provider(
-                OPENAI_PROVIDER_NAME
+                LlmProviderNames.OPENAI
             ),
             default_model=fetch_default_model_for_provider(OPENAI_PROVIDER_NAME),
         ),
         WellKnownLLMProviderDescriptor(
-            name=OLLAMA_PROVIDER_NAME,
+            name=LlmProviderNames.OLLAMA_CHAT,
             display_name="Ollama",
             title="Ollama",
             api_key_required=False,
@@ -243,14 +244,14 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                 )
             ],
             model_configurations=fetch_model_configurations_for_provider(
-                OLLAMA_PROVIDER_NAME
+                LlmProviderNames.OLLAMA_CHAT
             ),
             # we don't know what models are available, so we can't pre-fetch a default
             default_model=None,
             default_api_base="http://127.0.0.1:11434",
         ),
         WellKnownLLMProviderDescriptor(
-            name=ANTHROPIC_PROVIDER_NAME,
+            name=LlmProviderNames.ANTHROPIC,
             display_name="Anthropic",
             title="Claude",
             api_key_required=True,
@@ -258,12 +259,12 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             api_version_required=False,
             custom_config_keys=[],
             model_configurations=fetch_model_configurations_for_provider(
-                ANTHROPIC_PROVIDER_NAME
+                LlmProviderNames.ANTHROPIC
             ),
             default_model=fetch_default_model_for_provider(ANTHROPIC_PROVIDER_NAME),
         ),
         WellKnownLLMProviderDescriptor(
-            name=AZURE_PROVIDER_NAME,
+            name=LlmProviderNames.AZURE,
             display_name="Microsoft Azure Cloud",
             title="Azure OpenAI",
             api_key_required=True,
@@ -271,13 +272,13 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             api_version_required=True,
             custom_config_keys=[],
             model_configurations=fetch_model_configurations_for_provider(
-                AZURE_PROVIDER_NAME
+                LlmProviderNames.AZURE
             ),
             deployment_name_required=True,
             single_model_supported=True,
         ),
         WellKnownLLMProviderDescriptor(
-            name=BEDROCK_PROVIDER_NAME,
+            name=LlmProviderNames.BEDROCK,
             display_name="AWS",
             title="Amazon Bedrock",
             api_key_required=False,
@@ -340,20 +341,20 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                 ),
             ],
             model_configurations=fetch_model_configurations_for_provider(
-                BEDROCK_PROVIDER_NAME
+                LlmProviderNames.BEDROCK
             ),
             # we don't know what models are available, so we can't pre-fetch a default
             default_model=None,
         ),
         WellKnownLLMProviderDescriptor(
-            name=VERTEXAI_PROVIDER_NAME,
+            name=LlmProviderNames.VERTEX_AI,
             display_name="Google Cloud Vertex AI",
             title="Gemini",
             api_key_required=False,
             api_base_required=False,
             api_version_required=False,
             model_configurations=fetch_model_configurations_for_provider(
-                VERTEXAI_PROVIDER_NAME
+                LlmProviderNames.VERTEX_AI
             ),
             custom_config_keys=[
                 CustomConfigKey(
@@ -367,18 +368,19 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                 CustomConfigKey(
                     name=VERTEX_LOCATION_KWARG,
                     display_name="Location",
-                    description="The location of the Vertex AI model. Please refer to the "
-                    "[Vertex AI configuration docs](https://docs.onyx.app/admins/ai_models/google_ai) for all possible values.",
+                    description="The location of Google model deployment. Please refer to the "
+                    "[Vertex AI docs](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations) "
+                    "to decide which location to use.",
                     is_required=False,
                     is_secret=False,
                     key_type=CustomConfigKeyType.TEXT_INPUT,
-                    default_value="us-east1",
+                    default_value="global",
                 ),
             ],
             default_model=fetch_default_model_for_provider(VERTEXAI_PROVIDER_NAME),
         ),
         WellKnownLLMProviderDescriptor(
-            name=OPENROUTER_PROVIDER_NAME,
+            name=LlmProviderNames.OPENROUTER,
             display_name="OpenRouter",
             title="OpenRouter",
             api_key_required=True,
@@ -386,7 +388,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             api_version_required=False,
             custom_config_keys=[],
             model_configurations=fetch_model_configurations_for_provider(
-                OPENROUTER_PROVIDER_NAME
+                LlmProviderNames.OPENROUTER
             ),
             default_model=fetch_default_model_for_provider(OPENROUTER_PROVIDER_NAME),
             default_api_base="https://openrouter.ai/api/v1",

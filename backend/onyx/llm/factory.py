@@ -14,15 +14,14 @@ from onyx.db.llm import fetch_llm_provider_view
 from onyx.db.llm import fetch_user_group_ids
 from onyx.db.models import Persona
 from onyx.db.models import User
-from onyx.llm.chat_llm import LitellmLLM
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import get_max_input_tokens_from_llm_provider
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.llm_provider_options import OLLAMA_API_KEY_CONFIG_KEY
-from onyx.llm.well_known_providers.llm_provider_options import OLLAMA_PROVIDER_NAME
-from onyx.llm.well_known_providers.llm_provider_options import OPENROUTER_PROVIDER_NAME
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.headers import build_llm_extra_headers
@@ -35,7 +34,7 @@ logger = setup_logger()
 def _build_provider_extra_headers(
     provider: str, custom_config: dict[str, str] | None
 ) -> dict[str, str]:
-    if provider == OLLAMA_PROVIDER_NAME and custom_config:
+    if provider == LlmProviderNames.OLLAMA_CHAT and custom_config:
         raw_api_key = custom_config.get(OLLAMA_API_KEY_CONFIG_KEY)
         api_key = raw_api_key.strip() if raw_api_key else None
         if not api_key:
@@ -45,7 +44,7 @@ def _build_provider_extra_headers(
         return {"Authorization": api_key}
 
     # Passing these will put Onyx on the OpenRouter leaderboard
-    elif provider == OPENROUTER_PROVIDER_NAME:
+    elif provider == LlmProviderNames.OPENROUTER:
         return {
             "HTTP-Referer": "https://onyx.app",
             "X-Title": "Onyx",

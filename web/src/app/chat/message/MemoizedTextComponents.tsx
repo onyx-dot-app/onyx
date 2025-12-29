@@ -160,24 +160,23 @@ export const MemoizedLink = memo(
       );
     }
 
-    const handleMouseDown = () => {
-      let url = href || rest.children?.toString();
-
-      if (url && !url.includes("://")) {
-        // Only add https:// if the URL doesn't already have a protocol
-        const httpsUrl = `https://${url}`;
-        try {
-          new URL(httpsUrl);
-          url = httpsUrl;
-        } catch {
-          // If not a valid URL, don't modify original url
-        }
+    let url = href || rest.children?.toString();
+    if (url && !url.includes("://")) {
+      // Only add https:// if the URL doesn't already have a protocol
+      const httpsUrl = `https://${url}`;
+      try {
+        new URL(httpsUrl);
+        url = httpsUrl;
+      } catch {
+        // If not a valid URL, don't modify original url
       }
-      window.open(url, "_blank");
-    };
+    }
+
     return (
       <a
-        onMouseDown={handleMouseDown}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
         className="cursor-pointer text-link hover:text-link-hover"
       >
         {rest.children}

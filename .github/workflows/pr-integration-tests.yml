@@ -72,9 +72,14 @@ jobs:
           all_dirs="[${all_dirs%,}]"
           echo "test-dirs=$all_dirs" >> $GITHUB_OUTPUT
 
-
   build-backend-image:
-    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-build-backend-image", "extras=ecr-cache"]
+    runs-on:
+      [
+        runs-on,
+        runner=1cpu-linux-arm64,
+        "run-id=${{ github.run_id }}-build-backend-image",
+        "extras=ecr-cache",
+      ]
     timeout-minutes: 45
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
@@ -127,9 +132,14 @@ jobs:
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache,mode=max
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
-
   build-model-server-image:
-    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-build-model-server-image", "extras=ecr-cache"]
+    runs-on:
+      [
+        runs-on,
+        runner=1cpu-linux-arm64,
+        "run-id=${{ github.run_id }}-build-model-server-image",
+        "extras=ecr-cache",
+      ]
     timeout-minutes: 45
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
@@ -181,9 +191,14 @@ jobs:
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache,mode=max
 
-
   build-integration-image:
-    runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}-build-integration-image", "extras=ecr-cache"]
+    runs-on:
+      [
+        runs-on,
+        runner=2cpu-linux-arm64,
+        "run-id=${{ github.run_id }}-build-integration-image",
+        "extras=ecr-cache",
+      ]
     timeout-minutes: 45
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
@@ -225,7 +240,7 @@ jobs:
           CACHE_SUFFIX: ${{ steps.format-branch.outputs.cache-suffix }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          cd backend && docker buildx bake --push \
+          docker buildx bake --push \
             --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${HEAD_SHA} \
             --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${CACHE_SUFFIX} \
             --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache \
@@ -438,15 +453,16 @@ jobs:
           path: ${{ github.workspace }}/docker-compose.log
       # ------------------------------------------------------------
 
-
   multitenant-tests:
     needs:
+      [build-backend-image, build-model-server-image, build-integration-image]
+    runs-on:
       [
-        build-backend-image,
-        build-model-server-image,
-        build-integration-image,
+        runs-on,
+        runner=8cpu-linux-arm64,
+        "run-id=${{ github.run_id }}-multitenant-tests",
+        "extras=ecr-cache",
       ]
-    runs-on: [runs-on, runner=8cpu-linux-arm64, "run-id=${{ github.run_id }}-multitenant-tests", "extras=ecr-cache"]
     timeout-minutes: 45
 
     steps:

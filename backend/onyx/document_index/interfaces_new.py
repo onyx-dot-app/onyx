@@ -3,6 +3,7 @@ import abc
 from pydantic import BaseModel
 
 from onyx.access.models import DocumentAccess
+from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
@@ -90,9 +91,14 @@ class MetadataUpdateRequest(BaseModel):
     the contents of the document.
     """
 
+    model_config = {"frozen": True}
+
     document_ids: list[str]
     # Passed in to help with potential optimizations of the implementation. The
     # keys should be redundant with document_ids.
+    # NOTE: Generally the chunk count should always be known, however for
+    # documents still using the legacy chunk ID system it may not be. Any chunk
+    # count value < 0 should represent an unknown chunk count.
     doc_id_to_chunk_cnt: dict[str, int]
     # For the ones that are None, there is no update required to that field.
     access: DocumentAccess | None = None
@@ -101,6 +107,26 @@ class MetadataUpdateRequest(BaseModel):
     hidden: bool | None = None
     secondary_index_updated: bool | None = None
     project_ids: set[int] | None = None
+
+
+class IndexRetrievalFilters(BaseModel):
+    """
+    Filters for retrieving chunks from the index.
+
+    Used to filter on permissions and other Onyx-specific metadata rather than
+    chunk content. Should be passed in for every retrieval method.
+
+    TODO(andrei): Currently unused, use this when making retrieval methods more
+    strict.
+    """
+
+    model_config = {"frozen": True}
+
+    # frozenset gets around the issue of python's mutable defaults.
+    # WARNING: Falls back to only public docs as default for security. If
+    # callers want no access filtering they must explicitly supply an empty set.
+    # Doing so should be done sparingly.
+    access_control_list: frozenset[str] = frozenset({PUBLIC_DOC_PAT})
 
 
 class SchemaVerifiable(abc.ABC):
@@ -139,8 +165,7 @@ class Indexable(abc.ABC):
         chunks: list[DocMetadataAwareIndexChunk],
         indexing_metadata: IndexingMetadata,
     ) -> list[DocumentInsertionRecord]:
-        """
-        Takes a list of document chunks and indexes them in the document index.
+        """Indexes a list of document chunks into the document index.
 
         This is often a batch operation including chunks from multiple
         documents.
@@ -161,7 +186,7 @@ class Indexable(abc.ABC):
                 cleaning / updating.
 
         Returns:
-            List of document ids which map to unique documents and are used for
+            List of document IDs which map to unique documents and are used for
             deduping chunks when updating, as well as if the document is newly
             indexed or already existed and just updated.
         """
@@ -170,52 +195,71 @@ class Indexable(abc.ABC):
 
 class Deletable(abc.ABC):
     """
-    Class must implement the ability to delete document by a given unique document id. Note that the document id is the
-    unique identifier for the document as represented in Onyx, not in the document index.
+    Class must implement the ability to delete a document by a given unique
+    document ID.
     """
 
     @abc.abstractmethod
     def delete(
         self,
-        db_doc_id: str,
-        # Passed in in case it helps the efficiency of the delete implementation
-        chunk_count: int | None,
+        # TODO(andrei): Fine for now but this can probably be a batch operation that
+        # takes in a list of IDs.
+        document_id: str,
+        chunk_count: int | None = None,
+        # TODO(andrei): Shouldn't this also have some acl filtering at minimum?
     ) -> int:
         """
-        Given a single document, hard delete all of the chunks for the document from the document index
+        Hard deletes all of the chunks for the corresponding document in the
+        document index.
 
-        Parameters:
-        - doc_id: document id as represented in Onyx
-        - chunk_count: number of chunks in the document
+        Args:
+            document_id: The unique identifier for the document as represented
+                in Onyx, not necessarily in the document index.
+            chunk_count: The number of chunks in the document. May be useful for
+                improving the efficiency of the delete operation. Defaults to
+                None.
 
         Returns:
-            number of chunks deleted
+            The number of chunks deleted.
         """
         raise NotImplementedError
 
 
 class Updatable(abc.ABC):
     """
-    Class must implement the ability to update certain attributes of a document without needing to
-    update all of the fields. Specifically, needs to be able to update:
+    Class must implement the ability to update certain attributes of a document
+    without needing to update all of the fields. Specifically, needs to be able
+    to update:
     - Access Control List
     - Document-set membership
     - Boost value (learning from feedback mechanism)
-    - Whether the document is hidden or not, hidden documents are not returned from search
+    - Whether the document is hidden or not; hidden documents are not returned
+      from search
     - Which Projects the document is a part of
     """
 
     @abc.abstractmethod
-    def update(self, update_requests: list[MetadataUpdateRequest]) -> None:
+    def update(
+        self,
+        update_requests: list[MetadataUpdateRequest],
+        # TODO(andrei), WARNING: Very temporary, this is not the interface we want
+        # in Updatable, we only have this to continue supporting
+        # user_file_docid_migration_task for Vespa which should be done soon.
+        old_doc_id_to_new_doc_id: dict[str, str],
+    ) -> None:
         """
         Updates some set of chunks. The document and fields to update are specified in the update
         requests. Each update request in the list applies its changes to a list of document ids.
         None values mean that the field does not need an update.
 
-        Parameters:
-        - update_requests: for a list of document ids in the update request, apply the same updates
-                to all of the documents with those ids. This is for bulk handling efficiency. Many
-                updates are done at the connector level which have many documents for the connector
+        The document and fields to update are specified in the update requests.
+        Each update request in the list applies its changes to a list of
+        document IDs. None values mean that the field does not need an update.
+
+        Args:
+            update_requests: A list of update requests, each containing a list
+                of document IDs and the fields to update. The field updates
+                apply to all of the specified documents in each update request.
         """
         raise NotImplementedError
 
@@ -223,7 +267,7 @@ class Updatable(abc.ABC):
 class IdRetrievalCapable(abc.ABC):
     """
     Class must implement the ability to retrieve either:
-    - All of the chunks of a document IN ORDER given a document id. Caller assumes it to be in order.
+    - All of the chunks of a document IN ORDER given a document ID.
     - A specific section (continuous set of chunks) for some document.
     """
 
@@ -231,31 +275,33 @@ class IdRetrievalCapable(abc.ABC):
     def id_based_retrieval(
         self,
         chunk_requests: list[DocumentSectionRequest],
+        # TODO(andrei): Make this more strict w.r.t. acl, temporary for now.
+        filters: IndexFilters,
+        # TODO(andrei): This is temporary, we will not expose this in the long
+        # run.
+        batch_retrieval: bool = False,
     ) -> list[InferenceChunk]:
-        """
-        Fetch chunk(s) based on document id
+        """Fetches chunk(s) based on document ID.
 
-        NOTE: This is used to reconstruct a full document or an extended (multi-chunk) section
-        of a document. Downstream currently assumes that the chunking does not introduce overlaps
-        between the chunks. If there are overlaps for the chunks, then the reconstructed document
-        or extended section will have duplicate segments.
+        NOTE: This is used to reconstruct a full document or an extended
+        (multi-chunk) section of a document. Downstream currently assumes that
+        the chunking does not introduce overlaps between the chunks. If there
+        are overlaps for the chunks, then the reconstructed document or extended
+        section will have duplicate segments.
 
-        NOTE: This should be used after a search call to get more context around returned chunks.
-        There is no filters here since the calling code should not be calling this on arbitrary
-        documents.
-
-        Parameters:
-        - chunk_requests: requests containing the document id and the chunk range to retrieve
+        Args:
+            chunk_requests: Requests containing the document ID and the chunk
+                range to retrieve.
 
         Returns:
-            list of sections from the documents specified
+            List of sections from the documents specified.
         """
         raise NotImplementedError
 
 
 class HybridCapable(abc.ABC):
     """
-    Class must implement hybrid (keyword + vector) search functionality
+    Class must implement hybrid (keyword + vector) search functionality.
     """
 
     @abc.abstractmethod
@@ -265,42 +311,64 @@ class HybridCapable(abc.ABC):
         query_embedding: Embedding,
         final_keywords: list[str] | None,
         query_type: QueryType,
+        # TODO(andrei): Make this more strict w.r.t. acl, temporary for now.
         filters: IndexFilters,
         num_to_retrieve: int,
         offset: int = 0,
     ) -> list[InferenceChunk]:
-        """
-        Run hybrid search and return a list of inference chunks.
+        """Runs hybrid search and returns a list of inference chunks.
 
-        Parameters:
-        - query: unmodified user query. This may be needed for getting the matching highlighted
-                keywords or for logging purposes
-        - query_embedding: vector representation of the query, must be of the correct
-                dimensionality for the primary index
-        - final_keywords: Final keywords to be used from the query, defaults to query if not set
-        - query_type: Semantic or keyword type query, may use different scoring logic for each
-        - filters: Filters for things like permissions, source type, time, etc.
-        - num_to_retrieve: number of highest matching chunks to return
-        - offset: number of highest matching chunks to skip (kind of like pagination)
+        Args:
+            query: Unmodified user query. This may be needed for getting the
+                matching highlighted keywords or for logging purposes.
+            query_embedding: Vector representation of the query. Must be of the
+                correct dimensionality for the primary index.
+            final_keywords: Final keywords to be used from the query; defaults
+                to query if not set.
+            query_type: Semantic or keyword type query; may use different
+                scoring logic for each.
+            filters: Filters for things like permissions, source type, time,
+                etc.
+            num_to_retrieve: Number of highest matching chunks to return.
+            offset: Number of highest matching chunks to initially skip (kind of
+                like pagination). Defaults to 0.
 
         Returns:
-            Score ranked (highest first) list of highest matching chunks
+            Score-ranked (highest first) list of highest matching chunks.
         """
         raise NotImplementedError
 
 
 class RandomCapable(abc.ABC):
-    """Class must implement random document retrieval capability.
-    This currently is just used for porting the documents to a secondary index."""
+    """
+    Class must implement random document retrieval.
+
+    This currently is just used for porting the documents to a secondary index.
+    """
 
     @abc.abstractmethod
     def random_retrieval(
         self,
-        filters: IndexFilters | None = None,
+        # TODO(andrei): Make this more strict w.r.t. acl, temporary for now.
+        filters: IndexFilters,
         num_to_retrieve: int = 100,
         dirty: bool | None = None,
     ) -> list[InferenceChunk]:
-        """Retrieve random chunks matching the filters"""
+        """Retrieves random chunks matching the filters.
+
+        Args:
+            filters: Filters for things like permissions, source type, time,
+                etc.
+            num_to_retrieve: Number of chunks to retrieve. Defaults to 100.
+            dirty: If set, retrieve chunks whose "dirty" flag matches this
+                argument. If None, there is no restriction on retrieved chunks
+                with respect to that flag. A chunk is considered dirty if there
+                is a secondary index but the chunk's state has not been ported
+                over to it yet. Defaults to None.
+
+        Returns:
+            List of chunks matching the filters.
+        """
         raise NotImplementedError
 
 

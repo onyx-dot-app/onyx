@@ -1412,8 +1412,13 @@ def _docprocessing_task(
             )
 
             # Process documents through indexing pipeline
+            connector_source = (
+                index_attempt.connector_credential_pair.connector.source.value
+            )
             task_logger.info(
-                f"Processing {len(documents)} documents through indexing pipeline"
+                f"Processing {len(documents)} documents through indexing pipeline: "
+                f"cc_pair_id={cc_pair_id}, source={connector_source}, "
+                f"batch_num={batch_num}"
             )
 
             adapter = DocumentIndexingBatchAdapter(
@@ -1503,6 +1508,8 @@ def _docprocessing_task(
 
         # FIX: Explicitly clear document batch from memory and force garbage collection
         # This helps prevent memory accumulation across multiple batches
+        # NOTE: Thread-local event loops in embedding threads are cleaned up automatically
+        # via the _cleanup_thread_local decorator in search_nlp_models.py
         del documents
         gc.collect()
 

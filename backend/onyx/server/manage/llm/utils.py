@@ -11,13 +11,20 @@ import re
 from typing import TypedDict
 
 from onyx.llm.constants import BEDROCK_MODEL_NAME_MAPPINGS
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.constants import OLLAMA_MODEL_NAME_MAPPINGS
 from onyx.llm.constants import OLLAMA_MODEL_TO_VENDOR
 from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
 
 
 # Dynamic providers fetch models directly from source APIs (not LiteLLM)
-DYNAMIC_LLM_PROVIDERS = {"openrouter", "bedrock", "ollama_chat"}
+DYNAMIC_LLM_PROVIDERS = frozenset(
+    {
+        LlmProviderNames.OPENROUTER,
+        LlmProviderNames.BEDROCK,
+        LlmProviderNames.OLLAMA_CHAT,
+    }
+)
 
 
 class ModelMetadata(TypedDict):
@@ -313,13 +320,13 @@ def extract_vendor_from_model_name(model_name: str, provider: str) -> str | None
         - Ollama: "llama3:70b" → "Meta"
         - Ollama: "qwen2.5:7b" → "Alibaba"
     """
-    if provider == "openrouter":
+    if provider == LlmProviderNames.OPENROUTER:
         # Format: "vendor/model-name" e.g., "anthropic/claude-3-5-sonnet"
         if "/" in model_name:
             vendor_key = model_name.split("/")[0].lower()
             return PROVIDER_DISPLAY_NAMES.get(vendor_key, vendor_key.title())
 
-    elif provider == "bedrock":
+    elif provider == LlmProviderNames.BEDROCK:
         # Format: "vendor.model-name" or "region.vendor.model-name"
         parts = model_name.split(".")
         if len(parts) >= 2:
@@ -330,7 +337,7 @@ def extract_vendor_from_model_name(model_name: str, provider: str) -> str | None
                 vendor_key = parts[0].lower()
             return PROVIDER_DISPLAY_NAMES.get(vendor_key, vendor_key.title())
 
-    elif provider == "ollama_chat":
+    elif provider == LlmProviderNames.OLLAMA_CHAT:
         # Format: "model-name:tag" e.g., "llama3:70b", "qwen2.5:7b"
         # Extract base name (before colon)
         base_name = model_name.split(":")[0].lower()

@@ -11,7 +11,7 @@ import {
 import { BrainIcon } from "@/components/icons/icons";
 import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
-import UnlabeledSwitchField from "@/refresh-components/formik-fields/UnlabeledSwitchField";
+import SwitchField from "@/refresh-components/form/SwitchField";
 import { Form, Formik, FormikState, useFormikContext } from "formik";
 import { useState } from "react";
 import * as Yup from "yup";
@@ -174,7 +174,7 @@ function KGConfiguration({
                 label="Enabled"
                 subtext="Enable or disable Knowledge Graph."
               />
-              <UnlabeledSwitchField
+              <SwitchField
                 name="enabled"
                 onCheckedChange={(state) => {
                   if (!state) props.resetForm();
