@@ -123,6 +123,7 @@ export function BedrockForm({
             <Formik
               initialValues={initialValues}
               validationSchema={validationSchema}
+              validateOnMount={true}
               onSubmit={async (values, { setSubmitting }) => {
                 // Filter out empty custom_config values
                 const filteredCustomConfig = Object.fromEntries(
@@ -319,6 +320,7 @@ export function BedrockForm({
                       existingLlmProvider={existingLlmProvider}
                       mutate={mutate}
                       onClose={onClose}
+                      isFormValid={formikProps.isValid}
                     />
                   </Form>
                 );

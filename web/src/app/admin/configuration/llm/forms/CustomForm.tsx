@@ -105,6 +105,7 @@ export function CustomForm({
             <Formik
               initialValues={initialValues}
               validationSchema={validationSchema}
+              validateOnMount={true}
               onSubmit={async (values, { setSubmitting }) => {
                 setSubmitting(true);
 
@@ -307,6 +308,7 @@ export function CustomForm({
                       existingLlmProvider={existingLlmProvider}
                       mutate={mutate}
                       onClose={onClose}
+                      isFormValid={formikProps.isValid}
                     />
                   </Form>
                 );

@@ -93,6 +93,7 @@ export function AzureForm({
             <Formik
               initialValues={initialValues}
               validationSchema={validationSchema}
+              validateOnMount={true}
               onSubmit={async (values, { setSubmitting }) => {
                 // Parse target_uri to extract api_base, api_version, and deployment_name
                 let processedValues: AzureFormValues = { ...values };
@@ -155,6 +156,7 @@ export function AzureForm({
                       existingLlmProvider={existingLlmProvider}
                       mutate={mutate}
                       onClose={onClose}
+                      isFormValid={formikProps.isValid}
                     />
                   </Form>
                 );

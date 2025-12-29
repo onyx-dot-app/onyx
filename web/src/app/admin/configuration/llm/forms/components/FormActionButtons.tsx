@@ -11,6 +11,7 @@ interface FormActionButtonsProps {
   existingLlmProvider?: LLMProviderView;
   mutate: (key: string) => void;
   onClose: () => void;
+  isFormValid: boolean;
 }
 
 export function FormActionButtons({
@@ -19,6 +20,7 @@ export function FormActionButtons({
   existingLlmProvider,
   mutate,
   onClose,
+  isFormValid,
 }: FormActionButtonsProps) {
   const handleDelete = async () => {
     if (!existingLlmProvider) return;
@@ -65,7 +67,7 @@ export function FormActionButtons({
       {testError && <Text className="text-error mt-2">{testError}</Text>}
 
       <div className="flex w-full mt-4 gap-2">
-        <Button type="submit" disabled={isTesting}>
+        <Button type="submit" disabled={isTesting || !isFormValid}>
           {isTesting ? (
             <Text inverted>
               <LoadingAnimation text="Testing" />

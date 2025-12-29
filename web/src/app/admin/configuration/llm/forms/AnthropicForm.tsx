@@ -63,6 +63,7 @@ export function AnthropicForm({
             <Formik
               initialValues={initialValues}
               validationSchema={validationSchema}
+              validateOnMount={true}
               onSubmit={async (values, { setSubmitting }) => {
                 await submitLLMProvider({
                   providerName: ANTHROPIC_PROVIDER_NAME,
@@ -100,6 +101,7 @@ export function AnthropicForm({
                       existingLlmProvider={existingLlmProvider}
                       mutate={mutate}
                       onClose={onClose}
+                      isFormValid={formikProps.isValid}
                     />
                   </Form>
                 );

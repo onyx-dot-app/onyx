@@ -60,6 +60,7 @@ export function OpenAIForm({
             <Formik
               initialValues={initialValues}
               validationSchema={validationSchema}
+              validateOnMount={true}
               onSubmit={async (values, { setSubmitting }) => {
                 await submitLLMProvider({
                   providerName: OPENAI_PROVIDER_NAME,
@@ -97,6 +98,7 @@ export function OpenAIForm({
                       existingLlmProvider={existingLlmProvider}
                       mutate={mutate}
                       onClose={onClose}
+                      isFormValid={formikProps.isValid}
                     />
                   </Form>
                 );

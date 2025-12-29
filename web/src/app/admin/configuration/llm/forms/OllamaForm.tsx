@@ -42,6 +42,7 @@ interface OllamaFormContentProps {
   testError: string;
   mutate: () => void;
   onClose: () => void;
+  isFormValid: boolean;
 }
 
 function OllamaFormContent({
@@ -51,6 +52,7 @@ function OllamaFormContent({
   testError,
   mutate,
   onClose,
+  isFormValid,
 }: OllamaFormContentProps) {
   const [availableModels, setAvailableModels] = useState<ModelConfiguration[]>(
     []
@@ -137,6 +139,7 @@ function OllamaFormContent({
         existingLlmProvider={existingLlmProvider}
         mutate={mutate}
         onClose={onClose}
+        isFormValid={isFormValid}
       />
     </Form>
   );
@@ -185,6 +188,7 @@ export function OllamaForm({
             <Formik
               initialValues={initialValues}
               validationSchema={validationSchema}
+              validateOnMount={true}
               onSubmit={async (values, { setSubmitting }) => {
                 // Filter out empty custom_config values
                 const filteredCustomConfig = Object.fromEntries(
@@ -225,6 +229,7 @@ export function OllamaForm({
                   testError={testError}
                   mutate={mutate}
                   onClose={onClose}
+                  isFormValid={formikProps.isValid}
                 />
               )}
             </Formik>

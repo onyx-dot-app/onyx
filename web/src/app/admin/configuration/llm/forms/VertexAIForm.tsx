@@ -84,6 +84,7 @@ export function VertexAIForm({
             <Formik
               initialValues={initialValues}
               validationSchema={validationSchema}
+              validateOnMount={true}
               onSubmit={async (values, { setSubmitting }) => {
                 // Filter out empty custom_config values except for required ones
                 const filteredCustomConfig = Object.fromEntries(
@@ -150,6 +151,7 @@ export function VertexAIForm({
                       existingLlmProvider={existingLlmProvider}
                       mutate={mutate}
                       onClose={onClose}
+                      isFormValid={formikProps.isValid}
                     />
                   </Form>
                 );

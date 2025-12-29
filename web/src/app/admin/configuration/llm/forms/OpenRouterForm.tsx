@@ -132,6 +132,7 @@ export function OpenRouterForm({
             <Formik
               initialValues={initialValues}
               validationSchema={validationSchema}
+              validateOnMount={true}
               onSubmit={async (values, { setSubmitting }) => {
                 await submitLLMProvider({
                   providerName: OPENROUTER_PROVIDER_NAME,
@@ -212,6 +213,7 @@ export function OpenRouterForm({
                       existingLlmProvider={existingLlmProvider}
                       mutate={mutate}
                       onClose={onClose}
+                      isFormValid={formikProps.isValid}
                     />
                   </Form>
                 );
