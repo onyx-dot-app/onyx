@@ -37,6 +37,17 @@ __all__ = [
 ]
 
 
+class TenantState(BaseModel):
+    """
+    Captures the tenant-related state for an instance of DocumentIndex.
+    """
+
+    model_config = {"frozen": True}
+
+    tenant_id: str
+    multitenant: bool
+
+
 class DocumentInsertionRecord(BaseModel):
     """
     Result of indexing a document.

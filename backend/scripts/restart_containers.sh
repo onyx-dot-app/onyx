@@ -31,13 +31,13 @@ else
     docker run -p 5432:5432 --name onyx_postgres -e POSTGRES_PASSWORD=password -d postgres -c max_connections=250
 fi
 
-# Start the Vespa container with optional volume
-echo "Starting Vespa container..."
-if [[ -n "$VESPA_VOLUME" ]]; then
-    docker run --detach --name onyx_vespa --hostname vespa-container --publish 8081:8081 --publish 19071:19071 -v $VESPA_VOLUME:/opt/vespa/var vespaengine/vespa:8
-else
-    docker run --detach --name onyx_vespa --hostname vespa-container --publish 8081:8081 --publish 19071:19071 vespaengine/vespa:8
-fi
+# # Start the Vespa container with optional volume
+# echo "Starting Vespa container..."
+# if [[ -n "$VESPA_VOLUME" ]]; then
+#     docker run --detach --name onyx_vespa --hostname vespa-container --publish 8081:8081 --publish 19071:19071 -v $VESPA_VOLUME:/opt/vespa/var vespaengine/vespa:8
+# else
+#     docker run --detach --name onyx_vespa --hostname vespa-container --publish 8081:8081 --publish 19071:19071 vespaengine/vespa:8
+# fi
 
 # Start the Redis container with optional volume
 echo "Starting Redis container..."

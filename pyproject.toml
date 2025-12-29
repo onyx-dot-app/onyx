@@ -77,6 +77,7 @@ backend = [
     "oauthlib==3.2.2",
     # NOTE: This is frozen to avoid https://foss.heptapod.net/openpyxl/openpyxl/-/issues/2147
     "openpyxl==3.0.10",
+    "opensearch-py==3.0.0",
     "passlib==1.7.4",
     "playwright==1.55.0",
     "psutil==7.1.3",

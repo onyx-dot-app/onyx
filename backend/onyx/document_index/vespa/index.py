@@ -232,6 +232,9 @@ class VespaIndex(DocumentIndex):
         multitenant: bool = False,
         httpx_client: httpx.Client | None = None,
     ) -> None:
+        raise NotImplementedError(
+            "[ANDREI]: VespaIndex is not implemented for OpenSearch."
+        )
         self.index_name = index_name
         self.secondary_index_name = secondary_index_name
 
@@ -265,6 +268,9 @@ class VespaIndex(DocumentIndex):
         secondary_index_embedding_dim: int | None,
         secondary_index_embedding_precision: EmbeddingPrecision | None,
     ) -> None:
+        raise NotImplementedError(
+            "[ANDREI]: VespaIndex is not implemented for OpenSearch."
+        )
         if MULTI_TENANT:
             logger.info(
                 "Skipping Vespa index setup for multitenant (would wipe all indices)"
@@ -465,6 +471,9 @@ class VespaIndex(DocumentIndex):
         chunks: list[DocMetadataAwareIndexChunk],
         index_batch_params: IndexBatchParams,
     ) -> set[OldDocumentInsertionRecord]:
+        raise NotImplementedError(
+            "[ANDREI]: VespaIndex is not implemented for OpenSearch."
+        )
         if len(index_batch_params.doc_id_to_previous_chunk_cnt) != len(
             index_batch_params.doc_id_to_new_chunk_cnt
         ):
@@ -647,6 +656,9 @@ class VespaIndex(DocumentIndex):
         fields: VespaDocumentFields | None,
         user_fields: VespaDocumentUserFields | None,
     ) -> None:
+        raise NotImplementedError(
+            "[ANDREI]: VespaIndex is not implemented for OpenSearch."
+        )
         """Note: if the document id does not exist, the update will be a no-op and the
         function will complete with no errors or exceptions.
         Handle other exceptions if you wish to implement retry behavior
@@ -700,6 +712,9 @@ class VespaIndex(DocumentIndex):
         tenant_id: str,
         chunk_count: int | None,
     ) -> int:
+        raise NotImplementedError(
+            "[ANDREI]: VespaIndex is not implemented for OpenSearch."
+        )
         vespa_document_index = VespaDocumentIndex(
             index_name=self.index_name,
             tenant_state=TenantState(
@@ -718,6 +733,9 @@ class VespaIndex(DocumentIndex):
         batch_retrieval: bool = False,
         get_large_chunks: bool = False,
     ) -> list[InferenceChunk]:
+        raise NotImplementedError(
+            "[ANDREI]: VespaIndex is not implemented for OpenSearch."
+        )
         tenant_id = filters.tenant_id if filters.tenant_id is not None else ""
         vespa_document_index = VespaDocumentIndex(
             index_name=self.index_name,
@@ -757,6 +775,9 @@ class VespaIndex(DocumentIndex):
         offset: int = 0,
         title_content_ratio: float | None = TITLE_CONTENT_RATIO,
     ) -> list[InferenceChunk]:
+        raise NotImplementedError(
+            "[ANDREI]: VespaIndex is not implemented for OpenSearch."
+        )
         tenant_id = filters.tenant_id if filters.tenant_id is not None else ""
         vespa_document_index = VespaDocumentIndex(
             index_name=self.index_name,
@@ -796,6 +817,9 @@ class VespaIndex(DocumentIndex):
         num_to_retrieve: int = NUM_RETURNED_HITS,
         offset: int = 0,
     ) -> list[InferenceChunk]:
+        raise NotImplementedError(
+            "[ANDREI]: VespaIndex is not implemented for OpenSearch."
+        )
         vespa_where_clauses = build_vespa_filters(filters, include_hidden=True)
         yql = (
             YQL_BASE.format(index_name=self.index_name)
@@ -1025,6 +1049,9 @@ class VespaIndex(DocumentIndex):
         filters: IndexFilters,
         num_to_retrieve: int = 10,
     ) -> list[InferenceChunk]:
+        raise NotImplementedError(
+            "[ANDREI]: VespaIndex is not implemented for OpenSearch."
+        )
         """Retrieve random chunks matching the filters using Vespa's random ranking
 
         This method is currently used for random chunk retrieval in the context of
