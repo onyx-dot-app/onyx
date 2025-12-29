@@ -6,6 +6,7 @@ from unittest.mock import patch
 import pytest
 
 from onyx.db.llm import sync_model_configurations
+from onyx.llm.constants import LlmProviderNames
 
 
 class TestSyncModelConfigurations:
@@ -40,7 +41,7 @@ class TestSyncModelConfigurations:
 
             result = sync_model_configurations(
                 db_session=mock_session,
-                provider_name="openai",
+                provider_name=LlmProviderNames.OPENAI,
                 models=models,
             )
 
@@ -80,7 +81,7 @@ class TestSyncModelConfigurations:
 
             result = sync_model_configurations(
                 db_session=mock_session,
-                provider_name="openai",
+                provider_name=LlmProviderNames.OPENAI,
                 models=models,
             )
 
@@ -112,7 +113,7 @@ class TestSyncModelConfigurations:
 
             result = sync_model_configurations(
                 db_session=mock_session,
-                provider_name="openai",
+                provider_name=LlmProviderNames.OPENAI,
                 models=models,
             )
 

@@ -145,6 +145,7 @@ dev = [
     "openapi-generator-cli==7.17.0",
     "pandas-stubs==2.2.3.241009",
     "pre-commit==3.2.2",
+    "pytest-alembic==0.12.1",
     "pytest-asyncio==1.3.0",
     "pytest-dotenv==0.5.2",
     "pytest-xdist==3.6.1",
