@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { SvgChevronDown, SvgChevronUp } from "@opal/icons";
+import { SvgChevronDown, SvgChevronRight } from "@opal/icons";
 import Button from "@/refresh-components/buttons/Button";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import { getErrorIcon, getErrorTitle } from "./errorHelpers";
@@ -61,11 +61,11 @@ export const ErrorBanner = ({
                 <Button
                   tertiary
                   leftIcon={
-                    isStackTraceExpanded ? SvgChevronDown : SvgChevronUp
+                    isStackTraceExpanded ? SvgChevronDown : SvgChevronRight
                   }
                   onClick={() => setIsStackTraceExpanded(!isStackTraceExpanded)}
                 >
-                  Stack Trace
+                  Stack trace
                 </Button>
                 <CopyIconButton tertiary getCopyText={() => stackTrace} />
               </div>
