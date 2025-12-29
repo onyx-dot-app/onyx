@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Button from "@/refresh-components/buttons/Button";
@@ -77,10 +77,8 @@ import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import * as ActionsLayouts from "@/layouts/actions-layouts";
 import { useActionsLayout } from "@/layouts/actions-layouts";
-
 import { getActionIcon } from "@/lib/tools/mcpUtils";
-import { MCPServer, ToolSnapshot } from "@/lib/tools/interfaces";
-import useServerTools from "@/hooks/useServerTools";
+import { MCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/interfaces";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
@@ -273,19 +271,19 @@ function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
 
 interface MCPServerCardProps {
   server: MCPServer;
+  tools: MCPTool[];
+  isLoading: boolean;
 }
 
-function MCPServerCard({ server }: MCPServerCardProps) {
+function MCPServerCard({
+  server,
+  tools: enabledTools,
+  isLoading,
+}: MCPServerCardProps) {
   const actionsLayouts = useActionsLayout();
-  const { tools, isLoading } = useServerTools(server, true);
   const { values, setFieldValue } = useFormikContext<any>();
-
   const serverFieldName = `mcp_server_${server.id}`;
   const isServerEnabled = values[serverFieldName]?.enabled ?? false;
-
-  // Filter out globally disabled tools
-  const enabledTools = tools.filter((tool) => tool.isEnabled);
-
   const {
     query,
     setQuery,
@@ -297,13 +295,6 @@ function MCPServerCard({ server }: MCPServerCardProps) {
     const toolFieldValue = values[serverFieldName]?.[`tool_${tool.id}`];
     return toolFieldValue === true;
   }).length;
-
-  // Watch for server toggle to enable/disable all tools
-  useEffect(() => {
-    enabledTools.forEach((tool) => {
-      setFieldValue(`${serverFieldName}.tool_${tool.id}`, isServerEnabled);
-    });
-  }, [enabledTools, isServerEnabled, serverFieldName, setFieldValue]);
 
   return (
     <actionsLayouts.Provider>
@@ -321,6 +312,12 @@ function MCPServerCard({ server }: MCPServerCardProps) {
               <SwitchField
                 name={`${serverFieldName}.enabled`}
                 onCheckedChange={(checked) => {
+                  enabledTools.forEach((tool) => {
+                    setFieldValue(
+                      `${serverFieldName}.tool_${tool.id}`,
+                      checked
+                    );
+                  });
                   if (!checked) return;
                   actionsLayouts.setIsFolded(false);
                 }}
@@ -440,8 +437,7 @@ export default function AgentEditorPage({
   } | null>(null);
 
   const { mcpData } = useMcpServers();
-  const { openApiTools: openApiToolsRaw, mutateOpenApiTools } =
-    useOpenApiTools();
+  const { openApiTools: openApiToolsRaw } = useOpenApiTools();
   const mcpServers = mcpData?.mcp_servers ?? [];
   const openApiTools = openApiToolsRaw ?? [];
 
@@ -463,6 +459,22 @@ export default function AgentEditorPage({
   const codeInterpreterTool = availableTools?.find(
     (t) => t.in_code_tool_id === PYTHON_TOOL_ID
   );
+
+  // Group MCP server tools from availableTools by server ID
+  const mcpServersWithTools = mcpServers.map((server) => {
+    const serverTools: MCPTool[] = (availableTools || [])
+      .filter((tool) => tool.mcp_server_id === server.id)
+      .map((tool) => ({
+        id: tool.id.toString(),
+        icon: getActionIcon(server.server_url, server.name),
+        name: tool.display_name || tool.name,
+        description: tool.description,
+        isAvailable: true,
+        isEnabled: tool.enabled,
+      }));
+
+    return { server, tools: serverTools, isLoading: false };
+  });
 
   const initialValues = {
     // General
@@ -517,24 +529,27 @@ export default function AgentEditorPage({
 
     // MCP servers - dynamically add fields for each server with nested tool fields
     ...Object.fromEntries(
-      mcpServers.map((server) => {
+      mcpServersWithTools.map(({ server, tools }) => {
         // Find all tools from existingAgent that belong to this MCP server
-        const serverTools =
+        const serverToolsFromAgent =
           existingAgent?.tools?.filter(
             (tool) => tool.mcp_server_id === server.id
           ) ?? [];
 
-        // Build the tool field object with tool_{id}: true for each enabled tool
+        // Build the tool field object with tool_{id} for ALL available tools
         const toolFields: Record<string, boolean> = {};
-        serverTools.forEach((tool) => {
-          toolFields[`tool_${tool.id}`] = true;
+        tools.forEach((tool) => {
+          // Set to true if this tool was enabled in existingAgent, false otherwise
+          toolFields[`tool_${tool.id}`] = serverToolsFromAgent.some(
+            (t) => t.id === Number(tool.id)
+          );
         });
 
         return [
           `mcp_server_${server.id}`,
           {
-            enabled: serverTools.length > 0, // Server is enabled if it has any tools
-            ...toolFields, // Add individual tool states
+            enabled: serverToolsFromAgent.length > 0, // Server is enabled if it has any tools
+            ...toolFields, // Add individual tool states for ALL tools
           },
         ];
       })
@@ -1195,14 +1210,18 @@ export default function AgentEditorPage({
                           )}
 
                           {/* MCP tools */}
-                          {mcpServers.length > 0 && (
+                          {mcpServersWithTools.length > 0 && (
                             <div className="flex flex-col gap-2">
-                              {mcpServers.map((server) => (
-                                <MCPServerCard
-                                  key={server.id}
-                                  server={server}
-                                />
-                              ))}
+                              {mcpServersWithTools.map(
+                                ({ server, tools, isLoading }) => (
+                                  <MCPServerCard
+                                    key={server.id}
+                                    server={server}
+                                    tools={tools}
+                                    isLoading={isLoading}
+                                  />
+                                )
+                              )}
                             </div>
                           )}
 
