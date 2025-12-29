@@ -87,6 +87,7 @@ services:
       interval: 30s
       timeout: 20s
       retries: 3
+      start_period: 20s
     # Optional, only for debugging purposes
     volumes:
       - api_server_logs:/var/log/onyx
