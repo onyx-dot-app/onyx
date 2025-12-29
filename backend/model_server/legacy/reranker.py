@@ -55,7 +55,7 @@ async def process_rerank_request(rerank_request: RerankRequest) -> RerankRespons
         )
 
     if INDEXING_ONLY:
-        raise RuntimeError("Indexing model server should not call intent endpoint")
+        raise RuntimeError("Indexing model server should not call reranking endpoint")
 
     if not rerank_request.documents or not rerank_request.query:
         raise HTTPException(
