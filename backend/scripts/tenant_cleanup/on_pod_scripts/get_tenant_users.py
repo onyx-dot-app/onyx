@@ -13,10 +13,11 @@ Output:
 import json
 import sys
 
-from sqlalchemy import text
+from sqlalchemy import select
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.engine.sql_engine import SqlEngine
+from onyx.db.models import User
 
 
 def get_tenant_users(tenant_id: str) -> dict:
@@ -33,18 +34,10 @@ def get_tenant_users(tenant_id: str) -> dict:
         print(f"Querying users for tenant: {tenant_id}", file=sys.stderr)
 
         with get_session_with_tenant(tenant_id=tenant_id) as db_session:
-            # Why we can't use select(User) with the ORM:
-            # select(User) tries to load ALL columns defined in the User model, including newer
-            # columns like temperature_override_enabled, chosen_assistants, etc. Tenant schemas
-            # may be missing these columns if migrations haven't been run and/or failed,
-            # causing "column does not exist" errors.
-            #
-            # Solution: Use raw SQL
-            # - Only query the email column (which exists in all schema versions)
-            # - Use schema-qualified table name to directly target the tenant schema
-            result = db_session.execute(
-                text(f'SELECT email FROM "{tenant_id}"."user" ORDER BY email')
-            )
+            # Query users from the tenant schema
+            # Select only the email column
+            stmt = select(User.email).order_by(User.email)
+            result = db_session.execute(stmt)
             users = [row[0] for row in result]
 
         return {"status": "success", "users": users}
