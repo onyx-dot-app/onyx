@@ -8,10 +8,24 @@ import { OpenRouterForm } from "./OpenRouterForm";
 import { CustomForm } from "./CustomForm";
 import { BedrockForm } from "./BedrockForm";
 
+export function detectIfRealOpenAIProvider(provider: LLMProviderView) {
+  return (
+    provider.provider === LLMProviderName.OPENAI &&
+    provider.api_key &&
+    !provider.api_base &&
+    !provider.custom_config
+  );
+}
+
 export const getFormForExistingProvider = (provider: LLMProviderView) => {
   switch (provider.provider) {
     case LLMProviderName.OPENAI:
-      return <OpenAIForm existingLlmProvider={provider} />;
+      // "openai" as a provider name can be used for litellm proxy / any OpenAI-compatible provider
+      if (detectIfRealOpenAIProvider(provider)) {
+        return <OpenAIForm existingLlmProvider={provider} />;
+      } else {
+        return <CustomForm existingLlmProvider={provider} />;
+      }
     case LLMProviderName.ANTHROPIC:
       return <AnthropicForm existingLlmProvider={provider} />;
     case LLMProviderName.OLLAMA_CHAT:

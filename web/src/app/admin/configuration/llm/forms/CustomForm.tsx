@@ -43,7 +43,7 @@ export function CustomForm({
 }: LLMProviderFormProps) {
   return (
     <ProviderFormEntrypointWrapper
-      providerName="Custom LLM Provider"
+      providerName="Custom LLM"
       existingLlmProvider={existingLlmProvider}
       buttonMode={!existingLlmProvider}
       buttonText="Add Custom LLM Provider"

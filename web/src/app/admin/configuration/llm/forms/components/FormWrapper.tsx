@@ -143,7 +143,7 @@ export function ProviderFormEntrypointWrapper({
                 {existingLlmProvider.name}
               </Text>
               <Text secondaryBody text03 className="italic">
-                ({existingLlmProvider.provider})
+                ({providerName})
               </Text>
               {!existingLlmProvider.is_default_provider && (
                 <Text
