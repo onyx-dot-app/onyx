@@ -20,6 +20,7 @@ import {
   STARTER_MESSAGES_EXAMPLES,
   MAX_CHARACTERS_STARTER_MESSAGE,
   MAX_CHARACTERS_AGENT_DESCRIPTION,
+  MAX_CHUNKS_FED_TO_CHAT,
 } from "@/lib/constants";
 import {
   IMAGE_GENERATION_TOOL_ID,
@@ -500,7 +501,6 @@ export default function AgentEditorPage({
         : ("team_knowledge" as "team_knowledge" | "user_knowledge"),
     document_set_ids: existingAgent?.document_sets?.map((ds) => ds.id) ?? [],
     user_file_ids: existingAgent?.user_file_ids ?? [],
-    num_chunks: existingAgent?.num_chunks ?? 0,
 
     // Advanced
     knowledge_cutoff_date: existingAgent?.search_start_date
@@ -646,7 +646,7 @@ export default function AgentEditorPage({
 
       // Determine knowledge settings
       const teamKnowledge = values.knowledge_source === "team_knowledge";
-      const numChunks = values.enable_knowledge ? values.num_chunks ?? 25 : 0;
+      const numChunks = values.enable_knowledge ? MAX_CHUNKS_FED_TO_CHAT : 0;
 
       // Always look up tools in availableTools to ensure we can find all tools
 
