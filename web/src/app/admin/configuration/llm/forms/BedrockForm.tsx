@@ -166,7 +166,8 @@ export function BedrockForm({
                 const currentModels =
                   fetchedModels.length > 0
                     ? fetchedModels
-                    : modelConfigurations;
+                    : existingLlmProvider?.model_configurations ||
+                      modelConfigurations;
 
                 // Check if auth credentials are complete
                 const isAuthComplete =

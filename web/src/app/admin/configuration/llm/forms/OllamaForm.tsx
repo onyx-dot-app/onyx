@@ -55,7 +55,7 @@ function OllamaFormContent({
   isFormValid,
 }: OllamaFormContentProps) {
   const [availableModels, setAvailableModels] = useState<ModelConfiguration[]>(
-    []
+    existingLlmProvider?.model_configurations || []
   );
   const [isLoadingModels, setIsLoadingModels] = useState(true);
 
