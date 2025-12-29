@@ -18,7 +18,7 @@ import {
   MCPServerStatus,
   MCPServer,
 } from "@/lib/tools/interfaces";
-import { useServerTools } from "@/sections/actions/useServerTools";
+import useServerTools from "@/hooks/useServerTools";
 import { KeyedMutator } from "swr";
 import type { IconProps } from "@opal/types";
 import { SvgRefreshCw, SvgServer, SvgTrash } from "@opal/icons";
@@ -131,11 +131,7 @@ export default function MCPActionCard({
   }, [server.status]);
 
   // Lazy load tools only when expanded
-  const { tools, isLoading, mutate } = useServerTools({
-    serverId,
-    server,
-    isExpanded: isToolsExpanded,
-  });
+  const { tools, isLoading, mutate } = useServerTools(server, isToolsExpanded);
 
   // Retry tools fetch when server transitions from FETCHING_TOOLS to CONNECTED
   useEffect(() => {

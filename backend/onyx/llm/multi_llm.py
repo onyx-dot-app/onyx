@@ -9,24 +9,24 @@ from typing import Union
 from langchain_core.messages import BaseMessage
 
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
-from onyx.configs.app_configs import SEND_USER_METADATA_TO_LLM_PROVIDER
 from onyx.configs.chat_configs import QA_TIMEOUT
+from onyx.configs.model_configs import DEFAULT_REASONING_EFFORT
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.interfaces import ReasoningEffort
 from onyx.llm.interfaces import ToolChoiceOptions
-from onyx.llm.llm_provider_options import AZURE_PROVIDER_NAME
-from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
 from onyx.llm.llm_provider_options import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.llm_provider_options import VERTEX_LOCATION_KWARG
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.models import CLAUDE_REASONING_BUDGET_TOKENS
 from onyx.llm.models import OPENAI_REASONING_EFFORT
+from onyx.llm.utils import build_litellm_passthrough_kwargs
 from onyx.llm.utils import is_true_openai_model
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.utils import mask_string
@@ -43,7 +43,6 @@ if TYPE_CHECKING:
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
 LEGACY_MAX_TOKENS_KWARG = "max_tokens"
 STANDARD_MAX_TOKENS_KWARG = "max_completion_tokens"
-MAX_LITELLM_USER_ID_LENGTH = 64
 
 
 class LLMTimeoutError(Exception):
@@ -71,17 +70,6 @@ def _prompt_to_dicts(prompt: LanguageModelInput) -> list[dict[str, Any]]:
 
 def _prompt_as_json(prompt: LanguageModelInput) -> JSON_ro:
     return cast(JSON_ro, _prompt_to_dicts(prompt))
-
-
-def _truncate_litellm_user_id(user_id: str) -> str:
-    if len(user_id) <= MAX_LITELLM_USER_ID_LENGTH:
-        return user_id
-    logger.warning(
-        "LLM user id exceeds %d chars (len=%d); truncating for provider compatibility.",
-        MAX_LITELLM_USER_ID_LENGTH,
-        len(user_id),
-    )
-    return user_id[:MAX_LITELLM_USER_ID_LENGTH]
 
 
 class LitellmLLM(LLM):
@@ -139,7 +127,7 @@ class LitellmLLM(LLM):
             # model_kwarg to the completion call for vertex AI. More details here:
             # https://docs.litellm.ai/docs/providers/vertex
             for k, v in custom_config.items():
-                if model_provider == "vertex_ai":
+                if model_provider == LlmProviderNames.VERTEX_AI:
                     if k == VERTEX_CREDENTIALS_FILE_KWARG:
                         model_kwargs[k] = v
                         continue
@@ -153,8 +141,17 @@ class LitellmLLM(LLM):
                     os.environ[k] = v
                 else:
                     os.environ.pop(k, None)
+
+        # Default vertex_location to "global" if not provided for Vertex AI
+        # Latest gemini models are only available through the global region
+        if (
+            model_provider == LlmProviderNames.VERTEX_AI
+            and VERTEX_LOCATION_KWARG not in model_kwargs
+        ):
+            model_kwargs[VERTEX_LOCATION_KWARG] = "global"
+
         # This is needed for Ollama to do proper function calling
-        if model_provider == OLLAMA_PROVIDER_NAME and api_base is not None:
+        if model_provider == LlmProviderNames.OLLAMA_CHAT and api_base is not None:
             os.environ["OLLAMA_API_BASE"] = api_base
         if extra_headers:
             model_kwargs.update({"extra_headers": extra_headers})
@@ -243,131 +240,116 @@ class LitellmLLM(LLM):
         from onyx.llm.litellm_singleton import litellm
         from litellm.exceptions import Timeout, RateLimitError
 
+        #########################
+        # Flags that modify the final arguments
+        #########################
+        is_claude_model = "claude" in self.config.model_name.lower()
         is_reasoning = model_is_reasoning_model(
             self.config.model_name, self.config.model_provider
         )
-
-        # Needed to get reasoning tokens from the model
-        use_responses_api = (
-            is_true_openai_model(self.config.model_provider, self.config.model_name)
-            or self.config.model_provider == AZURE_PROVIDER_NAME
+        # All OpenAI models will use responses API for consistency
+        # Responses API is needed to get reasoning packets from OpenAI models
+        is_openai_model = is_true_openai_model(
+            self.config.model_provider, self.config.model_name
         )
-        if use_responses_api:
-            model_provider = f"{self.config.model_provider}/responses"
-        else:
-            model_provider = self.config.model_provider
 
-        completion_kwargs: dict[str, Any] = self._model_kwargs
-        if SEND_USER_METADATA_TO_LLM_PROVIDER and user_identity:
-            completion_kwargs = dict(self._model_kwargs)
+        #########################
+        # Build arguments
+        #########################
+        # Model name
+        model_provider = (
+            f"{self.config.model_provider}/responses"
+            if is_openai_model  # Uses litellm's completions -> responses bridge
+            else self.config.model_provider
+        )
+        model = (
+            f"{model_provider}/{self.config.deployment_name or self.config.model_name}"
+        )
 
-            if user_identity.user_id:
-                completion_kwargs["user"] = _truncate_litellm_user_id(
-                    user_identity.user_id
-                )
+        # Tool choice
+        if is_claude_model and tool_choice == ToolChoiceOptions.REQUIRED:
+            # Claude models will not use reasoning if tool_choice is required
+            # let it choose tools automatically so reasoning can still be used
+            tool_choice = ToolChoiceOptions.AUTO
 
-            if user_identity.session_id:
-                existing_metadata = completion_kwargs.get("metadata")
-                metadata: dict[str, Any] | None
-                if existing_metadata is None:
-                    metadata = {}
-                elif isinstance(existing_metadata, dict):
-                    metadata = dict(existing_metadata)
-                else:
-                    metadata = None
+        # If no tools are provided, tool_choice should be None
+        if not tools:
+            tool_choice = None
 
-                if metadata is not None:
-                    metadata["session_id"] = user_identity.session_id
-                    completion_kwargs["metadata"] = metadata
+        # Temperature
+        temperature = 1 if is_reasoning else self._temperature
+
+        # Optional kwargs - should only be passed to LiteLLM under certain conditions
+        optional_kwargs: dict[str, Any] = {}
+
+        if stream:
+            optional_kwargs["stream_options"] = {"include_usage": True}
+
+        if is_reasoning:
+            # Use configured default if not provided (if not set in env, low)
+            reasoning_effort = reasoning_effort or ReasoningEffort(
+                DEFAULT_REASONING_EFFORT
+            )
+
+            if is_claude_model and reasoning_effort != ReasoningEffort.OFF:
+                # Anthropic Claude models use `thinking` with budget_tokens
+                # for extended thinking across all providers
+                optional_kwargs["thinking"] = {
+                    "type": "enabled",
+                    "budget_tokens": CLAUDE_REASONING_BUDGET_TOKENS[reasoning_effort],
+                }
+            elif is_openai_model:
+                # OpenAI API does not accept reasoning params for GPT 5 chat models
+                # (neither reasoning nor reasoning_effort are accepted)
+                # even though they are reasoning models (bug in OpenAI)
+                if "-chat" not in model:
+                    optional_kwargs["reasoning"] = {
+                        "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
+                        "summary": "auto",
+                    }
+            else:
+                optional_kwargs["reasoning_effort"] = reasoning_effort
+
+        if tools:
+            # OpenAI will error if parallel_tool_calls is True and tools are not specified
+            optional_kwargs["parallel_tool_calls"] = parallel_tool_calls
+
+        if structured_response_format:
+            optional_kwargs["response_format"] = structured_response_format
+
+        if not is_claude_model:
+            # Litellm bug: tool_choice is dropped silently if not specified here for OpenAI
+            # However, this param breaks Anthropic models, so it must be conditionally included
+            optional_kwargs["allowed_openai_params"] = ["tool_choice"]
+
+        # Passthrough kwargs
+        passthrough_kwargs = build_litellm_passthrough_kwargs(
+            model_kwargs=self._model_kwargs,
+            user_identity=user_identity,
+        )
 
         try:
-            final_tool_choice = tool_choice if tools else None
-            # Claude models will not use reasoning if tool_choice is required
-            # Better to let it use reasoning
-            if (
-                "claude" in self.config.model_name.lower()
-                and final_tool_choice == ToolChoiceOptions.REQUIRED
-            ):
-                final_tool_choice = ToolChoiceOptions.AUTO
-
+            # NOTE: must pass in None instead of empty strings
+            # otherwise litellm can have some issues with bedrock
             response = litellm.completion(
                 mock_response=MOCK_LLM_RESPONSE,
-                # model choice
-                # model="openai/gpt-4",
-                model=f"{model_provider}/{self.config.deployment_name or self.config.model_name}",
-                # NOTE: have to pass in None instead of empty string for these
-                # otherwise litellm can have some issues with bedrock
+                model=model,
                 api_key=self._api_key or None,
                 base_url=self._api_base or None,
                 api_version=self._api_version or None,
                 custom_llm_provider=self._custom_llm_provider or None,
-                # actual input
                 messages=_prompt_to_dicts(prompt),
                 tools=tools,
-                tool_choice=final_tool_choice,
-                # streaming choice
+                tool_choice=tool_choice,
                 stream=stream,
-                # model params
-                temperature=(1 if is_reasoning else self._temperature),
+                temperature=temperature,
                 timeout=timeout_override or self._timeout,
                 max_tokens=max_tokens,
-                **({"stream_options": {"include_usage": True}} if stream else {}),
-                # NOTE: we can't pass parallel_tool_calls if tools are not specified
-                # or else OpenAI throws an error
-                **({"parallel_tool_calls": parallel_tool_calls} if tools else {}),
-                # Anthropic Claude uses `thinking` with budget_tokens for extended thinking
-                # This applies to Claude models on any provider (anthropic, vertex_ai, bedrock)
-                **(
-                    {
-                        "thinking": {
-                            "type": "enabled",
-                            "budget_tokens": CLAUDE_REASONING_BUDGET_TOKENS[
-                                reasoning_effort
-                            ],
-                        }
-                    }
-                    if reasoning_effort
-                    and reasoning_effort != ReasoningEffort.OFF
-                    and is_reasoning
-                    and "claude" in self.config.model_name.lower()
-                    # For now, Claude models cannot support reasoning when a tool is required
-                    # Maybe this will change in the future.
-                    and tool_choice != ToolChoiceOptions.REQUIRED
-                    else {}
-                ),
-                # OpenAI and other providers use reasoning_effort
-                # (litellm maps this to thinking_level for Gemini 3 models)
-                **(
-                    {
-                        "reasoning": {
-                            "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
-                            "summary": "auto",
-                        }
-                    }
-                    if is_reasoning and use_responses_api
-                    else {}
-                ),
-                **(
-                    {"response_format": structured_response_format}
-                    if structured_response_format
-                    else {}
-                ),
-                # TODO: Litellm erroenously drops tool_choice for OpenAI,
-                # which we use to control tool calls (auto, required, none, etc.).
-                # This drop is silent and does not raise error because we set litellm.drop_params = True.
-                # Force tool use for OpenAI was re-enabled via allowed_openai_params.
-                # However, this param breaks Anthropic models, so we only include it for non-Anthropic models.
-                # This should be removed when either 1) we switch to responses API 2) Litellm fixes this issue
-                **(
-                    {"allowed_openai_params": ["tool_choice"]}
-                    if "claude" not in self.config.model_name.lower()
-                    else {}
-                ),
-                **completion_kwargs,
+                **optional_kwargs,
+                **passthrough_kwargs,
             )
             return response
         except Exception as e:
-
             self._record_error(prompt, e)
             # for break pointing
             if isinstance(e, Timeout):

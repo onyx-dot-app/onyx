@@ -631,56 +631,6 @@ def _patch_openai_responses_transform_response() -> None:
     LiteLLMResponsesTransformationHandler.transform_response = _patched_transform_response  # type: ignore[method-assign]
 
 
-def _patch_openai_responses_tool_content_type() -> None:
-    """
-    Patches LiteLLMResponsesTransformationHandler._convert_content_str_to_input_text
-    to use 'input_text' type for tool messages instead of 'output_text'.
-
-    The OpenAI Responses API only accepts 'input_text', 'input_image', and 'input_file'
-    in the function_call_output.output array. The default litellm implementation
-    incorrectly uses 'output_text' for tool messages, causing 400 Bad Request errors.
-
-    See: https://github.com/BerriAI/litellm/issues/17507
-
-    This should be removed once litellm releases a fix for this issue.
-    """
-    original_method = (
-        LiteLLMResponsesTransformationHandler._convert_content_str_to_input_text
-    )
-
-    if (
-        getattr(
-            original_method,
-            "__name__",
-            "",
-        )
-        == "_patched_convert_content_str_to_input_text"
-    ):
-        return
-
-    def _patched_convert_content_str_to_input_text(
-        self: Any, content: str, role: str
-    ) -> Dict[str, Any]:
-        """
-        Convert string content to the appropriate Responses API format.
-
-        For user, system, and tool messages, use 'input_text' type.
-        For assistant messages, use 'output_text' type.
-
-        Tool messages go into function_call_output.output, which only accepts
-        'input_text', 'input_image', and 'input_file' types.
-        """
-        if role in ("user", "system", "tool"):
-            return {"type": "input_text", "text": content}
-        else:
-            return {"type": "output_text", "text": content}
-
-    _patched_convert_content_str_to_input_text.__name__ = (
-        "_patched_convert_content_str_to_input_text"
-    )
-    LiteLLMResponsesTransformationHandler._convert_content_str_to_input_text = _patched_convert_content_str_to_input_text  # type: ignore[method-assign]
-
-
 def apply_monkey_patches() -> None:
     """
     Apply all necessary monkey patches to LiteLLM for compatibility.
@@ -696,7 +646,6 @@ def apply_monkey_patches() -> None:
     _patch_ollama_chunk_parser()
     _patch_openai_responses_chunk_parser()
     _patch_openai_responses_transform_response()
-    _patch_openai_responses_tool_content_type()
 
 
 def _extract_reasoning_content(message: dict) -> Tuple[Optional[str], Optional[str]]:

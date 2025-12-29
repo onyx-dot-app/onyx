@@ -3,6 +3,7 @@ from unittest.mock import patch
 import litellm
 
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.utils import find_model_obj
 from onyx.llm.utils import get_model_map
 
@@ -42,13 +43,15 @@ def test_partial_match_in_model_map() -> None:
         "supports_vision": True,
     }
 
-    result1 = find_model_obj(model_map, "openai", "gemini/gemma-3-27b-it")
+    result1 = find_model_obj(
+        model_map, LlmProviderNames.OPENAI, "gemini/gemma-3-27b-it"
+    )
     assert result1 is not None
     for key, value in _EXPECTED_FIELDS.items():
         assert key in result1
         assert result1[key] == value, "Unexpected value for key: {}".format(key)
 
-    result2 = find_model_obj(model_map, "openai", "gemma-3-27b-it")
+    result2 = find_model_obj(model_map, LlmProviderNames.OPENAI, "gemma-3-27b-it")
     assert result2 is not None
     for key, value in _EXPECTED_FIELDS.items():
         assert key in result2
@@ -73,7 +76,7 @@ def test_no_overwrite_in_model_map() -> None:
         get_model_map.cache_clear()  # Clear the LRU cache to use the patched data
 
         model_map = get_model_map()
-        result = find_model_obj(model_map, "openai", "gpt-4o")
+        result = find_model_obj(model_map, LlmProviderNames.OPENAI, "gpt-4o")
         assert result is not None
         assert result["is_correct"] is True
 

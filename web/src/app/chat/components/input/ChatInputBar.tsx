@@ -37,7 +37,6 @@ import {
   hasSearchToolsAvailable,
 } from "@/app/chat/services/actionUtils";
 import { SvgArrowUp, SvgHourglass, SvgPlusCircle, SvgStop } from "@opal/icons";
-import { useFeatureFlagEnabled } from "posthog-js/react";
 
 const MAX_INPUT_HEIGHT = 200;
 
@@ -145,9 +144,6 @@ const ChatInputBar = React.memo(
       const previousHeightRef = useRef<number | null>(null);
       const onHeightChangeRef = useRef(onHeightChange);
       onHeightChangeRef.current = onHeightChange;
-
-      const deepResearchFeatureFlagEnabled =
-        useFeatureFlagEnabled("deep-research");
 
       // Expose reset and focus methods to parent via ref
       React.useImperativeHandle(ref, () => ({
@@ -633,7 +629,7 @@ const ChatInputBar = React.memo(
                       disabled={disabled}
                     />
                   )}
-                  {deepResearchFeatureFlagEnabled && showDeepResearch && (
+                  {showDeepResearch && (
                     <SelectButton
                       leftIcon={SvgHourglass}
                       onClick={toggleDeepResearch}
