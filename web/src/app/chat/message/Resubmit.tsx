@@ -57,22 +57,18 @@ export const ErrorBanner = ({
           )}
           {stackTrace && (
             <div className="mt-2 border-t border-neutral-200 dark:border-neutral-700 pt-2">
-              <div className="flex">
-                <div className="flex flex-1">
-                  <button
-                    onClick={() =>
-                      setIsStackTraceExpanded(!isStackTraceExpanded)
-                    }
-                    className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200"
-                  >
-                    {isStackTraceExpanded ? (
-                      <ChevronDown className="h-3 w-3" />
-                    ) : (
-                      <ChevronRight className="h-3 w-3" />
-                    )}
-                    Stack trace
-                  </button>
-                </div>
+              <div className="flex flex-1 justify-between">
+                <button
+                  onClick={() => setIsStackTraceExpanded(!isStackTraceExpanded)}
+                  className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200"
+                >
+                  {isStackTraceExpanded ? (
+                    <ChevronDown className="h-3 w-3" />
+                  ) : (
+                    <ChevronRight className="h-3 w-3" />
+                  )}
+                  Stack trace
+                </button>
                 <CopyIconButton getCopyText={() => stackTrace} />
               </div>
               {isStackTraceExpanded && (
