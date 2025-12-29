@@ -24,8 +24,6 @@ import {
   BedrockFetchParams,
   OllamaFetchParams,
   OpenRouterFetchParams,
-  VertexAIFetchParams,
-  FetchModelsParams,
 } from "./interfaces";
 import { SvgAws, SvgOpenrouter } from "@opal/icons";
 
@@ -275,61 +273,54 @@ export const fetchOpenRouterModels = async (
 };
 
 /**
- * Fetches Vertex AI models. This is a static provider, so models come from
- * the LLM descriptor (via litellm) rather than an API call.
- * The model_configurations parameter should be passed from the descriptor.
- * Uses snake_case params to match API structure.
+ * Fetches models for a provider. Accepts form values directly and maps them
+ * to the expected fetch params format internally.
  */
-export const fetchVertexAIModels = async (
-  params: VertexAIFetchParams
-): Promise<{ models: ModelConfiguration[]; error?: string }> => {
-  // Vertex AI is a static provider - models are defined in the descriptor
-  // Return the provided model configurations or an empty list
-  const models: ModelConfiguration[] = (params.model_configurations || []).map(
-    (config) => ({
-      ...config,
-      is_visible: config.is_visible ?? true,
-    })
-  );
-
-  return { models };
-};
-
-type FetchModelsResult = Promise<{
-  models: ModelConfiguration[];
-  error?: string;
-}>;
-
-const providerNameToFetchFunc: Partial<
-  Record<LLMProviderName, (params: FetchModelsParams) => FetchModelsResult>
-> = {
-  [LLMProviderName.BEDROCK]: fetchBedrockModels as (
-    params: FetchModelsParams
-  ) => FetchModelsResult,
-  [LLMProviderName.OLLAMA_CHAT]: fetchOllamaModels as (
-    params: FetchModelsParams
-  ) => FetchModelsResult,
-  [LLMProviderName.OPENROUTER]: fetchOpenRouterModels as (
-    params: FetchModelsParams
-  ) => FetchModelsResult,
-  [LLMProviderName.VERTEX_AI]: fetchVertexAIModels as (
-    params: FetchModelsParams
-  ) => FetchModelsResult,
-};
-
 export const fetchModels = async (
   providerName: string,
-  values: FetchModelsParams
-) => {
-  const fetchFunc = providerNameToFetchFunc[providerName as LLMProviderName];
-  if (fetchFunc) {
-    return fetchFunc(values);
+  formValues: {
+    api_base?: string;
+    api_key?: string;
+    name?: string;
+    custom_config?: Record<string, string>;
+    model_configurations?: ModelConfiguration[];
   }
+) => {
+  const customConfig = formValues.custom_config || {};
 
-  return { models: [], error: `Unknown provider: ${providerName}` };
+  switch (providerName) {
+    case LLMProviderName.BEDROCK:
+      return fetchBedrockModels({
+        aws_region_name: customConfig.AWS_REGION_NAME || "",
+        aws_access_key_id: customConfig.AWS_ACCESS_KEY_ID,
+        aws_secret_access_key: customConfig.AWS_SECRET_ACCESS_KEY,
+        aws_bearer_token_bedrock: customConfig.AWS_BEARER_TOKEN_BEDROCK,
+        provider_name: formValues.name,
+      });
+    case LLMProviderName.OLLAMA_CHAT:
+      return fetchOllamaModels({
+        api_base: formValues.api_base,
+        provider_name: formValues.name,
+      });
+    case LLMProviderName.OPENROUTER:
+      return fetchOpenRouterModels({
+        api_base: formValues.api_base,
+        api_key: formValues.api_key,
+        provider_name: formValues.name,
+      });
+    default:
+      return { models: [], error: `Unknown provider: ${providerName}` };
+  }
 };
 
 export function canProviderFetchModels(providerName?: string) {
   if (!providerName) return false;
-  return !!providerNameToFetchFunc[providerName as LLMProviderName];
+  switch (providerName) {
+    case LLMProviderName.BEDROCK:
+    case LLMProviderName.OLLAMA_CHAT:
+    case LLMProviderName.OPENROUTER:
+      return true;
+    default:
+      return false;
+  }
 }
