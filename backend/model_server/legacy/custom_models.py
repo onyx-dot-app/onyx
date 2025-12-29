@@ -7,8 +7,8 @@ import torch
 import torch.nn.functional as F
 from fastapi import APIRouter
 from huggingface_hub import snapshot_download
+from pydantic import BaseModel
 
-from model_server.constants import INFORMATION_CONTENT_MODEL_WARM_UP_STRING
 from model_server.constants import MODEL_WARM_UP_STRING
 from model_server.legacy.onyx_torch_model import ConnectorClassifier
 from model_server.legacy.onyx_torch_model import HybridClassifier
@@ -16,28 +16,39 @@ from model_server.utils import simple_log_function_time
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import CONNECTOR_CLASSIFIER_MODEL_REPO
 from shared_configs.configs import CONNECTOR_CLASSIFIER_MODEL_TAG
-from shared_configs.configs import (
-    INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH,
-)
-from shared_configs.configs import INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX
-from shared_configs.configs import INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN
-from shared_configs.configs import (
-    INDEXING_INFORMATION_CONTENT_CLASSIFICATION_TEMPERATURE,
-)
 from shared_configs.configs import INDEXING_ONLY
-from shared_configs.configs import INFORMATION_CONTENT_MODEL_TAG
-from shared_configs.configs import INFORMATION_CONTENT_MODEL_VERSION
 from shared_configs.configs import INTENT_MODEL_TAG
 from shared_configs.configs import INTENT_MODEL_VERSION
-from shared_configs.model_server_models import ConnectorClassificationRequest
-from shared_configs.model_server_models import ConnectorClassificationResponse
-from shared_configs.model_server_models import ContentClassificationPrediction
 from shared_configs.model_server_models import IntentRequest
 from shared_configs.model_server_models import IntentResponse
 
 if TYPE_CHECKING:
     from setfit import SetFitModel  # type: ignore[import-untyped]
     from transformers import PreTrainedTokenizer, BatchEncoding
+
+
+INFORMATION_CONTENT_MODEL_WARM_UP_STRING = "hi" * 50
+
+INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX = 1.0
+INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN = 0.7
+INDEXING_INFORMATION_CONTENT_CLASSIFICATION_TEMPERATURE = 4.0
+INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH = 10
+INFORMATION_CONTENT_MODEL_VERSION = "onyx-dot-app/information-content-model"
+INFORMATION_CONTENT_MODEL_TAG: str | None = None
+
+
+class ConnectorClassificationRequest(BaseModel):
+    available_connectors: list[str]
+    query: str
+
+
+class ConnectorClassificationResponse(BaseModel):
+    connectors: list[str]
+
+
+class ContentClassificationPrediction(BaseModel):
+    predicted_label: int
+    content_boost_factor: float
 
 
 logger = setup_logger()
