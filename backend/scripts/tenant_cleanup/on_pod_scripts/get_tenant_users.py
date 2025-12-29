@@ -36,7 +36,8 @@ def get_tenant_users(tenant_id: str) -> dict:
         with get_session_with_tenant(tenant_id=tenant_id) as db_session:
             # Query users from the tenant schema
             # Select only the email column
-            stmt = select(User.email).order_by(User.email)
+            user_email_column = User.__table__.c.email
+            stmt = select(user_email_column).order_by(user_email_column)
             result = db_session.execute(stmt)
             users = [row[0] for row in result]
 
