@@ -194,8 +194,10 @@ export function BedrockForm({
                     />
 
                     <div>
-                      <Text mainUiAction>Authentication Method</Text>
-                      <Text secondaryBody text03>
+                      <Text as="p" mainUiAction>
+                        Authentication Method
+                      </Text>
+                      <Text as="p" secondaryBody text03>
                         Choose how Onyx should authenticate with Bedrock.
                       </Text>
                       <Tabs
@@ -224,7 +226,7 @@ export function BedrockForm({
                           value={AUTH_METHOD_IAM}
                           className="data-[state=active]:animate-fade-in-scale"
                         >
-                          <Text text03>
+                          <Text as="p" text03>
                             Uses the IAM role attached to your AWS environment.
                             Recommended for EC2, ECS, Lambda, or other AWS
                             services.

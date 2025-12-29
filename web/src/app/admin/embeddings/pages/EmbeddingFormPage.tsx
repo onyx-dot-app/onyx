@@ -497,7 +497,7 @@ export default function EmbeddingForm() {
             <h2 className="text-2xl font-bold mb-4 text-text-800">
               Select an Embedding Model
             </h2>
-            <Text className="mb-4">
+            <Text as="p" className="mb-4">
               Note that updating the backing model will require a complete
               re-indexing of all documents across every connected source. This
               is taken care of in the background so that the system can continue
@@ -593,7 +593,7 @@ export default function EmbeddingForm() {
             <h2 className="text-2xl font-bold mb-4 text-text-800">
               Select a Reranking Model
             </h2>
-            <Text className="mb-4">
+            <Text as="p" className="mb-4">
               Updating the reranking model does not require re-indexing
               documents. The reranker helps improve search quality by reordering
               results after the initial embedding search. Changes will take
@@ -646,7 +646,7 @@ export default function EmbeddingForm() {
             <h2 className="text-2xl font-bold mb-4 text-text-800">
               Advanced Search Configuration
             </h2>
-            <Text className="mb-4">
+            <Text as="p" className="mb-4">
               Configure advanced embedding and search settings. Changes will
               require re-indexing documents.
             </Text>

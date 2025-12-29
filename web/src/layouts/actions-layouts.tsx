@@ -389,6 +389,7 @@ function ActionsTool({
           </Truncated>
         </div>
         <Text
+          as="p"
           text03
           secondaryBody
           className="whitespace-pre-wrap line-clamp-2 pl-6"
@@ -424,7 +425,9 @@ function ActionsNoToolsFound() {
   return (
     <div className="flex items-center justify-center gap-2 p-4">
       <SvgMcp className="stroke-text-04" size={18} />
-      <Text text03>No tools found</Text>
+      <Text as="p" text03>
+        No tools found
+      </Text>
     </div>
   );
 }

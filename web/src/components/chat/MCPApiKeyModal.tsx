@@ -165,7 +165,7 @@ export default function MCPApiKeyModal({
               ? `Update your ${credsType} for ${serverName}.`
               : `Enter your ${credsType} for ${serverName} to enable authentication.`}
           </Text>
-          <Text text02>
+          <Text as="p" text02>
             {isAuthenticated
               ? "Changes will be validated against the server before being saved."
               : `Your ${credsType} will be validated against the server and stored securely.`}

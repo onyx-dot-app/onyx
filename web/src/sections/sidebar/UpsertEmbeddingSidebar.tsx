@@ -41,7 +41,7 @@ export default function EmbeddingSidebar() {
                   )}
                 </div>
               </div>
-              <Text text04={index <= formStep} text02={index > formStep}>
+              <Text as="p" text04={index <= formStep} text02={index > formStep}>
                 {step}
               </Text>
             </div>

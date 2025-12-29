@@ -53,7 +53,7 @@ export const OAuthConfigForm = ({
   return (
     <RawModal onClose={onClose} className="w-[60%] max-h-[80vh]">
       <div className="overflow-y-auto p-6">
-        <Text headingH2 className="mb-4">
+        <Text as="p" headingH2 className="mb-4">
           {isUpdate
             ? "Update OAuth Configuration"
             : "Create OAuth Configuration"}
@@ -161,7 +161,7 @@ export const OAuthConfigForm = ({
                 title="Redirect URI for OAuth App Configuration"
                 className="my-0"
               >
-                <Text className="text-sm mb-2">
+                <Text as="p" className="text-sm mb-2">
                   When configuring your OAuth application in the provider&apos;s
                   dashboard, use this redirect URI:
                 </Text>

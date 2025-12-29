@@ -9,10 +9,10 @@ import { cn } from "@/lib/utils";
 function DisplayModelHeader({ alternativeText }: { alternativeText?: string }) {
   return (
     <div className="mb-2">
-      <Text mainUiAction className="block">
+      <Text as="p" mainUiAction className="block">
         Available Models
       </Text>
-      <Text secondaryBody text03 className="block">
+      <Text as="p" secondaryBody text03 className="block">
         {alternativeText ??
           "Select which models to make available for this provider."}
       </Text>
@@ -135,7 +135,7 @@ export function DisplayModels<T extends BaseLLMFormValues>({
                     }
                   />
                 </div>
-                <Text secondaryBody className="select-none leading-none">
+                <Text as="p" secondaryBody className="select-none leading-none">
                   {modelConfiguration.name}
                 </Text>
               </div>

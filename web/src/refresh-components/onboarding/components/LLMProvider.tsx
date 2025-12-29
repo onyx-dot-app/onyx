@@ -117,7 +117,7 @@ function LLMProviderInner({
           )}
         </div>
         <div className="min-w-0 flex flex-col justify-center">
-          <Text text04 mainUiAction>
+          <Text as="p" text04 mainUiAction>
             {title}
           </Text>
           <Truncated text03 secondaryBody>
@@ -143,7 +143,7 @@ function LLMProviderInner({
       ) : (
         <div className="flex items-start p-1">
           <div className="flex items-center gap-0.5">
-            <Text text03 secondaryAction>
+            <Text as="p" text03 secondaryAction>
               Connect
             </Text>
             <div className="p-0.5">

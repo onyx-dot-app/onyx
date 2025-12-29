@@ -212,7 +212,9 @@ export function PersonasTable({
             >
               <div className="flex flex-col gap-2">
                 <Text>{text}</Text>
-                <Text text03>{additionalText}</Text>
+                <Text as="p" text03>
+                  {additionalText}
+                </Text>
               </div>
             </ConfirmationModalLayout>
           );

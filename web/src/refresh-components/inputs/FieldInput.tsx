@@ -16,7 +16,9 @@ function FieldInputInner(
 ) {
   return (
     <div className="flex flex-col gap-2 w-full">
-      <Text mainUiAction>{label}</Text>
+      <Text as="p" mainUiAction>
+        {label}
+      </Text>
       <input
         ref={ref}
         type="text"
@@ -30,7 +32,11 @@ function FieldInputInner(
         )}
         {...props}
       />
-      {description && <Text text03>{description}</Text>}
+      {description && (
+        <Text as="p" text03>
+          {description}
+        </Text>
+      )}
     </div>
   );
 }

@@ -36,7 +36,7 @@ export function LLMConfiguration() {
 
       {existingLlmProviders.length > 0 ? (
         <>
-          <Text className="mb-4">
+          <Text as="p" className="mb-4">
             If multiple LLM providers are enabled, the default provider will be
             used for all &quot;Default&quot; Assistants. For user-created
             Assistants, you can select the LLM provider/model that best fits the
@@ -63,7 +63,7 @@ export function LLMConfiguration() {
       )}
 
       <Title className="mb-2 mt-6">Add LLM Provider</Title>
-      <Text className="mb-4">
+      <Text as="p" className="mb-4">
         Add a new LLM provider by either selecting from one of the default
         providers or by specifying your own custom LLM provider.
       </Text>

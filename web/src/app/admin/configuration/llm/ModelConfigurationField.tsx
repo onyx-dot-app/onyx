@@ -83,8 +83,10 @@ export function ModelConfigurationField({
   return (
     <div className="pb-5 flex flex-col w-full">
       <div className="flex flex-col">
-        <Text mainUiAction>Model Configurations</Text>
-        <Text secondaryBody text03>
+        <Text as="p" mainUiAction>
+          Model Configurations
+        </Text>
+        <Text as="p" secondaryBody text03>
           Add models and customize the number of input tokens that they accept.
         </Text>
       </div>
@@ -94,10 +96,10 @@ export function ModelConfigurationField({
           <div className="flex flex-col">
             <div className="flex flex-col gap-4 py-4">
               <div className="flex">
-                <Text secondaryBody className="flex flex-[2]">
+                <Text as="p" secondaryBody className="flex flex-[2]">
                   Model Name
                 </Text>
-                <Text secondaryBody className="flex flex-[1]">
+                <Text as="p" secondaryBody className="flex flex-[1]">
                   Max Input Tokens
                 </Text>
                 <div className="w-10" />

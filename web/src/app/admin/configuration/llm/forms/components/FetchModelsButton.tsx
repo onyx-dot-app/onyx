@@ -59,7 +59,7 @@ export function FetchModelsButton({
         </div>
       </SimpleTooltip>
       {fetchModelsError && (
-        <Text className="text-xs text-status-error-05 mt-1">
+        <Text as="p" className="text-xs text-status-error-05 mt-1">
           {fetchModelsError}
         </Text>
       )}
