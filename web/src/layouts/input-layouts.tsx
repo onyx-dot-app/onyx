@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
-import { SvgXOctagon } from "@opal/icons";
+import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
 import { useField, useFormikContext } from "formik";
 
 export interface VerticalLayoutProps extends FieldLabelLayoutProps {
@@ -222,7 +222,7 @@ function ErrorLayout({ name }: FieldErrorLayoutProps) {
 
       {hasWarning && (
         <>
-          <SvgXOctagon size={12} className="stroke-status-warning-05" />
+          <SvgAlertCircle size={12} className="stroke-status-warning-05" />
           <Text secondaryBody className="text-status-warning-05" role="alert">
             {warning}
           </Text>
