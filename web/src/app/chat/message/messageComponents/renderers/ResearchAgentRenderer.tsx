@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { FiUsers, FiCircle, FiTarget } from "react-icons/fi";
 import { SvgChevronDown } from "@opal/icons";
 import { cn } from "@/lib/utils";
@@ -164,6 +164,15 @@ export const ResearchAgentRenderer: MessageRenderer<
     (p) => p.obj.type === PacketType.SECTION_END
   );
   const [isExpanded, toggleExpanded] = useState(true);
+  const hasCalledCompleteRef = useRef(false);
+
+  // Call onComplete when research agent is complete
+  useEffect(() => {
+    if (isComplete && !hasCalledCompleteRef.current) {
+      hasCalledCompleteRef.current = true;
+      onComplete();
+    }
+  }, [isComplete, onComplete]);
 
   // Get the full report content from parent packets only
   const fullReportContent = parentPackets
