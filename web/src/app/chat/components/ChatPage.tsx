@@ -289,6 +289,12 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
   const loadedIdSessionRef = useRef<string | null>(currentChatSessionId);
   const submitOnLoadPerformed = useRef<boolean>(false);
 
+  // Track processed SEND_ON_LOAD requests to prevent duplicate submissions
+  // This is needed because searchParams can change identity on re-renders,
+  // and router.replace() is async, so multiple renders can occur before
+  // the URL is actually updated
+  const sendOnLoadProcessedRef = useRef<string | null>(null);
+
   function loadNewPageLogic(event: MessageEvent) {
     if (event.data.type === SUBMIT_MESSAGE_TYPES.PAGE_CHANGE) {
       try {
@@ -301,9 +307,20 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
   }
 
   // Equivalent to `loadNewPageLogic`
+  // Guard against duplicate submissions when searchParams changes identity during re-renders
   useEffect(() => {
-    if (searchParams?.get(SEARCH_PARAM_NAMES.SEND_ON_LOAD)) {
-      processSearchParamsAndSubmitMessage(searchParams.toString());
+    const searchParamsString = searchParams?.toString() || "";
+    const hasSendOnLoad = searchParams?.get(SEARCH_PARAM_NAMES.SEND_ON_LOAD);
+
+    if (hasSendOnLoad) {
+      // Only process if we haven't already processed this exact search params string
+      if (sendOnLoadProcessedRef.current !== searchParamsString) {
+        sendOnLoadProcessedRef.current = searchParamsString;
+        processSearchParamsAndSubmitMessage(searchParamsString);
+      }
+    } else {
+      // Reset the ref when SEND_ON_LOAD is not present to allow future navigations
+      sendOnLoadProcessedRef.current = null;
     }
   }, [searchParams, router]);
 
