@@ -85,6 +85,7 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
 import useOnMount from "@/hooks/useOnMount";
+import { useAppRouter } from "@/hooks/appNavigation";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
@@ -426,6 +427,7 @@ export default function AgentEditorPage({
   refreshAgent,
 }: AgentEditorPageProps) {
   const router = useRouter();
+  const appRouter = useAppRouter();
   const { popup, setPopup } = usePopup();
   const { refresh: refreshAgents } = useAgents();
 
@@ -780,8 +782,8 @@ export default function AgentEditorPage({
         refreshAgent();
       }
 
-      // Navigate back
-      router.push("/chat/agents");
+      // Immediately start a chat with this agent.
+      appRouter({ agentId: agent.id });
     } catch (error) {
       console.error("Submit error:", error);
       setPopup({
@@ -1302,7 +1304,7 @@ export default function AgentEditorPage({
                             </InputLayouts.Horizontal>
                             <InputLayouts.Horizontal
                               name="replace_base_system_prompt"
-                              label="Overwrite System Prompts"
+                              label="Overwrite System Prompt"
                               description='Completely replace the base system prompt. This might affect response quality since it will also overwrite useful system instructions (e.g. "You (the LLM) can provide markdown and it will be rendered").'
                             >
                               <SwitchField name="replace_base_system_prompt" />
