@@ -336,7 +336,10 @@ function ParallelToolTabs({
           </SimpleTooltip>
 
           {/* Collapse/expand button */}
-          <SimpleTooltip tooltip={isExpanded ? "Collapse" : "Expand"} side="top">
+          <SimpleTooltip
+            tooltip={isExpanded ? "Collapse" : "Expand"}
+            side="top"
+          >
             <button
               onClick={() => setIsExpanded(!isExpanded)}
               className="flex-shrink-0 p-1 rounded hover:bg-background-tint-02 active:bg-background-tint-00 transition-colors ml-0.5"
