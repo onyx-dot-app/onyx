@@ -1,6 +1,7 @@
 import concurrent.futures
 import logging
 import random
+import time
 from uuid import UUID
 
 import httpx
@@ -592,6 +593,7 @@ class VespaDocumentIndex(DocumentIndex):
         filters: IndexFilters,
         batch_retrieval: bool = False,
     ) -> list[InferenceChunk]:
+        start_time = time.perf_counter_ns()
         sanitized_chunk_requests = [
             VespaChunkRequest(
                 document_id=replace_invalid_doc_id_characters(
@@ -614,7 +616,7 @@ class VespaDocumentIndex(DocumentIndex):
                     get_large_chunks=False,
                 )
             )
-        return _cleanup_chunks(
+        chunks = _cleanup_chunks(
             parallel_visit_api_retrieval(
                 index_name=self._index_name,
                 chunk_requests=sanitized_chunk_requests,
@@ -624,6 +626,11 @@ class VespaDocumentIndex(DocumentIndex):
                 get_large_chunks=False,
             )
         )
+        end_time = time.perf_counter_ns()
+        logger.info(
+            f"[ANDREI]: Retrieval took {(end_time - start_time) / 1_000_000} ms."
+        )
+        return chunks
 
     def hybrid_retrieval(
         self,
@@ -635,6 +642,7 @@ class VespaDocumentIndex(DocumentIndex):
         num_to_retrieve: int,
         offset: int = 0,
     ) -> list[InferenceChunk]:
+        start_time = time.perf_counter_ns()
         vespa_where_clauses = build_vespa_filters(filters)
         # Needs to be at least as much as the rerank-count value set in the
         # Vespa schema config. Otherwise we would be getting fewer results than
@@ -684,7 +692,12 @@ class VespaDocumentIndex(DocumentIndex):
             "timeout": VESPA_TIMEOUT,
         }
 
-        return _cleanup_chunks(query_vespa(params))
+        chunks = _cleanup_chunks(query_vespa(params))
+        end_time = time.perf_counter_ns()
+        logger.info(
+            f"[ANDREI]: Hybrid retrieval took {(end_time - start_time) / 1_000_000} ms."
+        )
+        return chunks
 
     def random_retrieval(
         self,

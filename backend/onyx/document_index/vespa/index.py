@@ -232,9 +232,6 @@ class VespaIndex(DocumentIndex):
         multitenant: bool = False,
         httpx_client: httpx.Client | None = None,
     ) -> None:
-        raise NotImplementedError(
-            "[ANDREI]: VespaIndex is not implemented for OpenSearch."
-        )
         self.index_name = index_name
         self.secondary_index_name = secondary_index_name
 
@@ -268,9 +265,7 @@ class VespaIndex(DocumentIndex):
         secondary_index_embedding_dim: int | None,
         secondary_index_embedding_precision: EmbeddingPrecision | None,
     ) -> None:
-        raise NotImplementedError(
-            "[ANDREI]: VespaIndex is not implemented for OpenSearch."
-        )
+        start_time = time.perf_counter_ns()
         if MULTI_TENANT:
             logger.info(
                 "Skipping Vespa index setup for multitenant (would wipe all indices)"
@@ -370,6 +365,10 @@ class VespaIndex(DocumentIndex):
             raise RuntimeError(
                 f"Failed to prepare Vespa Onyx Index. Response: {response.text}"
             )
+        end_time = time.perf_counter_ns()
+        logger.info(
+            f"[ANDREI]: Index creation took {(end_time - start_time) / 1_000_000} ms."
+        )
 
     @staticmethod
     def register_multitenant_indices(
@@ -471,9 +470,7 @@ class VespaIndex(DocumentIndex):
         chunks: list[DocMetadataAwareIndexChunk],
         index_batch_params: IndexBatchParams,
     ) -> set[OldDocumentInsertionRecord]:
-        raise NotImplementedError(
-            "[ANDREI]: VespaIndex is not implemented for OpenSearch."
-        )
+        start_time = time.perf_counter_ns()
         if len(index_batch_params.doc_id_to_previous_chunk_cnt) != len(
             index_batch_params.doc_id_to_new_chunk_cnt
         ):
@@ -502,6 +499,10 @@ class VespaIndex(DocumentIndex):
         # entirety of this class.
         document_insertion_records = vespa_document_index.index(
             chunks, indexing_metadata
+        )
+        end_time = time.perf_counter_ns()
+        logger.info(
+            f"[ANDREI]: Indexing took {(end_time - start_time) / 1_000_000} ms."
         )
         return set(
             [
@@ -656,13 +657,11 @@ class VespaIndex(DocumentIndex):
         fields: VespaDocumentFields | None,
         user_fields: VespaDocumentUserFields | None,
     ) -> None:
-        raise NotImplementedError(
-            "[ANDREI]: VespaIndex is not implemented for OpenSearch."
-        )
         """Note: if the document id does not exist, the update will be a no-op and the
         function will complete with no errors or exceptions.
         Handle other exceptions if you wish to implement retry behavior
         """
+        start_time = time.perf_counter_ns()
         if fields is None and user_fields is None:
             raise ValueError(
                 f"Bug: Tried to update document {doc_id} with no updated fields or user fields."
@@ -704,6 +703,8 @@ class VespaIndex(DocumentIndex):
         vespa_document_index.update(
             [update_request], old_doc_id_to_new_doc_id=old_doc_id_to_new_doc_id
         )
+        end_time = time.perf_counter_ns()
+        logger.info(f"[ANDREI]: Update took {(end_time - start_time) / 1_000_000} ms.")
 
     def delete_single(
         self,
@@ -712,9 +713,6 @@ class VespaIndex(DocumentIndex):
         tenant_id: str,
         chunk_count: int | None,
     ) -> int:
-        raise NotImplementedError(
-            "[ANDREI]: VespaIndex is not implemented for OpenSearch."
-        )
         vespa_document_index = VespaDocumentIndex(
             index_name=self.index_name,
             tenant_state=TenantState(
@@ -733,9 +731,6 @@ class VespaIndex(DocumentIndex):
         batch_retrieval: bool = False,
         get_large_chunks: bool = False,
     ) -> list[InferenceChunk]:
-        raise NotImplementedError(
-            "[ANDREI]: VespaIndex is not implemented for OpenSearch."
-        )
         tenant_id = filters.tenant_id if filters.tenant_id is not None else ""
         vespa_document_index = VespaDocumentIndex(
             index_name=self.index_name,
@@ -775,9 +770,6 @@ class VespaIndex(DocumentIndex):
         offset: int = 0,
         title_content_ratio: float | None = TITLE_CONTENT_RATIO,
     ) -> list[InferenceChunk]:
-        raise NotImplementedError(
-            "[ANDREI]: VespaIndex is not implemented for OpenSearch."
-        )
         tenant_id = filters.tenant_id if filters.tenant_id is not None else ""
         vespa_document_index = VespaDocumentIndex(
             index_name=self.index_name,

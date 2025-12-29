@@ -1,3 +1,5 @@
+from typing import Any
+
 from opensearchpy import OpenSearch
 
 from onyx.document_index.opensearch.constants import CONTENT_KEYWORD_WEIGHT
@@ -57,7 +59,15 @@ NORMALIZATION_PIPELINE_ZSCORE = {
 }
 
 
+OPENSEARCH_CLIENT_TIMEOUT_S = 30
+OPENSEARCH_CLIENT_MAX_RETRIES = 3
+
+
 class OpenSearchClient:
+    """
+    TODO(andrei): What?
+    """
+
     def __init__(
         self,
         index_name: str,
@@ -66,37 +76,50 @@ class OpenSearchClient:
         auth: tuple[str, str] = ("admin", "D@nswer_1ndex"),
         use_ssl: bool = True,
         verify_certs: bool = False,
-        ssl_show_warn: bool = False,
     ):
-        self.index_name = index_name
-        self.client = OpenSearch(
+        self._index_name = index_name
+        self._client = OpenSearch(
             hosts=[{"host": host, "port": port}],
             http_auth=auth,
             use_ssl=use_ssl,
             verify_certs=verify_certs,
-            ssl_show_warn=ssl_show_warn,
-            timeout=30,
-            max_retries=3,
+            ssl_show_warn=False,
+            timeout=OPENSEARCH_CLIENT_TIMEOUT_S,
+            max_retries=OPENSEARCH_CLIENT_MAX_RETRIES,
             retry_on_timeout=True,
         )
 
-    def create_index(self, mappings: dict, settings: dict | None = None) -> dict:
+    def create_index(
+        self, mappings: dict[str, Any], settings: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """
+        TODO(andrei): Figure out what the return type is, OpenSearch's
+        documentation is so bad.
+        """
         body = {}
         if settings:
             body["settings"] = settings
         if mappings:
             body["mappings"] = mappings
 
-        return self.client.indices.create(index=self.index_name, body=body)
+        return self._client.indices.create(index=self._index_name, body=body)
 
-    def delete_index(self) -> dict:
-        if self.client.indices.exists(index=self.index_name):
-            return self.client.indices.delete(index=self.index_name)
+    def delete_index(self) -> dict[str, Any]:
+        """
+        TODO(andrei): Figure out what the return type is, OpenSearch's
+        documentation is so bad.
+        """
+        if self._client.indices.exists(index=self._index_name):
+            return self._client.indices.delete(index=self._index_name)
         return {"acknowledged": False, "message": "Index does not exist"}
 
-    def index_document(self, doc_id: str, document: DocumentChunk) -> dict:
-        return self.client.index(
-            index=self.index_name, id=doc_id, body=document.to_dict()
+    def index_document(self, doc_id: str, document: DocumentChunk) -> dict[str, Any]:
+        """
+        TODO(andrei): Figure out what the return type is, OpenSearch's
+        documentation is so bad.
+        """
+        return self._client.index(
+            index=self._index_name, id=doc_id, body=document.to_dict()
         )
 
     # def bulk_index(self, documents: list[dict]) -> dict:
@@ -126,36 +149,40 @@ class OpenSearchClient:
 
     #     return {"success": success, "failed": failed}
 
-    def get_mapping(self) -> dict:
-        return self.client.indices.get_mapping(index=self.index_name)
+    def get_mapping(self) -> dict[str, Any]:
+        return self._client.indices.get_mapping(index=self._index_name)
 
-    def update_settings(self, settings: dict) -> dict:
+    def update_settings(self, settings: dict[str, Any]) -> dict[str, Any]:
         """Update index settings."""
-        return self.client.indices.put_settings(index=self.index_name, body=settings)
+        return self._client.indices.put_settings(index=self._index_name, body=settings)
 
-    def refresh_index(self) -> dict:
+    def refresh_index(self) -> dict[str, Any]:
         """Manually refresh the index."""
-        return self.client.indices.refresh(index=self.index_name)
+        return self._client.indices.refresh(index=self._index_name)
 
-    def close(self):
-        self.client.close()
+    def close(self) -> None:
+        self._client.close()
 
     def create_search_pipeline(
         self,
-        pipeline_body: dict = NORMALIZATION_PIPELINE,
+        pipeline_body: dict[str, Any] = NORMALIZATION_PIPELINE,
         pipeline_id: str = SEARCH_PIPELINE_NAME,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Create a search pipeline for score normalization and combination."""
-        return self.client.search_pipeline.put(id=pipeline_id, body=pipeline_body)
+        return self._client.search_pipeline.put(id=pipeline_id, body=pipeline_body)
 
-    def delete_search_pipeline(self, pipeline_id: str = SEARCH_PIPELINE_NAME) -> dict:
+    def delete_search_pipeline(
+        self, pipeline_id: str = SEARCH_PIPELINE_NAME
+    ) -> dict[str, Any]:
         """Delete a search pipeline."""
-        return self.client.search_pipeline.delete(id=pipeline_id)
+        return self._client.search_pipeline.delete(id=pipeline_id)
 
-    def search(self, body: dict, search_pipeline: str | None) -> dict:
+    def search(
+        self, body: dict[str, Any], search_pipeline: str | None = None
+    ) -> dict[str, Any]:
         if search_pipeline:
-            return self.client.search(
-                index=self.index_name, search_pipeline=search_pipeline, body=body
+            return self._client.search(
+                index=self._index_name, search_pipeline=search_pipeline, body=body
             )
         else:
-            return self.client.search(index=self.index_name, body=body)
+            return self._client.search(index=self._index_name, body=body)

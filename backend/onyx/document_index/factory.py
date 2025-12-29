@@ -11,7 +11,7 @@ from onyx.document_index.vespa.index import VespaIndex
 from shared_configs.configs import MULTI_TENANT
 
 
-ENABLE_OPENSEARCH = True
+ENABLE_OPENSEARCH = False
 
 
 def get_default_document_index(

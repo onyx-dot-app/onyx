@@ -1,5 +1,7 @@
-VECTOR_DIMENSION = 1024
+DEFAULT_OPENSEARCH_VECTOR_DIMENSION = 1024
+# TODO(andrei): What?
 EF_CONSTRUCTION = 256
+# TODO(andrei): What?
 M = 32  # Increased for better accuracy
 
 CHUNK_SIZE = 512
