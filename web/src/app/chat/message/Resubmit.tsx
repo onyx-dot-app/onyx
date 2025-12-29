@@ -60,7 +60,7 @@ export const ErrorBanner = ({
               <div className="flex flex-1 justify-between">
                 <button
                   onClick={() => setIsStackTraceExpanded(!isStackTraceExpanded)}
-                  className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200"
+                  className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 cursor-pointer"
                 >
                   {isStackTraceExpanded ? (
                     <ChevronDown className="h-3 w-3" />
