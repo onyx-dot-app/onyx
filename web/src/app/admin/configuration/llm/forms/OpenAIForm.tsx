@@ -16,7 +16,7 @@ import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
 
 export const OPENAI_PROVIDER_NAME = "openai";
-const DEFAULT_DEFAULT_MODEL_NAME = "gpt-4o";
+const DEFAULT_DEFAULT_MODEL_NAME = "gpt-5.2";
 
 export function OpenAIForm({
   existingLlmProvider,
