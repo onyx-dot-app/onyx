@@ -30,6 +30,7 @@ interface PersonaUpsertRequest {
   display_priority: number | null;
   label_ids: number[] | null;
   user_file_ids: string[] | null;
+  replace_base_system_prompt: boolean;
 }
 
 export interface PersonaUpsertParameters {
@@ -81,6 +82,7 @@ function buildPersonaUpsertRequest({
   llm_model_version_override,
   starter_messages,
   label_ids,
+  replace_base_system_prompt,
 }: PersonaUpsertParameters): PersonaUpsertRequest {
   return {
     name,
@@ -108,6 +110,7 @@ function buildPersonaUpsertRequest({
     display_priority: null,
     label_ids: label_ids ?? null,
     user_file_ids: user_file_ids ?? null,
+    replace_base_system_prompt,
   };
 }
 
@@ -148,7 +151,6 @@ export async function updatePersona(
   id: number,
   personaUpsertParams: PersonaUpsertParameters
 ): Promise<Response | null> {
-  const fileId = personaUpsertParams.uploaded_image_id;
   const updatePersonaResponse = await fetch(`/api/persona/${id}`, {
     method: "PATCH",
     headers: {
