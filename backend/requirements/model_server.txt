@@ -87,6 +87,8 @@ distro==1.9.0
     # via openai
 docstring-parser==0.17.0
     # via google-cloud-aiplatform
+einops==0.8.1
+    # via onyx
 fastapi==0.116.1
     # via
     #   onyx
