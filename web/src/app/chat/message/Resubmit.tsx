@@ -59,6 +59,7 @@ export const ErrorBanner = ({
             <div className="mt-2 border-t border-neutral-200 dark:border-neutral-700 pt-2">
               <div className="flex flex-1 items-center justify-between">
                 <Button
+                  tertiary
                   leftIcon={
                     isStackTraceExpanded ? SvgChevronDown : SvgChevronUp
                   }
@@ -66,7 +67,7 @@ export const ErrorBanner = ({
                 >
                   Stack Trace
                 </Button>
-                <CopyIconButton getCopyText={() => stackTrace} />
+                <CopyIconButton tertiary getCopyText={() => stackTrace} />
               </div>
               {isStackTraceExpanded && (
                 <pre className="mt-2 p-3 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-xs text-neutral-700 dark:text-neutral-300 overflow-auto max-h-48 whitespace-pre-wrap font-mono">
