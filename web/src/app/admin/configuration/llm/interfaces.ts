@@ -131,3 +131,33 @@ export interface LLMProviderFormProps {
   existingLlmProvider?: LLMProviderView;
   shouldMarkAsDefault?: boolean;
 }
+
+// Param types for model fetching functions - use snake_case to match API structure
+export interface BedrockFetchParams {
+  aws_region_name: string;
+  aws_access_key_id?: string;
+  aws_secret_access_key?: string;
+  aws_bearer_token_bedrock?: string;
+  provider_name?: string;
+}
+
+export interface OllamaFetchParams {
+  api_base?: string;
+  provider_name?: string;
+}
+
+export interface OpenRouterFetchParams {
+  api_base?: string;
+  api_key?: string;
+  provider_name?: string;
+}
+
+export interface VertexAIFetchParams {
+  model_configurations?: ModelConfiguration[];
+}
+
+export type FetchModelsParams =
+  | BedrockFetchParams
+  | OllamaFetchParams
+  | OpenRouterFetchParams
+  | VertexAIFetchParams;

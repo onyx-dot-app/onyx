@@ -273,18 +273,18 @@ export function BedrockForm({
                     <FetchModelsButton
                       onFetch={() =>
                         fetchBedrockModels({
-                          awsRegionName:
+                          aws_region_name:
                             formikProps.values.custom_config?.AWS_REGION_NAME ??
                             "",
-                          awsAccessKeyId:
+                          aws_access_key_id:
                             formikProps.values.custom_config?.AWS_ACCESS_KEY_ID,
-                          awsSecretAccessKey:
+                          aws_secret_access_key:
                             formikProps.values.custom_config
                               ?.AWS_SECRET_ACCESS_KEY,
-                          awsBearerTokenBedrock:
+                          aws_bearer_token_bedrock:
                             formikProps.values.custom_config
                               ?.AWS_BEARER_TOKEN_BEDROCK,
-                          providerName: existingLlmProvider?.name,
+                          provider_name: existingLlmProvider?.name,
                         })
                       }
                       isDisabled={isFetchDisabled}

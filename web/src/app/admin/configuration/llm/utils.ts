@@ -21,6 +21,11 @@ import {
   BedrockModelResponse,
   ModelConfiguration,
   LLMProviderName,
+  BedrockFetchParams,
+  OllamaFetchParams,
+  OpenRouterFetchParams,
+  VertexAIFetchParams,
+  FetchModelsParams,
 } from "./interfaces";
 import { SvgAws, SvgOpenrouter } from "@opal/icons";
 
@@ -108,15 +113,12 @@ export const isAnthropic = (provider: string, modelName: string) =>
 
 /**
  * Fetches Bedrock models directly without any form state dependencies.
+ * Uses snake_case params to match API structure.
  */
-export const fetchBedrockModels = async (params: {
-  awsRegionName: string;
-  awsAccessKeyId?: string;
-  awsSecretAccessKey?: string;
-  awsBearerTokenBedrock?: string;
-  providerName?: string;
-}): Promise<{ models: ModelConfiguration[]; error?: string }> => {
-  if (!params.awsRegionName) {
+export const fetchBedrockModels = async (
+  params: BedrockFetchParams
+): Promise<{ models: ModelConfiguration[]; error?: string }> => {
+  if (!params.aws_region_name) {
     return { models: [], error: "AWS region is required" };
   }
 
@@ -127,11 +129,11 @@ export const fetchBedrockModels = async (params: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        aws_region_name: params.awsRegionName,
-        aws_access_key_id: params.awsAccessKeyId,
-        aws_secret_access_key: params.awsSecretAccessKey,
-        aws_bearer_token_bedrock: params.awsBearerTokenBedrock,
-        provider_name: params.providerName,
+        aws_region_name: params.aws_region_name,
+        aws_access_key_id: params.aws_access_key_id,
+        aws_secret_access_key: params.aws_secret_access_key,
+        aws_bearer_token_bedrock: params.aws_bearer_token_bedrock,
+        provider_name: params.provider_name,
       }),
     });
 
@@ -165,12 +167,13 @@ export const fetchBedrockModels = async (params: {
 
 /**
  * Fetches Ollama models directly without any form state dependencies.
+ * Uses snake_case params to match API structure.
  */
-export const fetchOllamaModels = async (params: {
-  apiBase: string;
-  providerName?: string;
-}): Promise<{ models: ModelConfiguration[]; error?: string }> => {
-  if (!params.apiBase) {
+export const fetchOllamaModels = async (
+  params: OllamaFetchParams
+): Promise<{ models: ModelConfiguration[]; error?: string }> => {
+  const apiBase = params.api_base;
+  if (!apiBase) {
     return { models: [], error: "API Base is required" };
   }
 
@@ -181,8 +184,8 @@ export const fetchOllamaModels = async (params: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        api_base: params.apiBase,
-        provider_name: params.providerName,
+        api_base: apiBase,
+        provider_name: params.provider_name,
       }),
     });
 
@@ -216,16 +219,17 @@ export const fetchOllamaModels = async (params: {
 
 /**
  * Fetches OpenRouter models directly without any form state dependencies.
+ * Uses snake_case params to match API structure.
  */
-export const fetchOpenRouterModels = async (params: {
-  apiBase: string;
-  apiKey: string;
-  providerName?: string;
-}): Promise<{ models: ModelConfiguration[]; error?: string }> => {
-  if (!params.apiBase) {
+export const fetchOpenRouterModels = async (
+  params: OpenRouterFetchParams
+): Promise<{ models: ModelConfiguration[]; error?: string }> => {
+  const apiBase = params.api_base;
+  const apiKey = params.api_key;
+  if (!apiBase) {
     return { models: [], error: "API Base is required" };
   }
-  if (!params.apiKey) {
+  if (!apiKey) {
     return { models: [], error: "API Key is required" };
   }
 
@@ -236,9 +240,9 @@ export const fetchOpenRouterModels = async (params: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        api_base: params.apiBase,
-        api_key: params.apiKey,
-        provider_name: params.providerName,
+        api_base: apiBase,
+        api_key: apiKey,
+        provider_name: params.provider_name,
       }),
     });
 
@@ -273,14 +277,15 @@ export const fetchOpenRouterModels = async (params: {
 /**
  * Fetches Vertex AI models. This is a static provider, so models come from
  * the LLM descriptor (via litellm) rather than an API call.
- * The modelConfigurations parameter should be passed from the descriptor.
+ * The model_configurations parameter should be passed from the descriptor.
+ * Uses snake_case params to match API structure.
  */
-export const fetchVertexAIModels = async (params: {
-  modelConfigurations?: ModelConfiguration[];
-}): Promise<{ models: ModelConfiguration[]; error?: string }> => {
+export const fetchVertexAIModels = async (
+  params: VertexAIFetchParams
+): Promise<{ models: ModelConfiguration[]; error?: string }> => {
   // Vertex AI is a static provider - models are defined in the descriptor
   // Return the provided model configurations or an empty list
-  const models: ModelConfiguration[] = (params.modelConfigurations || []).map(
+  const models: ModelConfiguration[] = (params.model_configurations || []).map(
     (config) => ({
       ...config,
       is_visible: config.is_visible ?? true,
@@ -290,19 +295,32 @@ export const fetchVertexAIModels = async (params: {
   return { models };
 };
 
+type FetchModelsResult = Promise<{
+  models: ModelConfiguration[];
+  error?: string;
+}>;
+
 const providerNameToFetchFunc: Partial<
-  Record<
-    LLMProviderName,
-    (params: any) => Promise<{ models: ModelConfiguration[]; error?: string }>
-  >
+  Record<LLMProviderName, (params: FetchModelsParams) => FetchModelsResult>
 > = {
-  [LLMProviderName.BEDROCK]: fetchBedrockModels,
-  [LLMProviderName.OLLAMA_CHAT]: fetchOllamaModels,
-  [LLMProviderName.OPENROUTER]: fetchOpenRouterModels,
-  [LLMProviderName.VERTEX_AI]: fetchVertexAIModels,
+  [LLMProviderName.BEDROCK]: fetchBedrockModels as (
+    params: FetchModelsParams
+  ) => FetchModelsResult,
+  [LLMProviderName.OLLAMA_CHAT]: fetchOllamaModels as (
+    params: FetchModelsParams
+  ) => FetchModelsResult,
+  [LLMProviderName.OPENROUTER]: fetchOpenRouterModels as (
+    params: FetchModelsParams
+  ) => FetchModelsResult,
+  [LLMProviderName.VERTEX_AI]: fetchVertexAIModels as (
+    params: FetchModelsParams
+  ) => FetchModelsResult,
 };
 
-export const fetchModels = async (providerName: string, values: any) => {
+export const fetchModels = async (
+  providerName: string,
+  values: FetchModelsParams
+) => {
   const fetchFunc = providerNameToFetchFunc[providerName as LLMProviderName];
   if (fetchFunc) {
     return fetchFunc(values);

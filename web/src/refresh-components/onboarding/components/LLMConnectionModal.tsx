@@ -302,17 +302,27 @@ export default function LLMConnectionModal({
           if (!llmDescriptor) return;
 
           setIsFetchingModels(true);
-          const { models, error } = await fetchModels(
-            llmDescriptor.name,
-            formikProps.values
-          );
-          if (error) {
-            setFetchModelsError(error);
-          } else {
-            setFetchedModelConfigurations(models);
+          try {
+            const { models, error } = await fetchModels(
+              llmDescriptor.name,
+              formikProps.values
+            );
+            if (error) {
+              setFetchModelsError(error);
+            } else {
+              setFetchedModelConfigurations(models);
+              // Set default model to first available model
+              if (models.length > 0 && !formikProps.values.default_model_name) {
+                formikProps.setFieldValue(
+                  "default_model_name",
+                  models[0]?.name ?? ""
+                );
+              }
+            }
+          } finally {
+            setIsFetchingModels(false);
           }
         };
-        setIsFetchingModels(false);
 
         return (
           <ProviderModal
