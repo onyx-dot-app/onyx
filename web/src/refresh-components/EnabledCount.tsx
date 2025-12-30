@@ -12,7 +12,7 @@ interface EnabledCountProps {
 const EnabledCount = memo(
   ({ name, enabledCount, totalCount }: EnabledCountProps) => {
     return (
-      <Text text03 mainUiBody>
+      <Text as="p" text03 mainUiBody>
         <Text mainUiBody className="text-action-link-05" as="span">
           {enabledCount}
         </Text>

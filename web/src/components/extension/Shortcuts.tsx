@@ -249,7 +249,7 @@ export const MaxShortcutsReachedModal = ({
           onClose={onClose}
         />
         <Modal.Body>
-          <Text>
+          <Text as="p">
             You&apos;ve reached the maximum limit of 8 shortcuts. To add a new
             shortcut, please remove an existing one.
           </Text>

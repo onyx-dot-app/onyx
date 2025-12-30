@@ -145,7 +145,7 @@ function LabelLayout({
   const content = label ? (
     <>
       <div className="flex flex-row gap-1.5">
-        <Text mainContentEmphasis text04>
+        <Text as="p" mainContentEmphasis text04>
           {label}
         </Text>
         {optional && (
@@ -155,7 +155,7 @@ function LabelLayout({
         )}
       </div>
       {description && (
-        <Text secondaryBody text03>
+        <Text as="p" secondaryBody text03>
           {description}
         </Text>
       )}
@@ -214,7 +214,12 @@ function ErrorLayout({ name }: FieldErrorLayoutProps) {
       {hasError && (
         <>
           <SvgXOctagon size={12} className="stroke-status-error-05" />
-          <Text secondaryBody className="text-status-error-05" role="alert">
+          <Text
+            as="p"
+            secondaryBody
+            className="text-status-error-05"
+            role="alert"
+          >
             {meta.error}
           </Text>
         </>
@@ -223,7 +228,12 @@ function ErrorLayout({ name }: FieldErrorLayoutProps) {
       {hasWarning && (
         <>
           <SvgAlertCircle size={12} className="stroke-status-warning-05" />
-          <Text secondaryBody className="text-status-warning-05" role="alert">
+          <Text
+            as="p"
+            secondaryBody
+            className="text-status-warning-05"
+            role="alert"
+          >
             {warning}
           </Text>
         </>

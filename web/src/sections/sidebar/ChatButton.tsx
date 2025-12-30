@@ -267,7 +267,7 @@ const ChatButton = memo(
                     handleCreateProjectAndMove(searchTerm.trim())
                   )}
                 >
-                  <Text text03 mainUiMuted className="-mr-1">
+                  <Text as="p" text03 mainUiMuted className="-mr-1">
                     Create
                   </Text>
                   <Truncated text03 mainUiAction>

@@ -47,8 +47,10 @@ function AgentsSection({ title, description, agents }: AgentsSectionProps) {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <Text headingH3>{title}</Text>
-        <Text secondaryBody text03>
+        <Text as="p" headingH3>
+          {title}
+        </Text>
+        <Text as="p" secondaryBody text03>
           {description}
         </Text>
       </div>
@@ -636,6 +638,7 @@ export default function AgentsNavigationPage() {
       <SettingsLayouts.Body>
         {agentCount === 0 ? (
           <Text
+            as="p"
             className="w-full h-full flex flex-col items-center justify-center py-12"
             text03
           >

@@ -210,12 +210,16 @@ const InputSelectTrigger = React.forwardRef<
   if (!selectedItemDisplay) {
     displayContent = placeholder ? (
       typeof placeholder === "string" ? (
-        <Text text03>{placeholder}</Text>
+        <Text as="p" text03>
+          {placeholder}
+        </Text>
       ) : (
         placeholder
       )
     ) : (
-      <Text text03>Select an option</Text>
+      <Text as="p" text03>
+        Select an option
+      </Text>
     );
   } else {
     const Icon = selectedItemDisplay.iconRef.current;

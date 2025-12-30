@@ -318,9 +318,11 @@ function MessageInner(
 
         {/* Text Content */}
         <div className="flex flex-col flex-1 items-start min-w-0 px-0.5">
-          <Text className={cn("w-full", textClass)}>{text}</Text>
+          <Text as="p" className={cn("w-full", textClass)}>
+            {text}
+          </Text>
           {description && (
-            <Text className={cn("w-full", descriptionClass)}>
+            <Text as="p" className={cn("w-full", descriptionClass)}>
               {description}
             </Text>
           )}

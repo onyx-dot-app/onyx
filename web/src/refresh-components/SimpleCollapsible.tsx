@@ -220,9 +220,11 @@ const SimpleCollapsibleHeader = React.forwardRef<
 >(({ title, description, className, ...props }, ref) => {
   return (
     <div ref={ref} className={cn("flex flex-col w-full", className)} {...props}>
-      <Text mainContentEmphasis>{title}</Text>
+      <Text as="p" mainContentEmphasis>
+        {title}
+      </Text>
       {description && (
-        <Text secondaryBody text03>
+        <Text as="p" secondaryBody text03>
           {description}
         </Text>
       )}

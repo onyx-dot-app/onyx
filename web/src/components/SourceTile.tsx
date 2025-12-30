@@ -46,7 +46,9 @@ export default function SourceTile({
         </div>
       )}
       <SourceIcon sourceType={sourceMetadata.internalName} iconSize={24} />
-      <Text className="pt-2">{sourceMetadata.displayName}</Text>
+      <Text as="p" className="pt-2">
+        {sourceMetadata.displayName}
+      </Text>
     </Link>
   );
 }

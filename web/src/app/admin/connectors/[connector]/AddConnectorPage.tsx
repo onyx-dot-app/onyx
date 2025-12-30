@@ -510,7 +510,7 @@ export default function AddConnector({
 
           {formStep == 0 && (
             <CardSection>
-              <Text headingH3 className="pb-2">
+              <Text as="p" headingH3 className="pb-2">
                 Select a credential
               </Text>
 
