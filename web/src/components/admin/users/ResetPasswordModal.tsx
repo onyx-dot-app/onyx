@@ -70,7 +70,7 @@ export default function ResetPasswordModal({
         <Modal.Body>
           {newPassword ? (
             <div>
-              <Text>New Password:</Text>
+              <Text as="p">New Password:</Text>
               <div className="flex items-center bg-background-tint-03 p-2 rounded gap-2">
                 <Text as="p" data-testid="new-password" className="flex-grow">
                   {newPassword}
@@ -88,7 +88,7 @@ export default function ResetPasswordModal({
               leftIcon={SvgRefreshCw}
             >
               {isLoading ? (
-                <Text>
+                <Text as="p">
                   <LoadingAnimation text="Resetting" />
                 </Text>
               ) : (

@@ -22,7 +22,7 @@ export default function GenericConfirmModal({
       <Modal.Content small>
         <Modal.Header icon={SvgCheck} title={title} onClose={onClose} />
         <Modal.Body>
-          <Text>{message}</Text>
+          <Text as="p">{message}</Text>
         </Modal.Body>
         <Modal.Footer>
           <Button onClick={onConfirm}>{confirmText}</Button>

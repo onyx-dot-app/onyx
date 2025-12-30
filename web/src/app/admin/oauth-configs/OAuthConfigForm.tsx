@@ -149,7 +149,7 @@ export const OAuthConfigForm = ({
         >
           {({ isSubmitting }) => (
             <Form className="w-full overflow-visible">
-              <Text>
+              <Text as="p">
                 Configure an OAuth provider that can be shared across multiple
                 custom tools. Users will authenticate with this provider when
                 using tools that require it.

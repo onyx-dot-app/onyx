@@ -153,7 +153,7 @@ export default function FederatedOAuthModal() {
         <Modal.Content small>
           <Modal.Header icon={SvgLink} title="Heads Up!" />
           <Modal.Body>
-            <Text>
+            <Text as="p">
               You can always connect your apps later by going to the{" "}
               <strong>User Settings</strong> menu (click your profile icon) and
               selecting <strong>Connectors</strong>.

@@ -358,7 +358,7 @@ const AddUserButton = ({
             />
             <Modal.Body>
               <div className="flex flex-col gap-2">
-                <Text>
+                <Text as="p">
                   Add the email addresses to import, separated by whitespaces.
                   Invited users will be able to login to this domain with their
                   email address.
