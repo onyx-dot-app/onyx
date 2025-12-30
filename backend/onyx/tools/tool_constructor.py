@@ -80,7 +80,11 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
 
     # Try to get default from database first
     default_config = get_default_image_generation_config(db_session)
-    if default_config:
+    if (
+        default_config
+        and default_config.model_configuration
+        and default_config.model_configuration.llm_provider
+    ):
         llm_provider = default_config.model_configuration.llm_provider
         return LLMConfig(
             model_provider=llm_provider.provider,

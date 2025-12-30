@@ -242,6 +242,16 @@ def create_config(
     2. New credentials mode: api_key + provider provided
        → Create new provider with given credentials
     """
+    # Check if image_provider_id already exists
+    existing_config = get_image_generation_config(
+        db_session, config_create.image_provider_id
+    )
+    if existing_config:
+        raise HTTPException(
+            status_code=400,
+            detail=f"ImageGenerationConfig with image_provider_id '{config_create.image_provider_id}' already exists",
+        )
+
     try:
         # Build and create LLM provider
         provider_request = _build_llm_provider_request(
@@ -376,9 +386,25 @@ def delete_config(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    """Delete an image generation configuration."""
+    """Delete an image generation configuration and its associated LLM provider."""
     try:
+        # Get the config first to find the associated LLM provider
+        existing_config = get_image_generation_config(db_session, image_provider_id)
+        if not existing_config:
+            raise HTTPException(
+                status_code=404,
+                detail=f"ImageGenerationConfig with image_provider_id {image_provider_id} not found",
+            )
+
+        llm_provider_id = existing_config.model_configuration.llm_provider_id
+
+        # Delete the image generation config first
         delete_image_generation_config(db_session, image_provider_id)
+
+        # Clean up the orphaned LLM provider (it was exclusively for image gen)
+        remove_llm_provider(db_session, llm_provider_id)
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
