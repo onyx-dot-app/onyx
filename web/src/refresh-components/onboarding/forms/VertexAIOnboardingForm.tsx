@@ -102,10 +102,9 @@ function VertexAIFormFields({
             state={state}
             className="w-full"
           >
-            <FormField.Label>Service Account Credentials</FormField.Label>
+            <FormField.Label>Credentials File</FormField.Label>
             <FormField.Control>
               <InputFile
-                placeholder="Upload your service account JSON file"
                 setValue={(value) => helper.setValue(value)}
                 onValueSet={handleFileInputChange}
                 error={apiStatus === "error"}
