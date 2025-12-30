@@ -15,11 +15,12 @@ import pytest
 from litellm import completion_cost
 from sqlalchemy.orm import Session
 
-from onyx.llm.chat_llm import LitellmLLM
+from onyx.llm.model_response import Usage
 from onyx.llm.models import AssistantMessage
 from onyx.llm.models import ChatCompletionMessage
 from onyx.llm.models import SystemMessage
 from onyx.llm.models import UserMessage
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 
 
@@ -29,7 +30,7 @@ VERTEX_MODEL_ENV = "VERTEX_MODEL_NAME"
 DEFAULT_VERTEX_MODEL = "gemini-2.5-flash"
 
 
-def _extract_cached_tokens(usage: Any) -> int:
+def _extract_cached_tokens(usage: Usage | None) -> int:
     """Helper to extract cached_tokens from usage (dict or object)."""
     if not usage:
         return 0
@@ -48,7 +49,7 @@ def _extract_cached_tokens(usage: Any) -> int:
     return int(cached_tokens or 0)
 
 
-def _extract_prompt_tokens(usage: Any) -> int:
+def _extract_prompt_tokens(usage: Usage | None) -> int:
     """Helper to extract prompt_tokens from usage (dict or object)."""
     if not usage:
         return 0
@@ -251,7 +252,7 @@ def test_openai_prompt_caching_reduces_costs(
             model=f"{llm._model_provider}/{llm._model_version}",
         )
 
-        usage1 = response1.usage or {}
+        usage1 = response1.usage
         cached_tokens_1 = _extract_cached_tokens(usage1)
         prompt_tokens_1 = _extract_prompt_tokens(usage1)
         # print(f"Response 1 usage: {usage1}")
@@ -280,7 +281,7 @@ def test_openai_prompt_caching_reduces_costs(
             model=f"{llm._model_provider}/{llm._model_version}",
         )
 
-        usage2 = response2.usage or {}
+        usage2 = response2.usage
         cached_tokens_2 = _extract_cached_tokens(usage2)
         prompt_tokens_2 = _extract_prompt_tokens(usage2)
         # print(f"Response 2 usage: {usage2}")
@@ -362,7 +363,7 @@ def test_anthropic_prompt_caching_reduces_costs(
         model=f"{llm._model_provider}/{llm._model_version}",
     )
 
-    usage1 = response1.usage or {}
+    usage1 = response1.usage
     print(f"Response 1 usage: {usage1}")
     print(f"Cost 1: ${cost1:.10f}")
 
@@ -389,7 +390,7 @@ def test_anthropic_prompt_caching_reduces_costs(
         model=f"{llm._model_provider}/{llm._model_version}",
     )
 
-    usage2 = response2.usage or {}
+    usage2 = response2.usage
     print(f"Response 2 usage: {usage2}")
     print(f"Cost 2: ${cost2:.10f}")
 
@@ -509,7 +510,7 @@ def test_google_genai_prompt_caching_reduces_costs(
                 completion_response=response1.model_dump(),
                 model=f"{llm._model_provider}/{llm._model_version}",
             )
-            usage1 = response1.usage or {}
+            usage1 = response1.usage
             cache_creation_tokens = _get_usage_value(
                 usage1, "cache_creation_input_tokens"
             )
@@ -540,7 +541,7 @@ def test_google_genai_prompt_caching_reduces_costs(
                 completion_response=response2.model_dump(),
                 model=f"{llm._model_provider}/{llm._model_version}",
             )
-            usage2 = response2.usage or {}
+            usage2 = response2.usage
             cache_read_tokens_2 = _extract_cache_read_tokens(usage2)
             cached_tokens_2 = _extract_cached_tokens(usage2)
 
@@ -642,7 +643,7 @@ def test_prompt_caching_with_conversation_history(
         model=f"{llm._model_provider}/{llm._model_version}",
     )
 
-    usage1 = response1.usage or {}
+    usage1 = response1.usage
     print(f"Turn 1 usage: {usage1}")
     print(f"Turn 1 cost: ${cost1:.10f}")
 
@@ -664,7 +665,7 @@ def test_prompt_caching_with_conversation_history(
         model=f"{llm._model_provider}/{llm._model_version}",
     )
 
-    usage2 = response2.usage or {}
+    usage2 = response2.usage
     print(f"Turn 2 usage: {usage2}")
     print(f"Turn 2 cost: ${cost2:.10f}")
 
@@ -681,7 +682,7 @@ def test_prompt_caching_with_conversation_history(
         model=f"{llm._model_provider}/{llm._model_version}",
     )
 
-    usage3 = response3.usage or {}
+    usage3 = response3.usage
     print(f"Turn 3 usage: {usage3}")
     print(f"Turn 3 cost: ${cost3:.10f}")
 
@@ -743,7 +744,7 @@ def test_no_caching_without_process_with_prompt_cache(
         model=f"{llm._model_provider}/{llm._model_version}",
     )
 
-    usage1 = response1.usage or {}
+    usage1 = response1.usage
     print(f"Response 1 usage: {usage1}")
     print(f"Cost 1: ${cost1:.10f}")
 
