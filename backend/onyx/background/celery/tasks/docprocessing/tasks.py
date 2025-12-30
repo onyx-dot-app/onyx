@@ -96,9 +96,6 @@ from onyx.indexing.adapters.document_indexing_adapter import (
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
-from onyx.natural_language_processing.search_nlp_models import (
-    InformationContentClassificationModel,
-)
 from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_pool import get_redis_client
@@ -1391,10 +1388,6 @@ def _docprocessing_task(
                 callback=callback,
             )
 
-            information_content_classification_model = (
-                InformationContentClassificationModel()
-            )
-
             document_index = get_default_document_index(
                 index_attempt.search_settings,
                 None,
@@ -1412,8 +1405,13 @@ def _docprocessing_task(
             )
 
             # Process documents through indexing pipeline
+            connector_source = (
+                index_attempt.connector_credential_pair.connector.source.value
+            )
             task_logger.info(
-                f"Processing {len(documents)} documents through indexing pipeline"
+                f"Processing {len(documents)} documents through indexing pipeline: "
+                f"cc_pair_id={cc_pair_id}, source={connector_source}, "
+                f"batch_num={batch_num}"
             )
 
             adapter = DocumentIndexingBatchAdapter(
@@ -1427,7 +1425,6 @@ def _docprocessing_task(
             # real work happens here!
             index_pipeline_result = run_indexing_pipeline(
                 embedder=embedding_model,
-                information_content_classification_model=information_content_classification_model,
                 document_index=document_index,
                 ignore_time_skip=True,  # Documents are already filtered during extraction
                 db_session=db_session,
@@ -1503,6 +1500,8 @@ def _docprocessing_task(
 
         # FIX: Explicitly clear document batch from memory and force garbage collection
         # This helps prevent memory accumulation across multiple batches
+        # NOTE: Thread-local event loops in embedding threads are cleaned up automatically
+        # via the _cleanup_thread_local decorator in search_nlp_models.py
         del documents
         gc.collect()
 

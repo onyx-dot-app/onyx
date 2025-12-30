@@ -31,7 +31,9 @@ export default function WelcomeMessage({
     content = (
       <div data-testid="onyx-logo" className="flex flex-row items-center gap-4">
         <Logo folded size={32} />
-        <Text headingH2>{greeting}</Text>
+        <Text as="p" headingH2>
+          {greeting}
+        </Text>
       </div>
     );
   } else if (agent) {
@@ -42,10 +44,12 @@ export default function WelcomeMessage({
           className="flex flex-row items-center gap-3"
         >
           <AgentAvatar agent={agent} size={36} />
-          <Text headingH2>{agent.name}</Text>
+          <Text as="p" headingH2>
+            {agent.name}
+          </Text>
         </div>
         {agent.description && (
-          <Text secondaryBody text03>
+          <Text as="p" secondaryBody text03>
             {agent.description}
           </Text>
         )}

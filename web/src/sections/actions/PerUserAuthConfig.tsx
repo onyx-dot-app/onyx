@@ -140,10 +140,10 @@ export function PerUserAuthConfig({
             <div className="flex items-start gap-1">
               <SvgUser className="w-4 h-4 stroke-text-04 mt-0.5" />
               <div className="flex flex-col gap-1">
-                <Text text04 secondaryAction>
+                <Text text04 secondaryAction as="p">
                   Only for your own account
                 </Text>
-                <Text text03 secondaryBody>
+                <Text text03 secondaryBody as="p">
                   The following credentials will not be shared with your
                   organization.
                 </Text>

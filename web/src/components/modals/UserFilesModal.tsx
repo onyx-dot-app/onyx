@@ -17,7 +17,13 @@ import Modal from "@/refresh-components/Modal";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import CounterSeparator from "@/refresh-components/CounterSeparator";
-import { SvgEye, SvgFileText, SvgImage, SvgXCircle } from "@opal/icons";
+import {
+  SvgEye,
+  SvgFiles,
+  SvgFileText,
+  SvgImage,
+  SvgXCircle,
+} from "@opal/icons";
 
 function getIcon(
   file: ProjectFile,
@@ -85,7 +91,6 @@ export interface UserFilesModalProps {
   // Modal content
   title: string;
   description: string;
-  icon: React.FunctionComponent<IconProps>;
   recentFiles: ProjectFile[];
   handleUploadChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   selectedFileIds?: string[];
@@ -100,7 +105,6 @@ export interface UserFilesModalProps {
 export default function UserFilesModal({
   title,
   description,
-  icon,
   recentFiles,
   handleUploadChange,
   selectedFileIds,
@@ -179,7 +183,7 @@ export default function UserFilesModal({
           }}
           preventAccidentalClose={false}
         >
-          <Modal.Header icon={icon} title={title} description={description}>
+          <Modal.Header icon={SvgFiles} title={title} description={description}>
             {/* Search bar section */}
             <div className="flex flex-row items-center gap-2">
               <InputTypeIn
@@ -210,7 +214,9 @@ export default function UserFilesModal({
             {/* File display section */}
             {filtered.length === 0 ? (
               <div className="p-4 flex w-full h-full items-center justify-center">
-                <Text text03>No files found</Text>
+                <Text as="p" text03>
+                  No files found
+                </Text>
               </div>
             ) : (
               <ScrollIndicatorDiv className="p-2 gap-2" variant="shadow">
@@ -265,7 +271,7 @@ export default function UserFilesModal({
             {/* Left side: file count and controls */}
             {onPickRecent && (
               <div className="flex items-center gap-2">
-                <Text text03>
+                <Text as="p" text03>
                   {selectedCount} {selectedCount === 1 ? "file" : "files"}{" "}
                   selected
                 </Text>

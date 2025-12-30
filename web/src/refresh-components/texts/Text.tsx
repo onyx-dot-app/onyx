@@ -188,7 +188,7 @@ export default function Text({
                     ? "textDark05"
                     : "text05";
 
-  const Tag = as ?? "p";
+  const Tag = as ?? "span";
 
   return (
     <Tag
@@ -197,6 +197,7 @@ export default function Text({
         fonts[font],
         inverted ? colors.inverted[color] : colors[color],
         nowrap && "whitespace-nowrap",
+        "px-[2px]",
         className
       )}
     >

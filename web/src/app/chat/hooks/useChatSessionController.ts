@@ -54,7 +54,7 @@ interface UseChatSessionControllerProps {
   onSubmit: (params: {
     message: string;
     currentMessageFiles: ProjectFile[];
-    useAgentSearch: boolean;
+    deepResearch: boolean;
     isSeededChat?: boolean;
   }) => Promise<void>;
 }
@@ -167,7 +167,7 @@ export function useChatSessionController({
           await onSubmit({
             message: firstMessage || "",
             currentMessageFiles: [],
-            useAgentSearch: false,
+            deepResearch: false,
           });
         }
         return;
@@ -265,14 +265,14 @@ export function useChatSessionController({
           message: seededMessage,
           isSeededChat: true,
           currentMessageFiles: [],
-          useAgentSearch: false,
+          deepResearch: false,
         });
         // Force re-name if the chat session doesn't have one
         if (!chatSession.description) {
           await nameChatSession(existingChatSessionId);
           refreshChatSessions();
         }
-      } else if (newMessageHistory.length === 2 && !chatSession.description) {
+      } else if (newMessageHistory.length >= 2 && !chatSession.description) {
         await nameChatSession(existingChatSessionId);
         refreshChatSessions();
       }

@@ -37,12 +37,16 @@ export const createToolPacket = (
  * with both queries and at least one result document.
  *
  * This is used to exercise the two-step internal search rendering
- * in MultiToolRenderer and SearchToolRendererV2.
+ * in MultiToolRenderer and SearchToolRenderer.
  */
 export const createInternalSearchToolGroup = (
   turn_index: number = 0,
   tab_index: number = 0
-): { turn_index: number; tab_index: number; packets: Packet[] } => {
+): {
+  turn_index: number;
+  tab_index: number;
+  packets: Packet[];
+} => {
   const packets: Packet[] = [
     {
       placement: { turn_index, tab_index },

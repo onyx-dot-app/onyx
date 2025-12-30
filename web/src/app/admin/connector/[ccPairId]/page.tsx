@@ -1,6 +1,6 @@
 "use client";
 
-import { BackButton } from "@/components/BackButton";
+import BackButton from "@/refresh-components/buttons/BackButton";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { SourceIcon } from "@/components/SourceIcon";
@@ -631,7 +631,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
             <>
               <div className="w-[200px]">
                 {/* TODO: Remove className and switch to text03 once Text is fully integrated across this page */}
-                <Text className="text-sm font-medium mb-1">
+                <Text as="p" className="text-sm font-medium mb-1">
                   Permission Syncing
                 </Text>
                 {ccPair.permission_syncing ||
@@ -647,8 +647,10 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
               <div className="w-[200px]">
                 {/* TODO: Remove className and switch to text03 once Text is fully integrated across this page */}
-                <Text className="text-sm font-medium mb-1">Last Synced</Text>
-                <Text className="text-sm text-text-default">
+                <Text as="p" className="text-sm font-medium mb-1">
+                  Last Synced
+                </Text>
+                <Text as="p" className="text-sm text-text-default">
                   {ccPair.last_permission_sync_attempt_finished
                     ? timeAgo(ccPair.last_permission_sync_attempt_finished)
                     : timeAgo(ccPair.last_full_permission_sync) ?? "-"}

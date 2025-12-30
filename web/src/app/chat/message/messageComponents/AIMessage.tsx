@@ -5,6 +5,7 @@ import {
   SearchToolDocumentsDelta,
   StreamingCitation,
   FetchToolDocuments,
+  TopLevelBranching,
 } from "@/app/chat/services/streamingModels";
 import { CitationMap } from "@/app/chat/interfaces";
 import { FullChatState } from "@/app/chat/message/messageComponents/interfaces";
@@ -32,6 +33,7 @@ import {
   isStreamingComplete,
   isToolPacket,
 } from "@/app/chat/services/packetUtils";
+import { removeThinkingTokens } from "@/app/chat/services/thinkingTokens";
 import { useMessageSwitching } from "@/app/chat/message/messageComponents/hooks/useMessageSwitching";
 import MultiToolRenderer from "@/app/chat/message/messageComponents/MultiToolRenderer";
 import { RendererComponent } from "@/app/chat/message/messageComponents/renderMessageComponent";
@@ -72,6 +74,7 @@ export default function AIMessage({
   onMessageSelection,
 }: AIMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
+  const finalAnswerRef = useRef<HTMLDivElement>(null);
   const { popup, setPopup } = usePopup();
   const { handleFeedbackChange } = useFeedbackController({ setPopup });
 
@@ -186,6 +189,8 @@ export default function AIMessage({
   // Track composite keys "turn_index-tab_index" for graceful SECTION_END injection
   const seenGroupKeysRef = useRef<Set<string>>(new Set());
   const groupKeysWithSectionEndRef = useRef<Set<string>>(new Set());
+  // Track expected parallel branches per turn_index from TopLevelBranching packets
+  const expectedBranchesRef = useRef<Map<number, number>>(new Map());
 
   // Reset incremental state when switching messages or when stream resets
   const resetState = () => {
@@ -201,6 +206,7 @@ export default function AIMessage({
     stopPacketSeenRef.current = isStreamingComplete(rawPackets);
     seenGroupKeysRef.current = new Set();
     groupKeysWithSectionEndRef.current = new Set();
+    expectedBranchesRef.current = new Map();
   };
   useEffect(() => {
     resetState();
@@ -221,6 +227,8 @@ export default function AIMessage({
       PacketType.CUSTOM_TOOL_START,
       PacketType.FETCH_TOOL_START,
       PacketType.REASONING_START,
+      PacketType.DEEP_RESEARCH_PLAN_START,
+      PacketType.RESEARCH_AGENT_START,
     ];
     return packets.some((packet) =>
       contentPacketTypes.includes(packet.obj.type as PacketType)
@@ -252,6 +260,17 @@ export default function AIMessage({
     for (let i = lastProcessedIndexRef.current; i < rawPackets.length; i++) {
       const packet = rawPackets[i];
       if (!packet) continue;
+
+      // Handle TopLevelBranching packets - these tell us how many parallel branches to expect
+      if (packet.obj.type === PacketType.TOP_LEVEL_BRANCHING) {
+        const branchingPacket = packet.obj as TopLevelBranching;
+        expectedBranchesRef.current.set(
+          packet.placement.turn_index,
+          branchingPacket.num_parallel_branches
+        );
+        // Don't add this packet to any group, it's just metadata
+        continue;
+      }
 
       const currentTurnIndex = packet.placement.turn_index;
       const currentTabIndex = packet.placement.tab_index ?? 0;
@@ -496,33 +515,38 @@ export default function AIMessage({
                             onAllToolsDisplayed={() =>
                               setFinalAnswerComing(true)
                             }
+                            expectedBranchesPerTurn={
+                              expectedBranchesRef.current
+                            }
                           />
                         )}
 
                         {/* Render all display groups (messages + image generation) in main area */}
-                        {displayGroups.map((displayGroup, index) => (
-                          <RendererComponent
-                            key={`${displayGroup.turn_index}-${displayGroup.tab_index}`}
-                            packets={displayGroup.packets}
-                            chatState={effectiveChatState}
-                            onComplete={() => {
-                              // if we've reverted to final answer not coming, don't set display complete
-                              // this happens when using claude and a tool calling packet comes after
-                              // some message packets
-                              // Only mark complete on the last display group
-                              if (
-                                finalAnswerComingRef.current &&
-                                index === displayGroups.length - 1
-                              ) {
-                                setDisplayComplete(true);
-                              }
-                            }}
-                            animate={false}
-                            stopPacketSeen={stopPacketSeen}
-                          >
-                            {({ content }) => <div>{content}</div>}
-                          </RendererComponent>
-                        ))}
+                        <div ref={finalAnswerRef}>
+                          {displayGroups.map((displayGroup, index) => (
+                            <RendererComponent
+                              key={`${displayGroup.turn_index}-${displayGroup.tab_index}`}
+                              packets={displayGroup.packets}
+                              chatState={effectiveChatState}
+                              onComplete={() => {
+                                // if we've reverted to final answer not coming, don't set display complete
+                                // this happens when using claude and a tool calling packet comes after
+                                // some message packets
+                                // Only mark complete on the last display group
+                                if (
+                                  finalAnswerComingRef.current &&
+                                  index === displayGroups.length - 1
+                                ) {
+                                  setDisplayComplete(true);
+                                }
+                              }}
+                              animate={false}
+                              stopPacketSeen={stopPacketSeen}
+                            >
+                              {({ content }) => <div>{content}</div>}
+                            </RendererComponent>
+                          ))}
+                        </div>
                       </>
                     );
                   })()
@@ -563,10 +587,14 @@ export default function AIMessage({
 
                       <CopyIconButton
                         getCopyText={() =>
-                          convertMarkdownTablesToTsv(getTextContent(rawPackets))
+                          convertMarkdownTablesToTsv(
+                            removeThinkingTokens(
+                              getTextContent(rawPackets)
+                            ) as string
+                          )
                         }
                         getHtmlContent={() =>
-                          markdownRef.current?.innerHTML || ""
+                          finalAnswerRef.current?.innerHTML || ""
                         }
                         tertiary
                         data-testid="AIMessage/copy-button"

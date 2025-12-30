@@ -344,7 +344,7 @@ export default function AdminSidebar({
         footer={
           <div className="flex flex-col gap-2">
             {settings.webVersion && (
-              <Text text02 secondaryBody className="px-2">
+              <Text as="p" text02 secondaryBody className="px-2">
                 {`Onyx version: ${settings.webVersion}`}
               </Text>
             )}
@@ -359,7 +359,7 @@ export default function AdminSidebar({
                 <SidebarTab
                   key={index}
                   href={link}
-                  active={pathname.startsWith(link)}
+                  transient={pathname.startsWith(link)}
                   leftIcon={({ className }) => (
                     <Icon className={className} size={16} />
                   )}

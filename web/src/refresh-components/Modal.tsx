@@ -453,7 +453,7 @@ ModalBody.displayName = "ModalBody";
  *
  * // Space-between layout
  * <Modal.Footer className="flex justify-between p-4">
- *   <Text>3 files selected</Text>
+ *   <Text as="p">3 files selected</Text>
  *   <Button>Done</Button>
  * </Modal.Footer>
  * ```

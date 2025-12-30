@@ -208,7 +208,7 @@ export default function TextView({
       >
         <div className="relative flex flex-row items-center gap-2 p-4 shadow-01">
           <SvgFileText className="w-[1.5rem] h-[1.5rem] stroke-text-04 shrink-0" />
-          <Text className="flex-1 min-w-0 truncate" mainUiBody>
+          <Text as="p" className="flex-1 min-w-0 truncate" mainUiBody>
             {fileName || "Document"}
           </Text>
           <div className="flex flex-row items-center justify-end gap-1">
@@ -218,7 +218,7 @@ export default function TextView({
               icon={SvgZoomOut}
               tooltip="Zoom Out"
             />
-            <Text text03 mainUiBody>
+            <Text as="p" text03 mainUiBody>
               {zoom}%
             </Text>
             <IconButton
@@ -246,13 +246,13 @@ export default function TextView({
           {isLoading ? (
             <div className="flex flex-col items-center justify-center flex-1 min-h-0 p-6 gap-4">
               <SimpleLoader className="h-8 w-8" />
-              <Text text03 mainUiBody>
+              <Text as="p" text03 mainUiBody>
                 Loading document...
               </Text>
             </div>
           ) : loadError ? (
             <div className="flex flex-col items-center justify-center flex-1 min-h-0 p-6 gap-4">
-              <Text text03 mainUiBody>
+              <Text as="p" text03 mainUiBody>
                 {loadError}
               </Text>
               <Button onClick={handleDownload}>Download File</Button>
@@ -286,6 +286,7 @@ export default function TextView({
                           {csvData.headers.map((h, i) => (
                             <TableHead key={i}>
                               <Text
+                                as="p"
                                 className="line-clamp-2 font-medium"
                                 text03
                                 mainUiBody
@@ -324,7 +325,7 @@ export default function TextView({
                 </ScrollIndicatorDiv>
               ) : (
                 <div className="flex flex-col items-center justify-center flex-1 min-h-0 p-6 gap-4">
-                  <Text text03 mainUiBody>
+                  <Text as="p" text03 mainUiBody>
                     This file format is not supported for preview.
                   </Text>
                   <Button onClick={handleDownload}>Download File</Button>

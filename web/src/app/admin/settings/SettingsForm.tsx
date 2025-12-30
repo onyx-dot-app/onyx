@@ -284,7 +284,7 @@ export function SettingsForm() {
 
       <Checkbox
         label="Deep Research"
-        sublabel="If set, users will be able to use Deep Research."
+        sublabel="Deep Research is in Alpha. Not recommended to be turned on. Use at your own risk."
         checked={settings.deep_research_enabled ?? true}
         onChange={(e) =>
           handleToggleSettingsField("deep_research_enabled", e.target.checked)

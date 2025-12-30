@@ -63,7 +63,7 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 MAX_USER_MESSAGES_FOR_CONTEXT = 5
-MAX_FINAL_REPORT_TOKENS = 10000
+MAX_FINAL_REPORT_TOKENS = 20000
 
 # Might be something like (this gives a lot of leeway for change but typically the models don't do this):
 # 0. Research topics 1-3
@@ -140,6 +140,7 @@ def generate_final_report(
             final_documents=final_documents,
             user_identity=user_identity,
             max_tokens=MAX_FINAL_REPORT_TOKENS,
+            is_deep_research=True,
         )
 
         final_report = llm_step_result.answer
@@ -185,7 +186,7 @@ def run_deep_research_llm_loop(
         # to work in most cases.
         if llm.config.max_input_tokens < 50000:
             raise RuntimeError(
-                "Cannot run Deep Research with an LLM that has less than 25,000 max input tokens"
+                "Cannot run Deep Research with an LLM that has less than 50,000 max input tokens"
             )
 
         initialize_litellm()
@@ -235,6 +236,7 @@ def run_deep_research_llm_loop(
                 state_container=state_container,
                 final_documents=None,
                 user_identity=user_identity,
+                is_deep_research=True,
             )
 
             if not llm_step_result.tool_calls:
@@ -281,6 +283,7 @@ def run_deep_research_llm_loop(
             state_container=state_container,
             final_documents=None,
             user_identity=user_identity,
+            is_deep_research=True,
         )
 
         while True:
@@ -310,7 +313,9 @@ def run_deep_research_llm_loop(
                 emitter.emit(
                     Packet(
                         # Marks the last turn end which should be the plan generation
-                        placement=Placement(turn_index=1 if reasoned else 0),
+                        placement=Placement(
+                            turn_index=1 if reasoned else 0,
+                        ),
                         obj=SectionEnd(),
                     )
                 )
@@ -351,21 +356,27 @@ def run_deep_research_llm_loop(
         reasoning_cycles = 0
         most_recent_reasoning: str | None = None
         citation_mapping: CitationMapping = {}
+        final_turn_index: int = (
+            orchestrator_start_turn_index  # Track the final turn_index for stop packet
+        )
         for cycle in range(max_orchestrator_cycles):
             if cycle == max_orchestrator_cycles - 1:
                 # If it's the last cycle, forcibly generate the final report
+                report_turn_index = (
+                    orchestrator_start_turn_index + cycle + reasoning_cycles
+                )
                 report_reasoned = generate_final_report(
                     history=simple_chat_history,
                     llm=llm,
                     token_counter=token_counter,
                     state_container=state_container,
                     emitter=emitter,
-                    turn_index=orchestrator_start_turn_index + cycle + reasoning_cycles,
+                    turn_index=report_turn_index,
                     citation_mapping=citation_mapping,
                     user_identity=user_identity,
                 )
                 # Update final_turn_index: base + 1 for the report itself + 1 if reasoning occurred
-                reasoning_cycles += 1 if report_reasoned else 0
+                final_turn_index = report_turn_index + (1 if report_reasoned else 0)
                 break
 
             research_agent_calls: list[ToolCallKickoff] = []
@@ -417,6 +428,7 @@ def run_deep_research_llm_loop(
                 final_documents=None,
                 user_identity=user_identity,
                 custom_token_processor=custom_processor,
+                is_deep_research=True,
             )
             if has_reasoned:
                 reasoning_cycles += 1
@@ -432,34 +444,40 @@ def run_deep_research_llm_loop(
                 # Basically hope that this is an infrequent occurence and hopefully multiple research
                 # cycles have already ran
                 logger.warning("No tool calls found, this should not happen.")
+                report_turn_index = (
+                    orchestrator_start_turn_index + cycle + reasoning_cycles
+                )
                 report_reasoned = generate_final_report(
                     history=simple_chat_history,
                     llm=llm,
                     token_counter=token_counter,
                     state_container=state_container,
                     emitter=emitter,
-                    turn_index=orchestrator_start_turn_index + cycle + reasoning_cycles,
+                    turn_index=report_turn_index,
                     citation_mapping=citation_mapping,
                     user_identity=user_identity,
                 )
-                reasoning_cycles += 1 if report_reasoned else 0
+                final_turn_index = report_turn_index + (1 if report_reasoned else 0)
                 break
 
             special_tool_calls = check_special_tool_calls(tool_calls=tool_calls)
 
             if special_tool_calls.generate_report_tool_call:
+                report_turn_index = (
+                    special_tool_calls.generate_report_tool_call.placement.turn_index
+                )
                 report_reasoned = generate_final_report(
                     history=simple_chat_history,
                     llm=llm,
                     token_counter=token_counter,
                     state_container=state_container,
                     emitter=emitter,
-                    turn_index=orchestrator_start_turn_index + cycle + reasoning_cycles,
+                    turn_index=report_turn_index,
                     citation_mapping=citation_mapping,
                     user_identity=user_identity,
                     saved_reasoning=most_recent_reasoning,
                 )
-                reasoning_cycles += 1 if report_reasoned else 0
+                final_turn_index = report_turn_index + (1 if report_reasoned else 0)
                 break
             elif special_tool_calls.think_tool_call:
                 think_tool_call = special_tool_calls.think_tool_call
@@ -505,19 +523,20 @@ def run_deep_research_llm_loop(
                     logger.warning(
                         "No research agent tool calls found, this should not happen."
                     )
+                    report_turn_index = (
+                        orchestrator_start_turn_index + cycle + reasoning_cycles
+                    )
                     report_reasoned = generate_final_report(
                         history=simple_chat_history,
                         llm=llm,
                         token_counter=token_counter,
                         state_container=state_container,
                         emitter=emitter,
-                        turn_index=orchestrator_start_turn_index
-                        + cycle
-                        + reasoning_cycles,
+                        turn_index=report_turn_index,
                         citation_mapping=citation_mapping,
                         user_identity=user_identity,
                     )
-                    reasoning_cycles += 1 if report_reasoned else 0
+                    final_turn_index = report_turn_index + (1 if report_reasoned else 0)
                     break
 
                 if len(research_agent_calls) > 1:
@@ -608,9 +627,7 @@ def run_deep_research_llm_loop(
 
         emitter.emit(
             Packet(
-                placement=Placement(
-                    turn_index=orchestrator_start_turn_index + cycle + reasoning_cycles
-                ),
+                placement=Placement(turn_index=final_turn_index),
                 obj=OverallStop(type="stop"),
             )
         )

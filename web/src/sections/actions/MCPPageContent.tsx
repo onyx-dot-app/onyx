@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useCallback, useMemo, useEffect } from "react";
-import useSWR, { KeyedMutator } from "swr";
+import { useState, useCallback, useMemo, useEffect } from "react";
+import { KeyedMutator } from "swr";
 import MCPActionCard from "@/sections/actions/MCPActionCard";
 import Actionbar from "@/sections/actions/Actionbar";
 import ActionCardSkeleton from "@/sections/actions/skeleton/ActionCardSkeleton";
@@ -10,10 +10,8 @@ import {
   ActionStatus,
   MCPServerStatus,
   MCPServer,
-  MCPServersResponse,
   ToolSnapshot,
 } from "@/lib/tools/interfaces";
-import { errorHandlingFetcher } from "@/lib/fetcher";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import MCPAuthenticationModal from "@/sections/actions/modals/MCPAuthenticationModal";
@@ -29,18 +27,15 @@ import {
 } from "@/lib/tools/mcpService";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
+import useMcpServers from "@/hooks/useMcpServers";
 
 export default function MCPPageContent() {
   // Data fetching
   const {
-    data: mcpData,
+    mcpData,
     isLoading: isMcpLoading,
-    mutate: mutateMcpServers,
-  } = useSWR<MCPServersResponse>(
-    "/api/admin/mcp/servers",
-    errorHandlingFetcher,
-    { refreshInterval: 10000 }
-  );
+    mutateMcpServers,
+  } = useMcpServers();
 
   // Modal management
   const authModal = useCreateModal();
@@ -544,7 +539,7 @@ export default function MCPPageContent() {
       {/* Shared overlay that persists across modal transitions */}
       {showSharedOverlay && (
         <div
-          className="fixed inset-0 z-[2000] bg-mask-03 backdrop-blur-03 pointer-events-none data-[state=open]:animate-in data-[state=open]:fade-in-0"
+          className="fixed inset-0 z-modal-overlay bg-mask-03 backdrop-blur-03 pointer-events-none data-[state=open]:animate-in data-[state=open]:fade-in-0"
           data-state="open"
           aria-hidden="true"
         />

@@ -1,6 +1,6 @@
 "use client";
 
-import { AdminPageLayout } from "@/refresh-components/layouts/AdminPageLayout";
+import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { SvgPaintBrush } from "@opal/icons";
 import Button from "@/refresh-components/buttons/Button";
 import {
@@ -218,35 +218,38 @@ export default function ThemePage() {
         return (
           <Form className="w-full h-full">
             {popup}
-            <AdminPageLayout
-              title="Appearance & Theming"
-              description="Customize how the application appears to users across your organization."
-              icon={SvgPaintBrush}
-              rightChildren={
-                <Button
-                  type="button"
-                  disabled={isSubmitting || (!dirty && !hasLogoChange)}
-                  onClick={async () => {
-                    const errors = await validateForm();
-                    if (Object.keys(errors).length > 0) {
-                      setErrors(errors);
-                      appearanceSettingsRef.current?.focusFirstError(errors);
-                      return;
-                    }
-                    await submitForm();
-                  }}
-                >
-                  {isSubmitting ? "Applying..." : "Apply Changes"}
-                </Button>
-              }
-            >
-              <AppearanceThemeSettings
-                ref={appearanceSettingsRef}
-                selectedLogo={selectedLogo}
-                setSelectedLogo={setSelectedLogo}
-                charLimits={CHAR_LIMITS}
+            <SettingsLayouts.Root>
+              <SettingsLayouts.Header
+                title="Appearance & Theming"
+                description="Customize how the application appears to users across your organization."
+                icon={SvgPaintBrush}
+                rightChildren={
+                  <Button
+                    type="button"
+                    disabled={isSubmitting || (!dirty && !hasLogoChange)}
+                    onClick={async () => {
+                      const errors = await validateForm();
+                      if (Object.keys(errors).length > 0) {
+                        setErrors(errors);
+                        appearanceSettingsRef.current?.focusFirstError(errors);
+                        return;
+                      }
+                      await submitForm();
+                    }}
+                  >
+                    {isSubmitting ? "Applying..." : "Apply Changes"}
+                  </Button>
+                }
               />
-            </AdminPageLayout>
+              <SettingsLayouts.Body>
+                <AppearanceThemeSettings
+                  ref={appearanceSettingsRef}
+                  selectedLogo={selectedLogo}
+                  setSelectedLogo={setSelectedLogo}
+                  charLimits={CHAR_LIMITS}
+                />
+              </SettingsLayouts.Body>
+            </SettingsLayouts.Root>
           </Form>
         );
       }}

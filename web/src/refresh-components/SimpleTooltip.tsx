@@ -58,7 +58,9 @@ export default function SimpleTooltip({
             className={cn("max-w-[30rem]", className)}
             {...rest}
           >
-            <Text textLight05>{hoverContent}</Text>
+            <Text as="p" textLight05>
+              {hoverContent}
+            </Text>
           </TooltipContent>
         )}
       </Tooltip>

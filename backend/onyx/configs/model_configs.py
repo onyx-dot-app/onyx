@@ -78,6 +78,10 @@ GEN_AI_MODEL_FALLBACK_MAX_TOKENS = int(
 GEN_AI_SINGLE_USER_MESSAGE_EXPECTED_MAX_TOKENS = 512
 GEN_AI_TEMPERATURE = float(os.environ.get("GEN_AI_TEMPERATURE") or 0)
 
+# Reasoning models use effort to control the amount of reasoning
+# before tool calling or answer generation.
+DEFAULT_REASONING_EFFORT = os.environ.get("DEFAULT_REASONING_EFFORT") or "low"
+
 # should be used if you are using a custom LLM inference provider that doesn't support
 # streaming format AND you are still using the langchain/litellm LLM class
 DISABLE_LITELLM_STREAMING = (
@@ -124,10 +128,3 @@ if _LITELLM_EXTRA_BODY_RAW:
         LITELLM_EXTRA_BODY = json.loads(_LITELLM_EXTRA_BODY_RAW)
     except Exception:
         pass
-
-# Whether and how to lower scores for short chunks w/o relevant context
-# Evaluated via custom ML model
-
-USE_INFORMATION_CONTENT_CLASSIFICATION = (
-    os.environ.get("USE_INFORMATION_CONTENT_CLASSIFICATION", "false").lower() == "true"
-)
