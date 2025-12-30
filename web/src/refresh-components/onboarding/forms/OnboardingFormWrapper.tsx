@@ -348,7 +348,7 @@ export function OnboardingFormWrapper<T extends Record<string, any>>({
               description={description}
               icon={icon}
               onSubmit={formikProps.submitForm}
-              submitDisabled={formikProps.isValid || !formikProps.dirty}
+              submitDisabled={!formikProps.isValid || !formikProps.dirty}
               isSubmitting={isSubmitting}
             >
               <Form className="flex flex-col gap-0">
