@@ -5,33 +5,15 @@ import pytest
 from fastapi.testclient import TestClient
 
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.llm_provider_options import fetch_available_well_known_llms
-from onyx.llm.llm_provider_options import WellKnownLLMProviderDescriptor
 
 
 _DEFAULT_BEDROCK_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0"
 
 
-@pytest.fixture
-def bedrock_provider() -> WellKnownLLMProviderDescriptor:
-    provider = next(
-        (
-            provider
-            for provider in fetch_available_well_known_llms()
-            if provider.name == LlmProviderNames.BEDROCK
-        ),
-        None,
-    )
-    assert provider is not None, "Bedrock provider not found"
-    return provider
-
-
 @pytest.mark.xfail(
     reason="Credentials not yet available due to compliance work needed",
 )
-def test_bedrock_llm_configuration(
-    client: TestClient, bedrock_provider: WellKnownLLMProviderDescriptor
-) -> None:
+def test_bedrock_llm_configuration(client: TestClient) -> None:
     # Prepare the test request payload
     test_request: dict[str, Any] = {
         "provider": LlmProviderNames.BEDROCK,
@@ -55,15 +37,7 @@ def test_bedrock_llm_configuration(
     ), f"Expected status code 200, but got {response.status_code}. Response: {response.text}"
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Now broken due to db_session dependency injection on the route and "
-        "a change that requires manual sql engine init."
-    ),
-)
-def test_bedrock_llm_configuration_invalid_key(
-    client: TestClient, bedrock_provider: WellKnownLLMProviderDescriptor
-) -> None:
+def test_bedrock_llm_configuration_invalid_key(client: TestClient) -> None:
     # Prepare the test request payload with invalid credentials
     test_request: dict[str, Any] = {
         "provider": LlmProviderNames.BEDROCK,
