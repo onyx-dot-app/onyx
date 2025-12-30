@@ -1,43 +1,64 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
+import * as Yup from "yup";
+import { FormikProps, useFormikContext } from "formik";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import Separator from "@/refresh-components/Separator";
+import Text from "@/refresh-components/texts/Text";
 import KeyValueInput, {
   KeyValue,
 } from "@/refresh-components/inputs/InputKeyValue";
-import Text from "@/refresh-components/texts/Text";
-import { useFormikContext } from "formik";
+import { SvgServer } from "@opal/icons";
+import {
+  OnboardingFormWrapper,
+  useOnboardingFormContext,
+} from "./OnboardingFormWrapper";
+import { OnboardingActions, OnboardingState } from "../types";
+import { buildInitialValues } from "../components/llmConnectionHelpers";
+import { MODAL_CONTENT_MAP } from "../constants";
+import LLMConnectionIcons from "../components/LLMConnectionIcons";
 
-type ModelConfig = {
+interface CustomOnboardingFormProps {
+  onboardingState: OnboardingState;
+  onboardingActions: OnboardingActions;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+interface CustomFormValues {
   name: string;
-  max_input_tokens: string;
-};
+  provider: string;
+  api_key: string;
+  api_base: string;
+  api_version: string;
+  api_key_changed: boolean;
+  default_model_name: string;
+  model_configurations: any[];
+  custom_config: Record<string, string>;
+  groups: number[];
+  is_public: boolean;
+  deployment_name: string;
+  target_uri: string;
+}
 
-type Props = {
-  showApiMessage: boolean;
-  apiStatus: "idle" | "loading" | "success" | "error";
-  errorMessage: string;
-  disabled?: boolean;
-};
+function CustomFormFields({
+  formikProps,
+}: {
+  formikProps: FormikProps<CustomFormValues>;
+}) {
+  const { apiStatus, showApiMessage, errorMessage, disabled } =
+    useOnboardingFormContext();
 
-export const LLMConnectionFieldsCustom: React.FC<Props> = ({
-  showApiMessage,
-  apiStatus,
-  errorMessage,
-  disabled = false,
-}) => {
-  const formikContext = useFormikContext<any>();
   const [modelConfigError, setModelConfigError] = useState<string | null>(null);
   const [customConfigDraft, setCustomConfigDraft] = useState<KeyValue[]>(
-    Object.entries(formikContext.values.custom_config || {}).map(
+    Object.entries(formikProps.values.custom_config || {}).map(
       ([key, value]) => ({ key, value: String(value) })
     )
   );
 
   const handleModelConfigsChange = (items: KeyValue[]) => {
-    // Don't filter out empty items here - let the user edit them
     const configs = items.map((item) => ({
       name: item.key,
       is_visible: true,
@@ -50,7 +71,7 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
       supports_image_input: false,
     }));
 
-    formikContext.setFieldValue("model_configurations", configs);
+    formikProps.setFieldValue("model_configurations", configs);
   };
 
   const handleCustomConfigsChange = (items: KeyValue[]) => {
@@ -62,12 +83,12 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
     items.forEach((item) => {
       config[item.key] = item.value;
     });
-    formikContext.setFieldValue("custom_config", config);
+    formikProps.setFieldValue("custom_config", config);
   };
 
   // Convert model_configurations back to KeyValue[] for display
   const modelConfigsAsKeyValue: KeyValue[] =
-    formikContext.values.model_configurations?.map((config: any) => ({
+    formikProps.values.model_configurations?.map((config: any) => ({
       key: config.name || "",
       value: config.max_input_tokens?.toString() || "",
     })) || [];
@@ -204,7 +225,7 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
       <div className="w-full">
         <FormField
           name="custom_config"
-          state={formikContext.errors.custom_config ? "error" : "idle"}
+          state={formikProps.errors.custom_config ? "error" : "idle"}
           className="w-full"
         >
           <FormField.Label optional>Additional Configs</FormField.Label>
@@ -235,7 +256,7 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
         <FormField
           name="model_configurations"
           state={
-            formikContext.errors.model_configurations || modelConfigError
+            formikProps.errors.model_configurations || modelConfigError
               ? "error"
               : "idle"
           }
@@ -293,4 +314,89 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
       />
     </>
   );
-};
+}
+
+export function CustomOnboardingForm({
+  onboardingState,
+  onboardingActions,
+  open,
+  onOpenChange,
+}: CustomOnboardingFormProps) {
+  const initialValues = useMemo(
+    () => buildInitialValues(undefined, true) as CustomFormValues,
+    []
+  );
+
+  const validationSchema = Yup.object().shape({
+    provider: Yup.string().required("Provider is required"),
+    api_key: Yup.string(),
+    api_base: Yup.string(),
+    api_version: Yup.string(),
+    model_configurations: Yup.array()
+      .of(
+        Yup.object({
+          name: Yup.string().required("Model name is required"),
+          is_visible: Yup.boolean().required("Visibility is required"),
+          max_input_tokens: Yup.number()
+            .transform((value, originalValue) =>
+              originalValue === "" ||
+              originalValue === undefined ||
+              originalValue === null
+                ? null
+                : value
+            )
+            .nullable()
+            .optional(),
+        })
+      )
+      .min(1, "At least one model configuration is required"),
+    default_model_name: Yup.string().required("Default model is required"),
+    custom_config: Yup.object(),
+  });
+
+  const icon = () => (
+    <LLMConnectionIcons
+      icon={<SvgServer className="w-6 h-6 stroke-text-04" />}
+    />
+  );
+
+  return (
+    <OnboardingFormWrapper<CustomFormValues>
+      icon={icon}
+      title="Set up Custom LLM Provider"
+      description={MODAL_CONTENT_MAP.custom?.description}
+      isCustomProvider={true}
+      onboardingState={onboardingState}
+      onboardingActions={onboardingActions}
+      open={open}
+      onOpenChange={onOpenChange}
+      initialValues={initialValues}
+      validationSchema={validationSchema}
+      transformValues={(values, fetchedModels) => {
+        // For custom providers, use the values from the form and filter out empty entries
+        const modelConfigsToUse = (values.model_configurations || []).filter(
+          (config: any) => config.name && config.name.trim() !== ""
+        );
+
+        // Filter out empty custom config entries
+        const filteredCustomConfig: Record<string, string> = {};
+        Object.entries(values.custom_config || {}).forEach(([key, value]) => {
+          if (key.trim() !== "") {
+            filteredCustomConfig[key] = value;
+          }
+        });
+
+        return {
+          ...values,
+          model_configurations: modelConfigsToUse,
+          custom_config:
+            Object.keys(filteredCustomConfig).length > 0
+              ? filteredCustomConfig
+              : undefined,
+        };
+      }}
+    >
+      {(formikProps) => <CustomFormFields formikProps={formikProps} />}
+    </OnboardingFormWrapper>
+  );
+}

@@ -1,0 +1,474 @@
+import React, { useMemo, useState, useEffect } from "react";
+import * as Yup from "yup";
+import { FormikProps } from "formik";
+import { FormikField } from "@/refresh-components/form/FormikField";
+import { FormField } from "@/refresh-components/form/FormField";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
+import InputComboBox from "@/refresh-components/inputs/InputComboBox";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
+import Separator from "@/refresh-components/Separator";
+import Text from "@/refresh-components/texts/Text";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@/refresh-components/tabs/tabs";
+import { cn, noProp } from "@/lib/utils";
+import { SvgAlertCircle, SvgRefreshCw } from "@opal/icons";
+import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import {
+  OnboardingFormWrapper,
+  useOnboardingFormContext,
+} from "./OnboardingFormWrapper";
+import { OnboardingActions, OnboardingState } from "../types";
+import { buildInitialValues } from "../components/llmConnectionHelpers";
+import { MODAL_CONTENT_MAP } from "../constants";
+import LLMConnectionIcons from "../components/LLMConnectionIcons";
+import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
+
+// AWS Bedrock regions
+const AWS_REGION_OPTIONS = [
+  { label: "us-east-1", value: "us-east-1" },
+  { label: "us-east-2", value: "us-east-2" },
+  { label: "us-west-2", value: "us-west-2" },
+  { label: "us-gov-east-1", value: "us-gov-east-1" },
+  { label: "us-gov-west-1", value: "us-gov-west-1" },
+  { label: "ap-northeast-1", value: "ap-northeast-1" },
+  { label: "ap-south-1", value: "ap-south-1" },
+  { label: "ap-southeast-1", value: "ap-southeast-1" },
+  { label: "ap-southeast-2", value: "ap-southeast-2" },
+  { label: "ap-east-1", value: "ap-east-1" },
+  { label: "ca-central-1", value: "ca-central-1" },
+  { label: "eu-central-1", value: "eu-central-1" },
+  { label: "eu-west-2", value: "eu-west-2" },
+];
+
+// Auth method constants
+const AUTH_METHOD_IAM = "iam";
+const AUTH_METHOD_ACCESS_KEY = "access_key";
+const AUTH_METHOD_LONG_TERM_API_KEY = "long_term_api_key";
+
+interface BedrockOnboardingFormProps {
+  llmDescriptor: WellKnownLLMProviderDescriptor;
+  onboardingState: OnboardingState;
+  onboardingActions: OnboardingActions;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+interface BedrockFormValues {
+  name: string;
+  provider: string;
+  api_key_changed: boolean;
+  default_model_name: string;
+  model_configurations: any[];
+  groups: number[];
+  is_public: boolean;
+  custom_config: {
+    AWS_REGION_NAME: string;
+    BEDROCK_AUTH_METHOD: string;
+    AWS_ACCESS_KEY_ID?: string;
+    AWS_SECRET_ACCESS_KEY?: string;
+    AWS_BEARER_TOKEN_BEDROCK?: string;
+  };
+}
+
+function BedrockFormFields({
+  formikProps,
+}: {
+  formikProps: FormikProps<BedrockFormValues>;
+}) {
+  const {
+    apiStatus,
+    showApiMessage,
+    errorMessage,
+    modelOptions,
+    canFetchModels,
+    isFetchingModels,
+    handleFetchModels,
+    modelsApiStatus,
+    modelsErrorMessage,
+    showModelsApiErrorMessage,
+    disabled,
+    llmDescriptor,
+  } = useOnboardingFormContext();
+
+  const modalContent = MODAL_CONTENT_MAP[llmDescriptor?.name ?? ""];
+  const authMethod =
+    formikProps.values.custom_config?.BEDROCK_AUTH_METHOD ||
+    AUTH_METHOD_ACCESS_KEY;
+
+  // Check if auth credentials are complete for enabling fetch models
+  const isAuthComplete =
+    authMethod === AUTH_METHOD_IAM ||
+    (authMethod === AUTH_METHOD_ACCESS_KEY &&
+      formikProps.values.custom_config?.AWS_ACCESS_KEY_ID &&
+      formikProps.values.custom_config?.AWS_SECRET_ACCESS_KEY) ||
+    (authMethod === AUTH_METHOD_LONG_TERM_API_KEY &&
+      formikProps.values.custom_config?.AWS_BEARER_TOKEN_BEDROCK);
+
+  const isFetchDisabled =
+    !formikProps.values.custom_config?.AWS_REGION_NAME || !isAuthComplete;
+
+  return (
+    <>
+      <FormikField<string>
+        name="custom_config.AWS_REGION_NAME"
+        render={(field, helper, meta, state) => (
+          <FormField
+            name="custom_config.AWS_REGION_NAME"
+            state={state}
+            className="w-full"
+          >
+            <FormField.Label>AWS Region</FormField.Label>
+            <FormField.Control>
+              <InputSelect
+                value={field.value ?? ""}
+                onValueChange={(value) => helper.setValue(value)}
+                disabled={disabled}
+              >
+                <InputSelect.Trigger onBlur={field.onBlur} />
+                <InputSelect.Content>
+                  {AWS_REGION_OPTIONS.map((opt) => (
+                    <InputSelect.Item key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </InputSelect.Item>
+                  ))}
+                </InputSelect.Content>
+              </InputSelect>
+            </FormField.Control>
+            <FormField.Message
+              messages={{
+                idle: "Region where your Amazon Bedrock models are hosted.",
+                error: meta.error,
+              }}
+            />
+          </FormField>
+        )}
+      />
+
+      <div>
+        <Text as="p" mainUiAction className="mb-1">
+          Authentication Method
+        </Text>
+        <Text as="p" secondaryBody text03 className="mb-2">
+          Choose how Onyx should authenticate with Bedrock.
+        </Text>
+        <Tabs
+          value={authMethod}
+          onValueChange={(value) =>
+            formikProps.setFieldValue(
+              "custom_config.BEDROCK_AUTH_METHOD",
+              value
+            )
+          }
+        >
+          <TabsList>
+            <TabsTrigger value={AUTH_METHOD_IAM}>IAM Role</TabsTrigger>
+            <TabsTrigger value={AUTH_METHOD_ACCESS_KEY}>Access Key</TabsTrigger>
+            <TabsTrigger value={AUTH_METHOD_LONG_TERM_API_KEY}>
+              Long-term API Key
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent
+            value={AUTH_METHOD_IAM}
+            className="data-[state=active]:animate-fade-in-scale"
+          >
+            <div className="flex gap-1 p-2 border border-border-01 rounded-12 bg-background-tint-01 mt-2">
+              <div className="p-1">
+                <SvgAlertCircle className="h-4 w-4 stroke-text-03" />
+              </div>
+              <Text as="p" text04 mainUiBody>
+                Onyx will use the IAM role attached to the environment it&apos;s
+                running in to authenticate.
+              </Text>
+            </div>
+          </TabsContent>
+
+          <TabsContent
+            value={AUTH_METHOD_ACCESS_KEY}
+            className={cn("data-[state=active]:animate-fade-in-scale", "mt-4")}
+          >
+            <div className="flex flex-col gap-4">
+              <FormikField<string>
+                name="custom_config.AWS_ACCESS_KEY_ID"
+                render={(field, helper, meta, state) => (
+                  <FormField
+                    name="custom_config.AWS_ACCESS_KEY_ID"
+                    state={state}
+                    className="w-full"
+                  >
+                    <FormField.Label>AWS Access Key ID</FormField.Label>
+                    <FormField.Control>
+                      <InputTypeIn
+                        {...field}
+                        placeholder="AKIAIOSFODNN7EXAMPLE"
+                        showClearButton={false}
+                        disabled={disabled}
+                        error={apiStatus === "error"}
+                      />
+                    </FormField.Control>
+                    <FormField.Message
+                      messages={{
+                        idle: "",
+                        error: meta.error,
+                      }}
+                    />
+                  </FormField>
+                )}
+              />
+              <FormikField<string>
+                name="custom_config.AWS_SECRET_ACCESS_KEY"
+                render={(field, helper, meta, state) => (
+                  <FormField
+                    name="custom_config.AWS_SECRET_ACCESS_KEY"
+                    state={state}
+                    className="w-full"
+                  >
+                    <FormField.Label>AWS Secret Access Key</FormField.Label>
+                    <FormField.Control>
+                      <PasswordInputTypeIn
+                        {...field}
+                        placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+                        showClearButton={false}
+                        disabled={disabled}
+                        error={apiStatus === "error"}
+                      />
+                    </FormField.Control>
+                    {showApiMessage && (
+                      <FormField.APIMessage
+                        state={apiStatus}
+                        messages={{
+                          loading: "Checking credentials...",
+                          success: "Credentials valid.",
+                          error: errorMessage || "Invalid credentials",
+                        }}
+                      />
+                    )}
+                    {!showApiMessage && (
+                      <FormField.Message
+                        messages={{
+                          idle: "",
+                          error: meta.error,
+                        }}
+                      />
+                    )}
+                  </FormField>
+                )}
+              />
+            </div>
+          </TabsContent>
+
+          <TabsContent
+            value={AUTH_METHOD_LONG_TERM_API_KEY}
+            className={cn("data-[state=active]:animate-fade-in-scale", "mt-4")}
+          >
+            <div className="flex flex-col gap-4">
+              <FormikField<string>
+                name="custom_config.AWS_BEARER_TOKEN_BEDROCK"
+                render={(field, helper, meta, state) => (
+                  <FormField
+                    name="custom_config.AWS_BEARER_TOKEN_BEDROCK"
+                    state={state}
+                    className="w-full"
+                  >
+                    <FormField.Label>
+                      AWS Bedrock Long-term API Key
+                    </FormField.Label>
+                    <FormField.Control>
+                      <PasswordInputTypeIn
+                        {...field}
+                        placeholder="Your long-term API key"
+                        showClearButton={false}
+                        disabled={disabled}
+                        error={apiStatus === "error"}
+                      />
+                    </FormField.Control>
+                    {showApiMessage && (
+                      <FormField.APIMessage
+                        state={apiStatus}
+                        messages={{
+                          loading: "Checking API key...",
+                          success: "API key valid.",
+                          error: errorMessage || "Invalid API key",
+                        }}
+                      />
+                    )}
+                    {!showApiMessage && (
+                      <FormField.Message
+                        messages={{
+                          idle:
+                            modalContent?.field_metadata
+                              ?.AWS_BEARER_TOKEN_BEDROCK ?? "",
+                          error: meta.error,
+                        }}
+                      />
+                    )}
+                  </FormField>
+                )}
+              />
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      <Separator className="my-0" />
+
+      <FormikField<string>
+        name="default_model_name"
+        render={(field, helper, meta, state) => (
+          <FormField name="default_model_name" state={state} className="w-full">
+            <FormField.Label>Default Model</FormField.Label>
+            <FormField.Control>
+              <InputComboBox
+                value={field.value}
+                onValueChange={(value) => helper.setValue(value)}
+                onChange={(e) => helper.setValue(e.target.value)}
+                options={modelOptions}
+                disabled={disabled || isFetchingModels}
+                rightSection={
+                  canFetchModels ? (
+                    <IconButton
+                      internal
+                      icon={({ className }) => (
+                        <SvgRefreshCw
+                          className={cn(
+                            className,
+                            isFetchingModels && "animate-spin"
+                          )}
+                        />
+                      )}
+                      onClick={noProp((e) => {
+                        e.preventDefault();
+                        if (!isFetchDisabled) {
+                          handleFetchModels();
+                        }
+                      })}
+                      tooltip={
+                        isFetchDisabled
+                          ? !formikProps.values.custom_config?.AWS_REGION_NAME
+                            ? "Select an AWS region first"
+                            : "Complete authentication first"
+                          : "Fetch available models"
+                      }
+                      disabled={disabled || isFetchingModels || isFetchDisabled}
+                    />
+                  ) : undefined
+                }
+                onBlur={field.onBlur}
+                placeholder="Fetch models first, then select"
+              />
+            </FormField.Control>
+            {showModelsApiErrorMessage && (
+              <FormField.APIMessage
+                state={modelsApiStatus}
+                messages={{
+                  loading: "Fetching models...",
+                  success: "Models fetched successfully.",
+                  error: modelsErrorMessage || "Failed to fetch models",
+                }}
+              />
+            )}
+            {!showModelsApiErrorMessage && (
+              <FormField.Message
+                messages={{
+                  idle:
+                    modalContent?.field_metadata?.default_model_name ??
+                    "Fetch available models first, then select the default model.",
+                  error: meta.error,
+                }}
+              />
+            )}
+          </FormField>
+        )}
+      />
+    </>
+  );
+}
+
+export function BedrockOnboardingForm({
+  llmDescriptor,
+  onboardingState,
+  onboardingActions,
+  open,
+  onOpenChange,
+}: BedrockOnboardingFormProps) {
+  const initialValues = useMemo(() => {
+    const base = buildInitialValues(llmDescriptor, false);
+    return {
+      ...base,
+      custom_config: {
+        AWS_REGION_NAME: "",
+        BEDROCK_AUTH_METHOD: AUTH_METHOD_ACCESS_KEY,
+        AWS_ACCESS_KEY_ID: "",
+        AWS_SECRET_ACCESS_KEY: "",
+        AWS_BEARER_TOKEN_BEDROCK: "",
+      },
+    } as BedrockFormValues;
+  }, [llmDescriptor]);
+
+  const validationSchema = Yup.object().shape({
+    default_model_name: Yup.string().required("Model name is required"),
+    custom_config: Yup.object().shape({
+      AWS_REGION_NAME: Yup.string().required("AWS Region is required"),
+      BEDROCK_AUTH_METHOD: Yup.string(),
+      AWS_ACCESS_KEY_ID: Yup.string().when("BEDROCK_AUTH_METHOD", {
+        is: AUTH_METHOD_ACCESS_KEY,
+        then: (schema) => schema.required("AWS Access Key ID is required"),
+        otherwise: (schema) => schema,
+      }),
+      AWS_SECRET_ACCESS_KEY: Yup.string().when("BEDROCK_AUTH_METHOD", {
+        is: AUTH_METHOD_ACCESS_KEY,
+        then: (schema) => schema.required("AWS Secret Access Key is required"),
+        otherwise: (schema) => schema,
+      }),
+      AWS_BEARER_TOKEN_BEDROCK: Yup.string().when("BEDROCK_AUTH_METHOD", {
+        is: AUTH_METHOD_LONG_TERM_API_KEY,
+        then: (schema) => schema.required("Long-term API Key is required"),
+        otherwise: (schema) => schema,
+      }),
+    }),
+  });
+
+  const icon = () => (
+    <LLMConnectionIcons
+      icon={<ProviderIcon provider={llmDescriptor.name} size={24} />}
+    />
+  );
+
+  return (
+    <OnboardingFormWrapper<BedrockFormValues>
+      icon={icon}
+      title={`Set up ${llmDescriptor.title}`}
+      description={MODAL_CONTENT_MAP[llmDescriptor.name]?.description}
+      llmDescriptor={llmDescriptor}
+      onboardingState={onboardingState}
+      onboardingActions={onboardingActions}
+      open={open}
+      onOpenChange={onOpenChange}
+      initialValues={initialValues}
+      validationSchema={validationSchema}
+      transformValues={(values, fetchedModels) => {
+        // Filter out empty custom_config values
+        const filteredCustomConfig = Object.fromEntries(
+          Object.entries(values.custom_config || {}).filter(([, v]) => v !== "")
+        );
+
+        return {
+          ...values,
+          custom_config:
+            Object.keys(filteredCustomConfig).length > 0
+              ? filteredCustomConfig
+              : undefined,
+          model_configurations: fetchedModels,
+        };
+      }}
+    >
+      {(formikProps) => <BedrockFormFields formikProps={formikProps} />}
+    </OnboardingFormWrapper>
+  );
+}
