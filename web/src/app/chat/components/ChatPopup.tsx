@@ -39,6 +39,10 @@ export function ChatPopup() {
   const settings = useContext(SettingsContext);
   const enterpriseSettings = settings?.enterpriseSettings;
   const isConsentScreen = enterpriseSettings?.enable_consent_screen;
+  console.log(
+    "All user initial popup flow completed",
+    localStorage.getItem(ALL_USERS_INITIAL_POPUP_FLOW_COMPLETED)
+  );
   if (
     !enterpriseSettings?.custom_popup_content ||
     completedFlow ||
@@ -120,7 +124,7 @@ export function ChatPopup() {
                 state={showConsentError ? "error" : "idle"}
                 className="mt-6"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1">
                   <FormField.Control>
                     <Checkbox
                       checked={consentChecked}
@@ -145,7 +149,13 @@ export function ChatPopup() {
                           />
                         ),
                         p: ({ node, ...props }) => (
-                          <Text as="p" mainUiBody text04 {...props} />
+                          <Text
+                            as="p"
+                            mainUiBody
+                            text04
+                            className="!my-0"
+                            {...props}
+                          />
                         ),
                         strong: ({ node, ...props }) => (
                           <Text as="span" mainUiBody text04 {...props} />
