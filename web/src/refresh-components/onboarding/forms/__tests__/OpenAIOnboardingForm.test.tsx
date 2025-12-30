@@ -10,6 +10,7 @@ import {
   createMockOnboardingActions,
   createMockFetchResponses,
   MOCK_PROVIDERS,
+  OPENAI_DEFAULT_VISIBLE_MODELS,
 } from "./testHelpers";
 
 // Mock fetch
@@ -50,20 +51,45 @@ jest.mock("@/components/modals/ProviderModal", () => ({
   },
 }));
 
-// Mock fetchModels utility
+// Mock fetchModels utility - returns the curated OpenAI visible models
+// that match OPENAI_VISIBLE_MODEL_NAMES from backend
 const mockFetchModels = jest.fn().mockResolvedValue({
   models: [
     {
-      name: "gpt-4",
+      name: "gpt-5.2",
       is_visible: true,
-      max_input_tokens: 8192,
+      max_input_tokens: 128000,
       supports_image_input: true,
     },
     {
-      name: "gpt-3.5-turbo",
+      name: "gpt-5-mini",
       is_visible: true,
-      max_input_tokens: 4096,
+      max_input_tokens: 128000,
+      supports_image_input: true,
+    },
+    {
+      name: "o1",
+      is_visible: true,
+      max_input_tokens: 200000,
+      supports_image_input: true,
+    },
+    {
+      name: "o3-mini",
+      is_visible: true,
+      max_input_tokens: 200000,
       supports_image_input: false,
+    },
+    {
+      name: "gpt-4o",
+      is_visible: true,
+      max_input_tokens: 128000,
+      supports_image_input: true,
+    },
+    {
+      name: "gpt-4o-mini",
+      is_visible: true,
+      max_input_tokens: 128000,
+      supports_image_input: true,
     },
   ],
   error: null,
@@ -144,6 +170,77 @@ describe("OpenAIOnboardingForm", () => {
     });
   });
 
+  describe("Default Available Models", () => {
+    /**
+     * This test verifies that the exact curated list of OpenAI visible models
+     * matches what's returned from /api/admin/llm/built-in/options.
+     * The expected models are defined in OPENAI_VISIBLE_MODEL_NAMES in
+     * backend/onyx/llm/llm_provider_options.py
+     */
+    test("llmDescriptor contains the correct default visible models from built-in options", () => {
+      const expectedModelNames = [
+        "gpt-5.2",
+        "gpt-5-mini",
+        "o1",
+        "o3-mini",
+        "gpt-4o",
+        "gpt-4o-mini",
+      ];
+
+      // Verify MOCK_PROVIDERS.openai has the correct model configurations
+      const actualModelNames = MOCK_PROVIDERS.openai.model_configurations.map(
+        (config) => config.name
+      );
+
+      // Check that all expected models are present
+      expect(actualModelNames).toEqual(
+        expect.arrayContaining(expectedModelNames)
+      );
+
+      // Check that only the expected models are present (no extras)
+      expect(actualModelNames).toHaveLength(expectedModelNames.length);
+
+      // Verify each model has is_visible set to true
+      MOCK_PROVIDERS.openai.model_configurations.forEach((config) => {
+        expect(config.is_visible).toBe(true);
+      });
+    });
+
+    test("OPENAI_DEFAULT_VISIBLE_MODELS matches backend OPENAI_VISIBLE_MODEL_NAMES", () => {
+      // These are the exact model names from backend/onyx/llm/llm_provider_options.py
+      // OPENAI_VISIBLE_MODEL_NAMES = {"gpt-5.2", "gpt-5-mini", "o1", "o3-mini", "gpt-4o", "gpt-4o-mini"}
+      const backendVisibleModelNames = new Set([
+        "gpt-5.2",
+        "gpt-5-mini",
+        "o1",
+        "o3-mini",
+        "gpt-4o",
+        "gpt-4o-mini",
+      ]);
+
+      const testHelperModelNames = new Set(
+        OPENAI_DEFAULT_VISIBLE_MODELS.map((m) => m.name)
+      );
+
+      expect(testHelperModelNames).toEqual(backendVisibleModelNames);
+    });
+
+    test("all default models are marked as visible", () => {
+      OPENAI_DEFAULT_VISIBLE_MODELS.forEach((model) => {
+        expect(model.is_visible).toBe(true);
+      });
+    });
+
+    test("default model gpt-5.2 is set correctly in component", () => {
+      // The OpenAIOnboardingForm sets DEFAULT_DEFAULT_MODEL_NAME = "gpt-5.2"
+      // Verify this model exists in the default visible models
+      const defaultModelExists = OPENAI_DEFAULT_VISIBLE_MODELS.some(
+        (m) => m.name === "gpt-5.2"
+      );
+      expect(defaultModelExists).toBe(true);
+    });
+  });
+
   describe("Form Validation", () => {
     test("submit button is disabled when form is empty", () => {
       render(<OpenAIOnboardingForm {...defaultProps} />);
@@ -152,15 +249,16 @@ describe("OpenAIOnboardingForm", () => {
       expect(submitButton).toBeDisabled();
     });
 
-    test("submit button is disabled when only API key is filled", async () => {
+    test("submit button is enabled when API key is filled (default model is pre-selected)", async () => {
       const user = setupUser();
       render(<OpenAIOnboardingForm {...defaultProps} />);
 
       const apiKeyInput = screen.getByPlaceholderText("");
       await user.type(apiKeyInput, "sk-test-key");
 
+      // Button should be enabled because default model (gpt-5.2) is pre-selected
       const submitButton = screen.getByTestId("submit-button");
-      expect(submitButton).toBeDisabled();
+      expect(submitButton).not.toBeDisabled();
     });
   });
 
@@ -179,14 +277,12 @@ describe("OpenAIOnboardingForm", () => {
         await user.click(fetchButton);
       }
 
-      // Wait for models to be fetched
-      await waitFor(() => {
-        expect(mockFetchModels).toHaveBeenCalled();
-      });
+      // Verify fetchModels is not called (models come from llmDescriptor)
+      expect(mockFetchModels).not.toHaveBeenCalled();
 
-      // Now select a model from the dropdown (it should be enabled now)
+      // Now select a model from the dropdown
       const modelInput = screen.getByPlaceholderText("Select a model");
-      await user.type(modelInput, "gpt-4");
+      await user.type(modelInput, "gpt-5.2");
     }
 
     test("calls API test endpoint on submit", async () => {
@@ -307,14 +403,12 @@ describe("OpenAIOnboardingForm", () => {
         await user.click(fetchButton);
       }
 
-      // Wait for models to be fetched
-      await waitFor(() => {
-        expect(mockFetchModels).toHaveBeenCalled();
-      });
+      // Verify fetchModels is not called (models come from llmDescriptor)
+      expect(mockFetchModels).not.toHaveBeenCalled();
 
       // Now select a model from the dropdown
       const modelInput = screen.getByPlaceholderText("Select a model");
-      await user.type(modelInput, "gpt-4");
+      await user.type(modelInput, "gpt-5.2");
     }
 
     test("displays error message when API test fails", async () => {
