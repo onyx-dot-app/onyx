@@ -7,12 +7,12 @@ from typing import cast
 from typing import TextIO
 
 from ragas import evaluate  # type: ignore[import-not-found]
-from ragas import EvaluationDataset
-from ragas import SingleTurnSample
+from ragas import EvaluationDataset  # type: ignore[import-not-found]
+from ragas import SingleTurnSample  # type: ignore[import-not-found]
 from ragas.dataset_schema import EvaluationResult  # type: ignore[import-not-found]
 from ragas.metrics import FactualCorrectness  # type: ignore[import-not-found]
-from ragas.metrics import Faithfulness
-from ragas.metrics import ResponseRelevancy
+from ragas.metrics import Faithfulness  # type: ignore[import-not-found]
+from ragas.metrics import ResponseRelevancy  # type: ignore[import-not-found]
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
