@@ -42,6 +42,7 @@ export default function Logo({ folded, size, className }: LogoProps) {
           />
         )}
         <Text
+          as="p"
           headingH3
           className={cn("line-clamp-1 truncate", folded && "hidden")}
           nowrap
@@ -51,6 +52,7 @@ export default function Logo({ folded, size, className }: LogoProps) {
       </div>
       {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && (
         <Text
+          as="p"
           secondaryBody
           text03
           className={cn("ml-[33px] line-clamp-1 truncate", folded && "hidden")}

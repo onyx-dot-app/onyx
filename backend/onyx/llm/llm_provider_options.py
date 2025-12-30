@@ -57,7 +57,7 @@ class WellKnownLLMProviderDescriptor(BaseModel):
 
 # Curated list of OpenAI models to show by default in the UI
 OPENAI_VISIBLE_MODEL_NAMES = {
-    "gpt-5",
+    "gpt-5.2",
     "gpt-5-mini",
     "o1",
     "o3-mini",
@@ -324,7 +324,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             model_configurations=fetch_model_configurations_for_provider(
                 LlmProviderNames.OPENAI
             ),
-            default_model="gpt-4o",
+            default_model="gpt-5.2",
         ),
         WellKnownLLMProviderDescriptor(
             name=LlmProviderNames.OLLAMA_CHAT,

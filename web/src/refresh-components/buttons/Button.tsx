@@ -364,6 +364,7 @@ function ButtonInner(
       <div className={cn(LeftIcon && "pr-1", RightIcon && "pl-1")}>
         {typeof children === "string" ? (
           <Text
+            as="p"
             className={cn(
               "whitespace-nowrap",
               textClasses(transient)[variant][subvariant][abled]

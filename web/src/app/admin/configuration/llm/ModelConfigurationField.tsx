@@ -2,16 +2,12 @@
 
 import { ArrayHelpers, FieldArray, FormikProps, useField } from "formik";
 import { ModelConfiguration } from "./interfaces";
-import {
-  ManualErrorMessage,
-  SubLabel,
-  TextFormField,
-} from "@/components/Field";
-import { Label } from "@/components/ui/label";
+import { ManualErrorMessage, TextFormField } from "@/components/Field";
 import { useEffect, useState } from "react";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgX } from "@opal/icons";
+import Text from "@/refresh-components/texts/Text";
 function ModelConfigurationRow({
   name,
   index,
@@ -87,10 +83,12 @@ export function ModelConfigurationField({
   return (
     <div className="pb-5 flex flex-col w-full">
       <div className="flex flex-col">
-        <Label className="text-md">Model Configurations</Label>
-        <SubLabel>
+        <Text as="p" mainUiAction>
+          Model Configurations
+        </Text>
+        <Text as="p" secondaryBody text03>
           Add models and customize the number of input tokens that they accept.
-        </SubLabel>
+        </Text>
       </div>
       <FieldArray
         name={name}
@@ -98,8 +96,12 @@ export function ModelConfigurationField({
           <div className="flex flex-col">
             <div className="flex flex-col gap-4 py-4">
               <div className="flex">
-                <Label className="flex flex-[2]">Model Name</Label>
-                <Label className="flex flex-[1]">Max Input Tokens</Label>
+                <Text as="p" secondaryBody className="flex flex-[2]">
+                  Model Name
+                </Text>
+                <Text as="p" secondaryBody className="flex flex-[1]">
+                  Max Input Tokens
+                </Text>
                 <div className="w-10" />
               </div>
               {formikProps.values.model_configurations.map((_, index) => (

@@ -147,13 +147,18 @@ export function CompactDocumentCard({
           ) : (
             <SourceIcon sourceType={document.source_type} iconSize={18} />
           )}
-          <Text text04 className="truncate !m-0">
+          <Text as="p" text04 className="truncate !m-0">
             {document.semantic_identifier ?? document.document_id}
           </Text>
         </div>
 
         {document.blurb && (
-          <Text text03 secondaryBody className="line-clamp-2 text-left !m-0">
+          <Text
+            as="p"
+            text03
+            secondaryBody
+            className="line-clamp-2 text-left !m-0"
+          >
             {document.blurb}
           </Text>
         )}
@@ -161,6 +166,7 @@ export function CompactDocumentCard({
         {document.updated_at &&
           !isNaN(new Date(document.updated_at).getTime()) && (
             <Text
+              as="p"
               text03
               figureSmallLabel
               className="line-clamp-2 text-left !m-0"

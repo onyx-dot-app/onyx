@@ -530,7 +530,7 @@ export function FederatedConnectorForm({
             className="flex items-center justify-between gap-4 py-2"
           >
             <div className="flex-1">
-              <Text mainUiAction text04 className="mb-1">
+              <Text as="p" mainUiAction text04 className="mb-1">
                 {fieldKey
                   .replace(/_/g, " ")
                   .replace(/\b\w/g, (l) => l.toUpperCase())}
@@ -539,7 +539,7 @@ export function FederatedConnectorForm({
                 )}
               </Text>
               {fieldSpec.description && (
-                <Text mainUiMuted text03>
+                <Text as="p" mainUiMuted text03>
                   {fieldSpec.description}
                 </Text>
               )}
@@ -641,13 +641,13 @@ export function FederatedConnectorForm({
                       }
                     />
                     <div className="flex-1">
-                      <Text mainUiAction text04>
+                      <Text as="p" mainUiAction text04>
                         {fieldKey
                           .replace(/_/g, " ")
                           .replace(/\b\w/g, (l) => l.toUpperCase())}
                       </Text>
                       {fieldSpec.description && (
-                        <Text mainUiMuted text03>
+                        <Text as="p" mainUiMuted text03>
                           {fieldSpec.description}
                         </Text>
                       )}
@@ -657,7 +657,7 @@ export function FederatedConnectorForm({
                   <>
                     {isListType ? (
                       <>
-                        <Text mainUiAction text04>
+                        <Text as="p" mainUiAction text04>
                           {fieldSpec.description ||
                             fieldKey
                               .replace(/_/g, " ")
@@ -697,7 +697,7 @@ export function FederatedConnectorForm({
                           error={!!configValidationErrors[fieldKey]}
                         />
                         {configValidationErrors[fieldKey] && (
-                          <Text className="text-red-500 text-sm mt-1">
+                          <Text as="p" className="text-red-500 text-sm mt-1">
                             {configValidationErrors[fieldKey]}
                           </Text>
                         )}
@@ -705,7 +705,7 @@ export function FederatedConnectorForm({
                     ) : (
                       <div className="flex items-center justify-between gap-4 py-2">
                         <div className="flex-1">
-                          <Text mainUiAction text04 className="mb-1">
+                          <Text as="p" mainUiAction text04 className="mb-1">
                             {fieldKey
                               .replace(/_/g, " ")
                               .replace(/\b\w/g, (l) => l.toUpperCase())}
@@ -714,7 +714,7 @@ export function FederatedConnectorForm({
                             )}
                           </Text>
                           {fieldSpec.description && (
-                            <Text mainUiMuted text03>
+                            <Text as="p" mainUiMuted text03>
                               {fieldSpec.description}
                             </Text>
                           )}
@@ -817,11 +817,17 @@ export function FederatedConnectorForm({
       <Card className="px-8 py-4">
         <CardContent className="p-0">
           <form onSubmit={handleSubmit}>
-            <Text headingH3>Credentials</Text>
-            <Text mainUiMuted>Enter the credentials for this connector.</Text>
+            <Text as="p" headingH3>
+              Credentials
+            </Text>
+            <Text as="p" mainUiMuted>
+              Enter the credentials for this connector.
+            </Text>
             <div className="space-y-4">{renderCredentialFields()}</div>
             <Separator />
-            <Text headingH3>Configuration</Text>
+            <Text as="p" headingH3>
+              Configuration
+            </Text>
             <div className="space-y-4">{renderConfigFields()}</div>
 
             <div className="flex gap-2 pt-4 w-full justify-end">

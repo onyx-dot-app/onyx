@@ -480,10 +480,10 @@ export default function AddOpenAPIActionModal({
                           <SvgActions className="size-4 stroke-text-03" />
                         </div>
                         <div className="flex flex-col gap-1">
-                          <Text mainUiAction text03>
+                          <Text as="p" mainUiAction text03>
                             No actions found
                           </Text>
-                          <Text secondaryBody text03>
+                          <Text as="p" secondaryBody text03>
                             Provide OpenAPI schema to preview actions here.
                           </Text>
                         </div>

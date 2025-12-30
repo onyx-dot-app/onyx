@@ -108,6 +108,7 @@ function ToolItemRow({
         </div>
         <div className={cn("flex-1", !isLastItem && "pb-4")}>
           <Text
+            as="p"
             text02
             className={cn("text-sm mb-1", isLoading && "loading-text")}
           >
@@ -478,6 +479,7 @@ function ExpandedToolItem({
         <div className={cn("flex-1", !isLastItem && "pb-4")}>
           <div className="flex mb-1">
             <Text
+              as="p"
               text02
               className={cn(
                 "text-sm flex items-center gap-1",
@@ -822,7 +824,7 @@ export default function MultiToolRenderer({
         className="flex flex-row w-fit items-center group/StepsButton select-none"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <Text text03 className="group-hover/StepsButton:text-text-04">
+        <Text as="p" text03 className="group-hover/StepsButton:text-text-04">
           {displayItems.length} steps
         </Text>
         <SvgChevronDownSmall

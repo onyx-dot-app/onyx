@@ -68,7 +68,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
       {hasSearchTerm && unmatchedOptions.length > 0 && (
         <div className="px-3 py-2 pt-3">
           <div className="border-t border-border-01 pt-2">
-            <Text text04 secondaryBody className="text-text-02">
+            <Text as="p" text04 secondaryBody className="text-text-02">
               {separatorLabel}
             </Text>
           </div>

@@ -977,12 +977,12 @@ export default function AssistantEditor({
                                     >
                                       <div className="flex flex-col overflow-hidden h-12 p-1">
                                         <div className="flex items-center justify-between gap-2 w-full">
-                                          <Text text04 secondaryAction>
+                                          <Text as="p" text04 secondaryAction>
                                             View All
                                           </Text>
                                           <SvgFiles className="h-5 w-5 stroke-text-02" />
                                         </div>
-                                        <Text text03 secondaryBody>
+                                        <Text as="p" text03 secondaryBody>
                                           {values.user_file_ids.length} files
                                         </Text>
                                       </div>

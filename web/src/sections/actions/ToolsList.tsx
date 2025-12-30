@@ -71,7 +71,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
         ) : isEmpty ? (
           // Empty state
           <div className="flex items-center justify-center w-full py-8">
-            <Text text03 mainUiBody>
+            <Text as="p" text03 mainUiBody>
               {searchQuery ? emptySearchMessage : emptyMessage}
             </Text>
           </div>

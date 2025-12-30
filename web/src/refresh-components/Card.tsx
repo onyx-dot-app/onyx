@@ -29,8 +29,8 @@
  *
  * // Multiple children - automatically spaced
  * <Card>
- *   <Text headingH3>Section 1</Text>
- *   <Text body>Some content</Text>
+ *   <Text as="p" headingH3>Section 1</Text>
+ *   <Text as="p" body>Some content</Text>
  *   <Button>Action</Button>
  * </Card>
  * ```

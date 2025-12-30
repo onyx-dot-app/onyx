@@ -61,14 +61,14 @@ function QueryHistoryTableRow({
       className="hover:bg-accent-background cursor-pointer relative select-none"
     >
       <TableCell>
-        <Text className="whitespace-normal line-clamp-5">
+        <Text as="p" className="whitespace-normal line-clamp-5">
           {chatSessionMinimal.first_user_message ||
             chatSessionMinimal.name ||
             "-"}
         </Text>
       </TableCell>
       <TableCell>
-        <Text className="whitespace-normal line-clamp-5">
+        <Text as="p" className="whitespace-normal line-clamp-5">
           {chatSessionMinimal.first_ai_message || "-"}
         </Text>
       </TableCell>
@@ -102,7 +102,9 @@ function SelectFeedbackType({
 }) {
   return (
     <div>
-      <Text className="my-auto mr-2 font-medium mb-1">Feedback Type</Text>
+      <Text as="p" className="my-auto mr-2 font-medium mb-1">
+        Feedback Type
+      </Text>
       <div className="max-w-sm space-y-6">
         <InputSelect
           value={value}

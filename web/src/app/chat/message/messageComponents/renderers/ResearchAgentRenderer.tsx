@@ -75,6 +75,7 @@ function NestedToolItemRow({
           )}
         >
           <Text
+            as="p"
             text02
             className={cn("text-sm mb-1", isLoading && "loading-text")}
           >

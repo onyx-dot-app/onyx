@@ -182,7 +182,7 @@ export default function ChangeCredentialsModal({
         <Modal.Body>
           {!isAzure && (
             <>
-              <Text>
+              <Text as="p">
                 You can modify your configuration by providing a new API key
                 {isProxy ? " or API URL." : "."}
               </Text>
@@ -239,7 +239,7 @@ export default function ChangeCredentialsModal({
 
                     <div>
                       <Label className="mt-2">Test Model</Label>
-                      <Text>
+                      <Text as="p">
                         Since you are using a liteLLM proxy, we&apos;ll need a
                         model name to test the connection with.
                       </Text>
@@ -280,10 +280,10 @@ export default function ChangeCredentialsModal({
             </>
           )}
 
-          <Text className="mt-4 font-bold">
+          <Text as="p" className="mt-4 font-bold">
             You can delete your configuration.
           </Text>
-          <Text>
+          <Text as="p">
             This is only possible if you have already switched to a different
             embedding type!
           </Text>
