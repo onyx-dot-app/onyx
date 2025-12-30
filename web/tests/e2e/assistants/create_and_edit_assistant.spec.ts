@@ -3,28 +3,30 @@ import { loginAs, loginAsRandomUser } from "../utils/auth";
 import { OnyxApiClient } from "../utils/onyxApiClient";
 
 // --- Locator Helper Functions ---
-const getNameInput = (page: Page) =>
-  page.getByRole("textbox", { name: "name" });
+const getNameInput = (page: Page) => page.locator('input[name="name"]');
 const getDescriptionInput = (page: Page) =>
-  page.getByRole("textbox", { name: "description" });
+  page.locator('textarea[name="description"]');
 const getInstructionsTextarea = (page: Page) =>
-  page.getByRole("textbox", { name: "instructions" });
+  page.locator('textarea[name="instructions"]');
 const getAdvancedOptionsButton = (page: Page) =>
   page.locator('button:has-text("Advanced Options")');
 const getReminderTextarea = (page: Page) =>
-  page.getByRole("textbox", { name: "reminders" });
+  page.locator('textarea[name="reminders"]');
 const getKnowledgeCutoffInput = (page: Page) =>
-  page.getByRole("textbox", { name: "knowledge_cutoff_date" });
+  page.locator('input[name="knowledge_cutoff_date"]');
 const getKnowledgeToggle = (page: Page) =>
-  page
-    .locator('div:has(> p:has-text("Knowledge"))')
-    .locator('button[role="switch"]');
+  page.locator('button[role="switch"][name="enable_knowledge"]');
 const getStarterMessageInput = (page: Page, index: number = 0) =>
-  page.getByRole("textbox", { name: `starter_messages.${index}.message` });
+  page.locator(`input[name="starter_messages.${index}"]`);
 const getCreateSubmitButton = (page: Page) =>
   page.locator('button[type="submit"]:has-text("Create")');
 const getUpdateSubmitButton = (page: Page) =>
   page.locator('button[type="submit"]:has-text("Update")');
+const getKnowledgeSourceSelect = (page: Page) =>
+  page
+    .locator('label:has-text("Knowledge Source")')
+    .locator('button[role="combobox"]')
+    .first();
 
 test.describe("Assistant Creation and Edit Verification", () => {
   // Configure this entire suite to run serially
@@ -51,12 +53,18 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await getDescriptionInput(page).fill(assistantDescription);
       await getInstructionsTextarea(page).fill(assistantInstructions);
 
-      // Verify Knowledge toggle is disabled (no connectors)
+      // Enable Knowledge toggle
       const knowledgeToggle = getKnowledgeToggle(page);
       await knowledgeToggle.scrollIntoViewIfNeeded();
       await expect(knowledgeToggle).toHaveAttribute("aria-checked", "false");
+      await knowledgeToggle.click();
 
-      // Verify "Add User Files" button is visible even without connectors
+      // Select "User Knowledge" from the knowledge source dropdown
+      const knowledgeSourceSelect = getKnowledgeSourceSelect(page);
+      await knowledgeSourceSelect.click();
+      await page.getByRole("option", { name: "User Knowledge" }).click();
+
+      // Verify "Add User Files" button is visible
       const addUserFilesButton = page.getByRole("button", {
         name: /add user files/i,
       });
@@ -167,6 +175,11 @@ test.describe("Assistant Creation and Edit Verification", () => {
       // Verify toggle is NOT disabled
       await expect(knowledgeToggle).not.toBeDisabled();
       await knowledgeToggle.click();
+
+      // Select "Team Knowledge" from the knowledge source dropdown
+      const knowledgeSourceSelect = getKnowledgeSourceSelect(page);
+      await knowledgeSourceSelect.click();
+      await page.getByRole("option", { name: "Team Knowledge" }).click();
 
       // Select the document set created in beforeAll
       // Document sets are rendered as clickable cards, not a dropdown

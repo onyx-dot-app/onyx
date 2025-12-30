@@ -33,15 +33,15 @@ test("Chat workflow", async ({ page }) => {
   // Test creation of a new assistant
   await page.getByTestId("AppSidebar/more-agents").click();
   await page.getByTestId("AgentsPage/new-agent-button").click();
-  await page.getByRole("textbox", { name: "name" }).click();
-  await page.getByRole("textbox", { name: "name" }).fill("Test Assistant");
-  await page.getByRole("textbox", { name: "description" }).click();
+  await page.locator('input[name="name"]').click();
+  await page.locator('input[name="name"]').fill("Test Assistant");
+  await page.locator('textarea[name="description"]').click();
   await page
-    .getByRole("textbox", { name: "description" })
+    .locator('textarea[name="description"]')
     .fill("Test Assistant Description");
-  await page.getByRole("textbox", { name: "instructions" }).click();
+  await page.locator('textarea[name="instructions"]').click();
   await page
-    .getByRole("textbox", { name: "instructions" })
+    .locator('textarea[name="instructions"]')
     .fill("Test Assistant Instructions");
   await page.getByRole("button", { name: "Create" }).click();
 

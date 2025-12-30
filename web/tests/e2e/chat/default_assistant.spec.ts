@@ -68,14 +68,12 @@ test.describe("Default Assistant Tests", () => {
       await page.getByTestId("AppSidebar/more-agents").click();
       await page.getByTestId("AgentsPage/new-agent-button").click();
       await page.waitForTimeout(2000);
+      await page.locator('input[name="name"]').fill("Custom Test Assistant");
       await page
-        .getByRole("textbox", { name: "name" })
-        .fill("Custom Test Assistant");
-      await page
-        .getByRole("textbox", { name: "description" })
+        .locator('textarea[name="description"]')
         .fill("Test Description");
       await page
-        .getByRole("textbox", { name: "instructions" })
+        .locator('textarea[name="instructions"]')
         .fill("Test Instructions");
       await page.getByRole("button", { name: "Create" }).click();
 
@@ -111,14 +109,12 @@ test.describe("Default Assistant Tests", () => {
       await page.getByTestId("AppSidebar/more-agents").click();
       await page.getByTestId("AgentsPage/new-agent-button").click();
       await page.waitForTimeout(2000);
+      await page.locator('input[name="name"]').fill("Custom Assistant");
       await page
-        .getByRole("textbox", { name: "name" })
-        .fill("Custom Assistant");
-      await page
-        .getByRole("textbox", { name: "description" })
+        .locator('textarea[name="description"]')
         .fill("Test Description");
       await page
-        .getByRole("textbox", { name: "instructions" })
+        .locator('textarea[name="instructions"]')
         .fill("Test Instructions");
       await page.getByRole("button", { name: "Create" }).click();
 
@@ -162,13 +158,13 @@ test.describe("Default Assistant Tests", () => {
       await page.getByTestId("AgentsPage/new-agent-button").click();
       await page.waitForTimeout(2000);
       await page
-        .getByRole("textbox", { name: "name" })
+        .locator('input[name="name"]')
         .fill("Test Assistant with Starters");
       await page
-        .getByRole("textbox", { name: "description" })
+        .locator('textarea[name="description"]')
         .fill("Test Description");
       await page
-        .getByRole("textbox", { name: "instructions" })
+        .locator('textarea[name="instructions"]')
         .fill("Test Instructions");
 
       // Add starter messages (if the UI supports it)
@@ -237,14 +233,12 @@ test.describe("Default Assistant Tests", () => {
       await page.getByTestId("AppSidebar/more-agents").click();
       await page.getByTestId("AgentsPage/new-agent-button").click();
       await page.waitForTimeout(2000);
+      await page.locator('input[name="name"]').fill("Switch Test Assistant");
       await page
-        .getByRole("textbox", { name: "name" })
-        .fill("Switch Test Assistant");
-      await page
-        .getByRole("textbox", { name: "description" })
+        .locator('textarea[name="description"]')
         .fill("Test Description");
       await page
-        .getByRole("textbox", { name: "instructions" })
+        .locator('textarea[name="instructions"]')
         .fill("Test Instructions");
       await page.getByRole("button", { name: "Create" }).click();
 
