@@ -9,6 +9,9 @@ from onyx.llm.llm_provider_options import fetch_available_well_known_llms
 from onyx.llm.llm_provider_options import WellKnownLLMProviderDescriptor
 
 
+_DEFAULT_BEDROCK_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+
+
 @pytest.fixture
 def bedrock_provider() -> WellKnownLLMProviderDescriptor:
     provider = next(
@@ -32,7 +35,7 @@ def test_bedrock_llm_configuration(
     # Prepare the test request payload
     test_request: dict[str, Any] = {
         "provider": LlmProviderNames.BEDROCK,
-        "default_model_name": bedrock_provider.default_model,
+        "default_model_name": _DEFAULT_BEDROCK_MODEL,
         "api_key": None,
         "api_base": None,
         "api_version": None,
@@ -64,7 +67,7 @@ def test_bedrock_llm_configuration_invalid_key(
     # Prepare the test request payload with invalid credentials
     test_request: dict[str, Any] = {
         "provider": LlmProviderNames.BEDROCK,
-        "default_model_name": bedrock_provider.default_model,
+        "default_model_name": _DEFAULT_BEDROCK_MODEL,
         "api_key": None,
         "api_base": None,
         "api_version": None,
