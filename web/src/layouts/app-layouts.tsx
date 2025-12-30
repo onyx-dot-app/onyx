@@ -28,7 +28,6 @@
 
 "use client";
 
-import { ChatSession } from "@/app/chat/interfaces";
 import { cn, ensureHrefProtocol, noProp } from "@/lib/utils";
 import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
@@ -67,7 +66,7 @@ import { useSettingsContext } from "@/components/settings/SettingsProvider";
 
 const footerMarkdownComponents = {
   p: ({ children }) => (
-    <Text as="p" text03 secondaryAction className="!my-0 text-center">
+    <Text as="p" text03 secondaryAction className="text-center">
       {children}
     </Text>
   ),

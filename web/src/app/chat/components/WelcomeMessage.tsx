@@ -5,8 +5,8 @@ import { getRandomGreeting } from "@/lib/chat/greetingMessages";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import { useContext, useMemo } from "react";
-import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { useMemo } from "react";
+import { useSettingsContext } from "@/components/settings/SettingsProvider";
 
 export interface WelcomeMessageProps {
   agent?: MinimalPersonaSnapshot;
@@ -18,7 +18,7 @@ export default function WelcomeMessage({
   isDefaultAgent,
 }: WelcomeMessageProps) {
   let content: React.ReactNode = null;
-  const settings = useContext(SettingsContext);
+  const settings = useSettingsContext();
   const enterpriseSettings = settings?.enterpriseSettings;
   const greeting = useMemo(() => {
     if (enterpriseSettings?.custom_greeting_message) {
