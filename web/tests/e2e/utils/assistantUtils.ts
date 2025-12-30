@@ -23,11 +23,11 @@ export async function createAssistant(page: Page, params: AssistantParams) {
   await page.getByTestId("AgentsPage/new-agent-button").click();
 
   // Fill required fields
-  await page.getByTestId("name").fill(name);
+  await page.getByRole("textbox", { name: "name" }).fill(name);
   if (description) {
-    await page.getByTestId("description").fill(description);
+    await page.getByRole("textbox", { name: "description" }).fill(description);
   }
-  await page.getByTestId("system_prompt").fill(instructions);
+  await page.getByRole("textbox", { name: "instructions" }).fill(instructions);
 
   // Submit create
   await page.getByRole("button", { name: "Create" }).click();

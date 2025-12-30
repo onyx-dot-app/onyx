@@ -3,29 +3,24 @@ import { loginAs, loginAsRandomUser } from "../utils/auth";
 import { OnyxApiClient } from "../utils/onyxApiClient";
 
 // --- Locator Helper Functions ---
-const getNameInput = (page: Page) => page.locator('input[name="name"]');
+const getNameInput = (page: Page) =>
+  page.getByRole("textbox", { name: "name" });
 const getDescriptionInput = (page: Page) =>
-  page.locator('input[name="description"]');
+  page.getByRole("textbox", { name: "description" });
 const getInstructionsTextarea = (page: Page) =>
-  page.locator('textarea[name="system_prompt"]');
+  page.getByRole("textbox", { name: "instructions" });
 const getAdvancedOptionsButton = (page: Page) =>
   page.locator('button:has-text("Advanced Options")');
 const getReminderTextarea = (page: Page) =>
-  page.locator('textarea[name="task_prompt"]');
-const getDateTimeAwareCheckbox = (page: Page) =>
-  page.locator("#checkbox-datetime_aware");
+  page.getByRole("textbox", { name: "reminders" });
 const getKnowledgeCutoffInput = (page: Page) =>
-  page.locator('input[name="search_start_date"]');
-const getAiRelevanceCheckbox = (page: Page) =>
-  page.locator("#checkbox-llm_relevance_filter");
+  page.getByRole("textbox", { name: "knowledge_cutoff_date" });
 const getKnowledgeToggle = (page: Page) =>
   page
     .locator('div:has(> p:has-text("Knowledge"))')
     .locator('button[role="switch"]');
-const getNumChunksInput = (page: Page) =>
-  page.locator('input[name="num_chunks"]');
 const getStarterMessageInput = (page: Page, index: number = 0) =>
-  page.locator(`input[name="starter_messages.${index}.message"]`);
+  page.getByRole("textbox", { name: `starter_messages.${index}.message` });
 const getCreateSubmitButton = (page: Page) =>
   page.locator('button[type="submit"]:has-text("Create")');
 const getUpdateSubmitButton = (page: Page) =>
@@ -135,7 +130,6 @@ test.describe("Assistant Creation and Edit Verification", () => {
       const assistantReminder = "Initial reminder.";
       const assistantStarterMessage = "Initial starter message?";
       const knowledgeCutoffDate = "2023-01-01";
-      const numChunks = "5";
 
       // --- Edited Values ---
       const editedAssistantName = `Edited Assistant ${Date.now()}`;
@@ -144,7 +138,6 @@ test.describe("Assistant Creation and Edit Verification", () => {
       const editedAssistantReminder = "Edited reminder.";
       const editedAssistantStarterMessage = "Edited starter message?";
       const editedKnowledgeCutoffDate = "2024-01-01";
-      const editedNumChunks = "15";
 
       // Navigate to the assistant creation page
       await page.goto("http://localhost:3000/chat/agents/create");
@@ -164,9 +157,6 @@ test.describe("Assistant Creation and Edit Verification", () => {
       // Reminder
       await getReminderTextarea(page).fill(assistantReminder);
 
-      // Date/Time Aware (Enable)
-      await getDateTimeAwareCheckbox(page).click();
-
       // Knowledge Cutoff Date
       await getKnowledgeCutoffInput(page).fill(knowledgeCutoffDate);
 
@@ -181,12 +171,6 @@ test.describe("Assistant Creation and Edit Verification", () => {
       // Select the document set created in beforeAll
       // Document sets are rendered as clickable cards, not a dropdown
       await page.getByTestId(`document-set-card-${documentSetId}`).click();
-
-      // Num Chunks (should work now that Knowledge is enabled)
-      await getNumChunksInput(page).fill(numChunks);
-
-      // AI Relevance Filter (Enable)
-      await getAiRelevanceCheckbox(page).click();
 
       // Starter Message
       await getStarterMessageInput(page).fill(assistantStarterMessage);
@@ -220,10 +204,6 @@ test.describe("Assistant Creation and Edit Verification", () => {
 
       // Verify advanced fields
       await expect(getReminderTextarea(page)).toHaveValue(assistantReminder);
-      await expect(getDateTimeAwareCheckbox(page)).toHaveAttribute(
-        "aria-checked",
-        "true"
-      );
       // Knowledge toggle should be enabled since we have a connector
       await expect(getKnowledgeToggle(page)).toHaveAttribute(
         "aria-checked",
@@ -237,11 +217,6 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await expect(getKnowledgeCutoffInput(page)).toHaveValue(
         knowledgeCutoffDate
       );
-      await expect(getNumChunksInput(page)).toHaveValue(numChunks);
-      await expect(getAiRelevanceCheckbox(page)).toHaveAttribute(
-        "aria-checked",
-        "true"
-      );
       await expect(getStarterMessageInput(page)).toHaveValue(
         assistantStarterMessage
       );
@@ -251,10 +226,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await getDescriptionInput(page).fill(editedAssistantDescription);
       await getInstructionsTextarea(page).fill(editedAssistantInstructions);
       await getReminderTextarea(page).fill(editedAssistantReminder);
-      await getDateTimeAwareCheckbox(page).click(); // Disable
       await getKnowledgeCutoffInput(page).fill(editedKnowledgeCutoffDate);
-      await getNumChunksInput(page).fill(editedNumChunks);
-      await getAiRelevanceCheckbox(page).click(); // Disable
       await getStarterMessageInput(page).fill(editedAssistantStarterMessage);
 
       // Submit the edit form
@@ -286,10 +258,6 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await expect(getReminderTextarea(page)).toHaveValue(
         editedAssistantReminder
       );
-      await expect(getDateTimeAwareCheckbox(page)).toHaveAttribute(
-        "aria-checked",
-        "false"
-      );
       await expect(getKnowledgeToggle(page)).toHaveAttribute(
         "aria-checked",
         "true"
@@ -300,11 +268,6 @@ test.describe("Assistant Creation and Edit Verification", () => {
       ).toBeVisible();
       await expect(getKnowledgeCutoffInput(page)).toHaveValue(
         editedKnowledgeCutoffDate
-      );
-      await expect(getNumChunksInput(page)).toHaveValue(editedNumChunks);
-      await expect(getAiRelevanceCheckbox(page)).toHaveAttribute(
-        "aria-checked",
-        "false"
       );
       await expect(getStarterMessageInput(page)).toHaveValue(
         editedAssistantStarterMessage
