@@ -446,9 +446,12 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
         currentMessageFiles: currentMessageFiles,
         deepResearch: deepResearchEnabled,
       });
-      setShowOnboarding(false);
+      if (showOnboarding) {
+        localStorage.setItem(HAS_FINISHED_ONBOARDING_KEY, "true");
+        setShowOnboarding(false);
+      }
     },
-    [onSubmit, currentMessageFiles, deepResearchEnabled]
+    [onSubmit, currentMessageFiles, deepResearchEnabled, showOnboarding]
   );
 
   // Memoized callbacks for DocumentsSidebar
