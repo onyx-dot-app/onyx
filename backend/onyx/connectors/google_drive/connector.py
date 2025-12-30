@@ -38,6 +38,9 @@ from onyx.connectors.google_drive.file_retrieval import get_all_files_for_oauth
 from onyx.connectors.google_drive.file_retrieval import (
     get_all_files_in_my_drive_and_shared,
 )
+from onyx.connectors.google_drive.file_retrieval import (
+    get_files_by_web_view_links_batch,
+)
 from onyx.connectors.google_drive.file_retrieval import get_files_in_shared_drive
 from onyx.connectors.google_drive.file_retrieval import get_root_folder_id
 from onyx.connectors.google_drive.file_retrieval import has_link_only_permission
@@ -63,6 +66,7 @@ from onyx.connectors.google_utils.shared_constants import USER_FIELDS
 from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
+from onyx.connectors.interfaces import Resolver
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import ConnectorFailure
@@ -155,6 +159,7 @@ class DriveIdStatus(Enum):
 class GoogleDriveConnector(
     SlimConnectorWithPermSync,
     CheckpointedConnectorWithPermSync[GoogleDriveCheckpoint],
+    Resolver,
 ):
     def __init__(
         self,
@@ -1175,10 +1180,10 @@ class GoogleDriveConnector(
             run_functions_tuples_in_parallel(func_with_args, max_workers=8),
         )
 
-        results = [result for result in results if result is not None]
-        logger.debug(f"batch has {len(results)} docs or failures")
+        results_cleaned = [result for result in results if result is not None]
+        logger.debug(f"batch has {len(results_cleaned)} docs or failures")
 
-        yield from results
+        yield from results_cleaned
 
     def _convert_retrieved_file_to_document(
         self,
@@ -1282,6 +1287,43 @@ class GoogleDriveConnector(
     ) -> CheckpointOutput[GoogleDriveCheckpoint]:
         return self._load_from_checkpoint(
             start, end, checkpoint, include_permissions=True
+        )
+
+    @override
+    def resolve_errors(
+        self, errors: list[ConnectorFailure], include_permissions: bool = False
+    ) -> Generator[Document | ConnectorFailure, None, None]:
+        """Attempts to yield back ALL the documents described by the error, no checkpointing.
+        caller's responsibility is to delete the old connectorfailures and replace with the new ones.
+        """
+        if self._creds is None or self._primary_admin_email is None:
+            raise RuntimeError(
+                "Credentials missing, should not call this method before calling load_credentials"
+            )
+
+        logger.info(f"Resolving {len(errors)} errors")
+        doc_ids = set(
+            failure.failed_document.document_id
+            for failure in errors
+            if failure.failed_document
+        )
+        service = get_drive_service(self.creds, self.primary_admin_email)
+        field_type = (
+            DriveFileFieldType.WITH_PERMISSIONS
+            if include_permissions or self.exclude_domain_link_only
+            else DriveFileFieldType.STANDARD
+        )
+        files = get_files_by_web_view_links_batch(service, list(doc_ids), field_type)
+        retrieved_iter = (
+            RetrievedDriveFile(
+                drive_file=file,
+                user_email=self.primary_admin_email,
+                completion_stage=DriveRetrievalStage.DONE,
+            )
+            for file in files.values()
+        )
+        yield from self._convert_retrieved_files_to_documents(
+            retrieved_iter, include_permissions
         )
 
     def _extract_slim_docs_from_google_drive(

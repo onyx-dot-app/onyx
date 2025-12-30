@@ -3,11 +3,14 @@ from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
 from enum import Enum
+from typing import cast
+from typing import Dict
 from urllib.parse import parse_qs
 from urllib.parse import urlparse
 
 from googleapiclient.discovery import Resource  # type: ignore
 from googleapiclient.errors import HttpError  # type: ignore
+from googleapiclient.http import BatchHttpRequest  # type: ignore
 
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
 from onyx.connectors.google_drive.constants import DRIVE_SHORTCUT_TYPE
@@ -53,6 +56,8 @@ SLIM_FILE_FIELDS = (
     "permissionIds, webViewLink, owners(emailAddress), modifiedTime)"
 )
 FOLDER_FIELDS = "nextPageToken, files(id, name, permissions, modifiedTime, webViewLink, shortcutDetails)"
+
+MAX_BATCH_SIZE = 100
 
 
 def generate_time_range_filter(
@@ -435,3 +440,58 @@ def get_file_by_web_view_link(
         )
         .execute()
     )
+
+
+def get_files_by_web_view_links_batch(
+    service: GoogleDriveService,
+    web_view_links: list[str],
+    field_type: DriveFileFieldType,
+) -> dict[str, GoogleDriveFileType]:
+    fields = _get_fields_for_file_type(field_type)
+    if len(web_view_links) <= MAX_BATCH_SIZE:
+        return _get_files_by_web_view_links_batch(service, web_view_links, fields)
+
+    ret = {}
+    for i in range(0, len(web_view_links), MAX_BATCH_SIZE):
+        batch = web_view_links[i : i + MAX_BATCH_SIZE]
+        ret.update(_get_files_by_web_view_links_batch(service, batch, fields))
+    return ret
+
+
+def _get_files_by_web_view_links_batch(
+    service: GoogleDriveService,
+    web_view_links: list[str],
+    fields: str,
+) -> dict[str, GoogleDriveFileType]:
+    """
+    Retrieve multiple Google Drive files using their webViewLinks in a single batch request.
+
+    Returns a dict mapping web_view_link to file metadata.
+    Failed requests (due to invalid links or API errors) are omitted from the result.
+    """
+
+    def callback(
+        request_id: str, response: GoogleDriveFileType, exception: Exception | None
+    ) -> None:
+        if exception:
+            logger.warning(f"Error retrieving file {request_id}: {exception}")
+        else:
+            results[request_id] = response
+
+    results: Dict[str, GoogleDriveFileType] = {}
+    batch = cast(BatchHttpRequest, service.new_batch_http_request(callback=callback))
+
+    for web_view_link in web_view_links:
+        try:
+            file_id = _extract_file_id_from_web_view_link(web_view_link)
+            request = service.files().get(
+                fileId=file_id,
+                supportsAllDrives=True,
+                fields=fields,
+            )
+            batch.add(request, request_id=web_view_link)
+        except ValueError as e:
+            logger.warning(f"Failed to extract file ID from {web_view_link}: {e}")
+
+    batch.execute()
+    return results

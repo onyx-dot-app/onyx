@@ -269,3 +269,15 @@ class CheckpointedConnectorWithPermSync(CheckpointedConnector[CT]):
         checkpoint: CT,
     ) -> CheckpointOutput[CT]:
         raise NotImplementedError
+
+
+class Resolver:
+    @abc.abstractmethod
+    def resolve_errors(
+        self, errors: list[ConnectorFailure], include_permissions: bool = False
+    ) -> Generator[Document | ConnectorFailure, None, None]:
+        """Attempts to yield back ALL the documents described by the error, no checkpointing.
+        caller's responsibility is to delete the old connectorfailures and replace with the new ones.
+        If include_permissions is True, the documents will have permissions synced.
+        """
+        raise NotImplementedError
