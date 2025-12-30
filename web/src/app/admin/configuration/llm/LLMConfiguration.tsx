@@ -84,7 +84,9 @@ function DefaultLLMProviderDisplay({
       {popup}
       <div className="border p-3 bg-background-neutral-01 rounded-16 w-96 flex shadow-md">
         <div className="my-auto">
-          <Text headingH3>{providerName}</Text>
+          <Text as="p" headingH3>
+            {providerName}
+          </Text>
         </div>
         <div className="ml-auto">
           <Button action onClick={() => setFormIsVisible(true)}>

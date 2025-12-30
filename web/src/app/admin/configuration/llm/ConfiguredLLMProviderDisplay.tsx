@@ -107,14 +107,15 @@ function LLMProviderDisplay({
       {popup}
       <div className="border p-3 bg-background-neutral-01 rounded-16 w-96 flex shadow-md">
         <div className="my-auto">
-          <Text headingH3 text04>
+          <Text as="p" headingH3 text04>
             {providerName}{" "}
           </Text>
-          <Text secondaryBody text03 className="italic">
+          <Text as="p" secondaryBody text03 className="italic">
             ({existingLlmProvider.provider})
           </Text>
           {!existingLlmProvider.is_default_provider && (
             <Text
+              as="p"
               className={cn("text-action-link-05", "cursor-pointer")}
               onClick={handleSetAsDefault}
             >

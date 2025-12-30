@@ -596,7 +596,7 @@ export function LLMProviderUpdateForm({
                   className="w-fit"
                 >
                   {isFetchingModels ? (
-                    <Text>
+                    <Text as="p">
                       <LoadingAnimation text="Fetching models" />
                     </Text>
                   ) : (
@@ -605,12 +605,12 @@ export function LLMProviderUpdateForm({
                 </Button>
 
                 {fetchModelsError && (
-                  <Text className="text-red-600 text-sm">
+                  <Text as="p" className="text-red-600 text-sm">
                     {fetchModelsError}
                   </Text>
                 )}
 
-                <Text className="text-sm text-gray-600">
+                <Text as="p" className="text-sm text-gray-600">
                   Retrieve the latest available models for this provider.
                 </Text>
               </div>
@@ -689,7 +689,9 @@ export function LLMProviderUpdateForm({
                       )}
                       <Separator />
                       <div className="flex flex-col gap-3">
-                        <Text headingH3>Access Controls</Text>
+                        <Text as="p" headingH3>
+                          Access Controls
+                        </Text>
                         <IsPublicGroupSelector
                           formikProps={formikProps}
                           objectName="LLM Provider"
@@ -715,12 +717,16 @@ export function LLMProviderUpdateForm({
             )}
 
             {/* NOTE: this is above the test button to make sure it's visible */}
-            {testError && <Text className="text-error mt-2">{testError}</Text>}
+            {testError && (
+              <Text as="p" className="text-error mt-2">
+                {testError}
+              </Text>
+            )}
 
             <div className="flex w-full mt-4 gap-2">
               <Button type="submit" disabled={isTesting}>
                 {isTesting ? (
-                  <Text inverted>
+                  <Text as="p" inverted>
                     <LoadingAnimation text="Testing" />
                   </Text>
                 ) : existingLlmProvider ? (
