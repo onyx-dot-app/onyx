@@ -247,8 +247,10 @@ export default function KGEntityTypes({
       <div className="flex flex-col gap-y-4 w-full">
         {Object.entries(sourceAndEntityTypes.entity_types).length === 0 ? (
           <div className="flex flex-col gap-y-4">
-            <Text text02>No results available.</Text>
-            <Text text02>
+            <Text as="p" text02>
+              No results available.
+            </Text>
+            <Text as="p" text02>
               To configure Knowledge Graph, first connect some{" "}
               <Link
                 href="/admin/add-connector"
@@ -291,13 +293,13 @@ export default function KGEntityTypes({
                         {snakeToHumanReadable(key)}
                         <span className="ml-auto flex flex-row gap-x-16 items-center pr-16">
                           <span className="flex flex-col items-start">
-                            <Text secondaryBody text02>
+                            <Text as="p" secondaryBody text02>
                               Entities Count
                             </Text>
                             <Text>{stats.entities_count}</Text>
                           </span>
                           <span className="flex flex-col items-start">
-                            <Text secondaryBody text02>
+                            <Text as="p" secondaryBody text02>
                               Last Updated
                             </Text>
                             <Text>

@@ -66,7 +66,11 @@ export function ConfirmEntityModal({
           </Text>
         )}
 
-        {additionalDetails && <Text text03>{additionalDetails}</Text>}
+        {additionalDetails && (
+          <Text as="p" text03>
+            {additionalDetails}
+          </Text>
+        )}
       </div>
     </Modal>
   );

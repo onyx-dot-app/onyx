@@ -42,7 +42,7 @@ const OnboardingHeaderInner = ({
         ) : (
           <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
         )}
-        <Text text03 mainUiBody>
+        <Text as="p" text03 mainUiBody>
           {STEP_CONFIG[onboardingState.currentStep].title}
         </Text>
       </div>
@@ -50,7 +50,7 @@ const OnboardingHeaderInner = ({
         {stepButtonText ? (
           <>
             {!isWelcomeStep && (
-              <Text text03 mainUiBody>
+              <Text as="p" text03 mainUiBody>
                 Step {onboardingState.stepIndex} of {onboardingState.totalSteps}
               </Text>
             )}

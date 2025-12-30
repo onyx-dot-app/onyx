@@ -40,10 +40,10 @@ function CountDisplay({ label, value, isLoading }: CountDisplayProps) {
 
   return (
     <div className="flex items-center gap-1 px-1 py-0.5 rounded-06">
-      <Text mainUiMuted text03>
+      <Text as="p" mainUiMuted text03>
         {label}
       </Text>
-      <Text headingH3 text05>
+      <Text as="p" headingH3 text05>
         {displayValue}
       </Text>
     </div>

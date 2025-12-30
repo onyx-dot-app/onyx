@@ -113,7 +113,9 @@ function Main() {
             description="Make sure you copy your new API key. You won’t be able to see this key again."
           />
           <Modal.Body>
-            <Text className="break-all flex-1">{fullApiKey}</Text>
+            <Text as="p" className="break-all flex-1">
+              {fullApiKey}
+            </Text>
             <CopyIconButton getCopyText={() => fullApiKey!} />
           </Modal.Body>
         </Modal.Content>

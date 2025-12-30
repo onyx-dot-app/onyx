@@ -139,7 +139,7 @@ export function ExplanationText({
       {text}
     </a>
   ) : (
-    <Text text03 secondaryBody>
+    <Text as="p" text03 secondaryBody>
       {text}
     </Text>
   );

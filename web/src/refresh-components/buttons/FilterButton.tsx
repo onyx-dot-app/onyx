@@ -88,7 +88,7 @@ export default function FilterButton({
         />
       </div>
 
-      <Text nowrap className={cn(textClasses(transient)[state])}>
+      <Text as="p" nowrap className={cn(textClasses(transient)[state])}>
         {children}
       </Text>
       <div className="pl-0">

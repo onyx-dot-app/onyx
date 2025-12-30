@@ -88,6 +88,7 @@ function FileLineItem({
             className="hidden group-hover/LineItem:flex"
           />
           <Text
+            as="p"
             className="flex group-hover/LineItem:hidden"
             secondaryBody
             text03
@@ -142,7 +143,7 @@ function FilePickerPopoverContents({
         // Title
         hasFiles && (
           <div key="recent-files" className="pt-1">
-            <Text text02 secondaryBody className="py-1 px-3">
+            <Text as="p" text02 secondaryBody className="py-1 px-3">
               Recent Files
             </Text>
           </div>

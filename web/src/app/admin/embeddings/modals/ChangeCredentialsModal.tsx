@@ -280,7 +280,7 @@ export default function ChangeCredentialsModal({
             </>
           )}
 
-          <Text className="mt-4 font-bold">
+          <Text as="p" className="mt-4 font-bold">
             You can delete your configuration.
           </Text>
           <Text>

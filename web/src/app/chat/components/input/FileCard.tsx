@@ -205,7 +205,7 @@ export function FileCard({
         >
           {file.name}
         </Truncated>
-        <Text text03 secondaryBody nowrap className="truncate">
+        <Text as="p" text03 secondaryBody nowrap className="truncate">
           {isProcessing
             ? file.status === UserFileStatus.UPLOADING
               ? "Uploading..."
