@@ -27,6 +27,21 @@ import LLMConnectionIcons from "../components/LLMConnectionIcons";
 import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 
+enum OllamaTab {
+  SelfHosted = "self-hosted",
+  Cloud = "cloud",
+}
+
+// Field name constants
+const FIELD_API_BASE = "api_base";
+const FIELD_API_KEY = "api_key";
+const FIELD_DEFAULT_MODEL_NAME = "default_model_name";
+const FIELD_OLLAMA_API_KEY = "custom_config.OLLAMA_API_KEY";
+
+// URL constants
+const OLLAMA_CLOUD_URL = "https://ollama.com";
+const OLLAMA_SELF_HOSTED_DEFAULT_URL = "http://127.0.0.1:11434";
+
 interface OllamaOnboardingFormProps {
   llmDescriptor: WellKnownLLMProviderDescriptor;
   onboardingState: OnboardingState;
@@ -55,8 +70,8 @@ function OllamaFormFields({
   setActiveTab,
 }: {
   formikProps: FormikProps<OllamaFormValues>;
-  activeTab: string;
-  setActiveTab: (tab: string) => void;
+  activeTab: OllamaTab;
+  setActiveTab: (tab: OllamaTab) => void;
 }) {
   const {
     apiStatus,
@@ -84,7 +99,7 @@ function OllamaFormFields({
 
   // Auto-fetch models for self-hosted Ollama on initial load
   useEffect(() => {
-    if (activeTab === "self-hosted" && formikProps.values.api_base) {
+    if (activeTab === OllamaTab.SelfHosted && formikProps.values.api_base) {
       setApiStatus("loading");
       handleFetchModels();
     }
@@ -92,37 +107,47 @@ function OllamaFormFields({
 
   // Set hidden fields based on active tab
   useEffect(() => {
-    if (activeTab === "cloud") {
-      formikProps.setFieldValue("api_base", "https://ollama.com");
+    if (activeTab === OllamaTab.Cloud) {
+      formikProps.setFieldValue(FIELD_API_BASE, OLLAMA_CLOUD_URL);
     } else {
-      if (formikProps.values.api_base === "https://ollama.com") {
-        formikProps.setFieldValue("api_base", "http://127.0.0.1:11434");
+      if (formikProps.values.api_base === OLLAMA_CLOUD_URL) {
+        formikProps.setFieldValue(
+          FIELD_API_BASE,
+          OLLAMA_SELF_HOSTED_DEFAULT_URL
+        );
       }
+
+      // API key is not used for self-hosted Ollama
+      formikProps.setFieldValue(FIELD_API_KEY, "");
     }
   }, [activeTab]);
 
   return (
-    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+    <Tabs
+      value={activeTab}
+      onValueChange={(value) => setActiveTab(value as OllamaTab)}
+      className="w-full"
+    >
       <TabsList className="w-full">
-        <TabsTrigger value="self-hosted" className="flex-1">
+        <TabsTrigger value={OllamaTab.SelfHosted} className="flex-1">
           Self-hosted Ollama
         </TabsTrigger>
-        <TabsTrigger value="cloud" className="flex-1">
+        <TabsTrigger value={OllamaTab.Cloud} className="flex-1">
           Ollama Cloud
         </TabsTrigger>
       </TabsList>
 
-      <TabsContent value="self-hosted" className="w-full">
+      <TabsContent value={OllamaTab.SelfHosted} className="w-full">
         <div className="flex flex-col gap-4 w-full">
           <FormikField<string>
-            name="api_base"
+            name={FIELD_API_BASE}
             render={(field, helper, meta, state) => (
-              <FormField name="api_base" state={state} className="w-full">
+              <FormField name={FIELD_API_BASE} state={state} className="w-full">
                 <FormField.Label>API Base URL</FormField.Label>
                 <FormField.Control>
                   <InputTypeIn
                     {...field}
-                    placeholder="http://127.0.0.1:11434"
+                    placeholder={OLLAMA_SELF_HOSTED_DEFAULT_URL}
                     error={apiStatus === "error"}
                     showClearButton={false}
                     disabled={disabled}
@@ -153,10 +178,10 @@ function OllamaFormFields({
           <Separator className="my-0" />
 
           <FormikField<string>
-            name="default_model_name"
+            name={FIELD_DEFAULT_MODEL_NAME}
             render={(field, helper, meta, state) => (
               <FormField
-                name="default_model_name"
+                name={FIELD_DEFAULT_MODEL_NAME}
                 state={state}
                 className="w-full"
               >
@@ -217,13 +242,13 @@ function OllamaFormFields({
         </div>
       </TabsContent>
 
-      <TabsContent value="cloud" className="w-full">
+      <TabsContent value={OllamaTab.Cloud} className="w-full">
         <div className="flex flex-col gap-4 w-full">
           <FormikField<string>
-            name="custom_config.OLLAMA_API_KEY"
+            name={FIELD_OLLAMA_API_KEY}
             render={(field, helper, meta, state) => (
               <FormField
-                name="custom_config.OLLAMA_API_KEY"
+                name={FIELD_OLLAMA_API_KEY}
                 state={state}
                 className="w-full"
               >
@@ -276,10 +301,10 @@ function OllamaFormFields({
           <Separator className="my-0" />
 
           <FormikField<string>
-            name="default_model_name"
+            name={FIELD_DEFAULT_MODEL_NAME}
             render={(field, helper, meta, state) => (
               <FormField
-                name="default_model_name"
+                name={FIELD_DEFAULT_MODEL_NAME}
                 state={state}
                 className="w-full"
               >
@@ -350,14 +375,14 @@ export function OllamaOnboardingForm({
   open,
   onOpenChange,
 }: OllamaOnboardingFormProps) {
-  const [activeTab, setActiveTab] = useState<string>("self-hosted");
+  const [activeTab, setActiveTab] = useState<OllamaTab>(OllamaTab.SelfHosted);
 
   const initialValues = useMemo(
     (): OllamaFormValues => ({
       ...buildInitialValues(),
       name: llmDescriptor.name,
       provider: llmDescriptor.name,
-      api_base: "http://127.0.0.1:11434",
+      api_base: OLLAMA_SELF_HOSTED_DEFAULT_URL,
       custom_config: {
         OLLAMA_API_KEY: "",
       },
@@ -367,17 +392,21 @@ export function OllamaOnboardingForm({
 
   // Dynamic validation based on active tab
   const validationSchema = useMemo(() => {
-    if (activeTab === "self-hosted") {
+    if (activeTab === OllamaTab.SelfHosted) {
       return Yup.object().shape({
-        api_base: Yup.string().required("API Base is required"),
-        default_model_name: Yup.string().required("Model name is required"),
+        [FIELD_API_BASE]: Yup.string().required("API Base is required"),
+        [FIELD_DEFAULT_MODEL_NAME]: Yup.string().required(
+          "Model name is required"
+        ),
       });
     } else {
       return Yup.object().shape({
         custom_config: Yup.object().shape({
           OLLAMA_API_KEY: Yup.string().required("API Key is required"),
         }),
-        default_model_name: Yup.string().required("Model name is required"),
+        [FIELD_DEFAULT_MODEL_NAME]: Yup.string().required(
+          "Model name is required"
+        ),
       });
     }
   }, [activeTab]);
