@@ -523,7 +523,6 @@
       ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
-      "envFile": "${workspaceFolder}/.vscode/.env",
       "presentation": {
         "group": "3"
       }
