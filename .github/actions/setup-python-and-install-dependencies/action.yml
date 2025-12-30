@@ -22,7 +22,7 @@ runs:
         done <<< "$REQUIREMENTS"
         echo "hash=$(echo "$hash" | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
-    # NOTE: This comes before Setup uv since their cleanups ran in reverse chronological order
+    # NOTE: This comes before Setup uv since clean-ups run in reverse chronological order
     # such that Setup uv's prune-cache is able to prune the cache before we upload.
     - name: Cache uv cache directory
       uses: runs-on/cache@50350ad4242587b6c8c2baa2e740b1bc11285ff4 # ratchet:runs-on/cache@v4
