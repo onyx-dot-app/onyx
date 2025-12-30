@@ -51,8 +51,12 @@ interface OllamaFormValues {
 
 function OllamaFormFields({
   formikProps,
+  activeTab,
+  setActiveTab,
 }: {
   formikProps: FormikProps<OllamaFormValues>;
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
 }) {
   const {
     apiStatus,
@@ -69,10 +73,7 @@ function OllamaFormFields({
     modelsErrorMessage,
     showModelsApiErrorMessage,
     disabled,
-    llmDescriptor,
   } = useOnboardingFormContext();
-
-  const [activeTab, setActiveTab] = useState<string>("self-hosted");
 
   // Reset API status when tab changes
   useEffect(() => {
@@ -415,7 +416,13 @@ export function OllamaOnboardingForm({
         };
       }}
     >
-      {(formikProps) => <OllamaFormFields formikProps={formikProps} />}
+      {(formikProps) => (
+        <OllamaFormFields
+          formikProps={formikProps}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+        />
+      )}
     </OnboardingFormWrapper>
   );
 }
