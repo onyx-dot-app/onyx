@@ -6,6 +6,8 @@ EF_CONSTRUCTION = 256
 # quality but increase memory footprint. Values typically range between 12 - 48.
 M = 32  # Increased for better accuracy.
 
+# Default value for the maximum number of tokens a chunk can hold, if none is
+# specified when creating an index.
 DEFAULT_MAX_CHUNK_SIZE = 512
 
 # Number of vectors to examine for top k neighbors for the HNSW method. Values
