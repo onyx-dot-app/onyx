@@ -179,8 +179,12 @@ export function AnthropicOnboardingForm({
   onOpenChange,
 }: AnthropicOnboardingFormProps) {
   const initialValues = useMemo(
-    () => buildInitialValues(llmDescriptor, false) as AnthropicFormValues,
-    [llmDescriptor]
+    (): AnthropicFormValues => ({
+      ...buildInitialValues(),
+      name: llmDescriptor.name,
+      provider: llmDescriptor.name,
+    }),
+    [llmDescriptor.name]
   );
 
   const validationSchema = Yup.object().shape({

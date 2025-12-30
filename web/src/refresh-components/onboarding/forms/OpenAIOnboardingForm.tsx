@@ -179,8 +179,12 @@ export function OpenAIOnboardingForm({
   onOpenChange,
 }: OpenAIOnboardingFormProps) {
   const initialValues = useMemo(
-    () => buildInitialValues(llmDescriptor, false) as OpenAIFormValues,
-    [llmDescriptor]
+    (): OpenAIFormValues => ({
+      ...buildInitialValues(),
+      name: llmDescriptor.name,
+      provider: llmDescriptor.name,
+    }),
+    [llmDescriptor.name]
   );
 
   const validationSchema = Yup.object().shape({

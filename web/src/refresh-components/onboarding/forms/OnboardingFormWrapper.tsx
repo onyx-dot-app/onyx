@@ -16,7 +16,6 @@ import { LLM_PROVIDERS_ADMIN_URL } from "@/app/admin/configuration/llm/constants
 import { OnboardingActions, OnboardingState } from "../types";
 import { APIFormFieldState } from "@/refresh-components/form/types";
 import {
-  buildInitialValues,
   testApiKeyHelper,
   testCustomProvider,
   getModelOptions,
@@ -147,8 +146,8 @@ export function OnboardingFormWrapper<T extends Record<string, any>>({
 
   // Compute model options
   const modelOptions = useMemo(
-    () => getModelOptions(llmDescriptor, fetchedModelConfigurations),
-    [llmDescriptor, fetchedModelConfigurations]
+    () => getModelOptions(fetchedModelConfigurations),
+    [fetchedModelConfigurations]
   );
 
   // Check if provider can fetch models
@@ -207,7 +206,7 @@ export function OnboardingFormWrapper<T extends Record<string, any>>({
 
     let result;
     if (llmDescriptor) {
-      result = await testApiKeyHelper(llmDescriptor, initialValues, payload);
+      result = await testApiKeyHelper(llmDescriptor.name, payload);
     } else {
       result = await testCustomProvider(payload);
     }

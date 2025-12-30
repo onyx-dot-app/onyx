@@ -351,16 +351,18 @@ export function OllamaOnboardingForm({
 }: OllamaOnboardingFormProps) {
   const [activeTab, setActiveTab] = useState<string>("self-hosted");
 
-  const initialValues = useMemo(() => {
-    const base = buildInitialValues(llmDescriptor, false) as OllamaFormValues;
-    return {
-      ...base,
-      api_base: base.api_base || "http://127.0.0.1:11434",
+  const initialValues = useMemo(
+    (): OllamaFormValues => ({
+      ...buildInitialValues(),
+      name: llmDescriptor.name,
+      provider: llmDescriptor.name,
+      api_base: "http://127.0.0.1:11434",
       custom_config: {
         OLLAMA_API_KEY: "",
       },
-    };
-  }, [llmDescriptor]);
+    }),
+    [llmDescriptor.name]
+  );
 
   // Dynamic validation based on active tab
   const validationSchema = useMemo(() => {

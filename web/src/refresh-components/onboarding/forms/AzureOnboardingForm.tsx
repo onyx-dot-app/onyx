@@ -181,8 +181,12 @@ export function AzureOnboardingForm({
   onOpenChange,
 }: AzureOnboardingFormProps) {
   const initialValues = useMemo(
-    () => buildInitialValues(llmDescriptor, false) as AzureFormValues,
-    [llmDescriptor]
+    (): AzureFormValues => ({
+      ...buildInitialValues(),
+      name: llmDescriptor.name,
+      provider: llmDescriptor.name,
+    }),
+    [llmDescriptor.name]
   );
 
   const validationSchema = Yup.object().shape({

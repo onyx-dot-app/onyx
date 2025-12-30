@@ -190,17 +190,15 @@ export function OpenRouterOnboardingForm({
   open,
   onOpenChange,
 }: OpenRouterOnboardingFormProps) {
-  const initialValues = useMemo(() => {
-    const base = buildInitialValues(
-      llmDescriptor,
-      false
-    ) as OpenRouterFormValues;
-    return {
-      ...base,
-      api_base:
-        llmDescriptor?.default_api_base || "https://openrouter.ai/api/v1",
-    };
-  }, [llmDescriptor]);
+  const initialValues = useMemo(
+    (): OpenRouterFormValues => ({
+      ...buildInitialValues(),
+      name: llmDescriptor.name,
+      provider: llmDescriptor.name,
+      api_base: "https://openrouter.ai/api/v1",
+    }),
+    [llmDescriptor.name]
+  );
 
   const validationSchema = Yup.object().shape({
     api_key: Yup.string().required("API Key is required"),

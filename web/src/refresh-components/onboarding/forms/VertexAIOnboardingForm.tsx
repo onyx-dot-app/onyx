@@ -74,8 +74,7 @@ function VertexAIFormFields({
     setShowApiMessage(true);
 
     const result = await testApiKeyHelper(
-      llmDescriptor,
-      formikProps.initialValues,
+      llmDescriptor.name,
       formikProps.values,
       undefined,
       undefined,
@@ -219,15 +218,17 @@ export function VertexAIOnboardingForm({
   open,
   onOpenChange,
 }: VertexAIOnboardingFormProps) {
-  const initialValues = useMemo(() => {
-    const base = buildInitialValues(llmDescriptor, false);
-    return {
-      ...base,
+  const initialValues = useMemo(
+    (): VertexAIFormValues => ({
+      ...buildInitialValues(),
+      name: llmDescriptor.name,
+      provider: llmDescriptor.name,
       custom_config: {
         vertex_credentials: "",
       },
-    } as VertexAIFormValues;
-  }, [llmDescriptor]);
+    }),
+    [llmDescriptor.name]
+  );
 
   const validationSchema = Yup.object().shape({
     default_model_name: Yup.string().required("Model name is required"),

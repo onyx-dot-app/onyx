@@ -322,7 +322,17 @@ export function CustomOnboardingForm({
   onOpenChange,
 }: CustomOnboardingFormProps) {
   const initialValues = useMemo(
-    () => buildInitialValues(undefined, true) as CustomFormValues,
+    (): CustomFormValues => ({
+      ...buildInitialValues(),
+      model_configurations: [
+        {
+          name: "",
+          is_visible: true,
+          max_input_tokens: null,
+          supports_image_input: false,
+        },
+      ],
+    }),
     []
   );
 

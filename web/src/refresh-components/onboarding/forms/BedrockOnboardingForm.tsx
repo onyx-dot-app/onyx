@@ -398,10 +398,11 @@ export function BedrockOnboardingForm({
   open,
   onOpenChange,
 }: BedrockOnboardingFormProps) {
-  const initialValues = useMemo(() => {
-    const base = buildInitialValues(llmDescriptor, false);
-    return {
-      ...base,
+  const initialValues = useMemo(
+    (): BedrockFormValues => ({
+      ...buildInitialValues(),
+      name: llmDescriptor.name,
+      provider: llmDescriptor.name,
       custom_config: {
         AWS_REGION_NAME: "",
         BEDROCK_AUTH_METHOD: AUTH_METHOD_ACCESS_KEY,
@@ -409,8 +410,9 @@ export function BedrockOnboardingForm({
         AWS_SECRET_ACCESS_KEY: "",
         AWS_BEARER_TOKEN_BEDROCK: "",
       },
-    } as BedrockFormValues;
-  }, [llmDescriptor]);
+    }),
+    [llmDescriptor.name]
+  );
 
   const validationSchema = Yup.object().shape({
     default_model_name: Yup.string().required("Model name is required"),
