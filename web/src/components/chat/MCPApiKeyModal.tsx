@@ -160,7 +160,7 @@ export default function MCPApiKeyModal({
           onClose={handleClose}
         />
         <Modal.Body>
-          <Text>
+          <Text as="p">
             {isAuthenticated
               ? `Update your ${credsType} for ${serverName}.`
               : `Enter your ${credsType} for ${serverName} to enable authentication.`}

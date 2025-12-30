@@ -146,7 +146,7 @@ function NotificationsPopover({ onClose }: NotificationsPopoverProps) {
       <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 flex flex-col gap-2 items-center">
         {!notifications || notifications.length === 0 ? (
           <div className="w-full h-full flex flex-col justify-center items-center">
-            <Text>No notifications</Text>
+            <Text as="p">No notifications</Text>
           </div>
         ) : (
           <div className="w-full flex flex-col gap-2">
