@@ -29,7 +29,6 @@ from onyx.document_index.vespa.shared_utils.utils import (
 from onyx.federated_connectors.federated_retrieval import (
     get_federated_retrieval_functions,
 )
-from onyx.onyxbot.slack.models import SlackContext
 from onyx.secondary_llm_flows.query_expansion import multilingual_query_expansion
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -331,7 +330,6 @@ def retrieve_chunks(
     retrieval_metrics_callback: (
         Callable[[RetrievalMetricsContainer], None] | None
     ) = None,
-    slack_context: SlackContext | None = None,
 ) -> list[InferenceChunk]:
     """Returns a list of the best chunks from an initial keyword/semantic/ hybrid search."""
 
@@ -348,8 +346,7 @@ def retrieve_chunks(
         user_id,
         list(query.filters.source_type) if query.filters.source_type else None,
         query.filters.document_set,
-        slack_context,
-        query.filters.user_file_ids,
+        user_file_ids=query.filters.user_file_ids,
     )
     federated_sources = set(
         federated_retrieval_info.source.to_non_federated_source()
@@ -460,7 +457,6 @@ def search_chunks(
     user_id: UUID | None,
     document_index: DocumentIndex,
     db_session: Session,
-    slack_context: SlackContext | None = None,
 ) -> list[InferenceChunk]:
     run_queries: list[tuple[Callable, tuple]] = []
 
@@ -476,7 +472,6 @@ def search_chunks(
         user_id=user_id,
         source_types=list(source_filters) if source_filters else None,
         document_set_names=query_request.filters.document_set,
-        slack_context=slack_context,
         user_file_ids=query_request.filters.user_file_ids,
     )
 

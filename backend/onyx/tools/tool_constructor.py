@@ -214,7 +214,6 @@ def construct_tools(
                     user_selected_filters=search_tool_config.user_selected_filters,
                     project_id=search_tool_config.project_id,
                     bypass_acl=search_tool_config.bypass_acl,
-                    slack_context=search_tool_config.slack_context,
                 )
 
                 tool_dict[db_tool_model.id] = [search_tool]
@@ -517,7 +516,6 @@ def construct_tools(
             user_selected_filters=search_tool_config.user_selected_filters,
             project_id=search_tool_config.project_id,
             bypass_acl=search_tool_config.bypass_acl,
-            slack_context=search_tool_config.slack_context,
         )
 
         tool_dict[search_tool_db_model.id] = [search_tool]
