@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React from "react";
 import { cn, noProp } from "@/lib/utils";
 import { SvgPlus, SvgX } from "@opal/icons";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -8,43 +8,93 @@ import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Text from "@/refresh-components/texts/Text";
 import { useImageDropzone } from "@/hooks/useImageDropzone";
 
-const backgroundClasses = () =>
-  ({
-    enabled: [
-      "bg-background-neutral-00", // default
-      "hover:bg-background-tint-02", // hover
-      "active:bg-background-tint-00", // pressed
-      "focus-visible:bg-background-tint-01", // focus
-      "focus-visible:hover:bg-background-tint-02", // focus + hover
-    ],
-    disabled: ["bg-background-neutral-00"],
-  }) as const;
+type ImageState = "empty" | "withImage" | "dragActive";
+type AbledState = "enabled" | "disabled";
 
-const borderClasses = (isDragActive: boolean = false) =>
-  ({
-    enabled: isDragActive
-      ? ["border-action-link-05", "border-solid"]
-      : [
-          "border-border-01", // default
-          "hover:border-border-03", // hover
-          "active:border-border-05", // pressed
-          "focus-visible:border-border-05", // focus
-          "focus-visible:hover:border-border-05", // focus + hover
-        ],
-    disabled: ["border-border-01"],
-  }) as const;
-
-const iconClasses = () =>
-  ({
-    enabled: [
-      "stroke-text-02", // default
-      "group-hover:stroke-text-03", // hover - update this if needed
-      "group-active:stroke-text-04", // pressed - update this if needed
-      "group-focus-visible:stroke-text-02", // focus - update this if needed
-      "group-focus-visible:group-hover:stroke-text-03", // focus + hover - update this if needed
-    ],
-    disabled: ["stroke-text-01"],
-  }) as const;
+const inputImageClasses = {
+  container: {
+    empty: {
+      enabled: [
+        "bg-background-neutral-00",
+        "hover:bg-background-tint-02",
+        "active:bg-background-tint-00",
+        "focus-visible:bg-background-tint-01",
+        "focus-visible:hover:bg-background-tint-02",
+        "border-dashed",
+        "hover:border-solid",
+        "active:border-solid",
+        "border-border-01",
+        "hover:border-border-03",
+        "active:border-border-05",
+        "focus-visible:border-border-05",
+      ],
+      disabled: [
+        "bg-background-neutral-00",
+        "border-dashed",
+        "border-border-01",
+        "opacity-50",
+        "cursor-not-allowed",
+      ],
+    },
+    withImage: {
+      enabled: [
+        "bg-background-neutral-00",
+        "hover:bg-background-tint-02",
+        "active:bg-background-tint-00",
+        "focus-visible:bg-background-tint-01",
+        "focus-visible:hover:bg-background-tint-02",
+        "border-solid",
+        "border-border-01",
+        "hover:border-border-03",
+        "active:border-border-05",
+        "focus-visible:border-border-05",
+      ],
+      disabled: [
+        "bg-background-neutral-00",
+        "border-solid",
+        "border-border-01",
+        "opacity-50",
+        "cursor-not-allowed",
+      ],
+    },
+    dragActive: {
+      enabled: [
+        "bg-background-neutral-00",
+        "border-solid",
+        "border-2",
+        "border-action-link-05",
+      ],
+      disabled: [
+        "bg-background-neutral-00",
+        "border-solid",
+        "border-2",
+        "border-action-link-05",
+        "opacity-50",
+        "cursor-not-allowed",
+      ],
+    },
+  },
+  placeholder: {
+    empty: {
+      enabled: [
+        "stroke-text-02",
+        "group-hover:stroke-text-03",
+        "group-active:stroke-text-04",
+        "group-focus-visible:stroke-text-02",
+        "group-focus-visible:group-hover:stroke-text-03",
+      ],
+      disabled: ["stroke-text-01"],
+    },
+    withImage: {
+      enabled: [],
+      disabled: [],
+    },
+    dragActive: {
+      enabled: ["stroke-action-link-05"],
+      disabled: ["stroke-action-link-05"],
+    },
+  },
+} as const;
 
 export interface InputImageProps {
   // State control
@@ -62,6 +112,9 @@ export interface InputImageProps {
   /** Callback when file is rejected */
   onDropRejected?: (reason: string) => void;
 
+  /** Whether to show the edit overlay on hover (default: true) */
+  showEditOverlay?: boolean;
+
   // Size control
   size?: number;
 
@@ -76,13 +129,12 @@ export default function InputImage({
   onRemove,
   onDrop,
   onDropRejected,
+  showEditOverlay = true,
   size = 120,
   className,
 }: InputImageProps) {
   const isInteractive = !disabled && (onEdit || onDrop);
   const hasImage = !!src;
-
-  const abled = disabled ? "disabled" : "enabled";
 
   const { isDragActive, getRootProps, getInputProps, openFilePicker } =
     useImageDropzone({
@@ -106,25 +158,17 @@ export default function InputImage({
     }
   };
 
-  const bgClass = useMemo(() => backgroundClasses()[abled], [abled]);
+  // Derive states once
+  const imageState: ImageState = isDragActive
+    ? "dragActive"
+    : hasImage
+      ? "withImage"
+      : "empty";
+  const abled: AbledState = disabled ? "disabled" : "enabled";
 
-  const borderClass = useMemo(
-    () => borderClasses(isDragActive)[abled],
-    [abled, isDragActive]
-  );
-
-  const borderStyleClass = useMemo(() => {
-    if (isDragActive) return ["border-solid", "border-2"] as const;
-    if (hasImage) return ["border-solid"] as const;
-    if (disabled) return ["border-dashed"] as const;
-    return [
-      "border-dashed",
-      "hover:border-solid",
-      "active:border-solid",
-    ] as const;
-  }, [hasImage, disabled, isDragActive]);
-
-  const iconClass = useMemo(() => iconClasses()[abled], [abled]);
+  // Single lookup pattern for all classes
+  const containerClass = inputImageClasses.container[imageState][abled];
+  const placeholderClass = inputImageClasses.placeholder[imageState][abled];
 
   const dropzoneProps = onDrop ? getRootProps() : {};
 
@@ -146,10 +190,7 @@ export default function InputImage({
           "relative w-full h-full rounded-full overflow-hidden",
           "border flex items-center justify-center",
           "transition-all duration-150",
-          bgClass,
-          borderClass,
-          borderStyleClass,
-          disabled && "opacity-50 cursor-not-allowed"
+          containerClass
         )}
         aria-label={
           isInteractive ? (hasImage ? "Edit image" : "Upload image") : undefined
@@ -164,7 +205,7 @@ export default function InputImage({
           />
         ) : (
           <SvgPlus
-            className={cn("w-6 h-6", iconClass, "pointer-events-none")}
+            className={cn("w-6 h-6", placeholderClass, "pointer-events-none")}
           />
         )}
 
@@ -176,7 +217,7 @@ export default function InputImage({
         )}
 
         {/* Edit overlay - shows on hover/focus when image is uploaded */}
-        {isInteractive && hasImage && !isDragActive && (
+        {showEditOverlay && isInteractive && hasImage && !isDragActive && (
           <div
             className={cn(
               "absolute bottom-0 left-0 right-0",

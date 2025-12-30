@@ -20,7 +20,7 @@ import {
   useState,
 } from "react";
 import type { PreviewHighlightTarget } from "./Preview";
-import { SvgRevert } from "@opal/icons";
+import { SvgEdit } from "@opal/icons";
 interface CharacterCountProps {
   value: string;
   limit: number;
@@ -165,10 +165,6 @@ export const AppearanceThemeSettings = forwardRef<
 
   const handleLogoRemove = async () => {
     setFieldValue("use_custom_logo", false);
-    setSelectedLogo(null);
-  };
-
-  const handleLogoRevert = () => {
     setSelectedLogo(null);
   };
 
@@ -320,16 +316,17 @@ export const AppearanceThemeSettings = forwardRef<
               onEdit={handleLogoEdit}
               onDrop={(file) => setSelectedLogo(file)}
               onRemove={handleLogoRemove}
+              showEditOverlay={false}
             />
           </FormField.Control>
           <div className="mt-2 w-full justify-center items-center flex">
             <Button
               secondary
-              disabled={!selectedLogo}
-              onClick={handleLogoRevert}
-              leftIcon={SvgRevert}
+              disabled={!hasLogo}
+              onClick={handleLogoEdit}
+              leftIcon={SvgEdit}
             >
-              Reset
+              Update
             </Button>
           </div>
         </FormField>
