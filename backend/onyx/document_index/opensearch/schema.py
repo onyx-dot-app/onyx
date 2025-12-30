@@ -217,7 +217,6 @@ class DocumentSchema:
                     "index": False,
                     "doc_values": False,
                     "store": False,
-                    "enabled": False,
                 },
                 # Same as above; used to display an image along with the doc.
                 IMAGE_FILE_NAME_FIELD_NAME: {
@@ -225,7 +224,6 @@ class DocumentSchema:
                     "index": False,
                     "doc_values": False,
                     "store": False,
-                    "enabled": False,
                 },
                 # Same as above; used to link to the source doc.
                 SOURCE_LINKS_FIELD_NAME: {
@@ -233,7 +231,6 @@ class DocumentSchema:
                     "index": False,
                     "doc_values": False,
                     "store": False,
-                    "enabled": False,
                 },
                 # Product-specific fields.
                 DOCUMENT_SETS_FIELD_NAME: {"type": "keyword"},
