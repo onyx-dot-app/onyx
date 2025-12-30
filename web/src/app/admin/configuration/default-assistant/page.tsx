@@ -197,15 +197,18 @@ function DefaultAssistantConfig() {
                         <div>You can use placeholders in your prompt:</div>
                         <div>
                           <span className="font-mono font-semibold">
-                            [[CURRENT_DATETIME]]
+                            {"{{CURRENT_DATETIME}}"}
                           </span>{" "}
-                          - Injects the current date and time
+                          - Injects the current date and day of the week in a
+                          human/LLM readable format.
                         </div>
                         <div>
                           <span className="font-mono font-semibold">
-                            [[CITATION_GUIDANCE]]
+                            {"{{CITATION_GUIDANCE}}"}
                           </span>{" "}
-                          - Injects citation guidance when search tools are used
+                          - Injects instructions to provide citations for facts
+                          found from search tools. This is not included if no
+                          search tools are called.
                         </div>
                       </div>
                     }
