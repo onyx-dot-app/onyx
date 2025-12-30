@@ -10,6 +10,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.db.persona import get_default_assistant
 from onyx.db.persona import update_default_assistant_configuration
+from onyx.prompts.chat_prompts import DEFAULT_SYSTEM_PROMPT
 from onyx.server.features.default_assistant.models import DefaultAssistantConfiguration
 from onyx.server.features.default_assistant.models import DefaultAssistantUpdateRequest
 from onyx.utils.logger import setup_logger
@@ -38,7 +39,9 @@ def get_default_assistant_configuration(
 
     return DefaultAssistantConfiguration(
         tool_ids=tool_ids,
-        system_prompt=persona.system_prompt or "",
+        system_prompt=(
+            persona.system_prompt if persona.system_prompt else DEFAULT_SYSTEM_PROMPT
+        ),
     )
 
 
@@ -73,7 +76,11 @@ def update_default_assistant(
         tool_ids = [tool.id for tool in updated_persona.tools]
         return DefaultAssistantConfiguration(
             tool_ids=tool_ids,
-            system_prompt=updated_persona.system_prompt or "",
+            system_prompt=(
+                updated_persona.system_prompt
+                if updated_persona.system_prompt
+                else DEFAULT_SYSTEM_PROMPT
+            ),
         )
 
     except ValueError as e:
