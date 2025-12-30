@@ -17,18 +17,20 @@ export default defineConfig({
   workers: process.env.CI ? 2 : undefined, // Limit to 2 parallel workers in CI to reduce flakiness
   // workers: 1,
 
-  reporter: [
-    ["list"],
-    // Warning: uncommenting the html reporter may cause the chromatic-archives
-    // directory to be deleted after the test run, which will break CI.
-    // [
-    //   'html',
-    //   {
-    //     outputFolder: 'test-results', // or whatever directory you want
-    //     open: 'never', // can be 'always' | 'on-failure' | 'never'
-    //   },
-    // ],
-  ],
+  reporter: process.env.CI
+    ? [["list"], ["blob"]]
+    : [
+        ["list"],
+        // Warning: uncommenting the html reporter may cause the chromatic-archives
+        // directory to be deleted after the test run, which will break CI.
+        // [
+        //   'html',
+        //   {
+        //     outputFolder: 'test-results', // or whatever directory you want
+        //     open: 'never', // can be 'always' | 'on-failure' | 'never'
+        //   },
+        // ],
+      ],
   // Only run Playwright tests from tests/e2e directory (ignore Jest tests in src/)
   testMatch: /.*\/tests\/e2e\/.*\.spec\.ts/,
   outputDir: "test-results",

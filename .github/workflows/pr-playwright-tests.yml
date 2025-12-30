@@ -238,11 +238,11 @@ jobs:
 
   playwright-tests:
     needs: [build-web-image, build-backend-image, build-model-server-image]
-    name: Playwright Tests (${{ matrix.project }})
+    name: Playwright Tests (${{ matrix.project }}) - Shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
     runs-on:
       - runs-on
       - runner=8cpu-linux-arm64
-      - "run-id=${{ github.run_id }}-playwright-tests-${{ matrix.project }}"
+      - "run-id=${{ github.run_id }}-playwright-tests-${{ matrix.project }}-${{ matrix.shardIndex }}"
       - "extras=ecr-cache"
       - volume=50gb
     timeout-minutes: 45
@@ -250,6 +250,8 @@ jobs:
       fail-fast: false
       matrix:
         project: [admin, no-auth, exclusive]
+        shardIndex: [1, 2]
+        shardTotal: [2]
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
@@ -433,13 +435,21 @@ jobs:
           if [ "${PROJECT}" = "no-auth" ]; then
             export PLAYWRIGHT_FORCE_EMPTY_LLM_PROVIDERS=true
           fi
-          npx playwright test --project ${PROJECT}
+          npx playwright test --project ${PROJECT} --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+
+      - name: Upload blob report to GitHub Actions Artifacts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/upload-artifact@v4
+        with:
+          name: blob-report-${{ matrix.project }}-${{ matrix.shardIndex }}-${{ github.run_id }}
+          path: ./web/blob-report
+          retention-days: 1
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/upload-artifact@v4
         if: always()
         with:
           # Includes test results and trace.zip files
-          name: playwright-test-results-${{ matrix.project }}-${{ github.run_id }}
+          name: playwright-test-results-${{ matrix.project }}-${{ matrix.shardIndex }}-${{ github.run_id }}
           path: ./web/test-results/
           retention-days: 30
 
@@ -457,14 +467,60 @@ jobs:
         if: success() || failure()
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/upload-artifact@v4
         with:
-          name: docker-logs-${{ matrix.project }}-${{ github.run_id }}
+          name: docker-logs-${{ matrix.project }}-${{ matrix.shardIndex }}-${{ github.run_id }}
           path: ${{ github.workspace }}/docker-compose.log
+
+  merge-reports:
+    # Merge reports after playwright-tests, even if some shards have failed
+    if: ${{ !cancelled() }}
+    needs: [playwright-tests]
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [admin, no-auth, exclusive]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup node
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # ratchet:actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+          cache-dependency-path: ./web/package-lock.json
+
+      - name: Install node dependencies
+        working-directory: ./web
+        run: npm ci
+
+      - name: Download blob reports from GitHub Actions Artifacts
+        uses: actions/download-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/download-artifact@v4
+        with:
+          path: ./web/all-blob-reports-${{ matrix.project }}
+          pattern: blob-report-${{ matrix.project }}-*-${{ github.run_id }}
+          merge-multiple: true
+
+      - name: Merge into HTML Report
+        working-directory: ./web
+        run: npx playwright merge-reports --reporter html ./all-blob-reports-${{ matrix.project }}
+
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/upload-artifact@v4
+        with:
+          name: html-report-${{ matrix.project }}-${{ github.run_id }}
+          path: ./web/playwright-report
+          retention-days: 14
 
   playwright-required:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
     timeout-minutes: 45
-    needs: [playwright-tests]
+    needs: [playwright-tests, merge-reports]
     if: ${{ always() }}
     steps:
       - name: Check job status
