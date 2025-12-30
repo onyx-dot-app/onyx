@@ -286,8 +286,8 @@ describe("OllamaOnboardingForm", () => {
       const cloudTab = screen.getByRole("tab", { name: /cloud/i });
       await user.click(cloudTab);
 
-      // Fill API key (there will be a password input)
-      const apiKeyInput = screen.getByPlaceholderText("");
+      // Fill API key
+      const apiKeyInput = screen.getByLabelText(/api key/i);
       await user.type(apiKeyInput, "ollama-cloud-key-123");
 
       // Fill model
