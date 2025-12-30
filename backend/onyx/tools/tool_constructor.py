@@ -26,6 +26,7 @@ from onyx.db.oauth_config import get_oauth_config
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tools import get_builtin_tool
 from onyx.document_index.factory import get_default_document_index
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.onyxbot.slack.models import SlackContext
@@ -75,7 +76,11 @@ class SearchToolUsage(str, Enum):
 
 def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
     """Helper function to get image generation LLM config based on available providers"""
-    if llm and llm.config.api_key and llm.config.model_provider == "openai":
+    if (
+        llm
+        and llm.config.api_key
+        and llm.config.model_provider == LlmProviderNames.OPENAI
+    ):
         return LLMConfig(
             model_provider=llm.config.model_provider,
             model_name=IMAGE_MODEL_NAME,
@@ -86,9 +91,12 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
             max_input_tokens=llm.config.max_input_tokens,
         )
 
-    if llm.config.model_provider == "azure" and AZURE_IMAGE_API_KEY is not None:
+    if (
+        llm.config.model_provider == LlmProviderNames.AZURE
+        and AZURE_IMAGE_API_KEY is not None
+    ):
         return LLMConfig(
-            model_provider="azure",
+            model_provider=LlmProviderNames.AZURE,
             model_name=f"azure/{AZURE_IMAGE_DEPLOYMENT_NAME}",
             temperature=GEN_AI_TEMPERATURE,
             api_key=AZURE_IMAGE_API_KEY,
@@ -105,7 +113,7 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
             [
                 llm_provider
                 for llm_provider in llm_providers
-                if llm_provider.provider == "openai"
+                if llm_provider.provider == LlmProviderNames.OPENAI
             ]
         ),
         None,

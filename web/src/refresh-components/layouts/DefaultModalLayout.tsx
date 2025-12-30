@@ -70,9 +70,11 @@ export default function DefaultModalLayout({
               <IconButton icon={SvgX} internal onClick={onClose} />
             </div>
           </div>
-          <Text headingH3>{title}</Text>
+          <Text as="p" headingH3>
+            {title}
+          </Text>
           {description && (
-            <Text secondaryBody text02>
+            <Text as="p" secondaryBody text02>
               {description}
             </Text>
           )}

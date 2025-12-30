@@ -112,7 +112,7 @@ export const LLMConnectionFieldsCustom: React.FC<Props> = ({
 
       <Separator className="my-0" />
 
-      <Text text03 secondaryBody className="ml-0.5">
+      <Text as="p" text03 secondaryBody className="ml-0.5">
         Fill in the following fields as needed. Refer to{" "}
         <a
           href="https://docs.litellm.ai/docs/"

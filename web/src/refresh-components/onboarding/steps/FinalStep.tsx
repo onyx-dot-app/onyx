@@ -26,10 +26,10 @@ const FinalStepItemInner = ({
           <Icon className="w-4 h-4 stroke-text-03" />
         </div>
         <div>
-          <Text text04 mainUiAction>
+          <Text as="p" text04 mainUiAction>
             {title}
           </Text>
-          <Text text03 secondaryBody>
+          <Text as="p" text03 secondaryBody>
             {description}
           </Text>
         </div>

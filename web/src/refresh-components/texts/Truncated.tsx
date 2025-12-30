@@ -63,6 +63,7 @@ export default function Truncated({
 
   const text = (
     <Text
+      as="p"
       className={cn("line-clamp-1 break-all text-left", className)}
       {...rest}
     >
@@ -92,7 +93,9 @@ export default function Truncated({
               className="max-w-[400px] break-words whitespace-normal"
             >
               {typeof children === "string" ? (
-                <Text textLight05>{children}</Text>
+                <Text as="p" textLight05>
+                  {children}
+                </Text>
               ) : (
                 children
               )}

@@ -26,12 +26,13 @@ import {
   isToolComplete,
 } from "./toolDisplayHelpers";
 import {
-  SearchToolStep1Renderer,
-  SearchToolStep2Renderer,
+  SourceRetrievalStepRenderer,
+  ReadDocumentsStepRenderer,
   constructCurrentSearchState,
-} from "./renderers/SearchToolRendererV2";
+} from "./renderers/SearchToolRenderer";
 import { SvgChevronDown, SvgChevronDownSmall } from "@opal/icons";
 import { LoadingSpinner } from "../../chat_search/LoadingSpinner";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 enum DisplayType {
   REGULAR = "regular",
@@ -107,6 +108,7 @@ function ToolItemRow({
         </div>
         <div className={cn("flex-1", !isLastItem && "pb-4")}>
           <Text
+            as="p"
             text02
             className={cn("text-sm mb-1", isLoading && "loading-text")}
           >
@@ -295,43 +297,64 @@ function ParallelToolTabs({
 
         {/* Navigation arrows - navigate between tabs */}
         <div className="flex items-center gap-0.5 ml-2 flex-shrink-0">
-          <button
-            onClick={goToPreviousTab}
+          <SimpleTooltip
+            tooltip="Previous"
+            side="top"
             disabled={!canGoPrevious || !isExpanded}
-            className={cn(
-              "p-1 rounded hover:bg-background-subtle-hover transition-colors",
-              (!canGoPrevious || !isExpanded) && "opacity-30 cursor-not-allowed"
-            )}
-            aria-label="Previous tab"
           >
-            <FiChevronLeft className="w-4 h-4" />
-          </button>
-          <button
-            onClick={goToNextTab}
+            <button
+              onClick={goToPreviousTab}
+              disabled={!canGoPrevious || !isExpanded}
+              className={cn(
+                "p-1 rounded transition-colors",
+                canGoPrevious && isExpanded
+                  ? "hover:bg-background-tint-02 active:bg-background-tint-00"
+                  : "opacity-30 cursor-not-allowed"
+              )}
+              aria-label="Previous tab"
+            >
+              <FiChevronLeft className="w-4 h-4" />
+            </button>
+          </SimpleTooltip>
+          <SimpleTooltip
+            tooltip="Next"
+            side="top"
             disabled={!canGoNext || !isExpanded}
-            className={cn(
-              "p-1 rounded hover:bg-background-subtle-hover transition-colors",
-              (!canGoNext || !isExpanded) && "opacity-30 cursor-not-allowed"
-            )}
-            aria-label="Next tab"
           >
-            <FiChevronRight className="w-4 h-4" />
-          </button>
+            <button
+              onClick={goToNextTab}
+              disabled={!canGoNext || !isExpanded}
+              className={cn(
+                "p-1 rounded transition-colors",
+                canGoNext && isExpanded
+                  ? "hover:bg-background-tint-02 active:bg-background-tint-00"
+                  : "opacity-30 cursor-not-allowed"
+              )}
+              aria-label="Next tab"
+            >
+              <FiChevronRight className="w-4 h-4" />
+            </button>
+          </SimpleTooltip>
 
           {/* Collapse/expand button */}
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="flex-shrink-0 p-1 rounded hover:bg-background-subtle-hover transition-colors ml-0.5"
-            aria-label={isExpanded ? "Collapse" : "Expand"}
-            aria-expanded={isExpanded}
+          <SimpleTooltip
+            tooltip={isExpanded ? "Collapse" : "Expand"}
+            side="top"
           >
-            <SvgChevronDown
-              className={cn(
-                "w-4 h-4 stroke-text-400 transition-transform duration-150 ease-in-out",
-                isExpanded && "rotate-[-180deg]"
-              )}
-            />
-          </button>
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="flex-shrink-0 p-1 rounded hover:bg-background-tint-02 active:bg-background-tint-00 transition-colors ml-0.5"
+              aria-label={isExpanded ? "Collapse" : "Expand"}
+              aria-expanded={isExpanded}
+            >
+              <SvgChevronDown
+                className={cn(
+                  "w-4 h-4 stroke-text-400 transition-transform duration-150 ease-in-out",
+                  isExpanded && "rotate-[-180deg]"
+                )}
+              />
+            </button>
+          </SimpleTooltip>
         </div>
       </div>
 
@@ -348,7 +371,7 @@ function ParallelToolTabs({
 
             if (item.type === DisplayType.SEARCH_STEP_1) {
               return (
-                <SearchToolStep1Renderer
+                <SourceRetrievalStepRenderer
                   key={item.key}
                   packets={item.packets as SearchToolPacket[]}
                   isActive={!shouldStopShimmering}
@@ -356,11 +379,11 @@ function ParallelToolTabs({
                   {(props) => (
                     <ToolItemRow {...props} isLastItem={isLastItem} />
                   )}
-                </SearchToolStep1Renderer>
+                </SourceRetrievalStepRenderer>
               );
             } else if (item.type === DisplayType.SEARCH_STEP_2) {
               return (
-                <SearchToolStep2Renderer
+                <ReadDocumentsStepRenderer
                   key={item.key}
                   packets={item.packets as SearchToolPacket[]}
                   isActive={!shouldStopShimmering}
@@ -368,7 +391,7 @@ function ParallelToolTabs({
                   {(props) => (
                     <ToolItemRow {...props} isLastItem={isLastItem} />
                   )}
-                </SearchToolStep2Renderer>
+                </ReadDocumentsStepRenderer>
               );
             } else {
               // Regular tool
@@ -456,6 +479,7 @@ function ExpandedToolItem({
         <div className={cn("flex-1", !isLastItem && "pb-4")}>
           <div className="flex mb-1">
             <Text
+              as="p"
               text02
               className={cn(
                 "text-sm flex items-center gap-1",
@@ -620,23 +644,23 @@ export default function MultiToolRenderer({
   ) => {
     if (item.type === DisplayType.SEARCH_STEP_1) {
       return (
-        <SearchToolStep1Renderer
+        <SourceRetrievalStepRenderer
           key={item.key}
           packets={item.packets as SearchToolPacket[]}
           isActive={isStreaming}
         >
           {childrenCallback}
-        </SearchToolStep1Renderer>
+        </SourceRetrievalStepRenderer>
       );
     } else if (item.type === DisplayType.SEARCH_STEP_2) {
       return (
-        <SearchToolStep2Renderer
+        <ReadDocumentsStepRenderer
           key={item.key}
           packets={item.packets as SearchToolPacket[]}
           isActive={isStreaming}
         >
           {childrenCallback}
-        </SearchToolStep2Renderer>
+        </ReadDocumentsStepRenderer>
       );
     } else {
       // Regular tool - use RendererComponent
@@ -800,7 +824,7 @@ export default function MultiToolRenderer({
         className="flex flex-row w-fit items-center group/StepsButton select-none"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <Text text03 className="group-hover/StepsButton:text-text-04">
+        <Text as="p" text03 className="group-hover/StepsButton:text-text-04">
           {displayItems.length} steps
         </Text>
         <SvgChevronDownSmall

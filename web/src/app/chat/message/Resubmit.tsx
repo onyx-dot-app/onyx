@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ChevronDown, ChevronRight, Code } from "lucide-react";
+import { SvgChevronDown, SvgChevronRight } from "@opal/icons";
 import Button from "@/refresh-components/buttons/Button";
+import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import { getErrorIcon, getErrorTitle } from "./errorHelpers";
 
 interface ResubmitProps {
@@ -56,17 +57,18 @@ export const ErrorBanner = ({
           )}
           {stackTrace && (
             <div className="mt-2 border-t border-neutral-200 dark:border-neutral-700 pt-2">
-              <button
-                onClick={() => setIsStackTraceExpanded(!isStackTraceExpanded)}
-                className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 cursor-pointer"
-              >
-                {isStackTraceExpanded ? (
-                  <ChevronDown className="h-3 w-3" />
-                ) : (
-                  <ChevronRight className="h-3 w-3" />
-                )}
-                Stack trace
-              </button>
+              <div className="flex flex-1 items-center justify-between">
+                <Button
+                  tertiary
+                  leftIcon={
+                    isStackTraceExpanded ? SvgChevronDown : SvgChevronRight
+                  }
+                  onClick={() => setIsStackTraceExpanded(!isStackTraceExpanded)}
+                >
+                  Stack trace
+                </Button>
+                <CopyIconButton tertiary getCopyText={() => stackTrace} />
+              </div>
               {isStackTraceExpanded && (
                 <pre className="mt-2 p-3 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded text-xs text-neutral-700 dark:text-neutral-300 overflow-auto max-h-48 whitespace-pre-wrap font-mono">
                   {stackTrace}

@@ -75,12 +75,6 @@ repos:
       #   pass_filenames: true
       #   files: ^backend/.*\.py$
 
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # frozen: v6.0.0
-    hooks:
-      - id: check-yaml
-        files: ^.github/
-
   - repo: https://github.com/rhysd/actionlint
     rev: a443f344ff32813837fa49f7aa6cbc478d770e62 # frozen: v1.7.9
     hooks:

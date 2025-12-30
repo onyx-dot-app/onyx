@@ -75,7 +75,7 @@ export default function ImpersonatePage() {
 
       <div className="flex flex-col w-full justify-center">
         <div className="w-full flex flex-col items-center justify-center">
-          <Text headingH3 className="mb-6 text-center">
+          <Text as="p" headingH3 className="mb-6 text-center">
             Impersonate User
           </Text>
         </div>
@@ -109,6 +109,7 @@ export default function ImpersonatePage() {
         </Formik>
 
         <Text
+          as="p"
           mainUiMuted
           text03
           className="mt-4 text-center px-4"

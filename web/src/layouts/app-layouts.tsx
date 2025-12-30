@@ -291,7 +291,9 @@ function AppHeader() {
 
           {/* Center - contains the custom-header-content */}
           <div className="flex-1 flex flex-col items-center">
-            <Text text03>{customHeaderContent}</Text>
+            <Text as="p" text03>
+              {customHeaderContent}
+            </Text>
           </div>
 
           {/* Right - contains the share and more-options buttons */}
@@ -345,7 +347,7 @@ function AppFooter() {
 
   return (
     <footer className="w-full flex flex-row justify-center items-center gap-2 py-3">
-      <Text text03 secondaryBody>
+      <Text as="p" text03 secondaryBody>
         {customFooterContent}
       </Text>
     </footer>
