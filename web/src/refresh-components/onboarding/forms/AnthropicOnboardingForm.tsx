@@ -20,6 +20,10 @@ import LLMConnectionIcons from "../components/LLMConnectionIcons";
 import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 
+// Field name constants
+const FIELD_API_KEY = "api_key";
+const FIELD_DEFAULT_MODEL_NAME = "default_model_name";
+
 interface AnthropicOnboardingFormProps {
   llmDescriptor: WellKnownLLMProviderDescriptor;
   onboardingState: OnboardingState;
@@ -62,9 +66,9 @@ function AnthropicFormFields({
   return (
     <>
       <FormikField<string>
-        name="api_key"
+        name={FIELD_API_KEY}
         render={(field, helper, meta, state) => (
-          <FormField name="api_key" state={state} className="w-full">
+          <FormField name={FIELD_API_KEY} state={state} className="w-full">
             <FormField.Label>API Key</FormField.Label>
             <FormField.Control>
               <PasswordInputTypeIn
@@ -108,9 +112,13 @@ function AnthropicFormFields({
       <Separator className="my-0" />
 
       <FormikField<string>
-        name="default_model_name"
+        name={FIELD_DEFAULT_MODEL_NAME}
         render={(field, helper, meta, state) => (
-          <FormField name="default_model_name" state={state} className="w-full">
+          <FormField
+            name={FIELD_DEFAULT_MODEL_NAME}
+            state={state}
+            className="w-full"
+          >
             <FormField.Label>Default Model</FormField.Label>
             <FormField.Control>
               <InputComboBox
@@ -188,8 +196,8 @@ export function AnthropicOnboardingForm({
   );
 
   const validationSchema = Yup.object().shape({
-    api_key: Yup.string().required("API Key is required"),
-    default_model_name: Yup.string().required("Model name is required"),
+    [FIELD_API_KEY]: Yup.string().required("API Key is required"),
+    [FIELD_DEFAULT_MODEL_NAME]: Yup.string().required("Model name is required"),
   });
 
   const icon = () => (

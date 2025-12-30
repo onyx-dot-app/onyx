@@ -23,6 +23,10 @@ import LLMConnectionIcons from "../components/LLMConnectionIcons";
 import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 
+// Field name constants
+const FIELD_DEFAULT_MODEL_NAME = "default_model_name";
+const FIELD_VERTEX_CREDENTIALS = "custom_config.vertex_credentials";
+
 interface VertexAIOnboardingFormProps {
   llmDescriptor: WellKnownLLMProviderDescriptor;
   onboardingState: OnboardingState;
@@ -92,10 +96,10 @@ function VertexAIFormFields({
   return (
     <>
       <FormikField<string>
-        name="custom_config.vertex_credentials"
+        name={FIELD_VERTEX_CREDENTIALS}
         render={(field, helper, meta, state) => (
           <FormField
-            name="custom_config.vertex_credentials"
+            name={FIELD_VERTEX_CREDENTIALS}
             state={state}
             className="w-full"
           >
@@ -148,9 +152,13 @@ function VertexAIFormFields({
       <Separator className="my-0" />
 
       <FormikField<string>
-        name="default_model_name"
+        name={FIELD_DEFAULT_MODEL_NAME}
         render={(field, helper, meta, state) => (
-          <FormField name="default_model_name" state={state} className="w-full">
+          <FormField
+            name={FIELD_DEFAULT_MODEL_NAME}
+            state={state}
+            className="w-full"
+          >
             <FormField.Label>Default Model</FormField.Label>
             <FormField.Control>
               <InputComboBox
@@ -231,7 +239,7 @@ export function VertexAIOnboardingForm({
   );
 
   const validationSchema = Yup.object().shape({
-    default_model_name: Yup.string().required("Model name is required"),
+    [FIELD_DEFAULT_MODEL_NAME]: Yup.string().required("Model name is required"),
     custom_config: Yup.object().shape({
       vertex_credentials: Yup.string().required("Credentials file is required"),
     }),

@@ -46,6 +46,14 @@ const AUTH_METHOD_IAM = "iam";
 const AUTH_METHOD_ACCESS_KEY = "access_key";
 const AUTH_METHOD_LONG_TERM_API_KEY = "long_term_api_key";
 
+// Field name constants
+const FIELD_DEFAULT_MODEL_NAME = "default_model_name";
+const FIELD_AWS_REGION_NAME = "custom_config.AWS_REGION_NAME";
+const FIELD_BEDROCK_AUTH_METHOD = "custom_config.BEDROCK_AUTH_METHOD";
+const FIELD_AWS_ACCESS_KEY_ID = "custom_config.AWS_ACCESS_KEY_ID";
+const FIELD_AWS_SECRET_ACCESS_KEY = "custom_config.AWS_SECRET_ACCESS_KEY";
+const FIELD_AWS_BEARER_TOKEN_BEDROCK = "custom_config.AWS_BEARER_TOKEN_BEDROCK";
+
 interface BedrockOnboardingFormProps {
   llmDescriptor: WellKnownLLMProviderDescriptor;
   onboardingState: OnboardingState;
@@ -110,10 +118,10 @@ function BedrockFormFields({
   return (
     <>
       <FormikField<string>
-        name="custom_config.AWS_REGION_NAME"
+        name={FIELD_AWS_REGION_NAME}
         render={(field, helper, meta, state) => (
           <FormField
-            name="custom_config.AWS_REGION_NAME"
+            name={FIELD_AWS_REGION_NAME}
             state={state}
             className="w-full"
           >
@@ -145,10 +153,10 @@ function BedrockFormFields({
       />
 
       <FormikField<string>
-        name="custom_config.BEDROCK_AUTH_METHOD"
+        name={FIELD_BEDROCK_AUTH_METHOD}
         render={(field, helper, meta, state) => (
           <FormField
-            name="custom_config.BEDROCK_AUTH_METHOD"
+            name={FIELD_BEDROCK_AUTH_METHOD}
             state={state}
             className="w-full"
           >
@@ -208,10 +216,10 @@ function BedrockFormFields({
       {authMethod === AUTH_METHOD_ACCESS_KEY && (
         <>
           <FormikField<string>
-            name="custom_config.AWS_ACCESS_KEY_ID"
+            name={FIELD_AWS_ACCESS_KEY_ID}
             render={(field, helper, meta, state) => (
               <FormField
-                name="custom_config.AWS_ACCESS_KEY_ID"
+                name={FIELD_AWS_ACCESS_KEY_ID}
                 state={state}
                 className="w-full"
               >
@@ -235,10 +243,10 @@ function BedrockFormFields({
             )}
           />
           <FormikField<string>
-            name="custom_config.AWS_SECRET_ACCESS_KEY"
+            name={FIELD_AWS_SECRET_ACCESS_KEY}
             render={(field, helper, meta, state) => (
               <FormField
-                name="custom_config.AWS_SECRET_ACCESS_KEY"
+                name={FIELD_AWS_SECRET_ACCESS_KEY}
                 state={state}
                 className="w-full"
               >
@@ -278,10 +286,10 @@ function BedrockFormFields({
 
       {authMethod === AUTH_METHOD_LONG_TERM_API_KEY && (
         <FormikField<string>
-          name="custom_config.AWS_BEARER_TOKEN_BEDROCK"
+          name={FIELD_AWS_BEARER_TOKEN_BEDROCK}
           render={(field, helper, meta, state) => (
             <FormField
-              name="custom_config.AWS_BEARER_TOKEN_BEDROCK"
+              name={FIELD_AWS_BEARER_TOKEN_BEDROCK}
               state={state}
               className="w-full"
             >
@@ -321,9 +329,13 @@ function BedrockFormFields({
       <Separator className="my-0" />
 
       <FormikField<string>
-        name="default_model_name"
+        name={FIELD_DEFAULT_MODEL_NAME}
         render={(field, helper, meta, state) => (
-          <FormField name="default_model_name" state={state} className="w-full">
+          <FormField
+            name={FIELD_DEFAULT_MODEL_NAME}
+            state={state}
+            className="w-full"
+          >
             <FormField.Label>Default Model</FormField.Label>
             <FormField.Control>
               <InputComboBox
@@ -415,7 +427,7 @@ export function BedrockOnboardingForm({
   );
 
   const validationSchema = Yup.object().shape({
-    default_model_name: Yup.string().required("Model name is required"),
+    [FIELD_DEFAULT_MODEL_NAME]: Yup.string().required("Model name is required"),
     custom_config: Yup.object().shape({
       AWS_REGION_NAME: Yup.string().required("AWS Region is required"),
       BEDROCK_AUTH_METHOD: Yup.string(),

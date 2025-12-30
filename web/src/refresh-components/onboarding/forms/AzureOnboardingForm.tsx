@@ -22,6 +22,11 @@ import {
   parseAzureTargetUri,
 } from "@/lib/azureTargetUri";
 
+// Field name constants
+const FIELD_API_KEY = "api_key";
+const FIELD_TARGET_URI = "target_uri";
+const FIELD_DEFAULT_MODEL_NAME = "default_model_name";
+
 interface AzureOnboardingFormProps {
   llmDescriptor: WellKnownLLMProviderDescriptor;
   onboardingState: OnboardingState;
@@ -62,9 +67,9 @@ function AzureFormFields({
   return (
     <>
       <FormikField<string>
-        name="target_uri"
+        name={FIELD_TARGET_URI}
         render={(field, helper, meta, state) => (
-          <FormField name="target_uri" state={state} className="w-full">
+          <FormField name={FIELD_TARGET_URI} state={state} className="w-full">
             <FormField.Label>Target URI</FormField.Label>
             <FormField.Control>
               <InputTypeIn
@@ -99,9 +104,9 @@ function AzureFormFields({
       />
 
       <FormikField<string>
-        name="api_key"
+        name={FIELD_API_KEY}
         render={(field, helper, meta, state) => (
-          <FormField name="api_key" state={state} className="w-full">
+          <FormField name={FIELD_API_KEY} state={state} className="w-full">
             <FormField.Label>API Key</FormField.Label>
             <FormField.Control>
               <PasswordInputTypeIn
@@ -145,9 +150,13 @@ function AzureFormFields({
       <Separator className="my-0" />
 
       <FormikField<string>
-        name="default_model_name"
+        name={FIELD_DEFAULT_MODEL_NAME}
         render={(field, helper, meta, state) => (
-          <FormField name="default_model_name" state={state} className="w-full">
+          <FormField
+            name={FIELD_DEFAULT_MODEL_NAME}
+            state={state}
+            className="w-full"
+          >
             <FormField.Label>Default Model</FormField.Label>
             <FormField.Control>
               <InputComboBox
@@ -190,15 +199,15 @@ export function AzureOnboardingForm({
   );
 
   const validationSchema = Yup.object().shape({
-    api_key: Yup.string().required("API Key is required"),
-    target_uri: Yup.string()
+    [FIELD_API_KEY]: Yup.string().required("API Key is required"),
+    [FIELD_TARGET_URI]: Yup.string()
       .required("Target URI is required")
       .test(
         "valid-target-uri",
         "Target URI must be a valid URL with api-version query parameter and either a deployment name in the path (/openai/deployments/{name}/...) or /openai/responses for realtime",
         (value) => (value ? isValidAzureTargetUri(value) : false)
       ),
-    default_model_name: Yup.string().required("Model name is required"),
+    [FIELD_DEFAULT_MODEL_NAME]: Yup.string().required("Model name is required"),
   });
 
   const icon = () => (

@@ -19,6 +19,15 @@ import { OnboardingActions, OnboardingState } from "../types";
 import { buildInitialValues } from "../components/llmConnectionHelpers";
 import LLMConnectionIcons from "../components/LLMConnectionIcons";
 
+// Field name constants
+const FIELD_PROVIDER = "provider";
+const FIELD_API_BASE = "api_base";
+const FIELD_API_VERSION = "api_version";
+const FIELD_API_KEY = "api_key";
+const FIELD_CUSTOM_CONFIG = "custom_config";
+const FIELD_MODEL_CONFIGURATIONS = "model_configurations";
+const FIELD_DEFAULT_MODEL_NAME = "default_model_name";
+
 interface CustomOnboardingFormProps {
   onboardingState: OnboardingState;
   onboardingActions: OnboardingActions;
@@ -95,9 +104,9 @@ function CustomFormFields({
   return (
     <>
       <FormikField<string>
-        name="provider"
+        name={FIELD_PROVIDER}
         render={(field, helper, meta, state) => (
-          <FormField name="provider" state={state} className="w-full">
+          <FormField name={FIELD_PROVIDER} state={state} className="w-full">
             <FormField.Label>Provider Name</FormField.Label>
             <FormField.Control>
               <InputTypeIn
@@ -146,9 +155,9 @@ function CustomFormFields({
       </Text>
 
       <FormikField<string>
-        name="api_base"
+        name={FIELD_API_BASE}
         render={(field, helper, meta, state) => (
-          <FormField name="api_base" state={state} className="w-full">
+          <FormField name={FIELD_API_BASE} state={state} className="w-full">
             <FormField.Label optional>API Base URL</FormField.Label>
             <FormField.Control>
               <InputTypeIn
@@ -180,9 +189,9 @@ function CustomFormFields({
       />
 
       <FormikField<string>
-        name="api_version"
+        name={FIELD_API_VERSION}
         render={(field, helper, meta, state) => (
-          <FormField name="api_version" state={state} className="w-full">
+          <FormField name={FIELD_API_VERSION} state={state} className="w-full">
             <FormField.Label optional>API Version</FormField.Label>
             <FormField.Control>
               <InputTypeIn {...field} placeholder="" showClearButton={false} />
@@ -192,9 +201,9 @@ function CustomFormFields({
       />
 
       <FormikField<string>
-        name="api_key"
+        name={FIELD_API_KEY}
         render={(field, helper, meta, state) => (
-          <FormField name="api_key" state={state} className="w-full">
+          <FormField name={FIELD_API_KEY} state={state} className="w-full">
             <FormField.Label optional>API Key</FormField.Label>
             <FormField.Control>
               <PasswordInputTypeIn
@@ -223,7 +232,7 @@ function CustomFormFields({
 
       <div className="w-full">
         <FormField
-          name="custom_config"
+          name={FIELD_CUSTOM_CONFIG}
           state={formikProps.errors.custom_config ? "error" : "idle"}
           className="w-full"
         >
@@ -253,7 +262,7 @@ function CustomFormFields({
 
       <div className="w-full">
         <FormField
-          name="model_configurations"
+          name={FIELD_MODEL_CONFIGURATIONS}
           state={
             formikProps.errors.model_configurations || modelConfigError
               ? "error"
@@ -290,9 +299,13 @@ function CustomFormFields({
       <Separator className="my-0" />
 
       <FormikField<string>
-        name="default_model_name"
+        name={FIELD_DEFAULT_MODEL_NAME}
         render={(field, helper, meta, state) => (
-          <FormField name="default_model_name" state={state} className="w-full">
+          <FormField
+            name={FIELD_DEFAULT_MODEL_NAME}
+            state={state}
+            className="w-full"
+          >
             <FormField.Label>Default Model</FormField.Label>
             <FormField.Control>
               <InputTypeIn
@@ -337,11 +350,11 @@ export function CustomOnboardingForm({
   );
 
   const validationSchema = Yup.object().shape({
-    provider: Yup.string().required("Provider is required"),
-    api_key: Yup.string(),
-    api_base: Yup.string(),
-    api_version: Yup.string(),
-    model_configurations: Yup.array()
+    [FIELD_PROVIDER]: Yup.string().required("Provider is required"),
+    [FIELD_API_KEY]: Yup.string(),
+    [FIELD_API_BASE]: Yup.string(),
+    [FIELD_API_VERSION]: Yup.string(),
+    [FIELD_MODEL_CONFIGURATIONS]: Yup.array()
       .of(
         Yup.object({
           name: Yup.string().required("Model name is required"),
@@ -359,8 +372,10 @@ export function CustomOnboardingForm({
         })
       )
       .min(1, "At least one model configuration is required"),
-    default_model_name: Yup.string().required("Default model is required"),
-    custom_config: Yup.object(),
+    [FIELD_DEFAULT_MODEL_NAME]: Yup.string().required(
+      "Default model is required"
+    ),
+    [FIELD_CUSTOM_CONFIG]: Yup.object(),
   });
 
   const icon = () => (
