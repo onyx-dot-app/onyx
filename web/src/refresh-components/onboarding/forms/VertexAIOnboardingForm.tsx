@@ -19,8 +19,8 @@ import {
   buildInitialValues,
   testApiKeyHelper,
 } from "../components/llmConnectionHelpers";
-import { MODAL_CONTENT_MAP } from "../constants";
 import LLMConnectionIcons from "../components/LLMConnectionIcons";
+import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 
 interface VertexAIOnboardingFormProps {
@@ -66,8 +66,6 @@ function VertexAIFormFields({
     disabled,
     llmDescriptor,
   } = useOnboardingFormContext();
-
-  const modalContent = MODAL_CONTENT_MAP[llmDescriptor?.name ?? ""];
 
   const handleFileInputChange = async (value: string) => {
     if (!llmDescriptor || !value) return;
@@ -121,9 +119,15 @@ function VertexAIFormFields({
             {!showApiMessage && (
               <FormField.Message
                 messages={{
-                  idle:
-                    modalContent?.field_metadata?.vertex_credentials ??
-                    "Upload your Google Cloud service account credentials JSON file.",
+                  idle: (
+                    <>
+                      {"Paste your "}
+                      <InlineExternalLink href="https://console.cloud.google.com/projectselector2/iam-admin/serviceaccounts?supportedpurview=project">
+                        service account credentials
+                      </InlineExternalLink>
+                      {" from Google Cloud Vertex AI."}
+                    </>
+                  ),
                   error: meta.error,
                 }}
               />
@@ -132,9 +136,7 @@ function VertexAIFormFields({
               <FormField.APIMessage
                 state={apiStatus}
                 messages={{
-                  loading: `Verifying credentials with ${
-                    modalContent?.display_name ?? "Vertex AI"
-                  }...`,
+                  loading: "Verifying credentials with Vertex AI...",
                   success: "Credentials valid. Your available models updated.",
                   error: errorMessage || "Invalid credentials",
                 }}
@@ -188,7 +190,7 @@ function VertexAIFormFields({
             {!showModelsApiErrorMessage && (
               <FormField.Message
                 messages={{
-                  idle: modalContent?.field_metadata?.default_model_name,
+                  idle: "This model will be used by Onyx by default.",
                   error: meta.error,
                 }}
               />
@@ -244,7 +246,7 @@ export function VertexAIOnboardingForm({
     <OnboardingFormWrapper<VertexAIFormValues>
       icon={icon}
       title={`Set up ${llmDescriptor.title}`}
-      description={MODAL_CONTENT_MAP[llmDescriptor.name]?.description}
+      description="Connect to Google Cloud Vertex AI and set up your Gemini models."
       llmDescriptor={llmDescriptor}
       onboardingState={onboardingState}
       onboardingActions={onboardingActions}

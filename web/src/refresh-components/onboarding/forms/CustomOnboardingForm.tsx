@@ -17,7 +17,6 @@ import {
 } from "./OnboardingFormWrapper";
 import { OnboardingActions, OnboardingState } from "../types";
 import { buildInitialValues } from "../components/llmConnectionHelpers";
-import { MODAL_CONTENT_MAP } from "../constants";
 import LLMConnectionIcons from "../components/LLMConnectionIcons";
 
 interface CustomOnboardingFormProps {
@@ -364,7 +363,7 @@ export function CustomOnboardingForm({
     <OnboardingFormWrapper<CustomFormValues>
       icon={icon}
       title="Set up Custom LLM Provider"
-      description={MODAL_CONTENT_MAP.custom?.description}
+      description="Connect models from other providers or your self-hosted models."
       isCustomProvider={true}
       onboardingState={onboardingState}
       onboardingActions={onboardingActions}

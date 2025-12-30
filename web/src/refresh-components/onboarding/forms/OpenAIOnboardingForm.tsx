@@ -16,8 +16,8 @@ import {
 } from "./OnboardingFormWrapper";
 import { OnboardingActions, OnboardingState } from "../types";
 import { buildInitialValues } from "../components/llmConnectionHelpers";
-import { MODAL_CONTENT_MAP } from "../constants";
 import LLMConnectionIcons from "../components/LLMConnectionIcons";
+import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 
 interface OpenAIOnboardingFormProps {
@@ -59,8 +59,6 @@ function OpenAIFormFields({
     llmDescriptor,
   } = useOnboardingFormContext();
 
-  const modalContent = MODAL_CONTENT_MAP[llmDescriptor?.name ?? ""];
-
   return (
     <>
       <FormikField<string>
@@ -80,9 +78,15 @@ function OpenAIFormFields({
             {!showApiMessage && (
               <FormField.Message
                 messages={{
-                  idle:
-                    modalContent?.field_metadata?.api_key ??
-                    "Paste your API key to access your models.",
+                  idle: (
+                    <>
+                      {"Paste your "}
+                      <InlineExternalLink href="https://platform.openai.com/api-keys">
+                        API key
+                      </InlineExternalLink>
+                      {" from OpenAI to access your models."}
+                    </>
+                  ),
                   error: meta.error,
                 }}
               />
@@ -91,9 +95,7 @@ function OpenAIFormFields({
               <FormField.APIMessage
                 state={apiStatus}
                 messages={{
-                  loading: `Checking API key with ${
-                    modalContent?.display_name ?? "OpenAI"
-                  }...`,
+                  loading: "Checking API key with OpenAI...",
                   success: "API key valid. Your available models updated.",
                   error: errorMessage || "Invalid API key",
                 }}
@@ -147,7 +149,7 @@ function OpenAIFormFields({
             {!showModelsApiErrorMessage && (
               <FormField.Message
                 messages={{
-                  idle: modalContent?.field_metadata?.default_model_name,
+                  idle: "This model will be used by Onyx by default.",
                   error: meta.error,
                 }}
               />
@@ -196,7 +198,7 @@ export function OpenAIOnboardingForm({
     <OnboardingFormWrapper<OpenAIFormValues>
       icon={icon}
       title={`Set up ${llmDescriptor.title}`}
-      description={MODAL_CONTENT_MAP[llmDescriptor.name]?.description}
+      description="Connect to OpenAI and set up your ChatGPT models."
       llmDescriptor={llmDescriptor}
       onboardingState={onboardingState}
       onboardingActions={onboardingActions}

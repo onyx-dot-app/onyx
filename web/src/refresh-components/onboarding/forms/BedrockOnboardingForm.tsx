@@ -19,8 +19,9 @@ import {
 } from "./OnboardingFormWrapper";
 import { OnboardingActions, OnboardingState } from "../types";
 import { buildInitialValues } from "../components/llmConnectionHelpers";
-import { MODAL_CONTENT_MAP } from "../constants";
 import LLMConnectionIcons from "../components/LLMConnectionIcons";
+import InlineExternalLink from "@/refresh-components/InlineExternalLink";
+import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 
 // AWS Bedrock regions
@@ -90,7 +91,6 @@ function BedrockFormFields({
     llmDescriptor,
   } = useOnboardingFormContext();
 
-  const modalContent = MODAL_CONTENT_MAP[llmDescriptor?.name ?? ""];
   const authMethod =
     formikProps.values.custom_config?.BEDROCK_AUTH_METHOD ||
     AUTH_METHOD_ACCESS_KEY;
@@ -175,9 +175,17 @@ function BedrockFormFields({
             </FormField.Control>
             <FormField.Message
               messages={{
-                idle:
-                  modalContent?.field_metadata?.BEDROCK_AUTH_METHOD ??
-                  "Choose how Onyx should authenticate with Bedrock.",
+                idle: (
+                  <>
+                    {"See "}
+                    <InlineExternalLink
+                      href={`${DOCS_ADMINS_PATH}/ai_models/bedrock#authentication-methods`}
+                    >
+                      documentation
+                    </InlineExternalLink>
+                    {" for more instructions."}
+                  </>
+                ),
                 error: meta.error,
               }}
             />
@@ -300,9 +308,7 @@ function BedrockFormFields({
               {!showApiMessage && (
                 <FormField.Message
                   messages={{
-                    idle:
-                      modalContent?.field_metadata?.AWS_BEARER_TOKEN_BEDROCK ??
-                      "",
+                    idle: "",
                     error: meta.error,
                   }}
                 />
@@ -439,7 +445,7 @@ export function BedrockOnboardingForm({
     <OnboardingFormWrapper<BedrockFormValues>
       icon={icon}
       title={`Set up ${llmDescriptor.title}`}
-      description={MODAL_CONTENT_MAP[llmDescriptor.name]?.description}
+      description="Connect to AWS and set up your Amazon Bedrock models."
       llmDescriptor={llmDescriptor}
       onboardingState={onboardingState}
       onboardingActions={onboardingActions}

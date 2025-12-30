@@ -17,8 +17,8 @@ import {
 } from "./OnboardingFormWrapper";
 import { OnboardingActions, OnboardingState } from "../types";
 import { buildInitialValues } from "../components/llmConnectionHelpers";
-import { MODAL_CONTENT_MAP } from "../constants";
 import LLMConnectionIcons from "../components/LLMConnectionIcons";
+import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 
 interface OpenRouterOnboardingFormProps {
@@ -61,8 +61,6 @@ function OpenRouterFormFields({
     llmDescriptor,
   } = useOnboardingFormContext();
 
-  const modalContent = MODAL_CONTENT_MAP[llmDescriptor?.name ?? ""];
-
   const handleApiKeyInteraction = () => {
     if (formikProps.values.api_key) {
       handleFetchModels();
@@ -92,9 +90,15 @@ function OpenRouterFormFields({
             {!showApiMessage && (
               <FormField.Message
                 messages={{
-                  idle:
-                    modalContent?.field_metadata?.api_key ??
-                    "Paste your API key from OpenRouter.",
+                  idle: (
+                    <>
+                      {"Paste your "}
+                      <InlineExternalLink href="https://openrouter.ai/settings/keys">
+                        API key
+                      </InlineExternalLink>
+                      {" from OpenRouter to access your models."}
+                    </>
+                  ),
                   error: meta.error,
                 }}
               />
@@ -103,9 +107,7 @@ function OpenRouterFormFields({
               <FormField.APIMessage
                 state={apiStatus}
                 messages={{
-                  loading: `Checking API key with ${
-                    modalContent?.display_name ?? "OpenRouter"
-                  }...`,
+                  loading: "Checking API key with OpenRouter...",
                   success: "API key valid. Your available models updated.",
                   error: errorMessage || "Invalid API key",
                 }}
@@ -159,7 +161,7 @@ function OpenRouterFormFields({
             {!showModelsApiErrorMessage && (
               <FormField.Message
                 messages={{
-                  idle: modalContent?.field_metadata?.default_model_name,
+                  idle: "This model will be used by Onyx by default.",
                   error: meta.error,
                 }}
               />
@@ -215,7 +217,7 @@ export function OpenRouterOnboardingForm({
     <OnboardingFormWrapper<OpenRouterFormValues>
       icon={icon}
       title={`Set up ${llmDescriptor.title}`}
-      description={MODAL_CONTENT_MAP[llmDescriptor.name]?.description}
+      description="Connect to OpenRouter and set up your OpenRouter models."
       llmDescriptor={llmDescriptor}
       onboardingState={onboardingState}
       onboardingActions={onboardingActions}

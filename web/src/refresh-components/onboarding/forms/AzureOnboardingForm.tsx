@@ -14,8 +14,8 @@ import {
 } from "./OnboardingFormWrapper";
 import { OnboardingActions, OnboardingState } from "../types";
 import { buildInitialValues } from "../components/llmConnectionHelpers";
-import { MODAL_CONTENT_MAP } from "../constants";
 import LLMConnectionIcons from "../components/LLMConnectionIcons";
+import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 import {
   isValidAzureTargetUri,
@@ -58,8 +58,6 @@ function AzureFormFields({
     disabled,
     llmDescriptor,
   } = useOnboardingFormContext();
-
-  const modalContent = MODAL_CONTENT_MAP[llmDescriptor?.name ?? ""];
 
   return (
     <>
@@ -117,9 +115,15 @@ function AzureFormFields({
             {!showApiMessage && (
               <FormField.Message
                 messages={{
-                  idle:
-                    modalContent?.field_metadata?.api_key ??
-                    "Paste your API key from Azure OpenAI.",
+                  idle: (
+                    <>
+                      {"Paste your "}
+                      <InlineExternalLink href="https://oai.azure.com">
+                        API key
+                      </InlineExternalLink>
+                      {" from Azure OpenAI to access your models."}
+                    </>
+                  ),
                   error: meta.error,
                 }}
               />
@@ -128,9 +132,7 @@ function AzureFormFields({
               <FormField.APIMessage
                 state={apiStatus}
                 messages={{
-                  loading: `Checking API key with ${
-                    modalContent?.display_name ?? "Azure OpenAI"
-                  }...`,
+                  loading: "Checking API key with Azure OpenAI...",
                   success: "API key valid. Your available models updated.",
                   error: errorMessage || "Invalid API key",
                 }}
@@ -160,7 +162,7 @@ function AzureFormFields({
             </FormField.Control>
             <FormField.Message
               messages={{
-                idle: modalContent?.field_metadata?.default_model_name,
+                idle: "This model will be used by Onyx by default.",
                 error: meta.error,
               }}
             />
@@ -205,7 +207,7 @@ export function AzureOnboardingForm({
     <OnboardingFormWrapper<AzureFormValues>
       icon={icon}
       title={`Set up ${llmDescriptor.title}`}
-      description={MODAL_CONTENT_MAP[llmDescriptor.name]?.description}
+      description="Connect to Microsoft Azure and set up your Azure OpenAI models."
       llmDescriptor={llmDescriptor}
       onboardingState={onboardingState}
       onboardingActions={onboardingActions}
