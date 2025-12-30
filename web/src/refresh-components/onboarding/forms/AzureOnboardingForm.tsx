@@ -210,7 +210,7 @@ export function AzureOnboardingForm({
   return (
     <OnboardingFormWrapper<AzureFormValues>
       icon={icon}
-      title={`Set up ${llmDescriptor.title}`}
+      title="Set up Azure OpenAI"
       description="Connect to Microsoft Azure and set up your Azure OpenAI models."
       llmDescriptor={llmDescriptor}
       onboardingState={onboardingState}

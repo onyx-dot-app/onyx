@@ -201,7 +201,7 @@ export function OpenAIOnboardingForm({
   return (
     <OnboardingFormWrapper<OpenAIFormValues>
       icon={icon}
-      title={`Set up ${llmDescriptor.title}`}
+      title="Set up GPT"
       description="Connect to OpenAI and set up your ChatGPT models."
       llmDescriptor={llmDescriptor}
       onboardingState={onboardingState}

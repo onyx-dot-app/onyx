@@ -201,7 +201,7 @@ export function AnthropicOnboardingForm({
   return (
     <OnboardingFormWrapper<AnthropicFormValues>
       icon={icon}
-      title={`Set up ${llmDescriptor.title}`}
+      title="Set up Claude"
       description="Connect to Anthropic and set up your Claude models."
       llmDescriptor={llmDescriptor}
       onboardingState={onboardingState}

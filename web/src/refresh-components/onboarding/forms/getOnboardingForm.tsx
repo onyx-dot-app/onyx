@@ -13,6 +13,44 @@ import { VertexAIOnboardingForm } from "./VertexAIOnboardingForm";
 import { OpenRouterOnboardingForm } from "./OpenRouterOnboardingForm";
 import { CustomOnboardingForm } from "./CustomOnboardingForm";
 
+// Display info for LLM provider cards - title is the product name, displayName is the company/platform
+const PROVIDER_DISPLAY_INFO: Record<
+  string,
+  { title: string; displayName: string }
+> = {
+  [LLMProviderName.OPENAI]: { title: "GPT", displayName: "OpenAI" },
+  [LLMProviderName.ANTHROPIC]: { title: "Claude", displayName: "Anthropic" },
+  [LLMProviderName.OLLAMA_CHAT]: { title: "Ollama", displayName: "Ollama" },
+  [LLMProviderName.AZURE]: {
+    title: "Azure OpenAI",
+    displayName: "Microsoft Azure Cloud",
+  },
+  [LLMProviderName.BEDROCK]: {
+    title: "Amazon Bedrock",
+    displayName: "AWS",
+  },
+  [LLMProviderName.VERTEX_AI]: {
+    title: "Gemini",
+    displayName: "Google Cloud Vertex AI",
+  },
+  [LLMProviderName.OPENROUTER]: {
+    title: "OpenRouter",
+    displayName: "OpenRouter",
+  },
+};
+
+export function getProviderDisplayInfo(providerName: string): {
+  title: string;
+  displayName: string;
+} {
+  return (
+    PROVIDER_DISPLAY_INFO[providerName] ?? {
+      title: providerName,
+      displayName: providerName,
+    }
+  );
+}
+
 export interface OnboardingFormProps {
   llmDescriptor?: WellKnownLLMProviderDescriptor;
   isCustomProvider?: boolean;

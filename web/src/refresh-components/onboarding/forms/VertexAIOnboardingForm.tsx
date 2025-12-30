@@ -246,7 +246,7 @@ export function VertexAIOnboardingForm({
   return (
     <OnboardingFormWrapper<VertexAIFormValues>
       icon={icon}
-      title={`Set up ${llmDescriptor.title}`}
+      title="Set up Gemini"
       description="Connect to Google Cloud Vertex AI and set up your Gemini models."
       llmDescriptor={llmDescriptor}
       onboardingState={onboardingState}

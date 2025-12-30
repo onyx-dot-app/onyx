@@ -214,7 +214,7 @@ export function OpenRouterOnboardingForm({
   return (
     <OnboardingFormWrapper<OpenRouterFormValues>
       icon={icon}
-      title={`Set up ${llmDescriptor.title}`}
+      title="Set up OpenRouter"
       description="Connect to OpenRouter and set up your OpenRouter models."
       llmDescriptor={llmDescriptor}
       onboardingState={onboardingState}

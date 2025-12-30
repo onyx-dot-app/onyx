@@ -446,7 +446,7 @@ export function BedrockOnboardingForm({
   return (
     <OnboardingFormWrapper<BedrockFormValues>
       icon={icon}
-      title={`Set up ${llmDescriptor.title}`}
+      title="Set up Amazon Bedrock"
       description="Connect to AWS and set up your Amazon Bedrock models."
       llmDescriptor={llmDescriptor}
       onboardingState={onboardingState}

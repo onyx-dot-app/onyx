@@ -5,7 +5,10 @@ import Separator from "@/refresh-components/Separator";
 import LLMProviderCard from "../components/LLMProviderCard";
 import { OnboardingActions, OnboardingState, OnboardingStep } from "../types";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
-import { getOnboardingForm } from "../forms/getOnboardingForm";
+import {
+  getOnboardingForm,
+  getProviderDisplayInfo,
+} from "../forms/getOnboardingForm";
 import { cn } from "@/lib/utils";
 import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 import { SvgCheckCircle, SvgCpu, SvgExternalLink } from "@opal/icons";
@@ -173,23 +176,26 @@ const LLMStepInner = ({
                 })}
 
               {/* Render provider cards */}
-              {llmDescriptors.map((llmDescriptor) => (
-                <div
-                  key={llmDescriptor.name}
-                  className="basis-[calc(50%-theme(spacing.1)/2)] grow"
-                >
-                  <LLMProviderCard
-                    title={llmDescriptor.title}
-                    subtitle={llmDescriptor.display_name}
-                    providerName={llmDescriptor.name}
-                    disabled={disabled}
-                    isConnected={onboardingState.data.llmProviders?.some(
-                      (provider) => provider === llmDescriptor.name
-                    )}
-                    onClick={() => handleProviderClick(llmDescriptor, false)}
-                  />
-                </div>
-              ))}
+              {llmDescriptors.map((llmDescriptor) => {
+                const displayInfo = getProviderDisplayInfo(llmDescriptor.name);
+                return (
+                  <div
+                    key={llmDescriptor.name}
+                    className="basis-[calc(50%-theme(spacing.1)/2)] grow"
+                  >
+                    <LLMProviderCard
+                      title={displayInfo.title}
+                      subtitle={displayInfo.displayName}
+                      providerName={llmDescriptor.name}
+                      disabled={disabled}
+                      isConnected={onboardingState.data.llmProviders?.some(
+                        (provider) => provider === llmDescriptor.name
+                      )}
+                      onClick={() => handleProviderClick(llmDescriptor, false)}
+                    />
+                  </div>
+                );
+              })}
 
               {/* Custom provider card */}
               <div className="basis-[calc(50%-theme(spacing.1)/2)] grow">

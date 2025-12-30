@@ -40,8 +40,6 @@ class CustomConfigKey(BaseModel):
 
 class WellKnownLLMProviderDescriptor(BaseModel):
     name: str
-    display_name: str
-    title: str
     model_configurations: list[ModelConfigurationView]
 
 
@@ -54,8 +52,6 @@ OPENAI_VISIBLE_MODEL_NAMES = {
     "gpt-4o",
     "gpt-4o-mini",
 }
-
-BEDROCK_DEFAULT_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0"
 
 
 def _fallback_bedrock_regions() -> list[str]:
@@ -128,7 +124,6 @@ ANTHROPIC_VISIBLE_MODEL_NAMES = {
 
 VERTEX_CREDENTIALS_FILE_KWARG = "vertex_credentials"
 VERTEX_LOCATION_KWARG = "vertex_location"
-VERTEXAI_DEFAULT_MODEL = "gemini-2.5-flash"
 # Curated list of Vertex AI models to show by default in the UI
 VERTEXAI_VISIBLE_MODEL_NAMES = {
     "gemini-2.5-flash",
@@ -305,57 +300,42 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
     return [
         WellKnownLLMProviderDescriptor(
             name=LlmProviderNames.OPENAI,
-            display_name="OpenAI",
-            title="GPT",
             model_configurations=fetch_model_configurations_for_provider(
                 LlmProviderNames.OPENAI
             ),
         ),
         WellKnownLLMProviderDescriptor(
             name=LlmProviderNames.OLLAMA_CHAT,
-            display_name="Ollama",
-            title="Ollama",
             model_configurations=fetch_model_configurations_for_provider(
                 LlmProviderNames.OLLAMA_CHAT
             ),
         ),
         WellKnownLLMProviderDescriptor(
             name=LlmProviderNames.ANTHROPIC,
-            display_name="Anthropic",
-            title="Claude",
             model_configurations=fetch_model_configurations_for_provider(
                 LlmProviderNames.ANTHROPIC
             ),
         ),
         WellKnownLLMProviderDescriptor(
             name=LlmProviderNames.AZURE,
-            display_name="Microsoft Azure Cloud",
-            title="Azure OpenAI",
             model_configurations=fetch_model_configurations_for_provider(
                 LlmProviderNames.AZURE
             ),
         ),
         WellKnownLLMProviderDescriptor(
             name=LlmProviderNames.BEDROCK,
-            display_name="AWS",
-            title="Amazon Bedrock",
             model_configurations=fetch_model_configurations_for_provider(
                 LlmProviderNames.BEDROCK
             ),
         ),
         WellKnownLLMProviderDescriptor(
             name=LlmProviderNames.VERTEX_AI,
-            display_name="Google Cloud Vertex AI",
-            title="Gemini",
             model_configurations=fetch_model_configurations_for_provider(
                 LlmProviderNames.VERTEX_AI
             ),
-            default_model=VERTEXAI_DEFAULT_MODEL,
         ),
         WellKnownLLMProviderDescriptor(
             name=LlmProviderNames.OPENROUTER,
-            display_name="OpenRouter",
-            title="OpenRouter",
             model_configurations=fetch_model_configurations_for_provider(
                 LlmProviderNames.OPENROUTER
             ),

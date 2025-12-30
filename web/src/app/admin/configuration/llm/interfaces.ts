@@ -43,9 +43,6 @@ export interface ModelConfiguration {
 
 export interface WellKnownLLMProviderDescriptor {
   name: string;
-  display_name: string;
-  title: string;
-
   model_configurations: ModelConfiguration[];
 }
 

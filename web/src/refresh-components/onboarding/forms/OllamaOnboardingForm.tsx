@@ -390,7 +390,7 @@ export function OllamaOnboardingForm({
   return (
     <OnboardingFormWrapper<OllamaFormValues>
       icon={icon}
-      title={`Set up ${llmDescriptor.title}`}
+      title="Set up Ollama"
       description="Connect to your Ollama models."
       llmDescriptor={llmDescriptor}
       onboardingState={onboardingState}
