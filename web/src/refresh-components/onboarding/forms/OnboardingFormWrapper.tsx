@@ -135,7 +135,7 @@ export function OnboardingFormWrapper<T extends Record<string, any>>({
   // Model fetching state
   const [isFetchingModels, setIsFetchingModels] = useState(false);
   const [fetchedModelConfigurations, setFetchedModelConfigurations] = useState<
-    any[]
+    ModelConfiguration[]
   >([]);
 
   // Submission state
