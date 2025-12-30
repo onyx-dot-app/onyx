@@ -446,6 +446,11 @@ export function useChatController({
 
       const searchParamBasedChatSessionName =
         searchParams?.get(SEARCH_PARAM_NAMES.TITLE) || null;
+      // Auto-name only once, after the first assistant response, and only when the chat isn't
+      // already explicitly named (e.g. `?title=...`).
+      const hadAnyUserMessagesBeforeSubmit = currentHistory.some(
+        (m) => m.type === "user"
+      );
       if (isNewSession) {
         currChatSessionId = await createChatSession(
           liveAssistant?.id || 0,
@@ -480,6 +485,11 @@ export function useChatController({
       if (isNewSession) {
         handleNewSessionNavigation(currChatSessionId);
       }
+
+      const shouldAutoNameChatSessionAfterResponse =
+        !searchParamBasedChatSessionName &&
+        !hadAnyUserMessagesBeforeSubmit &&
+        !sessions.get(currChatSessionId)?.description;
 
       // set the ability to cancel the request
       const controller = new AbortController();
@@ -851,8 +861,8 @@ export function useChatController({
       resetRegenerationState(frozenSessionId);
       updateChatStateAction(frozenSessionId, "input");
 
-      // Name the chat now that we have AI response (navigation already happened before streaming)
-      if (isNewSession && !searchParamBasedChatSessionName) {
+      // Name the chat now that we have the first AI response (navigation already happened before streaming)
+      if (shouldAutoNameChatSessionAfterResponse) {
         handleNewSessionNaming(currChatSessionId);
       }
     },

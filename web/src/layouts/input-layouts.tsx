@@ -2,8 +2,8 @@
 
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
-import { SvgXOctagon } from "@opal/icons";
-import { useField } from "formik";
+import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
+import { useField, useFormikContext } from "formik";
 
 export interface VerticalLayoutProps extends FieldLabelLayoutProps {
   name: string;
@@ -79,7 +79,6 @@ function HorizontalInputLayout({
   children,
 
   name,
-  className,
   ...fieldLabelProps
 }: HorizontalLayoutProps) {
   return (
@@ -92,10 +91,7 @@ function HorizontalInputLayout({
         )}
       >
         <div className="min-w-[70%]">
-          <LabelLayout
-            className={cn("cursor-pointer", className)}
-            {...fieldLabelProps}
-          />
+          <LabelLayout {...fieldLabelProps} />
         </div>
         {children}
       </label>
@@ -149,7 +145,7 @@ function LabelLayout({
   const content = label ? (
     <>
       <div className="flex flex-row gap-1.5">
-        <Text mainContentEmphasis text04>
+        <Text as="p" mainContentEmphasis text04>
           {label}
         </Text>
         {optional && (
@@ -159,7 +155,7 @@ function LabelLayout({
         )}
       </div>
       {description && (
-        <Text secondaryBody text03>
+        <Text as="p" secondaryBody text03>
           {description}
         </Text>
       )}
@@ -203,16 +199,45 @@ interface FieldErrorLayoutProps {
  */
 function ErrorLayout({ name }: FieldErrorLayoutProps) {
   const [, meta] = useField(name);
-  const hasError = meta.touched && meta.error;
+  const { status } = useFormikContext();
+  const warning = status?.warnings?.[name];
+  if (warning && typeof warning !== "string")
+    throw new Error("The warning that is set must ALWAYS be a string");
 
-  if (!hasError) return null;
+  const hasError = meta.touched && meta.error;
+  const hasWarning = warning; // Don't require touched for warnings
+
+  if (!hasError && !hasWarning) return null;
 
   return (
     <div className="flex flex-row items-center gap-1 px-1">
-      <SvgXOctagon className="w-[0.75rem] h-[0.75rem] stroke-status-error-05" />
-      <Text secondaryBody className="text-status-error-05" role="alert">
-        {meta.error}
-      </Text>
+      {hasError && (
+        <>
+          <SvgXOctagon size={12} className="stroke-status-error-05" />
+          <Text
+            as="p"
+            secondaryBody
+            className="text-status-error-05"
+            role="alert"
+          >
+            {meta.error}
+          </Text>
+        </>
+      )}
+
+      {hasWarning && (
+        <>
+          <SvgAlertCircle size={12} className="stroke-status-warning-05" />
+          <Text
+            as="p"
+            secondaryBody
+            className="text-status-warning-05"
+            role="alert"
+          >
+            {warning}
+          </Text>
+        </>
+      )}
     </div>
   );
 }

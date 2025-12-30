@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { FiUsers, FiCircle, FiTarget } from "react-icons/fi";
 import { SvgChevronDown } from "@opal/icons";
 import { cn } from "@/lib/utils";
@@ -15,7 +15,6 @@ import { RendererComponent } from "../renderMessageComponent";
 import { getToolName } from "../toolDisplayHelpers";
 import { STANDARD_TEXT_COLOR } from "../constants";
 import Text from "@/refresh-components/texts/Text";
-import { usePacketAnimationAndCollapse } from "../hooks/usePacketAnimationAndCollapse";
 import { useMarkdownRenderer } from "../markdownUtils";
 
 interface NestedToolGroup {
@@ -77,6 +76,7 @@ function NestedToolItemRow({
           )}
         >
           <Text
+            as="p"
             text02
             className={cn(
               "text-sm mb-1",
@@ -169,17 +169,16 @@ export const ResearchAgentRenderer: MessageRenderer<
   const isComplete = parentPackets.some(
     (p) => p.obj.type === PacketType.SECTION_END
   );
+  const [isExpanded, toggleExpanded] = useState(true);
+  const hasCalledCompleteRef = useRef(false);
 
-  // Use shared hook for animation and auto-collapse logic
-  // Use preventDoubleComplete since this renderer needs to avoid double-calling onComplete
-  const { displayedPacketCount, isExpanded, toggleExpanded } =
-    usePacketAnimationAndCollapse({
-      packets,
-      animate,
-      isComplete,
-      onComplete,
-      preventDoubleComplete: true,
-    });
+  // Call onComplete when research agent is complete
+  useEffect(() => {
+    if (isComplete && !hasCalledCompleteRef.current) {
+      hasCalledCompleteRef.current = true;
+      onComplete();
+    }
+  }, [isComplete, onComplete]);
 
   // Get the full report content from parent packets only
   const fullReportContent = parentPackets
@@ -261,7 +260,7 @@ export const ResearchAgentRenderer: MessageRenderer<
   const statusElement = (
     <div
       className="flex items-center justify-between gap-2 cursor-pointer group w-full"
-      onClick={toggleExpanded}
+      onClick={() => toggleExpanded(!isExpanded)}
     >
       <span>{statusText}</span>
       <div className="flex items-center gap-2">

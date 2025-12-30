@@ -48,7 +48,7 @@ jobs:
         id: set-matrix
         run: |
           # Find all leaf-level directories in both test directories
-          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" -exec basename {} \; | sort)
+          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "mcp" -exec basename {} \; | sort)
           connector_dirs=$(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" -exec basename {} \; | sort)
 
           # Create JSON array with directory info
@@ -65,7 +65,13 @@ jobs:
           echo "test-dirs=$all_dirs" >> $GITHUB_OUTPUT
 
   build-backend-image:
-    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-build-backend-image", "extras=ecr-cache"]
+    runs-on:
+      [
+        runs-on,
+        runner=1cpu-linux-arm64,
+        "run-id=${{ github.run_id }}-build-backend-image",
+        "extras=ecr-cache",
+      ]
     timeout-minutes: 45
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
@@ -119,7 +125,13 @@ jobs:
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-model-server-image:
-    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-build-model-server-image", "extras=ecr-cache"]
+    runs-on:
+      [
+        runs-on,
+        runner=1cpu-linux-arm64,
+        "run-id=${{ github.run_id }}-build-model-server-image",
+        "extras=ecr-cache",
+      ]
     timeout-minutes: 45
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
@@ -172,7 +184,13 @@ jobs:
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache,mode=max
 
   build-integration-image:
-    runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}-build-integration-image", "extras=ecr-cache"]
+    runs-on:
+      [
+        runs-on,
+        runner=2cpu-linux-arm64,
+        "run-id=${{ github.run_id }}-build-integration-image",
+        "extras=ecr-cache",
+      ]
     timeout-minutes: 45
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
@@ -214,7 +232,7 @@ jobs:
           CACHE_SUFFIX: ${{ steps.format-branch.outputs.cache-suffix }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          cd backend && docker buildx bake --push \
+          docker buildx bake --push \
             --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${HEAD_SHA} \
             --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${CACHE_SUFFIX} \
             --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache \
@@ -282,7 +300,6 @@ jobs:
           ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID}
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID}
           INTEGRATION_TESTS_MODE=true
-          MCP_SERVER_ENABLED=true
           EOF
 
       - name: Start Docker containers
@@ -296,7 +313,6 @@ jobs:
             api_server \
             inference_model_server \
             indexing_model_server \
-            mcp_server \
             background \
             -d
         id: start_docker
@@ -339,12 +355,6 @@ jobs:
           }
 
           wait_for_service "http://localhost:8080/health" "API server"
-          test_dir="${{ matrix.test-dir.path }}"
-          if [ "$test_dir" = "tests/mcp" ]; then
-            wait_for_service "http://localhost:8090/health" "MCP server"
-          else
-            echo "Skipping MCP server wait for non-MCP suite: $test_dir"
-          fi
           echo "Finished waiting for services."
 
       - name: Start Mock Services
@@ -375,8 +385,6 @@ jobs:
               -e VESPA_HOST=index \
               -e REDIS_HOST=cache \
               -e API_SERVER_HOST=api_server \
-              -e MCP_SERVER_HOST=mcp_server \
-              -e MCP_SERVER_PORT=8090 \
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
               -e EXA_API_KEY=${EXA_API_KEY} \
               -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
@@ -419,7 +427,6 @@ jobs:
           name: docker-all-logs-${{ matrix.test-dir.name }}
           path: ${{ github.workspace }}/docker-compose.log
       # ------------------------------------------------------------
-
 
   required:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.

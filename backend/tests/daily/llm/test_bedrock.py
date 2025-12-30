@@ -4,7 +4,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from onyx.llm.llm_provider_options import BEDROCK_PROVIDER_NAME
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.llm_provider_options import fetch_available_well_known_llms
 from onyx.llm.llm_provider_options import WellKnownLLMProviderDescriptor
 
@@ -15,7 +15,7 @@ def bedrock_provider() -> WellKnownLLMProviderDescriptor:
         (
             provider
             for provider in fetch_available_well_known_llms()
-            if provider.name == BEDROCK_PROVIDER_NAME
+            if provider.name == LlmProviderNames.BEDROCK
         ),
         None,
     )
@@ -31,7 +31,7 @@ def test_bedrock_llm_configuration(
 ) -> None:
     # Prepare the test request payload
     test_request: dict[str, Any] = {
-        "provider": BEDROCK_PROVIDER_NAME,
+        "provider": LlmProviderNames.BEDROCK,
         "default_model_name": bedrock_provider.default_model,
         "api_key": None,
         "api_base": None,
@@ -63,7 +63,7 @@ def test_bedrock_llm_configuration_invalid_key(
 ) -> None:
     # Prepare the test request payload with invalid credentials
     test_request: dict[str, Any] = {
-        "provider": BEDROCK_PROVIDER_NAME,
+        "provider": LlmProviderNames.BEDROCK,
         "default_model_name": bedrock_provider.default_model,
         "api_key": None,
         "api_base": None,

@@ -164,7 +164,7 @@ function DefaultAssistantConfig() {
           <Form>
             <div className="space-y-6">
               <div className="mt-4">
-                <Text className="text-text-dark">
+                <Text as="p" className="text-text-dark">
                   Configure which capabilities are enabled for the default
                   assistant in chat. These settings apply to all users who
                   haven&apos;t customized their assistant preferences.
@@ -175,7 +175,12 @@ function DefaultAssistantConfig() {
 
               <div className="max-w-4xl">
                 <div className="flex gap-x-2 items-center">
-                  <Text mainUiBody text04 className="font-medium text-sm">
+                  <Text
+                    as="p"
+                    mainUiBody
+                    text04
+                    className="font-medium text-sm"
+                  >
                     Instructions
                   </Text>
                 </div>
@@ -217,7 +222,7 @@ function DefaultAssistantConfig() {
                     placeholder="You are a professional email writing assistant that always uses a polite enthusiastic tone, emphasizes action items, and leaves blanks for the human to fill in when you have unknowns"
                   />
                   <div className="flex justify-end items-center mt-2">
-                    <Text mainUiMuted text03 className="text-sm mr-4">
+                    <Text as="p" mainUiMuted text03 className="text-sm mr-4">
                       {values.system_prompt.length} characters
                     </Text>
                   </div>

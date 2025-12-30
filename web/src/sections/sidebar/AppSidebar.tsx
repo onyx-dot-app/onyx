@@ -108,7 +108,7 @@ function RecentsSection({ chatSessions }: RecentsSectionProps) {
     >
       <SidebarSection title="Recents">
         {chatSessions.length === 0 ? (
-          <Text text01 className="px-3">
+          <Text as="p" text01 className="px-3">
             Try sending a message! Your chat history will appear here.
           </Text>
         ) : (

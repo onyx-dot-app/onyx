@@ -343,7 +343,7 @@ export default function AdminSidebar({
         footer={
           <div className="flex flex-col gap-2">
             {settings.webVersion && (
-              <Text text02 secondaryBody className="px-2">
+              <Text as="p" text02 secondaryBody className="px-2">
                 {`Onyx version: ${settings.webVersion}`}
               </Text>
             )}
