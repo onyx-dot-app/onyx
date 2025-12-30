@@ -296,7 +296,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 document_index=self.document_index,
                 user=self.user,
                 persona=self.persona,
-                slack_context=self.slack_context,
+                slack_context=None,  # Slack handled by SlackFederatedSearchTool
             )
         finally:
             search_db_session.close()
