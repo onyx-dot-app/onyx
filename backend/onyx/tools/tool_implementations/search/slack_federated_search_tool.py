@@ -42,11 +42,11 @@ from onyx.context.search.federated.slack_search import slack_retrieval
 from onyx.context.search.models import ChunkIndexRequest
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
+from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
 from onyx.db.models import Persona
 from onyx.db.models import User
-from onyx.llm.interfaces import LLM
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
@@ -118,7 +118,6 @@ class SlackFederatedSearchTool(Tool[SlackFederatedSearchToolOverrideKwargs]):
         emitter: Emitter,
         user: User | None,
         persona: Persona,
-        llm: LLM,
         # Slack bot context (optional - None for web users with OAuth)
         slack_context: SlackContext | None = None,
         # Bot token for enhanced permissions
@@ -134,7 +133,6 @@ class SlackFederatedSearchTool(Tool[SlackFederatedSearchToolOverrideKwargs]):
 
         self.user = user
         self.persona = persona
-        self.llm = llm
         # slack_context is optional - None for web users with Slack OAuth
         self.slack_context = slack_context
         self.bot_token = bot_token
@@ -277,17 +275,7 @@ class SlackFederatedSearchTool(Tool[SlackFederatedSearchToolOverrideKwargs]):
                 )
             )
 
-            # Build citation mapping
-            citation_mapping: dict[int, str] = {}
-            for i, doc in enumerate(search_docs):
-                citation_mapping[override_kwargs.starting_citation_num + i] = (
-                    doc.document_id
-                )
-
             # Convert to LLM-facing string
-            # Note: We need to convert chunks to sections for the string conversion
-            from onyx.context.search.models import InferenceSection
-
             sections = [
                 InferenceSection(
                     center_chunk=chunk,

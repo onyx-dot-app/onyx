@@ -185,8 +185,7 @@ def run_tool_calls(
     tools_by_name = {tool.name: tool for tool in tools}
 
     # Auto-inject SlackFederatedSearchTool when SearchTool is called
-    # This ensures Slack is searched automatically (like before) but only ONCE
-    # instead of for each of SearchTool's 6-8 query variations
+    # so Slack is searched in parallel with the main document index
     if (
         SlackFederatedSearchTool.NAME in tools_by_name
         and any(tc.tool_name == SearchTool.NAME for tc in merged_tool_calls)

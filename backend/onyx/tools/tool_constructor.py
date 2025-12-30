@@ -252,7 +252,6 @@ def construct_tools(
                                 emitter=emitter,
                                 user=user,
                                 persona=persona,
-                                llm=llm,
                                 slack_context=search_tool_config.slack_context,
                                 bot_token=tenant_slack_bot.bot_token,
                                 access_token=access_token,
@@ -302,7 +301,6 @@ def construct_tools(
                                 emitter=emitter,
                                 user=user,
                                 persona=persona,
-                                llm=llm,
                                 slack_context=None,  # No bot context for web users
                                 bot_token=None,
                                 access_token=slack_oauth_token.token,
