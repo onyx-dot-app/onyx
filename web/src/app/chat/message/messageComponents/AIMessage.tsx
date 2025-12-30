@@ -30,6 +30,7 @@ import MessageSwitcher from "@/app/chat/message/MessageSwitcher";
 import { BlinkingDot } from "@/app/chat/message/BlinkingDot";
 import {
   getTextContent,
+  isActualToolCallPacket,
   isDisplayPacket,
   isFinalAnswerComing,
   isStreamingComplete,
@@ -390,11 +391,15 @@ export default function AIMessage({
       }
 
       // handles case where we get a Message packet from Claude, and then tool
-      // calling packets
+      // calling packets. We use isActualToolCallPacket instead of isToolPacket
+      // to exclude reasoning packets - reasoning is just the model thinking,
+      // not an actual tool call that would produce new content. If we reset
+      // finalAnswerComing for reasoning packets, the message content won't
+      // display until page refresh.
       if (
         finalAnswerComingRef.current &&
         !stopPacketSeenRef.current &&
-        isToolPacket(packet, false)
+        isActualToolCallPacket(packet)
       ) {
         setFinalAnswerComing(false);
         setDisplayComplete(false);
