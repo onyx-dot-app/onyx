@@ -16,7 +16,7 @@ import { useCurrentAgent } from "@/hooks/useAgents";
 import { useSearchParams } from "next/navigation";
 import { useChatSessionStore } from "@/app/chat/stores/useChatSessionStore";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import { copyAll } from "@/app/chat/message/copyingUtils";
 import { SvgCopy, SvgShare } from "@opal/icons";
 
@@ -123,13 +123,9 @@ export default function ShareChatSessionModal({
               view the message history using the following link:
             </Text>
 
-            <div className={cn("flex mt-2")}>
+            <div className="flex items-center mt-2">
               {/* <CopyButton content={shareLink} /> */}
-              <IconButton
-                icon={SvgCopy}
-                onClick={() => copyAll(shareLink)}
-                secondary
-              />
+              <CopyIconButton getCopyText={() => shareLink} secondary />
               <a
                 href={shareLink}
                 target="_blank"

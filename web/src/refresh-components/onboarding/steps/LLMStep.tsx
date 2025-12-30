@@ -68,7 +68,7 @@ const StackedProviderIcons = ({ providers }: StackedProviderIconsProps) => {
             zIndex: 0,
           }}
         >
-          <Text text03 secondaryBody>
+          <Text as="p" text03 secondaryBody>
             +{providers.length - 3}
           </Text>
         </div>
@@ -106,10 +106,10 @@ const LLMStepInner = ({
               <SvgCpu className="w-4 h-4 stroke-text-03" />
             </div>
             <div>
-              <Text text04 mainUiAction>
+              <Text as="p" text04 mainUiAction>
                 Connect your LLM models
               </Text>
-              <Text text03 secondaryBody>
+              <Text as="p" text03 secondaryBody>
                 Onyx supports both self-hosted models and popular providers.
               </Text>
             </div>
@@ -206,7 +206,7 @@ const LLMStepInner = ({
           <StackedProviderIcons
             providers={onboardingState.data.llmProviders || []}
           />
-          <Text text04 mainUiAction>
+          <Text as="p" text04 mainUiAction>
             {onboardingState.data.llmProviders?.length || 0}{" "}
             {(onboardingState.data.llmProviders?.length || 0) === 1
               ? "model"

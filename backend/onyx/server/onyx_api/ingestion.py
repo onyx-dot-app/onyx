@@ -27,9 +27,6 @@ from onyx.indexing.adapters.document_indexing_adapter import (
 )
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
-from onyx.natural_language_processing.search_nlp_models import (
-    InformationContentClassificationModel,
-)
 from onyx.server.onyx_api.models import DocMinimalInfo
 from onyx.server.onyx_api.models import IngestionDocument
 from onyx.server.onyx_api.models import IngestionResult
@@ -116,8 +113,6 @@ def upsert_ingestion_doc(
         search_settings=search_settings
     )
 
-    information_content_classification_model = InformationContentClassificationModel()
-
     # Build adapter for primary indexing
     adapter = DocumentIndexingBatchAdapter(
         db_session=db_session,
@@ -132,7 +127,6 @@ def upsert_ingestion_doc(
 
     indexing_pipeline_result = run_indexing_pipeline(
         embedder=index_embedding_model,
-        information_content_classification_model=information_content_classification_model,
         document_index=curr_doc_index,
         ignore_time_skip=True,
         db_session=db_session,
@@ -162,7 +156,6 @@ def upsert_ingestion_doc(
 
         run_indexing_pipeline(
             embedder=new_index_embedding_model,
-            information_content_classification_model=information_content_classification_model,
             document_index=sec_doc_index,
             ignore_time_skip=True,
             db_session=db_session,

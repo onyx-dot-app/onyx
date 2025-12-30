@@ -319,7 +319,7 @@ export default function LLMConnectionFieldsBasic({
                         <div className="p-1">
                           <SvgAlertCircle className="h-4 w-4 stroke-text-03" />
                         </div>
-                        <Text text04 mainUiBody>
+                        <Text as="p" text04 mainUiBody>
                           Onyx will use the IAM role attached to the environment
                           it&apos;s running in to authenticate.
                         </Text>

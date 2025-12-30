@@ -48,7 +48,7 @@ const Actionbar: React.FC<ActionbarProps> = ({
         </div>
       ) : (
         <div className="flex-1">
-          <Text mainUiMuted text03>
+          <Text as="p" mainUiMuted text03>
             Connect MCP server to add custom actions.
           </Text>
         </div>

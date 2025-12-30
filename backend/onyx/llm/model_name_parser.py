@@ -20,6 +20,7 @@ from functools import lru_cache
 from pydantic import BaseModel
 
 from onyx.llm.constants import AGGREGATOR_PROVIDERS
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
 from onyx.llm.constants import VENDOR_BRAND_NAMES
 
@@ -65,8 +66,8 @@ def _extract_provider(model_key: str) -> str:
 
     if litellm_provider:
         # Normalize vertex_ai variants
-        if litellm_provider.startswith("vertex_ai"):
-            return "vertex_ai"
+        if litellm_provider.startswith(LlmProviderNames.VERTEX_AI):
+            return LlmProviderNames.VERTEX_AI
         return litellm_provider
 
     return "unknown"
