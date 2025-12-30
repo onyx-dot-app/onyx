@@ -477,10 +477,13 @@ export default function AIMessage({
       <div
         // for e2e tests
         data-testid={displayComplete ? "onyx-ai-message" : undefined}
-        className="pb-5 md:pt-5 relative flex"
+        className="flex items-start px-4 pb-5 md:pt-5"
       >
-        <div className="mx-auto w-[min(50rem,100%)] px-4 max-w-message-max">
-          <div className="flex items-start">
+        {/** TODO(jamison): These fragments were kept to preserve whitespace and
+          improve the diff while removing elements. Remove them separately so
+          we can ignore the revision and preserve the git blame. **/}
+        <>
+          <>
             <AgentAvatar agent={chatState.assistant} size={24} />
             {/* w-full ensures the MultiToolRenderer non-expanded state takes up the full width */}
             <div className="max-w-message-max break-words pl-4 w-full">
@@ -683,8 +686,8 @@ export default function AIMessage({
                 </div>
               )}
             </div>
-          </div>
-        </div>
+          </>
+        </>
       </div>
     </>
   );

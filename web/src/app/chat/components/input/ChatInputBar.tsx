@@ -462,7 +462,7 @@ const ChatInputBar = React.memo(
             ref={containerRef}
             id="onyx-chat-input"
             className={cn(
-              "max-w-full w-[min(50rem,100%)] flex flex-col shadow-01 bg-background-neutral-00 rounded-16",
+              "w-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16",
               disabled && "opacity-50 cursor-not-allowed pointer-events-none"
             )}
             aria-disabled={disabled}
