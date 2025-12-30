@@ -263,24 +263,16 @@ describe("OpenAIOnboardingForm", () => {
   });
 
   describe("Form Submission", () => {
-    async function fillFormAndFetchModels(user: ReturnType<typeof setupUser>) {
-      // First fill in API key
+    async function fillForm(user: ReturnType<typeof setupUser>) {
+      // Fill in API key
       const apiKeyInput = screen.getByPlaceholderText("");
       await user.type(apiKeyInput, "sk-test-key-123");
 
-      // Click fetch models button - find it by looking for icon button with data-state
-      const buttons = screen.getAllByRole("button");
-      const fetchButton = buttons.find(
-        (btn) => btn.getAttribute("data-state") === "closed"
-      );
-      if (fetchButton) {
-        await user.click(fetchButton);
-      }
-
-      // Verify fetchModels is not called (models come from llmDescriptor)
+      // OpenAI form uses static models from llmDescriptor, no fetch button exists
+      // Verify fetchModels is not called
       expect(mockFetchModels).not.toHaveBeenCalled();
 
-      // Now select a model from the dropdown
+      // Select a model from the dropdown
       const modelInput = screen.getByPlaceholderText("Select a model");
       await user.type(modelInput, "gpt-5.2");
     }
@@ -294,7 +286,7 @@ describe("OpenAIOnboardingForm", () => {
 
       render(<OpenAIOnboardingForm {...defaultProps} />);
 
-      await fillFormAndFetchModels(user);
+      await fillForm(user);
 
       const submitButton = screen.getByTestId("submit-button");
       await user.click(submitButton);
@@ -319,7 +311,7 @@ describe("OpenAIOnboardingForm", () => {
 
       render(<OpenAIOnboardingForm {...defaultProps} />);
 
-      await fillFormAndFetchModels(user);
+      await fillForm(user);
 
       const submitButton = screen.getByTestId("submit-button");
       await user.click(submitButton);
@@ -347,7 +339,7 @@ describe("OpenAIOnboardingForm", () => {
         <OpenAIOnboardingForm {...defaultProps} onOpenChange={onOpenChange} />
       );
 
-      await fillFormAndFetchModels(user);
+      await fillForm(user);
 
       const submitButton = screen.getByTestId("submit-button");
       await user.click(submitButton);
@@ -373,7 +365,7 @@ describe("OpenAIOnboardingForm", () => {
         />
       );
 
-      await fillFormAndFetchModels(user);
+      await fillForm(user);
 
       const submitButton = screen.getByTestId("submit-button");
       await user.click(submitButton);
@@ -390,23 +382,15 @@ describe("OpenAIOnboardingForm", () => {
 
   describe("Error Handling", () => {
     async function fillFormForErrorTest(user: ReturnType<typeof setupUser>) {
-      // First fill in API key
+      // Fill in API key
       const apiKeyInput = screen.getByPlaceholderText("");
       await user.type(apiKeyInput, "invalid-key");
 
-      // Click fetch models button - find it by looking for icon button with data-state
-      const buttons = screen.getAllByRole("button");
-      const fetchButton = buttons.find(
-        (btn) => btn.getAttribute("data-state") === "closed"
-      );
-      if (fetchButton) {
-        await user.click(fetchButton);
-      }
-
-      // Verify fetchModels is not called (models come from llmDescriptor)
+      // OpenAI form uses static models from llmDescriptor, no fetch button exists
+      // Verify fetchModels is not called
       expect(mockFetchModels).not.toHaveBeenCalled();
 
-      // Now select a model from the dropdown
+      // Select a model from the dropdown
       const modelInput = screen.getByPlaceholderText("Select a model");
       await user.type(modelInput, "gpt-5.2");
     }

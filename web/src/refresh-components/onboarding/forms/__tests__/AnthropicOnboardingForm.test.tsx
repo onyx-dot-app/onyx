@@ -240,25 +240,16 @@ describe("AnthropicOnboardingForm", () => {
   });
 
   describe("Form Submission", () => {
-    async function fillFormAndFetchModels(user: ReturnType<typeof setupUser>) {
-      // First fill in API key
+    async function fillForm(user: ReturnType<typeof setupUser>) {
+      // Fill in API key
       const apiKeyInput = screen.getByPlaceholderText("");
       await user.type(apiKeyInput, "sk-ant-test-key-123");
 
-      // Click fetch models button - find it by looking for icon button with data-state
-      // The IconButton with tooltip "Fetch available models" has data-state attribute
-      const buttons = screen.getAllByRole("button");
-      const fetchButton = buttons.find(
-        (btn) => btn.getAttribute("data-state") === "closed"
-      );
-      if (fetchButton) {
-        await user.click(fetchButton);
-      }
-
-      // Verify fetchModels is not called (models come from llmDescriptor)
+      // Anthropic form uses static models from llmDescriptor, no fetch button exists
+      // Verify fetchModels is not called
       expect(mockFetchModels).not.toHaveBeenCalled();
 
-      // Now select a model from the dropdown
+      // Select a model from the dropdown
       const modelInput = screen.getByPlaceholderText("Select a model");
       await user.type(modelInput, "claude-sonnet-4-5");
     }
@@ -272,7 +263,7 @@ describe("AnthropicOnboardingForm", () => {
 
       render(<AnthropicOnboardingForm {...defaultProps} />);
 
-      await fillFormAndFetchModels(user);
+      await fillForm(user);
 
       const submitButton = screen.getByTestId("submit-button");
       await user.click(submitButton);
@@ -297,7 +288,7 @@ describe("AnthropicOnboardingForm", () => {
 
       render(<AnthropicOnboardingForm {...defaultProps} />);
 
-      await fillFormAndFetchModels(user);
+      await fillForm(user);
 
       const submitButton = screen.getByTestId("submit-button");
       await user.click(submitButton);
@@ -327,7 +318,7 @@ describe("AnthropicOnboardingForm", () => {
         />
       );
 
-      await fillFormAndFetchModels(user);
+      await fillForm(user);
 
       const submitButton = screen.getByTestId("submit-button");
       await user.click(submitButton);
@@ -353,7 +344,7 @@ describe("AnthropicOnboardingForm", () => {
         />
       );
 
-      await fillFormAndFetchModels(user);
+      await fillForm(user);
 
       const submitButton = screen.getByTestId("submit-button");
       await user.click(submitButton);
@@ -370,23 +361,15 @@ describe("AnthropicOnboardingForm", () => {
 
   describe("Error Handling", () => {
     async function fillFormForErrorTest(user: ReturnType<typeof setupUser>) {
-      // First fill in API key
+      // Fill in API key
       const apiKeyInput = screen.getByPlaceholderText("");
       await user.type(apiKeyInput, "invalid-key");
 
-      // Click fetch models button - find it by looking for icon button with data-state
-      const buttons = screen.getAllByRole("button");
-      const fetchButton = buttons.find(
-        (btn) => btn.getAttribute("data-state") === "closed"
-      );
-      if (fetchButton) {
-        await user.click(fetchButton);
-      }
-
-      // Verify fetchModels is not called (models come from llmDescriptor)
+      // Anthropic form uses static models from llmDescriptor, no fetch button exists
+      // Verify fetchModels is not called
       expect(mockFetchModels).not.toHaveBeenCalled();
 
-      // Now select a model from the dropdown
+      // Select a model from the dropdown
       const modelInput = screen.getByPlaceholderText("Select a model");
       await user.type(modelInput, "claude-sonnet-4-5");
     }

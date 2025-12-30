@@ -33,7 +33,6 @@ enum OllamaTab {
 
 // Field name constants
 const FIELD_API_BASE = "api_base";
-const FIELD_API_KEY = "api_key";
 const FIELD_DEFAULT_MODEL_NAME = "default_model_name";
 const FIELD_OLLAMA_API_KEY = "custom_config.OLLAMA_API_KEY";
 
@@ -116,7 +115,7 @@ function OllamaFormFields({
       }
 
       // API key is not used for self-hosted Ollama
-      formikProps.setFieldValue(FIELD_API_KEY, "");
+      formikProps.setFieldValue(FIELD_OLLAMA_API_KEY, "");
     }
   }, [activeTab]);
 
