@@ -272,28 +272,38 @@ describe("CustomOnboardingForm", () => {
   });
 
   describe("Optional Fields", () => {
-    test("API Base URL is optional", () => {
+    test("API Base URL shows optional indicator", () => {
       render(<CustomOnboardingForm {...defaultProps} />);
 
-      // The field label should indicate it's optional
-      const labels = screen.getAllByText(/API Base URL/i);
-      expect(labels.length).toBeGreaterThan(0);
+      // The field label should have an "(Optional)" indicator
+      const apiBaseLabel = screen.getByText("API Base URL").closest("label");
+      expect(apiBaseLabel).toHaveTextContent("(Optional)");
     });
 
-    test("API Version is optional", () => {
+    test("API Version shows optional indicator", () => {
       render(<CustomOnboardingForm {...defaultProps} />);
 
-      // The field label should indicate it's optional
-      const labels = screen.getAllByText(/API Version/i);
-      expect(labels.length).toBeGreaterThan(0);
+      // The field label should have an "(Optional)" indicator
+      const apiVersionLabel = screen.getByText("API Version").closest("label");
+      expect(apiVersionLabel).toHaveTextContent("(Optional)");
     });
 
-    test("API Key is optional", () => {
+    test("API Key shows optional indicator", () => {
       render(<CustomOnboardingForm {...defaultProps} />);
 
-      // Custom provider API key is optional
-      const labels = screen.getAllByText(/API Key/i);
-      expect(labels.length).toBeGreaterThan(0);
+      // The field label should have an "(Optional)" indicator
+      const apiKeyLabel = screen.getByText("API Key").closest("label");
+      expect(apiKeyLabel).toHaveTextContent("(Optional)");
+    });
+
+    test("Additional Configs shows optional indicator", () => {
+      render(<CustomOnboardingForm {...defaultProps} />);
+
+      // The field label should have an "(Optional)" indicator
+      const additionalConfigsLabel = screen
+        .getByText("Additional Configs")
+        .closest("label");
+      expect(additionalConfigsLabel).toHaveTextContent("(Optional)");
     });
   });
 
@@ -371,15 +381,6 @@ describe("CustomOnboardingForm", () => {
       await user.click(closeButton);
 
       expect(onOpenChange).toHaveBeenCalledWith(false);
-    });
-  });
-
-  describe("Server Icon", () => {
-    test("renders server icon for custom provider", () => {
-      render(<CustomOnboardingForm {...defaultProps} />);
-
-      // The custom form uses SvgServer icon - verify the dialog renders
-      expect(screen.getByRole("dialog")).toBeInTheDocument();
     });
   });
 });
