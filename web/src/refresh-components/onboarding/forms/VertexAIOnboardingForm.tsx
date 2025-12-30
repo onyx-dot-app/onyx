@@ -26,6 +26,8 @@ import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 const FIELD_DEFAULT_MODEL_NAME = "default_model_name";
 const FIELD_VERTEX_CREDENTIALS = "custom_config.vertex_credentials";
 
+const DEFAULT_DEFAULT_MODEL_NAME = "gemini-2.5-pro";
+
 interface VertexAIOnboardingFormProps {
   llmDescriptor: WellKnownLLMProviderDescriptor;
   onboardingState: OnboardingState;
@@ -209,6 +211,7 @@ export function VertexAIOnboardingForm({
       custom_config: {
         vertex_credentials: "",
       },
+      default_model_name: DEFAULT_DEFAULT_MODEL_NAME,
     }),
     [llmDescriptor.name]
   );
