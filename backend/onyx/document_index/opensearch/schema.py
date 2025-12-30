@@ -208,10 +208,8 @@ class DocumentSchema:
                 HIDDEN_FIELD_NAME: {"type": "boolean"},
                 GLOBAL_BOOST_FIELD_NAME: {"type": "float"},
                 # This field is only used for displaying a useful name for the
-                # doc in the UI and is not used for searching. These parameters
-                # may be overkill but the documentation is not entirely clear on
-                # where they overlap/don't, so choosing to disable all of them
-                # to maximize footprint and performance.
+                # doc in the UI and is not used for searching. Disabling these
+                # features to increase perf.
                 SEMANTIC_IDENTIFIER_FIELD_NAME: {
                     "type": "keyword",
                     "index": False,
