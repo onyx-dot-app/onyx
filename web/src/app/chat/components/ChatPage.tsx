@@ -65,6 +65,7 @@ import Suggestions from "@/sections/Suggestions";
 import OnboardingFlow from "@/refresh-components/onboarding/OnboardingFlow";
 import { useOnboardingState } from "@/refresh-components/onboarding/useOnboardingState";
 import { OnboardingStep } from "@/refresh-components/onboarding/types";
+import { HAS_FINISHED_ONBOARDING_KEY } from "@/refresh-components/onboarding/constants";
 import * as AppLayouts from "@/layouts/app-layouts";
 import { SvgFileText } from "@opal/icons";
 import Spacer from "@/refresh-components/Spacer";
@@ -207,7 +208,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
 
     // Check if user has explicitly finished onboarding
     const hasFinishedOnboarding =
-      localStorage.getItem("hasFinishedOnboarding") === "true";
+      localStorage.getItem(HAS_FINISHED_ONBOARDING_KEY) === "true";
 
     // Show onboarding if:
     // 1. No LLM providers configured, OR
