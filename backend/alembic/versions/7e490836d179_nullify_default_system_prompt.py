@@ -35,6 +35,14 @@ You can use Markdown tables to format your responses for data, lists, and other 
 
 
 def upgrade() -> None:
+    # Make system_prompt column nullable (model already has nullable=True but DB doesn't)
+    op.alter_column(
+        "persona",
+        "system_prompt",
+        nullable=True,
+    )
+
+    # Set system_prompt to NULL where it matches the previous default
     conn = op.get_bind()
     conn.execute(
         sa.text(
@@ -62,4 +70,11 @@ def downgrade() -> None:
             """
         ),
         {"previous_default": PREVIOUS_DEFAULT_SYSTEM_PROMPT},
+    )
+
+    # Revert system_prompt column to not nullable
+    op.alter_column(
+        "persona",
+        "system_prompt",
+        nullable=False,
     )
