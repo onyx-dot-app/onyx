@@ -33,13 +33,13 @@ function TableHeader() {
   return (
     <div className="grid grid-cols-12 gap-y-4 px-8 p-4 border-b bg-background-tint-00">
       <div className="col-span-1">
-        <Text>Entity Name</Text>
+        <Text as="p">Entity Name</Text>
       </div>
       <div className="col-span-10">
-        <Text>Description</Text>
+        <Text as="p">Description</Text>
       </div>
       <div className="col-span-1 flex flex-1 justify-center">
-        <Text>Active</Text>
+        <Text as="p">Active</Text>
       </div>
     </div>
   );
@@ -122,7 +122,7 @@ function TableRow({ entityType }: { entityType: EntityType }) {
           )}
         >
           <div className="col-span-1 flex items-center">
-            <Text>{snakeToHumanReadable(entityType.name)}</Text>
+            <Text as="p">{snakeToHumanReadable(entityType.name)}</Text>
           </div>
           <div className="col-span-10 relative">
             <InputTypeIn
@@ -296,13 +296,13 @@ export default function KGEntityTypes({
                             <Text as="p" secondaryBody text02>
                               Entities Count
                             </Text>
-                            <Text>{stats.entities_count}</Text>
+                            <Text as="p">{stats.entities_count}</Text>
                           </span>
                           <span className="flex flex-col items-start">
                             <Text as="p" secondaryBody text02>
                               Last Updated
                             </Text>
-                            <Text>
+                            <Text as="p">
                               {stats.last_updated
                                 ? new Date(stats.last_updated).toLocaleString()
                                 : "N/A"}

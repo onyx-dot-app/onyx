@@ -10,8 +10,12 @@ class DefaultAssistantConfiguration(BaseModel):
     tool_ids: list[int] = Field(
         default_factory=list, description="List of enabled tool IDs"
     )
-    system_prompt: str = Field(
-        ..., description="System prompt (instructions) for the assistant"
+    system_prompt: str | None = Field(
+        ...,
+        description="System prompt (instructions) for the assistant. None means use default.",
+    )
+    default_system_prompt: str = Field(
+        ..., description="The default system prompt used when system_prompt is null."
     )
 
 
@@ -24,5 +28,8 @@ class DefaultAssistantUpdateRequest(BaseModel):
     )
     system_prompt: str | None = Field(
         default=None,
-        description="New system prompt (instructions). Can be empty string but not null",
+        description="New system prompt (instructions). None resets to default, empty string is allowed.",
     )
+
+
+3

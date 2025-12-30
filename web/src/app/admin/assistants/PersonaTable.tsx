@@ -23,22 +23,24 @@ import { SvgAlertCircle, SvgTrash } from "@opal/icons";
 
 function PersonaTypeDisplay({ persona }: { persona: Persona }) {
   if (persona.builtin_persona) {
-    return <Text>Built-In</Text>;
+    return <Text as="p">Built-In</Text>;
   }
 
   if (persona.is_default_persona) {
-    return <Text>Default</Text>;
+    return <Text as="p">Default</Text>;
   }
 
   if (persona.is_public) {
-    return <Text>Public</Text>;
+    return <Text as="p">Public</Text>;
   }
 
   if (persona.groups.length > 0 || persona.users.length > 0) {
-    return <Text>Shared</Text>;
+    return <Text as="p">Shared</Text>;
   }
 
-  return <Text>Personal {persona.owner && <>({persona.owner.email})</>}</Text>;
+  return (
+    <Text as="p">Personal {persona.owner && <>({persona.owner.email})</>}</Text>
+  );
 }
 
 export function PersonasTable({
@@ -211,7 +213,7 @@ export function PersonasTable({
               }
             >
               <div className="flex flex-col gap-2">
-                <Text>{text}</Text>
+                <Text as="p">{text}</Text>
                 <Text as="p" text03>
                   {additionalText}
                 </Text>
@@ -315,7 +317,7 @@ export function PersonasTable({
                       onClick={() => openDeleteModal(persona)}
                     />
                   ) : (
-                    <Text>-</Text>
+                    <Text as="p">-</Text>
                   )}
                 </div>
               </div>,

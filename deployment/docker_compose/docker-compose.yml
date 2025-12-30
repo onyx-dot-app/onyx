@@ -82,6 +82,12 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 25s
     # Optional, only for debugging purposes
     volumes:
       - api_server_logs:/var/log/onyx
@@ -297,6 +303,11 @@ services:
     # 2. Uncomment the ports below
     # ports:
     #   - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     volumes:
       - db_volume:/var/lib/postgresql/data
 

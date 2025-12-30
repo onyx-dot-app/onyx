@@ -284,7 +284,8 @@ const ModalContent = React.forwardRef<
               contentRef(node);
             }}
             className={cn(
-              "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-modal",
+              "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
+              "z-modal",
               "bg-background-tint-00 border rounded-16 shadow-2xl",
               "flex flex-col overflow-auto",
               "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
@@ -451,7 +452,7 @@ ModalBody.displayName = "ModalBody";
  *
  * // Space-between layout
  * <Modal.Footer className="flex justify-between p-4">
- *   <Text>3 files selected</Text>
+ *   <Text as="p">3 files selected</Text>
  *   <Button>Done</Button>
  * </Modal.Footer>
  * ```

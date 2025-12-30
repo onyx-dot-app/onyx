@@ -547,15 +547,19 @@ export default function EmbeddingForm() {
               />
               <Modal.Body>
                 <div className="text-lg">
-                  <Text>
+                  <Text as="p">
                     {`${selectedProvider.model_name} is a lower accuracy model. We recommend the following alternatives:`}
                   </Text>
                   <ul className="list-disc list-inside mt-2 ml-4">
                     <li>
-                      <Text>Cohere embed-english-v3.0 for cloud-based</Text>
+                      <Text as="p">
+                        Cohere embed-english-v3.0 for cloud-based
+                      </Text>
                     </li>
                     <li>
-                      <Text>Nomic nomic-embed-text-v1 for self-hosted</Text>
+                      <Text as="p">
+                        Nomic nomic-embed-text-v1 for self-hosted
+                      </Text>
                     </li>
                   </ul>
                 </div>

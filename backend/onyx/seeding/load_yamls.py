@@ -36,5 +36,5 @@ def load_chat_yamls(
     db_session: Session,
     input_prompts_yaml: str = INPUT_PROMPT_YAML,
 ) -> None:
-    """Load all chat-related YAML configurations and builtin personas."""
+    """Load all chat-related YAML configurations (such as the prompt shortcuts which are called input prompts on the backend)"""
     load_input_prompts_from_yaml(db_session, input_prompts_yaml)
