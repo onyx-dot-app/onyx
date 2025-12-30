@@ -66,7 +66,8 @@ import { useSettingsContext } from "@/components/settings/SettingsProvider";
 
 const footerMarkdownComponents = {
   p: ({ children }) => (
-    <Text as="p" text03 secondaryAction className="text-center">
+    //dont remove the !my-0 class, it's important for the markdown to render without any alignment issues
+    <Text as="p" text03 secondaryAction className="!my-0 text-center">
       {children}
     </Text>
   ),

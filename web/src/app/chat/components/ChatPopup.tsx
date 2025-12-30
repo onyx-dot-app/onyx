@@ -153,7 +153,7 @@ export function ChatPopup() {
                             as="p"
                             mainUiBody
                             text04
-                            className="!my-0"
+                            className="!my-0" //dont remove the !my-0 class, it's important for the markdown to render without any alignment issues
                             {...props}
                           />
                         ),
