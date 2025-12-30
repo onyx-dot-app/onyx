@@ -30,3 +30,6 @@ class DefaultAssistantUpdateRequest(BaseModel):
         default=None,
         description="New system prompt (instructions). None resets to default, empty string is allowed.",
     )
+
+
+3
