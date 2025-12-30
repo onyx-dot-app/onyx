@@ -7,8 +7,7 @@
   /* Interactive overlays */
   --z-modal-overlay: 900;
   --z-modal: 1000;
-  --z-confirmation-overlay: 1050;
-  --z-confirmation: 1075;
+  --z-confirmation: 1050;
   --z-toast: 1100;
   --z-popover: 1200;
   --z-tooltip: 1300;
@@ -31,9 +30,6 @@
 }
 .z-modal {
   z-index: var(--z-modal);
-}
-.z-confirmation-overlay {
-  z-index: var(--z-confirmation-overlay);
 }
 .z-confirmation {
   z-index: var(--z-confirmation);
