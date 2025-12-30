@@ -1,6 +1,7 @@
 import concurrent.futures
 import logging
 import random
+import time
 from uuid import UUID
 
 import httpx
@@ -28,6 +29,7 @@ from onyx.document_index.interfaces_new import DocumentInsertionRecord
 from onyx.document_index.interfaces_new import DocumentSectionRequest
 from onyx.document_index.interfaces_new import IndexingMetadata
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
+from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.vespa.chunk_retrieval import batch_search_api_retrieval
 from onyx.document_index.vespa.chunk_retrieval import (
     parallel_visit_api_retrieval,
@@ -60,25 +62,11 @@ from onyx.utils.logger import setup_logger
 from shared_configs.model_server_models import Embedding
 
 
-logger = setup_logger()
+logger = setup_logger(__name__)
 # Set the logging level to WARNING to ignore INFO and DEBUG logs from httpx. By
 # default it emits INFO-level logs for every request.
 httpx_logger = logging.getLogger("httpx")
 httpx_logger.setLevel(logging.WARNING)
-
-
-class TenantState(BaseModel):
-    """
-    Captures the tenant-related state for an instance of VespaDocumentIndex.
-
-    TODO(andrei): If we find that we need this for Opensearch too, just move
-    this to interfaces_new.py.
-    """
-
-    model_config = {"frozen": True}
-
-    tenant_id: str
-    multitenant: bool
 
 
 def _enrich_basic_chunk_info(
@@ -615,6 +603,7 @@ class VespaDocumentIndex(DocumentIndex):
         filters: IndexFilters,
         batch_retrieval: bool = False,
     ) -> list[InferenceChunk]:
+        start_time = time.perf_counter_ns()
         sanitized_chunk_requests = [
             VespaChunkRequest(
                 document_id=replace_invalid_doc_id_characters(
@@ -637,7 +626,7 @@ class VespaDocumentIndex(DocumentIndex):
                     get_large_chunks=False,
                 )
             )
-        return _cleanup_chunks(
+        chunks = _cleanup_chunks(
             parallel_visit_api_retrieval(
                 index_name=self._index_name,
                 chunk_requests=sanitized_chunk_requests,
@@ -647,6 +636,11 @@ class VespaDocumentIndex(DocumentIndex):
                 get_large_chunks=False,
             )
         )
+        end_time = time.perf_counter_ns()
+        logger.info(
+            f"[ANDREI]: Retrieval took {(end_time - start_time) / 1_000_000} ms."
+        )
+        return chunks
 
     def hybrid_retrieval(
         self,
@@ -658,6 +652,7 @@ class VespaDocumentIndex(DocumentIndex):
         num_to_retrieve: int,
         offset: int = 0,
     ) -> list[InferenceChunk]:
+        start_time = time.perf_counter_ns()
         vespa_where_clauses = build_vespa_filters(filters)
         # Needs to be at least as much as the rerank-count value set in the
         # Vespa schema config. Otherwise we would be getting fewer results than
@@ -707,7 +702,12 @@ class VespaDocumentIndex(DocumentIndex):
             "timeout": VESPA_TIMEOUT,
         }
 
-        return _cleanup_chunks(query_vespa(params))
+        chunks = _cleanup_chunks(query_vespa(params))
+        end_time = time.perf_counter_ns()
+        logger.info(
+            f"[ANDREI]: Hybrid retrieval took {(end_time - start_time) / 1_000_000} ms."
+        )
+        return chunks
 
     def random_retrieval(
         self,

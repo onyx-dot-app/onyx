@@ -4,8 +4,14 @@ from sqlalchemy.orm import Session
 from onyx.db.models import SearchSettings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.interfaces import DocumentIndex
+from onyx.document_index.opensearch.opensearch_document_index import (
+    OpenSearchOldDocumentIndex,
+)
 from onyx.document_index.vespa.index import VespaIndex
 from shared_configs.configs import MULTI_TENANT
+
+
+ENABLE_OPENSEARCH = False
 
 
 def get_default_document_index(
@@ -23,15 +29,24 @@ def get_default_document_index(
         secondary_index_name = secondary_search_settings.index_name
         secondary_large_chunks_enabled = secondary_search_settings.large_chunks_enabled
 
-    # Currently only supporting Vespa
-    return VespaIndex(
-        index_name=search_settings.index_name,
-        secondary_index_name=secondary_index_name,
-        large_chunks_enabled=search_settings.large_chunks_enabled,
-        secondary_large_chunks_enabled=secondary_large_chunks_enabled,
-        multitenant=MULTI_TENANT,
-        httpx_client=httpx_client,
-    )
+    if ENABLE_OPENSEARCH:
+        return OpenSearchOldDocumentIndex(
+            index_name=search_settings.index_name,
+            secondary_index_name=secondary_index_name,
+            large_chunks_enabled=search_settings.large_chunks_enabled,
+            secondary_large_chunks_enabled=secondary_large_chunks_enabled,
+            multitenant=MULTI_TENANT,
+            httpx_client=httpx_client,
+        )
+    else:
+        return VespaIndex(
+            index_name=search_settings.index_name,
+            secondary_index_name=secondary_index_name,
+            large_chunks_enabled=search_settings.large_chunks_enabled,
+            secondary_large_chunks_enabled=secondary_large_chunks_enabled,
+            multitenant=MULTI_TENANT,
+            httpx_client=httpx_client,
+        )
 
 
 def get_current_primary_default_document_index(db_session: Session) -> DocumentIndex:

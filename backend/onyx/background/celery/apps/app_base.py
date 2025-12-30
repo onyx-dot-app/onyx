@@ -514,6 +514,7 @@ def reset_tenant_id(
 def wait_for_vespa_or_shutdown(sender: Any, **kwargs: Any) -> None:
     """Waits for Vespa to become ready subject to a timeout.
     Raises WorkerShutdown if the timeout is reached."""
+    return
 
     if not wait_for_vespa_with_timeout():
         msg = "Vespa: Readiness probe did not succeed within the timeout. Exiting..."
