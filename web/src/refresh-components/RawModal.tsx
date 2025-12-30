@@ -36,7 +36,7 @@ export default function RawModal({
 
   const modalContent = (
     <div
-      className="fixed inset-0 z-[2000] flex items-center justify-center bg-mask-03 backdrop-blur-03"
+      className="fixed inset-0 z-modal-overlay flex items-center justify-center bg-mask-03 backdrop-blur-03"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           onClose?.();
@@ -46,7 +46,7 @@ export default function RawModal({
       <div
         ref={modalRef}
         className={cn(
-          "z-10 rounded-16 flex border shadow-2xl flex-col bg-background-tint-00 overflow-hidden",
+          "z-modal rounded-16 flex border shadow-2xl flex-col bg-background-tint-00 overflow-hidden",
           className
         )}
         tabIndex={-1}
