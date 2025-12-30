@@ -278,7 +278,7 @@ function ParallelToolTabs({
                           )}
                         />
                       )}
-                      {tab.isCancelled && !isLoading && (
+                      {tab.isCancelled && !isLoading && !tab.hasError && (
                         <SvgXCircle
                           size={12}
                           className={cn(
