@@ -81,11 +81,11 @@ function PreviewLogo({
       src={logoSrc}
       alt="Logo"
       style={{
-        objectFit: "contain",
+        objectFit: "cover",
         height: `${size}px`,
         width: `${size}px`,
       }}
-      className={cn("flex-shrink-0", className)}
+      className={cn("flex-shrink-0 rounded-full", className)}
     />
   ) : (
     <OnyxIcon size={size} className={cn("flex-shrink-0", className)} />
@@ -124,13 +124,16 @@ function PreviewStart({
               <PreviewLogo
                 logoSrc={logoSrc}
                 size={16}
-                forceOnyxIcon={applicationDisplayName === "Onyx"}
+                forceOnyxIcon={
+                  logoDisplayStyle === "logo_and_name" &&
+                  !applicationDisplayName
+                }
               />
             )}
             {(logoDisplayStyle === "logo_and_name" ||
               logoDisplayStyle === "name_only") && (
               <Truncated mainUiAction text04 nowrap>
-                {applicationDisplayName}
+                {applicationDisplayName || "Onyx"}
               </Truncated>
             )}
           </div>

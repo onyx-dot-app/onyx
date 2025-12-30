@@ -209,11 +209,7 @@ export default function ThemePage() {
         setTouched,
         submitForm,
       }) => {
-        // Only count selectedLogo as a change if logo will be displayed
-        const logoWillBeDisplayed =
-          values.logo_display_style === "logo_only" ||
-          values.logo_display_style === "logo_and_name";
-        const hasLogoChange = selectedLogo && logoWillBeDisplayed;
+        const hasLogoChange = !!selectedLogo;
 
         return (
           <Form className="w-full h-full">

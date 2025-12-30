@@ -160,6 +160,7 @@ export const AppearanceThemeSettings = forwardRef<
     const file = event.target.files?.[0];
     if (file) {
       setSelectedLogo(file);
+      setFieldValue("use_custom_logo", true);
     }
   };
 
@@ -314,7 +315,10 @@ export const AppearanceThemeSettings = forwardRef<
             <InputImage
               src={getLogoSrc()}
               onEdit={handleLogoEdit}
-              onDrop={(file) => setSelectedLogo(file)}
+              onDrop={(file) => {
+                setSelectedLogo(file);
+                setFieldValue("use_custom_logo", true);
+              }}
               onRemove={handleLogoRemove}
               showEditOverlay={false}
             />
@@ -337,7 +341,7 @@ export const AppearanceThemeSettings = forwardRef<
       <Preview
         className="mb-8"
         logoDisplayStyle={values.logo_display_style}
-        applicationDisplayName={values.application_name || "Onyx"}
+        applicationDisplayName={values.application_name ?? ""}
         chat_footer_content={
           values.custom_lower_disclaimer_content || "Chat Footer Content"
         }
