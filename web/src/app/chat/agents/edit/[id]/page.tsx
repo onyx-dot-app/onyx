@@ -15,13 +15,17 @@ export default function Page(props: PageProps) {
   const { id } = use(props.params);
   const agentId = parseInt(id);
 
-  // Handle invalid ID (NaN)
-  if (isNaN(agentId)) {
-    router.push("/chat");
-    return null;
-  }
+  // Call hook unconditionally (passes null when ID is invalid)
+  const { agent, isLoading, refresh } = useAgent(
+    isNaN(agentId) ? null : agentId
+  );
 
-  const { agent, isLoading, refresh } = useAgent(agentId);
+  // Handle invalid ID (NaN)
+  useEffect(() => {
+    if (isNaN(agentId)) {
+      router.push("/chat");
+    }
+  }, [agentId, router]);
 
   // Redirect to home if agent not found after loading completes
   useEffect(() => {
