@@ -35,10 +35,7 @@ const TabsTrigger = React.forwardRef<
     )}
     {...props}
   >
-    <Text
-      as="p"
-      className="group-data-[state=active]:text-text-04 text-text-03 inline-flex items-center gap-2"
-    >
+    <Text className="group-data-[state=active]:text-text-04 text-text-03 inline-flex items-center gap-2">
       {children}
     </Text>
   </TabsPrimitive.Trigger>
