@@ -91,6 +91,24 @@ interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
 }
 
+function FormWarningsEffect() {
+  const { values, setStatus } = useFormikContext<{
+    web_search: boolean;
+    open_url: boolean;
+  }>();
+
+  useEffect(() => {
+    const warnings: Record<string, string> = {};
+    if (values.web_search && !values.open_url) {
+      warnings.open_url =
+        "Web Search without the ability to open URLs can lead to significantly worse web based results.";
+    }
+    setStatus({ warnings });
+  }, [values.web_search, values.open_url, setStatus]);
+
+  return null;
+}
+
 function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
   const { values, setFieldValue } = useFormikContext<{
     name: string;
@@ -878,26 +896,10 @@ export default function AgentEditorPage({
           validateOnMount
           initialStatus={{ warnings: {} }}
         >
-          {({
-            isSubmitting,
-            isValid,
-            dirty,
-            values,
-            setFieldValue,
-            setStatus,
-          }) => {
-            // Compute warnings whenever relevant values change
-            useEffect(() => {
-              const warnings: Record<string, string> = {};
-              if (values.web_search && !values.open_url) {
-                warnings.open_url =
-                  "Web Search without the ability to open URLs can lead to significantly worse web based results.";
-              }
-              setStatus({ warnings });
-            }, [values.web_search, values.open_url, setStatus]);
-
+          {({ isSubmitting, isValid, dirty, values, setFieldValue }) => {
             return (
               <>
+                <FormWarningsEffect />
                 <userFilesModal.Provider>
                   <UserFilesModal
                     title="User Files"
