@@ -14,10 +14,6 @@ import AddInstructionModal from "@/components/modals/AddInstructionModal";
 import UserFilesModal from "@/components/modals/UserFilesModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import Text from "@/refresh-components/texts/Text";
-import SvgFolderOpen from "@/icons/folder-open";
-import SvgAddLines from "@/icons/add-lines";
-import SvgFiles from "@/icons/files";
-import SvgEdit from "@/icons/edit";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { FileCard } from "../input/FileCard";
 import { hasNonImageFiles } from "@/lib/utils";
@@ -25,6 +21,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import { FileCardSkeleton } from "@/app/chat/components/input/FileCard";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import { UserFileStatus } from "../../projects/projectsService";
+import { SvgAddLines, SvgEdit, SvgFiles, SvgFolderOpen } from "@opal/icons";
 export interface ProjectContextPanelProps {
   projectTokenCount?: number;
   availableContextTokens?: number;
@@ -127,9 +124,8 @@ export default function ProjectContextPanel({
 
       <projectFilesModal.Provider>
         <UserFilesModal
-          title="Project files"
+          title="Project Files"
           description="Sessions in this project can access the files here."
-          icon={SvgFiles}
           recentFiles={[...allCurrentProjectFiles]}
           onView={handleOnView}
           handleUploadChange={handleUploadChange}
@@ -139,7 +135,7 @@ export default function ProjectContextPanel({
           }}
         />
       </projectFilesModal.Provider>
-      <div className="flex flex-col gap-6 w-full max-w-[800px] mx-auto mt-10 mb-[1.5rem]">
+      <div className="flex flex-col gap-6 w-full max-w-[min(50rem,100%)] mx-auto p-4 pt-14 pb-6">
         <div className="flex flex-col gap-1 text-text-04">
           <SvgFolderOpen className="h-8 w-8 text-text-04" />
           <div className="group flex items-center gap-2">
@@ -156,7 +152,7 @@ export default function ProjectContextPanel({
               />
             ) : (
               <>
-                <Text headingH2 className="font-heading-h2">
+                <Text as="p" headingH2 className="font-heading-h2">
                   {projectName}
                 </Text>
                 <IconButton
@@ -174,17 +170,17 @@ export default function ProjectContextPanel({
         <Separator className="my-0" />
         <div className="flex flex-row gap-2 justify-between">
           <div className="min-w-0 flex-1">
-            <Text headingH3 text04>
+            <Text as="p" headingH3 text04>
               Instructions
             </Text>
             {isLoadingProjectDetails && !currentProjectDetails ? (
               <div className="h-5 w-3/4 rounded bg-background-tint-02 animate-pulse" />
             ) : currentProjectDetails?.project?.instructions ? (
-              <Text text02 secondaryBody className="truncate">
+              <Text as="p" text02 secondaryBody className="truncate">
                 {currentProjectDetails.project.instructions}
               </Text>
             ) : (
-              <Text text02 secondaryBody className="truncate">
+              <Text as="p" text02 secondaryBody className="truncate">
                 Add instructions to tailor the response in this project.
               </Text>
             )}
@@ -203,10 +199,10 @@ export default function ProjectContextPanel({
         >
           <div className="flex flex-row gap-2 justify-between">
             <div>
-              <Text headingH3 text04>
+              <Text as="p" headingH3 text04>
                 Files
               </Text>
-              <Text text02 secondaryBody>
+              <Text as="p" text02 secondaryBody>
                 Chats in this project can access these files.
               </Text>
             </div>
@@ -262,12 +258,12 @@ export default function ProjectContextPanel({
                 >
                   <div className="flex flex-col overflow-hidden">
                     <div className="flex items-center justify-between gap-2 w-full">
-                      <Text text04 secondaryAction>
+                      <Text as="p" text04 secondaryAction>
                         View files
                       </Text>
                       <SvgFiles className="h-5 w-5 stroke-text-02" />
                     </div>
-                    <Text text03 secondaryBody>
+                    <Text as="p" text03 secondaryBody>
                       {displayFileCount} files
                     </Text>
                   </div>
@@ -298,12 +294,12 @@ export default function ProjectContextPanel({
                   >
                     <div className="flex flex-col overflow-hidden h-12 p-1">
                       <div className="flex items-center justify-between gap-2 w-full">
-                        <Text text04 secondaryAction>
+                        <Text as="p" text04 secondaryAction>
                           View All
                         </Text>
                         <SvgFiles className="h-5 w-5 stroke-text-02" />
                       </div>
-                      <Text text03 secondaryBody>
+                      <Text as="p" text03 secondaryBody>
                         {displayFileCount} files
                       </Text>
                     </div>
@@ -314,7 +310,7 @@ export default function ProjectContextPanel({
                 )}
               </div>
               {projectTokenCount > availableContextTokens && (
-                <Text text02 secondaryBody>
+                <Text as="p" text02 secondaryBody>
                   This project exceeds the model&apos;s context limits. Sessions
                   will automatically search for relevant files first before
                   generating response.

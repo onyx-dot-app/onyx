@@ -34,6 +34,7 @@ so that the rest of the code can persist it, render it in the UI, etc. The respo
 refer to by using matching keywords to other parts of the prompt and reminders.
 """
 
+import time
 from collections.abc import Callable
 from typing import Any
 from typing import cast
@@ -63,13 +64,14 @@ from onyx.secondary_llm_flows.document_filter import select_chunks_for_relevance
 from onyx.secondary_llm_flows.document_filter import select_sections_for_expansion
 from onyx.secondary_llm_flows.query_expansion import keyword_query_expansion
 from onyx.secondary_llm_flows.query_expansion import semantic_query_rephrase
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
+from onyx.tools.interface import Tool
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.search.constants import (
     KEYWORD_QUERY_HYBRID_ALPHA,
 )
@@ -219,7 +221,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # Used for filter settings
         persona: Persona,
         llm: LLM,
-        fast_llm: LLM,
         document_index: DocumentIndex,
         # Respecting user selections
         user_selected_filters: BaseFilters | None,
@@ -234,7 +235,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.user = user
         self.persona = persona
         self.llm = llm
-        self.fast_llm = fast_llm
         self.document_index = document_index
         self.user_selected_filters = user_selected_filters
         self.project_id = project_id
@@ -303,9 +303,19 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
     @classmethod
     def is_available(cls, db_session: Session) -> bool:
-        """Check if search tool is available by verifying connectors exist."""
-        return check_connectors_exist(db_session) or check_federated_connectors_exist(
-            db_session
+        """Check if search tool is available.
+
+        The search tool is available if ANY of the following exist:
+        - Regular connectors (team knowledge)
+        - Federated connectors (e.g., Slack)
+        - User files (User Knowledge mode)
+        """
+        from onyx.db.connector import check_user_files_exist
+
+        return (
+            check_connectors_exist(db_session)
+            or check_federated_connectors_exist(db_session)
+            or check_user_files_exist(db_session)
         )
 
     @property
@@ -338,7 +348,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                         QUERIES_FIELD: {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "List of search queries to execute",
+                            "description": "List of search queries to execute, typically a single query.",
                         },
                     },
                     "required": [QUERIES_FIELD],
@@ -346,10 +356,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             },
         }
 
-    def emit_start(self, turn_index: int) -> None:
+    def emit_start(self, placement: Placement) -> None:
         self.emitter.emit(
             Packet(
-                turn_index=turn_index,
+                placement=placement,
                 obj=SearchToolStart(),
             )
         )
@@ -357,17 +367,25 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
     @log_function_time(print_only=True)
     def run(
         self,
-        turn_index: int,
+        placement: Placement,
         override_kwargs: SearchToolOverrideKwargs,
         **llm_kwargs: Any,
     ) -> ToolResponse:
+        # Start overall timing
+        overall_start_time = time.time()
+
+        # Initialize timing variables (in case of early exceptions)
+        query_expansion_elapsed = 0.0
+        document_selection_elapsed = 0.0
+        document_expansion_elapsed = 0.0
+
         # Create a new thread-safe session for this execution
         # This prevents transaction conflicts when multiple search tools run in parallel
         db_session = self._get_thread_safe_session()
         try:
             llm_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
 
-            # Run semantic and keyword query expansion in parallel
+            # Run semantic and keyword query expansion in parallel (unless skipped)
             # Use message history, memories, and user info from override_kwargs
             message_history = (
                 override_kwargs.message_history
@@ -377,22 +395,41 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             memories = override_kwargs.memories
             user_info = override_kwargs.user_info
 
-            functions_with_args: list[tuple[Callable, tuple]] = [
-                (
-                    semantic_query_rephrase,
-                    (message_history, self.llm, user_info, memories),
-                ),
-                (
-                    keyword_query_expansion,
-                    (message_history, self.llm, user_info, memories),
-                ),
-            ]
+            # Skip query expansion if this is a repeat search call
+            if override_kwargs.skip_query_expansion:
+                logger.debug(
+                    "Search tool - Skipping query expansion (repeat search call)"
+                )
+                semantic_query = None
+                keyword_queries: list[str] = []
+            else:
+                # Start timing for query expansion/rephrase
+                query_expansion_start_time = time.time()
 
-            expansion_results = run_functions_tuples_in_parallel(functions_with_args)
-            semantic_query = expansion_results[0]  # str
-            keyword_queries = (
-                expansion_results[1] if expansion_results[1] is not None else []
-            )  # list[str]
+                functions_with_args: list[tuple[Callable, tuple]] = [
+                    (
+                        semantic_query_rephrase,
+                        (message_history, self.llm, user_info, memories),
+                    ),
+                    (
+                        keyword_query_expansion,
+                        (message_history, self.llm, user_info, memories),
+                    ),
+                ]
+
+                expansion_results = run_functions_tuples_in_parallel(
+                    functions_with_args
+                )
+
+                # End timing for query expansion/rephrase
+                query_expansion_elapsed = time.time() - query_expansion_start_time
+                logger.debug(
+                    f"Search tool - Query expansion/rephrase took {query_expansion_elapsed:.3f} seconds"
+                )
+                semantic_query = expansion_results[0]  # str
+                keyword_queries = (
+                    expansion_results[1] if expansion_results[1] is not None else []
+                )  # list[str]
 
             # Prepare queries with their weights and hybrid_alpha settings
             # Group 1: Keyword queries (use hybrid_alpha=0.2)
@@ -405,13 +442,19 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
             # Group 2: Semantic/LLM/Original queries (use hybrid_alpha=None)
             # Include all LLM-provided queries with their weight
-            semantic_queries_with_weights = [
-                (semantic_query, LLM_SEMANTIC_QUERY_WEIGHT),
-            ]
+            semantic_queries_with_weights = (
+                [
+                    (semantic_query, LLM_SEMANTIC_QUERY_WEIGHT),
+                ]
+                if semantic_query
+                else []
+            )
             for llm_query in llm_queries:
-                semantic_queries_with_weights.append(
-                    (llm_query, LLM_NON_CUSTOM_QUERY_WEIGHT)
-                )
+                # In rare cases, the LLM may fail to provide real queries
+                if llm_query:
+                    semantic_queries_with_weights.append(
+                        (llm_query, LLM_NON_CUSTOM_QUERY_WEIGHT)
+                    )
             if override_kwargs.original_query:
                 semantic_queries_with_weights.append(
                     (override_kwargs.original_query, ORIGINAL_QUERY_WEIGHT)
@@ -444,7 +487,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             # Emit the queries early so the UI can display them immediately
             self.emitter.emit(
                 Packet(
-                    turn_index=turn_index,
+                    placement=placement,
                     obj=SearchToolQueriesDelta(
                         queries=all_queries,
                     ),
@@ -524,12 +567,22 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
             )
 
+            # Start timing for LLM document selection
+            document_selection_start_time = time.time()
+
             # Use LLM to select the most relevant sections for expansion
             selected_sections, best_doc_ids = select_sections_for_expansion(
                 sections=sections_for_selection,
                 user_query=secondary_flows_user_query,
                 llm=self.llm,
                 max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
+            )
+
+            # End timing for LLM document selection
+            document_selection_elapsed = time.time() - document_selection_start_time
+            logger.debug(
+                f"Search tool - LLM picking documents took {document_selection_elapsed:.3f} seconds "
+                f"(selected {len(selected_sections)} sections)"
             )
 
             # Create a set of best document IDs for quick lookup
@@ -542,7 +595,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
             self.emitter.emit(
                 Packet(
-                    turn_index=turn_index,
+                    placement=placement,
                     obj=SearchToolDocumentsDelta(
                         documents=final_ui_docs,
                     ),
@@ -589,8 +642,18 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 for section in selected_sections
             ]
 
+            # Start timing for document expansion
+            document_expansion_start_time = time.time()
+
             # Run all expansions in parallel
             expanded_sections = run_functions_tuples_in_parallel(expansion_functions)
+
+            # End timing for document expansion
+            document_expansion_elapsed = time.time() - document_expansion_start_time
+            logger.debug(
+                f"Search tool - Expansion of selected documents took {document_expansion_elapsed:.3f} seconds "
+                f"(expanded {len(expanded_sections)} sections)"
+            )
 
             if not expanded_sections:
                 expanded_sections = selected_sections
@@ -605,6 +668,15 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 limit=override_kwargs.max_llm_chunks,
                 include_link=True,
                 include_document_id=True,
+            )
+
+            # End overall timing
+            overall_elapsed = time.time() - overall_start_time
+            logger.debug(
+                f"Search tool - Total execution time: {overall_elapsed:.3f} seconds "
+                f"(query expansion: {query_expansion_elapsed:.3f}s, "
+                f"document selection: {document_selection_elapsed:.3f}s, "
+                f"document expansion: {document_expansion_elapsed:.3f}s)"
             )
 
             # TODO: extension - this can include the smaller set of approved docs to be saved/displayed in the UI

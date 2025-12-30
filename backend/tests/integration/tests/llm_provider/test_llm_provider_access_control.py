@@ -15,7 +15,8 @@ from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
-from onyx.llm.factory import get_llms_for_persona
+from onyx.llm.constants import LlmProviderNames
+from onyx.llm.factory import get_llm_for_persona
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.persona import PersonaManager
@@ -34,19 +35,17 @@ def _create_llm_provider(
     *,
     name: str,
     default_model_name: str,
-    fast_model_name: str,
     is_public: bool,
     is_default: bool,
 ) -> LLMProviderModel:
     provider = LLMProviderModel(
         name=name,
-        provider="openai",
+        provider=LlmProviderNames.OPENAI,
         api_key=None,
         api_base=None,
         api_version=None,
         custom_config=None,
         default_model_name=default_model_name,
-        fast_default_model_name=fast_model_name,
         deployment_name=None,
         is_public=is_public,
         # Use None instead of False to avoid unique constraint violation
@@ -112,7 +111,6 @@ def test_can_user_access_llm_provider_or_logic(
             db_session,
             name="default-provider",
             default_model_name="gpt-4o",
-            fast_model_name="gpt-4o-mini",
             is_public=True,
             is_default=True,
         )
@@ -121,7 +119,6 @@ def test_can_user_access_llm_provider_or_logic(
             db_session,
             name="locked-provider",
             default_model_name="gpt-4o",
-            fast_model_name="gpt-4o-mini",
             is_public=False,
             is_default=False,
         )
@@ -130,7 +127,6 @@ def test_can_user_access_llm_provider_or_logic(
             db_session,
             name="restricted-provider",
             default_model_name="gpt-4o-mini",
-            fast_model_name="gpt-4o-mini",
             is_public=False,
             is_default=False,
         )
@@ -244,7 +240,7 @@ def test_can_user_access_llm_provider_or_logic(
         )
 
 
-def test_get_llms_for_persona_falls_back_when_access_denied(
+def test_get_llm_for_persona_falls_back_when_access_denied(
     users: tuple[DATestUser, DATestUser],
 ) -> None:
     admin_user, basic_user = users
@@ -254,7 +250,6 @@ def test_get_llms_for_persona_falls_back_when_access_denied(
             db_session,
             name="default-provider",
             default_model_name="gpt-4o",
-            fast_model_name="gpt-4o-mini",
             is_public=True,
             is_default=True,
         )
@@ -262,7 +257,6 @@ def test_get_llms_for_persona_falls_back_when_access_denied(
             db_session,
             name="restricted-provider",
             default_model_name="gpt-4o-mini",
-            fast_model_name="gpt-4o-mini",
             is_public=False,
             is_default=False,
         )
@@ -302,13 +296,13 @@ def test_get_llms_for_persona_falls_back_when_access_denied(
         assert admin_model is not None
         assert basic_model is not None
 
-        allowed_llm, _ = get_llms_for_persona(
+        allowed_llm = get_llm_for_persona(
             persona=persona,
             user=admin_model,
         )
         assert allowed_llm.config.model_name == restricted_provider.default_model_name
 
-        fallback_llm, _ = get_llms_for_persona(
+        fallback_llm = get_llm_for_persona(
             persona=persona,
             user=basic_model,
         )

@@ -4,7 +4,8 @@ import React, { useMemo } from "react";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { IconProps } from "@/icons";
+import type { Route } from "next";
+import type { IconProps } from "@opal/types";
 
 const variantClasses = (transient?: boolean) =>
   ({
@@ -363,6 +364,7 @@ function ButtonInner(
       <div className={cn(LeftIcon && "pr-1", RightIcon && "pl-1")}>
         {typeof children === "string" ? (
           <Text
+            as="p"
             className={cn(
               "whitespace-nowrap",
               textClasses(transient)[variant][subvariant][abled]
@@ -383,7 +385,7 @@ function ButtonInner(
   );
 
   if (!href) return content;
-  return <Link href={href}>{content}</Link>;
+  return <Link href={href as Route}>{content}</Link>;
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(ButtonInner);

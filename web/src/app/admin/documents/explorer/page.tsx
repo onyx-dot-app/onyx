@@ -1,8 +1,7 @@
 import { AdminPageTitle } from "@/components/admin/Title";
 import { Explorer } from "./Explorer";
 import { fetchValidFilterInfo } from "@/lib/search/utilsSS";
-import SvgZoomIn from "@/icons/zoom-in";
-
+import { SvgZoomIn } from "@opal/icons";
 export default async function Page(props: {
   searchParams: Promise<{ [key: string]: string }>;
 }) {
@@ -10,7 +9,7 @@ export default async function Page(props: {
   const { connectors, documentSets } = await fetchValidFilterInfo();
 
   return (
-    <div className="mx-auto container">
+    <div className="container">
       <AdminPageTitle
         icon={<SvgZoomIn className="stroke-text-04 h-8 w-8" />}
         title="Document Explorer"

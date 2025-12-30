@@ -3,7 +3,6 @@ from collections.abc import Callable
 from sqlalchemy.orm import Session
 
 from onyx.chat.models import PersonaOverrideConfig
-from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.llm import can_user_access_llm_provider
@@ -15,13 +14,11 @@ from onyx.db.llm import fetch_llm_provider_view
 from onyx.db.llm import fetch_user_group_ids
 from onyx.db.models import Persona
 from onyx.db.models import User
-from onyx.llm.chat_llm import LitellmLLM
-from onyx.llm.exceptions import GenAIDisabledException
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.llm_provider_options import OLLAMA_API_KEY_CONFIG_KEY
-from onyx.llm.llm_provider_options import OLLAMA_PROVIDER_NAME
-from onyx.llm.llm_provider_options import OPENROUTER_PROVIDER_NAME
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import get_max_input_tokens_from_llm_provider
 from onyx.llm.utils import model_supports_image_input
@@ -37,7 +34,7 @@ logger = setup_logger()
 def _build_provider_extra_headers(
     provider: str, custom_config: dict[str, str] | None
 ) -> dict[str, str]:
-    if provider == OLLAMA_PROVIDER_NAME and custom_config:
+    if provider == LlmProviderNames.OLLAMA_CHAT and custom_config:
         raw_api_key = custom_config.get(OLLAMA_API_KEY_CONFIG_KEY)
         api_key = raw_api_key.strip() if raw_api_key else None
         if not api_key:
@@ -47,19 +44,13 @@ def _build_provider_extra_headers(
         return {"Authorization": api_key}
 
     # Passing these will put Onyx on the OpenRouter leaderboard
-    elif provider == OPENROUTER_PROVIDER_NAME:
+    elif provider == LlmProviderNames.OPENROUTER:
         return {
             "HTTP-Referer": "https://onyx.app",
             "X-Title": "Onyx",
         }
 
     return {}
-
-
-def get_main_llm_from_tuple(
-    llms: tuple[LLM, LLM],
-) -> LLM:
-    return llms[0]
 
 
 def get_llm_config_for_persona(
@@ -109,16 +100,16 @@ def get_llm_config_for_persona(
     )
 
 
-def get_llms_for_persona(
+def get_llm_for_persona(
     persona: Persona | PersonaOverrideConfig | None,
     user: User | None,
     llm_override: LLMOverride | None = None,
     additional_headers: dict[str, str] | None = None,
     long_term_logger: LongTermLogger | None = None,
-) -> tuple[LLM, LLM]:
+) -> LLM:
     if persona is None:
-        logger.warning("No persona provided, using default LLMs")
-        return get_default_llms()
+        logger.warning("No persona provided, using default LLM")
+        return get_default_llm()
 
     provider_name_override = llm_override.model_provider if llm_override else None
     model_version_override = llm_override.model_version if llm_override else None
@@ -126,7 +117,7 @@ def get_llms_for_persona(
 
     provider_name = provider_name_override or persona.llm_model_provider_override
     if not provider_name:
-        return get_default_llms(
+        return get_default_llm(
             temperature=temperature_override or GEN_AI_TEMPERATURE,
             additional_headers=additional_headers,
             long_term_logger=long_term_logger,
@@ -155,7 +146,7 @@ def get_llms_for_persona(
                 getattr(persona_model, "id", None),
                 provider_model.name,
             )
-            return get_default_llms(
+            return get_default_llm(
                 temperature=temperature_override or GEN_AI_TEMPERATURE,
                 additional_headers=additional_headers,
                 long_term_logger=long_term_logger,
@@ -164,30 +155,24 @@ def get_llms_for_persona(
         llm_provider = LLMProviderView.from_model(provider_model)
 
     model = model_version_override or persona.llm_model_version_override
-    fast_model = llm_provider.fast_default_model_name or llm_provider.default_model_name
     if not model:
         raise ValueError("No model name found")
-    if not fast_model:
-        raise ValueError("No fast model name found")
 
-    def _create_llm(model: str) -> LLM:
-        return get_llm(
-            provider=llm_provider.provider,
-            model=model,
-            deployment_name=llm_provider.deployment_name,
-            api_key=llm_provider.api_key,
-            api_base=llm_provider.api_base,
-            api_version=llm_provider.api_version,
-            custom_config=llm_provider.custom_config,
-            temperature=temperature_override,
-            additional_headers=additional_headers,
-            long_term_logger=long_term_logger,
-            max_input_tokens=get_max_input_tokens_from_llm_provider(
-                llm_provider=llm_provider, model_name=model
-            ),
-        )
-
-    return _create_llm(model), _create_llm(fast_model)
+    return get_llm(
+        provider=llm_provider.provider,
+        model=model,
+        deployment_name=llm_provider.deployment_name,
+        api_key=llm_provider.api_key,
+        api_base=llm_provider.api_base,
+        api_version=llm_provider.api_version,
+        custom_config=llm_provider.custom_config,
+        temperature=temperature_override,
+        additional_headers=additional_headers,
+        long_term_logger=long_term_logger,
+        max_input_tokens=get_max_input_tokens_from_llm_provider(
+            llm_provider=llm_provider, model_name=model
+        ),
+    )
 
 
 def get_default_llm_with_vision(
@@ -202,8 +187,6 @@ def get_default_llm_with_vision(
 
     Returns None if no providers exist or if no provider supports images.
     """
-    if DISABLE_GENERATIVE_AI:
-        raise GenAIDisabledException()
 
     def create_vision_llm(provider: LLMProviderView, model: str) -> LLM:
         """Helper to create an LLM if the provider supports image input."""
@@ -251,21 +234,13 @@ def get_default_llm_with_vision(
         ):
             return create_vision_llm(provider_view, provider.default_vision_model)
 
-        # If no model-configurations are specified, try default models in priority order
+        # If no model-configurations are specified, try default model
         if not provider.model_configurations:
             # Try default_model_name
             if provider.default_model_name and model_supports_image_input(
                 provider.default_model_name, provider.provider
             ):
                 return create_vision_llm(provider_view, provider.default_model_name)
-
-            # Try fast_default_model_name
-            if provider.fast_default_model_name and model_supports_image_input(
-                provider.fast_default_model_name, provider.provider
-            ):
-                return create_vision_llm(
-                    provider_view, provider.fast_default_model_name
-                )
 
         # Otherwise, if model-configurations are specified, check each model
         else:
@@ -315,15 +290,12 @@ def get_llm_for_contextual_rag(model_name: str, model_provider: str) -> LLM:
     )
 
 
-def get_default_llms(
+def get_default_llm(
     timeout: int | None = None,
     temperature: float | None = None,
     additional_headers: dict[str, str] | None = None,
     long_term_logger: LongTermLogger | None = None,
-) -> tuple[LLM, LLM]:
-    if DISABLE_GENERATIVE_AI:
-        raise GenAIDisabledException()
-
+) -> LLM:
     with get_session_with_current_tenant() as db_session:
         llm_provider = fetch_default_provider(db_session)
 
@@ -331,25 +303,17 @@ def get_default_llms(
         raise ValueError("No default LLM provider found")
 
     model_name = llm_provider.default_model_name
-    fast_model_name = (
-        llm_provider.fast_default_model_name or llm_provider.default_model_name
-    )
     if not model_name:
         raise ValueError("No default model name found")
-    if not fast_model_name:
-        raise ValueError("No fast default model name found")
 
-    def _create_llm(model: str) -> LLM:
-        return llm_from_provider(
-            model_name=model,
-            llm_provider=llm_provider,
-            timeout=timeout,
-            temperature=temperature,
-            additional_headers=additional_headers,
-            long_term_logger=long_term_logger,
-        )
-
-    return _create_llm(model_name), _create_llm(fast_model_name)
+    return llm_from_provider(
+        model_name=model_name,
+        llm_provider=llm_provider,
+        timeout=timeout,
+        temperature=temperature,
+        additional_headers=additional_headers,
+        long_term_logger=long_term_logger,
+    )
 
 
 def get_llm(

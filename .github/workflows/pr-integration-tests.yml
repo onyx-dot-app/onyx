@@ -33,6 +33,11 @@ env:
   PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD: ${{ secrets.PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD }}
   PERM_SYNC_SHAREPOINT_DIRECTORY_ID: ${{ secrets.PERM_SYNC_SHAREPOINT_DIRECTORY_ID }}
   EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
+  GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN: ${{ secrets.ONYX_GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN }}
+  GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN_CLASSIC: ${{ secrets.ONYX_GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN_CLASSIC }}
+  GITHUB_ADMIN_EMAIL: ${{ secrets.ONYX_GITHUB_ADMIN_EMAIL }}
+  GITHUB_TEST_USER_1_EMAIL: ${{ secrets.ONYX_GITHUB_TEST_USER_1_EMAIL }}
+  GITHUB_TEST_USER_2_EMAIL: ${{ secrets.ONYX_GITHUB_TEST_USER_2_EMAIL }}
 
 jobs:
   discover-test-dirs:
@@ -43,7 +48,7 @@ jobs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -51,7 +56,7 @@ jobs:
         id: set-matrix
         run: |
           # Find all leaf-level directories in both test directories
-          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" -exec basename {} \; | sort)
+          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "mcp" -exec basename {} \; | sort)
           connector_dirs=$(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" -exec basename {} \; | sort)
 
           # Create JSON array with directory info
@@ -67,14 +72,19 @@ jobs:
           all_dirs="[${all_dirs%,}]"
           echo "test-dirs=$all_dirs" >> $GITHUB_OUTPUT
 
-
   build-backend-image:
-    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-build-backend-image", "extras=ecr-cache"]
+    runs-on:
+      [
+        runs-on,
+        runner=1cpu-linux-arm64,
+        "run-id=${{ github.run_id }}-build-backend-image",
+        "extras=ecr-cache",
+      ]
     timeout-minutes: 45
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -122,14 +132,19 @@ jobs:
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache,mode=max
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
-
   build-model-server-image:
-    runs-on: [runs-on, runner=1cpu-linux-arm64, "run-id=${{ github.run_id }}-build-model-server-image", "extras=ecr-cache"]
+    runs-on:
+      [
+        runs-on,
+        runner=1cpu-linux-arm64,
+        "run-id=${{ github.run_id }}-build-model-server-image",
+        "extras=ecr-cache",
+      ]
     timeout-minutes: 45
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -176,14 +191,19 @@ jobs:
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache,mode=max
 
-
   build-integration-image:
-    runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}-build-integration-image", "extras=ecr-cache"]
+    runs-on:
+      [
+        runs-on,
+        runner=2cpu-linux-arm64,
+        "run-id=${{ github.run_id }}-build-integration-image",
+        "extras=ecr-cache",
+      ]
     timeout-minutes: 45
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -220,7 +240,7 @@ jobs:
           CACHE_SUFFIX: ${{ steps.format-branch.outputs.cache-suffix }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          cd backend && docker buildx bake --push \
+          docker buildx bake --push \
             --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${HEAD_SHA} \
             --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${CACHE_SUFFIX} \
             --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache \
@@ -259,7 +279,7 @@ jobs:
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -274,23 +294,27 @@ jobs:
 
       # NOTE: Use pre-ping/null pool to reduce flakiness due to dropped connections
       # NOTE: don't need web server for integration tests
-      - name: Start Docker containers
+      - name: Create .env file for Docker Compose
         env:
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
           RUN_ID: ${{ github.run_id }}
         run: |
+          cat <<EOF > deployment/docker_compose/.env
+          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
+          AUTH_TYPE=basic
+          POSTGRES_POOL_PRE_PING=true
+          POSTGRES_USE_NULL_POOL=true
+          REQUIRE_EMAIL_VERIFICATION=false
+          DISABLE_TELEMETRY=true
+          ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID}
+          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID}
+          INTEGRATION_TESTS_MODE=true
+          CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS=0.001
+          EOF
+
+      - name: Start Docker containers
+        run: |
           cd deployment/docker_compose
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
-          AUTH_TYPE=basic \
-          POSTGRES_POOL_PRE_PING=true \
-          POSTGRES_USE_NULL_POOL=true \
-          REQUIRE_EMAIL_VERIFICATION=false \
-          DISABLE_TELEMETRY=true \
-          ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID} \
-          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID} \
-          INTEGRATION_TESTS_MODE=true \
-          CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS=0.001 \
-          MCP_SERVER_ENABLED=true \
           docker compose -f docker-compose.yml -f docker-compose.dev.yml up \
             relational_db \
             index \
@@ -299,7 +323,6 @@ jobs:
             api_server \
             inference_model_server \
             indexing_model_server \
-            mcp_server \
             background \
             -d
         id: start_docker
@@ -342,12 +365,6 @@ jobs:
           }
 
           wait_for_service "http://localhost:8080/health" "API server"
-          test_dir="${{ matrix.test-dir.path }}"
-          if [ "$test_dir" = "tests/mcp" ]; then
-            wait_for_service "http://localhost:8090/health" "MCP server"
-          else
-            echo "Skipping MCP server wait for non-MCP suite: $test_dir"
-          fi
           echo "Finished waiting for services."
 
       - name: Start Mock Services
@@ -377,8 +394,6 @@ jobs:
               -e VESPA_HOST=index \
               -e REDIS_HOST=cache \
               -e API_SERVER_HOST=api_server \
-              -e MCP_SERVER_HOST=mcp_server \
-              -e MCP_SERVER_PORT=8090 \
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
               -e EXA_API_KEY=${EXA_API_KEY} \
               -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
@@ -394,6 +409,11 @@ jobs:
               -e PERM_SYNC_SHAREPOINT_PRIVATE_KEY="${PERM_SYNC_SHAREPOINT_PRIVATE_KEY}" \
               -e PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD=${PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD} \
               -e PERM_SYNC_SHAREPOINT_DIRECTORY_ID=${PERM_SYNC_SHAREPOINT_DIRECTORY_ID} \
+              -e GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN=${GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN} \
+              -e GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN_CLASSIC=${GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN_CLASSIC} \
+              -e GITHUB_ADMIN_EMAIL=${GITHUB_ADMIN_EMAIL} \
+              -e GITHUB_TEST_USER_1_EMAIL=${GITHUB_TEST_USER_1_EMAIL} \
+              -e GITHUB_TEST_USER_2_EMAIL=${GITHUB_TEST_USER_2_EMAIL} \
               -e TEST_WEB_HOSTNAME=test-runner \
               -e MOCK_CONNECTOR_SERVER_HOST=mock_connector_server \
               -e MOCK_CONNECTOR_SERVER_PORT=8001 \
@@ -422,21 +442,22 @@ jobs:
           path: ${{ github.workspace }}/docker-compose.log
       # ------------------------------------------------------------
 
-
   multitenant-tests:
     needs:
+      [build-backend-image, build-model-server-image, build-integration-image]
+    runs-on:
       [
-        build-backend-image,
-        build-model-server-image,
-        build-integration-image,
+        runs-on,
+        runner=8cpu-linux-arm64,
+        "run-id=${{ github.run_id }}-multitenant-tests",
+        "extras=ecr-cache",
       ]
-    runs-on: [runs-on, runner=8cpu-linux-arm64, "run-id=${{ github.run_id }}-multitenant-tests", "extras=ecr-cache"]
     timeout-minutes: 45
 
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
       - name: Checkout code
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -460,7 +481,6 @@ jobs:
           ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID} \
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID} \
           DEV_MODE=true \
-          MCP_SERVER_ENABLED=true \
           docker compose -f docker-compose.multitenant-dev.yml up \
             relational_db \
             index \
@@ -469,7 +489,6 @@ jobs:
             api_server \
             inference_model_server \
             indexing_model_server \
-            mcp_server \
             background \
             -d
         id: start_docker_multi_tenant
@@ -518,8 +537,6 @@ jobs:
             -e VESPA_HOST=index \
             -e REDIS_HOST=cache \
             -e API_SERVER_HOST=api_server \
-            -e MCP_SERVER_HOST=mcp_server \
-            -e MCP_SERVER_PORT=8090 \
             -e OPENAI_API_KEY=${OPENAI_API_KEY} \
             -e EXA_API_KEY=${EXA_API_KEY} \
             -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \

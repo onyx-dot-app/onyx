@@ -131,6 +131,9 @@ export interface Message {
   latestChildNodeId?: number | null;
   alternateAssistantID?: number | null;
   stackTrace?: string | null;
+  errorCode?: string | null;
+  isRetryable?: boolean;
+  errorDetails?: Record<string, any> | null;
   overridden_model?: string;
   stopReason?: StreamStopReason | null;
 
@@ -182,7 +185,8 @@ export interface BackendMessage {
   latest_child_message: number | null;
   message: string;
   rephrased_query: string | null;
-  context_docs: { top_documents: OnyxDocument[] } | null;
+  // Backend sends context_docs as a flat array of documents
+  context_docs: OnyxDocument[] | null;
   time_sent: string;
   overridden_model: string;
   alternate_assistant_id: number | null;
@@ -223,6 +227,9 @@ export interface FileChatDisplay {
 export interface StreamingError {
   error: string;
   stack_trace: string;
+  error_code?: string;
+  is_retryable?: boolean;
+  details?: Record<string, any>;
 }
 
 export interface InputPrompt {

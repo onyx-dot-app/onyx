@@ -44,7 +44,6 @@ from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat import update_chat_session
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.feedback import create_chat_message_feedback
 from onyx.db.feedback import create_doc_retrieval_feedback
 from onyx.db.feedback import remove_chat_message_feedback
@@ -55,10 +54,10 @@ from onyx.db.projects import check_project_ownership
 from onyx.db.user_file import get_file_id_by_user_file_id
 from onyx.file_processing.extract_file_text import docx_to_txt_filename
 from onyx.file_store.file_store import get_default_file_store
-from onyx.llm.exceptions import GenAIDisabledException
-from onyx.llm.factory import get_default_llms
+from onyx.llm.constants import LlmProviderNames
+from onyx.llm.factory import get_default_llm
+from onyx.llm.factory import get_llm_for_persona
 from onyx.llm.factory import get_llm_token_counter
-from onyx.llm.factory import get_llms_for_persona
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.redis.redis_pool import get_redis_client
 from onyx.secondary_llm_flows.chat_session_naming import (
@@ -90,7 +89,7 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import create_milestone_and_report
+from onyx.utils.telemetry import mt_cloud_telemetry
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -118,7 +117,7 @@ def _get_available_tokens_for_persona(
             - default_reserved_tokens
         )
 
-    llm, _ = get_llms_for_persona(persona=persona, user=user)
+    llm = get_llm_for_persona(persona=persona, user=user)
     token_counter = get_llm_token_counter(llm)
 
     system_prompt = get_default_base_system_prompt(db_session)
@@ -195,7 +194,8 @@ def update_chat_session_temperature(
         # Additional check for Anthropic models
         if (
             chat_session.current_alternate_model
-            and "anthropic" in chat_session.current_alternate_model.lower()
+            and LlmProviderNames.ANTHROPIC
+            in chat_session.current_alternate_model.lower()
         ):
             if update_thread_req.temperature_override > 1:
                 raise HTTPException(
@@ -355,16 +355,11 @@ def rename_chat_session(
         chat_session_id=chat_session_id, db_session=db_session
     )
 
-    try:
-        llm, _ = get_default_llms(
-            additional_headers=extract_headers(
-                request.headers, LITELLM_PASS_THROUGH_HEADERS
-            )
+    llm = get_default_llm(
+        additional_headers=extract_headers(
+            request.headers, LITELLM_PASS_THROUGH_HEADERS
         )
-    except GenAIDisabledException:
-        # This may be longer than what the LLM tends to produce but is the most
-        # clear thing we can do
-        return RenameChatSessionResponse(new_name=full_history[0].message)
+    )
 
     new_name = get_renamed_conversation_name(full_history=full_history, llm=llm)
 
@@ -457,14 +452,11 @@ def handle_new_chat_message(
     if not chat_message_req.message and not chat_message_req.use_existing_user_message:
         raise HTTPException(status_code=400, detail="Empty chat message is invalid")
 
-    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
-        create_milestone_and_report(
-            user=user,
-            distinct_id=user.email if user else tenant_id or "N/A",
-            event_type=MilestoneRecordType.RAN_QUERY,
-            properties=None,
-            db_session=db_session,
-        )
+    mt_cloud_telemetry(
+        tenant_id=tenant_id,
+        distinct_id=user.email if user else tenant_id,
+        event=MilestoneRecordType.RAN_QUERY,
+    )
 
     def stream_generator() -> Generator[str, None, None]:
         try:
@@ -676,7 +668,7 @@ def seed_chat(
         root_message = get_or_create_root_message(
             chat_session_id=new_chat_session.id, db_session=db_session
         )
-        llm, _fast_llm = get_llms_for_persona(
+        llm = get_llm_for_persona(
             persona=new_chat_session.persona,
             user=user,
         )
@@ -736,6 +728,7 @@ def seed_chat_from_slack(
 @router.get("/file/{file_id:path}")
 def fetch_chat_file(
     file_id: str,
+    request: Request,
     _: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
@@ -765,7 +758,19 @@ def fetch_chat_file(
     media_type = file_record.file_type
     file_io = file_store.read_file(file_id, mode="b")
 
-    return StreamingResponse(file_io, media_type=media_type)
+    # Files served here are immutable (content-addressed by file_id), so allow long-lived caching.
+    # Use `private` because this is behind auth / tenant scoping.
+    etag = f'"{file_id}"'
+    cache_headers = {
+        "Cache-Control": "private, max-age=31536000, immutable",
+        "ETag": etag,
+        "Vary": "Cookie",
+    }
+
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=cache_headers)
+
+    return StreamingResponse(file_io, media_type=media_type, headers=cache_headers)
 
 
 @router.get("/search")

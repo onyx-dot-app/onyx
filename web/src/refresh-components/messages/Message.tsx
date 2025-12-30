@@ -5,12 +5,13 @@ import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Button from "@/refresh-components/buttons/Button";
-import SvgAlertCircle from "@/icons/alert-circle";
-import SvgCheckCircle from "@/icons/check-circle";
-import SvgAlertTriangle from "@/icons/alert-triangle";
-import SvgXOctagon from "@/icons/x-octagon";
-import SvgX from "@/icons/x";
-
+import {
+  SvgAlertCircle,
+  SvgAlertTriangle,
+  SvgCheckCircle,
+  SvgX,
+  SvgXOctagon,
+} from "@opal/icons";
 const containerClasses = {
   flash: {
     default: {
@@ -317,9 +318,11 @@ function MessageInner(
 
         {/* Text Content */}
         <div className="flex flex-col flex-1 items-start min-w-0 px-0.5">
-          <Text className={cn("w-full", textClass)}>{text}</Text>
+          <Text as="p" className={cn("w-full", textClass)}>
+            {text}
+          </Text>
           {description && (
-            <Text className={cn("w-full", descriptionClass)}>
+            <Text as="p" className={cn("w-full", descriptionClass)}>
               {description}
             </Text>
           )}

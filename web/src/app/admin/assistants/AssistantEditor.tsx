@@ -55,9 +55,9 @@ import {
 import { debounce } from "lodash";
 import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
 import StarterMessagesList from "@/app/admin/assistants/StarterMessageList";
-import UnlabeledSwitchField from "@/refresh-components/formik-fields/UnlabeledSwitchField";
+import SwitchField from "@/refresh-components/form/SwitchField";
 import CustomAgentAvatar from "@/refresh-components/avatars/CustomAgentAvatar";
-import { BackButton } from "@/components/BackButton";
+import BackButton from "@/refresh-components/buttons/BackButton";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { MinimalUserSnapshot } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
@@ -90,13 +90,13 @@ import {
 } from "@/app/chat/projects/projectsService";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
-import SvgTrash from "@/icons/trash";
-import SvgFiles from "@/icons/files";
-import { useAgents } from "@/lib/hooks/useAgents";
+import { useAgents } from "@/hooks/useAgents";
 import Text from "@/refresh-components/texts/Text";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import { buildImgUrl } from "@/app/chat/components/files/images/utils";
+import { SvgFiles, SvgTrash } from "@opal/icons";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
@@ -210,7 +210,12 @@ export default function AssistantEditor({
 
   const enabledToolsMap: { [key: number]: boolean } = {};
   tools.forEach((tool) => {
-    enabledToolsMap[tool.id] = personaCurrentToolIds.includes(tool.id);
+    // Enable tool if:
+    // 1. It's part of the existing persona's tools, OR
+    // 2. It's marked as default_enabled in the backend config (for new personas)
+    enabledToolsMap[tool.id] =
+      personaCurrentToolIds.includes(tool.id) ||
+      (tool.default_enabled && !existingPersona);
   });
 
   const { allRecentFiles, beginUpload } = useProjectsContext();
@@ -665,7 +670,7 @@ export default function AssistantEditor({
           const src =
             uploadedImagePreview ??
             (existingPersona?.uploaded_image_id && !removePersonaImage
-              ? existingPersona?.uploaded_image_id
+              ? buildImgUrl(existingPersona?.uploaded_image_id)
               : undefined);
 
           const iconElement = (
@@ -678,7 +683,6 @@ export default function AssistantEditor({
                 <UserFilesModal
                   title="User Files"
                   description="All files selected for this assistant"
-                  icon={SvgFiles}
                   recentFiles={values.user_file_ids.map(
                     (userFileId: string) => {
                       const rf = allRecentFiles.find(
@@ -842,7 +846,7 @@ export default function AssistantEditor({
                                   : ""
                               }`}
                             >
-                              <UnlabeledSwitchField
+                              <SwitchField
                                 onCheckedChange={() =>
                                   toggleToolInValues(searchTool?.id || -1)
                                 }
@@ -973,12 +977,12 @@ export default function AssistantEditor({
                                     >
                                       <div className="flex flex-col overflow-hidden h-12 p-1">
                                         <div className="flex items-center justify-between gap-2 w-full">
-                                          <Text text04 secondaryAction>
+                                          <Text as="p" text04 secondaryAction>
                                             View All
                                           </Text>
                                           <SvgFiles className="h-5 w-5 stroke-text-02" />
                                         </div>
-                                        <Text text03 secondaryBody>
+                                        <Text as="p" text03 secondaryBody>
                                           {values.user_file_ids.length} files
                                         </Text>
                                       </div>
@@ -1279,7 +1283,7 @@ export default function AssistantEditor({
                             side="top"
                           >
                             <div>
-                              <UnlabeledSwitchField
+                              <SwitchField
                                 name="is_public"
                                 onCheckedChange={(checked) => {
                                   if (values.is_default_persona && !checked) {

@@ -3,7 +3,7 @@ import { SlackChannelConfigCreationForm } from "../SlackChannelConfigCreationFor
 import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { DocumentSetSummary, ValidSources } from "@/lib/types";
-import { BackButton } from "@/components/BackButton";
+import BackButton from "@/refresh-components/buttons/BackButton";
 import { fetchAssistantsSS } from "@/lib/assistants/fetchAssistantsSS";
 import { getStandardAnswerCategoriesIfEE } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 import { redirect } from "next/navigation";
@@ -53,7 +53,7 @@ async function NewChannelConfigPage(props: {
   }
 
   return (
-    <div className="container max-w-4xl mx-auto">
+    <div className="container max-w-4xl">
       <BackButton />
       <AdminPageTitle
         icon={<SourceIcon iconSize={32} sourceType={ValidSources.Slack} />}

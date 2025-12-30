@@ -1,21 +1,16 @@
 "use client";
 
-import { ActionEditor } from "@/app/admin/actions/ActionEditor";
-import { BackButton } from "@/components/BackButton";
-import { AdminPageTitle } from "@/components/admin/Title";
-import CardSection from "@/components/admin/CardSection";
-import SvgActions from "@/icons/actions";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import type { Route } from "next";
 
-export default function NewToolPage() {
-  return (
-    <div className="mx-auto container">
-      <BackButton />
+export default function NewActionPage() {
+  const router = useRouter();
 
-      <AdminPageTitle title="Create Action" icon={SvgActions} />
+  useEffect(() => {
+    // Redirect to MCP actions page
+    router.replace("/admin/actions/mcp" as Route);
+  }, [router]);
 
-      <CardSection>
-        <ActionEditor />
-      </CardSection>
-    </div>
-  );
+  return null;
 }

@@ -79,9 +79,14 @@
     "pageTitle": "Search Settings"
   },
   {
-    "name": "Custom Assistants - Actions",
-    "path": "actions",
-    "pageTitle": "Actions"
+    "name": "Custom Assistants - MCP Actions",
+    "path": "actions/mcp",
+    "pageTitle": "MCP Actions"
+  },
+  {
+    "name": "Custom Assistants - OpenAPI Actions",
+    "path": "actions/open-api",
+    "pageTitle": "OpenAPI Actions"
   },
   {
     "name": "User Management - Token Rate Limits",

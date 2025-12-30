@@ -67,9 +67,7 @@ export function InMessageImage({
         onOpenChange={(open) => setFullImageShowing(open)}
       />
 
-      <div
-        className={cn("relative w-full h-full group", shapeContainerClasses)}
-      >
+      <div className={cn("relative group", shapeContainerClasses)}>
         {!imageLoaded && (
           <div className="absolute inset-0 bg-background-tint-02 animate-pulse rounded-lg" />
         )}

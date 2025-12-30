@@ -9,8 +9,7 @@ import { logout } from "@/lib/user";
 import { loadStripe } from "@stripe/stripe-js";
 import { NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY } from "@/lib/constants";
 import Text from "@/refresh-components/texts/Text";
-import SvgLock from "@/icons/lock";
-
+import { SvgLock } from "@opal/icons";
 const fetchResubscriptionSession = async () => {
   const response = await fetch("/api/tenants/create-subscription-session", {
     method: "POST",
@@ -87,21 +86,23 @@ export default function AccessRestricted() {
   return (
     <ErrorPageLayout>
       <div className="flex items-center gap-2">
-        <Text headingH2>Access Restricted</Text>
+        <Text as="p" headingH2>
+          Access Restricted
+        </Text>
         <SvgLock className="stroke-status-error-05 w-[1.5rem] h-[1.5rem]" />
       </div>
 
-      <Text text03>
+      <Text as="p" text03>
         We regret to inform you that your access to Onyx has been temporarily
         suspended due to a lapse in your subscription.
       </Text>
 
-      <Text text03>
+      <Text as="p" text03>
         To reinstate your access and continue benefiting from Onyx&apos;s
         powerful features, please update your payment information.
       </Text>
 
-      <Text text03>
+      <Text as="p" text03>
         If you&apos;re an admin, you can manage your subscription by clicking
         the button below. For other users, please reach out to your
         administrator to address this matter.
@@ -129,9 +130,13 @@ export default function AccessRestricted() {
         </Button>
       </div>
 
-      {error && <Text className="text-status-error-05">{error}</Text>}
+      {error && (
+        <Text as="p" className="text-status-error-05">
+          {error}
+        </Text>
+      )}
 
-      <Text text03>
+      <Text as="p" text03>
         Need help? Join our{" "}
         <a
           className="text-action-link-05 hover:text-action-link-06"

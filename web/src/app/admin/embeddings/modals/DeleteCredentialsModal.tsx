@@ -1,46 +1,51 @@
-import React from "react";
-import { Modal } from "@/components/Modal";
-import Text from "@/components/ui/text";
+import Modal from "@/refresh-components/Modal";
+import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import { Callout } from "@/components/ui/callout";
 import {
   CloudEmbeddingProvider,
   getFormattedProviderName,
 } from "../../../../components/embedding/interfaces";
+import { SvgTrash } from "@opal/icons";
 
-export function DeleteCredentialsModal({
-  modelProvider,
-  onConfirm,
-  onCancel,
-}: {
+export interface DeleteCredentialsModalProps {
   modelProvider: CloudEmbeddingProvider;
   onConfirm: () => void;
   onCancel: () => void;
-}) {
+}
+
+export default function DeleteCredentialsModal({
+  modelProvider,
+  onConfirm,
+  onCancel,
+}: DeleteCredentialsModalProps) {
   return (
-    <Modal
-      width="max-w-3xl"
-      title={`Delete ${getFormattedProviderName(
-        modelProvider.provider_type
-      )} Credentials?`}
-      onOutsideClick={onCancel}
-    >
-      <div className="mb-4">
-        <Text className="text-lg mb-2">
-          You&apos;re about to delete your{" "}
-          {getFormattedProviderName(modelProvider.provider_type)} credentials.
-          Are you sure?
-        </Text>
-        <Callout type="danger" title="Point of No Return" className="mt-4" />
-        <div className="flex mt-8 justify-between">
+    <Modal open onOpenChange={onCancel}>
+      <Modal.Content small>
+        <Modal.Header
+          icon={SvgTrash}
+          title={`Delete ${getFormattedProviderName(
+            modelProvider.provider_type
+          )} Credentials?`}
+          onClose={onCancel}
+        />
+        <Modal.Body>
+          <Text as="p">
+            You&apos;re about to delete your{" "}
+            {getFormattedProviderName(modelProvider.provider_type)} credentials.
+            Are you sure?
+          </Text>
+          <Callout type="danger" title="Point of No Return" />
+        </Modal.Body>
+        <Modal.Footer>
           <Button secondary onClick={onCancel}>
             Keep Credentials
           </Button>
           <Button danger onClick={onConfirm}>
             Delete Credentials
           </Button>
-        </div>
-      </div>
+        </Modal.Footer>
+      </Modal.Content>
     </Modal>
   );
 }

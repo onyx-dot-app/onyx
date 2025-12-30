@@ -20,13 +20,14 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import VespaChunkRequest
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import OpenUrlDocuments
 from onyx.server.query_and_chat.streaming_models import OpenUrlStart
 from onyx.server.query_and_chat.streaming_models import OpenUrlUrls
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.tools.interface import Tool
 from onyx.tools.models import OpenURLToolOverrideKwargs
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.open_url.models import WebContentProvider
 from onyx.tools.tool_implementations.open_url.url_normalization import (
     _default_url_normalizer,
@@ -367,22 +368,32 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             },
         }
 
-    def emit_start(self, turn_index: int) -> None:
+    def emit_start(self, placement: Placement) -> None:
         """Emit start packet to signal tool has started."""
         self.emitter.emit(
             Packet(
-                turn_index=turn_index,
+                placement=placement,
                 obj=OpenUrlStart(),
             )
         )
 
     def run(
         self,
-        turn_index: int,
+        placement: Placement,
         override_kwargs: OpenURLToolOverrideKwargs,
         **llm_kwargs: Any,
     ) -> ToolResponse:
-        """Execute the OpenURL tool using document identifiers when possible."""
+        """Execute the open URL tool to fetch content from the specified URLs.
+
+        Args:
+            placement: The placement info (turn_index and tab_index) for this tool call.
+            override_kwargs: Override arguments including starting citation number
+                and existing citation_mapping to reuse citations for already-cited URLs.
+            **llm_kwargs: Arguments provided by the LLM, including the 'urls' field.
+
+        Returns:
+                ToolResponse containing the fetched content and citation mapping.
+        """ 
         urls = _normalize_string_list(llm_kwargs.get(URLS_FIELD))
 
         if not urls:
@@ -390,7 +401,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
 
         self.emitter.emit(
             Packet(
-                turn_index=turn_index,
+                placement=placement,
                 obj=OpenUrlUrls(urls=urls),
             )
         )
@@ -474,7 +485,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
 
         self.emitter.emit(
             Packet(
-                turn_index=turn_index,
+                placement=placement,
                 obj=OpenUrlDocuments(documents=search_docs),
             )
         )

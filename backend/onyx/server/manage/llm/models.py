@@ -8,6 +8,10 @@ from pydantic import field_validator
 from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import litellm_thinks_model_supports_image_input
 from onyx.llm.utils import model_is_reasoning_model
+from onyx.server.manage.llm.utils import DYNAMIC_LLM_PROVIDERS
+from onyx.server.manage.llm.utils import extract_vendor_from_model_name
+from onyx.server.manage.llm.utils import filter_model_configurations
+from onyx.server.manage.llm.utils import is_reasoning_model
 
 
 if TYPE_CHECKING:
@@ -28,7 +32,6 @@ class TestLLMRequest(BaseModel):
 
     # model level
     default_model_name: str
-    fast_default_model_name: str | None = None
     deployment_name: str | None = None
 
     model_configurations: list["ModelConfigurationUpsertRequest"]
@@ -51,7 +54,6 @@ class LLMProviderDescriptor(BaseModel):
     provider: str
     provider_display_name: str  # Human-friendly name like "Claude (Anthropic)"
     default_model_name: str
-    fast_default_model_name: str | None
     is_default_provider: bool | None
     is_default_vision_provider: bool | None
     default_vision_model: str | None
@@ -65,20 +67,17 @@ class LLMProviderDescriptor(BaseModel):
         from onyx.llm.llm_provider_options import get_provider_display_name
 
         provider = llm_provider_model.provider
+
         return cls(
             name=llm_provider_model.name,
             provider=provider,
             provider_display_name=get_provider_display_name(provider),
             default_model_name=llm_provider_model.default_model_name,
-            fast_default_model_name=llm_provider_model.fast_default_model_name,
             is_default_provider=llm_provider_model.is_default_provider,
             is_default_vision_provider=llm_provider_model.is_default_vision_provider,
             default_vision_model=llm_provider_model.default_vision_model,
-            model_configurations=list(
-                ModelConfigurationView.from_model(
-                    model_configuration, llm_provider_model.provider
-                )
-                for model_configuration in llm_provider_model.model_configurations
+            model_configurations=filter_model_configurations(
+                llm_provider_model.model_configurations, provider
             ),
         )
 
@@ -91,7 +90,6 @@ class LLMProvider(BaseModel):
     api_version: str | None = None
     custom_config: dict[str, str] | None = None
     default_model_name: str
-    fast_default_model_name: str | None = None
     is_public: bool = True
     groups: list[int] = Field(default_factory=list)
     personas: list[int] = Field(default_factory=list)
@@ -137,16 +135,17 @@ class LLMProviderView(LLMProvider):
         except Exception:
             personas = []
 
+        provider = llm_provider_model.provider
+
         return cls(
             id=llm_provider_model.id,
             name=llm_provider_model.name,
-            provider=llm_provider_model.provider,
+            provider=provider,
             api_key=llm_provider_model.api_key,
             api_base=llm_provider_model.api_base,
             api_version=llm_provider_model.api_version,
             custom_config=llm_provider_model.custom_config,
             default_model_name=llm_provider_model.default_model_name,
-            fast_default_model_name=llm_provider_model.fast_default_model_name,
             is_default_provider=llm_provider_model.is_default_provider,
             is_default_vision_provider=llm_provider_model.is_default_vision_provider,
             default_vision_model=llm_provider_model.default_vision_model,
@@ -154,11 +153,8 @@ class LLMProviderView(LLMProvider):
             groups=groups,
             personas=personas,
             deployment_name=llm_provider_model.deployment_name,
-            model_configurations=list(
-                ModelConfigurationView.from_model(
-                    model_configuration, llm_provider_model.provider
-                )
-                for model_configuration in llm_provider_model.model_configurations
+            model_configurations=filter_model_configurations(
+                llm_provider_model.model_configurations, provider
             ),
         )
 
@@ -168,6 +164,7 @@ class ModelConfigurationUpsertRequest(BaseModel):
     is_visible: bool
     max_input_tokens: int | None = None
     supports_image_input: bool | None = None
+    display_name: str | None = None  # For dynamic providers, from source API
 
     @classmethod
     def from_model(
@@ -178,6 +175,7 @@ class ModelConfigurationUpsertRequest(BaseModel):
             is_visible=model_configuration_model.is_visible,
             max_input_tokens=model_configuration_model.max_input_tokens,
             supports_image_input=model_configuration_model.supports_image_input,
+            display_name=model_configuration_model.display_name,
         )
 
 
@@ -199,13 +197,41 @@ class ModelConfigurationView(BaseModel):
         model_configuration_model: "ModelConfigurationModel",
         provider_name: str,
     ) -> "ModelConfigurationView":
+        # For dynamic providers (OpenRouter, Bedrock, Ollama), use the display_name
+        # stored in DB from the source API. Skip LiteLLM parsing entirely.
+        if (
+            provider_name in DYNAMIC_LLM_PROVIDERS
+            and model_configuration_model.display_name
+        ):
+            # Extract vendor from model name for grouping (e.g., "Anthropic", "OpenAI")
+            vendor = extract_vendor_from_model_name(
+                model_configuration_model.name, provider_name
+            )
 
+            return cls(
+                name=model_configuration_model.name,
+                is_visible=model_configuration_model.is_visible,
+                max_input_tokens=model_configuration_model.max_input_tokens,
+                supports_image_input=(
+                    model_configuration_model.supports_image_input or False
+                ),
+                # Infer reasoning support from model name/display name
+                supports_reasoning=is_reasoning_model(
+                    model_configuration_model.name,
+                    model_configuration_model.display_name or "",
+                ),
+                display_name=model_configuration_model.display_name,
+                provider_display_name=None,  # Not needed for dynamic providers
+                vendor=vendor,
+                version=None,
+                region=None,
+            )
+
+        # For static providers (OpenAI, Anthropic, etc.), use LiteLLM enrichments
         from onyx.llm.model_name_parser import parse_litellm_model_name
 
         # Parse the model name to get display information
         # Include provider prefix if not already present (enrichments use full keys like "vertex_ai/...")
-        # For OpenRouter, model names are like "anthropic/claude-3-5-haiku" but enrichment keys
-        # are "openrouter/anthropic/claude-3-5-haiku", so we need to prepend the provider
         model_name = model_configuration_model.name
         if provider_name and not model_name.startswith(f"{provider_name}/"):
             model_name = f"{provider_name}/{model_name}"
@@ -267,13 +293,22 @@ class BedrockModelsRequest(BaseModel):
     provider_name: str | None = None  # Optional: to save models to existing provider
 
 
+class BedrockFinalModelResponse(BaseModel):
+    name: str  # Model ID (e.g., "anthropic.claude-3-5-sonnet-20241022-v2:0")
+    display_name: str  # Human-readable name from AWS (e.g., "Claude 3.5 Sonnet v2")
+    max_input_tokens: int  # From LiteLLM, our mapping, or default 32000
+    supports_image_input: bool
+
+
 class OllamaModelsRequest(BaseModel):
     api_base: str
+    provider_name: str | None = None  # Optional: to save models to existing provider
 
 
 class OllamaFinalModelResponse(BaseModel):
     name: str
-    max_input_tokens: int
+    display_name: str  # Generated from model name (e.g., "llama3:7b" → "Llama 3 7B")
+    max_input_tokens: int | None  # From Ollama API or None if unavailable
     supports_image_input: bool
 
 
@@ -296,6 +331,7 @@ class OllamaModelDetails(BaseModel):
 class OpenRouterModelsRequest(BaseModel):
     api_base: str
     api_key: str
+    provider_name: str | None = None  # Optional: to save models to existing provider
 
 
 class OpenRouterModelDetails(BaseModel):
@@ -305,8 +341,11 @@ class OpenRouterModelDetails(BaseModel):
     model_config = {"extra": "ignore"}
 
     id: str
-    context_length: int
-    architecture: dict[str, Any]  # Contains 'input_modalities' key
+    # OpenRouter API returns "name" but we use "display_name" for consistency
+    display_name: str = Field(alias="name")
+    # context_length may be missing or 0 for some models
+    context_length: int | None = None
+    architecture: dict[str, Any] = {}  # Contains 'input_modalities' key
 
     @property
     def supports_image_input(self) -> bool:
@@ -320,6 +359,9 @@ class OpenRouterModelDetails(BaseModel):
 
 
 class OpenRouterFinalModelResponse(BaseModel):
-    name: str
-    max_input_tokens: int
+    name: str  # Model ID (e.g., "openai/gpt-5-pro")
+    display_name: str  # Human-readable name from OpenRouter API
+    max_input_tokens: (
+        int | None
+    )  # From OpenRouter API context_length (may be missing for some models)
     supports_image_input: bool

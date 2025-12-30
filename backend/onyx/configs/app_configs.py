@@ -7,10 +7,8 @@ from typing import cast
 
 from onyx.auth.schemas import AuthBackend
 from onyx.configs.constants import AuthType
-from onyx.configs.constants import DocumentIndexType
 from onyx.configs.constants import QueryHistoryType
 from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
-from onyx.prompts.image_analysis import DEFAULT_IMAGE_ANALYSIS_SYSTEM_PROMPT
 from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT
 from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT
 
@@ -24,6 +22,12 @@ APP_PORT = 8080
 # prefix from requests directed towards the API server. In these cases, set this to `/api`
 APP_API_PREFIX = os.environ.get("API_PREFIX", "")
 
+# Whether to send user metadata (user_id/email and session_id) to the LLM provider.
+# Disabled by default.
+SEND_USER_METADATA_TO_LLM_PROVIDER = (
+    os.environ.get("SEND_USER_METADATA_TO_LLM_PROVIDER", "")
+).lower() == "true"
+
 #####
 # User Facing Features Configs
 #####
@@ -31,7 +35,6 @@ BLURB_SIZE = 128  # Number Encoder Tokens included in the chunk blurb
 GENERATIVE_MODEL_ACCESS_CHECK_FREQ = int(
     os.environ.get("GENERATIVE_MODEL_ACCESS_CHECK_FREQ") or 86400
 )  # 1 day
-DISABLE_GENERATIVE_AI = os.environ.get("DISABLE_GENERATIVE_AI", "").lower() == "true"
 
 # Controls whether users can use User Knowledge (personal documents) in assistants
 DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() == "true"
@@ -183,10 +186,6 @@ TRACK_EXTERNAL_IDP_EXPIRY = (
 # DB Configs
 #####
 DOCUMENT_INDEX_NAME = "danswer_index"
-# Vespa is now the default document index store for both keyword and vector
-DOCUMENT_INDEX_TYPE = os.environ.get(
-    "DOCUMENT_INDEX_TYPE", DocumentIndexType.COMBINED.value
-)
 VESPA_HOST = os.environ.get("VESPA_HOST") or "localhost"
 # NOTE: this is used if and only if the vespa config server is accessible via a
 # different host than the main vespa application
@@ -198,10 +197,6 @@ VESPA_NUM_ATTEMPTS_ON_STARTUP = int(os.environ.get("NUM_RETRIES_ON_STARTUP") or 
 
 VESPA_CLOUD_URL = os.environ.get("VESPA_CLOUD_URL", "")
 
-# The default below is for dockerized deployment
-VESPA_DEPLOYMENT_ZIP = (
-    os.environ.get("VESPA_DEPLOYMENT_ZIP") or "/app/onyx/vespa-app.zip"
-)
 VESPA_CLOUD_CERT_PATH = os.environ.get("VESPA_CLOUD_CERT_PATH")
 VESPA_CLOUD_KEY_PATH = os.environ.get("VESPA_CLOUD_KEY_PATH")
 
@@ -310,63 +305,64 @@ CELERY_RESULT_EXPIRES = int(os.environ.get("CELERY_RESULT_EXPIRES", 86400))  # s
 
 # https://docs.celeryq.dev/en/stable/userguide/configuration.html#broker-pool-limit
 # Setting to None may help when there is a proxy in the way closing idle connections
-CELERY_BROKER_POOL_LIMIT_DEFAULT = 10
+_CELERY_BROKER_POOL_LIMIT_DEFAULT = 10
 try:
     CELERY_BROKER_POOL_LIMIT = int(
-        os.environ.get("CELERY_BROKER_POOL_LIMIT", CELERY_BROKER_POOL_LIMIT_DEFAULT)
+        os.environ.get("CELERY_BROKER_POOL_LIMIT", _CELERY_BROKER_POOL_LIMIT_DEFAULT)
     )
 except ValueError:
-    CELERY_BROKER_POOL_LIMIT = CELERY_BROKER_POOL_LIMIT_DEFAULT
+    CELERY_BROKER_POOL_LIMIT = _CELERY_BROKER_POOL_LIMIT_DEFAULT
 
-CELERY_WORKER_LIGHT_CONCURRENCY_DEFAULT = 24
+_CELERY_WORKER_LIGHT_CONCURRENCY_DEFAULT = 24
 try:
     CELERY_WORKER_LIGHT_CONCURRENCY = int(
         os.environ.get(
-            "CELERY_WORKER_LIGHT_CONCURRENCY", CELERY_WORKER_LIGHT_CONCURRENCY_DEFAULT
+            "CELERY_WORKER_LIGHT_CONCURRENCY",
+            _CELERY_WORKER_LIGHT_CONCURRENCY_DEFAULT,
         )
     )
 except ValueError:
-    CELERY_WORKER_LIGHT_CONCURRENCY = CELERY_WORKER_LIGHT_CONCURRENCY_DEFAULT
+    CELERY_WORKER_LIGHT_CONCURRENCY = _CELERY_WORKER_LIGHT_CONCURRENCY_DEFAULT
 
-CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER_DEFAULT = 8
+_CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER_DEFAULT = 8
 try:
     CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER = int(
         os.environ.get(
             "CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER",
-            CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER_DEFAULT,
+            _CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER_DEFAULT,
         )
     )
 except ValueError:
     CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER = (
-        CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER_DEFAULT
+        _CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER_DEFAULT
     )
 
-CELERY_WORKER_DOCPROCESSING_CONCURRENCY_DEFAULT = 6
+_CELERY_WORKER_DOCPROCESSING_CONCURRENCY_DEFAULT = 6
 try:
     env_value = os.environ.get("CELERY_WORKER_DOCPROCESSING_CONCURRENCY")
     if not env_value:
         env_value = os.environ.get("NUM_INDEXING_WORKERS")
 
     if not env_value:
-        env_value = str(CELERY_WORKER_DOCPROCESSING_CONCURRENCY_DEFAULT)
+        env_value = str(_CELERY_WORKER_DOCPROCESSING_CONCURRENCY_DEFAULT)
     CELERY_WORKER_DOCPROCESSING_CONCURRENCY = int(env_value)
 except ValueError:
     CELERY_WORKER_DOCPROCESSING_CONCURRENCY = (
-        CELERY_WORKER_DOCPROCESSING_CONCURRENCY_DEFAULT
+        _CELERY_WORKER_DOCPROCESSING_CONCURRENCY_DEFAULT
     )
 
-CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT = 1
+_CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT = 1
 try:
     env_value = os.environ.get("CELERY_WORKER_DOCFETCHING_CONCURRENCY")
     if not env_value:
         env_value = os.environ.get("NUM_DOCFETCHING_WORKERS")
 
     if not env_value:
-        env_value = str(CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT)
+        env_value = str(_CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT)
     CELERY_WORKER_DOCFETCHING_CONCURRENCY = int(env_value)
 except ValueError:
     CELERY_WORKER_DOCFETCHING_CONCURRENCY = (
-        CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT
+        _CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT
     )
 
 CELERY_WORKER_PRIMARY_CONCURRENCY = int(
@@ -464,11 +460,6 @@ CONFLUENCE_CONNECTOR_LABELS_TO_SKIP = [
     if ignored_tag
 ]
 
-# Avoid to get archived pages
-CONFLUENCE_CONNECTOR_INDEX_ARCHIVED_PAGES = (
-    os.environ.get("CONFLUENCE_CONNECTOR_INDEX_ARCHIVED_PAGES", "").lower() == "true"
-)
-
 # Attachments exceeding this size will not be retrieved (in bytes)
 CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD = int(
     os.environ.get("CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD", 10 * 1024 * 1024)
@@ -536,6 +527,11 @@ GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD", 10 * 1024 * 1024)
 )
 
+# Default size threshold for Drupal Wiki attachments (10MB)
+DRUPAL_WIKI_ATTACHMENT_SIZE_THRESHOLD = int(
+    os.environ.get("DRUPAL_WIKI_ATTACHMENT_SIZE_THRESHOLD", 10 * 1024 * 1024)
+)
+
 # Default size threshold for SharePoint files (20MB)
 SHAREPOINT_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("SHAREPOINT_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
@@ -578,13 +574,15 @@ LINEAR_CLIENT_SECRET = os.getenv("LINEAR_CLIENT_SECRET")
 SLACK_NUM_THREADS = int(os.getenv("SLACK_NUM_THREADS") or 8)
 MAX_SLACK_QUERY_EXPANSIONS = int(os.environ.get("MAX_SLACK_QUERY_EXPANSIONS", "5"))
 
-DASK_JOB_CLIENT_ENABLED = (
-    os.environ.get("DASK_JOB_CLIENT_ENABLED", "").lower() == "true"
+# Slack federated search thread context settings
+# Batch size for fetching thread context (controls concurrent API calls per batch)
+SLACK_THREAD_CONTEXT_BATCH_SIZE = int(
+    os.environ.get("SLACK_THREAD_CONTEXT_BATCH_SIZE", "5")
 )
-EXPERIMENTAL_CHECKPOINTING_ENABLED = (
-    os.environ.get("EXPERIMENTAL_CHECKPOINTING_ENABLED", "").lower() == "true"
+# Maximum messages to fetch thread context for (top N by relevance get full context)
+MAX_SLACK_THREAD_CONTEXT_MESSAGES = int(
+    os.environ.get("MAX_SLACK_THREAD_CONTEXT_MESSAGES", "5")
 )
-
 
 # TestRail specific configs
 TESTRAIL_BASE_URL = os.environ.get("TESTRAIL_BASE_URL", "")
@@ -596,7 +594,6 @@ LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE = (
     == "true"
 )
 
-PRUNING_DISABLED = -1
 DEFAULT_PRUNING_FREQ = 60 * 60 * 24  # Once a day
 
 ALLOW_SIMULTANEOUS_PRUNING = (
@@ -648,10 +645,6 @@ LARGE_CHUNK_RATIO = 4
 # Include the document level metadata in each chunk. If the metadata is too long, then it is thrown out
 # We don't want the metadata to overwhelm the actual contents of the chunk
 SKIP_METADATA_IN_CHUNK = os.environ.get("SKIP_METADATA_IN_CHUNK", "").lower() == "true"
-# Timeout to wait for job's last update before killing it, in hours
-CLEANUP_INDEXING_JOBS_TIMEOUT = int(
-    os.environ.get("CLEANUP_INDEXING_JOBS_TIMEOUT") or 3
-)
 
 # The indexer will warn in the logs whenver a document exceeds this threshold (in bytes)
 INDEXING_SIZE_WARNING_THRESHOLD = int(
@@ -667,10 +660,6 @@ INDEXING_TRACER_INTERVAL = int(os.environ.get("INDEXING_TRACER_INTERVAL") or 0)
 INDEXING_EMBEDDING_MODEL_NUM_THREADS = int(
     os.environ.get("INDEXING_EMBEDDING_MODEL_NUM_THREADS") or 8
 )
-
-# During an indexing attempt, specifies the number of batches which are allowed to
-# exception without aborting the attempt.
-INDEXING_EXCEPTION_LIMIT = int(os.environ.get("INDEXING_EXCEPTION_LIMIT") or 0)
 
 # Maximum number of user file connector credential pairs to index in a single batch
 # Setting this number too high may overload the indexing process
@@ -693,6 +682,15 @@ AVERAGE_SUMMARY_EMBEDDINGS = (
 
 MAX_TOKENS_FOR_FULL_INCLUSION = 4096
 
+# The intent was to have this be configurable per query, but I don't think any
+# codepath was actually configuring this, so for the migrated Vespa interface
+# we'll just use the default value, but also have it be configurable by env var.
+RECENCY_BIAS_MULTIPLIER = float(os.environ.get("RECENCY_BIAS_MULTIPLIER") or 1.0)
+
+# Should match the rerank-count value set in
+# backend/onyx/document_index/vespa/app_config/schemas/danswer_chunk.sd.jinja.
+RERANK_COUNT = int(os.environ.get("RERANK_COUNT") or 1000)
+
 
 #####
 # Tool Configs
@@ -713,21 +711,9 @@ CODE_INTERPRETER_MAX_OUTPUT_LENGTH = int(
 # Miscellaneous
 #####
 JOB_TIMEOUT = 60 * 60 * 6  # 6 hours default
-# used to allow the background indexing jobs to use a different embedding
-# model server than the API server
-CURRENT_PROCESS_IS_AN_INDEXING_JOB = (
-    os.environ.get("CURRENT_PROCESS_IS_AN_INDEXING_JOB", "").lower() == "true"
-)
-# Sets LiteLLM to verbose logging
-LOG_ALL_MODEL_INTERACTIONS = (
-    os.environ.get("LOG_ALL_MODEL_INTERACTIONS", "").lower() == "true"
-)
 # Logs Onyx only model interactions like prompts, responses, messages etc.
 LOG_ONYX_MODEL_INTERACTIONS = (
     os.environ.get("LOG_ONYX_MODEL_INTERACTIONS", "").lower() == "true"
-)
-LOG_INDIVIDUAL_MODEL_TOKENS = (
-    os.environ.get("LOG_INDIVIDUAL_MODEL_TOKENS", "").lower() == "true"
 )
 # If set to `true` will enable additional logs about Vespa query performance
 # (time spent on finding the right docs + time spent fetching summaries from disk)
@@ -759,10 +745,6 @@ BRAINTRUST_MAX_CONCURRENCY = int(os.environ.get("BRAINTRUST_MAX_CONCURRENCY") or
 LANGFUSE_SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY") or ""
 LANGFUSE_PUBLIC_KEY = os.environ.get("LANGFUSE_PUBLIC_KEY") or ""
 
-TOKEN_BUDGET_GLOBALLY_ENABLED = (
-    os.environ.get("TOKEN_BUDGET_GLOBALLY_ENABLED", "").lower() == "true"
-)
-
 # Defined custom query/answer conditions to validate the query and the LLM answer.
 # Format: list of strings
 CUSTOM_ANSWER_VALIDITY_CONDITIONS = json.loads(
@@ -792,14 +774,6 @@ except json.JSONDecodeError:
 
 # LLM Model Update API endpoint
 LLM_MODEL_UPDATE_API_URL = os.environ.get("LLM_MODEL_UPDATE_API_URL")
-
-# Federated Search Configs
-MAX_FEDERATED_SECTIONS = int(
-    os.environ.get("MAX_FEDERATED_SECTIONS", "5")
-)  # max no. of federated sections to always keep
-MAX_FEDERATED_CHUNKS = int(
-    os.environ.get("MAX_FEDERATED_CHUNKS", "5")
-)  # max no. of chunks to retrieve per federated connector
 
 #####
 # Enterprise Edition Configs
@@ -855,8 +829,6 @@ OAUTH_CONFLUENCE_CLOUD_CLIENT_ID = os.environ.get(
 OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET = os.environ.get(
     "OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET", ""
 )
-OAUTH_JIRA_CLOUD_CLIENT_ID = os.environ.get("OAUTH_JIRA_CLOUD_CLIENT_ID", "")
-OAUTH_JIRA_CLOUD_CLIENT_SECRET = os.environ.get("OAUTH_JIRA_CLOUD_CLIENT_SECRET", "")
 OAUTH_GOOGLE_DRIVE_CLIENT_ID = os.environ.get("OAUTH_GOOGLE_DRIVE_CLIENT_ID", "")
 OAUTH_GOOGLE_DRIVE_CLIENT_SECRET = os.environ.get(
     "OAUTH_GOOGLE_DRIVE_CLIENT_SECRET", ""
@@ -900,8 +872,6 @@ INTEGRATION_TESTS_MODE = os.environ.get("INTEGRATION_TESTS_MODE", "").lower() ==
 
 MOCK_CONNECTOR_FILE_PATH = os.environ.get("MOCK_CONNECTOR_FILE_PATH")
 
-TEST_ENV = os.environ.get("TEST_ENV", "").lower() == "true"
-
 # Set to true to mock LLM responses for testing purposes
 MOCK_LLM_RESPONSE = (
     os.environ.get("MOCK_LLM_RESPONSE") if os.environ.get("MOCK_LLM_RESPONSE") else None
@@ -924,15 +894,6 @@ IMAGE_SUMMARIZATION_SYSTEM_PROMPT = os.environ.get(
 IMAGE_SUMMARIZATION_USER_PROMPT = os.environ.get(
     "IMAGE_SUMMARIZATION_USER_PROMPT",
     DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT,
-)
-
-IMAGE_ANALYSIS_SYSTEM_PROMPT = os.environ.get(
-    "IMAGE_ANALYSIS_SYSTEM_PROMPT",
-    DEFAULT_IMAGE_ANALYSIS_SYSTEM_PROMPT,
-)
-
-DISABLE_AUTO_AUTH_REFRESH = (
-    os.environ.get("DISABLE_AUTO_AUTH_REFRESH", "").lower() == "true"
 )
 
 # Knowledge Graph Read Only User Configuration

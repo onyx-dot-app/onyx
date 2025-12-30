@@ -508,7 +508,6 @@
       ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
-      "stopOnEntry": true,
       "presentation": {
         "group": "3"
       }
@@ -554,10 +553,10 @@
       "name": "Install Python Requirements",
       "type": "node",
       "request": "launch",
-      "runtimeExecutable": "bash",
+      "runtimeExecutable": "uv",
       "runtimeArgs": [
-        "-c",
-        "pip install -r backend/requirements/default.txt && pip install -r backend/requirements/dev.txt && pip install -r backend/requirements/ee.txt && pip install -r backend/requirements/model_server.txt"
+        "sync",
+        "--all-extras"
       ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",

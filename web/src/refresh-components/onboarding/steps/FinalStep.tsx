@@ -1,10 +1,11 @@
 import { memo } from "react";
 import Link from "next/link";
+import type { Route } from "next";
 import Button from "@/refresh-components/buttons/Button";
-import SvgExternalLink from "@/icons/external-link";
 import Text from "@/refresh-components/texts/Text";
 import { FINAL_SETUP_CONFIG } from "../constants";
 import { FinalStepItemProps } from "../types";
+import { SvgExternalLink } from "@opal/icons";
 
 const FinalStepItemInner = ({
   title,
@@ -25,10 +26,10 @@ const FinalStepItemInner = ({
           <Icon className="w-4 h-4 stroke-text-03" />
         </div>
         <div>
-          <Text text04 mainUiAction>
+          <Text as="p" text04 mainUiAction>
             {title}
           </Text>
-          <Text text03 secondaryBody>
+          <Text as="p" text03 secondaryBody>
             {description}
           </Text>
         </div>
@@ -39,12 +40,19 @@ const FinalStepItemInner = ({
     </>
   );
 
+  const className =
+    "flex justify-between h-full w-full p-1 rounded-16 border border-border-01 bg-background-tint-01 hover:bg-background-tint-02 transition-colors group";
+
+  if (isExternalLink) {
+    return (
+      <a href={buttonHref} className={className} {...linkProps}>
+        {content}
+      </a>
+    );
+  }
+
   return (
-    <Link
-      href={buttonHref}
-      className="flex justify-between h-full w-full p-1 rounded-16 border border-border-01 bg-background-tint-01 hover:bg-background-tint-02 transition-colors group"
-      {...linkProps}
-    >
+    <Link href={buttonHref as Route} className={className} {...linkProps}>
       {content}
     </Link>
   );

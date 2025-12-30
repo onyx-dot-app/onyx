@@ -1,16 +1,17 @@
 "use client";
 
 import { useContext, useState } from "react";
-import { Modal } from "@/components/Modal";
+import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import { SourceIcon } from "@/components/SourceIcon";
 import { ValidSources } from "@/lib/types";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { getSourceMetadata } from "@/lib/sources";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
 import Text from "@/refresh-components/texts/Text";
-
+import { SvgLink } from "@opal/icons";
 export interface FederatedConnectorOAuthStatus {
   federated_connector_id: number;
   source: string;
@@ -114,7 +115,7 @@ function useFederatedOauthModal() {
   };
 }
 
-export function FederatedOAuthModal() {
+export default function FederatedOAuthModal() {
   const settings = useContext(SettingsContext);
   const router = useRouter();
 
@@ -140,7 +141,7 @@ export function FederatedOAuthModal() {
 
   const handleAuthorize = (authorizeUrl: string) => {
     // Redirect to OAuth URL in the same window
-    router.push(authorizeUrl);
+    router.push(authorizeUrl as Route);
   };
 
   const applicationName =
@@ -148,38 +149,35 @@ export function FederatedOAuthModal() {
 
   if (skipCount >= MAX_SKIP_COUNT) {
     return (
-      <Modal
-        onOutsideClick={() => {}}
-        hideCloseButton={true}
-        width="w-full max-w-xl"
-      >
-        <div className="space-y-4 mt-4">
-          <div className="text-center">
-            <Text headingH3>Heads Up!</Text>
-            <Text>
+      <Modal open>
+        <Modal.Content small>
+          <Modal.Header icon={SvgLink} title="Heads Up!" />
+          <Modal.Body>
+            <Text as="p">
               You can always connect your apps later by going to the{" "}
               <strong>User Settings</strong> menu (click your profile icon) and
               selecting <strong>Connectors</strong>.
             </Text>
-          </div>
-
-          <div className="flex justify-center pt-2">
-            <Button onClick={onSkip}>Got it</Button>
-          </div>
-        </div>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button onClick={onSkip} className="w-full">
+              Got it
+            </Button>
+          </Modal.Footer>
+        </Modal.Content>
       </Modal>
     );
   }
 
   return (
-    <Modal hideCloseButton={true} width="w-full max-w-xl">
-      <div className="space-y-4 mt-4">
-        <Text>
-          Improve answer quality by letting {applicationName} search all your
-          connected data.
-        </Text>
-
-        <div className="space-y-3">
+    <Modal open>
+      <Modal.Content small>
+        <Modal.Header
+          icon={SvgLink}
+          title="Connect Your Apps"
+          description={`Improve answer quality by letting ${applicationName} search all your connected data.`}
+        />
+        <Modal.Body>
           {needsAuth.map((connector) => {
             const sourceMetadata = getSourceMetadata(
               connector.source as ValidSources
@@ -212,15 +210,13 @@ export function FederatedOAuthModal() {
               </div>
             );
           })}
-        </div>
-
-        {/* Add visual separation and center modal actions */}
-        <div className="pt-4 mt-2">
-          <div className="flex justify-center gap-3">
-            <Button onClick={onSkip}>Skip for now</Button>
-          </div>
-        </div>
-      </div>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button onClick={onSkip} className="w-full">
+            Skip for now
+          </Button>
+        </Modal.Footer>
+      </Modal.Content>
     </Modal>
   );
 }

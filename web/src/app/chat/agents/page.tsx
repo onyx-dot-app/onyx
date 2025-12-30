@@ -1,13 +1,10 @@
 import AgentsPage from "@/refresh-pages/AgentsPage";
-import AppPageLayout from "@/layouts/AppPageLayout";
-import { fetchHeaderDataSS } from "@/lib/headers/fetchHeaderDataSS";
+import * as AppLayouts from "@/layouts/app-layouts";
 
 export default async function Page() {
-  const headerData = await fetchHeaderDataSS();
-
   return (
-    <AppPageLayout {...headerData}>
+    <AppLayouts.Root>
       <AgentsPage />
-    </AppPageLayout>
+    </AppLayouts.Root>
   );
 }

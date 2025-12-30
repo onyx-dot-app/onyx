@@ -1,8 +1,6 @@
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
-import SvgChevronLeft from "@/icons/chevron-left";
-import SvgChevronRight from "@/icons/chevron-right";
-
+import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
 const DISABLED_MESSAGE = "Wait for agent message to complete";
 
 interface MessageSwitcherProps {
@@ -43,13 +41,13 @@ export default function MessageSwitcher({
       />
 
       <div className="flex flex-row items-center justify-center">
-        <Text text03 mainUiAction>
+        <Text as="p" text03 mainUiAction>
           {currentPage}
         </Text>
-        <Text text03 mainUiAction>
+        <Text as="p" text03 mainUiAction>
           /
         </Text>
-        <Text text03 mainUiAction>
+        <Text as="p" text03 mainUiAction>
           {totalPages}
         </Text>
       </div>

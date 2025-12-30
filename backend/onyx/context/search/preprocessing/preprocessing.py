@@ -44,6 +44,7 @@ def query_analysis(query: str) -> tuple[bool, list[str]]:
     return analysis_model.predict(query)
 
 
+# TODO: This is unused code.
 @log_function_time(print_only=True)
 def retrieval_preprocessing(
     search_request: SearchRequest,

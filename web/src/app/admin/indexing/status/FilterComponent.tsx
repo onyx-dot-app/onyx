@@ -15,8 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { AccessType, ValidStatuses } from "@/lib/types";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgFilter from "@/icons/filter";
-
+import { SvgFilter } from "@opal/icons";
 export interface FilterOptions {
   accessType: AccessType[] | null;
   docsCountFilter: {

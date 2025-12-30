@@ -51,12 +51,10 @@ services:
       - QA_TIMEOUT=${QA_TIMEOUT:-}
       - MAX_CHUNKS_FED_TO_CHAT=${MAX_CHUNKS_FED_TO_CHAT:-}
       - DISABLE_LLM_QUERY_REPHRASE=${DISABLE_LLM_QUERY_REPHRASE:-}
-      - DISABLE_GENERATIVE_AI=${DISABLE_GENERATIVE_AI:-}
       - DISABLE_LITELLM_STREAMING=${DISABLE_LITELLM_STREAMING:-}
       - LITELLM_EXTRA_HEADERS=${LITELLM_EXTRA_HEADERS:-}
       - DISABLE_LLM_DOC_RELEVANCE=${DISABLE_LLM_DOC_RELEVANCE:-}
       - GEN_AI_API_KEY=${GEN_AI_API_KEY:-}
-      - TOKEN_BUDGET_GLOBALLY_ENABLED=${TOKEN_BUDGET_GLOBALLY_ENABLED:-}
       # Query Options
       - DOC_TIME_DECAY=${DOC_TIME_DECAY:-}
       - HYBRID_ALPHA=${HYBRID_ALPHA:-}
@@ -84,9 +82,7 @@ services:
       - DISABLE_RERANK_FOR_STREAMING=${DISABLE_RERANK_FOR_STREAMING:-}
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
       - MODEL_SERVER_PORT=${MODEL_SERVER_PORT:-}
-      - LOG_ALL_MODEL_INTERACTIONS=${LOG_ALL_MODEL_INTERACTIONS:-}
       - LOG_ONYX_MODEL_INTERACTIONS=${LOG_ONYX_MODEL_INTERACTIONS:-}
-      - LOG_INDIVIDUAL_MODEL_TOKENS=${LOG_INDIVIDUAL_MODEL_TOKENS:-}
       - LOG_VESPA_TIMING_INFORMATION=${LOG_VESPA_TIMING_INFORMATION:-}
       - LOG_ENDPOINT_LATENCY=${LOG_ENDPOINT_LATENCY:-}
       - LOG_POSTGRES_LATENCY=${LOG_POSTGRES_LATENCY:-}
@@ -161,7 +157,6 @@ services:
       - QA_TIMEOUT=${QA_TIMEOUT:-}
       - MAX_CHUNKS_FED_TO_CHAT=${MAX_CHUNKS_FED_TO_CHAT:-}
       - DISABLE_LLM_QUERY_REPHRASE=${DISABLE_LLM_QUERY_REPHRASE:-}
-      - DISABLE_GENERATIVE_AI=${DISABLE_GENERATIVE_AI:-}
       - GENERATIVE_MODEL_ACCESS_CHECK_FREQ=${GENERATIVE_MODEL_ACCESS_CHECK_FREQ:-}
       - DISABLE_LITELLM_STREAMING=${DISABLE_LITELLM_STREAMING:-}
       - LITELLM_EXTRA_HEADERS=${LITELLM_EXTRA_HEADERS:-}
@@ -202,9 +197,7 @@ services:
       - VESPA_SEARCHER_THREADS=${VESPA_SEARCHER_THREADS:-}
       - ENABLED_CONNECTOR_TYPES=${ENABLED_CONNECTOR_TYPES:-}
       - DISABLE_INDEX_UPDATE_ON_SWAP=${DISABLE_INDEX_UPDATE_ON_SWAP:-}
-      - DASK_JOB_CLIENT_ENABLED=${DASK_JOB_CLIENT_ENABLED:-}
       - CONTINUE_ON_CONNECTOR_FAILURE=${CONTINUE_ON_CONNECTOR_FAILURE:-}
-      - EXPERIMENTAL_CHECKPOINTING_ENABLED=${EXPERIMENTAL_CHECKPOINTING_ENABLED:-}
       - CONFLUENCE_CONNECTOR_LABELS_TO_SKIP=${CONFLUENCE_CONNECTOR_LABELS_TO_SKIP:-}
       - JIRA_CONNECTOR_LABELS_TO_SKIP=${JIRA_CONNECTOR_LABELS_TO_SKIP:-}
       - WEB_CONNECTOR_VALIDATE_URLS=${WEB_CONNECTOR_VALIDATE_URLS:-}
@@ -240,10 +233,8 @@ services:
       # Leave this on pretty please? Nothing sensitive is collected!
       - DISABLE_TELEMETRY=${DISABLE_TELEMETRY:-}
       - LOG_LEVEL=${LOG_LEVEL:-info} # Set to debug to get more fine-grained logs
-      - LOG_ALL_MODEL_INTERACTIONS=${LOG_ALL_MODEL_INTERACTIONS:-} # LiteLLM Verbose Logging
       # Log all of Onyx prompts and interactions with the LLM
       - LOG_ONYX_MODEL_INTERACTIONS=${LOG_ONYX_MODEL_INTERACTIONS:-}
-      - LOG_INDIVIDUAL_MODEL_TOKENS=${LOG_INDIVIDUAL_MODEL_TOKENS:-}
       - LOG_VESPA_TIMING_INFORMATION=${LOG_VESPA_TIMING_INFORMATION:-}
 
       # Analytics Configs
@@ -303,46 +294,47 @@ services:
       - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${ENABLE_PAID_ENTERPRISE_EDITION_FEATURES:-false}
       - NEXT_PUBLIC_CUSTOM_REFRESH_URL=${NEXT_PUBLIC_CUSTOM_REFRESH_URL:-}
 
-  mcp_server:
-    image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
-    build:
-      context: ../../backend
-      dockerfile: Dockerfile
-    command: >
-      /bin/sh -c "if [ \"${MCP_SERVER_ENABLED:-}\" != \"True\" ] && [ \"${MCP_SERVER_ENABLED:-}\" != \"true\" ]; then
-        echo 'MCP server is disabled (MCP_SERVER_ENABLED=false), skipping...';
-        exit 0;
-      else
-        exec python -m onyx.mcp_server_main;
-      fi"
-    ports:
-      - "8090:8090"
-    env_file:
-      - path: .env
-        required: false
-    depends_on:
-      - relational_db
-      - cache
-    restart: "no"
-    environment:
-      - POSTGRES_HOST=relational_db
-      - REDIS_HOST=cache
-      # MCP Server Configuration
-      - MCP_SERVER_ENABLED=${MCP_SERVER_ENABLED:-false}
-      - MCP_SERVER_PORT=${MCP_SERVER_PORT:-8090}
-      - MCP_SERVER_CORS_ORIGINS=${MCP_SERVER_CORS_ORIGINS:-}
-      - API_SERVER_PROTOCOL=${API_SERVER_PROTOCOL:-http}
-      - API_SERVER_HOST=api_server
-      - API_SERVER_PORT=8080
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    logging:
-      driver: json-file
-      options:
-        max-size: "50m"
-        max-file: "6"
-    volumes:
-      - mcp_server_logs:/var/log/onyx
+  # Uncomment the block below to enable the MCP server for Onyx.
+  # mcp_server:
+  #   image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
+  #   build:
+  #     context: ../../backend
+  #     dockerfile: Dockerfile
+  #   command: >
+  #     /bin/sh -c "if [ \"${MCP_SERVER_ENABLED:-}\" != \"True\" ] && [ \"${MCP_SERVER_ENABLED:-}\" != \"true\" ]; then
+  #       echo 'MCP server is disabled (MCP_SERVER_ENABLED=false), skipping...';
+  #       exit 0;
+  #     else
+  #       exec python -m onyx.mcp_server_main;
+  #     fi"
+  #   ports:
+  #     - "8090:8090"
+  #   env_file:
+  #     - path: .env
+  #       required: false
+  #   depends_on:
+  #     - relational_db
+  #     - cache
+  #   restart: "no"
+  #   environment:
+  #     - POSTGRES_HOST=relational_db
+  #     - REDIS_HOST=cache
+  #     # MCP Server Configuration
+  #     - MCP_SERVER_ENABLED=${MCP_SERVER_ENABLED:-false}
+  #     - MCP_SERVER_PORT=${MCP_SERVER_PORT:-8090}
+  #     - MCP_SERVER_CORS_ORIGINS=${MCP_SERVER_CORS_ORIGINS:-}
+  #     - API_SERVER_PROTOCOL=${API_SERVER_PROTOCOL:-http}
+  #     - API_SERVER_HOST=api_server
+  #     - API_SERVER_PORT=8080
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
+  #   logging:
+  #     driver: json-file
+  #     options:
+  #       max-size: "50m"
+  #       max-file: "6"
+  #   volumes:
+  #     - mcp_server_logs:/var/log/onyx
 
   inference_model_server:
     image: ${ONYX_MODEL_SERVER_IMAGE:-onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}}
@@ -529,4 +521,4 @@ volumes:
 
   model_cache_huggingface:
   indexing_huggingface_model_cache:
-  mcp_server_logs:
+  # mcp_server_logs:

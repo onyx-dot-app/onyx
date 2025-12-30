@@ -5,6 +5,7 @@ import pytest
 import requests
 from requests.models import Response
 
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_name_parser import parse_litellm_model_name
 from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import litellm_thinks_model_supports_image_input
@@ -182,7 +183,7 @@ def test_create_llm_provider(
         headers=admin_user.headers,
         json={
             "name": str(uuid.uuid4()),
-            "provider": "openai",
+            "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "default_model_name": default_model_name,
             "model_configurations": [
@@ -281,7 +282,7 @@ def test_update_model_configurations(
         headers=admin_user.headers,
         json={
             "name": name,
-            "provider": "openai",
+            "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "default_model_name": default_model_name,
             "model_configurations": [
@@ -386,7 +387,7 @@ def test_delete_llm_provider(
         headers=admin_user.headers,
         json={
             "name": "test-provider-delete",
-            "provider": "openai",
+            "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "default_model_name": default_model_name,
             "model_configurations": [
@@ -444,7 +445,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
             supports_image_input=None,
         ),
         ModelConfigurationUpsertRequest(
-            name="gpt-3.5-turbo",
+            name="gpt-4-turbo",
             is_visible=False,
             max_input_tokens=None,
             supports_image_input=None,
@@ -457,10 +458,9 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
         headers=admin_user.headers,
         json={
             "name": "test-visibility-provider",
-            "provider": "openai",
+            "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "default_model_name": "gpt-4o",
-            "fast_default_model_name": "gpt-4o-mini",
             "model_configurations": [config.dict() for config in model_configs],
             "is_public": True,
             "groups": [],
@@ -495,7 +495,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
             supports_image_input=None,
         ),
         ModelConfigurationUpsertRequest(
-            name="gpt-3.5-turbo",
+            name="gpt-4-turbo",
             is_visible=True,  # Now visible
             max_input_tokens=None,
             supports_image_input=None,
@@ -507,10 +507,9 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
         headers=admin_user.headers,
         json={
             "name": "test-visibility-provider",
-            "provider": "openai",
+            "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "default_model_name": "gpt-4o",
-            "fast_default_model_name": "gpt-4o-mini",
             "model_configurations": [
                 config.dict() for config in edit_configs_all_visible
             ],
@@ -544,7 +543,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
             supports_image_input=None,
         ),
         ModelConfigurationUpsertRequest(
-            name="gpt-3.5-turbo",
+            name="gpt-4-turbo",
             is_visible=False,
             max_input_tokens=None,
             supports_image_input=None,
@@ -556,10 +555,9 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
         headers=admin_user.headers,
         json={
             "name": "test-visibility-provider",
-            "provider": "openai",
+            "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "default_model_name": "gpt-4o",
-            "fast_default_model_name": "gpt-4o",  # Set to same as default to have only 1 visible
             "model_configurations": [
                 config.dict() for config in edit_configs_one_visible
             ],
@@ -570,7 +568,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
     )
     assert edit_response_2.status_code == 200
 
-    # Verify only 1 model is visible (both default and fast_default point to the same model)
+    # Verify only 1 model is visible
     provider_data = _get_provider_by_id(admin_user, created_provider["id"])
     assert provider_data is not None
     visible_models = [

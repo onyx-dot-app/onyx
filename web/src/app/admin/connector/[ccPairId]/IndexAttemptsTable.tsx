@@ -20,8 +20,7 @@ import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
 import { InfoIcon } from "@/components/icons/icons";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
-import SvgClock from "@/icons/clock";
-
+import { SvgClock } from "@opal/icons";
 export interface IndexingAttemptsTableProps {
   ccPair: CCPairFullInfo;
   indexAttempts: IndexAttemptSnapshot[];

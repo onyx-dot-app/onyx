@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import requests
 
+from onyx.llm.constants import LlmProviderNames
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -34,13 +35,12 @@ class LLMProviderManager:
 
         llm_provider = LLMProviderUpsertRequest(
             name=name or f"test-provider-{uuid4()}",
-            provider=provider or "openai",
+            provider=provider or LlmProviderNames.OPENAI,
             default_model_name=default_model_name or "gpt-4o-mini",
             api_key=api_key or os.environ["OPENAI_API_KEY"],
             api_base=api_base,
             api_version=api_version,
             custom_config=None,
-            fast_default_model_name=default_model_name or "gpt-4o-mini",
             is_public=True if is_public is None else is_public,
             groups=groups or [],
             personas=personas or [],

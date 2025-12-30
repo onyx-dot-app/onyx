@@ -3,7 +3,7 @@
 import { JSX } from "react";
 import { HealthCheckBanner } from "../health/healthcheck";
 import Separator from "@/refresh-components/Separator";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 
 export interface AdminPageTitleProps {
@@ -31,7 +31,7 @@ export function AdminPageTitle({
           ) : (
             Icon
           )}
-          <Text headingH2 aria-label="admin-page-title">
+          <Text as="p" headingH2 aria-label="admin-page-title">
             {title}
           </Text>
         </div>

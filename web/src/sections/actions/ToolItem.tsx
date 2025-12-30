@@ -4,13 +4,15 @@ import React, { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import Switch from "@/refresh-components/inputs/Switch";
 import Text from "@/refresh-components/texts/Text";
-import SvgAlertTriangle from "@/icons/alert-triangle";
 import Truncated from "@/refresh-components/texts/Truncated";
-import SvgArrowLeftDot from "@/icons/arrow-left-dot";
-import SvgArrowRightDot from "@/icons/arrow-right-dot";
-import SvgCornerRightUpDot from "@/icons/corner-right-up-dot";
-import SvgMinusCircle from "@/icons/minus-circle";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal/types";
+import {
+  SvgAlertTriangle,
+  SvgArrowLeftDot,
+  SvgArrowRightDot,
+  SvgCornerRightUpDot,
+  SvgMinusCircle,
+} from "@opal/icons";
 
 type ToolItemVariant = "mcp" | "openapi";
 
@@ -208,7 +210,7 @@ const ToolItem: React.FC<ToolItemProps> = ({
             <div className="flex items-center min-h-[20px] px-0 py-0.5">
               <div className="flex gap-0.5 items-center">
                 <div className="flex items-center px-0.5">
-                  <Text text03 secondaryBody className="text-right">
+                  <Text as="p" text03 secondaryBody className="text-right">
                     Tool unavailable
                   </Text>
                 </div>
@@ -225,6 +227,7 @@ const ToolItem: React.FC<ToolItemProps> = ({
               checked={isEnabled}
               onCheckedChange={onToggle}
               disabled={!isAvailable}
+              aria-label={`tool-toggle-${name}`}
             />
           </div>
         </div>
@@ -235,6 +238,7 @@ const ToolItem: React.FC<ToolItemProps> = ({
               className={cn("rounded-04 border border-transparent", methodBg)}
             >
               <Text
+                as="p"
                 figureSmallLabel
                 className={cn("uppercase tracking-wide p-0.5 ", methodText)}
               >

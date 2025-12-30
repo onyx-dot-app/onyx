@@ -32,6 +32,7 @@ from onyx.onyxbot.slack.models import ChannelType
 from onyx.db.tools import get_builtin_tool
 from onyx.tools.built_in_tools import SearchTool
 from tests.external_dependency_unit.conftest import create_test_user
+from onyx.llm.constants import LlmProviderNames
 
 
 def _create_test_persona_with_slack_config(db_session: Session) -> Persona | None:
@@ -416,10 +417,9 @@ class TestSlackBotFederatedSearch:
 
         llm_provider = LLMProvider(
             name=f"test-llm-provider-{uuid4().hex[:8]}",
-            provider="openai",
+            provider=LlmProviderNames.OPENAI,
             api_key=api_key,
             default_model_name="gpt-4o",
-            fast_default_model_name="gpt-4o-mini",
             is_default_provider=True,
             is_public=True,
         )

@@ -464,6 +464,7 @@ export enum ValidSources {
   Jira = "jira",
   Productboard = "productboard",
   Slab = "slab",
+  Coda = "coda",
   Notion = "notion",
   Guru = "guru",
   Gong = "gong",
@@ -500,6 +501,7 @@ export enum ValidSources {
   Airtable = "airtable",
   Gitbook = "gitbook",
   Highspot = "highspot",
+  DrupalWiki = "drupal_wiki",
   Imap = "imap",
   Bitbucket = "bitbucket",
   TestRail = "testrail",
@@ -526,6 +528,7 @@ export const validAutoSyncSources = [
   ValidSources.Salesforce,
   ValidSources.GitHub,
   ValidSources.Sharepoint,
+  ValidSources.Teams,
 ] as const;
 
 // Create a type from the array elements

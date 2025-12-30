@@ -1,0 +1,41 @@
+:root {
+  /* Base layers */
+  --z-base: 0;
+  --z-content: 1;
+  --z-sticky: 10;
+
+  /* Interactive overlays */
+  --z-modal-overlay: 900;
+  --z-modal: 1000;
+  --z-toast: 1100;
+  --z-popover: 1200;
+  --z-tooltip: 1300;
+}
+
+/* Base layers */
+.z-base {
+  z-index: var(--z-base);
+}
+.z-content {
+  z-index: var(--z-content);
+}
+.z-sticky {
+  z-index: var(--z-sticky);
+}
+
+/* Interactive overlays */
+.z-modal-overlay {
+  z-index: var(--z-modal-overlay);
+}
+.z-modal {
+  z-index: var(--z-modal);
+}
+.z-toast {
+  z-index: var(--z-toast);
+}
+.z-popover {
+  z-index: var(--z-popover);
+}
+.z-tooltip {
+  z-index: var(--z-tooltip);
+}

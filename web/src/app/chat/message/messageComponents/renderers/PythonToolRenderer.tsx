@@ -1,5 +1,4 @@
 import { useEffect, useMemo } from "react";
-import SvgCode from "@/icons/code";
 import {
   PacketType,
   PythonToolPacket,
@@ -14,6 +13,7 @@ import {
 import { CodeBlock } from "@/app/chat/message/CodeBlock";
 import hljs from "highlight.js/lib/core";
 import python from "highlight.js/lib/languages/python";
+import { SvgCode } from "@opal/icons";
 
 // Register Python language for highlighting
 hljs.registerLanguage("python", python);
@@ -45,7 +45,9 @@ function constructCurrentPythonState(packets: PythonToolPacket[]) {
     .filter((packet) => packet.obj.type === PacketType.PYTHON_TOOL_DELTA)
     .map((packet) => packet.obj as PythonToolDelta);
   const pythonEnd = packets.find(
-    (packet) => packet.obj.type === PacketType.SECTION_END
+    (packet) =>
+      packet.obj.type === PacketType.SECTION_END ||
+      packet.obj.type === PacketType.ERROR
   )?.obj as SectionEnd | null;
 
   const code = pythonStart?.code || "";

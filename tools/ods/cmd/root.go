@@ -41,7 +41,10 @@ func NewRootCommand() *cobra.Command {
 	cmd.PersistentFlags().BoolVar(&opts.Debug, "debug", false, "run in debug mode")
 
 	// Add subcommands
+	cmd.AddCommand(NewCheckLazyImportsCommand())
 	cmd.AddCommand(NewCherryPickCommand())
+	cmd.AddCommand(NewDBCommand())
+	cmd.AddCommand(NewOpenAPICommand())
 
 	return cmd
 }

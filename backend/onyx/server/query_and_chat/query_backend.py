@@ -48,9 +48,8 @@ from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tag import find_tags
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.vespa.index import VespaIndex
-from onyx.llm.factory import get_default_llms
-from onyx.llm.factory import get_llms_for_persona
-from onyx.llm.factory import get_main_llm_from_tuple
+from onyx.llm.factory import get_default_llm
+from onyx.llm.factory import get_llm_for_persona
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.query_and_chat.models import AdminSearchRequest
 from onyx.server.query_and_chat.models import AdminSearchResponse
@@ -108,7 +107,7 @@ def handle_search_request(
     query = search_request.message
     logger.notice(f"Received document search query: {query}")
 
-    llm, __name__ = get_default_llms()
+    llm = get_default_llm()
     pagination_limit, pagination_offset = _normalize_pagination(
         limit=search_request.retrieval_options.limit,
         offset=search_request.retrieval_options.offset,
@@ -229,7 +228,7 @@ def get_answer_stream(
             is_for_edit=False,
         )
 
-    llm = get_main_llm_from_tuple(get_llms_for_persona(persona=persona_info, user=user))
+    llm = get_llm_for_persona(persona=persona_info, user=user)
 
     llm_tokenizer = get_tokenizer(
         model_name=llm.config.model_name,
@@ -256,7 +255,6 @@ def get_answer_stream(
         retrieval_details=query_request.retrieval_options,
         rerank_settings=query_request.rerank_settings,
         db_session=db_session,
-        use_agentic_search=query_request.use_agentic_search,
         skip_gen_ai_answer_generation=query_request.skip_gen_ai_answer_generation,
     )
 

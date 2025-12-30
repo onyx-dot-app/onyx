@@ -221,6 +221,7 @@ def create_tool_call_no_commit(
     parent_tool_call_id: int | None = None,
     reasoning_tokens: str | None = None,
     generated_images: list[dict] | None = None,
+    tab_index: int = 0,
     add_only: bool = True,
 ) -> ToolCall:
     """
@@ -239,6 +240,7 @@ def create_tool_call_no_commit(
         parent_tool_call_id: Optional parent tool call ID (for nested tool calls)
         reasoning_tokens: Optional reasoning tokens
         generated_images: Optional list of generated image metadata for replay
+        tab_index: Index order of tool calls from the LLM for parallel tool calls
         commit: If True, commit the transaction; if False, flush only
 
     Returns:
@@ -249,6 +251,7 @@ def create_tool_call_no_commit(
         parent_chat_message_id=parent_chat_message_id,
         parent_tool_call_id=parent_tool_call_id,
         turn_number=turn_number,
+        tab_index=tab_index,
         tool_id=tool_id,
         tool_call_id=tool_call_id,
         reasoning_tokens=reasoning_tokens,

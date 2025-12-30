@@ -24,9 +24,9 @@ from onyx.configs.app_configs import (
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
 from onyx.configs.constants import FileOrigin
 from onyx.file_processing.extract_file_text import extract_file_text
-from onyx.file_processing.extract_file_text import is_accepted_file_ext
-from onyx.file_processing.extract_file_text import OnyxExtensionType
-from onyx.file_processing.file_validation import is_valid_image_type
+from onyx.file_processing.extract_file_text import get_file_ext
+from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.file_processing.file_types import OnyxMimeTypes
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.utils.logger import setup_logger
 
@@ -56,15 +56,13 @@ def validate_attachment_filetype(
     """
     media_type = attachment.get("metadata", {}).get("mediaType", "")
     if media_type.startswith("image/"):
-        return is_valid_image_type(media_type)
+        return media_type in OnyxMimeTypes.IMAGE_MIME_TYPES
 
     # For non-image files, check if we support the extension
     title = attachment.get("title", "")
-    extension = Path(title).suffix.lstrip(".").lower() if "." in title else ""
+    extension = get_file_ext(title)
 
-    return is_accepted_file_ext(
-        "." + extension, OnyxExtensionType.Plain | OnyxExtensionType.Document
-    )
+    return extension in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS
 
 
 class AttachmentProcessingResult(BaseModel):

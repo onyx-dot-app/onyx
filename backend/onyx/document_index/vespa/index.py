@@ -2,7 +2,6 @@ import concurrent.futures
 import io
 import logging
 import os
-import random
 import re
 import time
 import urllib
@@ -13,30 +12,30 @@ from datetime import timedelta
 from typing import BinaryIO
 from typing import cast
 from typing import List
-from uuid import UUID
 
-import httpx  # type: ignore
+import httpx
 import jinja2
-import requests  # type: ignore
+import requests
 from pydantic import BaseModel
 from retry import retry
 
 from onyx.configs.app_configs import BLURB_SIZE
-from onyx.configs.chat_configs import DOC_TIME_DECAY
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
 from onyx.configs.chat_configs import VESPA_SEARCHER_THREADS
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.configs.constants import RETURN_SEPARATOR
+from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceChunkUncleaned
 from onyx.context.search.models import QueryExpansionType
 from onyx.db.enums import EmbeddingPrecision
-from onyx.document_index.document_index_utils import get_document_chunk_ids
 from onyx.document_index.document_index_utils import get_uuid_from_chunk_info
 from onyx.document_index.interfaces import DocumentIndex
-from onyx.document_index.interfaces import DocumentInsertionRecord
+from onyx.document_index.interfaces import (
+    DocumentInsertionRecord as OldDocumentInsertionRecord,
+)
 from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
 from onyx.document_index.interfaces import IndexBatchParams
 from onyx.document_index.interfaces import MinimalDocumentIndexingInfo
@@ -44,35 +43,24 @@ from onyx.document_index.interfaces import UpdateRequest
 from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.document_index.interfaces import VespaDocumentFields
 from onyx.document_index.interfaces import VespaDocumentUserFields
-from onyx.document_index.vespa.chunk_retrieval import batch_search_api_retrieval
-from onyx.document_index.vespa.chunk_retrieval import (
-    parallel_visit_api_retrieval,
-)
+from onyx.document_index.interfaces_new import DocumentSectionRequest
+from onyx.document_index.interfaces_new import IndexingMetadata
+from onyx.document_index.interfaces_new import MetadataUpdateRequest
 from onyx.document_index.vespa.chunk_retrieval import query_vespa
-from onyx.document_index.vespa.deletion import delete_vespa_chunks
 from onyx.document_index.vespa.indexing_utils import BaseHTTPXClientContext
-from onyx.document_index.vespa.indexing_utils import batch_index_vespa_chunks
 from onyx.document_index.vespa.indexing_utils import check_for_final_chunk_existence
-from onyx.document_index.vespa.indexing_utils import clean_chunk_id_copy
 from onyx.document_index.vespa.indexing_utils import GlobalHTTPXClientContext
 from onyx.document_index.vespa.indexing_utils import TemporaryHTTPXClientContext
 from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
-from onyx.document_index.vespa.shared_utils.utils import (
-    replace_invalid_doc_id_characters,
-)
 from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
     build_vespa_filters,
 )
-from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
+from onyx.document_index.vespa.vespa_document_index import TenantState
+from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
 from onyx.document_index.vespa_constants import BATCH_SIZE
-from onyx.document_index.vespa_constants import BOOST
 from onyx.document_index.vespa_constants import CONTENT_SUMMARY
-from onyx.document_index.vespa_constants import DOCUMENT_ID
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
-from onyx.document_index.vespa_constants import DOCUMENT_SETS
-from onyx.document_index.vespa_constants import HIDDEN
 from onyx.document_index.vespa_constants import NUM_THREADS
-from onyx.document_index.vespa_constants import USER_PROJECT
 from onyx.document_index.vespa_constants import VESPA_APPLICATION_ENDPOINT
 from onyx.document_index.vespa_constants import VESPA_TIMEOUT
 from onyx.document_index.vespa_constants import YQL_BASE
@@ -84,7 +72,6 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.model_server_models import Embedding
-
 
 logger = setup_logger()
 
@@ -253,8 +240,10 @@ class VespaIndex(DocumentIndex):
 
         self.multitenant = multitenant
 
-        self.httpx_client_context: BaseHTTPXClientContext
+        # Temporary until we refactor the entirety of this class.
+        self.httpx_client = httpx_client
 
+        self.httpx_client_context: BaseHTTPXClientContext
         if httpx_client:
             self.httpx_client_context = GlobalHTTPXClientContext(httpx_client)
         else:
@@ -475,92 +464,45 @@ class VespaIndex(DocumentIndex):
         self,
         chunks: list[DocMetadataAwareIndexChunk],
         index_batch_params: IndexBatchParams,
-    ) -> set[DocumentInsertionRecord]:
-        """Receive a list of chunks from a batch of documents and index the chunks into Vespa along
-        with updating the associated permissions. Assumes that a document will not be split into
-        multiple chunk batches calling this function multiple times, otherwise only the last set of
-        chunks will be kept"""
-
-        doc_id_to_previous_chunk_cnt = index_batch_params.doc_id_to_previous_chunk_cnt
-        doc_id_to_new_chunk_cnt = index_batch_params.doc_id_to_new_chunk_cnt
-        tenant_id = index_batch_params.tenant_id
-        large_chunks_enabled = index_batch_params.large_chunks_enabled
-
-        # IMPORTANT: This must be done one index at a time, do not use secondary index here
-        cleaned_chunks = [clean_chunk_id_copy(chunk) for chunk in chunks]
-
-        # needed so the final DocumentInsertionRecord returned can have the original document ID
-        new_document_id_to_original_document_id: dict[str, str] = {}
-        for ind, chunk in enumerate(cleaned_chunks):
-            old_chunk = chunks[ind]
-            new_document_id_to_original_document_id[chunk.source_document.id] = (
-                old_chunk.source_document.id
-            )
-
-        existing_docs: set[str] = set()
-
-        # NOTE: using `httpx` here since `requests` doesn't support HTTP2. This is beneficial for
-        # indexing / updates / deletes since we have to make a large volume of requests.
-        with (
-            concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor,
-            self.httpx_client_context as http_client,
+    ) -> set[OldDocumentInsertionRecord]:
+        if len(index_batch_params.doc_id_to_previous_chunk_cnt) != len(
+            index_batch_params.doc_id_to_new_chunk_cnt
         ):
-            # We require the start and end index for each document in order to
-            # know precisely which chunks to delete. This information exists for
-            # documents that have `chunk_count` in the database, but not for
-            # `old_version` documents.
-
-            enriched_doc_infos: list[EnrichedDocumentIndexingInfo] = [
-                VespaIndex.enrich_basic_chunk_info(
-                    index_name=self.index_name,
-                    http_client=http_client,
-                    document_id=doc_id,
-                    previous_chunk_count=doc_id_to_previous_chunk_cnt.get(doc_id, 0),
-                    new_chunk_count=doc_id_to_new_chunk_cnt.get(doc_id, 0),
-                )
-                for doc_id in doc_id_to_new_chunk_cnt.keys()
-            ]
-
-            for cleaned_doc_info in enriched_doc_infos:
-                # If the document has previously indexed chunks, we know it previously existed
-                if cleaned_doc_info.chunk_end_index:
-                    existing_docs.add(cleaned_doc_info.doc_id)
-
-            # Now, for each doc, we know exactly where to start and end our deletion
-            # So let's generate the chunk IDs for each chunk to delete
-            chunks_to_delete = get_document_chunk_ids(
-                enriched_document_info_list=enriched_doc_infos,
-                tenant_id=tenant_id,
-                large_chunks_enabled=large_chunks_enabled,
+            raise ValueError("Bug: Length of doc ID to chunk maps does not match.")
+        doc_id_to_chunk_cnt_diff = {
+            doc_id: IndexingMetadata.ChunkCounts(
+                old_chunk_cnt=index_batch_params.doc_id_to_previous_chunk_cnt[doc_id],
+                new_chunk_cnt=index_batch_params.doc_id_to_new_chunk_cnt[doc_id],
             )
-
-            # Delete old Vespa documents
-            for doc_chunk_ids_batch in batch_generator(chunks_to_delete, BATCH_SIZE):
-                delete_vespa_chunks(
-                    doc_chunk_ids=doc_chunk_ids_batch,
-                    index_name=self.index_name,
-                    http_client=http_client,
-                    executor=executor,
-                )
-
-            for chunk_batch in batch_generator(cleaned_chunks, BATCH_SIZE):
-                batch_index_vespa_chunks(
-                    chunks=chunk_batch,
-                    index_name=self.index_name,
-                    http_client=http_client,
-                    multitenant=self.multitenant,
-                    executor=executor,
-                )
-
-        all_cleaned_doc_ids = {chunk.source_document.id for chunk in cleaned_chunks}
-
-        return {
-            DocumentInsertionRecord(
-                document_id=new_document_id_to_original_document_id[cleaned_doc_id],
-                already_existed=cleaned_doc_id in existing_docs,
-            )
-            for cleaned_doc_id in all_cleaned_doc_ids
+            for doc_id in index_batch_params.doc_id_to_previous_chunk_cnt.keys()
         }
+        indexing_metadata = IndexingMetadata(
+            doc_id_to_chunk_cnt_diff=doc_id_to_chunk_cnt_diff,
+        )
+        vespa_document_index = VespaDocumentIndex(
+            index_name=self.index_name,
+            tenant_state=TenantState(
+                tenant_id=index_batch_params.tenant_id,
+                multitenant=self.multitenant,
+            ),
+            large_chunks_enabled=self.large_chunks_enabled,
+            httpx_client=self.httpx_client,
+        )
+        # This conversion from list to set only to be converted again to a list
+        # upstream is suboptimal and only temporary until we refactor the
+        # entirety of this class.
+        document_insertion_records = vespa_document_index.index(
+            chunks, indexing_metadata
+        )
+        return set(
+            [
+                OldDocumentInsertionRecord(
+                    document_id=doc_insertion_record.document_id,
+                    already_existed=doc_insertion_record.already_existed,
+                )
+                for doc_insertion_record in document_insertion_records
+            ]
+        )
 
     @classmethod
     def _apply_updates_batched(
@@ -650,89 +592,6 @@ class VespaIndex(DocumentIndex):
                         )
                         raise requests.HTTPError(failure_msg) from e
 
-    def update(self, update_requests: list[UpdateRequest], *, tenant_id: str) -> None:
-        logger.debug(f"Updating {len(update_requests)} documents in Vespa")
-
-        # Handle Vespa character limitations
-        # Mutating update_requests but it's not used later anyway
-        for update_request in update_requests:
-            for doc_info in update_request.minimal_document_indexing_info:
-                doc_info.doc_id = replace_invalid_doc_id_characters(doc_info.doc_id)
-
-        update_start = time.monotonic()
-
-        processed_updates_requests: list[_VespaUpdateRequest] = []
-        all_doc_chunk_ids: dict[str, list[UUID]] = {}
-
-        # Fetch all chunks for each document ahead of time
-        index_names = [self.index_name]
-        if self.secondary_index_name:
-            index_names.append(self.secondary_index_name)
-
-        chunk_id_start_time = time.monotonic()
-        with self.httpx_client_context as http_client:
-            for update_request in update_requests:
-                for doc_info in update_request.minimal_document_indexing_info:
-                    for index_name in index_names:
-                        doc_chunk_info = VespaIndex.enrich_basic_chunk_info(
-                            index_name=index_name,
-                            http_client=http_client,
-                            document_id=doc_info.doc_id,
-                            previous_chunk_count=doc_info.chunk_start_index,
-                            new_chunk_count=0,
-                        )
-                        doc_chunk_ids = get_document_chunk_ids(
-                            enriched_document_info_list=[doc_chunk_info],
-                            tenant_id=tenant_id,
-                            large_chunks_enabled=False,
-                        )
-                        all_doc_chunk_ids[doc_info.doc_id] = doc_chunk_ids
-
-        logger.debug(
-            f"Took {time.monotonic() - chunk_id_start_time:.2f} seconds to fetch all Vespa chunk IDs"
-        )
-
-        # Build the _VespaUpdateRequest objects
-        for update_request in update_requests:
-            update_dict: dict[str, dict] = {"fields": {}}
-            if update_request.boost is not None:
-                update_dict["fields"][BOOST] = {"assign": update_request.boost}
-            if update_request.document_sets is not None:
-                update_dict["fields"][DOCUMENT_SETS] = {
-                    "assign": {
-                        document_set: 1 for document_set in update_request.document_sets
-                    }
-                }
-            if update_request.access is not None:
-                update_dict["fields"][ACCESS_CONTROL_LIST] = {
-                    "assign": {
-                        acl_entry: 1 for acl_entry in update_request.access.to_acl()
-                    }
-                }
-            if update_request.hidden is not None:
-                update_dict["fields"][HIDDEN] = {"assign": update_request.hidden}
-
-            if not update_dict["fields"]:
-                logger.error("Update request received but nothing to update")
-                continue
-
-            for doc_info in update_request.minimal_document_indexing_info:
-                for doc_chunk_id in all_doc_chunk_ids[doc_info.doc_id]:
-                    processed_updates_requests.append(
-                        _VespaUpdateRequest(
-                            document_id=doc_info.doc_id,
-                            url=f"{DOCUMENT_ID_ENDPOINT.format(index_name=self.index_name)}/{doc_chunk_id}",
-                            update_request=update_dict,
-                        )
-                    )
-
-        with self.httpx_client_context as httpx_client:
-            self._apply_updates_batched(processed_updates_requests, httpx_client)
-        logger.debug(
-            "Finished updating Vespa documents in %.2f seconds",
-            time.monotonic() - update_start,
-        )
-
     def kg_chunk_updates(
         self, kg_update_requests: list[KGUChunkUpdateRequest], tenant_id: str
     ) -> None:
@@ -776,77 +635,8 @@ class VespaIndex(DocumentIndex):
             time.monotonic() - update_start,
         )
 
-    @retry(
-        tries=3,
-        delay=1,
-        backoff=2,
-    )
-    def _update_single_chunk(
-        self,
-        doc_chunk_id: UUID,
-        index_name: str,
-        fields: VespaDocumentFields | None,
-        user_fields: VespaDocumentUserFields | None,
-        doc_id: str,
-        http_client: httpx.Client,
-    ) -> None:
-        """
-        Update a single "chunk" (document) in Vespa using its chunk ID.
-        Retries if we encounter transient HTTPStatusError (e.g., overload).
-        """
-
-        update_dict: dict[str, dict] = {"fields": {}}
-
-        if fields is not None:
-            if fields.boost is not None:
-                update_dict["fields"][BOOST] = {"assign": fields.boost}
-
-            if fields.document_sets is not None:
-                update_dict["fields"][DOCUMENT_SETS] = {
-                    "assign": {document_set: 1 for document_set in fields.document_sets}
-                }
-
-            if fields.access is not None:
-                update_dict["fields"][ACCESS_CONTROL_LIST] = {
-                    "assign": {acl_entry: 1 for acl_entry in fields.access.to_acl()}
-                }
-
-            if fields.hidden is not None:
-                update_dict["fields"][HIDDEN] = {"assign": fields.hidden}
-
-            # document_id update is added only for migration purposes, ideally we should not be updating this field
-            if fields.document_id is not None:
-                update_dict["fields"][DOCUMENT_ID] = {"assign": fields.document_id}
-
-        if user_fields is not None:
-            if user_fields.user_projects is not None:
-                update_dict["fields"][USER_PROJECT] = {
-                    "assign": user_fields.user_projects
-                }
-
-        if not update_dict["fields"]:
-            logger.error("Update request received but nothing to update.")
-            return
-
-        vespa_url = (
-            f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{doc_chunk_id}"
-            "?create=true"
-        )
-
-        try:
-            resp = http_client.put(
-                vespa_url,
-                headers={"Content-Type": "application/json"},
-                json=update_dict,
-            )
-            resp.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            logger.error(
-                f"Failed to update doc chunk {doc_chunk_id} (doc_id={doc_id}). "
-                f"Details: {e.response.text}"
-            )
-            # Re-raise so the @retry decorator will catch and retry
-            raise
+    def update(self, update_requests: list[UpdateRequest], *, tenant_id: str) -> None:
+        raise NotImplementedError
 
     def update_single(
         self,
@@ -856,47 +646,52 @@ class VespaIndex(DocumentIndex):
         tenant_id: str,
         fields: VespaDocumentFields | None,
         user_fields: VespaDocumentUserFields | None,
-    ) -> int:
+    ) -> None:
         """Note: if the document id does not exist, the update will be a no-op and the
         function will complete with no errors or exceptions.
         Handle other exceptions if you wish to implement retry behavior
         """
-        doc_chunk_count = 0
+        if fields is None and user_fields is None:
+            raise ValueError(
+                f"Bug: Tried to update document {doc_id} with no updated fields or user fields."
+            )
+        # TODO(andrei): Very temporary, reinstate this soon.
+        # if fields is not None and fields.document_id is not None:
+        #     raise ValueError(
+        #         "The new vector db interface does not support updating the document ID field."
+        #     )
 
-        doc_id = replace_invalid_doc_id_characters(doc_id)
+        vespa_document_index = VespaDocumentIndex(
+            index_name=self.index_name,
+            tenant_state=TenantState(
+                tenant_id=tenant_id,
+                multitenant=self.multitenant,
+            ),
+            large_chunks_enabled=self.large_chunks_enabled,
+            httpx_client=self.httpx_client,
+        )
 
-        with self.httpx_client_context as httpx_client:
-            for (
-                index_name,
-                large_chunks_enabled,
-            ) in self.index_to_large_chunks_enabled.items():
-                enriched_doc_infos = VespaIndex.enrich_basic_chunk_info(
-                    index_name=index_name,
-                    http_client=httpx_client,
-                    document_id=doc_id,
-                    previous_chunk_count=chunk_count,
-                    new_chunk_count=0,
-                )
+        project_ids: set[int] | None = None
+        if user_fields is not None and user_fields.user_projects is not None:
+            project_ids = set(user_fields.user_projects)
+        update_request = MetadataUpdateRequest(
+            document_ids=[doc_id],
+            doc_id_to_chunk_cnt={
+                doc_id: chunk_count if chunk_count is not None else -1
+            },  # NOTE: -1 represents an unknown chunk count.
+            access=fields.access if fields is not None else None,
+            document_sets=fields.document_sets if fields is not None else None,
+            boost=fields.boost if fields is not None else None,
+            hidden=fields.hidden if fields is not None else None,
+            project_ids=project_ids,
+        )
 
-                doc_chunk_ids = get_document_chunk_ids(
-                    enriched_document_info_list=[enriched_doc_infos],
-                    tenant_id=tenant_id,
-                    large_chunks_enabled=large_chunks_enabled,
-                )
-
-                doc_chunk_count += len(doc_chunk_ids)
-
-                for doc_chunk_id in doc_chunk_ids:
-                    self._update_single_chunk(
-                        doc_chunk_id,
-                        index_name,
-                        fields,
-                        user_fields,
-                        doc_id,
-                        httpx_client,
-                    )
-
-        return doc_chunk_count
+        old_doc_id_to_new_doc_id: dict[str, str] = dict()
+        if fields is not None and fields.document_id is not None:
+            old_doc_id_to_new_doc_id[doc_id] = fields.document_id
+        vespa_document_index.update(
+            [update_request], old_doc_id_to_new_doc_id=old_doc_id_to_new_doc_id
+        )
 
     def delete_single(
         self,
@@ -905,49 +700,16 @@ class VespaIndex(DocumentIndex):
         tenant_id: str,
         chunk_count: int | None,
     ) -> int:
-        total_chunks_deleted = 0
-
-        doc_id = replace_invalid_doc_id_characters(doc_id)
-
-        # NOTE: using `httpx` here since `requests` doesn't support HTTP2. This is beneficial for
-        # indexing / updates / deletes since we have to make a large volume of requests.
-        index_names = [self.index_name]
-        if self.secondary_index_name:
-            index_names.append(self.secondary_index_name)
-
-        with (
-            self.httpx_client_context as http_client,
-            concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor,
-        ):
-            for (
-                index_name,
-                large_chunks_enabled,
-            ) in self.index_to_large_chunks_enabled.items():
-                enriched_doc_infos = VespaIndex.enrich_basic_chunk_info(
-                    index_name=index_name,
-                    http_client=http_client,
-                    document_id=doc_id,
-                    previous_chunk_count=chunk_count,
-                    new_chunk_count=0,
-                )
-                chunks_to_delete = get_document_chunk_ids(
-                    enriched_document_info_list=[enriched_doc_infos],
-                    tenant_id=tenant_id,
-                    large_chunks_enabled=large_chunks_enabled,
-                )
-
-                for doc_chunk_ids_batch in batch_generator(
-                    chunks_to_delete, BATCH_SIZE
-                ):
-                    total_chunks_deleted += len(doc_chunk_ids_batch)
-                    delete_vespa_chunks(
-                        doc_chunk_ids=doc_chunk_ids_batch,
-                        index_name=index_name,
-                        http_client=http_client,
-                        executor=executor,
-                    )
-
-        return total_chunks_deleted
+        vespa_document_index = VespaDocumentIndex(
+            index_name=self.index_name,
+            tenant_state=TenantState(
+                tenant_id=tenant_id,
+                multitenant=self.multitenant,
+            ),
+            large_chunks_enabled=self.large_chunks_enabled,
+            httpx_client=self.httpx_client,
+        )
+        return vespa_document_index.delete(document_id=doc_id, chunk_count=chunk_count)
 
     def id_based_retrieval(
         self,
@@ -956,34 +718,29 @@ class VespaIndex(DocumentIndex):
         batch_retrieval: bool = False,
         get_large_chunks: bool = False,
     ) -> list[InferenceChunk]:
-        # make sure to use the vespa-afied document IDs
-        chunk_requests = [
-            VespaChunkRequest(
-                document_id=replace_invalid_doc_id_characters(
-                    chunk_request.document_id
-                ),
-                min_chunk_ind=chunk_request.min_chunk_ind,
-                max_chunk_ind=chunk_request.max_chunk_ind,
-            )
-            for chunk_request in chunk_requests
-        ]
-
-        if batch_retrieval:
-            return cleanup_chunks(
-                batch_search_api_retrieval(
-                    index_name=self.index_name,
-                    chunk_requests=chunk_requests,
-                    filters=filters,
-                    get_large_chunks=get_large_chunks,
+        tenant_id = filters.tenant_id if filters.tenant_id is not None else ""
+        vespa_document_index = VespaDocumentIndex(
+            index_name=self.index_name,
+            tenant_state=TenantState(
+                tenant_id=tenant_id,
+                multitenant=self.multitenant,
+            ),
+            large_chunks_enabled=self.large_chunks_enabled,
+            httpx_client=self.httpx_client,
+        )
+        generic_chunk_requests: list[DocumentSectionRequest] = []
+        for chunk_request in chunk_requests:
+            generic_chunk_requests.append(
+                DocumentSectionRequest(
+                    document_id=chunk_request.document_id,
+                    min_chunk_ind=chunk_request.min_chunk_ind,
+                    max_chunk_ind=chunk_request.max_chunk_ind,
                 )
             )
-        return cleanup_chunks(
-            parallel_visit_api_retrieval(
-                index_name=self.index_name,
-                chunk_requests=chunk_requests,
-                filters=filters,
-                get_large_chunks=get_large_chunks,
-            )
+        return vespa_document_index.id_based_retrieval(
+            chunk_requests=generic_chunk_requests,
+            filters=filters,
+            batch_retrieval=batch_retrieval,
         )
 
     @log_function_time(print_only=True, debug_only=True)
@@ -1000,48 +757,37 @@ class VespaIndex(DocumentIndex):
         offset: int = 0,
         title_content_ratio: float | None = TITLE_CONTENT_RATIO,
     ) -> list[InferenceChunk]:
-        vespa_where_clauses = build_vespa_filters(filters)
-        # Needs to be at least as much as the value set in Vespa schema config
-        target_hits = max(10 * num_to_retrieve, 1000)
-
-        yql = (
-            YQL_BASE.format(index_name=self.index_name)
-            + vespa_where_clauses
-            + f"(({{targetHits: {target_hits}}}nearestNeighbor(embeddings, query_embedding)) "
-            + f"or ({{targetHits: {target_hits}}}nearestNeighbor(title_embedding, query_embedding)) "
-            + 'or ({grammar: "weakAnd"}userInput(@query)) '
-            + f'or ({{defaultIndex: "{CONTENT_SUMMARY}"}}userInput(@query)))'
-        )
-
-        final_query = " ".join(final_keywords) if final_keywords else query
-
-        if ranking_profile_type == QueryExpansionType.KEYWORD:
-            ranking_profile = f"hybrid_search_keyword_base_{len(query_embedding)}"
-        else:
-            ranking_profile = f"hybrid_search_semantic_base_{len(query_embedding)}"
-
-        logger.info(f"Selected ranking profile: {ranking_profile}")
-
-        logger.debug(f"Query YQL: {yql}")
-
-        params: dict[str, str | int | float] = {
-            "yql": yql,
-            "query": final_query,
-            "input.query(query_embedding)": str(query_embedding),
-            "input.query(decay_factor)": str(DOC_TIME_DECAY * time_decay_multiplier),
-            "input.query(alpha)": hybrid_alpha,
-            "input.query(title_content_ratio)": (
-                title_content_ratio
-                if title_content_ratio is not None
-                else TITLE_CONTENT_RATIO
+        tenant_id = filters.tenant_id if filters.tenant_id is not None else ""
+        vespa_document_index = VespaDocumentIndex(
+            index_name=self.index_name,
+            tenant_state=TenantState(
+                tenant_id=tenant_id,
+                multitenant=self.multitenant,
             ),
-            "hits": num_to_retrieve,
-            "offset": offset,
-            "ranking.profile": ranking_profile,
-            "timeout": VESPA_TIMEOUT,
-        }
-
-        return cleanup_chunks(query_vespa(params))
+            large_chunks_enabled=self.large_chunks_enabled,
+            httpx_client=self.httpx_client,
+        )
+        if not (
+            ranking_profile_type == QueryExpansionType.KEYWORD
+            or ranking_profile_type == QueryExpansionType.SEMANTIC
+        ):
+            raise ValueError(
+                f"Bug: Received invalid ranking profile type: {ranking_profile_type}"
+            )
+        query_type = (
+            QueryType.KEYWORD
+            if ranking_profile_type == QueryExpansionType.KEYWORD
+            else QueryType.SEMANTIC
+        )
+        return vespa_document_index.hybrid_retrieval(
+            query,
+            query_embedding,
+            final_keywords,
+            query_type,
+            filters,
+            num_to_retrieve,
+            offset,
+        )
 
     def admin_retrieval(
         self,
@@ -1284,21 +1030,20 @@ class VespaIndex(DocumentIndex):
         This method is currently used for random chunk retrieval in the context of
         assistant starter message creation (passed as sample context for usage by the assistant).
         """
-        vespa_where_clauses = build_vespa_filters(filters, remove_trailing_and=True)
-
-        yql = YQL_BASE.format(index_name=self.index_name) + vespa_where_clauses
-
-        random_seed = random.randint(0, 1000000)
-
-        params: dict[str, str | int | float] = {
-            "yql": yql,
-            "hits": num_to_retrieve,
-            "timeout": VESPA_TIMEOUT,
-            "ranking.profile": "random_",
-            "ranking.properties.random.seed": random_seed,
-        }
-
-        return cleanup_chunks(query_vespa(params))
+        tenant_id = filters.tenant_id if filters.tenant_id is not None else ""
+        vespa_document_index = VespaDocumentIndex(
+            index_name=self.index_name,
+            tenant_state=TenantState(
+                tenant_id=tenant_id,
+                multitenant=self.multitenant,
+            ),
+            large_chunks_enabled=self.large_chunks_enabled,
+            httpx_client=self.httpx_client,
+        )
+        return vespa_document_index.random_retrieval(
+            filters=filters,
+            num_to_retrieve=num_to_retrieve,
+        )
 
 
 class _VespaDeleteRequest:

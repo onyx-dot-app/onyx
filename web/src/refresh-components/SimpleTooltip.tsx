@@ -40,11 +40,7 @@ export default function SimpleTooltip({
   const isDomElement =
     React.isValidElement(children) && typeof children.type === "string";
 
-  const triggerChild = isDomElement ? (
-    children
-  ) : (
-    <span className="inline-flex">{children}</span>
-  );
+  const triggerChild = isDomElement ? children : <span>{children}</span>;
 
   return (
     <TooltipProvider>
@@ -62,7 +58,9 @@ export default function SimpleTooltip({
             className={cn("max-w-[30rem]", className)}
             {...rest}
           >
-            <Text textLight05>{hoverContent}</Text>
+            <Text as="p" textLight05>
+              {hoverContent}
+            </Text>
           </TooltipContent>
         )}
       </Tooltip>

@@ -1,15 +1,14 @@
 from collections.abc import Callable
 
 from onyx.configs.constants import MessageType
-from onyx.llm.exceptions import GenAIDisabledException
-from onyx.llm.factory import get_default_llms
+from onyx.llm.factory import get_default_llm
 from onyx.llm.interfaces import LLM
-from onyx.llm.message_types import AssistantMessage
-from onyx.llm.message_types import ChatCompletionMessage
-from onyx.llm.message_types import SystemMessage
-from onyx.llm.message_types import UserMessage
-from onyx.llm.utils import dict_based_prompt_to_langchain_prompt
-from onyx.llm.utils import message_to_string
+from onyx.llm.models import AssistantMessage
+from onyx.llm.models import ChatCompletionMessage
+from onyx.llm.models import ReasoningEffort
+from onyx.llm.models import SystemMessage
+from onyx.llm.models import UserMessage
+from onyx.llm.utils import llm_response_to_string
 from onyx.prompts.miscellaneous_prompts import LANGUAGE_REPHRASE_PROMPT
 from onyx.prompts.prompt_utils import get_current_llm_day_time
 from onyx.prompts.search_prompts import KEYWORD_REPHRASE_SYSTEM_PROMPT
@@ -19,7 +18,6 @@ from onyx.prompts.search_prompts import SEMANTIC_QUERY_REPHRASE_SYSTEM_PROMPT
 from onyx.prompts.search_prompts import SEMANTIC_QUERY_REPHRASE_USER_PROMPT
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.utils.logger import setup_logger
-from onyx.utils.text_processing import count_punctuation
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
@@ -61,16 +59,10 @@ def _build_message_history(
 
     for msg in history:
         if msg.message_type == MessageType.USER:
-            user_msg: UserMessage = {
-                "role": "user",
-                "content": msg.message,
-            }
+            user_msg = UserMessage(content=msg.message)
             messages.append(user_msg)
         elif msg.message_type == MessageType.ASSISTANT:
-            assistant_msg: AssistantMessage = {
-                "role": "assistant",
-                "content": msg.message,
-            }
+            assistant_msg = AssistantMessage(content=msg.message)
             messages.append(assistant_msg)
 
     return messages
@@ -124,29 +116,26 @@ def semantic_query_rephrase(
     )
 
     # Build system message with current date
-    system_msg: SystemMessage = {
-        "role": "system",
-        "content": SEMANTIC_QUERY_REPHRASE_SYSTEM_PROMPT.format(
+    system_msg = SystemMessage(
+        content=SEMANTIC_QUERY_REPHRASE_SYSTEM_PROMPT.format(
             current_date=current_datetime_str
-        ),
-    }
+        )
+    )
 
     # Convert chat history to message format (excluding the last user message and everything after it)
     messages: list[ChatCompletionMessage] = [system_msg]
     messages.extend(_build_message_history(history[:last_user_message_idx]))
 
     # Add the last message as the user prompt with instructions
-    final_user_msg: UserMessage = {
-        "role": "user",
-        "content": SEMANTIC_QUERY_REPHRASE_USER_PROMPT.format(
-            additional_context=additional_context,
-            user_query=user_query,
-        ),
-    }
+    final_user_msg = UserMessage(
+        content=SEMANTIC_QUERY_REPHRASE_USER_PROMPT.format(
+            additional_context=additional_context, user_query=user_query
+        )
+    )
     messages.append(final_user_msg)
 
     # Call LLM and return result
-    response = llm.invoke(prompt=messages)
+    response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.OFF)
 
     final_query = response.choice.message.content
 
@@ -206,29 +195,24 @@ def keyword_query_expansion(
     )
 
     # Build system message with current date
-    system_msg: SystemMessage = {
-        "role": "system",
-        "content": KEYWORD_REPHRASE_SYSTEM_PROMPT.format(
-            current_date=current_datetime_str
-        ),
-    }
+    system_msg = SystemMessage(
+        content=KEYWORD_REPHRASE_SYSTEM_PROMPT.format(current_date=current_datetime_str)
+    )
 
     # Convert chat history to message format (excluding the last user message and everything after it)
     messages: list[ChatCompletionMessage] = [system_msg]
     messages.extend(_build_message_history(history[:last_user_message_idx]))
 
     # Add the last message as the user prompt with instructions
-    final_user_msg: UserMessage = {
-        "role": "user",
-        "content": KEYWORD_REPHRASE_USER_PROMPT.format(
-            additional_context=additional_context,
-            user_query=user_query,
-        ),
-    }
+    final_user_msg = UserMessage(
+        content=KEYWORD_REPHRASE_USER_PROMPT.format(
+            additional_context=additional_context, user_query=user_query
+        )
+    )
     messages.append(final_user_msg)
 
     # Call LLM and return result
-    response = llm.invoke(prompt=messages)
+    response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.OFF)
     content = response.choice.message.content
 
     # Parse the response - each line is a separate keyword query
@@ -240,29 +224,12 @@ def keyword_query_expansion(
 
 
 def llm_multilingual_query_expansion(query: str, language: str) -> str:
-    def _get_rephrase_messages() -> list[dict[str, str]]:
-        messages = [
-            {
-                "role": "user",
-                "content": LANGUAGE_REPHRASE_PROMPT.format(
-                    query=query, target_language=language
-                ),
-            },
-        ]
+    llm = get_default_llm(timeout=5)
 
-        return messages
-
-    try:
-        _, fast_llm = get_default_llms(timeout=5)
-    except GenAIDisabledException:
-        logger.warning(
-            "Unable to perform multilingual query expansion, Gen AI disabled"
-        )
-        return query
-
-    messages = _get_rephrase_messages()
-    filled_llm_prompt = dict_based_prompt_to_langchain_prompt(messages)
-    model_output = message_to_string(fast_llm.invoke_langchain(filled_llm_prompt))
+    prompt = LANGUAGE_REPHRASE_PROMPT.format(query=query, target_language=language)
+    model_output = llm_response_to_string(
+        llm.invoke(prompt, reasoning_effort=ReasoningEffort.OFF)
+    )
     logger.debug(model_output)
 
     return model_output
@@ -288,75 +255,3 @@ def multilingual_query_expansion(
             llm_multilingual_query_expansion(query, language) for language in languages
         ]
         return query_rephrases
-
-
-# The stuff below is old and should be retired
-OLD_HISTORY_QUERY_REPHRASE = """
-Given the following conversation and a follow up input, rephrase the follow up into a SHORT, \
-standalone query (which captures any relevant context from previous messages) for a vectorstore.
-IMPORTANT: EDIT THE QUERY TO BE AS CONCISE AS POSSIBLE. Respond with a short, compressed phrase \
-with mainly keywords instead of a complete sentence.
-If there is a clear change in topic, disregard the previous messages.
-Strip out any information that is not relevant for the retrieval task.
-If the follow up message is an error or code snippet, repeat the same input back EXACTLY.
-
-Chat History:
---------------
-{chat_history}
---------------
-
-Follow Up Input: {question}
-Standalone question (Respond with only the short combined query):
-""".strip()
-
-
-def get_contextual_rephrase_messages(
-    question: str,
-    history_str: str,
-    prompt_template: str = OLD_HISTORY_QUERY_REPHRASE,
-) -> list[dict[str, str]]:
-    messages = [
-        {
-            "role": "user",
-            "content": prompt_template.format(
-                question=question, chat_history=history_str
-            ),
-        },
-    ]
-
-    return messages
-
-
-def thread_based_query_rephrase(
-    user_query: str,
-    history_str: str,
-    llm: LLM | None = None,
-    size_heuristic: int = 200,
-    punctuation_heuristic: int = 10,
-) -> str:
-    if not history_str:
-        return user_query
-
-    if len(user_query) >= size_heuristic:
-        return user_query
-
-    if count_punctuation(user_query) >= punctuation_heuristic:
-        return user_query
-
-    if llm is None:
-        try:
-            llm, _ = get_default_llms()
-        except GenAIDisabledException:
-            # If Generative AI is turned off, just return the original query
-            return user_query
-
-    prompt_msgs = get_contextual_rephrase_messages(
-        question=user_query, history_str=history_str
-    )
-
-    filled_llm_prompt = dict_based_prompt_to_langchain_prompt(prompt_msgs)
-    rephrased_query = message_to_string(llm.invoke_langchain(filled_llm_prompt))
-
-    logger.debug(f"Rephrased combined query: {rephrased_query}")
-
-    return rephrased_query

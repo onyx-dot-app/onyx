@@ -37,15 +37,14 @@ from onyx.db.models import AvailableTenant
 from onyx.db.models import IndexModelStatus
 from onyx.db.models import SearchSettings
 from onyx.db.models import UserTenantMapping
-from onyx.llm.llm_provider_options import ANTHROPIC_PROVIDER_NAME
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.llm_provider_options import get_anthropic_model_names
 from onyx.llm.llm_provider_options import get_openai_model_names
-from onyx.llm.llm_provider_options import OPENAI_PROVIDER_NAME
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.setup import setup_onyx
-from onyx.utils.telemetry import create_milestone_and_report
+from onyx.utils.telemetry import mt_cloud_telemetry
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.configs import TENANT_ID_PREFIX
@@ -266,10 +265,9 @@ def configure_default_api_keys(db_session: Session) -> None:
     if ANTHROPIC_DEFAULT_API_KEY:
         anthropic_provider = LLMProviderUpsertRequest(
             name="Anthropic",
-            provider=ANTHROPIC_PROVIDER_NAME,
+            provider=LlmProviderNames.ANTHROPIC,
             api_key=ANTHROPIC_DEFAULT_API_KEY,
             default_model_name="claude-3-7-sonnet-20250219",
-            fast_default_model_name="claude-3-5-sonnet-20241022",
             model_configurations=[
                 ModelConfigurationUpsertRequest(
                     name=name,
@@ -293,10 +291,9 @@ def configure_default_api_keys(db_session: Session) -> None:
     if OPENAI_DEFAULT_API_KEY:
         openai_provider = LLMProviderUpsertRequest(
             name="OpenAI",
-            provider=OPENAI_PROVIDER_NAME,
+            provider=LlmProviderNames.OPENAI,
             api_key=OPENAI_DEFAULT_API_KEY,
             default_model_name="gpt-4o",
-            fast_default_model_name="gpt-4o-mini",
             model_configurations=[
                 ModelConfigurationUpsertRequest(
                     name=model_name,
@@ -562,17 +559,11 @@ async def assign_tenant_to_user(
     try:
         add_users_to_tenant([email], tenant_id)
 
-        # Create milestone record in the same transaction context as the tenant assignment
-        with get_session_with_tenant(tenant_id=tenant_id) as db_session:
-            create_milestone_and_report(
-                user=None,
-                distinct_id=tenant_id,
-                event_type=MilestoneRecordType.TENANT_CREATED,
-                properties={
-                    "email": email,
-                },
-                db_session=db_session,
-            )
+        mt_cloud_telemetry(
+            tenant_id=tenant_id,
+            distinct_id=email,
+            event=MilestoneRecordType.TENANT_CREATED,
+        )
     except Exception:
         logger.exception(f"Failed to assign tenant {tenant_id} to user {email}")
         raise Exception("Failed to assign tenant to user")

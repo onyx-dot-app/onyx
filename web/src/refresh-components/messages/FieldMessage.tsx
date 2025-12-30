@@ -1,11 +1,12 @@
 import { cn } from "@/lib/utils";
 import React from "react";
 import Text from "../texts/Text";
-import SvgCheckCircle from "@/icons/check-circle";
-import SvgXOctagon from "@/icons/x-octagon";
-import SvgLoader from "@/icons/loader";
-import SvgAlertCircle from "@/icons/alert-circle";
-
+import {
+  SvgAlertCircle,
+  SvgCheckCircle,
+  SvgLoader,
+  SvgXOctagon,
+} from "@opal/icons";
 type MessageVariant =
   | "error"
   | "success"
@@ -60,7 +61,13 @@ const FieldMessageContent: React.FC<FieldMessageContentProps> = ({
   ...props
 }) => {
   return (
-    <Text text03 secondaryBody className={cn("ml-0.5", className)} {...props}>
+    <Text
+      as="p"
+      text03
+      secondaryBody
+      className={cn("ml-0.5", className)}
+      {...props}
+    >
       {children}
     </Text>
   );

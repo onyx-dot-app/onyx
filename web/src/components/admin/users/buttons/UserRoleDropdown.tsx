@@ -8,7 +8,7 @@ import userMutationFetcher from "@/lib/admin/users/userMutationFetcher";
 import useSWRMutation from "swr/mutation";
 
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import { GenericConfirmModal } from "@/components/modals/GenericConfirmModal";
+import GenericConfirmModal from "@/components/modals/GenericConfirmModal";
 import { useState } from "react";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 

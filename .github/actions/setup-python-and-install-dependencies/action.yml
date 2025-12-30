@@ -8,7 +8,9 @@ runs:
   using: "composite"
   steps:
     - name: Setup uv
-      uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # ratchet:astral-sh/setup-uv@v3
+      uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a # ratchet:astral-sh/setup-uv@v7
+      with:
+        version: "0.9.9"
       # TODO: Enable caching once there is a uv.lock file checked in.
       # with:
       #   enable-cache: true

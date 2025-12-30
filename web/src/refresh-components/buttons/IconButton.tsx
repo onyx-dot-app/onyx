@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal/types";
 import { cn } from "@/lib/utils";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
@@ -238,6 +238,9 @@ export interface IconButtonProps
   secondary?: boolean;
   tertiary?: boolean;
   internal?: boolean;
+
+  // Button size
+  large?: boolean;
 
   // Button states
   transient?: boolean;

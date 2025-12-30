@@ -13,6 +13,9 @@ from onyx.tools.tool_implementations.web_search.clients.exa_client import (
 from onyx.tools.tool_implementations.web_search.clients.google_pse_client import (
     GooglePSEClient,
 )
+from onyx.tools.tool_implementations.web_search.clients.searxng_client import (
+    SearXNGClient,
+)
 from onyx.tools.tool_implementations.web_search.clients.serper_client import (
     SerperClient,
 )
@@ -54,6 +57,14 @@ def build_search_provider_from_config(
             search_engine_id=search_engine_id,
             num_results=num_results,
             timeout_seconds=int(config.get("timeout_seconds") or 10),
+        )
+    if provider_type == WebSearchProviderType.SEARXNG:
+        searxng_base_url = config.get("searxng_base_url")
+        if not searxng_base_url:
+            raise ValueError("Please provide a URL for your private SearXNG instance.")
+        return SearXNGClient(
+            searxng_base_url,
+            num_results=num_results,
         )
 
 

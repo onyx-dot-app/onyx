@@ -15,10 +15,6 @@ import {
 } from "@/app/admin/configuration/llm/utils";
 import { Slider } from "@/components/ui/slider";
 import { useUser } from "@/components/user/UserProvider";
-import SvgRefreshCw from "@/icons/refresh-cw";
-import SvgCheck from "@/icons/check";
-import SvgChevronRight from "@/icons/chevron-right";
-import SvgChevronDown from "@/icons/chevron-down";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -30,6 +26,13 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import {
+  SvgCheck,
+  SvgChevronDown,
+  SvgChevronRight,
+  SvgRefreshCw,
+} from "@opal/icons";
+import { IconProps } from "@/components/icons/icons";
 
 interface LLMOption {
   name: string;
@@ -171,7 +174,7 @@ export default function LLMPopover({
       {
         displayName: string;
         options: LLMOption[];
-        icon: { provider: string; modelName?: string };
+        Icon: React.FunctionComponent<IconProps>;
       }
     >();
 
@@ -189,7 +192,6 @@ export default function LLMPopover({
       if (!groups.has(groupKey)) {
         // Build display name
         let displayName: string;
-        let iconProvider: string;
 
         if (isAggregator && option.vendor) {
           // Flattened format: "Amazon Bedrock/Anthropic"
@@ -199,14 +201,12 @@ export default function LLMPopover({
         } else {
           displayName = option.providerDisplayName;
         }
-        // Always use the top-level provider icon (e.g., AWS for Bedrock)
-        iconProvider = provider;
 
         groups.set(groupKey, {
           displayName,
           options: [],
-          // Don't pass modelName for group icon - we want the provider icon (e.g., AWS for Bedrock)
-          icon: { provider: iconProvider },
+          // Get the icon component - use provider for the icon lookup
+          Icon: getProviderIcon(provider),
         });
       }
 
@@ -224,7 +224,7 @@ export default function LLMPopover({
         key,
         displayName: group.displayName,
         options: group.options,
-        icon: group.icon,
+        Icon: group.Icon,
       };
     });
   }, [filteredOptions]);
@@ -289,7 +289,7 @@ export default function LLMPopover({
       // Small delay to let accordion content render
       const timer = setTimeout(() => {
         selectedItemRef.current?.scrollIntoView({
-          behavior: "smooth",
+          behavior: "instant",
           block: "center",
         });
       }, 50);
@@ -298,21 +298,20 @@ export default function LLMPopover({
   }, [open]);
 
   const isSearching = searchQuery.trim().length > 0;
-  const hasOnlyOneGroup = groupedOptions.length === 1;
 
   // Compute final expanded groups
   const effectiveExpandedGroups = useMemo(() => {
-    if (isSearching || hasOnlyOneGroup) {
-      // Force expand all when searching or only one group
+    if (isSearching) {
+      // Force expand all when searching
       return groupedOptions.map((g) => g.key);
     }
     return expandedGroups;
-  }, [isSearching, hasOnlyOneGroup, groupedOptions, expandedGroups]);
+  }, [isSearching, groupedOptions, expandedGroups]);
 
   // Handler for accordion changes
   const handleAccordionChange = (value: string[]) => {
-    // Only update state when not force-expanding
-    if (!isSearching && !hasOnlyOneGroup) {
+    // Only update state when not searching (force-expanding)
+    if (!isSearching) {
       setExpandedGroups(value);
     }
   };
@@ -325,6 +324,43 @@ export default function LLMPopover({
     } as LlmDescriptor);
     onSelect?.(structureValue(option.name, option.provider, option.modelName));
     setOpen(false);
+  };
+
+  const renderModelItem = (option: LLMOption) => {
+    const isSelected =
+      option.modelName === llmManager.currentLlm.modelName &&
+      option.provider === llmManager.currentLlm.provider;
+
+    const capabilities: string[] = [];
+    if (option.supportsReasoning) {
+      capabilities.push("Reasoning");
+    }
+    if (option.supportsImageInput) {
+      capabilities.push("Vision");
+    }
+    const description =
+      capabilities.length > 0 ? capabilities.join(", ") : undefined;
+
+    return (
+      <div
+        key={`${option.name}-${option.modelName}`}
+        ref={isSelected ? selectedItemRef : undefined}
+      >
+        <LineItem
+          selected={isSelected}
+          description={description}
+          onClick={() => handleSelectModel(option)}
+          icon={() => null}
+          rightChildren={
+            isSelected ? (
+              <SvgCheck className="h-4 w-4 stroke-action-link-05 shrink-0" />
+            ) : null
+          }
+        >
+          {option.displayName}
+        </LineItem>
+      </div>
+    );
   };
 
   return (
@@ -351,8 +387,8 @@ export default function LLMPopover({
           </SelectButton>
         </div>
       </PopoverTrigger>
-      <PopoverContent side="top" align="end" className="w-[280px] p-1">
-        <div className="flex flex-col gap-1">
+      <PopoverContent side="top" align="end" className="w-[280px] p-1.5">
+        <div className="flex flex-col gap-2">
           {/* Search Input */}
           <InputTypeIn
             ref={searchInputRef}
@@ -375,7 +411,7 @@ export default function LLMPopover({
                     className="flex items-center gap-2 px-2 py-3"
                   >
                     <SimpleLoader />
-                    <Text secondaryBody text03>
+                    <Text as="p" secondaryBody text03>
                       Loading models...
                     </Text>
                   </div>,
@@ -383,107 +419,77 @@ export default function LLMPopover({
               : groupedOptions.length === 0
                 ? [
                     <div key="empty" className="px-2 py-3">
-                      <Text secondaryBody text03>
+                      <Text as="p" secondaryBody text03>
                         No models found
                       </Text>
                     </div>,
                   ]
-                : [
-                    <Accordion
-                      key="accordion"
-                      type="multiple"
-                      value={effectiveExpandedGroups}
-                      onValueChange={handleAccordionChange}
-                      className="w-full flex flex-col"
-                    >
-                      {groupedOptions.map((group) => {
-                        const isExpanded = effectiveExpandedGroups.includes(
-                          group.key
-                        );
-                        return (
-                          <AccordionItem
-                            key={group.key}
-                            value={group.key}
-                            className="border-none pt-1"
-                          >
-                            {/* Group Header */}
-                            <AccordionTrigger className="flex items-center rounded-08 hover:no-underline hover:bg-background-tint-02 group [&>svg]:hidden w-full py-1 px-1.5">
-                              <div className="flex items-center gap-1 shrink-0">
-                                <div className="flex items-center justify-center size-5 shrink-0">
-                                  {getProviderIcon(
-                                    group.icon.provider,
-                                    group.icon.modelName
-                                  )({ size: 16 })}
+                : groupedOptions.length === 1
+                  ? // Single provider - show models directly without accordion
+                    [
+                      <div
+                        key="single-provider"
+                        className="flex flex-col gap-1"
+                      >
+                        {groupedOptions[0]!.options.map(renderModelItem)}
+                      </div>,
+                    ]
+                  : // Multiple providers - show accordion with groups
+                    [
+                      <Accordion
+                        key="accordion"
+                        type="multiple"
+                        value={effectiveExpandedGroups}
+                        onValueChange={handleAccordionChange}
+                        className="w-full flex flex-col"
+                      >
+                        {groupedOptions.map((group) => {
+                          const isExpanded = effectiveExpandedGroups.includes(
+                            group.key
+                          );
+                          return (
+                            <AccordionItem
+                              key={group.key}
+                              value={group.key}
+                              className="border-none pt-1"
+                            >
+                              {/* Group Header */}
+                              <AccordionTrigger className="flex items-center rounded-08 hover:no-underline hover:bg-background-tint-02 group [&>svg]:hidden w-full py-1 px-1.5">
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <div className="flex items-center justify-center size-5 shrink-0">
+                                    <group.Icon size={16} />
+                                  </div>
+                                  <Text
+                                    as="p"
+                                    secondaryBody
+                                    text03
+                                    nowrap
+                                    className="px-0.5"
+                                  >
+                                    {group.displayName}
+                                  </Text>
                                 </div>
-                                <Text
-                                  secondaryBody
-                                  text03
-                                  nowrap
-                                  className="px-0.5"
-                                >
-                                  {group.displayName}
-                                </Text>
-                              </div>
-                              <div className="flex-1" />
-                              <div className="flex items-center justify-center size-6 shrink-0">
-                                {isExpanded ? (
-                                  <SvgChevronDown className="h-4 w-4 stroke-text-04 shrink-0" />
-                                ) : (
-                                  <SvgChevronRight className="h-4 w-4 stroke-text-04 shrink-0" />
-                                )}
-                              </div>
-                            </AccordionTrigger>
+                                <div className="flex-1" />
+                                <div className="flex items-center justify-center size-6 shrink-0">
+                                  {isExpanded ? (
+                                    <SvgChevronDown className="h-4 w-4 stroke-text-04 shrink-0" />
+                                  ) : (
+                                    <SvgChevronRight className="h-4 w-4 stroke-text-04 shrink-0" />
+                                  )}
+                                </div>
+                              </AccordionTrigger>
 
-                            {/* Model Items - full width highlight */}
-                            <AccordionContent className="pb-0 pt-0">
-                              <div className="flex flex-col gap-1">
-                                {group.options.map((option) => {
-                                  // Match by both modelName AND provider to handle same model name across providers
-                                  const isSelected =
-                                    option.modelName ===
-                                      llmManager.currentLlm.modelName &&
-                                    option.provider ===
-                                      llmManager.currentLlm.provider;
-
-                                  // Build description with version info
-                                  const description =
-                                    option.version &&
-                                    option.version !== "latest"
-                                      ? option.version
-                                      : undefined;
-
-                                  return (
-                                    <div
-                                      key={`${option.name}-${option.modelName}`}
-                                      ref={
-                                        isSelected ? selectedItemRef : undefined
-                                      }
-                                    >
-                                      <LineItem
-                                        selected={isSelected}
-                                        description={description}
-                                        onClick={() =>
-                                          handleSelectModel(option)
-                                        }
-                                        className="pl-7"
-                                        rightChildren={
-                                          isSelected ? (
-                                            <SvgCheck className="h-4 w-4 stroke-action-link-05 shrink-0" />
-                                          ) : null
-                                        }
-                                      >
-                                        {option.displayName}
-                                      </LineItem>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </AccordionContent>
-                          </AccordionItem>
-                        );
-                      })}
-                    </Accordion>,
-                  ]}
+                              {/* Model Items - full width highlight */}
+                              <AccordionContent className="pb-0 pt-0">
+                                <div className="flex flex-col gap-1">
+                                  {group.options.map(renderModelItem)}
+                                </div>
+                              </AccordionContent>
+                            </AccordionItem>
+                          );
+                        })}
+                      </Accordion>,
+                    ]}
           </PopoverMenu>
 
           {/* Global Temperature Slider (shown if enabled in user prefs) */}
@@ -501,10 +507,10 @@ export default function LLMPopover({
                   className="w-full"
                 />
                 <div className="flex flex-row items-center justify-between">
-                  <Text secondaryBody text03>
+                  <Text as="p" secondaryBody text03>
                     Temperature (creativity)
                   </Text>
-                  <Text secondaryBody text03>
+                  <Text as="p" secondaryBody text03>
                     {localTemperature.toFixed(1)}
                   </Text>
                 </div>

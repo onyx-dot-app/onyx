@@ -56,6 +56,7 @@ from httpx_oauth.oauth2 import OAuth2Token
 from pydantic import BaseModel
 from sqlalchemy import nulls_last
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from onyx.auth.api_key import get_hashed_api_key_from_request
@@ -116,7 +117,7 @@ from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import create_milestone_and_report
+from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
 from onyx.utils.timing import log_function_time
@@ -218,7 +219,7 @@ def verify_email_is_invited(email: str) -> None:
         raise PermissionError("Email must be specified")
 
     try:
-        email_info = validate_email(email)
+        email_info = validate_email(email, check_deliverability=False)
     except EmailUndeliverableError:
         raise PermissionError("Email is not valid")
 
@@ -226,7 +227,9 @@ def verify_email_is_invited(email: str) -> None:
         try:
             # normalized emails are now being inserted into the db
             # we can remove this normalization on read after some time has passed
-            email_info_whitelist = validate_email(email_whitelist)
+            email_info_whitelist = validate_email(
+                email_whitelist, check_deliverability=False
+            )
         except EmailNotValidError:
             continue
 
@@ -335,10 +338,41 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
                 user_created = False
                 try:
-                    user = await super().create(
-                        user_create, safe=safe, request=request
-                    )  # type: ignore
+                    user = await super().create(user_create, safe=safe, request=request)
                     user_created = True
+                except IntegrityError as error:
+                    # Race condition: another request created the same user after the
+                    # pre-insert existence check but before our commit.
+                    await self.user_db.session.rollback()
+                    logger.warning(
+                        "IntegrityError while creating user %s, assuming duplicate: %s",
+                        user_create.email,
+                        str(error),
+                    )
+                    try:
+                        user = await self.get_by_email(user_create.email)
+                    except exceptions.UserNotExists:
+                        # Unexpected integrity error, surface it for handling upstream.
+                        raise error
+
+                    if MULTI_TENANT:
+                        user_by_session = await db_session.get(User, user.id)
+                        if user_by_session:
+                            user = user_by_session
+
+                    if (
+                        user.role.is_web_login()
+                        or not isinstance(user_create, UserCreate)
+                        or not user_create.role.is_web_login()
+                    ):
+                        raise exceptions.UserAlreadyExists()
+
+                    user_update = UserUpdateWithRole(
+                        password=user_create.password,
+                        is_verified=user_create.is_verified,
+                        role=user_create.role,
+                    )
+                    user = await self.update(user_update, user)
                 except exceptions.UserAlreadyExists:
                     user = await self.get_by_email(user_create.email)
 
@@ -568,10 +602,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             # this is needed if an organization goes from `TRACK_EXTERNAL_IDP_EXPIRY=true` to `false`
             # otherwise, the oidc expiry will always be old, and the user will never be able to login
-            if (
-                user.oidc_expiry is not None  # type: ignore
-                and not TRACK_EXTERNAL_IDP_EXPIRY
-            ):
+            if user.oidc_expiry is not None and not TRACK_EXTERNAL_IDP_EXPIRY:
                 await self.user_db.update(user, {"oidc_expiry": None})
                 user.oidc_expiry = None  # type: ignore
             remove_user_from_invited_users(user.email)
@@ -617,19 +648,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             user_count = await get_user_count()
             logger.debug(f"Current tenant user count: {user_count}")
 
-            with get_session_with_tenant(tenant_id=tenant_id) as db_session:
-                event_type = (
-                    MilestoneRecordType.USER_SIGNED_UP
-                    if user_count == 1
-                    else MilestoneRecordType.MULTIPLE_USERS
-                )
-                create_milestone_and_report(
-                    user=user,
-                    distinct_id=user.email,
-                    event_type=event_type,
-                    properties=None,
-                    db_session=db_session,
-                )
+            mt_cloud_telemetry(
+                tenant_id=tenant_id,
+                distinct_id=user.email,
+                event=MilestoneRecordType.USER_SIGNED_UP,
+            )
 
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
@@ -1150,7 +1173,7 @@ async def _sync_jwt_oidc_expiry(
             return
 
         await user_manager.user_db.update(user, {"oidc_expiry": oidc_expiry})
-        user.oidc_expiry = oidc_expiry  # type: ignore
+        user.oidc_expiry = oidc_expiry
         return
 
     if user.oidc_expiry is not None:

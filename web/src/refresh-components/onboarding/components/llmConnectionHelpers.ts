@@ -2,7 +2,6 @@ import {
   ModelConfiguration,
   WellKnownLLMProviderDescriptor,
 } from "@/app/admin/configuration/llm/interfaces";
-import { dynamicProviderConfigs } from "@/app/admin/configuration/llm/utils";
 import { parseAzureTargetUri } from "@/lib/azureTargetUri";
 
 export const buildInitialValues = (
@@ -18,7 +17,6 @@ export const buildInitialValues = (
       api_base: "",
       api_version: "",
       default_model_name: "",
-      fast_default_model_name: "",
       model_configurations: [
         {
           name: "",
@@ -45,8 +43,6 @@ export const buildInitialValues = (
     custom_config: {},
     deployment_name: "",
     target_uri: "",
-    fast_default_model_name:
-      llmDescriptor?.default_fast_model ?? llmDescriptor?.default_model ?? "",
     name: llmDescriptor?.name ?? "Default",
     provider: llmDescriptor?.name ?? "",
     model_configurations:
@@ -71,13 +67,6 @@ export const getModelOptions = (
       ? fetchedModelConfigurations
       : llmDescriptor.model_configurations;
   return modelsToUse.map((model) => ({ label: model.name, value: model.name }));
-};
-
-export const canProviderFetchModels = (
-  llmDescriptor: WellKnownLLMProviderDescriptor | undefined
-) => {
-  if (!llmDescriptor) return false;
-  return !!dynamicProviderConfigs[llmDescriptor.name];
 };
 
 export type TestApiKeyResult =

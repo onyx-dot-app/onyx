@@ -2,18 +2,20 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import type { Route } from "next";
 import { Dialog } from "@headlessui/react";
 import Button from "@/refresh-components/buttons/Button";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useUser } from "../user/UserProvider";
 import { useModalContext } from "../context/ModalContext";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import SvgArrowUp from "@/icons/arrow-up";
-import SvgArrowRight from "@/icons/arrow-right";
-import SvgCheckCircle from "@/icons/check-circle";
-import SvgOrganization from "@/icons/organization";
-import SvgPlus from "@/icons/plus";
-
+import {
+  SvgArrowRight,
+  SvgArrowUp,
+  SvgCheckCircle,
+  SvgOrganization,
+  SvgPlus,
+} from "@opal/icons";
 export interface TenantByDomainResponse {
   tenant_id: string;
   number_of_users: number;
@@ -117,7 +119,7 @@ export default function NewTeamModal() {
 
   const handleContinueToNewOrg = () => {
     const newUrl = window.location.pathname;
-    router.replace(newUrl);
+    router.replace(newUrl as Route);
     setShowNewTeamModal(false);
   };
 

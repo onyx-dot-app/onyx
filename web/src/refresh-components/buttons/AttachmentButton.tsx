@@ -4,11 +4,10 @@ import React from "react";
 import { cn, noProp } from "@/lib/utils";
 import Truncated from "@/refresh-components/texts/Truncated";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgTrash from "@/icons/trash";
 import Text from "@/refresh-components/texts/Text";
-import SvgExternalLink from "@/icons/external-link";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal/types";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
+import { SvgExternalLink, SvgTrash } from "@opal/icons";
 
 const bgClassNames = {
   defaulted: ["bg-background-tint-00 "],
@@ -97,7 +96,7 @@ export default function AttachmentButton({
       </div>
 
       <div className="flex flex-row self-stretch justify-end items-center gap-2 p-1 shrink-0">
-        <Text secondaryBody text03>
+        <Text as="p" secondaryBody text03>
           {rightText}
         </Text>
         {onDelete && (

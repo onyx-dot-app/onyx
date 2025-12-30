@@ -9,8 +9,8 @@ import {
 } from "@/app/chat/components/files/InputBarPreview";
 import { HorizontalSourceSelector } from "@/components/search/filtering/HorizontalSourceSelector";
 import { Tag } from "@/lib/types";
-import SvgArrowUp from "@/icons/arrow-up";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import { SvgArrowUp } from "@opal/icons";
 
 const MAX_INPUT_HEIGHT = 200;
 

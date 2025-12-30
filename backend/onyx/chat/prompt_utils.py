@@ -14,6 +14,7 @@ from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
 from onyx.prompts.chat_prompts import USER_INFO_HEADER
 from onyx.prompts.prompt_utils import get_company_context
 from onyx.prompts.prompt_utils import handle_onyx_date_awareness
+from onyx.prompts.prompt_utils import replace_citation_guidance_tag
 from onyx.prompts.tool_prompts import GENERATE_IMAGE_GUIDANCE
 from onyx.prompts.tool_prompts import INTERNAL_SEARCH_GUIDANCE
 from onyx.prompts.tool_prompts import OPEN_URLS_GUIDANCE
@@ -21,7 +22,7 @@ from onyx.prompts.tool_prompts import PYTHON_TOOL_GUIDANCE
 from onyx.prompts.tool_prompts import TOOL_DESCRIPTION_SEARCH_GUIDANCE
 from onyx.prompts.tool_prompts import TOOL_SECTION_HEADER
 from onyx.prompts.tool_prompts import WEB_SEARCH_GUIDANCE
-from onyx.tools.tool import Tool
+from onyx.tools.interface import Tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -141,20 +142,12 @@ def build_system_prompt(
     if open_ai_formatting_enabled:
         system_prompt = CODE_BLOCK_MARKDOWN + system_prompt
 
-    try:
-        citation_guidance = (
-            REQUIRE_CITATION_GUIDANCE
-            if should_cite_documents or include_all_guidance
-            else ""
-        )
-        system_prompt = system_prompt.format(
-            citation_reminder_or_empty=citation_guidance
-        )
-    except Exception:
-        # Even if the prompt is modified and there is not an explicit spot for citations, always require it
-        # This is more a product decision as it's likely better to always enforce citations
-        if should_cite_documents or include_all_guidance:
-            system_prompt += REQUIRE_CITATION_GUIDANCE
+    # Replace citation guidance placeholder if present
+    system_prompt, should_append_citation_guidance = replace_citation_guidance_tag(
+        system_prompt,
+        should_cite_documents=should_cite_documents,
+        include_all_guidance=include_all_guidance,
+    )
 
     company_context = get_company_context()
     if company_context or memories:
@@ -163,10 +156,12 @@ def build_system_prompt(
             system_prompt += company_context
         if memories:
             system_prompt += "\n".join(
-                memory.strip() for memory in memories if memory.strip()
+                "- " + memory.strip() for memory in memories if memory.strip()
             )
 
-    if should_cite_documents or include_all_guidance:
+    # Append citation guidance after company context if placeholder was not present
+    # This maintains backward compatibility and ensures citations are always enforced when needed
+    if should_append_citation_guidance:
         system_prompt += REQUIRE_CITATION_GUIDANCE
 
     if include_all_guidance:

@@ -40,7 +40,9 @@ const constructCurrentFetchState = (
     (packet) => packet.obj.type === PacketType.FETCH_TOOL_DOCUMENTS
   )?.obj as FetchToolDocuments | undefined;
   const sectionEnd = packets.find(
-    (packet) => packet.obj.type === PacketType.SECTION_END
+    (packet) =>
+      packet.obj.type === PacketType.SECTION_END ||
+      packet.obj.type === PacketType.ERROR
   );
 
   const urls = urlsPacket?.urls || [];

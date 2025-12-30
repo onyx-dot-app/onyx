@@ -38,6 +38,7 @@ from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.search_settings import get_current_search_settings
+from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
@@ -49,8 +50,10 @@ from onyx.llm.override_models import LLMOverride
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.prompts.chat_prompts import ADDITIONAL_CONTEXT_PROMPT
 from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
+from onyx.prompts.tool_prompts import TOOL_CALL_FAILURE_PROMPT
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.tools.models import ToolCallKickoff
 from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
 )
@@ -71,7 +74,6 @@ def prepare_chat_message_request(
     retrieval_details: RetrievalDetails | None,
     rerank_settings: RerankingDetails | None,
     db_session: Session,
-    use_agentic_search: bool = False,
     skip_gen_ai_answer_generation: bool = False,
     llm_override: LLMOverride | None = None,
     allowed_tool_ids: list[int] | None = None,
@@ -98,7 +100,6 @@ def prepare_chat_message_request(
         search_doc_ids=None,
         retrieval_options=retrieval_details,
         rerank_settings=rerank_settings,
-        use_agentic_search=use_agentic_search,
         skip_gen_ai_answer_generation=skip_gen_ai_answer_generation,
         llm_override=llm_override,
         allowed_tool_ids=allowed_tool_ids,
@@ -477,13 +478,20 @@ def load_chat_file(
 
     # Extract text content if it's a text file type (not an image)
     content_text = None
-    file_type = file_descriptor["type"]
+    # `FileDescriptor` is often JSON-roundtripped (e.g. JSONB / API), so `type`
+    # may arrive as a raw string value instead of a `ChatFileType`.
+    file_type = ChatFileType(file_descriptor["type"])
+
     if file_type.is_text_file():
         try:
-            content_text = content.decode("utf-8")
-        except UnicodeDecodeError:
+            content_text = extract_file_text(
+                file=file_io,
+                file_name=file_descriptor.get("name") or "",
+                break_on_unprocessable=False,
+            )
+        except Exception as e:
             logger.warning(
-                f"Failed to decode text content for file {file_descriptor['id']}"
+                f"Failed to retrieve content for file {file_descriptor['id']}: {str(e)}"
             )
 
     # Get token count from UserFile if available
@@ -578,9 +586,16 @@ def convert_chat_history(
 
             # Add text files as separate messages before the user message
             for text_file in text_files:
+                file_text = text_file.content_text or ""
+                filename = text_file.filename
+                message = (
+                    f"File: {filename}\n{file_text}\nEnd of File"
+                    if filename
+                    else file_text
+                )
                 simple_messages.append(
                     ChatMessageSimple(
-                        message=text_file.content_text or "",
+                        message=message,
                         token_count=text_file.token_count,
                         message_type=MessageType.USER,
                         image_files=None,
@@ -708,3 +723,56 @@ def get_custom_agent_prompt(persona: Persona, chat_session: ChatSession) -> str 
         return chat_session.project.instructions
     else:
         return None
+
+
+def is_last_assistant_message_clarification(chat_history: list[ChatMessage]) -> bool:
+    """Check if the last assistant message in chat history was a clarification question.
+
+    This is used in the deep research flow to determine whether to skip the
+    clarification step when the user has already responded to a clarification.
+
+    Args:
+        chat_history: List of ChatMessage objects in chronological order
+
+    Returns:
+        True if the last assistant message has is_clarification=True, False otherwise
+    """
+    for message in reversed(chat_history):
+        if message.message_type == MessageType.ASSISTANT:
+            return message.is_clarification
+    return False
+
+
+def create_tool_call_failure_messages(
+    tool_call: ToolCallKickoff, token_counter: Callable[[str], int]
+) -> list[ChatMessageSimple]:
+    """Create ChatMessageSimple objects for a failed tool call.
+
+    Creates two messages:
+    1. The tool call message itself
+    2. A failure response message indicating the tool call failed
+
+    Args:
+        tool_call: The ToolCallKickoff object representing the failed tool call
+        token_counter: Function to count tokens in a message string
+
+    Returns:
+        List containing two ChatMessageSimple objects: tool call message and failure response
+    """
+    tool_call_msg = ChatMessageSimple(
+        message=tool_call.to_msg_str(),
+        token_count=token_counter(tool_call.to_msg_str()),
+        message_type=MessageType.TOOL_CALL,
+        tool_call_id=tool_call.tool_call_id,
+        image_files=None,
+    )
+
+    failure_response_msg = ChatMessageSimple(
+        message=TOOL_CALL_FAILURE_PROMPT,
+        token_count=token_counter(TOOL_CALL_FAILURE_PROMPT),
+        message_type=MessageType.TOOL_CALL_RESPONSE,
+        tool_call_id=tool_call.tool_call_id,
+        image_files=None,
+    )
+
+    return [tool_call_msg, failure_response_msg]

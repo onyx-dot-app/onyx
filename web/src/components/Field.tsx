@@ -29,7 +29,7 @@ import Checkbox from "@/refresh-components/inputs/Checkbox";
 
 import { transformLinkUri } from "@/lib/utils";
 import FileInput from "@/app/admin/connectors/[connector]/pages/ConnectorInput/FileInput";
-import { DatePicker } from "./ui/datePicker";
+import InputDatePicker from "@/refresh-components/inputs/InputDatePicker";
 import { RichTextSubtext } from "./RichTextSubtext";
 import {
   TypedFile,
@@ -40,12 +40,11 @@ import {
 import Text from "@/refresh-components/texts/Text";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 
-import SvgEye from "@/icons/eye";
-import SvgEyeClosed from "@/icons/eye-closed";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import InputTextArea, {
   InputTextAreaProps,
 } from "@/refresh-components/inputs/InputTextArea";
+import { SvgEye, SvgEyeClosed } from "@opal/icons";
 
 export function SectionHeader({
   children,
@@ -140,7 +139,7 @@ export function ExplanationText({
       {text}
     </a>
   ) : (
-    <Text text03 secondaryBody>
+    <Text as="p" text03 secondaryBody>
       {text}
     </Text>
   );
@@ -182,7 +181,11 @@ export const FieldLabel = ({
       } gap-x-2 items-start`}
     >
       <div className="flex gap-x-2 items-center">
-        {!removeLabel && <Label small={false}>{label}</Label>}
+        {!removeLabel && (
+          <Label small={false} htmlFor={name}>
+            {label}
+          </Label>
+        )}
         {optional ? <span>(optional) </span> : ""}
         {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
       </div>
@@ -1038,7 +1041,7 @@ export function DatePickerField({
   return (
     <div>
       <FieldLabel label={label} name={name} subtext={subtext} />
-      <DatePicker
+      <InputDatePicker
         selectedDate={field.value}
         setSelectedDate={helper.setValue}
         startYear={startYear}

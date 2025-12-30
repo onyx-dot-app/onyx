@@ -11,7 +11,6 @@ from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.configs.constants import KV_SEARCH_SETTINGS
 from onyx.configs.embedding_configs import SUPPORTED_EMBEDDING_MODELS
 from onyx.configs.embedding_configs import SupportedEmbeddingModel
-from onyx.configs.model_configs import FAST_GEN_AI_MODEL_VERSION
 from onyx.configs.model_configs import GEN_AI_API_KEY
 from onyx.configs.model_configs import GEN_AI_MODEL_VERSION
 from onyx.context.search.models import SavedSearchSettings
@@ -43,10 +42,10 @@ from onyx.document_index.vespa.index import VespaIndex
 from onyx.indexing.models import IndexingSetting
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.llm_provider_options import get_openai_model_names
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder
-from onyx.natural_language_processing.search_nlp_models import warm_up_cross_encoder
 from onyx.seeding.load_yamls import load_input_prompts_from_yaml
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
@@ -116,16 +115,6 @@ def setup_onyx(
             logger.notice(
                 f"Multilingual query expansion is enabled with {search_settings.multilingual_expansion}."
             )
-    if (
-        search_settings.rerank_model_name
-        and not search_settings.provider_type
-        and not search_settings.rerank_provider_type
-    ):
-        # In integration tests, do not block API startup on warm-up
-        warm_up_cross_encoder(
-            search_settings.rerank_model_name,
-            non_blocking=INTEGRATION_TESTS_MODE,
-        )
 
     logger.notice("Verifying query preprocessing (NLTK) data is downloaded")
     download_nltk_data()
@@ -295,16 +284,14 @@ def setup_postgres(db_session: Session) -> None:
         logger.notice("Setting up default OpenAI LLM for dev.")
 
         llm_model = GEN_AI_MODEL_VERSION or "gpt-4o-mini"
-        fast_model = FAST_GEN_AI_MODEL_VERSION or "gpt-4o-mini"
         model_req = LLMProviderUpsertRequest(
             name="DevEnvPresetOpenAI",
-            provider="openai",
+            provider=LlmProviderNames.OPENAI,
             api_key=GEN_AI_API_KEY,
             api_base=None,
             api_version=None,
             custom_config=None,
             default_model_name=llm_model,
-            fast_default_model_name=fast_model,
             is_public=True,
             groups=[],
             model_configurations=[

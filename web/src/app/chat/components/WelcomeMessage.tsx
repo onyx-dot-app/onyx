@@ -1,14 +1,13 @@
 "use client";
 
-import { Logo } from "@/components/logo/Logo";
+import Logo from "@/refresh-components/Logo";
 import { getRandomGreeting } from "@/lib/chat/greetingMessages";
-import { cn } from "@/lib/utils";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { useMemo } from "react";
 
-interface WelcomeMessageProps {
+export interface WelcomeMessageProps {
   agent?: MinimalPersonaSnapshot;
   isDefaultAgent: boolean;
 }
@@ -23,8 +22,10 @@ export default function WelcomeMessage({
     const greeting = useMemo(getRandomGreeting, []);
     content = (
       <div data-testid="onyx-logo" className="flex flex-row items-center gap-4">
-        <Logo size="default" />
-        <Text headingH2>{greeting}</Text>
+        <Logo folded size={32} />
+        <Text as="p" headingH2>
+          {greeting}
+        </Text>
       </div>
     );
   } else if (agent) {
@@ -35,10 +36,12 @@ export default function WelcomeMessage({
           className="flex flex-row items-center gap-3"
         >
           <AgentAvatar agent={agent} size={36} />
-          <Text headingH2>{agent.name}</Text>
+          <Text as="p" headingH2>
+            {agent.name}
+          </Text>
         </div>
         {agent.description && (
-          <Text secondaryBody text03>
+          <Text as="p" secondaryBody text03>
             {agent.description}
           </Text>
         )}
@@ -48,22 +51,12 @@ export default function WelcomeMessage({
 
   // if we aren't using the default agent, we need to wait for the agent info to load
   // before rendering
-  if (!content) {
-    return null;
-  }
+  if (!content) return null;
 
   return (
     <div
       data-testid="chat-intro"
-      className={cn(
-        "row-start-1",
-        "self-end",
-        "flex",
-        "flex-col",
-        "items-center",
-        "justify-center",
-        "mb-6"
-      )}
+      className="flex flex-col items-center justify-center"
     >
       {content}
     </div>

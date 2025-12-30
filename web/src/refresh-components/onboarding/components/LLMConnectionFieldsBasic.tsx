@@ -12,11 +12,10 @@ import {
   BEDROCK_AUTH_FIELDS,
   HIDE_API_MESSAGE_FIELDS,
 } from "../constants";
-import SvgRefreshCw from "@/icons/refresh-cw";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgAlertCircle from "@/icons/alert-circle";
 import Text from "@/refresh-components/texts/Text";
 import { cn, noProp } from "@/lib/utils";
+import { SvgAlertCircle, SvgRefreshCw } from "@opal/icons";
 
 export interface LLMConnectionFieldsBasicProps {
   llmDescriptor: WellKnownLLMProviderDescriptor;
@@ -320,7 +319,7 @@ export default function LLMConnectionFieldsBasic({
                         <div className="p-1">
                           <SvgAlertCircle className="h-4 w-4 stroke-text-03" />
                         </div>
-                        <Text text04 mainUiBody>
+                        <Text as="p" text04 mainUiBody>
                           Onyx will use the IAM role attached to the environment
                           it&apos;s running in to authenticate.
                         </Text>
@@ -367,7 +366,9 @@ export default function LLMConnectionFieldsBasic({
                 }}
                 options={modelOptions}
                 disabled={
-                  disabled || modelOptions.length === 0 || isFetchingModels
+                  disabled ||
+                  isFetchingModels ||
+                  (modelOptions.length === 0 && llmDescriptor?.name !== "azure")
                 }
                 rightSection={
                   canFetchModels ? (

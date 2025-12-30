@@ -16,9 +16,9 @@ from urllib.parse import parse_qs
 from urllib.parse import urlparse
 from urllib.parse import urlunparse
 
-from google.auth.exceptions import RefreshError  # type: ignore
-from google.oauth2.credentials import Credentials as OAuthCredentials  # type: ignore
-from google.oauth2.service_account import Credentials as ServiceAccountCredentials  # type: ignore
+from google.auth.exceptions import RefreshError
+from google.oauth2.credentials import Credentials as OAuthCredentials
+from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from googleapiclient.errors import HttpError  # type: ignore
 from typing_extensions import override
 
@@ -1053,7 +1053,7 @@ class GoogleDriveConnector(
                     file.user_email,
                 )
                 if file.error is None:
-                    file.error = exc  # type: ignore[assignment]
+                    file.error = exc
                 yield file
                 continue
 

@@ -309,7 +309,7 @@ def get_document_counts_for_cc_pairs(
             )
         )
 
-        for connector_id, credential_id, cnt in db_session.execute(stmt).all():  # type: ignore
+        for connector_id, credential_id, cnt in db_session.execute(stmt).all():
             aggregated_counts[(connector_id, credential_id)] = cnt
 
     # Convert aggregated results back to the expected sequence of tuples
@@ -1117,7 +1117,7 @@ def reset_all_document_kg_stages(db_session: Session) -> int:
 
     # The hasattr check is needed for type checking, even though rowcount
     # is guaranteed to exist at runtime for UPDATE operations
-    return result.rowcount if hasattr(result, "rowcount") else 0  # type: ignore
+    return result.rowcount if hasattr(result, "rowcount") else 0
 
 
 def update_document_kg_stages(
@@ -1140,7 +1140,7 @@ def update_document_kg_stages(
     result = db_session.execute(stmt)
     # The hasattr check is needed for type checking, even though rowcount
     # is guaranteed to exist at runtime for UPDATE operations
-    return result.rowcount if hasattr(result, "rowcount") else 0  # type: ignore
+    return result.rowcount if hasattr(result, "rowcount") else 0
 
 
 def get_skipped_kg_documents(db_session: Session) -> list[str]:

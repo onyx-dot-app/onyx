@@ -6,10 +6,9 @@ import { useSpecificUserGroup } from "./hook";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { useConnectorStatus, useUsers } from "@/lib/hooks";
 import { useRouter } from "next/navigation";
-import { BackButton } from "@/components/BackButton";
+import BackButton from "@/refresh-components/buttons/BackButton";
 import { AdminPageTitle } from "@/components/admin/Title";
-import SvgUsers from "@/icons/users";
-
+import { SvgUsers } from "@opal/icons";
 const Page = (props: { params: Promise<{ groupId: string }> }) => {
   const params = use(props.params);
   const router = useRouter();
@@ -52,7 +51,7 @@ const Page = (props: { params: Promise<{ groupId: string }> }) => {
   }
 
   return (
-    <div className="mx-auto container">
+    <div className="container">
       <BackButton />
 
       <AdminPageTitle title={userGroup.name || "Unknown"} icon={SvgUsers} />

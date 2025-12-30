@@ -4,10 +4,9 @@ import { OnboardingActions, OnboardingState } from "../types";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgX from "@/icons/x";
-import SvgCheckCircle from "@/icons/check-circle";
 import { OnboardingStep } from "../types";
 import ProgressSteps from "@/refresh-components/inputs/ProgressSteps";
+import { SvgCheckCircle, SvgX } from "@opal/icons";
 
 type OnboardingHeaderProps = {
   state: OnboardingState;
@@ -43,7 +42,7 @@ const OnboardingHeaderInner = ({
         ) : (
           <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
         )}
-        <Text text03 mainUiBody>
+        <Text as="p" text03 mainUiBody>
           {STEP_CONFIG[onboardingState.currentStep].title}
         </Text>
       </div>
@@ -51,7 +50,7 @@ const OnboardingHeaderInner = ({
         {stepButtonText ? (
           <>
             {!isWelcomeStep && (
-              <Text text03 mainUiBody>
+              <Text as="p" text03 mainUiBody>
                 Step {onboardingState.stepIndex} of {onboardingState.totalSteps}
               </Text>
             )}

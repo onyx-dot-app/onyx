@@ -48,9 +48,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgMoreHorizontal from "@/icons/more-horizontal";
-import SvgKey from "@/icons/key";
-
+import { SvgKey, SvgMoreHorizontal } from "@opal/icons";
 const ITEMS_PER_PAGE = 10;
 const PAGES_PER_BATCH = 2;
 
@@ -89,6 +87,7 @@ export default function SignedUpUserTable({
 
   const [selectedRoles, setSelectedRoles] = useState<UserRole[]>([]);
   const [resetPasswordUser, setResetPasswordUser] = useState<User | null>(null);
+  const invitedEmails = invitedUsers.map((user) => user.email.toLowerCase());
 
   const {
     currentPageData: pageOfUsers,
@@ -327,7 +326,7 @@ export default function SignedUpUserTable({
       return (
         <InviteUserButton
           user={user}
-          invited={invitedUsers.map((u) => u.email).includes(user.email)}
+          invited={invitedEmails.includes(user.email.toLowerCase())}
           setPopup={setPopup}
           mutate={[refresh, invitedUsersMutate]}
         />

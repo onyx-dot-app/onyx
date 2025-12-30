@@ -1,11 +1,11 @@
 import React from "react";
 import Text from "@/refresh-components/texts/Text";
-import SvgX from "@/icons/x";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn } from "@/lib/utils";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal/types";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
 import RawModal from "@/refresh-components/RawModal";
+import { SvgX } from "@opal/icons";
 
 const sizeClassNames = {
   main: ["w-[80dvw]", "h-[80dvh]"],
@@ -70,9 +70,11 @@ export default function DefaultModalLayout({
               <IconButton icon={SvgX} internal onClick={onClose} />
             </div>
           </div>
-          <Text headingH3>{title}</Text>
+          <Text as="p" headingH3>
+            {title}
+          </Text>
           {description && (
-            <Text secondaryBody text02>
+            <Text as="p" secondaryBody text02>
               {description}
             </Text>
           )}

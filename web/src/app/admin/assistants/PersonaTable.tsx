@@ -17,37 +17,42 @@ import {
 import { FiEdit2 } from "react-icons/fi";
 import { useUser } from "@/components/user/UserProvider";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgTrash from "@/icons/trash";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import SvgAlertCircle from "@/icons/alert-circle";
 import Button from "@/refresh-components/buttons/Button";
+import { SvgAlertCircle, SvgTrash } from "@opal/icons";
 
 function PersonaTypeDisplay({ persona }: { persona: Persona }) {
   if (persona.builtin_persona) {
-    return <Text>Built-In</Text>;
+    return <Text as="p">Built-In</Text>;
   }
 
   if (persona.is_default_persona) {
-    return <Text>Default</Text>;
+    return <Text as="p">Default</Text>;
   }
 
   if (persona.is_public) {
-    return <Text>Public</Text>;
+    return <Text as="p">Public</Text>;
   }
 
   if (persona.groups.length > 0 || persona.users.length > 0) {
-    return <Text>Shared</Text>;
+    return <Text as="p">Shared</Text>;
   }
 
-  return <Text>Personal {persona.owner && <>({persona.owner.email})</>}</Text>;
+  return (
+    <Text as="p">Personal {persona.owner && <>({persona.owner.email})</>}</Text>
+  );
 }
 
 export function PersonasTable({
   personas,
   refreshPersonas,
+  currentPage,
+  pageSize,
 }: {
   personas: Persona[];
   refreshPersonas: () => void;
+  currentPage: number;
+  pageSize: number;
 }) {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
@@ -83,9 +88,13 @@ export function PersonasTable({
 
     setFinalPersonas(reorderedPersonas);
 
+    // Calculate display_priority based on current page.
+    // Page 1 (items 0-9): priorities 0-9
+    // Page 2 (items 10-19): priorities 10-19, etc.
+    const pageStartIndex = (currentPage - 1) * pageSize;
     const displayPriorityMap = new Map<UniqueIdentifier, number>();
     orderedPersonaIds.forEach((personaId, ind) => {
-      displayPriorityMap.set(personaId, ind);
+      displayPriorityMap.set(personaId, pageStartIndex + ind);
     });
 
     const response = await fetch("/api/admin/agents/display-priorities", {
@@ -204,8 +213,10 @@ export function PersonasTable({
               }
             >
               <div className="flex flex-col gap-2">
-                <Text>{text}</Text>
-                <Text text03>{additionalText}</Text>
+                <Text as="p">{text}</Text>
+                <Text as="p" text03>
+                  {additionalText}
+                </Text>
               </div>
             </ConfirmationModalLayout>
           );
@@ -306,7 +317,7 @@ export function PersonasTable({
                       onClick={() => openDeleteModal(persona)}
                     />
                   ) : (
-                    <Text>-</Text>
+                    <Text as="p">-</Text>
                   )}
                 </div>
               </div>,

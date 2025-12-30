@@ -177,6 +177,7 @@ class DocumentSource(str, Enum):
     SLAB = "slab"
     PRODUCTBOARD = "productboard"
     FILE = "file"
+    CODA = "coda"
     NOTION = "notion"
     ZULIP = "zulip"
     LINEAR = "linear"
@@ -208,6 +209,7 @@ class DocumentSource(str, Enum):
     EGNYTE = "egnyte"
     AIRTABLE = "airtable"
     HIGHSPOT = "highspot"
+    DRUPAL_WIKI = "drupal_wiki"
 
     IMAP = "imap"
     BITBUCKET = "bitbucket"
@@ -331,7 +333,6 @@ class FileType(str, Enum):
 class MilestoneRecordType(str, Enum):
     TENANT_CREATED = "tenant_created"
     USER_SIGNED_UP = "user_signed_up"
-    MULTIPLE_USERS = "multiple_users"
     VISITED_ADMIN_PAGE = "visited_admin_page"
     CREATED_CONNECTOR = "created_connector"
     CONNECTOR_SUCCEEDED = "connector_succeeded"
@@ -563,7 +564,7 @@ REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPCNT] = 3
 if platform.system() == "Darwin":
     REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPALIVE] = 60  # type: ignore
 else:
-    REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPIDLE] = 60  # type: ignore
+    REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPIDLE] = 60
 
 
 class OnyxCallTypes(str, Enum):
@@ -596,6 +597,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.SLAB: "slab data",
     DocumentSource.PRODUCTBOARD: "productboard data (boards, etc.)",
     DocumentSource.FILE: "files",
+    DocumentSource.CODA: "coda - team workspace with docs, tables, and pages",
     DocumentSource.NOTION: "notion data - a workspace that combines note-taking, \
 project management, and collaboration tools into a single, customizable platform",
     DocumentSource.ZULIP: "zulip data",
@@ -627,6 +629,7 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.EGNYTE: "egnyte - files",
     DocumentSource.AIRTABLE: "airtable - database",
     DocumentSource.HIGHSPOT: "highspot - CRM data",
+    DocumentSource.DRUPAL_WIKI: "drupal wiki - knowledge base content (pages, spaces, attachments)",
     DocumentSource.IMAP: "imap - email data",
     DocumentSource.TESTRAIL: "testrail - test case management tool for QA processes",
 }

@@ -93,7 +93,7 @@ export interface TextProps
   textDark05?: boolean;
 
   // Tag type override
-  as?: "p" | "span" | "div";
+  as?: "p" | "span";
 }
 
 export default function Text({
@@ -189,7 +189,7 @@ export default function Text({
                     ? "textDark05"
                     : "text05";
 
-  const Tag = as ?? "p";
+  const Tag = as ?? "span";
 
   return (
     <Tag
@@ -198,6 +198,7 @@ export default function Text({
         fonts[font],
         inverted ? colors.inverted[color] : colors[color],
         nowrap && "whitespace-nowrap",
+        "px-[2px]",
         className
       )}
     >

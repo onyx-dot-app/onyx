@@ -155,7 +155,6 @@ def test_soft_delete_with_agentic_search(
         chat_session_id=test_chat_session.id,
         message="What are the key principles of software engineering?",
         user_performing_action=basic_user,
-        use_agentic_search=True,
     )
 
     # Verify that the message was processed successfully
@@ -206,7 +205,6 @@ def test_hard_delete_with_agentic_search(
         chat_session_id=test_chat_session.id,
         message="What are the key principles of software engineering?",
         user_performing_action=basic_user,
-        use_agentic_search=True,
     )
 
     # Verify that the message was processed successfully

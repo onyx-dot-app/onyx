@@ -2,13 +2,14 @@
 
 import React, { useState } from "react";
 import { cn } from "@/lib/utils";
-import { ActionStatus } from "@/lib/tools/types";
+import { ActionStatus } from "@/lib/tools/interfaces";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgEdit from "@/icons/edit";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
-import { IconProps } from "@/icons";
+import type { IconProps } from "@opal/types";
 import Truncated from "@/refresh-components/texts/Truncated";
+import { SvgEdit } from "@opal/icons";
+import { useActionCardContext } from "@/sections/actions/ActionCardContext";
 
 interface ActionCardHeaderProps {
   title: string;
@@ -28,16 +29,14 @@ function ActionCardHeader({
   onRename,
 }: ActionCardHeaderProps) {
   const [isRenaming, setIsRenaming] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
+  const { isHovered } = useActionCardContext();
 
   const isConnected = status === ActionStatus.CONNECTED;
   const isPending = status === ActionStatus.PENDING;
   const isDisconnected = status === ActionStatus.DISCONNECTED;
   const isFetching = status === ActionStatus.FETCHING;
 
-  const showEditButton = isPending;
-  const showRenameIcon =
-    onRename && isHovered && !isRenaming && (isConnected || isFetching);
+  const showRenameIcon = onRename && isHovered && !isRenaming;
 
   const handleRename = async (newName: string) => {
     if (onRename) {
@@ -53,11 +52,7 @@ function ActionCardHeader({
   };
 
   return (
-    <div
-      className="flex flex-1 gap-2 items-start max-w-[480px]"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
+    <div className="flex gap-2 items-start flex-1 min-w-0 mr-2">
       <div
         className={cn(
           "flex items-center px-0 py-0.5 shrink-0",
@@ -67,72 +62,78 @@ function ActionCardHeader({
         <Icon size={20} className="h-5 w-5 stroke-text-04" />
       </div>
 
-      <div className="flex flex-col items-start flex-1 min-w-0">
-        <div className="flex gap-1 items-center w-full">
-          {isConnected || isFetching ? (
-            <div className="flex items-center gap-1 flex-1 min-w-0">
-              {isRenaming ? (
-                <ButtonRenaming
-                  initialName={title}
-                  onRename={handleRename}
-                  onClose={() => setIsRenaming(false)}
-                  className="text-text-04 font-main-content-emphasis"
-                />
-              ) : (
-                <Truncated mainContentEmphasis text04 className="truncate">
-                  {title}
-                </Truncated>
+      <div className="flex flex-col items-start flex-1 min-w-0 overflow-hidden">
+        <div className="flex items-center gap-1 min-w-0 w-full">
+          {isRenaming ? (
+            <ButtonRenaming
+              initialName={title}
+              onRename={handleRename}
+              onClose={() => setIsRenaming(false)}
+              className={cn(
+                "font-main-content-emphasis",
+                isConnected || isFetching
+                  ? "text-text-04"
+                  : isDisconnected
+                    ? "text-text-03"
+                    : "text-text-04"
               )}
-              {showRenameIcon && (
-                <IconButton
-                  icon={SvgEdit}
-                  tooltip="Rename"
-                  internal
-                  tertiary
-                  onClick={handleRenameClick}
-                  className="h-6 w-6 opacity-70 hover:opacity-100"
-                  aria-label={`Rename ${title}`}
-                />
-              )}
+            />
+          ) : (
+            <div className="min-w-0 shrink overflow-hidden">
+              <Truncated
+                mainContentEmphasis
+                className={cn(
+                  "truncate",
+                  isConnected || isFetching
+                    ? "text-text-04"
+                    : isDisconnected
+                      ? "text-text-03 line-through"
+                      : "text-text-04"
+                )}
+              >
+                {title}
+              </Truncated>
             </div>
-          ) : isPending ? (
-            <>
-              <Text headingH3 text04>
-                {title}
-              </Text>
-              <Text mainUiMuted text03>
-                (Not Authenticated)
-              </Text>
-            </>
-          ) : isDisconnected ? (
-            <>
-              <Text headingH3 text03 className="line-through">
-                {title}
-              </Text>
-              <Text mainUiMuted text02>
-                (Disconnected)
-              </Text>
-            </>
-          ) : null}
-          {showEditButton && onEdit && (
+          )}
+          {isPending && !isRenaming && (
+            <Text
+              as="p"
+              mainUiMuted
+              text03
+              className="shrink-0 whitespace-nowrap"
+            >
+              (Not Authenticated)
+            </Text>
+          )}
+          {isDisconnected && !isRenaming && (
+            <Text
+              as="p"
+              mainUiMuted
+              text02
+              className="shrink-0 whitespace-nowrap"
+            >
+              (Disconnected)
+            </Text>
+          )}
+          {showRenameIcon && (
             <IconButton
               icon={SvgEdit}
-              tooltip="Edit"
+              tooltip="Rename"
               internal
               tertiary
-              onClick={onEdit}
-              className="h-6 w-6"
-              aria-label={`Edit ${title}`}
+              onClick={handleRenameClick}
+              className="h-6 w-6 opacity-70 hover:opacity-100"
+              aria-label={`Rename ${title}`}
             />
           )}
         </div>
 
         {isConnected ? (
-          <Text secondaryBody text03 className="w-full">
+          <Text as="p" secondaryBody text03 className="w-full">
             {description}
           </Text>
         ) : (
-          <Text secondaryBody text02 className="w-full">
+          <Text as="p" secondaryBody text02 className="w-full">
             {description}
           </Text>
         )}

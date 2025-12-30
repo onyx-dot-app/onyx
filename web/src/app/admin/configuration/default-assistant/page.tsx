@@ -9,19 +9,20 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import Text from "@/refresh-components/texts/Text";
 import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import OnyxLogo from "@/icons/onyx-logo";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { useAgents } from "@/lib/hooks/useAgents";
+import { useAgents } from "@/hooks/useAgents";
 import Separator from "@/refresh-components/Separator";
 import { SubLabel } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
-import { cn } from "@/lib/utils";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import Link from "next/link";
 import { Callout } from "@/components/ui/callout";
 import { ToolSnapshot, MCPServersResponse } from "@/lib/tools/interfaces";
 import { ToolSelector } from "@/components/admin/assistants/ToolSelector";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
+import { HoverPopup } from "@/components/HoverPopup";
+import { Info } from "lucide-react";
+import { SvgOnyxLogo } from "@opal/icons";
 
 interface DefaultAssistantConfiguration {
   tool_ids: number[];
@@ -115,7 +116,9 @@ function DefaultAssistantConfig() {
 
   const enabledToolsMap: { [key: number]: boolean } = {};
   tools.forEach((tool) => {
-    enabledToolsMap[tool.id] = config.tool_ids.includes(tool.id);
+    // Enable tool if it's in the current config OR if it's marked as default_enabled
+    enabledToolsMap[tool.id] =
+      config.tool_ids.includes(tool.id) || tool.default_enabled;
   });
 
   return (
@@ -161,7 +164,7 @@ function DefaultAssistantConfig() {
           <Form>
             <div className="space-y-6">
               <div className="mt-4">
-                <Text className="text-text-dark">
+                <Text as="p" className="text-text-dark">
                   Configure which capabilities are enabled for the default
                   assistant in chat. These settings apply to all users who
                   haven&apos;t customized their assistant preferences.
@@ -172,13 +175,43 @@ function DefaultAssistantConfig() {
 
               <div className="max-w-4xl">
                 <div className="flex gap-x-2 items-center">
-                  <Text mainUiBody text04 className="font-medium text-sm">
+                  <Text
+                    as="p"
+                    mainUiBody
+                    text04
+                    className="font-medium text-sm"
+                  >
                     Instructions
                   </Text>
                 </div>
-                <SubLabel>
-                  Add instructions to tailor the behavior of the assistant.
-                </SubLabel>
+                <div className="flex items-start gap-1.5 mb-1">
+                  <SubLabel>
+                    Add instructions to tailor the behavior of the assistant.
+                  </SubLabel>
+                  <HoverPopup
+                    mainContent={
+                      <Info className="h-3.5 w-3.5 text-text-400 cursor-help" />
+                    }
+                    popupContent={
+                      <div className="text-xs space-y-1.5 max-w-xs bg-background-neutral-dark-03 text-text-light-05">
+                        <div>You can use placeholders in your prompt:</div>
+                        <div>
+                          <span className="font-mono font-semibold">
+                            [[CURRENT_DATETIME]]
+                          </span>{" "}
+                          - Injects the current date and time
+                        </div>
+                        <div>
+                          <span className="font-mono font-semibold">
+                            [[CITATION_GUIDANCE]]
+                          </span>{" "}
+                          - Injects citation guidance when search tools are used
+                        </div>
+                      </div>
+                    }
+                    direction="bottom"
+                  />
+                </div>
                 <div>
                   <InputTextArea
                     rows={8}
@@ -189,7 +222,7 @@ function DefaultAssistantConfig() {
                     placeholder="You are a professional email writing assistant that always uses a polite enthusiastic tone, emphasizes action items, and leaves blanks for the human to fill in when you have unknowns"
                   />
                   <div className="flex justify-end items-center mt-2">
-                    <Text mainUiMuted text03 className="text-sm mr-4">
+                    <Text as="p" mainUiMuted text03 className="text-sm mr-4">
                       {values.system_prompt.length} characters
                     </Text>
                   </div>
@@ -224,7 +257,11 @@ export default function Page() {
       <AdminPageTitle
         title="Default Assistant"
         icon={
-          <OnyxLogo width={32} height={32} className="my-auto stroke-text-04" />
+          <SvgOnyxLogo
+            width={32}
+            height={32}
+            className="my-auto stroke-text-04"
+          />
         }
       />
       <DefaultAssistantConfig />

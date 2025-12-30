@@ -28,7 +28,7 @@ export interface FullChatState {
 
 export interface RendererResult {
   icon: IconType | OnyxIconType | null;
-  status: string | null;
+  status: string | JSX.Element | null;
   content: JSX.Element;
 
   // can be used to override the look on the "expanded" view

@@ -4,12 +4,10 @@ import React, { useMemo } from "react";
 import type { ProjectFile } from "@/app/chat/projects/projectsService";
 import { UserFileStatus } from "@/app/chat/projects/projectsService";
 import Text from "@/refresh-components/texts/Text";
-import SvgFileText from "@/icons/file-text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { cn, isImageFile } from "@/lib/utils";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import SvgX from "@/icons/x";
-
+import { SvgFileText, SvgX } from "@opal/icons";
 function ImageFileCard({
   file,
   imageUrl,
@@ -207,7 +205,7 @@ export function FileCard({
         >
           {file.name}
         </Truncated>
-        <Text text03 secondaryBody nowrap className="truncate">
+        <Text as="p" text03 secondaryBody nowrap className="truncate">
           {isProcessing
             ? file.status === UserFileStatus.UPLOADING
               ? "Uploading..."

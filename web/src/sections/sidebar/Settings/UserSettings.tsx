@@ -5,6 +5,7 @@ import { useAuthType } from "@/lib/hooks";
 import { parseLlmDescriptor, structureValue } from "@/lib/llm/utils";
 import { setUserDefaultModel } from "@/lib/userSettings";
 import { usePathname, useRouter } from "next/navigation";
+import type { Route } from "next";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useUser } from "@/components/user/UserProvider";
 import { ThemePreference } from "@/lib/types";
@@ -18,24 +19,26 @@ import { deleteAllChatSessions } from "@/app/chat/services/lib";
 import { SourceIcon } from "@/components/SourceIcon";
 import { ValidSources } from "@/lib/types";
 import { getSourceMetadata } from "@/lib/sources";
-import SvgTrash from "@/icons/trash";
-import SvgExternalLink from "@/icons/external-link";
 import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
 import { useCCPairs } from "@/lib/hooks/useCCPairs";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 import { useUserPersonalization } from "@/lib/hooks/useUserPersonalization";
 import Text from "@/refresh-components/texts/Text";
-import SvgXOctagon from "@/icons/x-octagon";
 import PATManagement from "@/components/user/PATManagement";
 import DefaultModalLayout from "@/refresh-components/layouts/DefaultModalLayout";
-import SvgSettings from "@/icons/settings";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import SvgCpu from "@/icons/cpu";
-import SvgMoon from "@/icons/moon";
-import SvgSun from "@/icons/sun";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
+import {
+  SvgCpu,
+  SvgExternalLink,
+  SvgMoon,
+  SvgSettings,
+  SvgSun,
+  SvgTrash,
+  SvgXOctagon,
+} from "@opal/icons";
 
 type SettingsSection =
   | "general"
@@ -249,7 +252,7 @@ export default function UserSettings() {
 
   const handleConnectOAuth = (authorizeUrl: string) => {
     // Redirect to OAuth URL in the same window
-    router.push(authorizeUrl);
+    router.push(authorizeUrl as Route);
   };
 
   const handleDisconnectOAuth = async (connectorId: number) => {
@@ -548,7 +551,7 @@ export default function UserSettings() {
                   {personalizationValues.name.length === 0 && (
                     <div className="flex items-center gap-1 mt-1">
                       <SvgXOctagon className="h-3 w-3 stroke-status-error-05" />
-                      <Text text03 secondaryBody>
+                      <Text as="p" text03 secondaryBody>
                         Please enter a name to continue.
                       </Text>
                     </div>
