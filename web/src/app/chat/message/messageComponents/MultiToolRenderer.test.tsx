@@ -4,7 +4,13 @@
  */
 
 import React from "react";
-import { render, screen, waitFor, setupUser } from "@tests/setup/test-utils";
+import {
+  act,
+  render,
+  screen,
+  waitFor,
+  setupUser,
+} from "@tests/setup/test-utils";
 import MultiToolRenderer from "./MultiToolRenderer";
 import {
   createToolGroups,
@@ -198,8 +204,11 @@ describe("MultiToolRenderer - Streaming Mode", () => {
     jest.useFakeTimers();
   });
 
-  afterEach(() => {
-    jest.runOnlyPendingTimers();
+  afterEach(async () => {
+    // Wrap timer execution in act() since it triggers React state updates
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+    });
     jest.useRealTimers();
   });
 
