@@ -8,12 +8,6 @@ M = 32  # Increased for better accuracy.
 
 DEFAULT_MAX_CHUNK_SIZE = 512
 
-TITLE_VECTOR_WEIGHT = 0.05
-TITLE_KEYWORD_WEIGHT = 0.05
-CONTENT_VECTOR_WEIGHT = 0.50  # Increased to favor semantic search.
-CONTENT_KEYWORD_WEIGHT = 0.35  # Decreased to favor semantic search.
-CONTENT_PHRASE_WEIGHT = 0.05  # Phrase matching weight
-
 # Number of vectors to examine for top k neighbors for the HNSW method. Values
 # typically range between 100 - 200.
 EF_SEARCH = 200
