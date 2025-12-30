@@ -1038,7 +1038,7 @@ export default function AgentEditorPage({
                           <InputLayouts.Label
                             name="knowledge"
                             label="Knowledge"
-                            description="Add specific connectors and documents for this agent should use to inform its responses."
+                            description="Add specific connectors and documents for this agent to use to inform its responses."
                           />
 
                           <Card>
