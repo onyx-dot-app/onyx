@@ -4,7 +4,7 @@ import { useField } from "formik";
 import InputTextArea, {
   InputTextAreaProps,
 } from "@/refresh-components/inputs/InputTextArea";
-import { useOnChangeEvent, useOnBlurEvent } from "@/hooks/formHooks";
+import { useOnChangeEvent } from "@/hooks/formHooks";
 
 export interface InputTextAreaFieldProps
   extends Omit<InputTextAreaProps, "value"> {
@@ -14,12 +14,10 @@ export interface InputTextAreaFieldProps
 export default function InputTextAreaField({
   name,
   onChange: onChangeProp,
-  onBlur: onBlurProp,
   ...textareaProps
 }: InputTextAreaFieldProps) {
   const [field, meta] = useField(name);
   const onChange = useOnChangeEvent(name, onChangeProp);
-  const onBlur = useOnBlurEvent(name, onBlurProp);
   const hasError = meta.touched && meta.error;
 
   return (
@@ -27,9 +25,9 @@ export default function InputTextAreaField({
       {...textareaProps}
       id={name}
       name={name}
-      value={field.value ?? ""}
+      value={field.value || ""}
       onChange={onChange}
-      onBlur={onBlur}
+      onBlur={field.onBlur}
       error={!!hasError}
     />
   );
