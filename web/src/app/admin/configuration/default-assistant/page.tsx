@@ -26,12 +26,13 @@ import { SvgOnyxLogo } from "@opal/icons";
 
 interface DefaultAssistantConfiguration {
   tool_ids: number[];
-  system_prompt: string;
+  system_prompt: string | null;
+  default_system_prompt: string;
 }
 
 interface DefaultAssistantUpdateRequest {
   tool_ids?: number[];
-  system_prompt?: string;
+  system_prompt?: string | null;
 }
 
 function DefaultAssistantConfig() {
@@ -128,7 +129,10 @@ function DefaultAssistantConfig() {
         enableReinitialize
         initialValues={{
           enabled_tools_map: enabledToolsMap,
-          system_prompt: config.system_prompt,
+          // Display the default prompt when system_prompt is null
+          system_prompt: config.system_prompt ?? config.default_system_prompt,
+          // Track if we're using the default (null in DB)
+          isUsingDefault: config.system_prompt === null,
         }}
         onSubmit={async (values) => {
           setIsSubmitting(true);
@@ -137,10 +141,29 @@ function DefaultAssistantConfig() {
               .map((id) => Number(id))
               .filter((id) => values.enabled_tools_map[id]);
 
-            await persistConfiguration({
+            const updates: DefaultAssistantUpdateRequest = {
               tool_ids: enabledToolIds,
-              system_prompt: values.system_prompt,
-            });
+            };
+
+            // Determine if we need to send system_prompt
+            // Use config directly since it reflects the original DB state
+            const wasUsingDefault = config.system_prompt === null;
+            const initialPrompt =
+              config.system_prompt ?? config.default_system_prompt;
+            const isNowUsingDefault = values.isUsingDefault;
+            const promptChanged = values.system_prompt !== initialPrompt;
+
+            if (wasUsingDefault && isNowUsingDefault && !promptChanged) {
+              // Was default, still default, no changes - don't send
+            } else if (isNowUsingDefault) {
+              // User clicked reset - send null to set DB to null (use default)
+              updates.system_prompt = null;
+            } else if (promptChanged || wasUsingDefault !== isNowUsingDefault) {
+              // Prompt changed or switched from default to custom
+              updates.system_prompt = values.system_prompt;
+            }
+
+            await persistConfiguration(updates);
 
             await mutate("/api/admin/default-assistant/configuration");
             router.refresh();
@@ -219,13 +242,31 @@ function DefaultAssistantConfig() {
                   <InputTextArea
                     rows={8}
                     value={values.system_prompt}
-                    onChange={(event) =>
-                      setFieldValue("system_prompt", event.target.value)
-                    }
+                    onChange={(event) => {
+                      setFieldValue("system_prompt", event.target.value);
+                      // Mark as no longer using default when user edits
+                      if (values.isUsingDefault) {
+                        setFieldValue("isUsingDefault", false);
+                      }
+                    }}
                     placeholder="You are a professional email writing assistant that always uses a polite enthusiastic tone, emphasizes action items, and leaves blanks for the human to fill in when you have unknowns"
                   />
-                  <div className="flex justify-end items-center mt-2">
-                    <Text as="p" mainUiMuted text03 className="text-sm mr-4">
+                  <div className="flex justify-between items-center mt-2">
+                    <button
+                      type="button"
+                      className="text-sm text-link hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={values.isUsingDefault}
+                      onClick={() => {
+                        setFieldValue(
+                          "system_prompt",
+                          config.default_system_prompt
+                        );
+                        setFieldValue("isUsingDefault", true);
+                      }}
+                    >
+                      Reset to Default
+                    </button>
+                    <Text as="p" mainUiMuted text03 className="text-sm">
                       {values.system_prompt.length} characters
                     </Text>
                   </div>

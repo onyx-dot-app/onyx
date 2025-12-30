@@ -1183,13 +1183,15 @@ def update_default_assistant_configuration(
     db_session: Session,
     tool_ids: list[int] | None = None,
     system_prompt: str | None = None,
+    update_system_prompt: bool = False,
 ) -> Persona:
     """Update only tools and system_prompt for the default assistant.
 
     Args:
         db_session: Database session
         tool_ids: List of tool IDs to enable (if None, tools are not updated)
-        system_prompt: New system prompt (if None, system prompt is not updated)
+        system_prompt: New system prompt value (None means use default)
+        update_system_prompt: If True, update the system_prompt field (allows setting to None)
 
     Returns:
         Updated Persona object
@@ -1202,8 +1204,8 @@ def update_default_assistant_configuration(
     if not persona:
         raise ValueError("Default assistant not found")
 
-    # Update system prompt if provided
-    if system_prompt is not None:
+    # Update system prompt if explicitly requested
+    if update_system_prompt:
         persona.system_prompt = system_prompt
 
     # Update tools if provided
