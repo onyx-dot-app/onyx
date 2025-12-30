@@ -1,18 +1,14 @@
 import React, { useMemo } from "react";
 import * as Yup from "yup";
-import { FormikProps } from "formik";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import Separator from "@/refresh-components/Separator";
-import IconButton from "@/refresh-components/buttons/IconButton";
-import { cn, noProp } from "@/lib/utils";
-import { SvgRefreshCw } from "@opal/icons";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import {
   OnboardingFormWrapper,
-  useOnboardingFormContext,
+  OnboardingFormChildProps,
 } from "./OnboardingFormWrapper";
 import { OnboardingActions, OnboardingState } from "../types";
 import { buildInitialValues } from "../components/llmConnectionHelpers";
@@ -23,6 +19,8 @@ import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 // Field name constants
 const FIELD_API_KEY = "api_key";
 const FIELD_DEFAULT_MODEL_NAME = "default_model_name";
+
+const DEFAULT_DEFAULT_MODEL_NAME = "gpt-5.2";
 
 interface OpenAIOnboardingFormProps {
   llmDescriptor: WellKnownLLMProviderDescriptor;
@@ -43,25 +41,9 @@ interface OpenAIFormValues {
   is_public: boolean;
 }
 
-function OpenAIFormFields({
-  formikProps,
-}: {
-  formikProps: FormikProps<OpenAIFormValues>;
-}) {
-  const {
-    apiStatus,
-    showApiMessage,
-    errorMessage,
-    modelOptions,
-    canFetchModels,
-    isFetchingModels,
-    handleFetchModels,
-    modelsApiStatus,
-    modelsErrorMessage,
-    showModelsApiErrorMessage,
-    disabled,
-    llmDescriptor,
-  } = useOnboardingFormContext();
+function OpenAIFormFields(props: OnboardingFormChildProps<OpenAIFormValues>) {
+  const { apiStatus, showApiMessage, errorMessage, modelOptions, disabled } =
+    props;
 
   return (
     <>
@@ -100,7 +82,7 @@ function OpenAIFormFields({
                 state={apiStatus}
                 messages={{
                   loading: "Checking API key with OpenAI...",
-                  success: "API key valid. Your available models updated.",
+                  success: "API key valid.",
                   error: errorMessage || "Invalid API key",
                 }}
               />
@@ -126,52 +108,17 @@ function OpenAIFormFields({
                 onValueChange={(value) => helper.setValue(value)}
                 onChange={(e) => helper.setValue(e.target.value)}
                 options={modelOptions}
-                disabled={
-                  disabled || isFetchingModels || modelOptions.length === 0
-                }
-                rightSection={
-                  canFetchModels ? (
-                    <IconButton
-                      internal
-                      icon={({ className }) => (
-                        <SvgRefreshCw
-                          className={cn(
-                            className,
-                            isFetchingModels && "animate-spin"
-                          )}
-                        />
-                      )}
-                      onClick={noProp((e) => {
-                        e.preventDefault();
-                        handleFetchModels();
-                      })}
-                      tooltip="Fetch available models"
-                      disabled={disabled || isFetchingModels}
-                    />
-                  ) : undefined
-                }
+                disabled={disabled || modelOptions.length === 0}
                 onBlur={field.onBlur}
                 placeholder="Select a model"
               />
             </FormField.Control>
-            {!showModelsApiErrorMessage && (
-              <FormField.Message
-                messages={{
-                  idle: "This model will be used by Onyx by default.",
-                  error: meta.error,
-                }}
-              />
-            )}
-            {showModelsApiErrorMessage && (
-              <FormField.APIMessage
-                state={modelsApiStatus}
-                messages={{
-                  loading: "Fetching models...",
-                  success: "Models fetched successfully.",
-                  error: modelsErrorMessage || "Failed to fetch models",
-                }}
-              />
-            )}
+            <FormField.Message
+              messages={{
+                idle: "This model will be used by Onyx by default.",
+                error: meta.error,
+              }}
+            />
           </FormField>
         )}
       />
@@ -191,6 +138,7 @@ export function OpenAIOnboardingForm({
       ...buildInitialValues(),
       name: llmDescriptor.name,
       provider: llmDescriptor.name,
+      default_model_name: DEFAULT_DEFAULT_MODEL_NAME,
     }),
     [llmDescriptor.name]
   );
@@ -219,7 +167,7 @@ export function OpenAIOnboardingForm({
       initialValues={initialValues}
       validationSchema={validationSchema}
     >
-      {(formikProps) => <OpenAIFormFields formikProps={formikProps} />}
+      {(props) => <OpenAIFormFields {...props} />}
     </OnboardingFormWrapper>
   );
 }

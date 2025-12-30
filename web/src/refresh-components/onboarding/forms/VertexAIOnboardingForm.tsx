@@ -1,6 +1,5 @@
 import React, { useMemo } from "react";
 import * as Yup from "yup";
-import { FormikProps } from "formik";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
@@ -12,7 +11,7 @@ import { SvgRefreshCw } from "@opal/icons";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import {
   OnboardingFormWrapper,
-  useOnboardingFormContext,
+  OnboardingFormChildProps,
 } from "./OnboardingFormWrapper";
 import { OnboardingActions, OnboardingState } from "../types";
 import {
@@ -48,12 +47,11 @@ interface VertexAIFormValues {
   };
 }
 
-function VertexAIFormFields({
-  formikProps,
-}: {
-  formikProps: FormikProps<VertexAIFormValues>;
-}) {
+function VertexAIFormFields(
+  props: OnboardingFormChildProps<VertexAIFormValues>
+) {
   const {
+    formikProps,
     apiStatus,
     setApiStatus,
     showApiMessage,
@@ -61,15 +59,13 @@ function VertexAIFormFields({
     errorMessage,
     setErrorMessage,
     modelOptions,
-    canFetchModels,
     isFetchingModels,
-    handleFetchModels,
     modelsApiStatus,
     modelsErrorMessage,
     showModelsApiErrorMessage,
     disabled,
     llmDescriptor,
-  } = useOnboardingFormContext();
+  } = props;
 
   const handleFileInputChange = async (value: string) => {
     if (!llmDescriptor || !value) return;
@@ -169,27 +165,6 @@ function VertexAIFormFields({
                 disabled={
                   disabled || isFetchingModels || modelOptions.length === 0
                 }
-                rightSection={
-                  canFetchModels ? (
-                    <IconButton
-                      internal
-                      icon={({ className }) => (
-                        <SvgRefreshCw
-                          className={cn(
-                            className,
-                            isFetchingModels && "animate-spin"
-                          )}
-                        />
-                      )}
-                      onClick={noProp((e) => {
-                        e.preventDefault();
-                        handleFetchModels();
-                      })}
-                      tooltip="Fetch available models"
-                      disabled={disabled || isFetchingModels}
-                    />
-                  ) : undefined
-                }
                 onBlur={field.onBlur}
                 placeholder="Select a model"
               />
@@ -264,7 +239,7 @@ export function VertexAIOnboardingForm({
       initialValues={initialValues}
       validationSchema={validationSchema}
     >
-      {(formikProps) => <VertexAIFormFields formikProps={formikProps} />}
+      {(props) => <VertexAIFormFields {...props} />}
     </OnboardingFormWrapper>
   );
 }

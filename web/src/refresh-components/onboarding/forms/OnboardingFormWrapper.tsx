@@ -1,10 +1,4 @@
-import React, {
-  useState,
-  useMemo,
-  ReactNode,
-  createContext,
-  useContext,
-} from "react";
+import React, { useState, useMemo, ReactNode } from "react";
 import { Form, Formik, FormikProps } from "formik";
 import * as Yup from "yup";
 import ProviderModal from "@/components/modals/ProviderModal";
@@ -27,7 +21,10 @@ import {
 import type { IconProps } from "@opal/types";
 import { ComboBoxOption } from "@/refresh-components/inputs/InputComboBox";
 
-export interface OnboardingFormContextType {
+export interface OnboardingFormChildProps<T extends Record<string, any>> {
+  // Formik props
+  formikProps: FormikProps<T>;
+
   // API status tracking
   apiStatus: APIFormFieldState;
   setApiStatus: (status: APIFormFieldState) => void;
@@ -48,7 +45,6 @@ export interface OnboardingFormContextType {
   isFetchingModels: boolean;
   fetchedModelConfigurations: ModelConfiguration[];
   modelOptions: ComboBoxOption[];
-  canFetchModels: boolean;
   handleFetchModels: () => Promise<void>;
 
   // Provider info
@@ -60,20 +56,6 @@ export interface OnboardingFormContextType {
 
   // Disabled state
   disabled: boolean;
-}
-
-const OnboardingFormContext = createContext<OnboardingFormContextType | null>(
-  null
-);
-
-export function useOnboardingFormContext(): OnboardingFormContextType {
-  const context = useContext(OnboardingFormContext);
-  if (!context) {
-    throw new Error(
-      "useOnboardingFormContext must be used within OnboardingFormWrapper"
-    );
-  }
-  return context;
 }
 
 export interface OnboardingFormWrapperProps<T extends Record<string, any>> {
@@ -99,7 +81,7 @@ export interface OnboardingFormWrapperProps<T extends Record<string, any>> {
   validationSchema: Yup.Schema<any>;
 
   // Render function for form content
-  children: (formikProps: FormikProps<T>) => ReactNode;
+  children: (props: OnboardingFormChildProps<T>) => ReactNode;
 
   // Optional: transform values before submission
   transformValues?: (values: T, fetchedModelConfigurations: any[]) => any;
@@ -144,17 +126,20 @@ export function OnboardingFormWrapper<T extends Record<string, any>>({
   // Form reset key for re-initialization
   const [formResetKey, setFormResetKey] = useState(0);
 
-  // Compute model options
-  const modelOptions = useMemo(
-    () => getModelOptions(fetchedModelConfigurations),
-    [fetchedModelConfigurations]
-  );
-
-  // Check if provider can fetch models
-  const canFetchModels = useMemo(
-    () => canProviderFetchModels(llmDescriptor?.name),
-    [llmDescriptor]
-  );
+  // Compute model options - use static models from descriptor if provider doesn't support fetching
+  const modelOptions = useMemo(() => {
+    if (fetchedModelConfigurations.length > 0) {
+      return getModelOptions(fetchedModelConfigurations);
+    }
+    // For providers that don't support dynamic fetching, use static visible models from descriptor
+    if (llmDescriptor?.model_configurations) {
+      const visibleModels = llmDescriptor.model_configurations.filter(
+        (m) => m.is_visible
+      );
+      return getModelOptions(visibleModels);
+    }
+    return [];
+  }, [fetchedModelConfigurations, llmDescriptor]);
 
   // Reset form when modal opens
   React.useEffect(() => {
@@ -180,16 +165,11 @@ export function OnboardingFormWrapper<T extends Record<string, any>>({
   const handleSubmit = async (values: T) => {
     setIsSubmitting(true);
 
-    // Use fetched model configurations if available
-    let modelConfigsToUse =
+    // Use fetched model configurations if available, otherwise use static models from descriptor
+    const modelConfigsToUse =
       fetchedModelConfigurations.length > 0
         ? fetchedModelConfigurations
-        : llmDescriptor?.model_configurations.map((model) => ({
-            name: model.name,
-            is_visible: true,
-            max_input_tokens: model.max_input_tokens,
-            supports_image_input: model.supports_image_input,
-          })) ?? [];
+        : llmDescriptor?.model_configurations ?? [];
 
     // Transform values if transformer provided
     const payload = transformValues
@@ -275,10 +255,11 @@ export function OnboardingFormWrapper<T extends Record<string, any>>({
     onOpenChange(false);
   };
 
-  // Create context value with formik-dependent fetch function
-  const createContextValue = (
+  // Create child props with formik-dependent fetch function
+  const createChildProps = (
     formikProps: FormikProps<T>
-  ): OnboardingFormContextType => ({
+  ): OnboardingFormChildProps<T> => ({
+    formikProps,
     apiStatus,
     setApiStatus,
     showApiMessage,
@@ -294,9 +275,9 @@ export function OnboardingFormWrapper<T extends Record<string, any>>({
     isFetchingModels,
     fetchedModelConfigurations,
     modelOptions,
-    canFetchModels,
     handleFetchModels: async () => {
       if (!llmDescriptor) return;
+      if (!canProviderFetchModels(llmDescriptor.name)) return;
 
       setIsFetchingModels(true);
       try {
@@ -337,27 +318,25 @@ export function OnboardingFormWrapper<T extends Record<string, any>>({
       onSubmit={handleSubmit}
     >
       {(formikProps) => {
-        const contextValue = createContextValue(formikProps);
+        const childProps = createChildProps(formikProps);
 
         return (
-          <OnboardingFormContext.Provider value={contextValue}>
-            <ProviderModal
-              open={open}
-              onOpenChange={onOpenChange}
-              title={title}
-              description={description}
-              icon={icon}
-              onSubmit={formikProps.submitForm}
-              submitDisabled={!formikProps.isValid || !formikProps.dirty}
-              isSubmitting={isSubmitting}
-            >
-              <Form className="flex flex-col gap-0">
-                <div className="flex flex-col p-4 gap-4 bg-background-tint-01 w-full">
-                  {children(formikProps)}
-                </div>
-              </Form>
-            </ProviderModal>
-          </OnboardingFormContext.Provider>
+          <ProviderModal
+            open={open}
+            onOpenChange={onOpenChange}
+            title={title}
+            description={description}
+            icon={icon}
+            onSubmit={formikProps.submitForm}
+            submitDisabled={!formikProps.isValid || !formikProps.dirty}
+            isSubmitting={isSubmitting}
+          >
+            <Form className="flex flex-col gap-0">
+              <div className="flex flex-col p-4 gap-4 bg-background-tint-01 w-full">
+                {children(childProps)}
+              </div>
+            </Form>
+          </ProviderModal>
         );
       }}
     </Formik>

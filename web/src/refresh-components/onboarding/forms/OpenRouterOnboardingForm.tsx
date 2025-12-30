@@ -1,9 +1,7 @@
 import React, { useMemo } from "react";
 import * as Yup from "yup";
-import { FormikProps } from "formik";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import Separator from "@/refresh-components/Separator";
@@ -13,7 +11,7 @@ import { SvgRefreshCw } from "@opal/icons";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import {
   OnboardingFormWrapper,
-  useOnboardingFormContext,
+  OnboardingFormChildProps,
 } from "./OnboardingFormWrapper";
 import { OnboardingActions, OnboardingState } from "../types";
 import { buildInitialValues } from "../components/llmConnectionHelpers";
@@ -45,25 +43,22 @@ interface OpenRouterFormValues {
   is_public: boolean;
 }
 
-function OpenRouterFormFields({
-  formikProps,
-}: {
-  formikProps: FormikProps<OpenRouterFormValues>;
-}) {
+function OpenRouterFormFields(
+  props: OnboardingFormChildProps<OpenRouterFormValues>
+) {
   const {
+    formikProps,
     apiStatus,
     showApiMessage,
     errorMessage,
     modelOptions,
-    canFetchModels,
     isFetchingModels,
     handleFetchModels,
     modelsApiStatus,
     modelsErrorMessage,
     showModelsApiErrorMessage,
     disabled,
-    llmDescriptor,
-  } = useOnboardingFormContext();
+  } = props;
 
   const handleApiKeyInteraction = () => {
     if (formikProps.values.api_key) {
@@ -142,25 +137,23 @@ function OpenRouterFormFields({
                   disabled || isFetchingModels || modelOptions.length === 0
                 }
                 rightSection={
-                  canFetchModels ? (
-                    <IconButton
-                      internal
-                      icon={({ className }) => (
-                        <SvgRefreshCw
-                          className={cn(
-                            className,
-                            isFetchingModels && "animate-spin"
-                          )}
-                        />
-                      )}
-                      onClick={noProp((e) => {
-                        e.preventDefault();
-                        handleFetchModels();
-                      })}
-                      tooltip="Fetch available models"
-                      disabled={disabled || isFetchingModels}
-                    />
-                  ) : undefined
+                  <IconButton
+                    internal
+                    icon={({ className }) => (
+                      <SvgRefreshCw
+                        className={cn(
+                          className,
+                          isFetchingModels && "animate-spin"
+                        )}
+                      />
+                    )}
+                    onClick={noProp((e) => {
+                      e.preventDefault();
+                      handleFetchModels();
+                    })}
+                    tooltip="Fetch available models"
+                    disabled={disabled || isFetchingModels}
+                  />
                 }
                 onBlur={field.onBlur}
                 placeholder="Select a model"
@@ -232,7 +225,7 @@ export function OpenRouterOnboardingForm({
       initialValues={initialValues}
       validationSchema={validationSchema}
     >
-      {(formikProps) => <OpenRouterFormFields formikProps={formikProps} />}
+      {(props) => <OpenRouterFormFields {...props} />}
     </OnboardingFormWrapper>
   );
 }

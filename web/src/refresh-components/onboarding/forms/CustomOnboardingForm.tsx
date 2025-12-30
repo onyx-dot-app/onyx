@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import * as Yup from "yup";
-import { FormikProps } from "formik";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -13,7 +12,7 @@ import KeyValueInput, {
 import { SvgServer } from "@opal/icons";
 import {
   OnboardingFormWrapper,
-  useOnboardingFormContext,
+  OnboardingFormChildProps,
 } from "./OnboardingFormWrapper";
 import { OnboardingActions, OnboardingState } from "../types";
 import { buildInitialValues } from "../components/llmConnectionHelpers";
@@ -51,13 +50,9 @@ interface CustomFormValues {
   target_uri: string;
 }
 
-function CustomFormFields({
-  formikProps,
-}: {
-  formikProps: FormikProps<CustomFormValues>;
-}) {
-  const { apiStatus, showApiMessage, errorMessage, disabled } =
-    useOnboardingFormContext();
+function CustomFormFields(props: OnboardingFormChildProps<CustomFormValues>) {
+  const { formikProps, apiStatus, showApiMessage, errorMessage, disabled } =
+    props;
 
   const [modelConfigError, setModelConfigError] = useState<string | null>(null);
   const [customConfigDraft, setCustomConfigDraft] = useState<KeyValue[]>(
@@ -420,7 +415,7 @@ export function CustomOnboardingForm({
         };
       }}
     >
-      {(formikProps) => <CustomFormFields formikProps={formikProps} />}
+      {(props) => <CustomFormFields {...props} />}
     </OnboardingFormWrapper>
   );
 }

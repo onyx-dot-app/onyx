@@ -1,6 +1,5 @@
 import React, { useMemo } from "react";
 import * as Yup from "yup";
-import { FormikProps } from "formik";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -15,7 +14,7 @@ import { SvgAlertCircle, SvgRefreshCw } from "@opal/icons";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import {
   OnboardingFormWrapper,
-  useOnboardingFormContext,
+  OnboardingFormChildProps,
 } from "./OnboardingFormWrapper";
 import { OnboardingActions, OnboardingState } from "../types";
 import { buildInitialValues } from "../components/llmConnectionHelpers";
@@ -79,25 +78,20 @@ interface BedrockFormValues {
   };
 }
 
-function BedrockFormFields({
-  formikProps,
-}: {
-  formikProps: FormikProps<BedrockFormValues>;
-}) {
+function BedrockFormFields(props: OnboardingFormChildProps<BedrockFormValues>) {
   const {
+    formikProps,
     apiStatus,
     showApiMessage,
     errorMessage,
     modelOptions,
-    canFetchModels,
     isFetchingModels,
     handleFetchModels,
     modelsApiStatus,
     modelsErrorMessage,
     showModelsApiErrorMessage,
     disabled,
-    llmDescriptor,
-  } = useOnboardingFormContext();
+  } = props;
 
   const authMethod =
     formikProps.values.custom_config?.BEDROCK_AUTH_METHOD ||
@@ -347,33 +341,31 @@ function BedrockFormFields({
                   disabled || isFetchingModels || modelOptions.length === 0
                 }
                 rightSection={
-                  canFetchModels ? (
-                    <IconButton
-                      internal
-                      icon={({ className }) => (
-                        <SvgRefreshCw
-                          className={cn(
-                            className,
-                            isFetchingModels && "animate-spin"
-                          )}
-                        />
-                      )}
-                      onClick={noProp((e) => {
-                        e.preventDefault();
-                        if (!isFetchDisabled) {
-                          handleFetchModels();
-                        }
-                      })}
-                      tooltip={
-                        isFetchDisabled
-                          ? !formikProps.values.custom_config?.AWS_REGION_NAME
-                            ? "Select an AWS region first"
-                            : "Complete authentication first"
-                          : "Fetch available models"
+                  <IconButton
+                    internal
+                    icon={({ className }) => (
+                      <SvgRefreshCw
+                        className={cn(
+                          className,
+                          isFetchingModels && "animate-spin"
+                        )}
+                      />
+                    )}
+                    onClick={noProp((e) => {
+                      e.preventDefault();
+                      if (!isFetchDisabled) {
+                        handleFetchModels();
                       }
-                      disabled={disabled || isFetchingModels || isFetchDisabled}
-                    />
-                  ) : undefined
+                    })}
+                    tooltip={
+                      isFetchDisabled
+                        ? !formikProps.values.custom_config?.AWS_REGION_NAME
+                          ? "Select an AWS region first"
+                          : "Complete authentication first"
+                        : "Fetch available models"
+                    }
+                    disabled={disabled || isFetchingModels || isFetchDisabled}
+                  />
                 }
                 onBlur={field.onBlur}
                 placeholder="Select a model"
@@ -483,7 +475,7 @@ export function BedrockOnboardingForm({
         };
       }}
     >
-      {(formikProps) => <BedrockFormFields formikProps={formikProps} />}
+      {(props) => <BedrockFormFields {...props} />}
     </OnboardingFormWrapper>
   );
 }

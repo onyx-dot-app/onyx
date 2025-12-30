@@ -1,6 +1,5 @@
 import React, { useMemo } from "react";
 import * as Yup from "yup";
-import { FormikProps } from "formik";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -10,7 +9,7 @@ import Separator from "@/refresh-components/Separator";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import {
   OnboardingFormWrapper,
-  useOnboardingFormContext,
+  OnboardingFormChildProps,
 } from "./OnboardingFormWrapper";
 import { OnboardingActions, OnboardingState } from "../types";
 import { buildInitialValues } from "../components/llmConnectionHelpers";
@@ -50,19 +49,15 @@ interface AzureFormValues {
   is_public: boolean;
 }
 
-function AzureFormFields({
-  formikProps,
-}: {
-  formikProps: FormikProps<AzureFormValues>;
-}) {
+function AzureFormFields(props: OnboardingFormChildProps<AzureFormValues>) {
   const {
+    formikProps,
     apiStatus,
     showApiMessage,
     errorMessage,
     modelOptions,
     disabled,
-    llmDescriptor,
-  } = useOnboardingFormContext();
+  } = props;
 
   return (
     <>
@@ -252,7 +247,7 @@ export function AzureOnboardingForm({
         };
       }}
     >
-      {(formikProps) => <AzureFormFields formikProps={formikProps} />}
+      {(props) => <AzureFormFields {...props} />}
     </OnboardingFormWrapper>
   );
 }

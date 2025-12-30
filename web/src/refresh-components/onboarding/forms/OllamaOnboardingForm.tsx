@@ -1,6 +1,5 @@
 import React, { useMemo, useState, useEffect } from "react";
 import * as Yup from "yup";
-import { FormikProps } from "formik";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -19,7 +18,7 @@ import { SvgRefreshCw } from "@opal/icons";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import {
   OnboardingFormWrapper,
-  useOnboardingFormContext,
+  OnboardingFormChildProps,
 } from "./OnboardingFormWrapper";
 import { OnboardingActions, OnboardingState } from "../types";
 import { buildInitialValues } from "../components/llmConnectionHelpers";
@@ -65,15 +64,15 @@ interface OllamaFormValues {
 }
 
 function OllamaFormFields({
-  formikProps,
   activeTab,
   setActiveTab,
-}: {
-  formikProps: FormikProps<OllamaFormValues>;
+  ...props
+}: OnboardingFormChildProps<OllamaFormValues> & {
   activeTab: OllamaTab;
   setActiveTab: (tab: OllamaTab) => void;
 }) {
   const {
+    formikProps,
     apiStatus,
     showApiMessage,
     setShowApiMessage,
@@ -81,14 +80,13 @@ function OllamaFormFields({
     setErrorMessage,
     setApiStatus,
     modelOptions,
-    canFetchModels,
     isFetchingModels,
     handleFetchModels,
     modelsApiStatus,
     modelsErrorMessage,
     showModelsApiErrorMessage,
     disabled,
-  } = useOnboardingFormContext();
+  } = props;
 
   // Reset API status when tab changes
   useEffect(() => {
@@ -194,25 +192,23 @@ function OllamaFormFields({
                     options={modelOptions}
                     disabled={disabled || isFetchingModels}
                     rightSection={
-                      canFetchModels ? (
-                        <IconButton
-                          internal
-                          icon={({ className }) => (
-                            <SvgRefreshCw
-                              className={cn(
-                                className,
-                                isFetchingModels && "animate-spin"
-                              )}
-                            />
-                          )}
-                          onClick={noProp((e) => {
-                            e.preventDefault();
-                            handleFetchModels();
-                          })}
-                          tooltip="Fetch available models"
-                          disabled={disabled || isFetchingModels}
-                        />
-                      ) : undefined
+                      <IconButton
+                        internal
+                        icon={({ className }) => (
+                          <SvgRefreshCw
+                            className={cn(
+                              className,
+                              isFetchingModels && "animate-spin"
+                            )}
+                          />
+                        )}
+                        onClick={noProp((e) => {
+                          e.preventDefault();
+                          handleFetchModels();
+                        })}
+                        tooltip="Fetch available models"
+                        disabled={disabled || isFetchingModels}
+                      />
                     }
                     onBlur={field.onBlur}
                     placeholder="Select a model"
@@ -317,25 +313,23 @@ function OllamaFormFields({
                     options={modelOptions}
                     disabled={disabled || isFetchingModels}
                     rightSection={
-                      canFetchModels ? (
-                        <IconButton
-                          internal
-                          icon={({ className }) => (
-                            <SvgRefreshCw
-                              className={cn(
-                                className,
-                                isFetchingModels && "animate-spin"
-                              )}
-                            />
-                          )}
-                          onClick={noProp((e) => {
-                            e.preventDefault();
-                            handleFetchModels();
-                          })}
-                          tooltip="Fetch available models"
-                          disabled={disabled || isFetchingModels}
-                        />
-                      ) : undefined
+                      <IconButton
+                        internal
+                        icon={({ className }) => (
+                          <SvgRefreshCw
+                            className={cn(
+                              className,
+                              isFetchingModels && "animate-spin"
+                            )}
+                          />
+                        )}
+                        onClick={noProp((e) => {
+                          e.preventDefault();
+                          handleFetchModels();
+                        })}
+                        tooltip="Fetch available models"
+                        disabled={disabled || isFetchingModels}
+                      />
                     }
                     onBlur={field.onBlur}
                     placeholder="Select a model"
@@ -445,9 +439,9 @@ export function OllamaOnboardingForm({
         };
       }}
     >
-      {(formikProps) => (
+      {(props) => (
         <OllamaFormFields
-          formikProps={formikProps}
+          {...props}
           activeTab={activeTab}
           setActiveTab={setActiveTab}
         />
