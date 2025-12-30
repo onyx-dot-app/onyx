@@ -245,14 +245,8 @@ def construct_tools(
                         OpenURLTool(
                             tool_id=db_tool_model.id,
                             emitter=emitter,
-                            db_session=db_session,
                             document_index=_get_document_index(),
                             user=user,
-                            project_id=(
-                                search_tool_config.project_id
-                                if search_tool_config
-                                else None
-                            ),
                         )
                     ]
                 except RuntimeError as e:

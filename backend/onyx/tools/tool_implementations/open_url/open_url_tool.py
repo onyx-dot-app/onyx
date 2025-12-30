@@ -103,6 +103,85 @@ def _url_lookup_variants(url: str) -> set[str]:
     return {variant for variant in variants if variant}
 
 
+def _dedupe_document_requests(
+    requests: list[IndexedDocumentRequest],
+) -> list[IndexedDocumentRequest]:
+    """Remove duplicate document requests, preserving order."""
+    seen: set[str] = set()
+    deduped: list[IndexedDocumentRequest] = []
+    for request in requests:
+        if request.document_id in seen:
+            continue
+        seen.add(request.document_id)
+        deduped.append(request)
+    return deduped
+
+
+def _resolve_urls_to_document_ids(
+    urls: list[str], db_session: Session
+) -> tuple[list[IndexedDocumentRequest], list[str]]:
+    """Resolve URLs to document IDs using connector-owned normalization.
+
+    Uses the url_normalization module which delegates to each connector's
+    own normalization function to ensure URLs match the canonical Document.id
+    format used during ingestion.
+    """
+    matches: list[IndexedDocumentRequest] = []
+    unresolved: list[str] = []
+    normalized_map: dict[str, set[str]] = {}
+
+    for url in urls:
+        # Use connector-owned normalization (reuses connector's own logic)
+        normalized = normalize_url(url)
+
+        if normalized:
+            # Get URL variants (with/without trailing slash) for database lookup
+            variants = _url_lookup_variants(normalized)
+            if variants:
+                normalized_map[url] = variants
+            else:
+                unresolved.append(url)
+        else:
+            # No normalizer found - could be a non-URL document ID (e.g., FILE_CONNECTOR__...)
+            if url and not url.startswith(("http://", "https://")):
+                # Likely a document ID, use it directly
+                normalized_map[url] = {url}
+            else:
+                # Try generic normalization as fallback
+                variants = _url_lookup_variants(url)
+                if variants:
+                    normalized_map[url] = variants
+                else:
+                    unresolved.append(url)
+
+    if not normalized_map:
+        return matches, unresolved
+
+    # Query database with all normalized variants
+    all_variants = {
+        variant for variants in normalized_map.values() for variant in variants
+    }
+    existing_document_ids = filter_existing_document_ids(db_session, list(all_variants))
+
+    # Match URLs to documents
+    for url, variants in normalized_map.items():
+        matched_doc_id = next(
+            (variant for variant in variants if variant in existing_document_ids),
+            None,
+        )
+        if matched_doc_id:
+            matches.append(
+                IndexedDocumentRequest(
+                    document_id=matched_doc_id,
+                    original_url=url,
+                )
+            )
+        else:
+            unresolved.append(url)
+
+    return matches, unresolved
+
+
 def _convert_sections_to_llm_string_with_citations(
     sections: list[InferenceSection],
     existing_citation_mapping: dict[str, int],
@@ -166,7 +245,10 @@ def _convert_sections_to_llm_string_with_citations(
             link = next(iter(chunk.source_links.values()), None)
             if link:
                 result["url"] = link
-        result["document_identifier"] = document_id
+
+        if "url" not in result:
+            result["document_identifier"] = document_id
+
         if chunk.metadata:
             result["metadata"] = json.dumps(chunk.metadata)
         result["content"] = section.combined_content
@@ -192,10 +274,8 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         self,
         tool_id: int,
         emitter: Emitter,
-        db_session: Session,
         document_index: DocumentIndex,
         user: User | None,
-        project_id: int | None = None,
         content_provider: WebContentProvider | None = None,
     ) -> None:
         """Initialize the OpenURLTool.
@@ -203,10 +283,8 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         Args:
             tool_id: Unique identifier for this tool instance.
             emitter: Emitter for streaming packets to the client.
-            db_session: Session for database lookups / ACL checks.
             document_index: Index handle for retrieving stored documents.
             user: User context for ACL filtering.
-            project_id: Optional project scope for filters.
             content_provider: Optional content provider. If not provided,
                 will use the default provider from the database or fall back
                 to the built-in Onyx web crawler.
@@ -215,7 +293,6 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         self._id = tool_id
         self._document_index = document_index
         self._user = user
-        self._project_id = project_id
 
         if content_provider is not None:
             self._provider = content_provider
@@ -285,7 +362,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                             ),
                         },
                     },
-                    "required": [],
+                    "required": [URLS_FIELD],
                 },
             },
         }
@@ -323,14 +400,12 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         with get_session_with_current_tenant() as db_session:
             # Resolve URLs to document IDs for indexed retrieval
             # Handles both raw URLs and already-normalized document IDs
-            url_requests, _ = OpenURLTool._resolve_urls_to_document_ids(
-                urls, db_session
-            )
+            url_requests, _ = _resolve_urls_to_document_ids(urls, db_session)
             logger.info(
                 f"Resolved {len(url_requests)} URLs to indexed document IDs for parallel retrieval"
             )
 
-            all_requests = OpenURLTool._dedupe_document_requests(url_requests)
+            all_requests = _dedupe_document_requests(url_requests)
             logger.info(f"Total unique document requests: {len(all_requests)}")
 
             # Create mapping from URL to document_id for result merging
@@ -417,86 +492,6 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             ),
             llm_facing_response=docs_str,
         )
-
-    @staticmethod
-    def _dedupe_document_requests(
-        requests: list[IndexedDocumentRequest],
-    ) -> list[IndexedDocumentRequest]:
-        seen: set[str] = set()
-        deduped: list[IndexedDocumentRequest] = []
-        for request in requests:
-            if request.document_id in seen:
-                continue
-            seen.add(request.document_id)
-            deduped.append(request)
-        return deduped
-
-    @staticmethod
-    def _resolve_urls_to_document_ids(
-        urls: list[str], db_session: Session
-    ) -> tuple[list[IndexedDocumentRequest], list[str]]:
-        """Resolve URLs to document IDs using connector-owned normalization.
-
-        Uses the url_normalization module which delegates to each connector's
-        own normalization function to ensure URLs match the canonical Document.id
-        format used during ingestion.
-        """
-        matches: list[IndexedDocumentRequest] = []
-        unresolved: list[str] = []
-        normalized_map: dict[str, set[str]] = {}
-
-        for url in urls:
-            # Use connector-owned normalization (reuses connector's own logic)
-            normalized = normalize_url(url)
-
-            if normalized:
-                # Get URL variants (with/without trailing slash) for database lookup
-                variants = _url_lookup_variants(normalized)
-                if variants:
-                    normalized_map[url] = variants
-                else:
-                    unresolved.append(url)
-            else:
-                # No normalizer found - could be a non-URL document ID (e.g., FILE_CONNECTOR__...)
-                if url and not url.startswith(("http://", "https://")):
-                    # Likely a document ID, use it directly
-                    normalized_map[url] = {url}
-                else:
-                    # Try generic normalization as fallback
-                    variants = _url_lookup_variants(url)
-                    if variants:
-                        normalized_map[url] = variants
-                    else:
-                        unresolved.append(url)
-
-        if not normalized_map:
-            return matches, unresolved
-
-        # Query database with all normalized variants
-        all_variants = {
-            variant for variants in normalized_map.values() for variant in variants
-        }
-        existing_document_ids = filter_existing_document_ids(
-            db_session, list(all_variants)
-        )
-
-        # Match URLs to documents
-        for url, variants in normalized_map.items():
-            matched_doc_id = next(
-                (variant for variant in variants if variant in existing_document_ids),
-                None,
-            )
-            if matched_doc_id:
-                matches.append(
-                    IndexedDocumentRequest(
-                        document_id=matched_doc_id,
-                        original_url=url,
-                    )
-                )
-            else:
-                unresolved.append(url)
-
-        return matches, unresolved
 
     def _retrieve_indexed_documents_with_filters(
         self,
@@ -585,7 +580,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             access_control_list=access_control_list,
             tenant_id=get_current_tenant_id() if MULTI_TENANT else None,
             user_file_ids=None,
-            project_id=self._project_id,
+            project_id=None,
         )
 
     def _merge_indexed_and_crawled_results(

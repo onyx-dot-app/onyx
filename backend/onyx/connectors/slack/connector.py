@@ -638,25 +638,30 @@ class SlackConnector(
         # Slack document IDs are format: channel_id__thread_ts
         # Extract from URL pattern: .../archives/{channel_id}/p{timestamp}
         path_parts = parsed.path.split("/")
-        try:
-            archives_idx = path_parts.index("archives")
-            if archives_idx + 1 < len(path_parts):
-                channel_id = path_parts[archives_idx + 1]
-                if archives_idx + 2 < len(path_parts):
-                    thread_part = path_parts[archives_idx + 2]
-                    if thread_part.startswith("p"):
-                        # Convert p1234567890123456 to 1234567890.123456 format
-                        timestamp_str = thread_part[1:]  # Remove 'p' prefix
-                        if len(timestamp_str) == 16:
-                            # Insert dot at position 10 to match canonical format
-                            thread_ts = f"{timestamp_str[:10]}.{timestamp_str[10:]}"
-                        else:
-                            thread_ts = timestamp_str
-                        return f"{channel_id}__{thread_ts}"
-        except (ValueError, IndexError):
-            pass
+        if "archives" not in path_parts:
+            return None
 
-        return None
+        archives_idx = path_parts.index("archives")
+        if archives_idx + 1 >= len(path_parts):
+            return None
+
+        channel_id = path_parts[archives_idx + 1]
+        if archives_idx + 2 >= len(path_parts):
+            return None
+
+        thread_part = path_parts[archives_idx + 2]
+        if not thread_part.startswith("p"):
+            return None
+
+        # Convert p1234567890123456 to 1234567890.123456 format
+        timestamp_str = thread_part[1:]  # Remove 'p' prefix
+        if len(timestamp_str) == 16:
+            # Insert dot at position 10 to match canonical format
+            thread_ts = f"{timestamp_str[:10]}.{timestamp_str[10:]}"
+        else:
+            thread_ts = timestamp_str
+
+        return f"{channel_id}__{thread_ts}"
 
     @staticmethod
     def make_credential_prefix(key: str) -> str:

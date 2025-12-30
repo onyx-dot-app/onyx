@@ -20,23 +20,28 @@ logger = setup_logger()
 
 
 def _default_url_normalizer(url: str) -> str | None:
+    parsed = urlparse(url)
+    if not parsed.netloc:
+        return None
+
+    # Strip query params and fragment, normalize trailing slash
+    scheme = parsed.scheme or "https"
+    netloc = parsed.netloc.lower()
+    path = parsed.path.rstrip("/")
+    params = ""  # URL params (rarely used)
+    query = ""  # Query string (removed)
+    fragment = ""  # Fragment/hash (removed)
+
+    normalized = urlunparse((scheme, netloc, path, params, query, fragment))
+    return normalized or None
+
+
+def _try_connector_normalize(url: str, source_type: DocumentSource) -> str | None:
+    """Try to normalize URL using connector's normalize_url method."""
     try:
-        parsed = urlparse(url)
-        if not parsed.netloc:
-            return None
-
-        # Strip query params and fragment, normalize trailing slash
-        scheme = parsed.scheme or "https"
-        netloc = parsed.netloc.lower()
-        path = parsed.path.rstrip("/")
-        params = ""  # URL params (rarely used)
-        query = ""  # Query string (removed)
-        fragment = ""  # Fragment/hash (removed)
-
-        normalized = urlunparse((scheme, netloc, path, params, query, fragment))
-        return normalized or None
-    except Exception as e:
-        logger.debug(f"Default normalizer failed for URL {url}: {e}")
+        connector_class = identify_connector_class(source_type)
+        return connector_class.normalize_url(url)
+    except Exception:
         return None
 
 
@@ -46,52 +51,18 @@ def normalize_url(url: str, source_type: DocumentSource | None = None) -> str | 
     Dispatches to the connector's normalize_url() method or falls back to default normalizer.
     """
     if source_type:
-        try:
-            connector_class = identify_connector_class(source_type)
-            result = connector_class.normalize_url(url)
-        except Exception as e:
-            logger.warning(
-                f"Failed to normalize URL for {source_type}: {e}. Using default normalizer."
-            )
-            return _default_url_normalizer(url)
-
+        result = _try_connector_normalize(url, source_type)
         if result:
-            logger.debug(
-                f"Normalized URL using {source_type} connector: {url} -> {result}"
-            )
             return result
-
-        # Connector either doesn't override normalize_url or returned None - fall back
-        fallback = _default_url_normalizer(url)
-        if fallback:
-            logger.debug(
-                f"Connector {source_type} returned no normalization for {url}, "
-                f"using default: {fallback}"
-            )
-        return fallback
+        return _default_url_normalizer(url)
 
     # Try to detect source type from URL patterns
     detected = _detect_source_type(url)
     if detected:
-        try:
-            connector_class = identify_connector_class(detected)
-            result = connector_class.normalize_url(url)
-            if result:
-                logger.debug(
-                    f"Normalized URL using detected {detected} connector: {url} -> {result}"
-                )
-                return result
-        except Exception as e:
-            logger.debug(
-                f"Detected {detected} but normalization failed: {e}. Using default normalizer."
-            )
-        # Fall through to default normalizer if connector returns None or raises exception
-        return _default_url_normalizer(url)
+        result = _try_connector_normalize(url, detected)
+        if result:
+            return result
 
-    # No source detected - try default normalizer as last resort
-    logger.debug(
-        f"Could not detect source type for URL, trying default normalizer: {url}"
-    )
     return _default_url_normalizer(url)
 
 
