@@ -194,7 +194,8 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
     liveAssistant
   );
 
-  // On first render, open onboarding if there are no configured LLM providers.
+  // On first render, open onboarding if there are no configured LLM providers
+  // OR if the user hasn't explicitly finished onboarding yet.
   // Wait until providers have loaded before making this decision.
   const hasCheckedOnboarding = useRef(false);
   useEffect(() => {
@@ -203,7 +204,17 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
       return;
     }
     hasCheckedOnboarding.current = true;
-    setShowOnboarding(llmManager.hasAnyProvider === false);
+
+    // Check if user has explicitly finished onboarding
+    const hasFinishedOnboarding =
+      localStorage.getItem("hasFinishedOnboarding") === "true";
+
+    // Show onboarding if:
+    // 1. No LLM providers configured, OR
+    // 2. User hasn't explicitly finished onboarding (they navigated away before clicking "Finish Setup")
+    setShowOnboarding(
+      llmManager.hasAnyProvider === false || !hasFinishedOnboarding
+    );
   }, [llmManager.isLoadingProviders, llmManager.hasAnyProvider]);
 
   const noAssistants = liveAssistant === null || liveAssistant === undefined;

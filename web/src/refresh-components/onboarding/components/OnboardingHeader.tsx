@@ -28,6 +28,7 @@ const OnboardingHeaderInner = ({
 
   const handleButtonClick = () => {
     if (isCompleteStep) {
+      localStorage.setItem("hasFinishedOnboarding", "true");
       handleHideOnboarding();
     } else {
       onboardingActions.nextStep();
