@@ -91,3 +91,33 @@ export function useOnChangeValue<T = any>(
     helpers.setValue(value);
   };
 }
+
+/**
+ * Custom hook for handling form input blur events in Formik forms.
+ *
+ * This hook chains the consumer's onBlur callback with Formik's blur handler,
+ * ensuring both effects run when the field loses focus.
+ *
+ * @example
+ * ```tsx
+ * function MyField({ name, onBlur }: Props) {
+ *   const [field] = useField(name);
+ *   const handleBlur = useOnBlurEvent(name, onBlur);
+ *
+ *   return (
+ *     <input
+ *       name={name}
+ *       value={field.value}
+ *       onBlur={handleBlur}
+ *     />
+ *   );
+ * }
+ * ```
+ */
+export function useOnBlurEvent<T = any>(name: string, f?: (event: T) => void) {
+  const [field] = useField<T>(name);
+  return (event: T) => {
+    f?.(event);
+    field.onBlur(event);
+  };
+}
