@@ -82,6 +82,14 @@ function OllamaFormFields({
     setApiStatus("loading");
   }, [activeTab, setShowApiMessage, setErrorMessage, setApiStatus]);
 
+  // Auto-fetch models for self-hosted Ollama on initial load
+  useEffect(() => {
+    if (activeTab === "self-hosted" && formikProps.values.api_base) {
+      setApiStatus("loading");
+      handleFetchModels();
+    }
+  }, []);
+
   // Set hidden fields based on active tab
   useEffect(() => {
     if (activeTab === "cloud") {

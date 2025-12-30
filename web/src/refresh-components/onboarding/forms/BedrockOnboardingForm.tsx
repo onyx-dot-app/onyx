@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo } from "react";
 import * as Yup from "yup";
 import { FormikProps } from "formik";
 import { FormikField } from "@/refresh-components/form/FormikField";
@@ -10,12 +10,6 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "@/refresh-components/tabs/tabs";
 import { cn, noProp } from "@/lib/utils";
 import { SvgAlertCircle, SvgRefreshCw } from "@opal/icons";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
@@ -150,171 +144,173 @@ function BedrockFormFields({
         )}
       />
 
-      <div>
-        <Text as="p" mainUiAction className="mb-1">
-          Authentication Method
-        </Text>
-        <Text as="p" secondaryBody text03 className="mb-2">
-          Choose how Onyx should authenticate with Bedrock.
-        </Text>
-        <Tabs
-          value={authMethod}
-          onValueChange={(value) =>
-            formikProps.setFieldValue(
-              "custom_config.BEDROCK_AUTH_METHOD",
-              value
-            )
-          }
-        >
-          <TabsList>
-            <TabsTrigger value={AUTH_METHOD_IAM}>IAM Role</TabsTrigger>
-            <TabsTrigger value={AUTH_METHOD_ACCESS_KEY}>Access Key</TabsTrigger>
-            <TabsTrigger value={AUTH_METHOD_LONG_TERM_API_KEY}>
-              Long-term API Key
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent
-            value={AUTH_METHOD_IAM}
-            className="data-[state=active]:animate-fade-in-scale"
+      <FormikField<string>
+        name="custom_config.BEDROCK_AUTH_METHOD"
+        render={(field, helper, meta, state) => (
+          <FormField
+            name="custom_config.BEDROCK_AUTH_METHOD"
+            state={state}
+            className="w-full"
           >
-            <div className="flex gap-1 p-2 border border-border-01 rounded-12 bg-background-tint-01 mt-2">
-              <div className="p-1">
-                <SvgAlertCircle className="h-4 w-4 stroke-text-03" />
-              </div>
-              <Text as="p" text04 mainUiBody>
-                Onyx will use the IAM role attached to the environment it&apos;s
-                running in to authenticate.
-              </Text>
-            </div>
-          </TabsContent>
+            <FormField.Label>Authentication Method</FormField.Label>
+            <FormField.Control>
+              <InputSelect
+                value={authMethod}
+                onValueChange={(value) => helper.setValue(value)}
+                disabled={disabled}
+              >
+                <InputSelect.Trigger onBlur={field.onBlur} />
+                <InputSelect.Content>
+                  <InputSelect.Item value={AUTH_METHOD_IAM}>
+                    IAM Role
+                  </InputSelect.Item>
+                  <InputSelect.Item value={AUTH_METHOD_ACCESS_KEY}>
+                    Access Key
+                  </InputSelect.Item>
+                  <InputSelect.Item value={AUTH_METHOD_LONG_TERM_API_KEY}>
+                    Long-term API Key
+                  </InputSelect.Item>
+                </InputSelect.Content>
+              </InputSelect>
+            </FormField.Control>
+            <FormField.Message
+              messages={{
+                idle:
+                  modalContent?.field_metadata?.BEDROCK_AUTH_METHOD ??
+                  "Choose how Onyx should authenticate with Bedrock.",
+                error: meta.error,
+              }}
+            />
+          </FormField>
+        )}
+      />
 
-          <TabsContent
-            value={AUTH_METHOD_ACCESS_KEY}
-            className={cn("data-[state=active]:animate-fade-in-scale", "mt-4")}
-          >
-            <div className="flex flex-col gap-4">
-              <FormikField<string>
+      {authMethod === AUTH_METHOD_IAM && (
+        <div className="flex gap-1 p-2 border border-border-01 rounded-12 bg-background-tint-01">
+          <div className="p-1">
+            <SvgAlertCircle className="h-4 w-4 stroke-text-03" />
+          </div>
+          <Text as="p" text04 mainUiBody>
+            Onyx will use the IAM role attached to the environment it&apos;s
+            running in to authenticate.
+          </Text>
+        </div>
+      )}
+
+      {authMethod === AUTH_METHOD_ACCESS_KEY && (
+        <>
+          <FormikField<string>
+            name="custom_config.AWS_ACCESS_KEY_ID"
+            render={(field, helper, meta, state) => (
+              <FormField
                 name="custom_config.AWS_ACCESS_KEY_ID"
-                render={(field, helper, meta, state) => (
-                  <FormField
-                    name="custom_config.AWS_ACCESS_KEY_ID"
-                    state={state}
-                    className="w-full"
-                  >
-                    <FormField.Label>AWS Access Key ID</FormField.Label>
-                    <FormField.Control>
-                      <InputTypeIn
-                        {...field}
-                        placeholder="AKIAIOSFODNN7EXAMPLE"
-                        showClearButton={false}
-                        disabled={disabled}
-                        error={apiStatus === "error"}
-                      />
-                    </FormField.Control>
-                    <FormField.Message
-                      messages={{
-                        idle: "",
-                        error: meta.error,
-                      }}
-                    />
-                  </FormField>
-                )}
-              />
-              <FormikField<string>
+                state={state}
+                className="w-full"
+              >
+                <FormField.Label>AWS Access Key ID</FormField.Label>
+                <FormField.Control>
+                  <InputTypeIn
+                    {...field}
+                    placeholder="AKIAIOSFODNN7EXAMPLE"
+                    showClearButton={false}
+                    disabled={disabled}
+                    error={apiStatus === "error"}
+                  />
+                </FormField.Control>
+                <FormField.Message
+                  messages={{
+                    idle: "",
+                    error: meta.error,
+                  }}
+                />
+              </FormField>
+            )}
+          />
+          <FormikField<string>
+            name="custom_config.AWS_SECRET_ACCESS_KEY"
+            render={(field, helper, meta, state) => (
+              <FormField
                 name="custom_config.AWS_SECRET_ACCESS_KEY"
-                render={(field, helper, meta, state) => (
-                  <FormField
-                    name="custom_config.AWS_SECRET_ACCESS_KEY"
-                    state={state}
-                    className="w-full"
-                  >
-                    <FormField.Label>AWS Secret Access Key</FormField.Label>
-                    <FormField.Control>
-                      <PasswordInputTypeIn
-                        {...field}
-                        placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-                        showClearButton={false}
-                        disabled={disabled}
-                        error={apiStatus === "error"}
-                      />
-                    </FormField.Control>
-                    {showApiMessage && (
-                      <FormField.APIMessage
-                        state={apiStatus}
-                        messages={{
-                          loading: "Checking credentials...",
-                          success: "Credentials valid.",
-                          error: errorMessage || "Invalid credentials",
-                        }}
-                      />
-                    )}
-                    {!showApiMessage && (
-                      <FormField.Message
-                        messages={{
-                          idle: "",
-                          error: meta.error,
-                        }}
-                      />
-                    )}
-                  </FormField>
+                state={state}
+                className="w-full"
+              >
+                <FormField.Label>AWS Secret Access Key</FormField.Label>
+                <FormField.Control>
+                  <PasswordInputTypeIn
+                    {...field}
+                    placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+                    showClearButton={false}
+                    disabled={disabled}
+                    error={apiStatus === "error"}
+                  />
+                </FormField.Control>
+                {showApiMessage && (
+                  <FormField.APIMessage
+                    state={apiStatus}
+                    messages={{
+                      loading: "Checking credentials...",
+                      success: "Credentials valid.",
+                      error: errorMessage || "Invalid credentials",
+                    }}
+                  />
                 )}
-              />
-            </div>
-          </TabsContent>
+                {!showApiMessage && (
+                  <FormField.Message
+                    messages={{
+                      idle: "",
+                      error: meta.error,
+                    }}
+                  />
+                )}
+              </FormField>
+            )}
+          />
+        </>
+      )}
 
-          <TabsContent
-            value={AUTH_METHOD_LONG_TERM_API_KEY}
-            className={cn("data-[state=active]:animate-fade-in-scale", "mt-4")}
-          >
-            <div className="flex flex-col gap-4">
-              <FormikField<string>
-                name="custom_config.AWS_BEARER_TOKEN_BEDROCK"
-                render={(field, helper, meta, state) => (
-                  <FormField
-                    name="custom_config.AWS_BEARER_TOKEN_BEDROCK"
-                    state={state}
-                    className="w-full"
-                  >
-                    <FormField.Label>
-                      AWS Bedrock Long-term API Key
-                    </FormField.Label>
-                    <FormField.Control>
-                      <PasswordInputTypeIn
-                        {...field}
-                        placeholder="Your long-term API key"
-                        showClearButton={false}
-                        disabled={disabled}
-                        error={apiStatus === "error"}
-                      />
-                    </FormField.Control>
-                    {showApiMessage && (
-                      <FormField.APIMessage
-                        state={apiStatus}
-                        messages={{
-                          loading: "Checking API key...",
-                          success: "API key valid.",
-                          error: errorMessage || "Invalid API key",
-                        }}
-                      />
-                    )}
-                    {!showApiMessage && (
-                      <FormField.Message
-                        messages={{
-                          idle:
-                            modalContent?.field_metadata
-                              ?.AWS_BEARER_TOKEN_BEDROCK ?? "",
-                          error: meta.error,
-                        }}
-                      />
-                    )}
-                  </FormField>
-                )}
-              />
-            </div>
-          </TabsContent>
-        </Tabs>
-      </div>
+      {authMethod === AUTH_METHOD_LONG_TERM_API_KEY && (
+        <FormikField<string>
+          name="custom_config.AWS_BEARER_TOKEN_BEDROCK"
+          render={(field, helper, meta, state) => (
+            <FormField
+              name="custom_config.AWS_BEARER_TOKEN_BEDROCK"
+              state={state}
+              className="w-full"
+            >
+              <FormField.Label>AWS Bedrock Long-term API Key</FormField.Label>
+              <FormField.Control>
+                <PasswordInputTypeIn
+                  {...field}
+                  placeholder="Your long-term API key"
+                  showClearButton={false}
+                  disabled={disabled}
+                  error={apiStatus === "error"}
+                />
+              </FormField.Control>
+              {showApiMessage && (
+                <FormField.APIMessage
+                  state={apiStatus}
+                  messages={{
+                    loading: "Checking API key...",
+                    success: "API key valid.",
+                    error: errorMessage || "Invalid API key",
+                  }}
+                />
+              )}
+              {!showApiMessage && (
+                <FormField.Message
+                  messages={{
+                    idle:
+                      modalContent?.field_metadata?.AWS_BEARER_TOKEN_BEDROCK ??
+                      "",
+                    error: meta.error,
+                  }}
+                />
+              )}
+            </FormField>
+          )}
+        />
+      )}
 
       <Separator className="my-0" />
 
@@ -329,7 +325,9 @@ function BedrockFormFields({
                 onValueChange={(value) => helper.setValue(value)}
                 onChange={(e) => helper.setValue(e.target.value)}
                 options={modelOptions}
-                disabled={disabled || isFetchingModels}
+                disabled={
+                  disabled || isFetchingModels || modelOptions.length === 0
+                }
                 rightSection={
                   canFetchModels ? (
                     <IconButton
@@ -360,7 +358,7 @@ function BedrockFormFields({
                   ) : undefined
                 }
                 onBlur={field.onBlur}
-                placeholder="Fetch models first, then select"
+                placeholder="Select a model"
               />
             </FormField.Control>
             {showModelsApiErrorMessage && (
@@ -376,9 +374,6 @@ function BedrockFormFields({
             {!showModelsApiErrorMessage && (
               <FormField.Message
                 messages={{
-                  idle:
-                    modalContent?.field_metadata?.default_model_name ??
-                    "Fetch available models first, then select the default model.",
                   error: meta.error,
                 }}
               />

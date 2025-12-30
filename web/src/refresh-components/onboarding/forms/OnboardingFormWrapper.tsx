@@ -8,7 +8,10 @@ import React, {
 import { Form, Formik, FormikProps } from "formik";
 import * as Yup from "yup";
 import ProviderModal from "@/components/modals/ProviderModal";
-import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import {
+  ModelConfiguration,
+  WellKnownLLMProviderDescriptor,
+} from "@/app/admin/configuration/llm/interfaces";
 import { LLM_PROVIDERS_ADMIN_URL } from "@/app/admin/configuration/llm/constants";
 import { OnboardingActions, OnboardingState } from "../types";
 import { APIFormFieldState } from "@/refresh-components/form/types";
@@ -23,6 +26,7 @@ import {
   fetchModels,
 } from "@/app/admin/configuration/llm/utils";
 import type { IconProps } from "@opal/types";
+import { ComboBoxOption } from "@/refresh-components/inputs/InputComboBox";
 
 export interface OnboardingFormContextType {
   // API status tracking
@@ -43,8 +47,8 @@ export interface OnboardingFormContextType {
 
   // Model fetching
   isFetchingModels: boolean;
-  fetchedModelConfigurations: any[];
-  modelOptions: Array<{ label: string; value: string }>;
+  fetchedModelConfigurations: ModelConfiguration[];
+  modelOptions: ComboBoxOption[];
   canFetchModels: boolean;
   handleFetchModels: () => Promise<void>;
 
