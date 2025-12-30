@@ -133,10 +133,7 @@ export function OnboardingFormWrapper<T extends Record<string, any>>({
     }
     // For providers that don't support dynamic fetching, use static visible models from descriptor
     if (llmDescriptor?.model_configurations) {
-      const visibleModels = llmDescriptor.model_configurations.filter(
-        (m) => m.is_visible
-      );
-      return getModelOptions(visibleModels);
+      return getModelOptions(llmDescriptor.model_configurations);
     }
     return [];
   }, [fetchedModelConfigurations, llmDescriptor]);
