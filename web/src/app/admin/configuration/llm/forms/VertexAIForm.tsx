@@ -22,7 +22,7 @@ import Separator from "@/refresh-components/Separator";
 export const VERTEXAI_PROVIDER_NAME = "vertex_ai";
 const VERTEXAI_DISPLAY_NAME = "Google Cloud Vertex AI";
 const VERTEXAI_DEFAULT_MODEL = "gemini-2.5-pro";
-const VERTEXAI_DEFAULT_LOCATION = "us-east1";
+const VERTEXAI_DEFAULT_LOCATION = "global";
 
 interface VertexAIFormValues extends BaseLLMFormValues {
   custom_config: {
@@ -132,7 +132,7 @@ export function VertexAIForm({
                       name="custom_config.vertex_location"
                       label="Location"
                       placeholder={VERTEXAI_DEFAULT_LOCATION}
-                      subtext="The Google Cloud region for your Vertex AI models (e.g., us-east1, us-central1, europe-west1)."
+                      subtext="The Google Cloud region for your Vertex AI models (e.g., global, us-east1, us-central1, europe-west1). See [Google's documentation](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#google_model_endpoint_locations) to find the appropriate region for your model."
                       optional
                     />
 
