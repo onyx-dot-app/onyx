@@ -8,8 +8,6 @@ const getDescriptionInput = (page: Page) =>
   page.locator('textarea[name="description"]');
 const getInstructionsTextarea = (page: Page) =>
   page.locator('textarea[name="instructions"]');
-const getAdvancedOptionsButton = (page: Page) =>
-  page.locator('button:has-text("Advanced Options")');
 const getReminderTextarea = (page: Page) =>
   page.locator('textarea[name="reminders"]');
 const getKnowledgeCutoffInput = (page: Page) =>
@@ -155,13 +153,6 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await getDescriptionInput(page).fill(assistantDescription);
       await getInstructionsTextarea(page).fill(assistantInstructions);
 
-      // --- Open Advanced Options ---
-      const advancedOptionsButton = getAdvancedOptionsButton(page);
-      await advancedOptionsButton.scrollIntoViewIfNeeded();
-      await advancedOptionsButton.click();
-
-      // --- Fill Advanced Fields ---
-
       // Reminder
       await getReminderTextarea(page).fill(assistantReminder);
 
@@ -210,11 +201,6 @@ test.describe("Assistant Creation and Edit Verification", () => {
         assistantInstructions
       );
 
-      // Open Advanced Options
-      const advancedOptionsButton1 = getAdvancedOptionsButton(page);
-      await advancedOptionsButton1.scrollIntoViewIfNeeded();
-      await advancedOptionsButton1.click();
-
       // Verify advanced fields
       await expect(getReminderTextarea(page)).toHaveValue(assistantReminder);
       // Knowledge toggle should be enabled since we have a connector
@@ -261,11 +247,6 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await expect(getInstructionsTextarea(page)).toHaveValue(
         editedAssistantInstructions
       );
-
-      // Open Advanced Options
-      const advancedOptionsButton2 = getAdvancedOptionsButton(page);
-      await advancedOptionsButton2.scrollIntoViewIfNeeded();
-      await advancedOptionsButton2.click();
 
       // Verify advanced fields
       await expect(getReminderTextarea(page)).toHaveValue(
