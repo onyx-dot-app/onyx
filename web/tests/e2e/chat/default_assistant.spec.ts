@@ -68,9 +68,15 @@ test.describe("Default Assistant Tests", () => {
       await page.getByTestId("AppSidebar/more-agents").click();
       await page.getByTestId("AgentsPage/new-agent-button").click();
       await page.waitForTimeout(2000);
-      await page.getByTestId("name").fill("Custom Test Assistant");
-      await page.getByTestId("description").fill("Test Description");
-      await page.getByTestId("system_prompt").fill("Test Instructions");
+      await page
+        .getByRole("textbox", { name: "name" })
+        .fill("Custom Test Assistant");
+      await page
+        .getByRole("textbox", { name: "description" })
+        .fill("Test Description");
+      await page
+        .getByRole("textbox", { name: "instructions" })
+        .fill("Test Instructions");
       await page.getByRole("button", { name: "Create" }).click();
 
       // Wait for assistant to be created and selected
@@ -105,9 +111,15 @@ test.describe("Default Assistant Tests", () => {
       await page.getByTestId("AppSidebar/more-agents").click();
       await page.getByTestId("AgentsPage/new-agent-button").click();
       await page.waitForTimeout(2000);
-      await page.getByTestId("name").fill("Custom Assistant");
-      await page.getByTestId("description").fill("Test Description");
-      await page.getByTestId("system_prompt").fill("Test Instructions");
+      await page
+        .getByRole("textbox", { name: "name" })
+        .fill("Custom Assistant");
+      await page
+        .getByRole("textbox", { name: "description" })
+        .fill("Test Description");
+      await page
+        .getByRole("textbox", { name: "instructions" })
+        .fill("Test Instructions");
       await page.getByRole("button", { name: "Create" }).click();
 
       // Wait for assistant to be created and selected
@@ -149,9 +161,15 @@ test.describe("Default Assistant Tests", () => {
       await page.getByTestId("AppSidebar/more-agents").click();
       await page.getByTestId("AgentsPage/new-agent-button").click();
       await page.waitForTimeout(2000);
-      await page.getByTestId("name").fill("Test Assistant with Starters");
-      await page.getByTestId("description").fill("Test Description");
-      await page.getByTestId("system_prompt").fill("Test Instructions");
+      await page
+        .getByRole("textbox", { name: "name" })
+        .fill("Test Assistant with Starters");
+      await page
+        .getByRole("textbox", { name: "description" })
+        .fill("Test Description");
+      await page
+        .getByRole("textbox", { name: "instructions" })
+        .fill("Test Instructions");
 
       // Add starter messages (if the UI supports it)
       // For now, we'll create without starter messages and check the behavior
@@ -219,9 +237,15 @@ test.describe("Default Assistant Tests", () => {
       await page.getByTestId("AppSidebar/more-agents").click();
       await page.getByTestId("AgentsPage/new-agent-button").click();
       await page.waitForTimeout(2000);
-      await page.getByTestId("name").fill("Switch Test Assistant");
-      await page.getByTestId("description").fill("Test Description");
-      await page.getByTestId("system_prompt").fill("Test Instructions");
+      await page
+        .getByRole("textbox", { name: "name" })
+        .fill("Switch Test Assistant");
+      await page
+        .getByRole("textbox", { name: "description" })
+        .fill("Test Description");
+      await page
+        .getByRole("textbox", { name: "instructions" })
+        .fill("Test Instructions");
       await page.getByRole("button", { name: "Create" }).click();
 
       // Verify switched to custom assistant

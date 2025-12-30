@@ -1353,12 +1353,12 @@ test.describe("MCP OAuth flows", () => {
     }
     logStep("Assistant editor loaded");
 
-    await page.locator('input[name="name"]').fill(assistantName);
+    await page.getByRole("textbox", { name: "name" }).fill(assistantName);
     await page
-      .locator('textarea[name="system_prompt"]')
+      .getByRole("textbox", { name: "instructions" })
       .fill("Assist with MCP OAuth testing.");
     await page
-      .locator('input[name="description"]')
+      .getByRole("textbox", { name: "description" })
       .fill("Playwright admin MCP assistant.");
 
     await page
@@ -1611,12 +1611,12 @@ test.describe("MCP OAuth flows", () => {
       await page.waitForURL("**/assistants/new**", { timeout: 15000 });
       logStep("Assistant editor loaded (curator)");
 
-      await page.locator('input[name="name"]').fill(assistantName);
+      await page.getByRole("textbox", { name: "name" }).fill(assistantName);
       await page
-        .locator('textarea[name="system_prompt"]')
+        .getByRole("textbox", { name: "instructions" })
         .fill("Curator MCP OAuth assistant.");
       await page
-        .locator('input[name="description"]')
+        .getByRole("textbox", { name: "description" })
         .fill("Playwright curator MCP assistant.");
 
       await page

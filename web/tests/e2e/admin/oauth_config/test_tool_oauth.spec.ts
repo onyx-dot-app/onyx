@@ -185,10 +185,12 @@ test("Tool OAuth Configuration: Creation, Selection, and Assistant Integration",
   const assistantDescription = "Assistant with OAuth tool";
   const assistantInstructions = "Use the tool when needed";
 
-  await page.locator('input[name="name"]').fill(assistantName);
-  await page.locator('input[name="description"]').fill(assistantDescription);
+  await page.getByRole("textbox", { name: "name" }).fill(assistantName);
   await page
-    .locator('textarea[name="system_prompt"]')
+    .getByRole("textbox", { name: "description" })
+    .fill(assistantDescription);
+  await page
+    .getByRole("textbox", { name: "instructions" })
     .fill(assistantInstructions);
 
   // Scroll down to the Actions section (tools are listed there)
