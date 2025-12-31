@@ -18,35 +18,6 @@ class CustomConfigKeyType(str, Enum):
     SELECT = "select"
 
 
-class CustomConfigOption(BaseModel):
-    label: str
-    value: str
-    description: str | None = None
-
-
-class CustomConfigKey(BaseModel):
-    name: str
-    display_name: str
-    description: str | None = None
-    is_required: bool = True
-    is_secret: bool = False
-    key_type: CustomConfigKeyType = CustomConfigKeyType.TEXT_INPUT
-    default_value: str | None = None
-    options: list[CustomConfigOption] | None = None
-
-
 class WellKnownLLMProviderDescriptor(BaseModel):
     name: str
-    display_name: str
-    title: str
-    api_key_required: bool
-    api_base_required: bool
-    api_version_required: bool
-    custom_config_keys: list[CustomConfigKey] | None = None
     model_configurations: list[ModelConfigurationView]
-    default_model: str | None = None
-    default_api_base: str | None = None
-    # set for providers like Azure, which require a deployment name.
-    deployment_name_required: bool = False
-    # set for providers like Azure, which support a single model per deployment.
-    single_model_supported: bool = False
