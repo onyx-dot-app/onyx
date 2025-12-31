@@ -290,7 +290,7 @@ def filter_model_configurations(
         List of ModelConfigurationView objects with obsolete/duplicate models removed
     """
     # Import here to avoid circular imports
-    from onyx.llm.llm_provider_options import is_obsolete_model
+    from onyx.llm.well_known_providers.llm_provider_options import is_obsolete_model
     from onyx.server.manage.llm.models import ModelConfigurationView
 
     all_model_names = {mc.name for mc in model_configurations}

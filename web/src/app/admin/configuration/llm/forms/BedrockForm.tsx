@@ -17,6 +17,7 @@ import { FetchModelsButton } from "./components/FetchModelsButton";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
+  buildAvailableModelConfigurations,
   submitLLMProvider,
   BaseLLMFormValues,
   LLM_FORM_CLASS_NAME,
@@ -243,6 +244,7 @@ function BedrockFormInternals({
               : undefined
         }
         onModelsFetched={setFetchedModels}
+        autoFetchOnInitialLoad={!!existingLlmProvider}
       />
 
       <Separator />
@@ -254,6 +256,8 @@ function BedrockFormInternals({
           "Fetch available models first, then you'll be able to select " +
           "the models you want to make available in Onyx."
         }
+        recommendedDefaultModel={null}
+        shouldShowAutoUpdateToggle={false}
       />
 
       <Separator />
@@ -292,8 +296,12 @@ export function BedrockForm({
         setIsTesting,
         testError,
         setTestError,
-        modelConfigurations,
+        wellKnownLLMProvider,
       }: ProviderFormContext) => {
+        const modelConfigurations = buildAvailableModelConfigurations(
+          existingLlmProvider,
+          wellKnownLLMProvider
+        );
         const initialValues: BedrockFormValues = {
           ...buildDefaultInitialValues(
             existingLlmProvider,

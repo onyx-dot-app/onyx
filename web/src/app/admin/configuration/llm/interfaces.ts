@@ -9,25 +9,6 @@ export enum LLMProviderName {
   CUSTOM = "custom",
 }
 
-export interface CustomConfigOption {
-  label: string;
-  value: string;
-  description?: string | null;
-}
-
-export interface CustomConfigKey {
-  name: string;
-  display_name: string;
-  description: string | null;
-  is_required: boolean;
-  is_secret: boolean;
-  key_type: CustomConfigKeyType;
-  default_value?: string;
-  options?: CustomConfigOption[] | null;
-}
-
-export type CustomConfigKeyType = "text_input" | "file_input" | "select";
-
 export interface ModelConfiguration {
   name: string;
   is_visible: boolean;
@@ -41,9 +22,16 @@ export interface ModelConfiguration {
   region?: string;
 }
 
+export interface SimpleKnownModel {
+  name: string;
+  display_name: string | null;
+}
+
 export interface WellKnownLLMProviderDescriptor {
   name: string;
-  model_configurations: ModelConfiguration[];
+  known_models: ModelConfiguration[];
+
+  recommended_default_model: SimpleKnownModel | null;
 }
 
 export interface LLMModelDescriptor {
@@ -61,6 +49,7 @@ export interface LLMProvider {
   custom_config: { [key: string]: string } | null;
   default_model_name: string;
   is_public: boolean;
+  is_auto_mode: boolean;
   groups: number[];
   personas: number[];
   deployment_name: string | null;

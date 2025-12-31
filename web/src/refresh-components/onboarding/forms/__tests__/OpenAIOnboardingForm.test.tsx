@@ -191,7 +191,7 @@ describe("OpenAIOnboardingForm", () => {
       ];
 
       // Verify MOCK_PROVIDERS.openai has the correct model configurations
-      const actualModelNames = MOCK_PROVIDERS.openai.model_configurations.map(
+      const actualModelNames = MOCK_PROVIDERS.openai.known_models.map(
         (config) => config.name
       );
 
@@ -204,7 +204,7 @@ describe("OpenAIOnboardingForm", () => {
       expect(actualModelNames).toHaveLength(expectedModelNames.length);
 
       // Verify each model has is_visible set to true
-      MOCK_PROVIDERS.openai.model_configurations.forEach((config) => {
+      MOCK_PROVIDERS.openai.known_models.forEach((config) => {
         expect(config.is_visible).toBe(true);
       });
     });

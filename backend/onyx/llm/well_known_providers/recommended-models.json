@@ -1,0 +1,56 @@
+{
+  "version": "1.0",
+  "updated_at": "2025-12-17T00:00:00Z",
+  "providers": {
+    "openai": {
+      "default_model": { "name": "gpt-5.2" },
+      "additional_visible_models": [
+        { "name": "gpt-5-mini" },
+        { "name": "gpt-4.1" }
+      ]
+    },
+    "anthropic": {
+      "default_model": "claude-opus-4-5",
+      "additional_visible_models": [
+        {
+          "name": "claude-sonnet-4-5",
+          "display_name": "Claude Sonnet 4.5"
+        }
+      ]
+    },
+    "vertex_ai": {
+      "default_model": "gemini-3-pro-preview",
+      "additional_visible_models": [
+        {
+          "name": "gemini-3-pro-preview",
+          "display_name": "Gemini 3 Pro"
+        },
+        {
+          "name": "gemini-3-flash-preview",
+          "display_name": "Gemini 3 Flash"
+        }
+      ]
+    },
+    "openrouter": {
+      "default_model": "z-ai/glm-4.7",
+      "additional_visible_models": [
+        {
+          "name": "z-ai/glm-4.7",
+          "display_name": "GLM 4.7"
+        },
+        {
+          "name": "deepseek/deepseek-v3.2",
+          "display_name": "DeepSeek V3.2"
+        },
+        {
+          "name": "qwen/qwen3-235b-a22b-2507",
+          "display_name": "Qwen3 235B A22B Instruct 2507"
+        },
+        {
+          "name": "moonshotai/kimi-k2-0905",
+          "display_name": "Kimi K2 0905"
+        }
+      ]
+    }
+  }
+}

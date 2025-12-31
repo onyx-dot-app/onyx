@@ -64,7 +64,9 @@ class LLMProviderDescriptor(BaseModel):
         cls,
         llm_provider_model: "LLMProviderModel",
     ) -> "LLMProviderDescriptor":
-        from onyx.llm.llm_provider_options import get_provider_display_name
+        from onyx.llm.well_known_providers.llm_provider_options import (
+            get_provider_display_name,
+        )
 
         provider = llm_provider_model.provider
 
@@ -91,6 +93,7 @@ class LLMProvider(BaseModel):
     custom_config: dict[str, str] | None = None
     default_model_name: str
     is_public: bool = True
+    is_auto_mode: bool = False
     groups: list[int] = Field(default_factory=list)
     personas: list[int] = Field(default_factory=list)
     deployment_name: str | None = None
@@ -150,6 +153,7 @@ class LLMProviderView(LLMProvider):
             is_default_vision_provider=llm_provider_model.is_default_vision_provider,
             default_vision_model=llm_provider_model.default_vision_model,
             is_public=llm_provider_model.is_public,
+            is_auto_mode=llm_provider_model.is_auto_mode,
             groups=groups,
             personas=personas,
             deployment_name=llm_provider_model.deployment_name,

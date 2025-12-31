@@ -17,6 +17,7 @@ import { FormActionButtons } from "./components/FormActionButtons";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
+  buildAvailableModelConfigurations,
   submitLLMProvider,
   BaseLLMFormValues,
   LLM_FORM_CLASS_NAME,
@@ -110,8 +111,12 @@ export function OpenRouterForm({
         setIsTesting,
         testError,
         setTestError,
-        modelConfigurations,
+        wellKnownLLMProvider,
       }: ProviderFormContext) => {
+        const modelConfigurations = buildAvailableModelConfigurations(
+          existingLlmProvider,
+          wellKnownLLMProvider
+        );
         const initialValues: OpenRouterFormValues = {
           ...buildDefaultInitialValues(
             existingLlmProvider,
@@ -193,6 +198,7 @@ export function OpenRouterForm({
                             : undefined
                       }
                       onModelsFetched={setFetchedModels}
+                      autoFetchOnInitialLoad={!!existingLlmProvider}
                     />
 
                     <Separator />
@@ -204,6 +210,8 @@ export function OpenRouterForm({
                         "Fetch available models first, then you'll be able to select " +
                         "the models you want to make available in Onyx."
                       }
+                      recommendedDefaultModel={null}
+                      shouldShowAutoUpdateToggle={false}
                     />
 
                     <AdvancedOptions formikProps={formikProps} />

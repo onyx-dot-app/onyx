@@ -67,6 +67,7 @@ class LLMProviderManager:
             api_key=response_data["api_key"],
             default_model_name=response_data["default_model_name"],
             is_public=response_data["is_public"],
+            is_auto_mode=response_data.get("is_auto_mode", False),
             groups=response_data["groups"],
             personas=response_data.get("personas", []),
             api_base=response_data["api_base"],

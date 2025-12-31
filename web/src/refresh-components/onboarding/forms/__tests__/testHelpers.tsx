@@ -25,7 +25,7 @@ export function createMockLLMDescriptor(
 ): WellKnownLLMProviderDescriptor {
   return {
     name,
-    model_configurations:
+    known_models:
       modelConfigurations.length > 0
         ? modelConfigurations
         : [
@@ -42,6 +42,7 @@ export function createMockLLMDescriptor(
               supports_image_input: true,
             },
           ],
+    recommended_default_model: null,
   };
 }
 

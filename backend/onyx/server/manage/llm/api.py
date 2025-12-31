@@ -34,13 +34,19 @@ from onyx.db.persona import user_can_access_persona
 from onyx.llm.factory import get_default_llm
 from onyx.llm.factory import get_llm
 from onyx.llm.factory import get_max_input_tokens_from_llm_provider
-from onyx.llm.llm_provider_options import fetch_available_well_known_llms
-from onyx.llm.llm_provider_options import fetch_model_configurations_for_provider
-from onyx.llm.llm_provider_options import WellKnownLLMProviderDescriptor
 from onyx.llm.utils import get_bedrock_token_limit
 from onyx.llm.utils import get_llm_contextual_cost
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.utils import test_llm
+from onyx.llm.well_known_providers.auto_update_service import (
+    fetch_llm_recommendations_from_github,
+)
+from onyx.llm.well_known_providers.llm_provider_options import (
+    fetch_available_well_known_llms,
+)
+from onyx.llm.well_known_providers.llm_provider_options import (
+    WellKnownLLMProviderDescriptor,
+)
 from onyx.server.manage.llm.models import BedrockFinalModelResponse
 from onyx.server.manage.llm.models import BedrockModelsRequest
 from onyx.server.manage.llm.models import LLMCost
@@ -48,7 +54,6 @@ from onyx.server.manage.llm.models import LLMProviderDescriptor
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
-from onyx.server.manage.llm.models import ModelConfigurationView
 from onyx.server.manage.llm.models import OllamaFinalModelResponse
 from onyx.server.manage.llm.models import OllamaModelDetails
 from onyx.server.manage.llm.models import OllamaModelsRequest
@@ -89,8 +94,12 @@ def fetch_llm_options(
 def fetch_llm_provider_options(
     provider_name: str,
     _: User | None = Depends(current_admin_user),
-) -> list[ModelConfigurationView]:
-    return fetch_model_configurations_for_provider(provider_name)
+) -> WellKnownLLMProviderDescriptor:
+    well_known_llms = fetch_available_well_known_llms()
+    for well_known_llm in well_known_llms:
+        if well_known_llm.name == provider_name:
+            return well_known_llm
+    raise HTTPException(status_code=404, detail=f"Provider {provider_name} not found")
 
 
 @admin_router.post("/test")
@@ -246,11 +255,37 @@ def put_llm_provider(
     if existing_provider and not llm_provider_upsert_request.api_key_changed:
         llm_provider_upsert_request.api_key = existing_provider.api_key
 
+    # Check if we're transitioning to Auto mode
+    transitioning_to_auto_mode = llm_provider_upsert_request.is_auto_mode and (
+        not existing_provider or not existing_provider.is_auto_mode
+    )
+
     try:
-        return upsert_llm_provider(
+        result = upsert_llm_provider(
             llm_provider_upsert_request=llm_provider_upsert_request,
             db_session=db_session,
         )
+
+        # If newly enabling Auto mode, sync models immediately from GitHub config
+        if transitioning_to_auto_mode:
+            from onyx.db.llm import sync_auto_mode_models
+
+            config = fetch_llm_recommendations_from_github()
+            if config and llm_provider_upsert_request.provider in config.providers:
+                # Refetch the provider to get the updated model
+                updated_provider = fetch_existing_llm_provider(
+                    name=llm_provider_upsert_request.name, db_session=db_session
+                )
+                if updated_provider:
+                    sync_auto_mode_models(
+                        db_session,
+                        updated_provider,
+                        config,
+                    )
+                    # Refresh result with synced models
+                    result = LLMProviderView.from_model(updated_provider)
+
+        return result
     except ValueError as e:
         logger.exception("Failed to upsert LLM Provider")
         raise HTTPException(status_code=400, detail=str(e))
@@ -289,6 +324,24 @@ def set_provider_as_default_vision(
     update_default_vision_provider(
         provider_id=provider_id, vision_model=vision_model, db_session=db_session
     )
+
+
+@admin_router.get("/auto-config")
+def get_auto_config(
+    _: User | None = Depends(current_admin_user),
+) -> dict:
+    """Get the current Auto mode configuration from GitHub.
+
+    Returns the available models and default configurations for each
+    supported provider type when using Auto mode.
+    """
+    config = fetch_llm_recommendations_from_github()
+    if not config:
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to fetch configuration from GitHub",
+        )
+    return config.model_dump()
 
 
 @admin_router.get("/vision-providers")

@@ -9,6 +9,7 @@ import { FormActionButtons } from "./components/FormActionButtons";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
+  buildAvailableModelConfigurations,
   submitLLMProvider,
   LLM_FORM_CLASS_NAME,
 } from "./formUtils";
@@ -37,8 +38,12 @@ export function OpenAIForm({
         setIsTesting,
         testError,
         setTestError,
-        modelConfigurations,
+        wellKnownLLMProvider,
       }) => {
+        const modelConfigurations = buildAvailableModelConfigurations(
+          existingLlmProvider,
+          wellKnownLLMProvider
+        );
         const initialValues = {
           ...buildDefaultInitialValues(
             existingLlmProvider,
@@ -47,7 +52,10 @@ export function OpenAIForm({
           api_key: existingLlmProvider?.api_key ?? "",
           default_model_name:
             existingLlmProvider?.default_model_name ??
+            wellKnownLLMProvider?.recommended_default_model?.name ??
             DEFAULT_DEFAULT_MODEL_NAME,
+          // Default to auto mode for new OpenAI providers
+          is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
         };
 
         const validationSchema = buildDefaultValidationSchema().shape({
@@ -88,6 +96,10 @@ export function OpenAIForm({
                     <DisplayModels
                       modelConfigurations={modelConfigurations}
                       formikProps={formikProps}
+                      recommendedDefaultModel={
+                        wellKnownLLMProvider?.recommended_default_model ?? null
+                      }
+                      shouldShowAutoUpdateToggle={true}
                     />
 
                     <AdvancedOptions formikProps={formikProps} />
