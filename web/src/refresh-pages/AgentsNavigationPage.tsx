@@ -33,6 +33,7 @@ import {
   SvgPlus,
   SvgUser,
 } from "@opal/icons";
+import useOnMount from "@/hooks/useOnMount";
 
 interface AgentsSectionProps {
   title: string;
@@ -64,7 +65,7 @@ function AgentsSection({ title, description, agents }: AgentsSectionProps) {
   );
 }
 
-export default function AgentsPage() {
+export default function AgentsNavigationPage() {
   const { agents } = useAgents();
   const [creatorFilterOpen, setCreatorFilterOpen] = useState(false);
   const [actionsFilterOpen, setActionsFilterOpen] = useState(false);
@@ -87,10 +88,10 @@ export default function AgentsPage() {
   >(new Map());
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
+  useOnMount(() => {
     // Focus the search input when the page loads
     searchInputRef.current?.focus();
-  }, []);
+  });
 
   // Fetch all MCP servers used by agents
   useEffect(() => {
@@ -424,7 +425,7 @@ export default function AgentsPage() {
         description="Customize AI behavior and knowledge for you and your team’s use cases."
         rightChildren={
           <div data-testid="AgentsPage/new-agent-button">
-            <Button href="/assistants/new" leftIcon={SvgPlus}>
+            <Button href="/chat/agents/create" leftIcon={SvgPlus}>
               New Agent
             </Button>
           </div>
@@ -634,7 +635,7 @@ export default function AgentsPage() {
       </SettingsLayouts.Header>
 
       {/* Agents List */}
-      <div className="p-4 flex flex-col gap-8">
+      <SettingsLayouts.Body>
         {agentCount === 0 ? (
           <Text
             as="p"
@@ -657,7 +658,7 @@ export default function AgentsPage() {
             />
           </>
         )}
-      </div>
+      </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
 }

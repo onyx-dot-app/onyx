@@ -96,8 +96,8 @@ function UserCard({
 **Exception:** The `createLogoIcon` helper in `web/src/components/icons/icons.tsx` uses `dark:` modifiers (`dark:invert`, `dark:hidden`, `dark:block`) to handle third-party logo icons that cannot automatically adapt through `colors.css`. This is the ONLY acceptable use of dark mode modifiers.
 
 ```typescript
-// ✅ Good - Standard components use colors.css
-<div className="bg-white text-black">
+// ✅ Good - Standard components use `tailwind-themes/tailwind.config.js` / `src/app/css/colors.css`
+<div className="bg-background-neutral-03 text-text-02">
   Content
 </div>
 
@@ -213,7 +213,7 @@ function UserCard({ name }: { name: string }) {
 
 ## 10. Component Usage
 
-**Heavily avoid raw HTML input components. Always use components from the `refresh-components` directory.**
+**Heavily avoid raw HTML input components. Always use components from the `web/src/refresh-components` or `web/lib/opal/src` directory.**
 
 **Reason:** We've put in a lot of effort to unify the components that are rendered in the Onyx app. Using raw components breaks the entire UI of the application, and leaves it in a muddier state than before.
 
@@ -243,3 +243,39 @@ function ContactForm() {
   )
 }
 ```
+
+## 11. Colors
+
+**Always use custom overrides for colors and borders rather than built in Tailwind CSS colors. These overrides live in `web/tailwind-themes/tailwind.config.js`.**
+
+**Reason:** Our custom color system uses CSS variables that automatically handle dark mode and maintain design consistency across the app. Standard Tailwind colors bypass this system.
+
+**Available color categories:**
+- **Text:** `text-01` through `text-05`, `text-inverted-XX`
+- **Backgrounds:** `background-neutral-XX`, `background-tint-XX` (and inverted variants)
+- **Borders:** `border-01` through `border-05`, `border-inverted-XX`
+- **Actions:** `action-link-XX`, `action-danger-XX`
+- **Status:** `status-info-XX`, `status-success-XX`, `status-warning-XX`, `status-error-XX`
+- **Theme:** `theme-primary-XX`, `theme-red-XX`, `theme-blue-XX`, etc.
+
+```typescript
+// ✅ Good - Use custom Onyx color classes
+<div className="bg-background-neutral-01 border border-border-02" />
+<div className="bg-background-tint-02 border border-border-01" />
+<div className="bg-status-success-01" />
+<div className="bg-action-link-01" />
+<div className="bg-theme-primary-05" />
+
+// ❌ Bad - Do NOT use standard Tailwind colors
+<div className="bg-gray-100 border border-gray-300 text-gray-600" />
+<div className="bg-white border border-slate-200" />
+<div className="bg-green-100 text-green-700" />
+<div className="bg-blue-100 text-blue-600" />
+<div className="bg-indigo-500" />
+```
+
+## 12. Data Fetching
+
+**Prefer using `useSWR` for data fetching. Data should generally be fetched on the client side. Components that need data should display a loader / placeholder while waiting for that data. Prefer loading data within the component that needs it rather than at the top level and passing it down.**
+
+**Reason:** Client side fetching allows us to load the skeleton of the page without waiting for data to load, leading to a snappier UX. Loading data where needed reduces dependencies between a component and its parent component(s).
