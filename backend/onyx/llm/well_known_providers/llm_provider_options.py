@@ -13,6 +13,7 @@ from onyx.llm.well_known_providers.constants import OLLAMA_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENROUTER_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import VERTEXAI_PROVIDER_NAME
+from onyx.llm.well_known_providers.models import SimpleKnownModel
 from onyx.llm.well_known_providers.models import WellKnownLLMProviderDescriptor
 from onyx.server.manage.llm.models import ModelConfigurationView
 from onyx.utils.logger import setup_logger
@@ -211,7 +212,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
 
     well_known_llms = []
     for provider_name in LlmProviderNames:
-        all_model_names = fetch_models_for_provider(provider_name)
+        known_model_names = fetch_models_for_provider(provider_name)
         recommended_visible_models = llm_recommendations.get_visible_models(
             provider_name
         )
@@ -227,16 +228,18 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                     model_name, provider_name
                 ),
             )
-            for model_name in set(all_model_names)
-            | set(recommended_visible_models_names)
+            for model_name in known_model_names
         ]
 
         well_known_llms.append(
             WellKnownLLMProviderDescriptor(
                 name=provider_name,
-                model_configurations=model_configurations,
+                known_models=model_configurations,
                 recommended_default_model=(
-                    recommended_default_model.name
+                    SimpleKnownModel(
+                        name=recommended_default_model.name,
+                        display_name=recommended_default_model.display_name,
+                    )
                     if recommended_default_model
                     else None
                 ),

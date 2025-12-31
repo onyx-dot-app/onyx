@@ -1,4 +1,4 @@
-import { ModelConfiguration } from "../../interfaces";
+import { ModelConfiguration, SimpleKnownModel } from "../../interfaces";
 import { FormikProps } from "formik";
 import { BaseLLMFormValues } from "../formUtils";
 
@@ -67,18 +67,17 @@ export function DisplayModels<T extends BaseLLMFormValues>({
   modelConfigurations,
   noModelConfigurationsMessage,
   isLoading,
-  hideAutoModeToggle,
+  recommendedDefaultModel,
+  shouldShowAutoUpdateToggle,
 }: {
   formikProps: FormikProps<T>;
   modelConfigurations: ModelConfiguration[];
   noModelConfigurationsMessage?: string;
   isLoading?: boolean;
-  /** Hide the auto mode toggle (useful for dynamic providers like Ollama, Bedrock) */
-  hideAutoModeToggle?: boolean;
+  recommendedDefaultModel: SimpleKnownModel | null;
+  shouldShowAutoUpdateToggle: boolean;
 }) {
   const isAutoMode = formikProps.values.is_auto_mode;
-  const hasRecommendedModels = modelConfigurations.some((m) => m.is_visible);
-  const showAutoModeToggle = !hideAutoModeToggle && hasRecommendedModels;
 
   if (isLoading) {
     return (
@@ -121,6 +120,14 @@ export function DisplayModels<T extends BaseLLMFormValues>({
 
   const handleToggleAutoMode = () => {
     formikProps.setFieldValue("is_auto_mode", !isAutoMode);
+    formikProps.setFieldValue(
+      "selected_model_names",
+      modelConfigurations.filter((m) => m.is_visible).map((m) => m.name)
+    );
+    formikProps.setFieldValue(
+      "default_model_name",
+      recommendedDefaultModel?.name ?? ""
+    );
   };
 
   const selectedModels = formikProps.values.selected_model_names ?? [];
@@ -164,7 +171,7 @@ export function DisplayModels<T extends BaseLLMFormValues>({
     <div className="flex flex-col gap-3">
       <DisplayModelHeader />
       <div className="border border-border-01 rounded-lg p-3">
-        {showAutoModeToggle && (
+        {shouldShowAutoUpdateToggle && (
           <AutoModeToggle
             isAutoMode={isAutoMode}
             onToggle={handleToggleAutoMode}
@@ -175,10 +182,10 @@ export function DisplayModels<T extends BaseLLMFormValues>({
         <div
           className={cn(
             "flex flex-col gap-1",
-            showAutoModeToggle && "mt-3 pt-3 border-t border-border-01"
+            shouldShowAutoUpdateToggle && "mt-3 pt-3 border-t border-border-01"
           )}
         >
-          {isAutoMode && showAutoModeToggle ? (
+          {isAutoMode && shouldShowAutoUpdateToggle ? (
             // Auto mode: read-only display
             <div className="flex flex-col gap-2">
               {sortedAutoModels.map((model) => {

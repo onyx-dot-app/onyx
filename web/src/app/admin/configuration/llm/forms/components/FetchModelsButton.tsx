@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
@@ -10,6 +10,7 @@ interface FetchModelsButtonProps {
   disabledHint?: string;
   onModelsFetched: (models: ModelConfiguration[]) => void;
   onLoadingChange?: (isLoading: boolean) => void;
+  autoFetchOnInitialLoad?: boolean;
 }
 
 export function FetchModelsButton({
@@ -18,6 +19,7 @@ export function FetchModelsButton({
   disabledHint,
   onModelsFetched,
   onLoadingChange,
+  autoFetchOnInitialLoad = false,
 }: FetchModelsButtonProps) {
   const [isFetchingModels, setIsFetchingModels] = useState(false);
   const [fetchModelsError, setFetchModelsError] = useState("");
@@ -44,6 +46,14 @@ export function FetchModelsButton({
       onLoadingChange?.(false);
     }
   };
+
+  // Auto-fetch models on initial load if enabled and not disabled
+  useEffect(() => {
+    if (autoFetchOnInitialLoad && !isDisabled) {
+      handleFetchModels();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="flex flex-col gap-y-1">

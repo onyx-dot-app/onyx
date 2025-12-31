@@ -1,4 +1,8 @@
-import { LLMProviderView, ModelConfiguration } from "../interfaces";
+import {
+  LLMProviderView,
+  ModelConfiguration,
+  WellKnownLLMProviderDescriptor,
+} from "../interfaces";
 import { LLM_PROVIDERS_ADMIN_URL } from "../constants";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import * as Yup from "yup";
@@ -47,6 +51,29 @@ export const buildDefaultValidationSchema = () => {
     personas: Yup.array().of(Yup.number()),
     selected_model_names: Yup.array().of(Yup.string()),
   });
+};
+
+export const buildAvailableModelConfigurations = (
+  existingLlmProvider?: LLMProviderView,
+  wellKnownLLMProvider?: WellKnownLLMProviderDescriptor
+): ModelConfiguration[] => {
+  const existingModels = existingLlmProvider?.model_configurations ?? [];
+  const wellKnownModels = wellKnownLLMProvider?.known_models ?? [];
+
+  // Create a map to deduplicate by model name, preferring existing models
+  const modelMap = new Map<string, ModelConfiguration>();
+
+  // Add well-known models first
+  wellKnownModels.forEach((model) => {
+    modelMap.set(model.name, model);
+  });
+
+  // Override with existing models (they take precedence)
+  existingModels.forEach((model) => {
+    modelMap.set(model.name, model);
+  });
+
+  return Array.from(modelMap.values());
 };
 
 // Base form values that all provider forms share

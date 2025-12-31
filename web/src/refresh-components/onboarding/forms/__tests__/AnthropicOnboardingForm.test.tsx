@@ -167,10 +167,9 @@ describe("AnthropicOnboardingForm", () => {
       ];
 
       // Verify MOCK_PROVIDERS.anthropic has the correct model configurations
-      const actualModelNames =
-        MOCK_PROVIDERS.anthropic.model_configurations.map(
-          (config) => config.name
-        );
+      const actualModelNames = MOCK_PROVIDERS.anthropic.known_models.map(
+        (config) => config.name
+      );
 
       // Check that all expected models are present
       expect(actualModelNames).toEqual(
@@ -181,7 +180,7 @@ describe("AnthropicOnboardingForm", () => {
       expect(actualModelNames).toHaveLength(expectedModelNames.length);
 
       // Verify each model has is_visible set to true
-      MOCK_PROVIDERS.anthropic.model_configurations.forEach((config) => {
+      MOCK_PROVIDERS.anthropic.known_models.forEach((config) => {
         expect(config.is_visible).toBe(true);
       });
     });

@@ -11,6 +11,7 @@ import { FormActionButtons } from "./components/FormActionButtons";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
+  buildAvailableModelConfigurations,
   submitLLMProvider,
   BaseLLMFormValues,
   LLM_FORM_CLASS_NAME,
@@ -52,8 +53,10 @@ export function VertexAIForm({
         setTestError,
         wellKnownLLMProvider,
       }: ProviderFormContext) => {
-        const modelConfigurations =
-          wellKnownLLMProvider?.model_configurations ?? [];
+        const modelConfigurations = buildAvailableModelConfigurations(
+          existingLlmProvider,
+          wellKnownLLMProvider
+        );
         const initialValues: VertexAIFormValues = {
           ...buildDefaultInitialValues(
             existingLlmProvider,
@@ -61,7 +64,7 @@ export function VertexAIForm({
           ),
           default_model_name:
             existingLlmProvider?.default_model_name ??
-            wellKnownLLMProvider?.recommended_default_model ??
+            wellKnownLLMProvider?.recommended_default_model?.name ??
             VERTEXAI_DEFAULT_MODEL,
           // Default to auto mode for new Vertex AI providers
           is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
@@ -147,6 +150,10 @@ export function VertexAIForm({
                     <DisplayModels
                       modelConfigurations={modelConfigurations}
                       formikProps={formikProps}
+                      recommendedDefaultModel={
+                        wellKnownLLMProvider?.recommended_default_model ?? null
+                      }
+                      shouldShowAutoUpdateToggle={true}
                     />
 
                     <AdvancedOptions formikProps={formikProps} />

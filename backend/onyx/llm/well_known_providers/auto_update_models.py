@@ -6,12 +6,7 @@ from typing import Any
 from pydantic import BaseModel
 from pydantic import field_validator
 
-
-class ModelConfig(BaseModel):
-    """Configuration for a single model in the GitHub config."""
-
-    name: str
-    display_name: str | None = None
+from onyx.llm.well_known_providers.models import SimpleKnownModel
 
 
 class LLMProviderRecommendation(BaseModel):
@@ -22,8 +17,8 @@ class LLMProviderRecommendation(BaseModel):
     - additional_visible_models: List of additional visible model configs
     """
 
-    default_model: ModelConfig
-    additional_visible_models: list[ModelConfig] = []
+    default_model: SimpleKnownModel
+    additional_visible_models: list[SimpleKnownModel] = []
 
     @field_validator("default_model", mode="before")
     @classmethod
@@ -41,7 +36,7 @@ class LLMRecommendations(BaseModel):
     updated_at: datetime
     providers: dict[str, LLMProviderRecommendation]
 
-    def get_visible_models(self, provider_name: str) -> list[ModelConfig]:
+    def get_visible_models(self, provider_name: str) -> list[SimpleKnownModel]:
         """Get the set of models that should be visible by default for a provider."""
         if provider_name in self.providers:
             provider_config = self.providers[provider_name]
@@ -50,7 +45,7 @@ class LLMRecommendations(BaseModel):
             )
         return []
 
-    def get_default_model(self, provider_name: str) -> ModelConfig | None:
+    def get_default_model(self, provider_name: str) -> SimpleKnownModel | None:
         """Get the default model for a provider."""
         if provider_name in self.providers:
             provider_config = self.providers[provider_name]

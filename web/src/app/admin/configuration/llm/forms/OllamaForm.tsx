@@ -4,7 +4,6 @@ import {
   LLMProviderFormProps,
   LLMProviderView,
   ModelConfiguration,
-  OllamaModelResponse,
 } from "../interfaces";
 import * as Yup from "yup";
 import {
@@ -16,6 +15,7 @@ import { FormActionButtons } from "./components/FormActionButtons";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
+  buildAvailableModelConfigurations,
   submitLLMProvider,
   BaseLLMFormValues,
   LLM_FORM_CLASS_NAME,
@@ -27,7 +27,6 @@ import { fetchOllamaModels } from "../utils";
 
 export const OLLAMA_PROVIDER_NAME = "ollama_chat";
 const DEFAULT_API_BASE = "http://127.0.0.1:11434";
-const OLLAMA_MODELS_API_URL = "/api/admin/llm/ollama/available-models";
 
 interface OllamaFormValues extends BaseLLMFormValues {
   api_base: string;
@@ -106,7 +105,8 @@ function OllamaFormContent({
         formikProps={formikProps}
         noModelConfigurationsMessage="No models found. Please provide a valid API base URL."
         isLoading={isLoadingModels}
-        hideAutoModeToggle
+        recommendedDefaultModel={null}
+        shouldShowAutoUpdateToggle={false}
       />
 
       <AdvancedOptions formikProps={formikProps} />
@@ -143,8 +143,10 @@ export function OllamaForm({
         setTestError,
         wellKnownLLMProvider,
       }: ProviderFormContext) => {
-        const modelConfigurations =
-          wellKnownLLMProvider?.model_configurations ?? [];
+        const modelConfigurations = buildAvailableModelConfigurations(
+          existingLlmProvider,
+          wellKnownLLMProvider
+        );
         const initialValues: OllamaFormValues = {
           ...buildDefaultInitialValues(
             existingLlmProvider,

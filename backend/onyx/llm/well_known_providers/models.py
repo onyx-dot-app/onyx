@@ -1,6 +1,7 @@
 from enum import Enum
 
 from pydantic import BaseModel
+from pydantic import Field
 
 from onyx.server.manage.llm.models import ModelConfigurationView
 
@@ -18,7 +19,14 @@ class CustomConfigKeyType(str, Enum):
     SELECT = "select"
 
 
+class SimpleKnownModel(BaseModel):
+    name: str
+    display_name: str | None = None
+
+
 class WellKnownLLMProviderDescriptor(BaseModel):
     name: str
-    model_configurations: list[ModelConfigurationView]
-    recommended_default_model: str | None = None
+
+    # NOTE: the recommended visible models are encoded in the known_models list
+    known_models: list[ModelConfigurationView] = Field(default_factory=list)
+    recommended_default_model: SimpleKnownModel | None = None

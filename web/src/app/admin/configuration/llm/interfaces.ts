@@ -22,10 +22,16 @@ export interface ModelConfiguration {
   region?: string;
 }
 
+export interface SimpleKnownModel {
+  name: string;
+  display_name: string | null;
+}
+
 export interface WellKnownLLMProviderDescriptor {
   name: string;
-  model_configurations: ModelConfiguration[];
-  recommended_default_model: string | null;
+  known_models: ModelConfiguration[];
+
+  recommended_default_model: SimpleKnownModel | null;
 }
 
 export interface LLMModelDescriptor {

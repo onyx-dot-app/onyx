@@ -25,7 +25,7 @@ export function createMockLLMDescriptor(
 ): WellKnownLLMProviderDescriptor {
   return {
     name,
-    model_configurations:
+    known_models:
       modelConfigurations.length > 0
         ? modelConfigurations
         : [
