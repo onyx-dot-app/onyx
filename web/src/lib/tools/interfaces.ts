@@ -37,7 +37,7 @@ export interface MCPServer {
 }
 
 export interface MCPServersResponse {
-  assistant_id: string;
+  assistant_id?: string | null;
   mcp_servers: MCPServer[];
 }
 
