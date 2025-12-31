@@ -1317,18 +1317,18 @@ test.describe("MCP OAuth flows", () => {
     logStep("Tools auto-fetched and enabled via UI");
 
     const assistantEditorUrl =
-      "http://localhost:3000/assistants/new?admin=true";
+      "http://localhost:3000/chat/agents/create?admin=true";
     let assistantPageLoaded = false;
     for (let attempt = 0; attempt < 2 && !assistantPageLoaded; attempt++) {
       await page.goto(assistantEditorUrl);
       try {
-        await page.waitForURL("**/assistants/new**", {
+        await page.waitForURL("**/chat/agents/create**", {
           timeout: 15000,
         });
         assistantPageLoaded = true;
       } catch (error) {
         const currentUrl = page.url();
-        if (currentUrl.includes("/assistants/new")) {
+        if (currentUrl.includes("/chat/agents/create")) {
           assistantPageLoaded = true;
           break;
         }
@@ -1343,13 +1343,13 @@ test.describe("MCP OAuth flows", () => {
         }
         await logPageStateWithTag(
           page,
-          "Timed out waiting for /assistants/new"
+          "Timed out waiting for /chat/agents/create"
         );
         throw error;
       }
     }
     if (!assistantPageLoaded) {
-      throw new Error("Unable to navigate to /assistants/new");
+      throw new Error("Unable to navigate to /chat/agents/create");
     }
     logStep("Assistant editor loaded");
 
@@ -1607,8 +1607,8 @@ test.describe("MCP OAuth flows", () => {
 
       logStep("Tools auto-fetched and enabled via UI");
 
-      await page.goto("http://localhost:3000/assistants/new?admin=true");
-      await page.waitForURL("**/assistants/new**", { timeout: 15000 });
+      await page.goto("http://localhost:3000/chat/agents/create?admin=true");
+      await page.waitForURL("**/chat/agents/create**", { timeout: 15000 });
       logStep("Assistant editor loaded (curator)");
 
       await page.locator('input[name="name"]').fill(assistantName);
