@@ -28,7 +28,7 @@ import {
   restrictToFirstScrollableAncestor,
   restrictToVerticalAxis,
 } from "@dnd-kit/modifiers";
-import Settings from "@/sections/sidebar/Settings/Settings";
+import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useProjects } from "@/lib/hooks/useProjects";
@@ -419,7 +419,7 @@ const MemoizedAppSidebarInner = memo(
               {isAdmin ? "Admin Panel" : "Curator Panel"}
             </SidebarTab>
           )}
-          <Settings folded={folded} />
+          <UserAvatarPopover folded={folded} />
         </div>
       ),
       [folded, isAdmin, isCurator]

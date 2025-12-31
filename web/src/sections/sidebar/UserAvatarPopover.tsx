@@ -19,8 +19,6 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import UserSettings from "@/sections/sidebar/Settings/UserSettings";
 import { SvgBell, SvgLogOut, SvgUser, SvgX } from "@opal/icons";
 
 function getDisplayName(email?: string, personalName?: string): string {
@@ -162,26 +160,21 @@ function NotificationsPopover({ onClose }: NotificationsPopoverProps) {
   );
 }
 
-export interface SettingsProps {
+export interface UserAvatarPopoverProps {
   folded?: boolean;
 }
 
-export default function Settings({ folded }: SettingsProps) {
+export default function UserAvatarPopover({ folded }: UserAvatarPopoverProps) {
   const [popupState, setPopupState] = useState<
     "Settings" | "Notifications" | undefined
   >(undefined);
   const { user } = useUser();
-  const userSettingsModal = useCreateModal();
+  const router = useRouter();
 
   const displayName = getDisplayName(user?.email, user?.personalization?.name);
 
   const handlePopoverOpen = (state: boolean) => {
     if (state) {
-      // Prefetch user settings data when popover opens for instant modal display
-      preload("/api/user/pats", errorHandlingFetcher);
-      preload("/api/federated/oauth-status", errorHandlingFetcher);
-      preload("/api/manage/connector-status", errorHandlingFetcher);
-      preload("/api/llm/provider", errorHandlingFetcher);
       setPopupState("Settings");
     } else {
       setPopupState(undefined);
@@ -189,50 +182,44 @@ export default function Settings({ folded }: SettingsProps) {
   };
 
   return (
-    <>
-      <userSettingsModal.Provider>
-        <UserSettings />
-      </userSettingsModal.Provider>
-
-      <Popover open={!!popupState} onOpenChange={handlePopoverOpen}>
-        <PopoverTrigger asChild>
-          <div id="onyx-user-dropdown">
-            <SidebarTab
-              leftIcon={({ className }) => (
-                <InputAvatar
-                  className={cn(
-                    "flex items-center justify-center bg-background-neutral-inverted-00",
-                    className,
-                    "w-5 h-5"
-                  )}
-                >
-                  <Text as="p" inverted secondaryBody>
-                    {displayName[0]?.toUpperCase()}
-                  </Text>
-                </InputAvatar>
-              )}
-              transient={!!popupState}
-              folded={folded}
-            >
-              {displayName}
-            </SidebarTab>
-          </div>
-        </PopoverTrigger>
-        <PopoverContent align="end" side="right">
-          {popupState === "Settings" && (
-            <SettingsPopover
-              onUserSettingsClick={() => {
-                setPopupState(undefined);
-                userSettingsModal.toggle(true);
-              }}
-              onNotificationsClick={() => setPopupState("Notifications")}
-            />
-          )}
-          {popupState === "Notifications" && (
-            <NotificationsPopover onClose={() => setPopupState("Settings")} />
-          )}
-        </PopoverContent>
-      </Popover>
-    </>
+    <Popover open={!!popupState} onOpenChange={handlePopoverOpen}>
+      <PopoverTrigger asChild>
+        <div id="onyx-user-dropdown">
+          <SidebarTab
+            leftIcon={({ className }) => (
+              <InputAvatar
+                className={cn(
+                  "flex items-center justify-center bg-background-neutral-inverted-00",
+                  className,
+                  "w-5 h-5"
+                )}
+              >
+                <Text as="p" inverted secondaryBody>
+                  {displayName[0]?.toUpperCase()}
+                </Text>
+              </InputAvatar>
+            )}
+            transient={!!popupState}
+            folded={folded}
+          >
+            {displayName}
+          </SidebarTab>
+        </div>
+      </PopoverTrigger>
+      <PopoverContent align="end" side="right">
+        {popupState === "Settings" && (
+          <SettingsPopover
+            onUserSettingsClick={() => {
+              setPopupState(undefined);
+              router.push("/chat/settings");
+            }}
+            onNotificationsClick={() => setPopupState("Notifications")}
+          />
+        )}
+        {popupState === "Notifications" && (
+          <NotificationsPopover onClose={() => setPopupState("Settings")} />
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
