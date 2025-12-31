@@ -14,6 +14,9 @@ from ee.onyx.configs.app_configs import ANTHROPIC_DEFAULT_API_KEY
 from ee.onyx.configs.app_configs import COHERE_DEFAULT_API_KEY
 from ee.onyx.configs.app_configs import HUBSPOT_TRACKING_URL
 from ee.onyx.configs.app_configs import OPENAI_DEFAULT_API_KEY
+from ee.onyx.configs.app_configs import OPENROUTER_DEFAULT_API_KEY
+from ee.onyx.configs.app_configs import VERTEXAI_DEFAULT_CREDENTIALS
+from ee.onyx.configs.app_configs import VERTEXAI_DEFAULT_LOCATION
 from ee.onyx.server.tenants.access import generate_data_plane_token
 from ee.onyx.server.tenants.models import TenantByDomainResponse
 from ee.onyx.server.tenants.models import TenantCreationPayload
@@ -37,10 +40,17 @@ from onyx.db.models import AvailableTenant
 from onyx.db.models import IndexModelStatus
 from onyx.db.models import SearchSettings
 from onyx.db.models import UserTenantMapping
-from onyx.llm.well_known_providers.llm_provider_options import ANTHROPIC_PROVIDER_NAME
-from onyx.llm.well_known_providers.llm_provider_options import get_anthropic_model_names
-from onyx.llm.well_known_providers.llm_provider_options import get_openai_model_names
-from onyx.llm.well_known_providers.llm_provider_options import OPENAI_PROVIDER_NAME
+from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
+from onyx.llm.well_known_providers.constants import ANTHROPIC_PROVIDER_NAME
+from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
+from onyx.llm.well_known_providers.constants import OPENROUTER_PROVIDER_NAME
+from onyx.llm.well_known_providers.constants import VERTEX_CREDENTIALS_FILE_KWARG
+from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
+from onyx.llm.well_known_providers.constants import VERTEXAI_PROVIDER_NAME
+from onyx.llm.well_known_providers.llm_provider_options import (
+    _get_reccomendations,
+)
+from onyx.llm.well_known_providers.llm_provider_options import fetch_models_for_provider
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
@@ -262,22 +272,58 @@ async def rollback_tenant_provisioning(tenant_id: str) -> None:
         logger.info(f"Tenant rollback completed successfully for tenant {tenant_id}")
 
 
+def _build_model_configurations(
+    provider_name: str,
+    recommendations: LLMRecommendations,
+) -> list[ModelConfigurationUpsertRequest]:
+    """Build model configurations for a provider using recommendations.
+
+    Args:
+        provider_name: The provider name (e.g., "openai", "anthropic")
+        recommendations: LLM recommendations from JSON config
+
+    Returns:
+        List of ModelConfigurationUpsertRequest with visibility set based on recommendations
+    """
+    # Get all known model names for this provider
+    all_model_names = fetch_models_for_provider(provider_name)
+
+    # Get visible model names from recommendations
+    visible_models = recommendations.get_visible_models(provider_name)
+    visible_model_names = {m.name for m in visible_models}
+
+    return [
+        ModelConfigurationUpsertRequest(
+            name=model_name,
+            is_visible=model_name in visible_model_names,
+            max_input_tokens=None,
+        )
+        for model_name in all_model_names
+    ]
+
+
 def configure_default_api_keys(db_session: Session) -> None:
+    """Configure default LLM providers using recommended-models.json for model selection."""
+    # Load recommendations from JSON config
+    recommendations = _get_reccomendations()
+
+    # Configure Anthropic provider
     if ANTHROPIC_DEFAULT_API_KEY:
+        default_model = recommendations.get_default_model(ANTHROPIC_PROVIDER_NAME)
+        default_model_name = (
+            default_model.name if default_model else "claude-sonnet-4-5"
+        )
+
         anthropic_provider = LLMProviderUpsertRequest(
             name="Anthropic",
             provider=ANTHROPIC_PROVIDER_NAME,
             api_key=ANTHROPIC_DEFAULT_API_KEY,
-            default_model_name="claude-3-7-sonnet-20250219",
-            model_configurations=[
-                ModelConfigurationUpsertRequest(
-                    name=name,
-                    is_visible=False,
-                    max_input_tokens=None,
-                )
-                for name in get_anthropic_model_names()
-            ],
+            default_model_name=default_model_name,
+            model_configurations=_build_model_configurations(
+                ANTHROPIC_PROVIDER_NAME, recommendations
+            ),
             api_key_changed=True,
+            is_auto_mode=True,
         )
         try:
             full_provider = upsert_llm_provider(anthropic_provider, db_session)
@@ -285,25 +331,25 @@ def configure_default_api_keys(db_session: Session) -> None:
         except Exception as e:
             logger.error(f"Failed to configure Anthropic provider: {e}")
     else:
-        logger.error(
+        logger.info(
             "ANTHROPIC_DEFAULT_API_KEY not set, skipping Anthropic provider configuration"
         )
 
+    # Configure OpenAI provider
     if OPENAI_DEFAULT_API_KEY:
+        default_model = recommendations.get_default_model(OPENAI_PROVIDER_NAME)
+        default_model_name = default_model.name if default_model else "gpt-4o"
+
         openai_provider = LLMProviderUpsertRequest(
             name="OpenAI",
             provider=OPENAI_PROVIDER_NAME,
             api_key=OPENAI_DEFAULT_API_KEY,
-            default_model_name="gpt-4o",
-            model_configurations=[
-                ModelConfigurationUpsertRequest(
-                    name=model_name,
-                    is_visible=False,
-                    max_input_tokens=None,
-                )
-                for model_name in get_openai_model_names()
-            ],
+            default_model_name=default_model_name,
+            model_configurations=_build_model_configurations(
+                OPENAI_PROVIDER_NAME, recommendations
+            ),
             api_key_changed=True,
+            is_auto_mode=True,
         )
         try:
             full_provider = upsert_llm_provider(openai_provider, db_session)
@@ -311,10 +357,80 @@ def configure_default_api_keys(db_session: Session) -> None:
         except Exception as e:
             logger.error(f"Failed to configure OpenAI provider: {e}")
     else:
-        logger.error(
+        logger.info(
             "OPENAI_DEFAULT_API_KEY not set, skipping OpenAI provider configuration"
         )
 
+    # Configure Vertex AI provider
+    if VERTEXAI_DEFAULT_CREDENTIALS:
+        default_model = recommendations.get_default_model(VERTEXAI_PROVIDER_NAME)
+        default_model_name = default_model.name if default_model else "gemini-2.5-pro"
+
+        # Vertex AI uses custom_config for credentials and location
+        custom_config = {
+            VERTEX_CREDENTIALS_FILE_KWARG: VERTEXAI_DEFAULT_CREDENTIALS,
+            VERTEX_LOCATION_KWARG: VERTEXAI_DEFAULT_LOCATION,
+        }
+
+        vertexai_provider = LLMProviderUpsertRequest(
+            name="Google Vertex AI",
+            provider=VERTEXAI_PROVIDER_NAME,
+            custom_config=custom_config,
+            default_model_name=default_model_name,
+            model_configurations=_build_model_configurations(
+                VERTEXAI_PROVIDER_NAME, recommendations
+            ),
+            api_key_changed=True,
+            is_auto_mode=True,
+        )
+        try:
+            full_provider = upsert_llm_provider(vertexai_provider, db_session)
+            update_default_provider(full_provider.id, db_session)
+        except Exception as e:
+            logger.error(f"Failed to configure Vertex AI provider: {e}")
+    else:
+        logger.info(
+            "VERTEXAI_DEFAULT_CREDENTIALS not set, skipping Vertex AI provider configuration"
+        )
+
+    # Configure OpenRouter provider
+    if OPENROUTER_DEFAULT_API_KEY:
+        default_model = recommendations.get_default_model(OPENROUTER_PROVIDER_NAME)
+        default_model_name = default_model.name if default_model else "z-ai/glm-4.7"
+
+        # For OpenRouter, we use the visible models from recommendations as model_configurations
+        # since OpenRouter models are dynamic (fetched from their API)
+        visible_models = recommendations.get_visible_models(OPENROUTER_PROVIDER_NAME)
+        model_configurations = [
+            ModelConfigurationUpsertRequest(
+                name=model.name,
+                is_visible=True,
+                max_input_tokens=None,
+                display_name=model.display_name,
+            )
+            for model in visible_models
+        ]
+
+        openrouter_provider = LLMProviderUpsertRequest(
+            name="OpenRouter",
+            provider=OPENROUTER_PROVIDER_NAME,
+            api_key=OPENROUTER_DEFAULT_API_KEY,
+            default_model_name=default_model_name,
+            model_configurations=model_configurations,
+            api_key_changed=True,
+            is_auto_mode=True,
+        )
+        try:
+            full_provider = upsert_llm_provider(openrouter_provider, db_session)
+            update_default_provider(full_provider.id, db_session)
+        except Exception as e:
+            logger.error(f"Failed to configure OpenRouter provider: {e}")
+    else:
+        logger.info(
+            "OPENROUTER_DEFAULT_API_KEY not set, skipping OpenRouter provider configuration"
+        )
+
+    # Configure Cohere embedding provider
     if COHERE_DEFAULT_API_KEY:
         cloud_embedding_provider = CloudEmbeddingProviderCreationRequest(
             provider_type=EmbeddingProvider.COHERE,
