@@ -48,6 +48,8 @@ export function OpenAIForm({
           default_model_name:
             existingLlmProvider?.default_model_name ??
             DEFAULT_DEFAULT_MODEL_NAME,
+          // Default to auto mode for new OpenAI providers
+          is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
         };
 
         const validationSchema = buildDefaultValidationSchema().shape({
