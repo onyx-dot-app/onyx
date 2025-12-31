@@ -16,7 +16,7 @@ import { credentialTemplates } from "@/lib/connectors/credentials";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Title from "@/components/ui/title";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, use } from "react";
+import { useCallback, useEffect, useRef, useState, use } from "react";
 import useSWR, { mutate } from "swr";
 import {
   AdvancedConfigDisplay,
@@ -38,6 +38,7 @@ import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisp
 import EditPropertyModal from "@/components/modals/EditPropertyModal";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { deleteCCPair } from "@/lib/documentDeletion";
+import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import * as Yup from "yup";
 import {
   AlertCircle,
@@ -148,6 +149,36 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const [showIsResolvingKickoffLoader, setShowIsResolvingKickoffLoader] =
     useState(false);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  const [showDeleteConnectorConfirmModal, setShowDeleteConnectorConfirmModal] =
+    useState(false);
+  const isSchedulingConnectorDeletionRef = useRef(false);
+
+  const refresh = useCallback(() => {
+    mutate(buildCCPairInfoUrl(ccPairId));
+  }, [ccPairId]);
+
+  const shouldConfirmConnectorDeletion = true;
+
+  const scheduleConnectorDeletion = useCallback(async () => {
+    if (!ccPair) return;
+    if (isSchedulingConnectorDeletionRef.current) return;
+    isSchedulingConnectorDeletionRef.current = true;
+
+    try {
+      await deleteCCPair(
+        ccPair.connector.id,
+        ccPair.credential.id,
+        setPopup,
+        () => mutate(buildCCPairInfoUrl(ccPair.id))
+      );
+      refresh();
+    } catch (error) {
+      console.error("Error deleting connector:", error);
+    } finally {
+      setShowDeleteConnectorConfirmModal(false);
+      isSchedulingConnectorDeletionRef.current = false;
+    }
+  }, [ccPair, refresh, setPopup]);
 
   const latestIndexAttempt = indexAttempts?.[0];
   const isResolvingErrors =
@@ -359,10 +390,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
   const isDeleting = ccPair.status === ConnectorCredentialPairStatus.DELETING;
 
-  const refresh = () => {
-    mutate(buildCCPairInfoUrl(ccPairId));
-  };
-
   const {
     prune_freq: pruneFreq,
     refresh_freq: refreshFreq,
@@ -375,6 +402,19 @@ function Main({ ccPairId }: { ccPairId: number }) {
       {showIsResolvingKickoffLoader && !isResolvingErrors && <Spinner />}
       {ReIndexModal}
       {ConfirmModal}
+
+      {showDeleteConnectorConfirmModal && (
+        <ConfirmEntityModal
+          danger
+          entityType="connector"
+          entityName={ccPair.name}
+          additionalDetails="Deleting this connector schedules a deletion job that removes its indexed documents and deletes it for every user."
+          onClose={() => {
+            setShowDeleteConnectorConfirmModal(false);
+          }}
+          onSubmit={scheduleConnectorDeletion}
+        />
+      )}
 
       {editingRefreshFrequency && (
         <EditPropertyModal
@@ -510,17 +550,12 @@ function Main({ ccPairId }: { ccPairId: number }) {
                 {!isDeleting && (
                   <DropdownMenuItemWithTooltip
                     onClick={async () => {
-                      try {
-                        await deleteCCPair(
-                          ccPair.connector.id,
-                          ccPair.credential.id,
-                          setPopup,
-                          () => mutate(buildCCPairInfoUrl(ccPair.id))
-                        );
-                        refresh();
-                      } catch (error) {
-                        console.error("Error deleting connector:", error);
+                      if (shouldConfirmConnectorDeletion) {
+                        setShowDeleteConnectorConfirmModal(true);
+                        return;
                       }
+
+                      await scheduleConnectorDeletion();
                     }}
                     disabled={!statusIsNotCurrentlyActive(ccPair.status)}
                     className="flex items-center gap-x-2 cursor-pointer px-3 py-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"

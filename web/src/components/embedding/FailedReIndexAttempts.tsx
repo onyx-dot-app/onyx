@@ -4,6 +4,7 @@ import { IndexAttemptStatus } from "@/components/Status";
 import { deleteCCPair } from "@/lib/documentDeletion";
 import { FailedConnectorIndexingStatus } from "@/lib/types";
 import Button from "@/refresh-components/buttons/Button";
+import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import {
   Table,
   TableBody,
@@ -28,6 +29,14 @@ export function FailedReIndexAttempts({
 }) {
   const numToDisplay = 10;
   const [page, setPage] = useState(1);
+  const [pendingConnectorDeletion, setPendingConnectorDeletion] = useState<{
+    connectorId: number;
+    credentialId: number;
+    ccPairId: number;
+    name: string;
+  } | null>(null);
+
+  const shouldConfirmConnectorDeletion = true;
 
   const anyDeletable = failedIndexingStatuses.some(
     (status) => status.is_deletable
@@ -35,6 +44,35 @@ export function FailedReIndexAttempts({
 
   return (
     <div className="mt-6 mb-8 p-4 border border-red-300 rounded-lg bg-red-50">
+      {pendingConnectorDeletion && (
+        <ConfirmEntityModal
+          danger
+          entityType="connector"
+          entityName={pendingConnectorDeletion.name}
+          additionalDetails="Deleting this connector schedules a deletion job that removes its indexed documents and deletes it for every user."
+          onClose={() => setPendingConnectorDeletion(null)}
+          onSubmit={async () => {
+            try {
+              await deleteCCPair(
+                pendingConnectorDeletion.connectorId,
+                pendingConnectorDeletion.credentialId,
+                setPopup,
+                () =>
+                  mutate(buildCCPairInfoUrl(pendingConnectorDeletion.ccPairId))
+              );
+            } catch (error) {
+              console.error("Error deleting connector:", error);
+              setPopup({
+                message: "Failed to delete connector. Please try again.",
+                type: "error",
+              });
+            } finally {
+              setPendingConnectorDeletion(null);
+            }
+          }}
+        />
+      )}
+
       <Text className="text-red-700 font-semibold mb-2">
         Failed Re-indexing Attempts
       </Text>
@@ -98,21 +136,40 @@ export function FailedReIndexAttempts({
                     <TableCell>
                       <Button
                         danger
-                        onClick={() =>
-                          deleteCCPair(
-                            reindexingProgress.connector_id,
-                            reindexingProgress.credential_id,
-                            setPopup,
-                            () =>
-                              mutate(
-                                buildCCPairInfoUrl(
-                                  reindexingProgress.cc_pair_id
+                        onClick={async () => {
+                          if (shouldConfirmConnectorDeletion) {
+                            setPendingConnectorDeletion({
+                              connectorId: reindexingProgress.connector_id,
+                              credentialId: reindexingProgress.credential_id,
+                              ccPairId: reindexingProgress.cc_pair_id,
+                              name: reindexingProgress.name ?? "this connector",
+                            });
+                            return;
+                          }
+
+                          try {
+                            await deleteCCPair(
+                              reindexingProgress.connector_id,
+                              reindexingProgress.credential_id,
+                              setPopup,
+                              () =>
+                                mutate(
+                                  buildCCPairInfoUrl(
+                                    reindexingProgress.cc_pair_id
+                                  )
                                 )
-                              )
-                          )
-                        }
+                            );
+                          } catch (error) {
+                            console.error("Error deleting connector:", error);
+                            setPopup({
+                              message:
+                                "Failed to delete connector. Please try again.",
+                              type: "error",
+                            });
+                          }
+                        }}
                         leftIcon={SvgTrash}
-                        disabled={reindexingProgress.is_deletable}
+                        disabled={!reindexingProgress.is_deletable}
                       >
                         Delete
                       </Button>
