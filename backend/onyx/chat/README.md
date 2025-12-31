@@ -63,7 +63,7 @@ To ensure the LLM follows certain specific instructions, instructions are added 
 tool is used, a citation reminder is always added. Otherwise, by default there is no reminder. If the user configures reminders, those are added to the
 final message. If a search related tool just ran and the user has reminders, both appear in a single message.
 
-If a search related tool is called at any point during the turn, the reminder will remain at the end until the turn is over and the agent as responded.
+If a search related tool is called at any point during the turn, the reminder will remain at the end until the turn is over and the agent has responded.
 
 
 ## Tool Calls
@@ -145,7 +145,7 @@ attention despite having global access.
 In a similar concept, LLM instructions in the system prompt are structured specifically so that there are coherent sections for the LLM to attend to. This is
 fairly surprising actually but if there is a line of instructions effectively saying "If you try to use some tools and find that you need more information or
 need to call additional tools, you are encouraged to do this", having this in the Tool section of the System prompt makes all the LLMs follow it well but if it's
-even just a paragraph away like near the beginning of the prompt, it is often often ignored. The difference is as drastic as a 30% follow rate to a 90% follow
+even just a paragraph away like near the beginning of the prompt, it is often ignored. The difference is as drastic as a 30% follow rate to a 90% follow
 rate even just moving the same statement a few sentences.
 
 

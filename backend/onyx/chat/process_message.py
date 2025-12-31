@@ -1,5 +1,5 @@
 """
-IMPORTANT: familiarize yourself with the design concepts below prior to contributing to this file.
+IMPORTANT: familiarize yourself with the design concepts prior to contributing to this file.
 An overview can be found in the README.md file in this directory.
 """
 
