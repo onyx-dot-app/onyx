@@ -204,6 +204,7 @@ export function OpenRouterForm({
                         "Fetch available models first, then you'll be able to select " +
                         "the models you want to make available in Onyx."
                       }
+                      hideAutoModeToggle
                     />
 
                     <AdvancedOptions formikProps={formikProps} />

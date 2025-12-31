@@ -106,6 +106,7 @@ function OllamaFormContent({
         formikProps={formikProps}
         noModelConfigurationsMessage="No models found. Please provide a valid API base URL."
         isLoading={isLoadingModels}
+        hideAutoModeToggle
       />
 
       <AdvancedOptions formikProps={formikProps} />

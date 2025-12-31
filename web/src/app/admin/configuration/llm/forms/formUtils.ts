@@ -16,10 +16,15 @@ export const buildDefaultInitialValues = (
     modelConfigurations?.[0]?.name ??
     "";
 
+  // Auto mode must be explicitly enabled by the user
+  // Default to false for new providers, preserve existing value when editing
+  const isAutoMode = existingLlmProvider?.is_auto_mode ?? false;
+
   return {
     name: existingLlmProvider?.name || "",
     default_model_name: defaultModelName,
     is_public: existingLlmProvider?.is_public ?? true,
+    is_auto_mode: isAutoMode,
     groups: existingLlmProvider?.groups ?? [],
     personas: existingLlmProvider?.personas ?? [],
     selected_model_names: existingLlmProvider
@@ -37,6 +42,7 @@ export const buildDefaultValidationSchema = () => {
     name: Yup.string().required("Display Name is required"),
     default_model_name: Yup.string().required("Model name is required"),
     is_public: Yup.boolean().required(),
+    is_auto_mode: Yup.boolean().required(),
     groups: Yup.array().of(Yup.number()),
     personas: Yup.array().of(Yup.number()),
     selected_model_names: Yup.array().of(Yup.string()),
@@ -50,6 +56,7 @@ export interface BaseLLMFormValues {
   api_base?: string;
   default_model_name?: string;
   is_public: boolean;
+  is_auto_mode: boolean;
   groups: number[];
   personas: number[];
   selected_model_names: string[];
@@ -95,6 +102,23 @@ export const filterModelConfigurations = (
     );
 };
 
+// Helper to get model configurations for auto mode
+export const getAutoModeModelConfigurations = (
+  modelConfigurations: ModelConfiguration[]
+): ModelConfiguration[] => {
+  return modelConfigurations
+    .filter((m) => m.is_visible)
+    .map(
+      (modelConfiguration): ModelConfiguration => ({
+        name: modelConfiguration.name,
+        is_visible: true,
+        max_input_tokens: modelConfiguration.max_input_tokens ?? null,
+        supports_image_input: modelConfiguration.supports_image_input,
+        display_name: modelConfiguration.display_name,
+      })
+    );
+};
+
 export const submitLLMProvider = async <T extends BaseLLMFormValues>({
   providerName,
   values,
@@ -114,14 +138,36 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
 
   const { selected_model_names: visibleModels, api_key, ...rest } = values;
 
-  const filteredModelConfigurations = filterModelConfigurations(
-    modelConfigurations,
-    visibleModels,
-    rest.default_model_name as string | undefined
-  );
+  // In auto mode, use recommended models from descriptor
+  // In manual mode, use user's selection
+  let filteredModelConfigurations: ModelConfiguration[];
+  let finalDefaultModelName = rest.default_model_name;
+
+  if (values.is_auto_mode) {
+    filteredModelConfigurations =
+      getAutoModeModelConfigurations(modelConfigurations);
+
+    // In auto mode, use the first recommended model as default if current default isn't in the list
+    const visibleModelNames = new Set(
+      filteredModelConfigurations.map((m) => m.name)
+    );
+    if (
+      finalDefaultModelName &&
+      !visibleModelNames.has(finalDefaultModelName)
+    ) {
+      finalDefaultModelName = filteredModelConfigurations[0]?.name ?? "";
+    }
+  } else {
+    filteredModelConfigurations = filterModelConfigurations(
+      modelConfigurations,
+      visibleModels,
+      rest.default_model_name as string | undefined
+    );
+  }
 
   const finalValues = {
     ...rest,
+    default_model_name: finalDefaultModelName,
     api_key,
     api_key_changed: api_key !== (initialValues.api_key as string | undefined),
     model_configurations: filteredModelConfigurations,
