@@ -65,6 +65,7 @@ import Suggestions from "@/sections/Suggestions";
 import OnboardingFlow from "@/refresh-components/onboarding/OnboardingFlow";
 import { useOnboardingState } from "@/refresh-components/onboarding/useOnboardingState";
 import { OnboardingStep } from "@/refresh-components/onboarding/types";
+import { HAS_FINISHED_ONBOARDING_KEY } from "@/refresh-components/onboarding/constants";
 import * as AppLayouts from "@/layouts/app-layouts";
 import { SvgFileText } from "@opal/icons";
 import Spacer from "@/refresh-components/Spacer";
@@ -194,7 +195,8 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
     liveAssistant
   );
 
-  // On first render, open onboarding if there are no configured LLM providers.
+  // On first render, open onboarding if there are no configured LLM providers
+  // OR if the user hasn't explicitly finished onboarding yet.
   // Wait until providers have loaded before making this decision.
   const hasCheckedOnboarding = useRef(false);
   useEffect(() => {
@@ -203,7 +205,17 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
       return;
     }
     hasCheckedOnboarding.current = true;
-    setShowOnboarding(llmManager.hasAnyProvider === false);
+
+    // Check if user has explicitly finished onboarding
+    const hasFinishedOnboarding =
+      localStorage.getItem(HAS_FINISHED_ONBOARDING_KEY) === "true";
+
+    // Show onboarding if:
+    // 1. No LLM providers configured, OR
+    // 2. User hasn't explicitly finished onboarding (they navigated away before clicking "Finish Setup")
+    setShowOnboarding(
+      llmManager.hasAnyProvider === false || !hasFinishedOnboarding
+    );
   }, [llmManager.isLoadingProviders, llmManager.hasAnyProvider]);
 
   const noAssistants = liveAssistant === null || liveAssistant === undefined;
@@ -434,9 +446,12 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
         currentMessageFiles: currentMessageFiles,
         deepResearch: deepResearchEnabled,
       });
-      setShowOnboarding(false);
+      if (showOnboarding) {
+        localStorage.setItem(HAS_FINISHED_ONBOARDING_KEY, "true");
+        setShowOnboarding(false);
+      }
     },
-    [onSubmit, currentMessageFiles, deepResearchEnabled]
+    [onSubmit, currentMessageFiles, deepResearchEnabled, showOnboarding]
   );
 
   // Memoized callbacks for DocumentsSidebar
