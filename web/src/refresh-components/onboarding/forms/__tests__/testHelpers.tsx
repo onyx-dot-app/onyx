@@ -39,6 +39,7 @@ export function createMockLLMDescriptor(
               supports_image_input: true,
             },
           ],
+    recommended_default_model: null,
   };
 }
 

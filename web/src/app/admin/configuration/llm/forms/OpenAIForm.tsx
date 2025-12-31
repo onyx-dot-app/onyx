@@ -37,8 +37,12 @@ export function OpenAIForm({
         setIsTesting,
         testError,
         setTestError,
-        modelConfigurations,
+        wellKnownLLMProvider,
       }) => {
+        const modelConfigurations =
+          wellKnownLLMProvider?.model_configurations ?? [];
+        console.log("modelConfigurations", modelConfigurations);
+        console.log("wellKnownLLMProvider", wellKnownLLMProvider);
         const initialValues = {
           ...buildDefaultInitialValues(
             existingLlmProvider,

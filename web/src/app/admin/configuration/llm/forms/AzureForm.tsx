@@ -65,8 +65,10 @@ export function AzureForm({
         setIsTesting,
         testError,
         setTestError,
-        modelConfigurations,
+        wellKnownLLMProvider,
       }: ProviderFormContext) => {
+        const modelConfigurations =
+          wellKnownLLMProvider?.model_configurations ?? [];
         const initialValues: AzureFormValues = {
           ...buildDefaultInitialValues(
             existingLlmProvider,

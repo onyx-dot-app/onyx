@@ -39,8 +39,10 @@ export function AnthropicForm({
         setIsTesting,
         testError,
         setTestError,
-        modelConfigurations,
+        wellKnownLLMProvider,
       }: ProviderFormContext) => {
+        const modelConfigurations =
+          wellKnownLLMProvider?.model_configurations ?? [];
         const initialValues = {
           ...buildDefaultInitialValues(
             existingLlmProvider,

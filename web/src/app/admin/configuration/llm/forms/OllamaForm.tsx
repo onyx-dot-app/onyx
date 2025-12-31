@@ -141,8 +141,10 @@ export function OllamaForm({
         setIsTesting,
         testError,
         setTestError,
-        modelConfigurations,
+        wellKnownLLMProvider,
       }: ProviderFormContext) => {
+        const modelConfigurations =
+          wellKnownLLMProvider?.model_configurations ?? [];
         const initialValues: OllamaFormValues = {
           ...buildDefaultInitialValues(
             existingLlmProvider,

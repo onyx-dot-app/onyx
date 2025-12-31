@@ -25,6 +25,7 @@ export interface ModelConfiguration {
 export interface WellKnownLLMProviderDescriptor {
   name: string;
   model_configurations: ModelConfiguration[];
+  recommended_default_model: string | null;
 }
 
 export interface LLMModelDescriptor {

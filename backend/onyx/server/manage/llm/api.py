@@ -45,9 +45,6 @@ from onyx.llm.well_known_providers.llm_provider_options import (
     fetch_available_well_known_llms,
 )
 from onyx.llm.well_known_providers.llm_provider_options import (
-    fetch_model_configurations_for_provider,
-)
-from onyx.llm.well_known_providers.llm_provider_options import (
     WellKnownLLMProviderDescriptor,
 )
 from onyx.server.manage.llm.models import BedrockFinalModelResponse
@@ -57,7 +54,6 @@ from onyx.server.manage.llm.models import LLMProviderDescriptor
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
-from onyx.server.manage.llm.models import ModelConfigurationView
 from onyx.server.manage.llm.models import OllamaFinalModelResponse
 from onyx.server.manage.llm.models import OllamaModelDetails
 from onyx.server.manage.llm.models import OllamaModelsRequest
@@ -98,8 +94,12 @@ def fetch_llm_options(
 def fetch_llm_provider_options(
     provider_name: str,
     _: User | None = Depends(current_admin_user),
-) -> list[ModelConfigurationView]:
-    return fetch_model_configurations_for_provider(provider_name)
+) -> WellKnownLLMProviderDescriptor:
+    well_known_llms = fetch_available_well_known_llms()
+    for well_known_llm in well_known_llms:
+        if well_known_llm.name == provider_name:
+            return well_known_llm
+    raise HTTPException(status_code=404, detail=f"Provider {provider_name} not found")
 
 
 @admin_router.post("/test")

@@ -110,8 +110,10 @@ export function OpenRouterForm({
         setIsTesting,
         testError,
         setTestError,
-        modelConfigurations,
+        wellKnownLLMProvider,
       }: ProviderFormContext) => {
+        const modelConfigurations =
+          wellKnownLLMProvider?.model_configurations ?? [];
         const initialValues: OpenRouterFormValues = {
           ...buildDefaultInitialValues(
             existingLlmProvider,

@@ -50,8 +50,10 @@ export function VertexAIForm({
         setIsTesting,
         testError,
         setTestError,
-        modelConfigurations,
+        wellKnownLLMProvider,
       }: ProviderFormContext) => {
+        const modelConfigurations =
+          wellKnownLLMProvider?.model_configurations ?? [];
         const initialValues: VertexAIFormValues = {
           ...buildDefaultInitialValues(
             existingLlmProvider,

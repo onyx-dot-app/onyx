@@ -3,6 +3,7 @@ import pathlib
 
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
+from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.llm.well_known_providers.constants import ANTHROPIC_PROVIDER_NAME
@@ -206,50 +207,41 @@ def get_vertexai_model_names() -> list[str]:
 
 
 def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
-    return [
-        WellKnownLLMProviderDescriptor(
-            name=LlmProviderNames.OPENAI,
-            model_configurations=fetch_model_configurations_for_provider(
-                LlmProviderNames.OPENAI
-            ),
-        ),
-        WellKnownLLMProviderDescriptor(
-            name=LlmProviderNames.OLLAMA_CHAT,
-            model_configurations=fetch_model_configurations_for_provider(
-                LlmProviderNames.OLLAMA_CHAT
-            ),
-        ),
-        WellKnownLLMProviderDescriptor(
-            name=LlmProviderNames.ANTHROPIC,
-            model_configurations=fetch_model_configurations_for_provider(
-                LlmProviderNames.ANTHROPIC
-            ),
-        ),
-        WellKnownLLMProviderDescriptor(
-            name=LlmProviderNames.AZURE,
-            model_configurations=fetch_model_configurations_for_provider(
-                LlmProviderNames.AZURE
-            ),
-        ),
-        WellKnownLLMProviderDescriptor(
-            name=LlmProviderNames.BEDROCK,
-            model_configurations=fetch_model_configurations_for_provider(
-                LlmProviderNames.BEDROCK
-            ),
-        ),
-        WellKnownLLMProviderDescriptor(
-            name=LlmProviderNames.VERTEX_AI,
-            model_configurations=fetch_model_configurations_for_provider(
-                LlmProviderNames.VERTEX_AI
-            ),
-        ),
-        WellKnownLLMProviderDescriptor(
-            name=LlmProviderNames.OPENROUTER,
-            model_configurations=fetch_model_configurations_for_provider(
-                LlmProviderNames.OPENROUTER
-            ),
-        ),
-    ]
+    llm_recommendations = _get_reccomendations()
+
+    well_known_llms = []
+    for provider_name in LlmProviderNames:
+        all_model_names = fetch_models_for_provider(provider_name)
+        recommended_visible_models = llm_recommendations.get_visible_models(
+            provider_name
+        )
+        recommended_visible_models_names = [m.name for m in recommended_visible_models]
+        recommended_default_model = llm_recommendations.get_default_model(provider_name)
+
+        model_configurations = [
+            ModelConfigurationView(
+                name=model_name,
+                is_visible=model_name in recommended_visible_models_names,
+                max_input_tokens=get_max_input_tokens(model_name, provider_name),
+                supports_image_input=model_supports_image_input(
+                    model_name, provider_name
+                ),
+            )
+            for model_name in all_model_names
+        ]
+
+        well_known_llms.append(
+            WellKnownLLMProviderDescriptor(
+                name=provider_name,
+                model_configurations=model_configurations,
+                recommended_default_model=(
+                    recommended_default_model.name
+                    if recommended_default_model
+                    else None
+                ),
+            )
+        )
+    return well_known_llms
 
 
 def fetch_models_for_provider(provider_name: str) -> list[str]:
@@ -296,49 +288,6 @@ def get_provider_display_name(provider_name: str) -> str:
     return PROVIDER_DISPLAY_NAMES.get(
         provider_name.lower(), provider_name.replace("_", " ").title()
     )
-
-
-def fetch_model_configurations_for_provider(
-    provider_name: str,
-) -> list[ModelConfigurationView]:
-    """Fetch model configurations for a static provider (OpenAI, Anthropic, Vertex AI).
-
-    Looks up max_input_tokens from LiteLLM's model_cost. If not found, stores None
-    and the runtime will use the fallback (32000).
-
-    Models in the curated visible lists (OPENAI_VISIBLE_MODEL_NAMES, etc.) are
-    marked as is_visible=True by default.
-    """
-    from onyx.llm.utils import get_max_input_tokens
-
-    llm_recommendations = _get_reccomendations()
-    recommended_visible_models = llm_recommendations.get_visible_models(provider_name)
-    recommended_visible_model_names = {
-        model.name for model in recommended_visible_models
-    }
-    configs = []
-
-    model_names = set(fetch_models_for_provider(provider_name)).union(
-        recommended_visible_model_names
-    )
-    for model_name in model_names:
-        max_input_tokens = get_max_input_tokens(
-            model_name=model_name,
-            model_provider=provider_name,
-        )
-
-        configs.append(
-            ModelConfigurationView(
-                name=model_name,
-                is_visible=model_name in recommended_visible_model_names,
-                max_input_tokens=max_input_tokens,
-                supports_image_input=model_supports_image_input(
-                    model_name=model_name,
-                    model_provider=provider_name,
-                ),
-            )
-        )
-    return configs
 
 
 def fetch_default_model_for_provider(provider_name: str) -> str | None:

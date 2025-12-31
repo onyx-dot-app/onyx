@@ -21,3 +21,4 @@ class CustomConfigKeyType(str, Enum):
 class WellKnownLLMProviderDescriptor(BaseModel):
     name: str
     model_configurations: list[ModelConfigurationView]
+    recommended_default_model: str | None = None
