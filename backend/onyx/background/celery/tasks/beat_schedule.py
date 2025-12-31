@@ -196,7 +196,7 @@ if AUTO_LLM_CONFIG_URL:
             "schedule": timedelta(seconds=AUTO_LLM_UPDATE_INTERVAL_SECONDS),
             "options": {
                 "priority": OnyxCeleryPriority.LOW,
-                "expires": AUTO_LLM_UPDATE_INTERVAL_SECONDS,
+                "expires": BEAT_EXPIRES_DEFAULT,
             },
         }
     )
