@@ -159,7 +159,7 @@ export const OAuthConfigForm = ({
           {({ isSubmitting }) => (
             <Form className="w-full overflow-visible">
               <Modal.Body className="overflow-y-auto px-6 w-full">
-                <Separator className="p-0" />
+                <Separator noPadding />
 
                 <Text>
                   Configure an OAuth provider that can be shared across multiple
