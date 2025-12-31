@@ -227,7 +227,8 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                     model_name, provider_name
                 ),
             )
-            for model_name in all_model_names
+            for model_name in set(all_model_names)
+            | set(recommended_visible_models_names)
         ]
 
         well_known_llms.append(

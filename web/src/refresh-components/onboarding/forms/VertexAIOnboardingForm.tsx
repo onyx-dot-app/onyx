@@ -8,7 +8,10 @@ import Separator from "@/refresh-components/Separator";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn, noProp } from "@/lib/utils";
 import { SvgRefreshCw } from "@opal/icons";
-import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import {
+  ModelConfiguration,
+  WellKnownLLMProviderDescriptor,
+} from "@/app/admin/configuration/llm/interfaces";
 import {
   OnboardingFormWrapper,
   OnboardingFormChildProps,
@@ -229,6 +232,16 @@ export function VertexAIOnboardingForm({
     />
   );
 
+  // Enable auto mode if user keeps the recommended default model
+  const transformValues = (
+    values: VertexAIFormValues,
+    modelConfigurations: ModelConfiguration[]
+  ) => ({
+    ...values,
+    model_configurations: modelConfigurations,
+    is_auto_mode: values.default_model_name === DEFAULT_DEFAULT_MODEL_NAME,
+  });
+
   return (
     <OnboardingFormWrapper<VertexAIFormValues>
       icon={icon}
@@ -241,6 +254,7 @@ export function VertexAIOnboardingForm({
       onOpenChange={onOpenChange}
       initialValues={initialValues}
       validationSchema={validationSchema}
+      transformValues={transformValues}
     >
       {(props) => <VertexAIFormFields {...props} />}
     </OnboardingFormWrapper>
