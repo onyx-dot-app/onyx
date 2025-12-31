@@ -95,7 +95,7 @@ Example with tool configuration:
     "input": {
       "message": "Calculate 2 + 2"
     },
-    "expected_tools": ["InterpreterTool"]
+    "expected_tools": ["PythonTool"]
   }
 ]
 ```
@@ -106,8 +106,8 @@ The following built-in tool types can be used:
 - `SearchTool`: Internal document search
 - `WebSearchTool`: Internet/web search
 - `ImageGenerationTool`: Image generation
-- `InterpreterTool`: Python code execution
-- `OpenUrlTool`: Open and read URLs
+- `PythonTool`: Python code execution
+- `OpenURLTool`: Open and read URLs
 
 ### Braintrust Dashboard
 

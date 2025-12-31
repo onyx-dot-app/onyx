@@ -136,19 +136,19 @@ def gather_stream_with_tools(packets: AnswerStream) -> GatherStreamResult:
                     }
                 )
             elif isinstance(obj, PythonToolStart):
-                tools_called.append("InterpreterTool")
+                tools_called.append("PythonTool")
                 tool_call_details.append(
                     {
-                        "tool_name": "InterpreterTool",
+                        "tool_name": "PythonTool",
                         "tool_type": "python",
                         "code": obj.code,
                     }
                 )
             elif isinstance(obj, OpenUrlStart):
-                tools_called.append("OpenUrlTool")
+                tools_called.append("OpenURLTool")
                 tool_call_details.append(
                     {
-                        "tool_name": "OpenUrlTool",
+                        "tool_name": "OpenURLTool",
                         "tool_type": "open_url",
                     }
                 )
