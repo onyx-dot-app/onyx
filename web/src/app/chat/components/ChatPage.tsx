@@ -196,7 +196,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
   );
 
   // On first render, open onboarding if there are no configured LLM providers
-  // OR if the user hasn't explicitly finished onboarding yet.
+  // AND the user hasn't explicitly finished onboarding yet.
   // Wait until providers have loaded before making this decision.
   const hasCheckedOnboarding = useRef(false);
   useEffect(() => {
@@ -210,11 +210,20 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
     const hasFinishedOnboarding =
       localStorage.getItem(HAS_FINISHED_ONBOARDING_KEY) === "true";
 
-    // Show onboarding if:
-    // 1. No LLM providers configured, OR
-    // 2. User hasn't explicitly finished onboarding (they navigated away before clicking "Finish Setup")
+    // If user already has providers configured but hasn't finished onboarding,
+    // auto-set the key to prevent showing onboarding to existing users.
+    // This handles the case where users set up providers before the
+    // hasFinishedOnboarding key was introduced.
+    if (llmManager.hasAnyProvider && !hasFinishedOnboarding) {
+      localStorage.setItem(HAS_FINISHED_ONBOARDING_KEY, "true");
+      setShowOnboarding(false);
+      return;
+    }
+
+    // Show onboarding only if no LLM providers configured AND user hasn't
+    // explicitly finished onboarding (they navigated away before clicking "Finish Setup")
     setShowOnboarding(
-      llmManager.hasAnyProvider === false || !hasFinishedOnboarding
+      llmManager.hasAnyProvider === false && !hasFinishedOnboarding
     );
   }, [llmManager.isLoadingProviders, llmManager.hasAnyProvider]);
 
