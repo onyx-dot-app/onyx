@@ -1355,10 +1355,10 @@ test.describe("MCP OAuth flows", () => {
 
     await page.locator('input[name="name"]').fill(assistantName);
     await page
-      .locator('textarea[name="instructions"]')
+      .locator('textarea[name="system_prompt"]')
       .fill("Assist with MCP OAuth testing.");
     await page
-      .locator('textarea[name="description"]')
+      .locator('input[name="description"]')
       .fill("Playwright admin MCP assistant.");
 
     await page
@@ -1613,10 +1613,10 @@ test.describe("MCP OAuth flows", () => {
 
       await page.locator('input[name="name"]').fill(assistantName);
       await page
-        .locator('textarea[name="instructions"]')
+        .locator('textarea[name="system_prompt"]')
         .fill("Curator MCP OAuth assistant.");
       await page
-        .locator('textarea[name="description"]')
+        .locator('input[name="description"]')
         .fill("Playwright curator MCP assistant.");
 
       await page
