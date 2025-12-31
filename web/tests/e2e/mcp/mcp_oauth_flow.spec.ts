@@ -641,35 +641,25 @@ async function selectMcpTools(
   serverId: number,
   toolNames: string[]
 ) {
-  const sectionLocator = page.getByTestId(`mcp-server-section-${serverId}`);
-  const sectionExists = await sectionLocator.count();
-  if (sectionExists === 0) {
+  // Find the server toggle switch by its name attribute
+  const toggleButton = page.locator(
+    `button[role="switch"][name="mcp_server_${serverId}.enabled"]`
+  );
+  const toggleExists = await toggleButton.count();
+  if (toggleExists === 0) {
     throw new Error(
       `MCP server section ${serverId} not found in assistant form`
     );
   }
-  const toggleButton = page.getByTestId(`mcp-server-toggle-${serverId}`);
-  const dataState = await toggleButton.getAttribute("aria-expanded");
-  if (dataState === "false") {
+
+  // Check if the server is enabled (switch is checked)
+  const isEnabled = await toggleButton.getAttribute("aria-checked");
+  if (isEnabled !== "true") {
     await toggleButton.click();
   }
 
-  for (const toolName of toolNames) {
-    const checkboxLocator = sectionLocator.getByLabel(
-      `mcp-server-tool-checkbox-${toolName}`
-    );
-    if ((await checkboxLocator.count()) > 0) {
-      const isChecked = await checkboxLocator
-        .first()
-        .getAttribute("aria-checked");
-      if (isChecked !== "true") {
-        await checkboxLocator.first().click();
-      }
-      continue;
-    }
-
-    throw new Error(`Unable to locate MCP tool checkbox for ${toolName}`);
-  }
+  // Individual tools are automatically enabled when the server switch is turned on
+  // The new AgentEditorPage enables all tools when the server is enabled
 }
 
 const escapeRegex = (value: string): string =>
