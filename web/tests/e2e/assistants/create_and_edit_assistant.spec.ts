@@ -10,10 +10,140 @@ const getInstructionsTextarea = (page: Page) =>
   page.locator('textarea[name="instructions"]');
 const getReminderTextarea = (page: Page) =>
   page.locator('textarea[name="reminders"]');
-const getKnowledgeCutoffInput = (page: Page) =>
-  page.locator('input[name="knowledge_cutoff_date"]');
 const getKnowledgeToggle = (page: Page) =>
   page.locator('button[role="switch"][name="enable_knowledge"]');
+
+// Helper function to set date using InputDatePicker
+const setKnowledgeCutoffDate = async (page: Page, dateString: string) => {
+  // Parse date string explicitly as YYYY-MM-DD to avoid timezone issues
+  const [yearStr, monthStr, dayStr] = dateString.split("-");
+  const year = parseInt(yearStr);
+  const month = parseInt(monthStr) - 1; // 0-based (January = 0)
+  const day = parseInt(dayStr);
+
+  // Find and click the date picker button within the Knowledge Cutoff Date section
+  const datePickerButton = page
+    .locator('label:has-text("Knowledge Cutoff Date")')
+    .locator("..")
+    .locator('button:has-text("Select Date"), button:has-text("/")');
+
+  await datePickerButton.first().click();
+
+  // Wait for the popover to open
+  await page.waitForSelector('[role="dialog"]', {
+    state: "visible",
+    timeout: 5000,
+  });
+
+  // Select the year from dropdown
+  const yearSelect = page
+    .locator('[role="dialog"]')
+    .locator('button[role="combobox"]');
+  await yearSelect.click();
+  await page.getByRole("option", { name: `${year}` }).click();
+
+  // Wait for year selection to take effect
+  await page.waitForTimeout(500);
+
+  // After selecting the year, the calendar defaults to January of that year
+  // We need to navigate to the correct month
+  const monthNames = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
+  const targetMonthName = monthNames[month];
+
+  // Keep clicking next/previous month until we reach the target month
+  let attempts = 0;
+  const maxAttempts = 12;
+
+  while (attempts < maxAttempts) {
+    // Check current month displayed in calendar
+    const currentMonthElement = page
+      .locator('[role="dialog"]')
+      .locator(
+        "text=/January|February|March|April|May|June|July|August|September|October|November|December/"
+      )
+      .first();
+    const currentMonthText = await currentMonthElement.textContent();
+
+    if (currentMonthText?.includes(targetMonthName)) {
+      break; // We're at the right month
+    }
+
+    // Determine if we need to go forward or backward
+    const currentMonthIndex = monthNames.findIndex(
+      (m) => currentMonthText?.includes(m)
+    );
+
+    if (currentMonthIndex < month) {
+      // Click next month button
+      await page
+        .locator('[role="dialog"]')
+        .locator('button[aria-label*="Next"]')
+        .click();
+    } else {
+      // Click previous month button
+      await page
+        .locator('[role="dialog"]')
+        .locator('button[aria-label*="Previous"]')
+        .click();
+    }
+
+    await page.waitForTimeout(200);
+    attempts++;
+  }
+
+  // Now click the day in the calendar
+  // First, ensure we're on the right month/year before clicking
+  await page.waitForTimeout(300);
+
+  const dayButton = page
+    .locator('[role="dialog"]')
+    .locator('button[role="gridcell"]')
+    .filter({ hasText: new RegExp(`^${day}$`) })
+    .and(page.locator(":not([disabled])"))
+    .first();
+
+  // Wait for the day button to be visible and enabled
+  await dayButton.waitFor({ state: "visible", timeout: 5000 });
+  await dayButton.click();
+
+  // The popover should close automatically after selection
+  await page.waitForSelector('[role="dialog"]', {
+    state: "hidden",
+    timeout: 5000,
+  });
+};
+
+// Helper function to verify the displayed date in the date picker
+const verifyKnowledgeCutoffDate = async (page: Page, dateString: string) => {
+  // Parse date string explicitly as YYYY-MM-DD and create a date object
+  const [yearStr, monthStr, dayStr] = dateString.split("-");
+  const date = new Date(
+    parseInt(yearStr),
+    parseInt(monthStr) - 1,
+    parseInt(dayStr)
+  );
+  const formattedDate = date.toLocaleDateString();
+
+  const datePickerButton = page
+    .locator('label:has-text("Knowledge Cutoff Date")')
+    .locator("..")
+    .locator(`button:has-text("${formattedDate}")`);
+
+  await expect(datePickerButton.first()).toBeVisible();
+};
 const getStarterMessageInput = (page: Page, index: number = 0) =>
   page.locator(`input[name="starter_messages.${index}"]`);
 const getCreateSubmitButton = (page: Page) =>
@@ -157,7 +287,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await getReminderTextarea(page).fill(assistantReminder);
 
       // Knowledge Cutoff Date
-      await getKnowledgeCutoffInput(page).fill(knowledgeCutoffDate);
+      await setKnowledgeCutoffDate(page, knowledgeCutoffDate);
 
       // Enable Knowledge toggle (should now be enabled due to connector)
       const knowledgeToggle = getKnowledgeToggle(page);
@@ -213,9 +343,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await expect(
         page.getByTestId(`document-set-card-${documentSetId}`)
       ).toBeVisible();
-      await expect(getKnowledgeCutoffInput(page)).toHaveValue(
-        knowledgeCutoffDate
-      );
+      await verifyKnowledgeCutoffDate(page, knowledgeCutoffDate);
       await expect(getStarterMessageInput(page)).toHaveValue(
         assistantStarterMessage
       );
@@ -225,7 +353,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await getDescriptionInput(page).fill(editedAssistantDescription);
       await getInstructionsTextarea(page).fill(editedAssistantInstructions);
       await getReminderTextarea(page).fill(editedAssistantReminder);
-      await getKnowledgeCutoffInput(page).fill(editedKnowledgeCutoffDate);
+      await setKnowledgeCutoffDate(page, editedKnowledgeCutoffDate);
       await getStarterMessageInput(page).fill(editedAssistantStarterMessage);
 
       // Submit the edit form
@@ -260,9 +388,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await expect(
         page.getByTestId(`document-set-card-${documentSetId}`)
       ).toBeVisible();
-      await expect(getKnowledgeCutoffInput(page)).toHaveValue(
-        editedKnowledgeCutoffDate
-      );
+      await verifyKnowledgeCutoffDate(page, editedKnowledgeCutoffDate);
       await expect(getStarterMessageInput(page)).toHaveValue(
         editedAssistantStarterMessage
       );
