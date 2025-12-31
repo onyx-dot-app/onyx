@@ -17,13 +17,22 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def tool_assertion_scorer(output: EvalToolResult) -> Score:
+def tool_assertion_scorer(
+    input: dict[str, Any], output: EvalToolResult, expected: EvalToolResult | None
+) -> Score:
     """
     Scorer that checks if tool assertions passed.
+
+    Args:
+        input: The input data for the evaluation case.
+        output: The actual output from the task.
+        expected: The expected output (unused for this scorer).
 
     Returns:
         Score with value 1.0 if passed or no assertions, 0.0 if failed.
     """
+    # input and expected are unused but required by Braintrust scorer signature
+    _ = input, expected
     if output.assertion_passed is None:
         # No assertions configured - return passing score
         return Score(
