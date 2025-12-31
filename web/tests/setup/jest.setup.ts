@@ -1,6 +1,11 @@
 import "@testing-library/jest-dom";
 import { TextEncoder, TextDecoder } from "util";
 
+// Tell React 18+ this is a test environment where act() is available
+// This suppresses "not configured to support act(...)" warnings
+// @ts-ignore
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
 // Polyfill TextEncoder/TextDecoder (required for some libraries)
 global.TextEncoder = TextEncoder as any;
 global.TextDecoder = TextDecoder as any;
