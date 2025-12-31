@@ -1,5 +1,13 @@
 import { ComboBoxOption } from "../types";
 
+/**
+ * Sanitizes a value for use in HTML element IDs.
+ * Encodes characters that are invalid in IDs (spaces, special chars).
+ */
+export function sanitizeOptionId(value: string): string {
+  return `option-${encodeURIComponent(value)}`;
+}
+
 interface BuildAriaAttributesProps {
   hasOptions: boolean;
   isOpen: boolean;
@@ -36,7 +44,7 @@ export function buildAriaAttributes({
     "aria-haspopup": hasOptions ? ("listbox" as const) : undefined,
     "aria-controls": hasOptions ? `${fieldId}-listbox` : undefined,
     "aria-activedescendant": activeOption
-      ? `${fieldId}-option-${activeOption.value}`
+      ? `${fieldId}-option-${sanitizeOptionId(activeOption.value)}`
       : undefined,
     "aria-autocomplete": hasOptions ? ("list" as const) : undefined,
     role: hasOptions ? ("combobox" as const) : undefined,

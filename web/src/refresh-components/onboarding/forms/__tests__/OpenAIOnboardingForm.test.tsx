@@ -17,6 +17,9 @@ import {
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
 
+// Mock scrollIntoView which is not available in jsdom
+Element.prototype.scrollIntoView = jest.fn();
+
 // Mock the ProviderModal component
 jest.mock("@/components/modals/ProviderModal", () => ({
   __esModule: true,
