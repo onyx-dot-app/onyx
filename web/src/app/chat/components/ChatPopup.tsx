@@ -39,10 +39,7 @@ export function ChatPopup() {
   const settings = useContext(SettingsContext);
   const enterpriseSettings = settings?.enterpriseSettings;
   const isConsentScreen = enterpriseSettings?.enable_consent_screen;
-  console.log(
-    "All user initial popup flow completed",
-    localStorage.getItem(ALL_USERS_INITIAL_POPUP_FLOW_COMPLETED)
-  );
+
   if (
     !enterpriseSettings?.custom_popup_content ||
     completedFlow ||
