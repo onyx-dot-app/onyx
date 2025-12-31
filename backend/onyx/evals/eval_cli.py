@@ -31,7 +31,7 @@ def setup_session_factory() -> None:
 
 def load_data_local(
     local_data_path: str,
-) -> list[dict[str, dict[str, str]]]:
+) -> list[dict[str, Any]]:
     if not os.path.isfile(local_data_path):
         raise ValueError(f"Local data file does not exist: {local_data_path}")
     with open(local_data_path, "r") as f:
@@ -47,10 +47,16 @@ def run_local(
     """
     Run evaluation with local configurations.
 
+    Tool forcing and assertions are configured per-test in the data file using:
+    - force_tools: List of tool type names to force
+    - expected_tools: List of tool type names expected to be called
+    - require_all_tools: If true, all expected tools must be called
+
     Args:
         local_data_path: Path to local JSON file
         remote_dataset_name: Name of remote Braintrust dataset
         search_permissions_email: Optional email address to impersonate for the evaluation
+        no_send_logs: Whether to skip sending logs to Braintrust
 
     Returns:
         EvalationAck: The evaluation result
@@ -92,11 +98,14 @@ def run_remote(
     """
     Trigger an eval pipeline execution on a remote server.
 
+    Tool forcing and assertions are configured per-test in the dataset.
+
     Args:
         base_url: Base URL of the remote server (e.g., "https://test.onyx.app")
         api_key: API key for authentication
+        remote_dataset_name: Name of remote Braintrust dataset
+        search_permissions_email: Email address to use for the evaluation.
         payload: Optional payload to send with the request
-        search_permissions_email: Email address to use for the evaluation. Search will have the permissions of this user.
 
     Returns:
         Response from the remote server

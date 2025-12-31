@@ -50,6 +50,7 @@ This will run the evaluation with the following default settings:
 - `--remote-dataset-name`: Name of remote Braintrust dataset
 - `--braintrust-project`: Braintrust project name (overrides `BRAINTRUST_PROJECT` env var)
 - `--verbose`: Enable verbose output
+- `--no-send-logs`: Skip sending logs to Braintrust (useful for local testing)
 
 ## Test Data
 
@@ -64,3 +65,52 @@ Example test case:
     }
 }
 ```
+
+### Tool Forcing and Assertions
+
+Configure tool forcing and assertions per-test by adding the following optional fields to each test case:
+
+- `force_tools`: List of tool type names to force for this specific test
+- `expected_tools`: List of tool type names expected to be called
+- `require_all_tools`: If true, all expected tools must be called (default: false)
+
+Example with tool configuration:
+```json
+[
+  {
+    "input": {
+      "message": "Find information about Python programming"
+    },
+    "expected_tools": ["SearchTool"],
+    "force_tools": ["SearchTool"]
+  },
+  {
+    "input": {
+      "message": "Search the web for recent news about AI"
+    },
+    "expected_tools": ["WebSearchTool"],
+    "require_all_tools": true
+  },
+  {
+    "input": {
+      "message": "Calculate 2 + 2"
+    },
+    "expected_tools": ["InterpreterTool"]
+  }
+]
+```
+
+### Available Tool Types
+
+The following built-in tool types can be used:
+- `SearchTool`: Internal document search
+- `WebSearchTool`: Internet/web search
+- `ImageGenerationTool`: Image generation
+- `InterpreterTool`: Python code execution
+- `OpenUrlTool`: Open and read URLs
+
+### Braintrust Dashboard
+
+After running evaluations, you can view results in the Braintrust dashboard. The evaluation will report:
+- `tool_assertion`: Score of 1.0 if tool assertions passed (or no assertions configured), 0.0 if failed
+- Metadata including `tools_called`, `tools_called_count`, and assertion details
