@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
 from onyx.db.models import DocumentSet
+from onyx.db.models import ImageGenerationConfig
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import LLMProvider__Persona
 from onyx.db.models import LLMProvider__UserGroup
@@ -371,12 +372,29 @@ def fetch_existing_tools(db_session: Session, tool_ids: list[int]) -> list[ToolM
 def fetch_existing_llm_providers(
     db_session: Session,
     only_public: bool = False,
+    exclude_image_generation_providers: bool = False,
 ) -> list[LLMProviderModel]:
+    """Fetch all LLM providers with optional filtering.
+
+    Args:
+        db_session: Database session
+        only_public: If True, only return public providers
+        exclude_image_generation_providers: If True, exclude providers that are
+            used for image generation configs
+    """
     stmt = select(LLMProviderModel).options(
         selectinload(LLMProviderModel.model_configurations),
         selectinload(LLMProviderModel.groups),
         selectinload(LLMProviderModel.personas),
     )
+
+    if exclude_image_generation_providers:
+        # Get LLM provider IDs used by ImageGenerationConfig
+        image_gen_provider_ids = select(ModelConfiguration.llm_provider_id).join(
+            ImageGenerationConfig
+        )
+        stmt = stmt.where(LLMProviderModel.id.not_in(image_gen_provider_ids))
+
     providers = list(db_session.scalars(stmt).all())
     if only_public:
         return [provider for provider in providers if provider.is_public]

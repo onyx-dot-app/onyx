@@ -124,6 +124,15 @@ class DATestLLMProvider(BaseModel):
     api_version: str | None = None
 
 
+class DATestImageGenerationConfig(BaseModel):
+    image_provider_id: str
+    model_configuration_id: int
+    model_name: str
+    llm_provider_id: int
+    llm_provider_name: str
+    is_default: bool
+
+
 class DATestDocumentSet(BaseModel):
     id: int
     name: str

@@ -2451,6 +2451,29 @@ class ModelConfiguration(Base):
     )
 
 
+class ImageGenerationConfig(Base):
+    __tablename__ = "image_generation_config"
+
+    image_provider_id: Mapped[str] = mapped_column(String, primary_key=True)
+    model_configuration_id: Mapped[int] = mapped_column(
+        ForeignKey("model_configuration.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    model_configuration: Mapped["ModelConfiguration"] = relationship(
+        "ModelConfiguration"
+    )
+
+    __table_args__ = (
+        Index("ix_image_generation_config_is_default", "is_default"),
+        Index(
+            "ix_image_generation_config_model_configuration_id",
+            "model_configuration_id",
+        ),
+    )
+
+
 class CloudEmbeddingProvider(Base):
     __tablename__ = "embedding_provider"
 
