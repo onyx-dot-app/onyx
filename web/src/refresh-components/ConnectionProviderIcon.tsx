@@ -19,4 +19,6 @@ const ConnectionProviderIcon = memo(({ icon }: ConnectionProviderIconProps) => {
   );
 });
 
+ConnectionProviderIcon.displayName = "ConnectionProviderIcon";
+
 export default ConnectionProviderIcon;
