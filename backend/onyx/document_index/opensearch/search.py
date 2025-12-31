@@ -66,6 +66,12 @@ ZSCORE_NORMALIZATION_PIPELINE_CONFIG = {
 
 
 class DocumentQuery:
+    """
+    TODO(andrei): Implement multi-phase search strategies.
+    TODO(andrei): Implement document boost.
+    TODO(andrei): Implement document age.
+    """
+
     @staticmethod
     def get_hybrid_search_query(
         query_text: str, query_vector: list[float], num_candidates: int, num_hits: int
