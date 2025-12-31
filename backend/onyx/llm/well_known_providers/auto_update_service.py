@@ -130,7 +130,7 @@ def sync_llm_models_from_github(
         changes = sync_auto_mode_models(
             db_session=db_session,
             provider=provider,
-            llm_reccomendations=config,
+            llm_recommendations=config,
         )
 
         if changes > 0:
