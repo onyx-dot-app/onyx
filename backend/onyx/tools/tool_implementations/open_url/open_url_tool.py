@@ -15,6 +15,7 @@ from onyx.context.search.preprocessing.access_filters import (
 )
 from onyx.context.search.utils import convert_inference_sections_to_search_docs
 from onyx.context.search.utils import inference_section_from_chunks
+from onyx.db.document import fetch_document_ids_by_links
 from onyx.db.document import filter_existing_document_ids
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
@@ -102,6 +103,46 @@ def _url_lookup_variants(url: str) -> set[str]:
     else:
         variants.add(f"{normalized}/")
     return {variant for variant in variants if variant}
+
+
+def _lookup_document_ids_by_link(
+    urls: list[str], db_session: Session
+) -> list[IndexedDocumentRequest]:
+    """Lookup document IDs by matching URLs against the Document.link column.
+
+    This is used as a fallback when document ID resolution fails and URL scraping fails.
+    Useful for connectors like Linear.
+    """
+    variant_to_original: dict[str, str] = {}
+    for url in urls:
+        if not url:
+            continue
+        # Generate URL variants (normalized, with/without trailing slash)
+        variants = _url_lookup_variants(url)
+        variants.add(url)
+        # Map each variant back to the original URL
+        for variant in variants:
+            variant_to_original.setdefault(variant, url)
+
+    if not variant_to_original:
+        return []
+
+    # Query database for documents matching any of the URL variants
+    link_to_doc_id = fetch_document_ids_by_links(
+        db_session, list(variant_to_original.keys())
+    )
+
+    requests: list[IndexedDocumentRequest] = []
+    for link_value, doc_id in link_to_doc_id.items():
+        original_url = variant_to_original.get(link_value)
+        if original_url:
+            requests.append(
+                IndexedDocumentRequest(
+                    document_id=doc_id,
+                    original_url=original_url,
+                )
+            )
+    return requests
 
 
 def _dedupe_document_requests(
@@ -381,7 +422,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
 
         Returns:
                 ToolResponse containing the fetched content and citation mapping.
-        """ 
+        """
         urls = _normalize_string_list(llm_kwargs.get(URLS_FIELD))
 
         if not urls:
@@ -399,7 +440,9 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         with get_session_with_current_tenant() as db_session:
             # Resolve URLs to document IDs for indexed retrieval
             # Handles both raw URLs and already-normalized document IDs
-            url_requests, _ = _resolve_urls_to_document_ids(urls, db_session)
+            url_requests, unresolved_urls = _resolve_urls_to_document_ids(
+                urls, db_session
+            )
             logger.info(
                 f"Resolved {len(url_requests)} URLs to indexed document IDs for parallel retrieval"
             )
@@ -438,6 +481,17 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                 sections=[], missing_document_ids=[]
             )
             crawled_sections, failed_web_urls = crawled_result or ([], [])
+
+            # Last-resort: attempt link-based lookup for URLs that failed both
+            # document-ID resolution and crawling.
+            failed_web_urls = self._fallback_link_lookup(
+                unresolved_urls=unresolved_urls,
+                failed_web_urls=failed_web_urls,
+                db_session=db_session,
+                indexed_result=indexed_result,
+                url_to_doc_id=url_to_doc_id,
+                filters=filters,
+            )
 
             # Merge results: prefer indexed when available, fallback to crawled
             inference_sections = self._merge_indexed_and_crawled_results(
@@ -491,6 +545,66 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             ),
             llm_facing_response=docs_str,
         )
+
+    def _fallback_link_lookup(
+        self,
+        unresolved_urls: list[str],
+        failed_web_urls: list[str],
+        db_session: Session,
+        indexed_result: IndexedRetrievalResult,
+        url_to_doc_id: dict[str, str],
+        filters: IndexFilters,
+    ) -> list[str]:
+        """Attempt link-based lookup for URLs that failed both document-ID resolution and crawling.
+
+        Args:
+            unresolved_urls: URLs that couldn't be resolved to document IDs
+            failed_web_urls: URLs that failed crawling
+            db_session: Database session
+            indexed_result: Result object to update with found sections
+            url_to_doc_id: Mapping to update with resolved URLs
+            filters: Pre-built index filters for document retrieval
+
+        Returns:
+            Updated list of failed_web_urls (with resolved URLs removed)
+        """
+        if not unresolved_urls or not failed_web_urls:
+            return failed_web_urls
+
+        failed_set = {url for url in failed_web_urls if url}
+        fallback_urls = sorted(set(unresolved_urls).intersection(failed_set))
+
+        if not fallback_urls:
+            return failed_web_urls
+
+        logger.info(
+            "Attempting link-based lookup for %d URLs that lacked "
+            "document IDs and failed crawling",
+            len(fallback_urls),
+        )
+        fallback_requests = _lookup_document_ids_by_link(fallback_urls, db_session)
+
+        if not fallback_requests:
+            return failed_web_urls
+
+        deduped_fallback_requests = _dedupe_document_requests(fallback_requests)
+        fallback_result = self._retrieve_indexed_documents_with_filters(
+            deduped_fallback_requests, filters
+        )
+
+        if fallback_result.sections:
+            indexed_result.sections.extend(fallback_result.sections)
+            for request in deduped_fallback_requests:
+                if request.original_url:
+                    url_to_doc_id[request.original_url] = request.document_id
+
+        if fallback_result.missing_document_ids:
+            indexed_result.missing_document_ids.extend(
+                fallback_result.missing_document_ids
+            )
+
+        resolved_links = {request.original_url for request in deduped_fallback_requests}
+        return [url for url in failed_web_urls if url not in resolved_links]
 
     def _retrieve_indexed_documents_with_filters(
         self,
@@ -657,7 +771,19 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         failed_urls: list[str] = []
 
         for content in web_contents:
-            if content.scrape_successful and content.full_content:
+            # Check if content is insufficient (e.g., "Loading..." or too short)
+            text_stripped = content.full_content.strip()
+            is_insufficient = (
+                not text_stripped
+                or text_stripped.lower() == "loading..."
+                or len(text_stripped) < 50
+            )
+
+            if (
+                content.scrape_successful
+                and content.full_content
+                and not is_insufficient
+            ):
                 sections.append(inference_section_from_internet_page_scrape(content))
             else:
                 failed_urls.append(content.link or "")

@@ -244,6 +244,19 @@ def filter_existing_document_ids(
     return set(db_session.execute(stmt).scalars().all())
 
 
+def fetch_document_ids_by_links(
+    db_session: Session,
+    links: list[str],
+) -> dict[str, str]:
+    """Fetch document IDs for documents whose link matches any of the provided values."""
+    if not links:
+        return {}
+
+    stmt = select(DbDocument.link, DbDocument.id).where(DbDocument.link.in_(links))
+    rows = db_session.execute(stmt).all()
+    return {link: doc_id for link, doc_id in rows if link}
+
+
 def get_document_connector_count(
     db_session: Session,
     document_id: str,

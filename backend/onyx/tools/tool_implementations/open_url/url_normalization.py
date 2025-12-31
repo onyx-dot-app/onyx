@@ -89,5 +89,7 @@ def _detect_source_type(url: str) -> DocumentSource | None:
         return DocumentSource.SHAREPOINT
     if "slack.com" in netloc:
         return DocumentSource.SLACK
+    if "linear.app" in netloc:
+        return DocumentSource.LINEAR
 
     return None

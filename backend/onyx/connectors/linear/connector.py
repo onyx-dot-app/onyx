@@ -1,10 +1,13 @@
 import os
+import re
 from datetime import datetime
 from datetime import timezone
 from typing import Any
 from typing import cast
+from urllib.parse import urlparse
 
 import requests
+from typing_extensions import override
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import LINEAR_CLIENT_ID
@@ -311,6 +314,31 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
         end_time = datetime.fromtimestamp(end, tz=timezone.utc)
 
         yield from self._process_issues(start_str=start_time, end_str=end_time)
+
+    @classmethod
+    @override
+    def normalize_url(cls, url: str) -> str | None:
+        """Extract Linear issue identifier from URL.
+
+        Linear URLs are like: https://linear.app/team/issue/IDENTIFIER/...
+        Returns the identifier (e.g., "DAN-2327") which can be used to match Document.link.
+        """
+        parsed = urlparse(url)
+        netloc = parsed.netloc.lower()
+
+        if "linear.app" not in netloc:
+            return None
+
+        # Extract identifier from path: /team/issue/IDENTIFIER/...
+        # Pattern: /{team}/issue/{identifier}/...
+        path_parts = [p for p in parsed.path.split("/") if p]
+        if len(path_parts) >= 3 and path_parts[1] == "issue":
+            identifier = path_parts[2]
+            # Validate identifier format (e.g., "DAN-2327")
+            if re.match(r"^[A-Z]+-\d+$", identifier):
+                return identifier
+
+        return None
 
 
 if __name__ == "__main__":
