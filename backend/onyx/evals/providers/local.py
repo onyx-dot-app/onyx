@@ -80,6 +80,21 @@ class LocalEvalProvider(EvalProvider):
             try:
                 result = task(eval_input)
 
+                # Display timing trace
+                if result.timings:
+                    print(f"  {BOLD}Trace:{RESET}")
+                    print(f"    Total: {result.timings.total_ms:.0f}ms")
+                    if result.timings.llm_first_token_ms is not None:
+                        print(
+                            f"    First token: {result.timings.llm_first_token_ms:.0f}ms"
+                        )
+                    if result.timings.tool_execution_ms:
+                        for (
+                            tool_name,
+                            duration_ms,
+                        ) in result.timings.tool_execution_ms.items():
+                            print(f"    {tool_name}: {duration_ms:.0f}ms")
+
                 # Display tools called
                 tools_str = (
                     ", ".join(result.tools_called) if result.tools_called else "(none)"

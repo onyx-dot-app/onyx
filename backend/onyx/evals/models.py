@@ -23,6 +23,17 @@ class ToolAssertion(BaseModel):
     require_all: bool = False  # If True, ALL expected tools must be called
 
 
+class EvalTimings(BaseModel):
+    """Timing information for eval execution."""
+
+    total_ms: float  # Total time for the eval
+    llm_first_token_ms: float | None = None  # Time to first token from LLM
+    tool_execution_ms: dict[str, float] = Field(
+        default_factory=dict
+    )  # Per-tool timings
+    stream_processing_ms: float | None = None  # Time to process the stream
+
+
 class EvalToolResult(BaseModel):
     """Result of a single eval with tool call information."""
 
@@ -32,6 +43,7 @@ class EvalToolResult(BaseModel):
     citations: list[CitationInfo]  # Citations used in the answer
     assertion_passed: bool | None = None  # None if no assertion configured
     assertion_details: str | None = None  # Explanation of pass/fail
+    timings: EvalTimings | None = None  # Timing information for the eval
 
 
 class EvalConfiguration(BaseModel):
