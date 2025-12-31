@@ -16,7 +16,7 @@ import { credentialTemplates } from "@/lib/connectors/credentials";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Title from "@/components/ui/title";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, use } from "react";
+import { useCallback, useEffect, useRef, useState, use } from "react";
 import useSWR, { mutate } from "swr";
 import {
   AdvancedConfigDisplay,
@@ -64,8 +64,6 @@ import { useStatusChange } from "./useStatusChange";
 import { useReIndexModal } from "./ReIndexModal";
 import Button from "@/refresh-components/buttons/Button";
 import { SvgSettings } from "@opal/icons";
-import { useUser } from "@/components/user/UserProvider";
-import { UserRole } from "@/lib/types";
 // synchronize these validations with the SQLAlchemy connector class until we have a
 // centralized schema for both frontend and backend
 const RefreshFrequencySchema = Yup.object().shape({
@@ -92,7 +90,6 @@ const PAGES_PER_BATCH = 8;
 function Main({ ccPairId }: { ccPairId: number }) {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
-  const { user, isAdmin } = useUser();
 
   const {
     data: ccPair,
@@ -154,21 +151,19 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [showDeleteConnectorConfirmModal, setShowDeleteConnectorConfirmModal] =
     useState(false);
-  const [isSchedulingConnectorDeletion, setIsSchedulingConnectorDeletion] =
-    useState(false);
+  const isSchedulingConnectorDeletionRef = useRef(false);
 
   const refresh = useCallback(() => {
     mutate(buildCCPairInfoUrl(ccPairId));
   }, [ccPairId]);
 
-  const shouldConfirmConnectorDeletion =
-    !user || isAdmin || user.role === UserRole.GLOBAL_CURATOR;
+  const shouldConfirmConnectorDeletion = true;
 
   const scheduleConnectorDeletion = useCallback(async () => {
     if (!ccPair) return;
-    if (isSchedulingConnectorDeletion) return;
+    if (isSchedulingConnectorDeletionRef.current) return;
+    isSchedulingConnectorDeletionRef.current = true;
 
-    setIsSchedulingConnectorDeletion(true);
     try {
       await deleteCCPair(
         ccPair.connector.id,
@@ -180,10 +175,10 @@ function Main({ ccPairId }: { ccPairId: number }) {
     } catch (error) {
       console.error("Error deleting connector:", error);
     } finally {
-      setIsSchedulingConnectorDeletion(false);
       setShowDeleteConnectorConfirmModal(false);
+      isSchedulingConnectorDeletionRef.current = false;
     }
-  }, [ccPair, isSchedulingConnectorDeletion, refresh, setPopup]);
+  }, [ccPair, refresh, setPopup]);
 
   const latestIndexAttempt = indexAttempts?.[0];
   const isResolvingErrors =
