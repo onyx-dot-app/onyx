@@ -291,9 +291,14 @@ def translate_history_to_llm_format(
     """
     messages: list[ChatCompletionMessage] = []
     pending_tool_calls: list[ChatMessageSimple] = []
-    pending_tool_responses: list[ChatMessageSimple] = []
 
-    def flush_tool_calls() -> None:
+    def _flush_tool_calls() -> None:
+        """Combine pending tool call messages into a single AssistantMessage.
+
+        Parses tool call data from each message and creates an AssistantMessage
+        with a tool_calls array. Includes extra_reasoning_details from the first
+        tool message (all parallel tool calls share the same reasoning).
+        """
         if not pending_tool_calls:
             return
 
@@ -363,44 +368,29 @@ def translate_history_to_llm_format(
         messages.append(assistant_msg_with_tool)
         pending_tool_calls.clear()
 
-    def flush_tool_responses() -> None:
-        if not pending_tool_responses:
-            return
-
-        for tool_msg in pending_tool_responses:
-            if not tool_msg.tool_call_id:
-                raise ValueError(
-                    f"Tool call response message encountered but tool_call_id is not available. Message: {tool_msg}"
-                )
-
-        for tool_msg in pending_tool_responses:
-            tool_message = ToolMessage(
-                role="tool",
-                content=tool_msg.message,
-                tool_call_id=tool_msg.tool_call_id,
-            )
-            messages.append(tool_message)
-        pending_tool_responses.clear()
-
     for msg in history:
+        # Parallel tool calls are stored sequentially and should be combined into a single AssistantMessage.
+        # Tool responses are not combined.
         if msg.message_type == MessageType.TOOL_CALL:
-            if pending_tool_responses:
-                flush_tool_responses()
             pending_tool_calls.append(msg)
             continue
 
+        # Flush pending tool calls before processing any other message type
+        _flush_tool_calls()
+
         if msg.message_type == MessageType.TOOL_CALL_RESPONSE:
-            if pending_tool_calls:
-                flush_tool_calls()
-            pending_tool_responses.append(msg)
-            continue
-
-        if pending_tool_calls:
-            flush_tool_calls()
-        if pending_tool_responses:
-            flush_tool_responses()
-
-        if msg.message_type == MessageType.SYSTEM:
+            if not msg.tool_call_id:
+                raise ValueError(
+                    f"Tool response message missing tool_call_id. Message: {msg}"
+                )
+            messages.append(
+                ToolMessage(
+                    role="tool",
+                    content=msg.message,
+                    tool_call_id=msg.tool_call_id,
+                )
+            )
+        elif msg.message_type == MessageType.SYSTEM:
             system_msg = SystemMessage(
                 role="system",
                 content=msg.message,
@@ -466,10 +456,8 @@ def translate_history_to_llm_format(
                 f"Unknown message type {msg.message_type} in history. Skipping message."
             )
 
-    if pending_tool_calls:
-        flush_tool_calls()
-    if pending_tool_responses:
-        flush_tool_responses()
+    # Final flush for any remaining pending tool calls
+    _flush_tool_calls()
 
     return messages
 
@@ -567,10 +555,14 @@ def run_llm_step_pkt_generator(
     answer_start = False
     accumulated_reasoning = ""
     accumulated_answer = ""
-    # Accumulate extra_reasoning_details for verification
-    # Stores blocks from Anthropic (thinking_blocks) or OpenRouter/Gemini (reasoning_details)
-    # Key is block_index, value is accumulated block as dict
-    accumulated_reasoning_blocks: dict[int, dict[str, Any]] = {}
+    # Certain reasoning models expect their reasoning details to be returned unmodified.
+    # These details include both the reasoning content and metadata like an encrypted signature.
+    # These details have different shapes and names depending on the model,
+    # so we attempt to accumulate and store exactly what they give us.
+    # Key is (type, index) to handle OpenRouter/Gemini which can send different
+    # block types (reasoning.text vs reasoning.encrypted) at the same index.
+    accumulated_extra_reasoning_details: dict[tuple[str, int], dict[str, Any]] = {}
+    extra_reasoning_key: str | None = None
 
     processor_state: Any = None
 
@@ -758,36 +750,38 @@ def run_llm_step_pkt_generator(
                 for tool_call_delta in delta.tool_calls:
                     _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
 
-            # Accumulate extra_reasoning_details for verification (Anthropic/OpenRouter/Gemini)
+            # Accumulate extra_reasoning_details for reasoning verification (Anthropic/Gemini)
+            # delta.extra_reasoning_details is {"thinking_blocks": [...]} or {"reasoning_details": [...]}
             if delta.extra_reasoning_details:
-                # Fields that should be concatenated across deltas (content fields)
-                concatenate_fields = {"thinking", "text", "data"}
+                # Extract the key and blocks from the dict
+                for key_name, blocks in delta.extra_reasoning_details.items():
+                    if extra_reasoning_key is None:
+                        extra_reasoning_key = key_name
 
-                for block in delta.extra_reasoning_details:
-                    # Use index from block if available, otherwise default to 0
-                    raw_index = block.get("index")
-                    block_index: int = int(raw_index) if raw_index is not None else 0
+                    for block in blocks:
+                        # Use (type, index) as accumulator key to handle OpenRouter/Gemini
+                        # which can send different block types at the same index
+                        block_index: int = int(block.get("index") or 0)
+                        block_type: str = block.get("type", "thinking")
+                        accumulation_key = (block_type, block_index)
 
-                    if block_index not in accumulated_reasoning_blocks:
-                        accumulated_reasoning_blocks[block_index] = {}
+                        if accumulation_key not in accumulated_extra_reasoning_details:
+                            accumulated_extra_reasoning_details[accumulation_key] = {}
 
-                    current_block = accumulated_reasoning_blocks[block_index]
+                        current_block = accumulated_extra_reasoning_details[
+                            accumulation_key
+                        ]
 
-                    # Merge fields - concatenate content fields, replace metadata fields
-                    for field_name, field_value in block.items():
-                        if field_value is None:
-                            continue
-                        if (
-                            field_name in concatenate_fields
-                            and field_name in current_block
-                        ):
-                            # Concatenate content fields (thinking, text, data)
-                            current_block[field_name] = (
-                                current_block[field_name] + field_value
-                            )
-                        else:
-                            # Replace metadata fields (type, signature, format, id, index)
-                            current_block[field_name] = field_value
+                        # Merge fields: if value differs from existing, concatenate
+                        # Metadata fields (type, index) are same each time → skipped
+                        # Content fields (thinking, text, data) differ → concatenated
+                        for field_name, field_value in block.items():
+                            if field_value is None:
+                                continue
+                            if field_name not in current_block:
+                                current_block[field_name] = field_value
+                            elif current_block[field_name] != field_value:
+                                current_block[field_name] += field_value
 
         # Flush custom token processor to get any final tool calls
         if custom_token_processor:
@@ -890,25 +884,9 @@ def run_llm_step_pkt_generator(
 
     # Build extra_reasoning_details dict from accumulated blocks
     extra_reasoning_details: dict[str, Any] | None = None
-    if accumulated_reasoning_blocks:
-        # Group blocks by source based on their type field
-        thinking_blocks_list = []
-        reasoning_details_list = []
-        for block in accumulated_reasoning_blocks.values():
-            block_type = block.get("type", "thinking")
-            if block_type.startswith("reasoning."):
-                reasoning_details_list.append(block)
-            else:
-                thinking_blocks_list.append(block)
-
-        extra_reasoning_details = {}
-        if thinking_blocks_list:
-            extra_reasoning_details["thinking_blocks"] = thinking_blocks_list
-        if reasoning_details_list:
-            extra_reasoning_details["reasoning_details"] = reasoning_details_list
-
-        if not extra_reasoning_details:
-            extra_reasoning_details = None
+    if accumulated_extra_reasoning_details and extra_reasoning_key:
+        blocks_list = list(accumulated_extra_reasoning_details.values())
+        extra_reasoning_details = {extra_reasoning_key: blocks_list}
 
     return (
         LlmStepResult(

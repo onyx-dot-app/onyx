@@ -536,8 +536,9 @@ def run_llm_loop(
                 # Build a mapping of tool names to tool objects for getting tool_id
                 tools_by_name = {tool.name: tool for tool in final_tools}
 
-                # Add the results to the chat history. Even though tools may run in parallel,
-                # LLM APIs require linear history, so tool calls are grouped before responses.
+                # Add the results to the chat history.
+                # Even though tools may run in parallel, LLM APIs require linear history.
+                # Parallel tool calls are grouped before responses, then all are added sequentially.
                 # Get the tool object to retrieve tool_id
                 tool = tools_by_name.get(tool_call.tool_name)
                 if not tool:
@@ -614,10 +615,8 @@ def run_llm_loop(
                     tool_response, citation_processor
                 )
 
-            if tool_call_messages:
-                simple_chat_history.extend(tool_call_messages)
-            if tool_response_messages:
-                simple_chat_history.extend(tool_response_messages)
+            simple_chat_history.extend(tool_call_messages)
+            simple_chat_history.extend(tool_response_messages)
 
             # If no tool calls, then it must have answered, wrap up
             if not llm_step_result.tool_calls or len(llm_step_result.tool_calls) == 0:

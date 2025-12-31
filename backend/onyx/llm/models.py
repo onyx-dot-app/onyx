@@ -92,8 +92,9 @@ class AssistantMessage(BaseModel):
     def model_dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         """Override model_dump to flatten extra_reasoning_details for LiteLLM compatibility.
 
-        LiteLLM expects thinking_blocks/reasoning_details as top-level fields,
-        not nested inside extra_reasoning_details.
+        extra_reasoning_details is a dict for holding arbitrary reasoning content/verification details from the model.
+        The key is the provider-specific key for the reasoning details like "thinking_blocks" or "reasoning_details".
+        Model dump needs to extract the key and value and add them to the top-level data.
         """
         data = super().model_dump(*args, **kwargs)
 

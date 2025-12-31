@@ -76,6 +76,21 @@ Instead of dropping the Tool Call response, we might summarize it using an LLM s
 this is questionable value add because anything relevant and useful should be already captured in the Agent response.
 
 
+## Extended Thinking / Reasoning Verification
+Some LLM providers (Anthropic, OpenRouter/Gemini) support extended thinking where the model outputs reasoning content that must be echoed back
+in subsequent requests to maintain the thinking chain. This is required for reasoning verification.
+
+**Why**: When an assistant message includes tool calls with extended thinking, the thinking blocks must be included in the conversation history
+for subsequent LLM calls. Without this, providers like Anthropic will drop the thinking parameter and the model won't use extended thinking.
+
+**How**: We capture `extra_reasoning_details` from streaming deltas and store them:
+- In-memory: On `ChatMessageSimple` for the current turn's tool call messages
+- Database: On `ChatMessage` and `ToolCall` tables (JSONB column) for persistence across sessions
+
+The format is provider-agnostic: `{"thinking_blocks": [...]}` for Anthropic or `{"reasoning_details": [...]}` for OpenRouter/Gemini.
+When converting to LLM format, `AssistantMessage.model_dump()` flattens this to top-level fields (e.g., `thinking_blocks: [...]`) as expected by LiteLLM.
+
+
 ## Examples
 ```
 S -> System Message

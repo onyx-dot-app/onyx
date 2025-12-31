@@ -692,10 +692,12 @@ def convert_chat_history(
                     # Sort by tool_id within the turn for consistent ordering
                     turn_tool_calls.sort(key=lambda tc: tc.tool_id)
 
+                    # Parallel tool calls are grouped together (sequentially in the history)
+                    # then, eventually, concatenated into a single assistant message.
+                    # Parallel tool results are also grouped together, but not concatenated.
                     tool_call_messages: list[ChatMessageSimple] = []
                     tool_response_messages: list[ChatMessageSimple] = []
 
-                    # Add each tool call as a separate message with the tool arguments
                     for tool_call in turn_tool_calls:
                         # Create a message containing the tool call information
                         tool_name = tool_id_to_name_map.get(

@@ -31,8 +31,8 @@ class Delta(BaseModel):
     reasoning_content: str | None = None
     tool_calls: List[ChatCompletionDeltaToolCall] = Field(default_factory=list)
     # Extra reasoning details for verification (Anthropic/OpenRouter/Gemini)
-    # Stored as raw dicts to preserve provider-specific fields
-    extra_reasoning_details: List[dict[str, Any]] | None = None
+    # Stored with key name preserved: {"thinking_blocks": [...]} or {"reasoning_details": [...]}
+    extra_reasoning_details: dict[str, Any] | None = None
 
 
 class StreamingChoice(BaseModel):
@@ -142,26 +142,19 @@ def _parse_message_tool_calls(
     return parsed_tool_calls
 
 
-def _parse_thinking_blocks(
-    thinking_blocks: list[dict[str, Any]] | None,
-    reasoning_details: list[dict[str, Any]] | None = None,
-) -> list[dict[str, Any]] | None:
-    """Parse thinking blocks from delta for reasoning verification.
+def _extract_extra_reasoning_details(
+    delta_data: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Extract extra reasoning details from delta, preserving the key name.
 
-    Handles both:
-    - Anthropic's thinking_blocks format: {"type": "thinking", "thinking": "...", "signature": "..."}
-    - OpenRouter/Gemini's reasoning_details format: {"type": "reasoning.text", "text": "...", "format": "...", "index": 0}
-
-    Returns raw dicts to preserve all provider-specific fields.
+    Checks for thinking_blocks (Anthropic) or reasoning_details (OpenRouter/Gemini)
+    and returns the entire value with its key name preserved.
     """
-    # Try thinking_blocks first (Anthropic), then reasoning_details (OpenRouter/Gemini)
-    blocks = thinking_blocks or reasoning_details
-    if not blocks:
-        return None
-
-    # Return a copy of valid dict blocks
-    parsed_blocks = [block for block in blocks if isinstance(block, dict)]
-    return parsed_blocks if parsed_blocks else None
+    if delta_data.get("thinking_blocks") is not None:
+        return {"thinking_blocks": delta_data["thinking_blocks"]}
+    if delta_data.get("reasoning_details") is not None:
+        return {"reasoning_details": delta_data["reasoning_details"]}
+    return None
 
 
 def _validate_and_extract_base_fields(
@@ -201,10 +194,7 @@ def from_litellm_model_response_stream(
         content=delta_data.get("content"),
         reasoning_content=delta_data.get("reasoning_content"),
         tool_calls=_parse_delta_tool_calls(delta_data.get("tool_calls")),
-        extra_reasoning_details=_parse_thinking_blocks(
-            delta_data.get("thinking_blocks"),
-            delta_data.get("reasoning_details"),
-        ),
+        extra_reasoning_details=_extract_extra_reasoning_details(delta_data),
     )
 
     streaming_choice = StreamingChoice(
