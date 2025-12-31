@@ -5,6 +5,7 @@ import { BaseLLMFormValues } from "../formUtils";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
+import { FieldLabel } from "@/components/Field";
 
 interface AutoModeToggleProps {
   isAutoMode: boolean;
@@ -46,89 +47,17 @@ function AutoModeToggle({ isAutoMode, onToggle }: AutoModeToggleProps) {
   );
 }
 
-interface AutoModeDisplayProps {
-  modelConfigurations: ModelConfiguration[];
-  defaultModelName?: string;
-}
-
-function AutoModeDisplay({
-  modelConfigurations,
-  defaultModelName,
-}: AutoModeDisplayProps) {
-  const visibleModels = modelConfigurations.filter((m) => m.is_visible);
-
-  if (visibleModels.length === 0) {
-    return (
-      <Text secondaryBody text03 className="italic">
-        Models will be configured automatically when a key is provided.
-      </Text>
-    );
-  }
-
-  // Sort: default model first
-  const sortedModels = [...visibleModels].sort((a, b) => {
-    const aIsDefault = a.name === defaultModelName;
-    const bIsDefault = b.name === defaultModelName;
-    if (aIsDefault && !bIsDefault) return -1;
-    if (!aIsDefault && bIsDefault) return 1;
-    return 0;
-  });
-
-  return (
-    <div className="flex flex-col gap-2">
-      {sortedModels.map((model) => {
-        const isDefault = model.name === defaultModelName;
-        return (
-          <div
-            key={model.name}
-            className={cn(
-              "flex items-center justify-between gap-3 rounded-16 border p-1",
-              "bg-background-neutral-00",
-              isDefault ? "border-action-link-05" : "border-border-01"
-            )}
-          >
-            <div className="flex flex-1 items-center gap-2 px-2 py-1">
-              <div
-                className={cn(
-                  "size-2 shrink-0 rounded-full",
-                  isDefault ? "bg-action-link-05" : "bg-background-neutral-03"
-                )}
-              />
-              <div className="flex flex-col gap-0.5">
-                <Text mainUiAction text05>
-                  {model.display_name || model.name}
-                </Text>
-                {model.display_name && (
-                  <Text secondaryBody text03>
-                    {model.name}
-                  </Text>
-                )}
-              </div>
-            </div>
-            {isDefault && (
-              <div className="flex items-center justify-end pr-2">
-                <Text secondaryBody className="text-action-text-link-05">
-                  Default
-                </Text>
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 function DisplayModelHeader({ alternativeText }: { alternativeText?: string }) {
   return (
-    <div className="mb-2">
-      <Text as="p" mainUiAction className="block">
-        Available Models
-      </Text>
-      <Text as="p" secondaryBody text03 className="block">
-        {alternativeText ??
-          "Select which models to make available for this provider."}
-      </Text>
+    <div>
+      <FieldLabel
+        label="Available Models"
+        subtext={
+          alternativeText ??
+          "Select which models to make available for this provider."
+        }
+        name="_available-models"
+      />
     </div>
   );
 }
@@ -221,92 +150,156 @@ export function DisplayModels<T extends BaseLLMFormValues>({
     );
   }
 
+  // Sort auto mode models: default model first
+  const visibleModels = modelConfigurations.filter((m) => m.is_visible);
+  const sortedAutoModels = [...visibleModels].sort((a, b) => {
+    const aIsDefault = a.name === defaultModel;
+    const bIsDefault = b.name === defaultModel;
+    if (aIsDefault && !bIsDefault) return -1;
+    if (!aIsDefault && bIsDefault) return 1;
+    return 0;
+  });
+
   return (
     <div className="flex flex-col gap-3">
-      {showAutoModeToggle && (
-        <AutoModeToggle
-          isAutoMode={isAutoMode}
-          onToggle={handleToggleAutoMode}
-        />
-      )}
+      <DisplayModelHeader />
+      <div className="border border-border-01 rounded-lg p-3">
+        {showAutoModeToggle && (
+          <AutoModeToggle
+            isAutoMode={isAutoMode}
+            onToggle={handleToggleAutoMode}
+          />
+        )}
 
-      {isAutoMode && showAutoModeToggle ? (
-        // Auto mode: read-only display of recommended models
-        <AutoModeDisplay
-          modelConfigurations={modelConfigurations}
-          defaultModelName={defaultModel}
-        />
-      ) : (
-        // Manual mode: checkbox selection
-        <>
-          {!showAutoModeToggle && <DisplayModelHeader />}
-          <div
-            className={cn(
-              "flex flex-col gap-1",
-              "max-h-48 4xl:max-h-64",
-              "overflow-y-auto",
-              "border border-border-01",
-              "rounded-lg p-3"
-            )}
-          >
-            {sortedModelConfigurations.map((modelConfiguration) => {
-              const isSelected = selectedModels.includes(
-                modelConfiguration.name
-              );
-              const isDefault = defaultModel === modelConfiguration.name;
-
-              return (
-                <div
-                  key={modelConfiguration.name}
-                  className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-background-neutral-subtle"
-                >
+        {/* Model list section */}
+        <div
+          className={cn(
+            "flex flex-col gap-1",
+            showAutoModeToggle && "mt-3 pt-3 border-t border-border-01"
+          )}
+        >
+          {isAutoMode && showAutoModeToggle ? (
+            // Auto mode: read-only display
+            <div className="flex flex-col gap-2">
+              {sortedAutoModels.map((model) => {
+                const isDefault = model.name === defaultModel;
+                return (
                   <div
-                    className="flex items-center gap-2 cursor-pointer"
-                    onClick={() =>
-                      handleCheckboxChange(modelConfiguration.name, !isSelected)
-                    }
+                    key={model.name}
+                    className={cn(
+                      "flex items-center justify-between gap-3 rounded-lg border p-1",
+                      "bg-background-neutral-00",
+                      isDefault ? "border-action-link-05" : "border-border-01"
+                    )}
+                  >
+                    <div className="flex flex-1 items-center gap-2 px-2 py-1">
+                      <div
+                        className={cn(
+                          "size-2 shrink-0 rounded-full",
+                          isDefault
+                            ? "bg-action-link-05"
+                            : "bg-background-neutral-03"
+                        )}
+                      />
+                      <div className="flex flex-col gap-0.5">
+                        <Text mainUiAction text05>
+                          {model.display_name || model.name}
+                        </Text>
+                        {model.display_name && (
+                          <Text secondaryBody text03>
+                            {model.name}
+                          </Text>
+                        )}
+                      </div>
+                    </div>
+                    {isDefault && (
+                      <div className="flex items-center justify-end pr-2">
+                        <Text
+                          secondaryBody
+                          className="text-action-text-link-05"
+                        >
+                          Default
+                        </Text>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            // Manual mode: checkbox selection
+            <div
+              className={cn(
+                "flex flex-col gap-1",
+                "max-h-48 4xl:max-h-64",
+                "overflow-y-auto"
+              )}
+            >
+              {sortedModelConfigurations.map((modelConfiguration) => {
+                const isSelected = selectedModels.includes(
+                  modelConfiguration.name
+                );
+                const isDefault = defaultModel === modelConfiguration.name;
+
+                return (
+                  <div
+                    key={modelConfiguration.name}
+                    className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-background-neutral-subtle"
                   >
                     <div
-                      className="flex items-center"
-                      onClick={(e) => e.stopPropagation()}
+                      className="flex items-center gap-2 cursor-pointer"
+                      onClick={() =>
+                        handleCheckboxChange(
+                          modelConfiguration.name,
+                          !isSelected
+                        )
+                      }
                     >
-                      <Checkbox
-                        checked={isSelected}
-                        onCheckedChange={(checked) =>
-                          handleCheckboxChange(modelConfiguration.name, checked)
-                        }
-                      />
+                      <div
+                        className="flex items-center"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={(checked) =>
+                            handleCheckboxChange(
+                              modelConfiguration.name,
+                              checked
+                            )
+                          }
+                        />
+                      </div>
+                      <Text
+                        as="p"
+                        secondaryBody
+                        className="select-none leading-none"
+                      >
+                        {modelConfiguration.name}
+                      </Text>
                     </div>
-                    <Text
-                      as="p"
-                      secondaryBody
-                      className="select-none leading-none"
+                    <button
+                      type="button"
+                      disabled={!isSelected}
+                      onClick={() => handleSetDefault(modelConfiguration.name)}
+                      className={`text-xs px-2 py-0.5 rounded transition-all duration-200 ease-in-out ${
+                        isSelected
+                          ? "opacity-100 translate-x-0"
+                          : "opacity-0 translate-x-2 pointer-events-none"
+                      } ${
+                        isDefault
+                          ? "bg-action-link-05 text-text-inverse font-medium scale-100"
+                          : "bg-background-neutral-02 text-text-03 hover:bg-background-neutral-03 scale-95 hover:scale-100"
+                      }`}
                     >
-                      {modelConfiguration.name}
-                    </Text>
+                      {isDefault ? "Default" : "Set as default"}
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    disabled={!isSelected}
-                    onClick={() => handleSetDefault(modelConfiguration.name)}
-                    className={`text-xs px-2 py-0.5 rounded transition-all duration-200 ease-in-out ${
-                      isSelected
-                        ? "opacity-100 translate-x-0"
-                        : "opacity-0 translate-x-2 pointer-events-none"
-                    } ${
-                      isDefault
-                        ? "bg-action-link-05 text-text-inverse font-medium scale-100"
-                        : "bg-background-neutral-02 text-text-03 hover:bg-background-neutral-03 scale-95 hover:scale-100"
-                    }`}
-                  >
-                    {isDefault ? "Default" : "Set as default"}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
