@@ -6,13 +6,13 @@ from typing import Any
 from typing import cast
 from typing import TextIO
 
-from ragas import evaluate  # type: ignore
-from ragas import EvaluationDataset  # type: ignore
-from ragas import SingleTurnSample  # type: ignore
-from ragas.dataset_schema import EvaluationResult  # type: ignore
-from ragas.metrics import FactualCorrectness  # type: ignore
-from ragas.metrics import Faithfulness  # type: ignore
-from ragas.metrics import ResponseRelevancy  # type: ignore
+from ragas import evaluate  # type: ignore[unused-ignore]
+from ragas import EvaluationDataset  # type: ignore[unused-ignore]
+from ragas import SingleTurnSample  # type: ignore[unused-ignore]
+from ragas.dataset_schema import EvaluationResult  # type: ignore[unused-ignore]
+from ragas.metrics import FactualCorrectness  # type: ignore[unused-ignore]
+from ragas.metrics import Faithfulness  # type: ignore[unused-ignore]
+from ragas.metrics import ResponseRelevancy  # type: ignore[unused-ignore]
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource

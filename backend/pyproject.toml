@@ -34,18 +34,6 @@ module = "generated.*"
 follow_imports = "silent"
 ignore_errors = true
 
-[[tool.mypy.overrides]]
-module = "tests.integration.tests.migrations.*"
-warn_unused_ignores = false
-
-[[tool.mypy.overrides]]
-module = "tests.regression.search_quality.utils"
-warn_unused_ignores = false
-
-[[tool.mypy.overrides]]
-module = "onyx.configs.constants"
-warn_unused_ignores = false
-
 [tool.ruff]
 line-length = 130
 target-version = "py311"
