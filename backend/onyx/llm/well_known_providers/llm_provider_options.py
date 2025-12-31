@@ -6,6 +6,9 @@ from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
 from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
+from onyx.llm.well_known_providers.auto_update_service import (
+    fetch_llm_recommendations_from_github,
+)
 from onyx.llm.well_known_providers.constants import ANTHROPIC_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import AZURE_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import BEDROCK_PROVIDER_NAME
@@ -38,11 +41,11 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
     }
 
 
-def _get_reccomendations() -> LLMRecommendations:
+def get_reccomendations() -> LLMRecommendations:
     """Get the recommendations from the GitHub config."""
-    # recommendations_from_github = fetch_llm_recommendations_from_github()
-    # if recommendations_from_github:
-    #     return recommendations_from_github
+    recommendations_from_github = fetch_llm_recommendations_from_github()
+    if recommendations_from_github:
+        return recommendations_from_github
 
     # Fall back to json bundled with code
     json_path = pathlib.Path(__file__).parent / "recommended-models.json"
@@ -208,7 +211,7 @@ def get_vertexai_model_names() -> list[str]:
 
 
 def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
-    llm_recommendations = _get_reccomendations()
+    llm_recommendations = get_reccomendations()
 
     well_known_llms = []
     for provider_name in LlmProviderNames:
@@ -300,6 +303,6 @@ def fetch_default_model_for_provider(provider_name: str) -> str | None:
     First checks the GitHub-hosted recommended-models.json config (via fetch_github_config),
     then falls back to hardcoded defaults if unavailable.
     """
-    llm_recommendations = _get_reccomendations()
+    llm_recommendations = get_reccomendations()
     default_model = llm_recommendations.get_default_model(provider_name)
     return default_model.name if default_model else None

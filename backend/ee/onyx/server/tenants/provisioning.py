@@ -47,10 +47,10 @@ from onyx.llm.well_known_providers.constants import OPENROUTER_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.llm.well_known_providers.constants import VERTEXAI_PROVIDER_NAME
-from onyx.llm.well_known_providers.llm_provider_options import (
-    _get_reccomendations,
-)
 from onyx.llm.well_known_providers.llm_provider_options import fetch_models_for_provider
+from onyx.llm.well_known_providers.llm_provider_options import (
+    get_reccomendations,
+)
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
@@ -305,7 +305,7 @@ def _build_model_configurations(
 def configure_default_api_keys(db_session: Session) -> None:
     """Configure default LLM providers using recommended-models.json for model selection."""
     # Load recommendations from JSON config
-    recommendations = _get_reccomendations()
+    recommendations = get_reccomendations()
 
     # Configure Anthropic provider
     if ANTHROPIC_DEFAULT_API_KEY:
