@@ -86,6 +86,10 @@ class BraintrustEvalProvider(EvalProvider):
                             "force_tools": item.get("force_tools", []),
                             "expected_tools": item.get("expected_tools", []),
                             "require_all_tools": item.get("require_all_tools", False),
+                            # Pass through per-test model configuration
+                            "model": item.get("model"),
+                            "model_provider": item.get("model_provider"),
+                            "temperature": item.get("temperature"),
                         },
                         expected=item.get("expected"),
                     )

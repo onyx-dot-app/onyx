@@ -24,7 +24,8 @@ from onyx.evals.models import EvalConfigurationOptions
 from onyx.evals.models import EvalProvider
 from onyx.evals.models import EvalToolResult
 from onyx.evals.models import ToolAssertion
-from onyx.evals.provider import get_default_provider
+from onyx.evals.provider import get_provider
+from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
@@ -246,6 +247,9 @@ def _get_answer_with_tools(
             - 'force_tools' (optional): List of tool types to force for this input
             - 'expected_tools' (optional): List of tool types expected to be called
             - 'require_all_tools' (optional): If true, all expected tools must be called
+            - 'model' (optional): Model version to use (e.g., "gpt-4o", "claude-3-5-sonnet")
+            - 'model_provider' (optional): Model provider (e.g., "openai", "anthropic")
+            - 'temperature' (optional): Temperature for the model
         configuration: Evaluation configuration options
 
     Returns:
@@ -280,6 +284,24 @@ def _get_answer_with_tools(
                     require_all=eval_input.get("require_all_tools", False),
                 )
 
+            # Handle per-input model configuration
+            llm_override = full_configuration.llm
+            input_model = eval_input.get("model")
+            input_model_provider = eval_input.get("model_provider")
+            input_temperature = eval_input.get("temperature")
+
+            if input_model or input_model_provider or input_temperature is not None:
+                # Create a new LLMOverride with per-input values, falling back to config
+                llm_override = LLMOverride(
+                    model_provider=input_model_provider or llm_override.model_provider,
+                    model_version=input_model or llm_override.model_version,
+                    temperature=(
+                        input_temperature
+                        if input_temperature is not None
+                        else llm_override.temperature
+                    ),
+                )
+
             user = (
                 get_user_by_email(configuration.search_permissions_email, db_session)
                 if configuration.search_permissions_email
@@ -296,7 +318,7 @@ def _get_answer_with_tools(
                 rerank_settings=None,
                 db_session=db_session,
                 skip_gen_ai_answer_generation=False,
-                llm_override=full_configuration.llm,
+                llm_override=llm_override,
                 allowed_tool_ids=full_configuration.allowed_tool_ids,
                 forced_tool_ids=forced_tool_ids or None,
             )
@@ -334,7 +356,7 @@ def run_eval(
     configuration: EvalConfigurationOptions,
     data: list[dict[str, Any]] | None = None,
     remote_dataset_name: str | None = None,
-    provider: EvalProvider = get_default_provider(),
+    provider: EvalProvider = get_provider(),
 ) -> EvalationAck:
     if data is not None and remote_dataset_name is not None:
         raise ValueError("Cannot specify both data and remote_dataset_name")

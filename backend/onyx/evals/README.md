@@ -51,6 +51,7 @@ This will run the evaluation with the following default settings:
 - `--braintrust-project`: Braintrust project name (overrides `BRAINTRUST_PROJECT` env var)
 - `--verbose`: Enable verbose output
 - `--no-send-logs`: Skip sending logs to Braintrust (useful for local testing)
+- `--local-only`: Run evals locally without Braintrust, output results to CLI only
 
 ## Test Data
 
@@ -66,15 +67,23 @@ Example test case:
 }
 ```
 
-### Tool Forcing and Assertions
+### Per-Test Configuration
 
-Configure tool forcing and assertions per-test by adding the following optional fields to each test case:
+Configure tool forcing, assertions, and model settings per-test by adding optional fields to each test case.
+
+#### Tool Configuration
 
 - `force_tools`: List of tool type names to force for this specific test
 - `expected_tools`: List of tool type names expected to be called
 - `require_all_tools`: If true, all expected tools must be called (default: false)
 
-Example with tool configuration:
+#### Model Configuration
+
+- `model`: Model version to use (e.g., "gpt-4o", "claude-3-5-sonnet")
+- `model_provider`: Model provider (e.g., "openai", "anthropic")
+- `temperature`: Temperature for the model (default: 0.0)
+
+Example with tool and model configuration:
 ```json
 [
   {
@@ -82,20 +91,23 @@ Example with tool configuration:
       "message": "Find information about Python programming"
     },
     "expected_tools": ["SearchTool"],
-    "force_tools": ["SearchTool"]
+    "force_tools": ["SearchTool"],
+    "model": "gpt-4o"
   },
   {
     "input": {
       "message": "Search the web for recent news about AI"
     },
     "expected_tools": ["WebSearchTool"],
-    "require_all_tools": true
+    "model": "claude-3-5-sonnet",
+    "model_provider": "anthropic"
   },
   {
     "input": {
       "message": "Calculate 2 + 2"
     },
-    "expected_tools": ["PythonTool"]
+    "expected_tools": ["PythonTool"],
+    "temperature": 0.5
   }
 ]
 ```
