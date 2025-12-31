@@ -3,10 +3,10 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
+import * as GeneralLayouts from "@/layouts/general-layouts";
 import Button from "@/refresh-components/buttons/Button";
 import { FullPersona } from "@/app/admin/assistants/interfaces";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
-import { cn } from "@/lib/utils";
 import { Formik, Form, FieldArray } from "formik";
 import * as Yup from "yup";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -257,15 +257,6 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
         </PopoverContent>
       </Popover>
     </>
-  );
-}
-
-function Section({
-  className,
-  ...rest
-}: React.HtmlHTMLAttributes<HTMLDivElement>) {
-  return (
-    <div className={cn("flex flex-col gap-4 w-full", className)} {...rest} />
   );
 }
 
@@ -1021,7 +1012,7 @@ export default function AgentEditorPage({
                     {/* Agent Form Content */}
                     <SettingsLayouts.Body>
                       <div className="flex flex-row gap-10 justify-between items-start w-full">
-                        <Section>
+                        <GeneralLayouts.Section>
                           <InputLayouts.Vertical name="name" label="Name">
                             <InputTypeInField
                               name="name"
@@ -1039,9 +1030,9 @@ export default function AgentEditorPage({
                               placeholder="What does this agent do?"
                             />
                           </InputLayouts.Vertical>
-                        </Section>
+                        </GeneralLayouts.Section>
 
-                        <Section className="w-fit">
+                        <GeneralLayouts.Section fit>
                           <InputLayouts.Vertical
                             name="agent_avatar"
                             label="Agent Avatar"
@@ -1049,12 +1040,12 @@ export default function AgentEditorPage({
                           >
                             <AgentIconEditor existingAgent={existingAgent} />
                           </InputLayouts.Vertical>
-                        </Section>
+                        </GeneralLayouts.Section>
                       </div>
 
                       <Separator noPadding />
 
-                      <Section>
+                      <GeneralLayouts.Section>
                         <InputLayouts.Vertical
                           name="instructions"
                           label="Instructions"
@@ -1075,11 +1066,11 @@ export default function AgentEditorPage({
                         >
                           <StarterMessages />
                         </InputLayouts.Vertical>
-                      </Section>
+                      </GeneralLayouts.Section>
 
                       <Separator noPadding />
 
-                      <Section>
+                      <GeneralLayouts.Section>
                         <div className="flex flex-col gap-4">
                           <InputLayouts.Label
                             name="knowledge"
@@ -1228,7 +1219,7 @@ export default function AgentEditorPage({
                               )}
                           </Card>
                         </div>
-                      </Section>
+                      </GeneralLayouts.Section>
 
                       <Separator noPadding />
 
@@ -1240,7 +1231,7 @@ export default function AgentEditorPage({
                           />
                         }
                       >
-                        <Section className="gap-2">
+                        <GeneralLayouts.Section gap={2}>
                           <Card>
                             <InputLayouts.Horizontal
                               name="image_generation"
@@ -1326,7 +1317,7 @@ export default function AgentEditorPage({
                               </div>
                             )}
                           </>
-                        </Section>
+                        </GeneralLayouts.Section>
                       </SimpleCollapsible>
 
                       <Separator noPadding />
@@ -1339,7 +1330,7 @@ export default function AgentEditorPage({
                           />
                         }
                       >
-                        <Section>
+                        <GeneralLayouts.Section>
                           <Card>
                             <InputLayouts.Horizontal
                               name="llm_model"
@@ -1388,7 +1379,7 @@ export default function AgentEditorPage({
                               with the user messages.
                             </Text>
                           </div>
-                        </Section>
+                        </GeneralLayouts.Section>
                       </SimpleCollapsible>
                     </SettingsLayouts.Body>
                   </SettingsLayouts.Root>

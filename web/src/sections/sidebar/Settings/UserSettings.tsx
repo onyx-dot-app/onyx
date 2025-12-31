@@ -22,7 +22,7 @@ import { getSourceMetadata } from "@/lib/sources";
 import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
 import { useCCPairs } from "@/lib/hooks/useCCPairs";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
-import { useUserPersonalization } from "@/lib/hooks/useUserPersonalization";
+import useUserPersonalization from "@/hooks/useUserPersonalization";
 import Text from "@/refresh-components/texts/Text";
 import PATManagement from "@/components/user/PATManagement";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
