@@ -262,13 +262,7 @@ def _convert_sections_to_llm_string_with_citations(
 
 class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
     NAME = "open_url"
-    DESCRIPTION = (
-        "Open and read the full content of URLs or document identifiers. "
-        "Use this tool when: (1) Search results mention a document but don't include its full content, "
-        "(2) You need to read a specific document that was referenced but not fully retrieved, "
-        "(3) Search returned incomplete or truncated content for a document. "
-        "This tool retrieves the complete document content, either from indexed storage or by crawling the URL."
-    )
+    DESCRIPTION = "Open and read the content of one or more URLs."
     DISPLAY_NAME = "Open URL"
 
     def __init__(
@@ -336,13 +330,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             "type": "function",
             "function": {
                 "name": self.name,
-                "description": (
-                    "Open and read the full content of URLs or document identifiers. "
-                    "IMPORTANT: Use this tool when search results reference documents but don't include their full content, "
-                    "or when you need complete information from a specific document. "
-                    "This tool retrieves complete document content, either from indexed storage or by crawling the URL. "
-                    "Returns the full text content of the pages."
-                ),
+                "description": self.description,
                 "parameters": {
                     "type": "object",
                     "properties": {

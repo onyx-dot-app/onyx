@@ -215,7 +215,6 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
             limit=None,  # Already truncated
             include_source_type=False,
             include_link=True,
-            include_document_id=False,
         )
 
         return ToolResponse(
