@@ -1339,10 +1339,6 @@ test.describe("MCP OAuth flows", () => {
       .locator('textarea[name="description"]')
       .fill("Playwright admin MCP assistant.");
 
-    await page
-      .getByRole("button", { name: /Advanced Options/i })
-      .click()
-      .catch(() => {});
     await selectMcpTools(page, serverId, [TOOL_NAMES.admin]);
 
     await page.getByRole("button", { name: "Create" }).click();
@@ -1596,10 +1592,6 @@ test.describe("MCP OAuth flows", () => {
         .locator('textarea[name="description"]')
         .fill("Playwright curator MCP assistant.");
 
-      await page
-        .getByRole("button", { name: /Advanced Options/i })
-        .click()
-        .catch(() => {});
       await selectMcpTools(page, serverId, [TOOL_NAMES.curator]);
 
       await page.getByRole("button", { name: "Create" }).click();
