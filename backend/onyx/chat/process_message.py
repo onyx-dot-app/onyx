@@ -631,6 +631,7 @@ def handle_stream_message_objects(
             db_session=db_session,
             assistant_message=assistant_response,
             is_clarification=state_container.is_clarification,
+            extra_reasoning_details=state_container.get_extra_reasoning_details(),
         )
 
     except ValueError as e:

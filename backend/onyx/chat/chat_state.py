@@ -40,6 +40,8 @@ class ChatStateContainer:
         # True if this turn is a clarification question (deep research flow)
         self.is_clarification: bool = False
         # Note: LLM cost tracking is now handled in multi_llm.py
+        # Extra reasoning details for verification (thinking_blocks/reasoning_details)
+        self.extra_reasoning_details: dict[str, Any] | None = None
 
     def add_tool_call(self, tool_call: ToolCallInfo) -> None:
         """Add a tool call to the accumulated state."""
@@ -90,6 +92,22 @@ class ChatStateContainer:
         """Thread-safe getter for is_clarification."""
         with self._lock:
             return self.is_clarification
+
+    def set_extra_reasoning_details(
+        self, extra_reasoning_details: dict[str, Any] | None
+    ) -> None:
+        """Set the extra reasoning details for verification."""
+        with self._lock:
+            self.extra_reasoning_details = extra_reasoning_details
+
+    def get_extra_reasoning_details(self) -> dict[str, Any] | None:
+        """Thread-safe getter for extra_reasoning_details (returns a copy)."""
+        with self._lock:
+            return (
+                self.extra_reasoning_details.copy()
+                if self.extra_reasoning_details
+                else None
+            )
 
 
 def run_chat_loop_with_state_containers(

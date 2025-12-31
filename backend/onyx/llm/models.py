@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Any
 from typing import Literal
 
 from pydantic import BaseModel
@@ -83,6 +84,26 @@ class AssistantMessage(BaseModel):
     role: Literal["assistant"] = "assistant"
     content: str | None = None
     tool_calls: list[ToolCall] | None = None
+    # Extra reasoning details for verification, stored in provider-specific format:
+    # - Anthropic: {"thinking_blocks": [...]}
+    # - OpenRouter/Gemini: {"reasoning_details": [...]}
+    extra_reasoning_details: dict[str, Any] | None = None
+
+    def model_dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Override model_dump to flatten extra_reasoning_details for LiteLLM compatibility.
+
+        LiteLLM expects thinking_blocks/reasoning_details as top-level fields,
+        not nested inside extra_reasoning_details.
+        """
+        data = super().model_dump(*args, **kwargs)
+
+        # Flatten extra_reasoning_details into top-level fields
+        extra = data.pop("extra_reasoning_details", None)
+        if extra:
+            for key, value in extra.items():
+                data[key] = value
+
+        return data
 
 
 class ToolMessage(BaseModel):

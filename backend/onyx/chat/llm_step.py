@@ -168,6 +168,12 @@ def _format_message_history_for_logging(
             if msg.content:
                 formatted_lines.append(f"{msg.content}")
 
+            if msg.extra_reasoning_details:
+                formatted_lines.append("Extra reasoning details:")
+                formatted_lines.append(
+                    json.dumps(msg.extra_reasoning_details, indent=4)
+                )
+
             if msg.tool_calls:
                 formatted_lines.append("Tool calls:")
                 for tool_call in msg.tool_calls:
@@ -341,10 +347,18 @@ def translate_history_to_llm_format(
                     "Including as content-only message."
                 )
 
+        # Get extra_reasoning_details from the first tool message (all share same reasoning)
+        extra_reasoning_details = None
+        for tool_msg in pending_tool_calls:
+            if tool_msg.extra_reasoning_details:
+                extra_reasoning_details = tool_msg.extra_reasoning_details
+                break
+
         assistant_msg_with_tool = AssistantMessage(
             role="assistant",
             content=None,  # The tool call is parsed, doesn't need to be duplicated in the content
             tool_calls=tool_calls if tool_calls else None,
+            extra_reasoning_details=extra_reasoning_details,
         )
         messages.append(assistant_msg_with_tool)
         pending_tool_calls.clear()
@@ -443,6 +457,7 @@ def translate_history_to_llm_format(
                 role="assistant",
                 content=msg.message or None,
                 tool_calls=None,
+                extra_reasoning_details=msg.extra_reasoning_details,
             )
             messages.append(assistant_msg)
 
@@ -552,6 +567,10 @@ def run_llm_step_pkt_generator(
     answer_start = False
     accumulated_reasoning = ""
     accumulated_answer = ""
+    # Accumulate extra_reasoning_details for verification
+    # Stores blocks from Anthropic (thinking_blocks) or OpenRouter/Gemini (reasoning_details)
+    # Key is block_index, value is accumulated block as dict
+    accumulated_reasoning_blocks: dict[int, dict[str, Any]] = {}
 
     processor_state: Any = None
 
@@ -739,6 +758,37 @@ def run_llm_step_pkt_generator(
                 for tool_call_delta in delta.tool_calls:
                     _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
 
+            # Accumulate extra_reasoning_details for verification (Anthropic/OpenRouter/Gemini)
+            if delta.extra_reasoning_details:
+                # Fields that should be concatenated across deltas (content fields)
+                concatenate_fields = {"thinking", "text", "data"}
+
+                for block in delta.extra_reasoning_details:
+                    # Use index from block if available, otherwise default to 0
+                    raw_index = block.get("index")
+                    block_index: int = int(raw_index) if raw_index is not None else 0
+
+                    if block_index not in accumulated_reasoning_blocks:
+                        accumulated_reasoning_blocks[block_index] = {}
+
+                    current_block = accumulated_reasoning_blocks[block_index]
+
+                    # Merge fields - concatenate content fields, replace metadata fields
+                    for field_name, field_value in block.items():
+                        if field_value is None:
+                            continue
+                        if (
+                            field_name in concatenate_fields
+                            and field_name in current_block
+                        ):
+                            # Concatenate content fields (thinking, text, data)
+                            current_block[field_name] = (
+                                current_block[field_name] + field_value
+                            )
+                        else:
+                            # Replace metadata fields (type, signature, format, id, index)
+                            current_block[field_name] = field_value
+
         # Flush custom token processor to get any final tool calls
         if custom_token_processor:
             flush_delta, processor_state = custom_token_processor(None, processor_state)
@@ -838,11 +888,34 @@ def run_llm_step_pkt_generator(
     else:
         logger.debug("Tool calls: []")
 
+    # Build extra_reasoning_details dict from accumulated blocks
+    extra_reasoning_details: dict[str, Any] | None = None
+    if accumulated_reasoning_blocks:
+        # Group blocks by source based on their type field
+        thinking_blocks_list = []
+        reasoning_details_list = []
+        for block in accumulated_reasoning_blocks.values():
+            block_type = block.get("type", "thinking")
+            if block_type.startswith("reasoning."):
+                reasoning_details_list.append(block)
+            else:
+                thinking_blocks_list.append(block)
+
+        extra_reasoning_details = {}
+        if thinking_blocks_list:
+            extra_reasoning_details["thinking_blocks"] = thinking_blocks_list
+        if reasoning_details_list:
+            extra_reasoning_details["reasoning_details"] = reasoning_details_list
+
+        if not extra_reasoning_details:
+            extra_reasoning_details = None
+
     return (
         LlmStepResult(
             reasoning=accumulated_reasoning if accumulated_reasoning else None,
             answer=accumulated_answer if accumulated_answer else None,
             tool_calls=tool_calls if tool_calls else None,
+            extra_reasoning_details=extra_reasoning_details,
         ),
         bool(has_reasoned),
     )

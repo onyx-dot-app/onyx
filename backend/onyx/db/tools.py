@@ -221,6 +221,7 @@ def create_tool_call_no_commit(
     parent_tool_call_id: int | None = None,
     reasoning_tokens: str | None = None,
     generated_images: list[dict] | None = None,
+    extra_reasoning_details: dict | None = None,
     tab_index: int = 0,
     add_only: bool = True,
 ) -> ToolCall:
@@ -240,6 +241,7 @@ def create_tool_call_no_commit(
         parent_tool_call_id: Optional parent tool call ID (for nested tool calls)
         reasoning_tokens: Optional reasoning tokens
         generated_images: Optional list of generated image metadata for replay
+        extra_reasoning_details: Optional reasoning verification details (thinking_blocks/reasoning_details)
         tab_index: Index order of tool calls from the LLM for parallel tool calls
         commit: If True, commit the transaction; if False, flush only
 
@@ -259,6 +261,7 @@ def create_tool_call_no_commit(
         tool_call_response=tool_call_response,
         tool_call_tokens=tool_call_tokens,
         generated_images=generated_images,
+        extra_reasoning_details=extra_reasoning_details,
     )
 
     db_session.add(tool_call)

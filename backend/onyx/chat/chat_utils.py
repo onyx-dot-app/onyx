@@ -713,6 +713,7 @@ def convert_chat_history(
                                 message_type=MessageType.TOOL_CALL,
                                 image_files=None,
                                 tool_call_id=tool_call.tool_call_id,
+                                extra_reasoning_details=tool_call.extra_reasoning_details,
                             )
                         )
 
@@ -736,6 +737,7 @@ def convert_chat_history(
                     token_count=chat_message.token_count,
                     message_type=MessageType.ASSISTANT,
                     image_files=None,
+                    extra_reasoning_details=chat_message.extra_reasoning_details,
                 )
             )
         else:

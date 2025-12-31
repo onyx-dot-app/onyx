@@ -2121,6 +2121,10 @@ class ChatMessage(Base):
 
     # What does this message contain
     reasoning_tokens: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Extra reasoning details for verification (thinking_blocks/reasoning_details)
+    extra_reasoning_details: Mapped[dict | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
     message: Mapped[str] = mapped_column(Text)
     token_count: Mapped[int] = mapped_column(Integer)
     message_type: Mapped[MessageType] = mapped_column(
@@ -2226,6 +2230,10 @@ class ToolCall(Base):
     tool_call_id: Mapped[str] = mapped_column(String())
     # Preceeding reasoning tokens for this tool call, not included in the history
     reasoning_tokens: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Extra reasoning details for verification (thinking_blocks/reasoning_details)
+    extra_reasoning_details: Mapped[dict | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
     # For "Agents" like the Research Agent for Deep Research -
     # the argument and final report are stored as the argument and response.
     tool_call_arguments: Mapped[dict[str, JSON_ro]] = mapped_column(postgresql.JSONB())
