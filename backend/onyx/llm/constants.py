@@ -307,3 +307,8 @@ OLLAMA_MODEL_TO_VENDOR: dict[str, str] = {
     "nemotron": "NVIDIA",
     "smollm": "HuggingFace",
 }
+
+KNOWN_REASONING_DETAILS_KEYS: set[str] = {
+    "thinking_blocks",
+    "reasoning_details",
+}

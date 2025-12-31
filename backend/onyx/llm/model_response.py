@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel
 from pydantic import Field
 
+from onyx.llm.constants import KNOWN_REASONING_DETAILS_KEYS
+
 
 class FunctionCall(BaseModel):
     arguments: str | None = None
@@ -150,10 +152,10 @@ def _extract_extra_reasoning_details(
     Checks for thinking_blocks (Anthropic) or reasoning_details (OpenRouter/Gemini)
     and returns the entire value with its key name preserved.
     """
-    if delta_data.get("thinking_blocks") is not None:
-        return {"thinking_blocks": delta_data["thinking_blocks"]}
-    if delta_data.get("reasoning_details") is not None:
-        return {"reasoning_details": delta_data["reasoning_details"]}
+    # There should only ever be one of these keys in the delta data at a time
+    for key in KNOWN_REASONING_DETAILS_KEYS:
+        if delta_data.get(key) is not None:
+            return {key: delta_data[key]}
     return None
 
 
