@@ -398,8 +398,8 @@ def extract_channel_references_from_query(query_text: str) -> set[str]:
     channel_patterns = [
         r"\bin\s+(?:the\s+)?([a-z0-9_-]+)\s+(?:slack\s+)?channels?\b",  # "in the office channel"
         r"\bfrom\s+(?:the\s+)?([a-z0-9_-]+)\s+(?:slack\s+)?channels?\b",  # "from the office channel"
-        r"\bin\s+#([a-z0-9_-]+)\b",  # "in #office"
-        r"\bfrom\s+#([a-z0-9_-]+)\b",  # "from #office"
+        r"\bin[:\s]*#([a-z0-9_-]+)\b",  # "in #office" or "in:#office"
+        r"\bfrom[:\s]*#([a-z0-9_-]+)\b",  # "from #office" or "from:#office"
     ]
 
     for pattern in channel_patterns:

@@ -221,6 +221,17 @@ def get_federated_retrieval_functions(
     federated_retrieval_infos: list[FederatedRetrievalInfo] = []
     federated_oauth_tokens = list_federated_connector_oauth_tokens(db_session, user_id)
     for oauth_token in federated_oauth_tokens:
+        # Slack is handled separately inside SearchTool
+        if (
+            oauth_token.federated_connector.source
+            == FederatedConnectorSource.FEDERATED_SLACK
+        ):
+            logger.debug(
+                "Skipping Slack federated connector in user OAuth path - "
+                "handled by SearchTool"
+            )
+            continue
+
         if (
             oauth_token.federated_connector.source.to_non_federated_source()
             not in source_types

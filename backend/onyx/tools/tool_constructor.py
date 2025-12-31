@@ -417,6 +417,7 @@ def construct_tools(
 
         search_settings = get_current_search_settings(db_session)
         document_index = get_default_document_index(search_settings, None)
+
         search_tool = SearchTool(
             tool_id=search_tool_db_model.id,
             db_session=db_session,
