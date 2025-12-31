@@ -1,36 +1,45 @@
-# Copy this file to .env in the .vscode folder
-# Fill in the <REPLACE THIS> values as needed, it is recommended to set the GEN_AI_API_KEY value to avoid having to set up an LLM in the UI
-# Also check out onyx/backend/scripts/restart_containers.sh for a script to restart the containers which Onyx relies on outside of VSCode/Cursor processes
+# Copy this file to .env in the .vscode folder.
+# Fill in the <REPLACE THIS> values as needed; it is recommended to set the
+# GEN_AI_API_KEY value to avoid having to set up an LLM in the UI.
+# Also check out onyx/backend/scripts/restart_containers.sh for a script to
+# restart the containers which Onyx relies on outside of VSCode/Cursor
+# processes.
 
-# For local dev, often user Authentication is not needed
+
+# For local dev, often user Authentication is not needed.
 AUTH_TYPE=disabled
 
-# Always keep these on for Dev
-# Logs model prompts, reasoning, and answer to stdout
+
+# Always keep these on for Dev.
+# Logs model prompts, reasoning, and answer to stdout.
 LOG_ONYX_MODEL_INTERACTIONS=True
 # More verbose logging
 LOG_LEVEL=debug
 
 
-# This passes top N results to LLM an additional time for reranking prior to answer generation
-# This step is quite heavy on token usage so we disable it for dev generally
+# This passes top N results to LLM an additional time for reranking prior to
+# answer generation.
+# This step is quite heavy on token usage so we disable it for dev generally.
 DISABLE_LLM_DOC_RELEVANCE=False
 
 
-# Useful if you want to toggle auth on/off (google_oauth/OIDC specifically)
+# Useful if you want to toggle auth on/off (google_oauth/OIDC specifically).
 OAUTH_CLIENT_ID=<REPLACE THIS>
 OAUTH_CLIENT_SECRET=<REPLACE THIS>
 OPENID_CONFIG_URL=<REPLACE THIS>
 SAML_CONF_DIR=/<ABSOLUTE PATH TO ONYX>/onyx/backend/ee/onyx/configs/saml_config
 
-# Generally not useful for dev, we don't generally want to set up an SMTP server for dev
+
+# Generally not useful for dev, we don't generally want to set up an SMTP server
+# for dev.
 REQUIRE_EMAIL_VERIFICATION=False
 
 
-# Set these so if you wipe the DB, you don't end up having to go through the UI every time
+# Set these so if you wipe the DB, you don't end up having to go through the UI
+# every time.
 GEN_AI_API_KEY=<REPLACE THIS>
 OPENAI_API_KEY=<REPLACE THIS>
-# If answer quality isn't important for dev, use gpt-4o-mini since it's cheaper
+# If answer quality isn't important for dev, use gpt-4o-mini since it's cheaper.
 GEN_AI_MODEL_VERSION=gpt-4o
 FAST_GEN_AI_MODEL_VERSION=gpt-4o
 
@@ -40,9 +49,11 @@ PYTHONPATH=../backend
 PYTHONUNBUFFERED=1
 
 
-# Enable the full set of Danswer Enterprise Edition features
-# NOTE: DO NOT ENABLE THIS UNLESS YOU HAVE A PAID ENTERPRISE LICENSE (or if you are using this for local testing/development)
+# Enable the full set of Danswer Enterprise Edition features.
+# NOTE: DO NOT ENABLE THIS UNLESS YOU HAVE A PAID ENTERPRISE LICENSE (or if you
+# are using this for local testing/development).
 ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=False
+
 
 # S3 File Store Configuration (MinIO for local development)
 S3_ENDPOINT_URL=http://localhost:9004
@@ -50,8 +61,10 @@ S3_FILE_STORE_BUCKET_NAME=onyx-file-store-bucket
 S3_AWS_ACCESS_KEY_ID=minioadmin
 S3_AWS_SECRET_ACCESS_KEY=minioadmin
 
-# Show extra/uncommon connectors
+
+# Show extra/uncommon connectors.
 SHOW_EXTRA_CONNECTORS=True
+
 
 # Local langsmith tracing
 LANGSMITH_TRACING="true"
@@ -59,7 +72,13 @@ LANGSMITH_ENDPOINT="https://api.smith.langchain.com"
 LANGSMITH_API_KEY=<REPLACE_THIS>
 LANGSMITH_PROJECT=<REPLACE_THIS>
 
+
 # Local Confluence OAuth testing
 # OAUTH_CONFLUENCE_CLOUD_CLIENT_ID=<REPLACE_THIS>
 # OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET=<REPLACE_THIS>
 # NEXT_PUBLIC_TEST_ENV=True
+
+
+# OpenSearch
+# Arbitrary password is fine for local development.
+OPENSEARCH_INITIAL_ADMIN_PASSWORD=<REPLACE THIS>

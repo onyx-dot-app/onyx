@@ -4,7 +4,7 @@ import { useField } from "formik";
 import InputTypeIn, {
   InputTypeInProps,
 } from "@/refresh-components/inputs/InputTypeIn";
-import { useOnChangeEvent } from "@/hooks/formHooks";
+import { useOnChangeEvent, useOnBlurEvent } from "@/hooks/formHooks";
 
 export interface InputTypeInFieldProps
   extends Omit<InputTypeInProps, "value" | "onClear"> {
@@ -14,10 +14,12 @@ export interface InputTypeInFieldProps
 export default function InputTypeInField({
   name,
   onChange: onChangeProp,
+  onBlur: onBlurProp,
   ...inputProps
 }: InputTypeInFieldProps) {
   const [field, meta, helpers] = useField(name);
   const onChange = useOnChangeEvent(name, onChangeProp);
+  const onBlur = useOnBlurEvent(name, onBlurProp);
   const hasError = meta.touched && meta.error;
 
   return (
@@ -25,9 +27,9 @@ export default function InputTypeInField({
       {...inputProps}
       id={name}
       name={name}
-      value={field.value || ""}
+      value={field.value ?? ""}
       onChange={onChange}
-      onBlur={field.onBlur}
+      onBlur={onBlur}
       onClear={() => {
         helpers.setValue("");
       }}
