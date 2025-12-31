@@ -99,6 +99,9 @@ from onyx.server.manage.administrative import router as admin_router
 from onyx.server.manage.embedding.api import admin_router as embedding_admin_router
 from onyx.server.manage.embedding.api import basic_router as embedding_router
 from onyx.server.manage.get_state import router as state_router
+from onyx.server.manage.image_generation.api import (
+    admin_router as image_generation_admin_router,
+)
 from onyx.server.manage.llm.api import admin_router as llm_admin_router
 from onyx.server.manage.llm.api import basic_router as llm_router
 from onyx.server.manage.search_settings import router as search_settings_router
@@ -397,6 +400,9 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, llm_admin_router)
     include_router_with_global_prefix_prepended(application, kg_admin_router)
     include_router_with_global_prefix_prepended(application, llm_router)
+    include_router_with_global_prefix_prepended(
+        application, image_generation_admin_router
+    )
     include_router_with_global_prefix_prepended(application, embedding_admin_router)
     include_router_with_global_prefix_prepended(application, embedding_router)
     include_router_with_global_prefix_prepended(application, web_search_router)
