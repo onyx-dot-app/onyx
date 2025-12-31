@@ -212,6 +212,13 @@ BEDROCK_MODEL_TOKEN_LIMITS: dict[str, int] = {
 }
 
 
+# Models that should keep their hyphenated format in display names
+# These are model families where the hyphen is part of the brand name
+HYPHENATED_MODEL_NAMES: set[str] = {
+    "gpt-oss",
+}
+
+
 # General model prefix to vendor mapping (used as fallback when enrichment data is missing)
 # This covers common model families across all providers
 MODEL_PREFIX_TO_VENDOR: dict[str, str] = {

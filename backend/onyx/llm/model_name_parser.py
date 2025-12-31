@@ -21,6 +21,7 @@ from functools import lru_cache
 from pydantic import BaseModel
 
 from onyx.llm.constants import AGGREGATOR_PROVIDERS
+from onyx.llm.constants import HYPHENATED_MODEL_NAMES
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.constants import MODEL_PREFIX_TO_VENDOR
 from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
@@ -131,6 +132,7 @@ def _generate_display_name_from_model(model_name: str) -> str:
         "vertex_ai/gemini-3-flash-preview" → "Gemini 3 Flash Preview"
         "gemini-2.5-pro-exp-03-25" → "Gemini 2.5 Pro"
         "claude-3-5-sonnet-20241022" → "Claude 3.5 Sonnet"
+        "gpt-oss:120b" → "GPT-OSS 120B" (hyphenated exception)
     """
     try:
         # Remove provider prefix if present
@@ -140,9 +142,16 @@ def _generate_display_name_from_model(model_name: str) -> str:
         size_suffix = ""
         if ":" in base_name:
             base_name, tag = base_name.rsplit(":", 1)
-            # Keep size tags like "14b", "70b"
+            # Keep size tags like "14b", "70b", "120b"
             if re.match(r"^\d+[bBmM]$", tag):
                 size_suffix = f" {tag.upper()}"
+
+        # Check if this is a hyphenated model that should keep its format
+        base_name_lower = base_name.lower()
+        for hyphenated in HYPHENATED_MODEL_NAMES:
+            if base_name_lower.startswith(hyphenated):
+                # Keep the hyphenated prefix, uppercase it
+                return hyphenated.upper() + size_suffix
 
         # Remove common suffixes: date stamps, version numbers
         cleaned = base_name
