@@ -8,7 +8,8 @@ import {
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import { useEffect, useState } from "react";
+import useOnMount from "@/hooks/useOnMount";
+import { useState } from "react";
 
 export interface WelcomeMessageProps {
   agent?: MinimalPersonaSnapshot;
@@ -21,9 +22,7 @@ export default function WelcomeMessage({
 }: WelcomeMessageProps) {
   const [greeting, setGreeting] = useState(() => GREETING_MESSAGES[0] ?? "");
 
-  useEffect(() => {
-    setGreeting(getRandomGreeting());
-  }, []);
+  useOnMount(() => setGreeting(getRandomGreeting()));
 
   let content: React.ReactNode = null;
 
