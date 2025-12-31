@@ -32,7 +32,8 @@ const setKnowledgeCutoffDate = async (page: Page) => {
   // Click the "Today" button to set to today's date
   const todayButton = page
     .locator('[role="dialog"]')
-    .getByRole("button", { name: "Today" });
+    .getByRole("button", { name: "Today" })
+    .first();
   await todayButton.click();
 
   // The popover should close automatically after selection
