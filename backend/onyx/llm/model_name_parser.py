@@ -105,13 +105,16 @@ def _infer_vendor_from_model_name(model_name: str) -> str | None:
         "claude-3-5-sonnet" → "anthropic"
         "llama-3.1-70b" → "meta"
     """
-    # Get the base model name (remove provider prefix if present)
-    base_name = model_name.split("/")[-1].lower()
+    try:
+        # Get the base model name (remove provider prefix if present)
+        base_name = model_name.split("/")[-1].lower()
 
-    # Try to match against known prefixes (sorted by length to match longest first)
-    for prefix in sorted(MODEL_PREFIX_TO_VENDOR.keys(), key=len, reverse=True):
-        if base_name.startswith(prefix):
-            return MODEL_PREFIX_TO_VENDOR[prefix]
+        # Try to match against known prefixes (sorted by length to match longest first)
+        for prefix in sorted(MODEL_PREFIX_TO_VENDOR.keys(), key=len, reverse=True):
+            if base_name.startswith(prefix):
+                return MODEL_PREFIX_TO_VENDOR[prefix]
+    except Exception:
+        pass
 
     return None
 
@@ -129,48 +132,51 @@ def _generate_display_name_from_model(model_name: str) -> str:
         "gemini-2.5-pro-exp-03-25" → "Gemini 2.5 Pro"
         "claude-3-5-sonnet-20241022" → "Claude 3.5 Sonnet"
     """
-    # Remove provider prefix if present
-    base_name = model_name.split("/")[-1]
+    try:
+        # Remove provider prefix if present
+        base_name = model_name.split("/")[-1]
 
-    # Remove tag suffix (e.g., :14b, :latest) - handle separately
-    size_suffix = ""
-    if ":" in base_name:
-        base_name, tag = base_name.rsplit(":", 1)
-        # Keep size tags like "14b", "70b"
-        if re.match(r"^\d+[bBmM]$", tag):
-            size_suffix = f" {tag.upper()}"
+        # Remove tag suffix (e.g., :14b, :latest) - handle separately
+        size_suffix = ""
+        if ":" in base_name:
+            base_name, tag = base_name.rsplit(":", 1)
+            # Keep size tags like "14b", "70b"
+            if re.match(r"^\d+[bBmM]$", tag):
+                size_suffix = f" {tag.upper()}"
 
-    # Remove common suffixes: date stamps, version numbers
-    cleaned = base_name
-    # Remove date stamps like -20241022, @20250219, -2024-08-06
-    cleaned = re.sub(r"[-@]\d{4}-?\d{2}-?\d{2}", "", cleaned)
-    # Remove experimental/preview date suffixes like -exp-03-25
-    cleaned = re.sub(r"-exp-\d{2}-\d{2}", "", cleaned)
-    # Remove version suffixes like -v1, -v2
-    cleaned = re.sub(r"-v\d+$", "", cleaned)
+        # Remove common suffixes: date stamps, version numbers
+        cleaned = base_name
+        # Remove date stamps like -20241022, @20250219, -2024-08-06
+        cleaned = re.sub(r"[-@]\d{4}-?\d{2}-?\d{2}", "", cleaned)
+        # Remove experimental/preview date suffixes like -exp-03-25
+        cleaned = re.sub(r"-exp-\d{2}-\d{2}", "", cleaned)
+        # Remove version suffixes like -v1, -v2
+        cleaned = re.sub(r"-v\d+$", "", cleaned)
 
-    # Convert separators to spaces
-    cleaned = cleaned.replace("-", " ").replace("_", " ")
+        # Convert separators to spaces
+        cleaned = cleaned.replace("-", " ").replace("_", " ")
 
-    # Clean up version numbers: "3 5" → "3.5", "2 5" → "2.5"
-    # But only for single digits that look like version numbers
-    cleaned = re.sub(r"(\d) (\d)(?!\d)", r"\1.\2", cleaned)
+        # Clean up version numbers: "3 5" → "3.5", "2 5" → "2.5"
+        # But only for single digits that look like version numbers
+        cleaned = re.sub(r"(\d) (\d)(?!\d)", r"\1.\2", cleaned)
 
-    # Title case each word, preserving version numbers
-    words = cleaned.split()
-    result_words = []
-    for word in words:
-        if word.isdigit() or re.match(r"^\d+\.?\d*$", word):
-            # Keep numbers as-is
-            result_words.append(word)
-        elif word.lower() in ("pro", "lite", "mini", "flash", "preview", "ultra"):
-            # Common suffixes get title case
-            result_words.append(word.title())
-        else:
-            # Title case other words
-            result_words.append(word.title())
+        # Title case each word, preserving version numbers
+        words = cleaned.split()
+        result_words = []
+        for word in words:
+            if word.isdigit() or re.match(r"^\d+\.?\d*$", word):
+                # Keep numbers as-is
+                result_words.append(word)
+            elif word.lower() in ("pro", "lite", "mini", "flash", "preview", "ultra"):
+                # Common suffixes get title case
+                result_words.append(word.title())
+            else:
+                # Title case other words
+                result_words.append(word.title())
 
-    return " ".join(result_words) + size_suffix
+        return " ".join(result_words) + size_suffix
+    except Exception:
+        return model_name
 
 
 def _generate_provider_display_name(provider: str, vendor: str | None) -> str:
@@ -222,17 +228,11 @@ def parse_litellm_model_name(raw_name: str) -> ParsedModelName:
     region = _extract_region(raw_name)
 
     # Get from enrichment, with fallbacks for unenriched models
-    vendor = model_info.get("model_vendor")
+    vendor = model_info.get("model_vendor") or _infer_vendor_from_model_name(raw_name)
     version = model_info.get("model_version")
-    display_name = model_info.get("display_name")
-
-    # Fallback: infer vendor from model name patterns if not in enrichment
-    if not vendor:
-        vendor = _infer_vendor_from_model_name(raw_name)
-
-    # Fallback: generate clean display name if not in enrichment
-    if not display_name:
-        display_name = _generate_display_name_from_model(raw_name)
+    display_name = model_info.get("display_name") or _generate_display_name_from_model(
+        raw_name
+    )
 
     # Generate provider display name
     provider_display_name = _generate_provider_display_name(provider, vendor)
