@@ -27,6 +27,7 @@ export function constructMiniFiedPersona(name: string, id: number): Persona {
     system_prompt: null,
     task_prompt: null,
     datetime_aware: true,
+    replace_base_system_prompt: false,
   };
 }
 

@@ -12,7 +12,7 @@ import {
 } from "./OnboardingFormWrapper";
 import { OnboardingActions, OnboardingState } from "../types";
 import { buildInitialValues } from "../components/llmConnectionHelpers";
-import LLMConnectionIcons from "../components/LLMConnectionIcons";
+import ConnectionProviderIcon from "@/refresh-components/ConnectionProviderIcon";
 import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 
@@ -149,7 +149,7 @@ export function OpenAIOnboardingForm({
   });
 
   const icon = () => (
-    <LLMConnectionIcons
+    <ConnectionProviderIcon
       icon={<ProviderIcon provider={llmDescriptor.name} size={24} />}
     />
   );

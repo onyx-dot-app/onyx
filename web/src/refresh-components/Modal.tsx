@@ -288,6 +288,8 @@ const ModalContent = React.forwardRef<
               "z-modal",
               "bg-background-tint-00 border rounded-16 shadow-2xl",
               "flex flex-col overflow-auto",
+              // Never exceed viewport on small screens
+              "max-w-[calc(100dvw-2rem)] max-h-[calc(100dvh-2rem)]",
               "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
               "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
               "data-[state=open]:slide-in-from-top-1/2 data-[state=closed]:slide-out-to-top-1/2",

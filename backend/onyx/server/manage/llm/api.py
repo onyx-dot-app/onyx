@@ -169,7 +169,9 @@ def list_llm_providers(
     logger.debug("Starting to fetch LLM providers")
 
     llm_provider_list: list[LLMProviderView] = []
-    for llm_provider_model in fetch_existing_llm_providers(db_session):
+    for llm_provider_model in fetch_existing_llm_providers(
+        db_session, exclude_image_generation_providers=True
+    ):
         from_model_start = datetime.now(timezone.utc)
         full_llm_provider = LLMProviderView.from_model(llm_provider_model)
         from_model_end = datetime.now(timezone.utc)

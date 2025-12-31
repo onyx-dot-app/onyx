@@ -102,7 +102,7 @@ export default function SlackChannelConfigsTable({
                         ) ? (
                           <Link
                             href={
-                              `/assistants/edit/${slackChannelConfig.persona.id}` as Route
+                              `/chat/agents/edit/${slackChannelConfig.persona.id}` as Route
                             }
                             className="text-primary hover:underline"
                           >
