@@ -1,80 +1,29 @@
-import {
-  ModelConfiguration,
-  WellKnownLLMProviderDescriptor,
-} from "@/app/admin/configuration/llm/interfaces";
-import { dynamicProviderConfigs } from "@/app/admin/configuration/llm/utils";
+import { ModelConfiguration } from "@/app/admin/configuration/llm/interfaces";
 import { parseAzureTargetUri } from "@/lib/azureTargetUri";
 
-export const buildInitialValues = (
-  llmDescriptor?: WellKnownLLMProviderDescriptor,
-  isCustomProvider?: boolean
-) => {
-  // Custom provider has different initial values
-  if (isCustomProvider) {
-    return {
-      name: "",
-      provider: "",
-      api_key: "",
-      api_base: "",
-      api_version: "",
-      default_model_name: "",
-      model_configurations: [
-        {
-          name: "",
-          is_visible: true,
-          max_input_tokens: null,
-          supports_image_input: false,
-        },
-      ],
-      custom_config: {},
-      api_key_changed: true,
-      groups: [],
-      is_public: true,
-      deployment_name: "",
-      target_uri: "",
-    };
-  }
-
-  return {
-    api_base: llmDescriptor?.default_api_base ?? "",
-    default_model_name: llmDescriptor?.default_model ?? "",
-    api_key: "",
-    api_key_changed: true,
-    api_version: "",
-    custom_config: {},
-    deployment_name: "",
-    target_uri: "",
-    name: llmDescriptor?.name ?? "Default",
-    provider: llmDescriptor?.name ?? "",
-    model_configurations:
-      llmDescriptor?.model_configurations.map((model) => ({
-        name: model.name,
-        is_visible: true,
-        max_input_tokens: model.max_input_tokens,
-        supports_image_input: model.supports_image_input,
-      })) ?? [],
-    groups: [],
-    is_public: true,
-  };
-};
+export const buildInitialValues = () => ({
+  name: "",
+  provider: "",
+  api_key: "",
+  api_base: "",
+  api_version: "",
+  default_model_name: "",
+  model_configurations: [] as ModelConfiguration[],
+  custom_config: {} as Record<string, string>,
+  api_key_changed: true,
+  groups: [] as number[],
+  is_public: true,
+  deployment_name: "",
+  target_uri: "",
+});
 
 export const getModelOptions = (
-  llmDescriptor: WellKnownLLMProviderDescriptor | undefined,
   fetchedModelConfigurations: Array<{ name: string }>
 ) => {
-  if (!llmDescriptor) return [] as Array<{ label: string; value: string }>;
-  const modelsToUse =
-    fetchedModelConfigurations.length > 0
-      ? fetchedModelConfigurations
-      : llmDescriptor.model_configurations;
-  return modelsToUse.map((model) => ({ label: model.name, value: model.name }));
-};
-
-export const canProviderFetchModels = (
-  llmDescriptor: WellKnownLLMProviderDescriptor | undefined
-) => {
-  if (!llmDescriptor) return false;
-  return !!dynamicProviderConfigs[llmDescriptor.name];
+  return fetchedModelConfigurations.map((model) => ({
+    label: model.name,
+    value: model.name,
+  }));
 };
 
 export type TestApiKeyResult =
@@ -107,8 +56,7 @@ const submitLlmTestRequest = async (
 };
 
 export const testApiKeyHelper = async (
-  llmDescriptor: WellKnownLLMProviderDescriptor,
-  initialValues: any,
+  providerName: string,
   formValues: any,
   apiKey?: string,
   modelName?: string,
@@ -118,7 +66,7 @@ export const testApiKeyHelper = async (
   let finalApiVersion = formValues?.api_version;
   let finalDeploymentName = formValues?.deployment_name;
 
-  if (llmDescriptor.name === "azure" && formValues?.target_uri) {
+  if (providerName === "azure" && formValues?.target_uri) {
     try {
       const { url, apiVersion, deploymentName } = parseAzureTargetUri(
         formValues.target_uri
@@ -136,21 +84,20 @@ export const testApiKeyHelper = async (
     api_base: finalApiBase,
     api_version: finalApiVersion,
     deployment_name: finalDeploymentName,
-    provider: llmDescriptor.name,
+    provider: providerName,
     api_key_changed: true,
     custom_config: {
       ...(formValues?.custom_config ?? {}),
       ...(customConfigOverride ?? {}),
     },
-    default_model_name:
-      modelName ??
-      formValues?.default_model_name ??
-      initialValues.default_model_name,
+    default_model_name: modelName ?? formValues?.default_model_name ?? "",
     model_configurations: [
-      ...formValues.model_configurations.map((model: ModelConfiguration) => ({
-        name: model.name,
-        is_visible: true,
-      })),
+      ...(formValues.model_configurations || []).map(
+        (model: ModelConfiguration) => ({
+          name: model.name,
+          is_visible: true,
+        })
+      ),
     ],
   };
 

@@ -188,7 +188,7 @@ export const MemoizedLink = memo(
 export const MemoizedParagraph = memo(
   function MemoizedParagraph({ className, children }: any) {
     return (
-      <Text mainContentBody className={className}>
+      <Text as="p" mainContentBody className={className}>
         {children}
       </Text>
     );

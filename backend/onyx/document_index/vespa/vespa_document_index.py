@@ -562,18 +562,28 @@ class VespaDocumentIndex(DocumentIndex):
         # user_file_docid_migration_task for Vespa which should be done soon.
         old_doc_id_to_new_doc_id: dict[str, str],
     ) -> None:
+        # WARNING: This method can be called by vespa_metadata_sync_task, which
+        # is kicked off by check_for_vespa_sync_task, notably before a document
+        # has finished indexing. In this way, chunk_count below could be unknown
+        # even for chunks not on the "old" chunk ID system; i.e. there could be
+        # a race condition. Passing in None to _enrich_basic_chunk_info should
+        # handle this, but a higher level TODO might be to not run update at all
+        # on connectors that are still indexing, and therefore do not yet have a
+        # chunk count because update_docs_chunk_count__no_commit has not been
+        # run yet.
         with self._httpx_client_context as httpx_client:
             # Each invocation of this method can contain multiple update requests.
             for update_request in update_requests:
                 # Each update request can correspond to multiple documents.
                 for doc_id in update_request.document_ids:
+                    # NOTE: -1 represents an unknown chunk count.
                     chunk_count = update_request.doc_id_to_chunk_cnt[doc_id]
                     sanitized_doc_id = replace_invalid_doc_id_characters(doc_id)
                     enriched_doc_info = _enrich_basic_chunk_info(
                         index_name=self._index_name,
                         http_client=httpx_client,
                         document_id=sanitized_doc_id,
-                        previous_chunk_count=chunk_count,
+                        previous_chunk_count=chunk_count if chunk_count >= 0 else None,
                         new_chunk_count=0,  # WARNING: This semantically makes no sense and is misusing this function.
                     )
 

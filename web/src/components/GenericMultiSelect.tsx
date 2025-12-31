@@ -47,7 +47,9 @@ export function GenericMultiSelect<
   if (isLoading) {
     return (
       <div className="flex flex-col gap-2 w-full">
-        <Text mainUiAction>{label}</Text>
+        <Text as="p" mainUiAction>
+          {label}
+        </Text>
         <div className="animate-pulse bg-background-neutral-02 h-10 w-full rounded-08" />
       </div>
     );
@@ -56,8 +58,10 @@ export function GenericMultiSelect<
   if (error) {
     return (
       <div className="flex flex-col gap-2 w-full">
-        <Text mainUiAction>{label}</Text>
-        <Text text03 className="text-action-danger-05">
+        <Text as="p" mainUiAction>
+          {label}
+        </Text>
+        <Text as="p" text03 className="text-action-danger-05">
           Failed to load {label.toLowerCase()}. Please try again.
         </Text>
       </div>
@@ -67,8 +71,12 @@ export function GenericMultiSelect<
   if (!items || items.length === 0) {
     return (
       <div className="flex flex-col gap-2 w-full">
-        <Text mainUiAction>{label}</Text>
-        <Text text03>{emptyMessage}</Text>
+        <Text as="p" mainUiAction>
+          {label}
+        </Text>
+        <Text as="p" text03>
+          {emptyMessage}
+        </Text>
       </div>
     );
   }
@@ -99,9 +107,15 @@ export function GenericMultiSelect<
 
   return (
     <div className="flex flex-col gap-2 w-full">
-      <Text mainUiAction>{label}</Text>
+      <Text as="p" mainUiAction>
+        {label}
+      </Text>
 
-      {subtext && <Text text03>{disabled ? disabledMessage : subtext}</Text>}
+      {subtext && (
+        <Text as="p" text03>
+          {disabled ? disabledMessage : subtext}
+        </Text>
+      )}
 
       <div className={cn(disabled && "opacity-50 pointer-events-none")}>
         <SearchMultiSelectDropdown
@@ -134,7 +148,7 @@ export function GenericMultiSelect<
 
       <ErrorMessage name={fieldName} component="div">
         {(msg) => (
-          <Text text03 className="text-action-danger-05">
+          <Text as="p" text03 className="text-action-danger-05">
             {msg}
           </Text>
         )}

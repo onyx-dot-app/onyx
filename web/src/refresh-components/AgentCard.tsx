@@ -35,7 +35,7 @@ function IconLabel({ icon: Icon, children }: IconLabelProps) {
   return (
     <div className="flex flex-row items-center gap-1">
       <Icon className="stroke-text-03 w-3 h-3" />
-      <Text text03 secondaryBody>
+      <Text as="p" text03 secondaryBody>
         {children}
       </Text>
     </div>
@@ -97,7 +97,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                   icon={SvgEdit}
                   tertiary
                   onClick={noProp(() =>
-                    router.push(`/assistants/edit/${agent.id}` as Route)
+                    router.push(`/chat/agents/edit/${agent.id}` as Route)
                   )}
                   tooltip="Edit Agent"
                   className="hidden group-hover/AgentCard:flex"
@@ -114,6 +114,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
             </div>
           </div>
           <Text
+            as="p"
             secondaryBody
             text03
             className="pb-1 px-2 w-full line-clamp-2 truncate whitespace-normal h-[2.2rem] break-words"

@@ -24,7 +24,6 @@ from onyx.llm.llm_provider_options import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.llm_provider_options import VERTEX_LOCATION_KWARG
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.model_response import ModelResponseStream
-from onyx.llm.models import CLAUDE_REASONING_BUDGET_TOKENS
 from onyx.llm.models import OPENAI_REASONING_EFFORT
 from onyx.llm.utils import build_litellm_passthrough_kwargs
 from onyx.llm.utils import is_true_openai_model
@@ -285,20 +284,10 @@ class LitellmLLM(LLM):
         if stream:
             optional_kwargs["stream_options"] = {"include_usage": True}
 
-        if is_reasoning:
-            # Use configured default if not provided (if not set in env, low)
-            reasoning_effort = reasoning_effort or ReasoningEffort(
-                DEFAULT_REASONING_EFFORT
-            )
-
-            if is_claude_model and reasoning_effort != ReasoningEffort.OFF:
-                # Anthropic Claude models use `thinking` with budget_tokens
-                # for extended thinking across all providers
-                optional_kwargs["thinking"] = {
-                    "type": "enabled",
-                    "budget_tokens": CLAUDE_REASONING_BUDGET_TOKENS[reasoning_effort],
-                }
-            elif is_openai_model:
+        # Use configured default if not provided (if not set in env, low)
+        reasoning_effort = reasoning_effort or ReasoningEffort(DEFAULT_REASONING_EFFORT)
+        if is_reasoning and reasoning_effort != ReasoningEffort.OFF:
+            if is_openai_model:
                 # OpenAI API does not accept reasoning params for GPT 5 chat models
                 # (neither reasoning nor reasoning_effort are accepted)
                 # even though they are reasoning models (bug in OpenAI)
@@ -308,6 +297,8 @@ class LitellmLLM(LLM):
                         "summary": "auto",
                     }
             else:
+                # Note that litellm auto maps reasoning_effort to thinking
+                # and budget_tokens for Anthropic Claude models
                 optional_kwargs["reasoning_effort"] = reasoning_effort
 
         if tools:

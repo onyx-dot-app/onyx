@@ -11,6 +11,7 @@ import {
   Packet,
   PacketType,
   SearchToolPacket,
+  StopReason,
 } from "@/app/chat/services/streamingModels";
 import { FullChatState, RendererResult } from "./interfaces";
 import { RendererComponent } from "./renderMessageComponent";
@@ -30,8 +31,9 @@ import {
   ReadDocumentsStepRenderer,
   constructCurrentSearchState,
 } from "./renderers/SearchToolRenderer";
-import { SvgChevronDown, SvgChevronDownSmall } from "@opal/icons";
+import { SvgChevronDown, SvgChevronDownSmall, SvgXCircle } from "@opal/icons";
 import { LoadingSpinner } from "../../chat_search/LoadingSpinner";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 enum DisplayType {
   REGULAR = "regular",
@@ -72,12 +74,14 @@ function ToolItemRow({
   status,
   isLastItem,
   isLoading,
+  isCancelled,
 }: {
   icon: ((props: { size: number }) => JSX.Element) | null;
   content: JSX.Element | string;
   status: string | JSX.Element | null;
   isLastItem: boolean;
   isLoading?: boolean;
+  isCancelled?: boolean;
 }) {
   return (
     <div className="relative">
@@ -97,7 +101,9 @@ function ToolItemRow({
         <div className="flex flex-col items-center w-5">
           <div className="flex-shrink-0 flex items-center justify-center w-5 h-5 bg-background rounded-full">
             {icon ? (
-              <div className={cn(isLoading && "text-shimmer-base")}>
+              <div
+                className={cn(isLoading && !isCancelled && "text-shimmer-base")}
+              >
                 {icon({ size: 14 })}
               </div>
             ) : (
@@ -107,8 +113,12 @@ function ToolItemRow({
         </div>
         <div className={cn("flex-1", !isLastItem && "pb-4")}>
           <Text
+            as="p"
             text02
-            className={cn("text-sm mb-1", isLoading && "loading-text")}
+            className={cn(
+              "text-sm mb-1",
+              isLoading && !isCancelled && "loading-text"
+            )}
           >
             {status}
           </Text>
@@ -123,12 +133,14 @@ function ParallelToolTabs({
   items,
   chatState,
   stopPacketSeen,
+  stopReason,
   shouldStopShimmering,
   handleToolComplete,
 }: {
   items: DisplayItem[];
   chatState: FullChatState;
   stopPacketSeen: boolean;
+  stopReason?: StopReason;
   shouldStopShimmering: boolean;
   handleToolComplete: (turnIndex: number, tabIndex: number) => void;
 }) {
@@ -144,6 +156,7 @@ function ParallelToolTabs({
       packets: Packet[];
       isComplete: boolean;
       hasError: boolean;
+      isCancelled: boolean;
     }[] = [];
     items.forEach((item) => {
       if (!seen.has(item.tab_index)) {
@@ -151,6 +164,8 @@ function ParallelToolTabs({
         // Check if this tool is complete using the helper that handles research agents properly
         const toolComplete = isToolComplete(item.packets);
         const hasError = hasToolError(item.packets);
+        // Check if generation was cancelled by user (via stopReason prop)
+        const isCancelled = stopReason === StopReason.USER_CANCELLED;
         tabs.push({
           tab_index: item.tab_index,
           name: getToolName(item.packets),
@@ -158,6 +173,7 @@ function ParallelToolTabs({
           packets: item.packets,
           isComplete: toolComplete,
           hasError,
+          isCancelled,
         });
       }
     });
@@ -264,16 +280,29 @@ function ParallelToolTabs({
                           )}
                         />
                       )}
-                      {tab.isComplete && !isLoading && !tab.hasError && (
-                        <FiCheckCircle
+                      {tab.isCancelled && !isLoading && !tab.hasError && (
+                        <SvgXCircle
+                          size={12}
                           className={cn(
-                            "w-3 h-3",
                             isActive && isExpanded
                               ? "text-white opacity-70"
                               : "text-text-400"
                           )}
                         />
                       )}
+                      {tab.isComplete &&
+                        !isLoading &&
+                        !tab.hasError &&
+                        !tab.isCancelled && (
+                          <FiCheckCircle
+                            className={cn(
+                              "w-3 h-3",
+                              isActive && isExpanded
+                                ? "text-white opacity-70"
+                                : "text-text-400"
+                            )}
+                          />
+                        )}
                     </button>
                     {/* Active indicator overlay - only for active tab when expanded */}
                     {isExpanded && (
@@ -295,43 +324,64 @@ function ParallelToolTabs({
 
         {/* Navigation arrows - navigate between tabs */}
         <div className="flex items-center gap-0.5 ml-2 flex-shrink-0">
-          <button
-            onClick={goToPreviousTab}
+          <SimpleTooltip
+            tooltip="Previous"
+            side="top"
             disabled={!canGoPrevious || !isExpanded}
-            className={cn(
-              "p-1 rounded hover:bg-background-subtle-hover transition-colors",
-              (!canGoPrevious || !isExpanded) && "opacity-30 cursor-not-allowed"
-            )}
-            aria-label="Previous tab"
           >
-            <FiChevronLeft className="w-4 h-4" />
-          </button>
-          <button
-            onClick={goToNextTab}
+            <button
+              onClick={goToPreviousTab}
+              disabled={!canGoPrevious || !isExpanded}
+              className={cn(
+                "p-1 rounded transition-colors",
+                canGoPrevious && isExpanded
+                  ? "hover:bg-background-tint-02 active:bg-background-tint-00"
+                  : "opacity-30 cursor-not-allowed"
+              )}
+              aria-label="Previous tab"
+            >
+              <FiChevronLeft className="w-4 h-4" />
+            </button>
+          </SimpleTooltip>
+          <SimpleTooltip
+            tooltip="Next"
+            side="top"
             disabled={!canGoNext || !isExpanded}
-            className={cn(
-              "p-1 rounded hover:bg-background-subtle-hover transition-colors",
-              (!canGoNext || !isExpanded) && "opacity-30 cursor-not-allowed"
-            )}
-            aria-label="Next tab"
           >
-            <FiChevronRight className="w-4 h-4" />
-          </button>
+            <button
+              onClick={goToNextTab}
+              disabled={!canGoNext || !isExpanded}
+              className={cn(
+                "p-1 rounded transition-colors",
+                canGoNext && isExpanded
+                  ? "hover:bg-background-tint-02 active:bg-background-tint-00"
+                  : "opacity-30 cursor-not-allowed"
+              )}
+              aria-label="Next tab"
+            >
+              <FiChevronRight className="w-4 h-4" />
+            </button>
+          </SimpleTooltip>
 
           {/* Collapse/expand button */}
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="flex-shrink-0 p-1 rounded hover:bg-background-subtle-hover transition-colors ml-0.5"
-            aria-label={isExpanded ? "Collapse" : "Expand"}
-            aria-expanded={isExpanded}
+          <SimpleTooltip
+            tooltip={isExpanded ? "Collapse" : "Expand"}
+            side="top"
           >
-            <SvgChevronDown
-              className={cn(
-                "w-4 h-4 stroke-text-400 transition-transform duration-150 ease-in-out",
-                isExpanded && "rotate-[-180deg]"
-              )}
-            />
-          </button>
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="flex-shrink-0 p-1 rounded hover:bg-background-tint-02 active:bg-background-tint-00 transition-colors ml-0.5"
+              aria-label={isExpanded ? "Collapse" : "Expand"}
+              aria-expanded={isExpanded}
+            >
+              <SvgChevronDown
+                className={cn(
+                  "w-4 h-4 stroke-text-400 transition-transform duration-150 ease-in-out",
+                  isExpanded && "rotate-[-180deg]"
+                )}
+              />
+            </button>
+          </SimpleTooltip>
         </div>
       </div>
 
@@ -352,9 +402,14 @@ function ParallelToolTabs({
                   key={item.key}
                   packets={item.packets as SearchToolPacket[]}
                   isActive={!shouldStopShimmering}
+                  isCancelled={stopReason === StopReason.USER_CANCELLED}
                 >
                   {(props) => (
-                    <ToolItemRow {...props} isLastItem={isLastItem} />
+                    <ToolItemRow
+                      {...props}
+                      isLastItem={isLastItem}
+                      isCancelled={stopReason === StopReason.USER_CANCELLED}
+                    />
                   )}
                 </SourceRetrievalStepRenderer>
               );
@@ -364,9 +419,14 @@ function ParallelToolTabs({
                   key={item.key}
                   packets={item.packets as SearchToolPacket[]}
                   isActive={!shouldStopShimmering}
+                  isCancelled={stopReason === StopReason.USER_CANCELLED}
                 >
                   {(props) => (
-                    <ToolItemRow {...props} isLastItem={isLastItem} />
+                    <ToolItemRow
+                      {...props}
+                      isLastItem={isLastItem}
+                      isCancelled={stopReason === StopReason.USER_CANCELLED}
+                    />
                   )}
                 </ReadDocumentsStepRenderer>
               );
@@ -385,7 +445,11 @@ function ParallelToolTabs({
                   useShortRenderer={false}
                 >
                   {(props) => (
-                    <ToolItemRow {...props} isLastItem={isLastItem} />
+                    <ToolItemRow
+                      {...props}
+                      isLastItem={isLastItem}
+                      isCancelled={stopReason === StopReason.USER_CANCELLED}
+                    />
                   )}
                 </RendererComponent>
               );
@@ -456,6 +520,7 @@ function ExpandedToolItem({
         <div className={cn("flex-1", !isLastItem && "pb-4")}>
           <div className="flex mb-1">
             <Text
+              as="p"
               text02
               className={cn(
                 "text-sm flex items-center gap-1",
@@ -489,6 +554,7 @@ export default function MultiToolRenderer({
   isComplete,
   isFinalAnswerComing,
   stopPacketSeen,
+  stopReason,
   onAllToolsDisplayed,
   isStreaming,
   expectedBranchesPerTurn,
@@ -498,6 +564,7 @@ export default function MultiToolRenderer({
   isComplete: boolean;
   isFinalAnswerComing: boolean;
   stopPacketSeen: boolean;
+  stopReason?: StopReason;
   onAllToolsDisplayed?: () => void;
   isStreaming?: boolean;
   // Map of turn_index -> expected number of parallel branches (from TopLevelBranching packet)
@@ -624,6 +691,7 @@ export default function MultiToolRenderer({
           key={item.key}
           packets={item.packets as SearchToolPacket[]}
           isActive={isStreaming}
+          isCancelled={stopReason === StopReason.USER_CANCELLED}
         >
           {childrenCallback}
         </SourceRetrievalStepRenderer>
@@ -634,6 +702,7 @@ export default function MultiToolRenderer({
           key={item.key}
           packets={item.packets as SearchToolPacket[]}
           isActive={isStreaming}
+          isCancelled={stopReason === StopReason.USER_CANCELLED}
         >
           {childrenCallback}
         </ReadDocumentsStepRenderer>
@@ -730,6 +799,7 @@ export default function MultiToolRenderer({
                       items={turnGroup.items}
                       chatState={chatState}
                       stopPacketSeen={stopPacketSeen}
+                      stopReason={stopReason}
                       shouldStopShimmering={shouldStopShimmering}
                       handleToolComplete={handleToolComplete}
                     />
@@ -777,6 +847,9 @@ export default function MultiToolRenderer({
                               status={status}
                               isLastItem={isLastItem}
                               isLoading={isLoading}
+                              isCancelled={
+                                stopReason === StopReason.USER_CANCELLED
+                              }
                             />
                           )
                         )}
@@ -800,7 +873,7 @@ export default function MultiToolRenderer({
         className="flex flex-row w-fit items-center group/StepsButton select-none"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <Text text03 className="group-hover/StepsButton:text-text-04">
+        <Text as="p" text03 className="group-hover/StepsButton:text-text-04">
           {displayItems.length} steps
         </Text>
         <SvgChevronDownSmall
@@ -838,6 +911,7 @@ export default function MultiToolRenderer({
                       items={turnGroup.items}
                       chatState={chatState}
                       stopPacketSeen={stopPacketSeen}
+                      stopReason={stopReason}
                       shouldStopShimmering={true}
                       handleToolComplete={handleToolComplete}
                     />

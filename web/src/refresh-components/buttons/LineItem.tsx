@@ -78,7 +78,7 @@ export interface LineItemProps extends React.HTMLAttributes<HTMLButtonElement> {
  * </LineItem>
  *
  * // With right content
- * <LineItem icon={SvgKey} rightChildren={<Text text03>⌘K</Text>}>
+ * <LineItem icon={SvgKey} rightChildren={<Text as="p" text03>⌘K</Text>}>
  *   Keyboard Shortcuts
  * </LineItem>
  *
@@ -160,7 +160,7 @@ const LineItem = React.forwardRef<HTMLButtonElement, LineItemProps>(
               </>
             )}
 
-            <Text secondaryBody text03>
+            <Text as="p" secondaryBody text03>
               {description}
             </Text>
           </div>

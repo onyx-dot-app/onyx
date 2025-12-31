@@ -11,7 +11,7 @@ export function UnconfiguredLlmProviderText({
   return (
     <>
       {shouldShowConfigurationNeeded && (
-        <Text mainUiBody text05 className="text-center w-full pb-2">
+        <Text as="p" mainUiBody text05 className="text-center w-full pb-2">
           Please note that you have not yet configured an LLM provider. You can
           configure one{" "}
           <button

@@ -149,7 +149,7 @@ export function ToolSelector({
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-1.5 mb-2">
-        <Text mainUiBody text04>
+        <Text as="p" mainUiBody text04>
           Built-in Actions
         </Text>
         <HoverPopup
@@ -261,7 +261,7 @@ export function ToolSelector({
 
       {customTools.length > 0 && (
         <>
-          <Text mainUiBody text04 className="mb-2">
+          <Text as="p" mainUiBody text04 className="mb-2">
             OpenAPI Actions
           </Text>
           <MemoizedToolList tools={customTools} />
@@ -270,7 +270,7 @@ export function ToolSelector({
 
       {Object.keys(mcpToolsByServer).length > 0 && (
         <>
-          <Text mainUiBody text04 className="mb-2">
+          <Text as="p" mainUiBody text04 className="mb-2">
             MCP Actions
           </Text>
           {Object.entries(mcpToolsByServer).map(([serverId, serverTools]) => {

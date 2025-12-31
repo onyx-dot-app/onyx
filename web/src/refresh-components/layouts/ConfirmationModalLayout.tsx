@@ -28,11 +28,13 @@ export default function ConfirmationModalLayout({
 
   return (
     <Modal open onOpenChange={(isOpen) => !isOpen && onClose?.()}>
-      <Modal.Content mini>
+      <Modal.Content mini className="z-confirmation">
         <Modal.Header icon={icon} title={title} onClose={onClose} />
         <Modal.Body className="p-4 bg-background-tint-01">
           {typeof children === "string" ? (
-            <Text text03>{children}</Text>
+            <Text as="p" text03>
+              {children}
+            </Text>
           ) : (
             children
           )}
