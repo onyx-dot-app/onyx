@@ -573,7 +573,7 @@ def fetch_auto_mode_providers(db_session: Session) -> list[LLMProviderModel]:
 def sync_auto_mode_models(
     db_session: Session,
     provider: LLMProviderModel,
-    llm_reccomendations: LLMRecommendations,
+    llm_recommendations: LLMRecommendations,
 ) -> int:
     """Sync models from GitHub config to a provider in Auto mode.
 
@@ -596,7 +596,7 @@ def sync_auto_mode_models(
 
     # Build the list of all visible models from the config
     # All models in the config are visible (default + additional_visible_models)
-    recommended_visible_models = llm_reccomendations.get_visible_models(provider.name)
+    recommended_visible_models = llm_recommendations.get_visible_models(provider.name)
     recommended_visible_model_names = [
         model.name for model in recommended_visible_models
     ]
@@ -645,7 +645,7 @@ def sync_auto_mode_models(
             changes += 1
 
     # In Auto mode, default model is always set from GitHub config
-    default_model = llm_reccomendations.get_default_model(provider.name)
+    default_model = llm_recommendations.get_default_model(provider.name)
     if default_model and provider.default_model_name != default_model.name:
         provider.default_model_name = default_model.name
         changes += 1
