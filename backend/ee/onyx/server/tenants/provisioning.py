@@ -47,9 +47,11 @@ from onyx.llm.well_known_providers.constants import OPENROUTER_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.llm.well_known_providers.constants import VERTEXAI_PROVIDER_NAME
-from onyx.llm.well_known_providers.llm_provider_options import fetch_models_for_provider
 from onyx.llm.well_known_providers.llm_provider_options import (
     get_reccomendations,
+)
+from onyx.llm.well_known_providers.llm_provider_options import (
+    model_configurations_for_provider,
 )
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
@@ -272,33 +274,21 @@ async def rollback_tenant_provisioning(tenant_id: str) -> None:
         logger.info(f"Tenant rollback completed successfully for tenant {tenant_id}")
 
 
-def _build_model_configurations(
+def _build_model_configuration_upsert_requests(
     provider_name: str,
     recommendations: LLMRecommendations,
 ) -> list[ModelConfigurationUpsertRequest]:
-    """Build model configurations for a provider using recommendations.
-
-    Args:
-        provider_name: The provider name (e.g., "openai", "anthropic")
-        recommendations: LLM recommendations from JSON config
-
-    Returns:
-        List of ModelConfigurationUpsertRequest with visibility set based on recommendations
-    """
-    # Get all known model names for this provider
-    all_model_names = fetch_models_for_provider(provider_name)
-
-    # Get visible model names from recommendations
-    visible_models = recommendations.get_visible_models(provider_name)
-    visible_model_names = {m.name for m in visible_models}
-
+    model_configurations = model_configurations_for_provider(
+        provider_name, recommendations
+    )
     return [
         ModelConfigurationUpsertRequest(
-            name=model_name,
-            is_visible=model_name in visible_model_names,
-            max_input_tokens=None,
+            name=model_configuration.name,
+            is_visible=model_configuration.is_visible,
+            max_input_tokens=model_configuration.max_input_tokens,
+            supports_image_input=model_configuration.supports_image_input,
         )
-        for model_name in all_model_names
+        for model_configuration in model_configurations
     ]
 
 
@@ -319,7 +309,7 @@ def configure_default_api_keys(db_session: Session) -> None:
             provider=ANTHROPIC_PROVIDER_NAME,
             api_key=ANTHROPIC_DEFAULT_API_KEY,
             default_model_name=default_model_name,
-            model_configurations=_build_model_configurations(
+            model_configurations=_build_model_configuration_upsert_requests(
                 ANTHROPIC_PROVIDER_NAME, recommendations
             ),
             api_key_changed=True,
@@ -345,7 +335,7 @@ def configure_default_api_keys(db_session: Session) -> None:
             provider=OPENAI_PROVIDER_NAME,
             api_key=OPENAI_DEFAULT_API_KEY,
             default_model_name=default_model_name,
-            model_configurations=_build_model_configurations(
+            model_configurations=_build_model_configuration_upsert_requests(
                 OPENAI_PROVIDER_NAME, recommendations
             ),
             api_key_changed=True,
@@ -377,7 +367,7 @@ def configure_default_api_keys(db_session: Session) -> None:
             provider=VERTEXAI_PROVIDER_NAME,
             custom_config=custom_config,
             default_model_name=default_model_name,
-            model_configurations=_build_model_configurations(
+            model_configurations=_build_model_configuration_upsert_requests(
                 VERTEXAI_PROVIDER_NAME, recommendations
             ),
             api_key_changed=True,

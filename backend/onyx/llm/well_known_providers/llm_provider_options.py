@@ -16,7 +16,6 @@ from onyx.llm.well_known_providers.constants import OLLAMA_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENROUTER_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import VERTEXAI_PROVIDER_NAME
-from onyx.llm.well_known_providers.models import SimpleKnownModel
 from onyx.llm.well_known_providers.models import WellKnownLLMProviderDescriptor
 from onyx.server.manage.llm.models import ModelConfigurationView
 from onyx.utils.logger import setup_logger
@@ -210,41 +209,37 @@ def get_vertexai_model_names() -> list[str]:
     )
 
 
+def model_configurations_for_provider(
+    provider_name: str, llm_recommendations: LLMRecommendations
+) -> list[ModelConfigurationView]:
+    recommended_visible_models = llm_recommendations.get_visible_models(provider_name)
+    recommended_visible_models_names = [m.name for m in recommended_visible_models]
+    return [
+        ModelConfigurationView(
+            name=model_name,
+            is_visible=model_name in recommended_visible_models_names,
+            max_input_tokens=get_max_input_tokens(model_name, provider_name),
+            supports_image_input=model_supports_image_input(model_name, provider_name),
+        )
+        for model_name in set(fetch_models_for_provider(provider_name))
+        | set(recommended_visible_models_names)
+    ]
+
+
 def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
     llm_recommendations = get_reccomendations()
 
     well_known_llms = []
     for provider_name in LlmProviderNames:
-        known_model_names = fetch_models_for_provider(provider_name)
-        recommended_visible_models = llm_recommendations.get_visible_models(
-            provider_name
+        model_configurations = model_configurations_for_provider(
+            provider_name, llm_recommendations
         )
-        recommended_visible_models_names = [m.name for m in recommended_visible_models]
-        recommended_default_model = llm_recommendations.get_default_model(provider_name)
-
-        model_configurations = [
-            ModelConfigurationView(
-                name=model_name,
-                is_visible=model_name in recommended_visible_models_names,
-                max_input_tokens=get_max_input_tokens(model_name, provider_name),
-                supports_image_input=model_supports_image_input(
-                    model_name, provider_name
-                ),
-            )
-            for model_name in known_model_names
-        ]
-
         well_known_llms.append(
             WellKnownLLMProviderDescriptor(
                 name=provider_name,
                 known_models=model_configurations,
-                recommended_default_model=(
-                    SimpleKnownModel(
-                        name=recommended_default_model.name,
-                        display_name=recommended_default_model.display_name,
-                    )
-                    if recommended_default_model
-                    else None
+                recommended_default_model=llm_recommendations.get_default_model(
+                    provider_name
                 ),
             )
         )
