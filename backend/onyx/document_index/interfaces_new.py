@@ -37,6 +37,17 @@ __all__ = [
 ]
 
 
+class TenantState(BaseModel):
+    """
+    Captures the tenant-related state for an instance of DocumentIndex.
+    """
+
+    model_config = {"frozen": True}
+
+    tenant_id: str
+    multitenant: bool
+
+
 class DocumentInsertionRecord(BaseModel):
     """
     Result of indexing a document.
@@ -186,9 +197,9 @@ class Indexable(abc.ABC):
                 cleaning / updating.
 
         Returns:
-            List of document IDs which map to unique documents and are used for
-            deduping chunks when updating, as well as if the document is newly
-            indexed or already existed and just updated.
+            List of document IDs which map to unique documents as well as if the
+                document is newly indexed or had already existed and was just
+                updated.
         """
         raise NotImplementedError
 
@@ -211,6 +222,8 @@ class Deletable(abc.ABC):
         """
         Hard deletes all of the chunks for the corresponding document in the
         document index.
+
+        No chunks will be deleted if the document does not exist.
 
         Args:
             document_id: The unique identifier for the document as represented

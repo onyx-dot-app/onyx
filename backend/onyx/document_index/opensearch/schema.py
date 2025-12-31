@@ -79,6 +79,8 @@ class DocumentChunk(BaseModel):
 
     tenant_id: str | None = None
 
+    # TODO(andrei): Semantic identifier?
+
     def get_opensearch_doc_chunk_id(self) -> str:
         """
         Returns a unique identifier for the chunk.

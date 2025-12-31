@@ -11,7 +11,7 @@ from onyx.document_index.opensearch.schema import DocumentChunk
 from onyx.utils.logger import setup_logger
 
 
-logger = setup_logger()
+logger = setup_logger(__name__)
 
 
 class OpenSearchIndexingResult(StrEnum):
@@ -168,6 +168,7 @@ class OpenSearchClient:
                 )
 
     def delete_document(self) -> None:
+        # TODO(andrei): For OS delete returns 404 if not found.
         raise NotImplementedError("Not implemented.")
 
     def update_document(self) -> None:

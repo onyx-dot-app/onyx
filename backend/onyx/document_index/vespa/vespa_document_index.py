@@ -28,6 +28,7 @@ from onyx.document_index.interfaces_new import DocumentInsertionRecord
 from onyx.document_index.interfaces_new import DocumentSectionRequest
 from onyx.document_index.interfaces_new import IndexingMetadata
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
+from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.vespa.chunk_retrieval import batch_search_api_retrieval
 from onyx.document_index.vespa.chunk_retrieval import (
     parallel_visit_api_retrieval,
@@ -60,25 +61,11 @@ from onyx.utils.logger import setup_logger
 from shared_configs.model_server_models import Embedding
 
 
-logger = setup_logger()
+logger = setup_logger(__name__)
 # Set the logging level to WARNING to ignore INFO and DEBUG logs from httpx. By
 # default it emits INFO-level logs for every request.
 httpx_logger = logging.getLogger("httpx")
 httpx_logger.setLevel(logging.WARNING)
-
-
-class TenantState(BaseModel):
-    """
-    Captures the tenant-related state for an instance of VespaDocumentIndex.
-
-    TODO(andrei): If we find that we need this for Opensearch too, just move
-    this to interfaces_new.py.
-    """
-
-    model_config = {"frozen": True}
-
-    tenant_id: str
-    multitenant: bool
 
 
 def _enrich_basic_chunk_info(
