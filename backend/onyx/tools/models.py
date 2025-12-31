@@ -142,16 +142,6 @@ class SearchToolOverrideKwargs(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
-class SlackFederatedSearchToolOverrideKwargs(BaseModel):
-    """Override kwargs for SlackFederatedSearchTool."""
-
-    starting_citation_num: int
-    query: str
-    max_llm_chunks: int | None = MAX_CHUNKS_FED_TO_CHAT
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-
 class ChatFile(BaseModel):
     """File from a chat session that can be passed to tools."""
 

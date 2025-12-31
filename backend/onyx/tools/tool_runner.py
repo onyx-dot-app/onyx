@@ -12,15 +12,11 @@ from onyx.tools.interface import Tool
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tools.models import OpenURLToolOverrideKwargs
 from onyx.tools.models import SearchToolOverrideKwargs
-from onyx.tools.models import SlackFederatedSearchToolOverrideKwargs
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
 from onyx.tools.models import WebSearchToolOverrideKwargs
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
-from onyx.tools.tool_implementations.search.slack_federated_search_tool import (
-    SlackFederatedSearchTool,
-)
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tracing.framework.create import function_span
 from onyx.tracing.framework.spans import SpanError
@@ -184,27 +180,6 @@ def run_tool_calls(
 
     tools_by_name = {tool.name: tool for tool in tools}
 
-    # Auto-inject SlackFederatedSearchTool when SearchTool is called
-    # so Slack is searched in parallel with the main document index
-    if (
-        SlackFederatedSearchTool.NAME in tools_by_name
-        and any(tc.tool_name == SearchTool.NAME for tc in merged_tool_calls)
-        and not any(
-            tc.tool_name == SlackFederatedSearchTool.NAME for tc in merged_tool_calls
-        )
-    ):
-        # Find the SearchTool call to copy its placement
-        search_call = next(
-            tc for tc in merged_tool_calls if tc.tool_name == SearchTool.NAME
-        )
-        slack_tool_call = ToolCallKickoff(
-            tool_call_id=f"{search_call.tool_call_id}_slack",
-            tool_name=SlackFederatedSearchTool.NAME,
-            tool_args={},  # Query comes from override_kwargs
-            placement=search_call.placement,
-        )
-        merged_tool_calls.append(slack_tool_call)
-
     # Get starting citation number from citation processor to avoid conflicts with project files
     starting_citation_num = next_citation_num
 
@@ -242,7 +217,6 @@ def run_tool_calls(
             SearchToolOverrideKwargs
             | WebSearchToolOverrideKwargs
             | OpenURLToolOverrideKwargs
-            | SlackFederatedSearchToolOverrideKwargs
             | None
         ) = None
 
@@ -273,16 +247,6 @@ def run_tool_calls(
             override_kwargs = OpenURLToolOverrideKwargs(
                 starting_citation_num=starting_citation_num,
                 citation_mapping=url_to_citation,
-            )
-            starting_citation_num += 100
-
-        elif isinstance(tool, SlackFederatedSearchTool):
-            if last_user_message is None:
-                raise ValueError("No user message found in message history")
-
-            override_kwargs = SlackFederatedSearchToolOverrideKwargs(
-                starting_citation_num=starting_citation_num,
-                query=last_user_message,
             )
             starting_citation_num += 100
 

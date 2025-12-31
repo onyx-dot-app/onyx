@@ -10,9 +10,6 @@ from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
-from onyx.tools.tool_implementations.search.slack_federated_search_tool import (
-    SlackFederatedSearchTool,
-)
 from onyx.tools.tool_implementations.web_search.web_search_tool import (
     WebSearchTool,
 )
@@ -44,7 +41,6 @@ CITEABLE_TOOLS_NAMES: list[str] = [
     SearchTool.NAME,
     WebSearchTool.NAME,
     OpenURLTool.NAME,
-    SlackFederatedSearchTool.NAME,
 ]
 
 

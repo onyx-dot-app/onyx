@@ -12,12 +12,10 @@ from onyx.configs.app_configs import AZURE_IMAGE_API_KEY
 from onyx.configs.app_configs import AZURE_IMAGE_API_VERSION
 from onyx.configs.app_configs import AZURE_IMAGE_DEPLOYMENT_NAME
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
-from onyx.configs.constants import FederatedConnectorSource
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.models import BaseFilters
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
-from onyx.db.federated import list_federated_connector_oauth_tokens
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.mcp import get_all_mcp_tools_for_server
 from onyx.db.mcp import get_mcp_server_by_id
@@ -26,7 +24,6 @@ from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.oauth_config import get_oauth_config
 from onyx.db.search_settings import get_current_search_settings
-from onyx.db.slack_bot import fetch_slack_bots
 from onyx.db.tools import get_builtin_tool
 from onyx.document_index.factory import get_default_document_index
 from onyx.llm.constants import LlmProviderNames
@@ -48,9 +45,6 @@ from onyx.tools.tool_implementations.open_url.open_url_tool import (
 )
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
-from onyx.tools.tool_implementations.search.slack_federated_search_tool import (
-    SlackFederatedSearchTool,
-)
 from onyx.tools.tool_implementations.web_search.web_search_tool import (
     WebSearchTool,
 )
@@ -214,108 +208,10 @@ def construct_tools(
                     user_selected_filters=search_tool_config.user_selected_filters,
                     project_id=search_tool_config.project_id,
                     bypass_acl=search_tool_config.bypass_acl,
+                    slack_context=search_tool_config.slack_context,
                 )
 
                 tool_dict[db_tool_model.id] = [search_tool]
-
-                # Add SlackFederatedSearchTool if Slack access is available
-                # (runs in parallel with SearchTool)
-                slack_federated_tool_created = False
-
-                # Case 1: Slack bot context
-                if search_tool_config.slack_context:
-                    try:
-                        slack_bots = fetch_slack_bots(db_session)
-                        # Find an enabled bot with user_token (preferred) or bot_token
-                        tenant_slack_bot = next(
-                            (
-                                bot
-                                for bot in slack_bots
-                                if bot.enabled and bot.user_token
-                            ),
-                            None,
-                        )
-                        if not tenant_slack_bot:
-                            # Fall back to any enabled bot
-                            tenant_slack_bot = next(
-                                (bot for bot in slack_bots if bot.enabled), None
-                            )
-
-                        if tenant_slack_bot:
-                            access_token = (
-                                tenant_slack_bot.user_token
-                                or tenant_slack_bot.bot_token
-                            )
-                            slack_federated_tool = SlackFederatedSearchTool(
-                                tool_id=db_tool_model.id,  # Share tool_id with SearchTool
-                                db_session=db_session,
-                                emitter=emitter,
-                                user=user,
-                                persona=persona,
-                                slack_context=search_tool_config.slack_context,
-                                bot_token=tenant_slack_bot.bot_token,
-                                access_token=access_token,
-                                team_id=None,  # Will be fetched by slack_retrieval
-                                entities={},  # Default entities
-                            )
-                            # Add to the same tool_id list so they run together
-                            tool_dict[db_tool_model.id].append(slack_federated_tool)
-                            slack_federated_tool_created = True
-                            logger.debug(
-                                "Added SlackFederatedSearchTool for Slack bot context"
-                            )
-                        else:
-                            logger.warning(
-                                "No enabled Slack bot found, skipping SlackFederatedSearchTool"
-                            )
-                    except Exception as e:
-                        logger.warning(
-                            f"Could not create SlackFederatedSearchTool for bot context: {e}"
-                        )
-
-                # Case 2: Web user with Slack federated OAuth
-                if not slack_federated_tool_created and user:
-                    try:
-                        # Check if user has Slack federated OAuth tokens
-                        federated_oauth_tokens = list_federated_connector_oauth_tokens(
-                            db_session, user.id
-                        )
-                        slack_oauth_token = next(
-                            (
-                                token
-                                for token in federated_oauth_tokens
-                                if token.federated_connector.source
-                                == FederatedConnectorSource.FEDERATED_SLACK
-                            ),
-                            None,
-                        )
-
-                        if slack_oauth_token:
-                            # Get entity config from the federated connector
-                            entities = (
-                                slack_oauth_token.federated_connector.config or {}
-                            )
-                            slack_federated_tool = SlackFederatedSearchTool(
-                                tool_id=db_tool_model.id,  # Share tool_id with SearchTool
-                                db_session=db_session,
-                                emitter=emitter,
-                                user=user,
-                                persona=persona,
-                                slack_context=None,  # No bot context for web users
-                                bot_token=None,
-                                access_token=slack_oauth_token.token,
-                                team_id=None,  # Will be fetched by slack_retrieval
-                                entities=entities,
-                            )
-                            # Add to the same tool_id list so they run together
-                            tool_dict[db_tool_model.id].append(slack_federated_tool)
-                            logger.debug(
-                                "Added SlackFederatedSearchTool for user OAuth"
-                            )
-                    except Exception as e:
-                        logger.warning(
-                            f"Could not create SlackFederatedSearchTool for user OAuth: {e}"
-                        )
 
             # Handle Image Generation Tool
             elif tool_cls.__name__ == ImageGenerationTool.__name__:
@@ -503,6 +399,7 @@ def construct_tools(
 
         search_settings = get_current_search_settings(db_session)
         document_index = get_default_document_index(search_settings, None)
+
         search_tool = SearchTool(
             tool_id=search_tool_db_model.id,
             db_session=db_session,
@@ -514,6 +411,7 @@ def construct_tools(
             user_selected_filters=search_tool_config.user_selected_filters,
             project_id=search_tool_config.project_id,
             bypass_acl=search_tool_config.bypass_acl,
+            slack_context=search_tool_config.slack_context,
         )
 
         tool_dict[search_tool_db_model.id] = [search_tool]
