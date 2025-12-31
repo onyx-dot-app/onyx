@@ -16,6 +16,9 @@ import InputDatePickerField from "@/refresh-components/form/InputDatePickerField
 import Separator from "@/refresh-components/Separator";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { useFormikContext } from "formik";
+import LLMSelector from "@/components/llm/LLMSelector";
+import { parseLlmDescriptor, structureValue } from "@/lib/llm/utils";
+import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 import {
   STARTER_MESSAGES_EXAMPLES,
   MAX_CHARACTERS_STARTER_MESSAGE,
@@ -460,6 +463,7 @@ export default function AgentEditorPage({
 
   const { mcpData } = useMcpServers();
   const { openApiTools: openApiToolsRaw } = useOpenApiTools();
+  const { llmProviders } = useLLMProviders(existingAgent?.id);
   const mcpServers = mcpData?.mcp_servers ?? [];
   const openApiTools = openApiToolsRaw ?? [];
 
@@ -527,6 +531,10 @@ export default function AgentEditorPage({
     user_file_ids: existingAgent?.user_file_ids ?? [],
 
     // Advanced
+    llm_model_provider_override:
+      existingAgent?.llm_model_provider_override ?? null,
+    llm_model_version_override:
+      existingAgent?.llm_model_version_override ?? null,
     knowledge_cutoff_date: existingAgent?.search_start_date
       ? new Date(existingAgent.search_start_date)
       : null,
@@ -637,6 +645,8 @@ export default function AgentEditorPage({
       ),
 
     // Advanced
+    llm_model_provider_override: Yup.string().nullable().optional(),
+    llm_model_version_override: Yup.string().nullable().optional(),
     knowledge_cutoff_date: Yup.date().nullable().optional(),
     replace_base_system_prompt: Yup.boolean(),
     reminders: Yup.string().optional(),
@@ -739,8 +749,8 @@ export default function AgentEditorPage({
         // recency_bias: ...,
         // llm_filter_extraction: ...,
         llm_relevance_filter: false,
-        llm_model_provider_override: null,
-        llm_model_version_override: null,
+        llm_model_provider_override: values.llm_model_provider_override || null,
+        llm_model_version_override: values.llm_model_version_override || null,
         starter_messages: finalStarterMessages,
         users: undefined, // TODO: Handle restricted access users
         groups: [], // TODO: Handle groups
@@ -1297,6 +1307,63 @@ export default function AgentEditorPage({
                       >
                         <Section>
                           <Card>
+                            <InputLayouts.Horizontal
+                              name="llm_model"
+                              label="Default Model"
+                              description="Select the LLM model to use for this agent. If not set, the user's default model will be used."
+                            >
+                              {llmProviders && llmProviders.length > 0 ? (
+                                <LLMSelector
+                                  llmProviders={llmProviders}
+                                  currentLlm={
+                                    values.llm_model_version_override &&
+                                    values.llm_model_provider_override
+                                      ? (() => {
+                                          const provider = llmProviders.find(
+                                            (p) =>
+                                              p.name ===
+                                              values.llm_model_provider_override
+                                          );
+                                          return structureValue(
+                                            values.llm_model_provider_override,
+                                            provider?.provider || "",
+                                            values.llm_model_version_override
+                                          );
+                                        })()
+                                      : null
+                                  }
+                                  onSelect={(selected) => {
+                                    if (selected === null) {
+                                      setFieldValue(
+                                        "llm_model_version_override",
+                                        null
+                                      );
+                                      setFieldValue(
+                                        "llm_model_provider_override",
+                                        null
+                                      );
+                                    } else {
+                                      const { modelName, name } =
+                                        parseLlmDescriptor(selected);
+                                      if (modelName && name) {
+                                        setFieldValue(
+                                          "llm_model_version_override",
+                                          modelName
+                                        );
+                                        setFieldValue(
+                                          "llm_model_provider_override",
+                                          name
+                                        );
+                                      }
+                                    }
+                                  }}
+                                />
+                              ) : (
+                                <div className="text-sm text-text-secondary">
+                                  No LLM providers available
+                                </div>
+                              )}
+                            </InputLayouts.Horizontal>
                             <InputLayouts.Horizontal
                               name="knowledge_cutoff_date"
                               label="Knowledge Cutoff Date"
