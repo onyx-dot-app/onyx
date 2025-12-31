@@ -24,6 +24,13 @@ class LlmProviderNames(str, Enum):
     OLLAMA_CHAT = "ollama_chat"
     LITELLM_PROXY = "litellm_proxy"
 
+    def __str__(self) -> str:
+        """Needed so things like:
+
+        f"{LlmProviderNames.OPENAI}/" gives back "openai/" instead of "LlmProviderNames.OPENAI/"
+        """
+        return self.value
+
 
 # Proper capitalization for known providers and vendors
 PROVIDER_DISPLAY_NAMES: dict[str, str] = {
