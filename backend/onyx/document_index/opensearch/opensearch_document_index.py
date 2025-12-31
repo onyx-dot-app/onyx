@@ -37,51 +37,70 @@ logger = setup_logger(__name__)
 def _convert_opensearch_chunk_to_inference_chunk_uncleaned(
     chunk: DocumentChunk,
 ) -> InferenceChunkUncleaned:
+    # we will have niche feature regressions
     return InferenceChunkUncleaned(
         chunk_id=chunk.chunk_index,
         # blurb TODO(andrei) required
+        # top of doc, we use it in the ui, so needed for now but we should show match highlights
         blurb="",
         content=chunk.content,
         # source_links TODO(andrei): This one is weird, the typing is
         # source_links: dict[int, str] | None, comment is: Holds the link and
         # the offsets into the raw Chunk text.
+        # files are the only connector that is weird
         source_links=None,
         image_file_id=chunk.image_file_name,
         # section_continuation TODO(andrei) required
+        # dont think we need that anymore. if section needed to be split into diff chunks. every connector gives back sections.
+        # what is a section? click on citation, brings to right place in doc
+        # each chunk has its own link?
         section_continuation=False,
         document_id=chunk.document_id,
         source_type=DocumentSource(chunk.source_type),
         # semantic_identifier TODO(andrei) required
+        # should never be none
         semantic_identifier=(
             chunk.semantic_identifier if chunk.semantic_identifier else ""
         ),
         title=chunk.title,
         # TODO(andrei): This doesn't work for the same reason as the boost
         # comment in the next function.
+        # none title should be reweighted to 0?
         # boost=int(chunk.global_boost),
+        # we can remove this
+        # yuhong things os has some thing oob for this
         boost=1,
         # recency_bias TODO(andrei) required
         recency_bias=1.0,
         # score TODO(andrei)
+        # this is how good the match is, we need this, key insight is we can order chunks by this
         score=None,
         hidden=chunk.hidden,
+        # dont worry abt these for now
         # is_relevant TODO(andrei)
         # relevance_explanation TODO(andrei)
         # metadata TODO(andrei)
+        # arb key value, these get appended to content, need to unappend
+        # instead do string slice on indices where we appended content
         metadata={},
         # match_highlights TODO(andrei)
+        # useful. vector db needs to supply this, dont wanna do string match ourselves
         match_highlights=[],
         # doc_summary TODO(andrei) required
+        # summary of entire doc, specifically if you enable contextual retrieval enabled
         doc_summary="",
         # chunk_context TODO(andrei) required
+        # same thing as contx ret, llm gens context for each chunk
         chunk_context="",
         updated_at=chunk.last_updated,
+        # author of doc? if its null keeps being null
         # primary_owners TODO(andrei)
         # secondary_owners TODO(andrei)
-        # large_chunk_reference_ids TODO(andrei)
+        # large_chunk_reference_ids TODO(andrei) dont worry
         # is_federated TODO(andrei) required
         is_federated=False,
         # metadata_suffix TODO(andrei)
+        # this is the natural language thing we were talking abt
         metadata_suffix=None,
     )
 
@@ -90,6 +109,8 @@ def _convert_onyx_chunk_to_opensearch_document(
     chunk: DocMetadataAwareIndexChunk,
 ) -> DocumentChunk:
     return DocumentChunk(
+        # very often link to the source. tenant.
+        # for uniqueness stuff rely on tne vector dbs id
         document_id=chunk.source_document.id,
         chunk_index=chunk.chunk_id,
         title=chunk.source_document.title,
@@ -97,13 +118,16 @@ def _convert_onyx_chunk_to_opensearch_document(
         content=chunk.content,
         content_vector=chunk.embeddings.full_embedding,
         # TODO(andrei): Hmm.
+        # we should know this. reason to have this is convenience, but it could
+        # also change when you change your embedding model, maybe can remove it,
+        # yuhong to look at this
         num_tokens=-1,
         source_type=chunk.source_document.source.value,
         # TODO(andrei): Hmm.
         # metadata=chunk.source_document.metadata,
         last_updated=chunk.source_document.doc_updated_at,
         # TODO(andrei): Hmm.
-        # created_at=None,
+        # created_at=None, this is fine? like websites yuhong check
         public=chunk.access.is_public,
         # TODO(andrei): Hmm.
         # access_control_list=chunk.access.to_acl(),
@@ -115,8 +139,10 @@ def _convert_onyx_chunk_to_opensearch_document(
         # global_boost=chunk.boost,
         semantic_identifier=chunk.source_document.semantic_identifier,
         # TODO(andrei)
+        # ask chris
         # image_file_name=None,
         # TODO(andrei): Hmm.
+        # should not be none?
         # source_links=chunk.source_document.source_links,
         document_sets=list(chunk.document_sets) if chunk.document_sets else None,
         project_ids=list(chunk.user_project) if chunk.user_project else None,
