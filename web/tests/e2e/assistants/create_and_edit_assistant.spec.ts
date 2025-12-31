@@ -21,7 +21,7 @@ const setKnowledgeCutoffDate = async (page: Page) => {
     .locator("..")
     .locator('button:has-text("Select Date"), button:has-text("/")');
 
-  await datePickerButton.first().click();
+  await datePickerButton.click();
 
   // Wait for the popover to open
   await page.waitForSelector('[role="dialog"]', {
@@ -47,7 +47,7 @@ const getStarterMessageInput = (page: Page, index: number = 0) =>
 const getCreateSubmitButton = (page: Page) =>
   page.locator('button[type="submit"]:has-text("Create")');
 const getUpdateSubmitButton = (page: Page) =>
-  page.locator('button[type="submit"]:has-text("Update")');
+  page.locator('button[type="submit"]:has-text("Save")');
 const getKnowledgeSourceSelect = (page: Page) =>
   page
     .locator('label:has-text("Knowledge Source")')
@@ -255,6 +255,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await getStarterMessageInput(page).fill(editedAssistantStarterMessage);
 
       // Submit the edit form
+      await page.pause();
       await getUpdateSubmitButton(page).click();
 
       // Verify redirection back to the chat page
