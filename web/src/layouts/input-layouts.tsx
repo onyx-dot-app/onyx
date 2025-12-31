@@ -84,10 +84,10 @@ function HorizontalInputLayout({
           fieldLabelProps.description ? "items-start" : "items-center"
         )}
       >
-        <div className="min-w-[70%]">
+        <div className="w-[70%]">
           <LabelLayout {...fieldLabelProps} />
         </div>
-        {children}
+        <div className="flex flex-col items-end min-w-[14rem]">{children}</div>
       </label>
       {name && <ErrorLayout name={name} />}
     </div>

@@ -1231,7 +1231,7 @@ export default function AgentEditorPage({
                           />
                         }
                       >
-                        <GeneralLayouts.Section gap={2}>
+                        <GeneralLayouts.Section gap={0.5}>
                           <Card>
                             <InputLayouts.Horizontal
                               name="image_generation"

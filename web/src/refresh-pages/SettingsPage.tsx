@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import type { Route } from "next";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
+import * as GeneralLayouts from "@/layouts/general-layouts";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import {
   SvgCpu,
@@ -18,7 +19,6 @@ import Card from "@/refresh-components/Card";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import Button from "@/refresh-components/buttons/Button";
 import Switch from "@/refresh-components/inputs/Switch";
 import { SubLabel } from "@/components/Field";
@@ -48,7 +48,6 @@ function GeneralSettings() {
     user,
     updateUserAutoScroll,
     updateUserShortcuts,
-    updateUserTemperatureOverrideEnabled,
     updateUserPersonalization,
     updateUserThemePreference,
   } = useUser();
@@ -76,7 +75,7 @@ function GeneralSettings() {
   return (
     <>
       {popup}
-      <div className="flex flex-col gap-4">
+      <GeneralLayouts.Section gap={1}>
         <Card>
           <InputLayouts.Horizontal
             label="Full Name"
@@ -168,7 +167,7 @@ function GeneralSettings() {
             />
           </InputLayouts.Horizontal>
         </Card>
-      </div>
+      </GeneralLayouts.Section>
     </>
   );
 }
@@ -275,7 +274,7 @@ function ChatPreferencesSettings() {
   return (
     <>
       {popup}
-      <div className="flex flex-col gap-4">
+      <GeneralLayouts.Section gap={1}>
         <Card>
           <div>
             <div className="flex items-center gap-2 mb-2">
@@ -425,7 +424,7 @@ function ChatPreferencesSettings() {
             )}
           </div>
         </Card>
-      </div>
+      </GeneralLayouts.Section>
     </>
   );
 }
@@ -504,7 +503,7 @@ function AccountsAccessSettings() {
   return (
     <>
       {popup}
-      <div className="flex flex-col gap-4">
+      <GeneralLayouts.Section gap={1}>
         {showPasswordSection && (
           <Card>
             <div className="space-y-2">
@@ -579,7 +578,7 @@ function AccountsAccessSettings() {
             <PATManagement />
           </Card>
         )}
-      </div>
+      </GeneralLayouts.Section>
     </>
   );
 }
@@ -659,7 +658,7 @@ function ConnectorsSettings() {
   return (
     <>
       {popup}
-      <div className="flex flex-col gap-4">
+      <GeneralLayouts.Section gap={1}>
         <Card>
           <div>
             <h3 className="text-lg font-medium mb-4">Connected Services</h3>
@@ -806,7 +805,7 @@ function ConnectorsSettings() {
             )}
           </div>
         </Card>
-      </div>
+      </GeneralLayouts.Section>
     </>
   );
 }
