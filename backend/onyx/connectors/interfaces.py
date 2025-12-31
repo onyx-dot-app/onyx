@@ -25,6 +25,18 @@ GenerateSlimDocumentOutput = Iterator[list[SlimDocument]]
 CT = TypeVar("CT", bound=ConnectorCheckpoint)
 
 
+class NormalizationResult(BaseModel):
+    """Result of URL normalization attempt.
+
+    Attributes:
+        normalized_url: The normalized URL string, or None if normalization failed
+        use_default: If True, fall back to default normalizer. If False, return None.
+    """
+
+    normalized_url: str | None
+    use_default: bool = False
+
+
 class BaseConnector(abc.ABC, Generic[CT]):
     REDIS_KEY_PREFIX = "da_connector_data:"
 
@@ -75,13 +87,13 @@ class BaseConnector(abc.ABC, Generic[CT]):
         based on the application level image analysis setting."""
 
     @classmethod
-    def normalize_url(cls, url: str) -> str | None:
+    def normalize_url(cls, url: str) -> "NormalizationResult":
         """Normalize a URL to match the canonical Document.id format used during ingestion.
 
         Connectors that use URLs as document IDs should override this method.
-        Returns None if the URL doesn't belong to this connector or normalization fails.
+        Returns NormalizationResult with use_default=True if not implemented.
         """
-        return None
+        return NormalizationResult(normalized_url=None, use_default=True)
 
     def build_dummy_checkpoint(self) -> CT:
         # TODO: find a way to make this work without type: ignore

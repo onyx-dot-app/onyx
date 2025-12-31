@@ -49,7 +49,10 @@ def normalize_url(url: str, source_type: DocumentSource | None = None) -> str | 
         try:
             connector_class = identify_connector_class(source_type)
             result = connector_class.normalize_url(url)
-            return result
+
+            if result.use_default:
+                return _default_url_normalizer(url)
+            return result.normalized_url  # Could be None if failed
         except Exception as exc:
             logger.debug(
                 "Failed to normalize URL for source %s: %s. Using default normalizer.",

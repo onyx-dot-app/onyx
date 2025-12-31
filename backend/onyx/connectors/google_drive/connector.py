@@ -66,6 +66,7 @@ from onyx.connectors.google_utils.shared_constants import USER_FIELDS
 from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
+from onyx.connectors.interfaces import NormalizationResult
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import ConnectorFailure
@@ -285,7 +286,7 @@ class GoogleDriveConnector(
 
     @classmethod
     @override
-    def normalize_url(cls, url: str) -> str | None:
+    def normalize_url(cls, url: str) -> NormalizationResult:
         """Normalize a Google Drive URL to match the canonical Document.id format.
 
         Reuses the connector's existing document ID creation logic from
@@ -298,7 +299,7 @@ class GoogleDriveConnector(
             netloc.startswith("docs.google.com")
             or netloc.startswith("drive.google.com")
         ):
-            return None
+            return NormalizationResult(normalized_url=None, use_default=False)
 
         # Handle ?id= query parameter case
         query_params = parse_qs(parsed.query)
@@ -310,8 +311,10 @@ class GoogleDriveConnector(
             params = ""
             query = ""
             fragment = ""
-            normalized = urlunparse((scheme, netloc, path, params, query, fragment))
-            return normalized.rstrip("/")
+            normalized = urlunparse(
+                (scheme, netloc, path, params, query, fragment)
+            ).rstrip("/")
+            return NormalizationResult(normalized_url=normalized, use_default=False)
 
         # Extract file ID and use connector's function
         path_parts = parsed.path.split("/")
@@ -322,11 +325,12 @@ class GoogleDriveConnector(
                 break
 
         if not file_id:
-            return None
+            return NormalizationResult(normalized_url=None, use_default=False)
 
         # Create minimal file object for connector function
         file_obj = {"webViewLink": url, "id": file_id}
-        return onyx_document_id_from_drive_file(file_obj).rstrip("/")
+        normalized = onyx_document_id_from_drive_file(file_obj).rstrip("/")
+        return NormalizationResult(normalized_url=normalized, use_default=False)
 
     # TODO: ensure returned new_creds_dict is actually persisted when this is called?
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, str] | None:

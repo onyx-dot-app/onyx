@@ -19,6 +19,7 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
+from onyx.connectors.interfaces import NormalizationResult
 from onyx.connectors.interfaces import OAuthConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
@@ -317,7 +318,7 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
 
     @classmethod
     @override
-    def normalize_url(cls, url: str) -> str | None:
+    def normalize_url(cls, url: str) -> NormalizationResult:
         """Extract Linear issue identifier from URL.
 
         Linear URLs are like: https://linear.app/team/issue/IDENTIFIER/...
@@ -327,7 +328,7 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
         netloc = parsed.netloc.lower()
 
         if "linear.app" not in netloc:
-            return None
+            return NormalizationResult(normalized_url=None, use_default=False)
 
         # Extract identifier from path: /team/issue/IDENTIFIER/...
         # Pattern: /{team}/issue/{identifier}/...
@@ -336,9 +337,9 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
             identifier = path_parts[2]
             # Validate identifier format (e.g., "DAN-2327")
             if re.match(r"^[A-Z]+-\d+$", identifier):
-                return identifier
+                return NormalizationResult(normalized_url=identifier, use_default=False)
 
-        return None
+        return NormalizationResult(normalized_url=None, use_default=False)
 
 
 if __name__ == "__main__":

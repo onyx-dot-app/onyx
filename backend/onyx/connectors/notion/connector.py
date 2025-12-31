@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 import requests
 from pydantic import BaseModel
 from retry import retry
+from typing_extensions import override
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP
@@ -24,6 +25,7 @@ from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
+from onyx.connectors.interfaces import NormalizationResult
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
@@ -105,13 +107,14 @@ class NotionConnector(LoadConnector, PollConnector):
         self.recursive_index_enabled = recursive_index_enabled or self.root_page_id
 
     @classmethod
-    def normalize_url(cls, url: str) -> str | None:
+    @override
+    def normalize_url(cls, url: str) -> NormalizationResult:
         """Normalize a Notion URL to extract the page ID (UUID format)."""
         parsed = urlparse(url)
         netloc = parsed.netloc.lower()
 
         if not ("notion.so" in netloc or "notion.site" in netloc):
-            return None
+            return NormalizationResult(normalized_url=None, use_default=False)
 
         # Extract page ID from path (format: "Title-PageID")
         path_last = parsed.path.split("/")[-1]
@@ -122,10 +125,13 @@ class NotionConnector(LoadConnector, PollConnector):
         cleaned = candidate.replace("-", "")
 
         if len(cleaned) == 32 and re.fullmatch(r"[0-9a-fA-F]{32}", cleaned):
-            return (
+            normalized_uuid = (
                 f"{cleaned[0:8]}-{cleaned[8:12]}-{cleaned[12:16]}-"
                 f"{cleaned[16:20]}-{cleaned[20:]}"
             ).lower()
+            return NormalizationResult(
+                normalized_url=normalized_uuid, use_default=False
+            )
 
         # Try query params
         params = parse_qs(parsed.query)
@@ -133,12 +139,15 @@ class NotionConnector(LoadConnector, PollConnector):
             if key in params and params[key]:
                 candidate = params[key][0].replace("-", "")
                 if len(candidate) == 32 and re.fullmatch(r"[0-9a-fA-F]{32}", candidate):
-                    return (
+                    normalized_uuid = (
                         f"{candidate[0:8]}-{candidate[8:12]}-{candidate[12:16]}-"
                         f"{candidate[16:20]}-{candidate[20:]}"
                     ).lower()
+                    return NormalizationResult(
+                        normalized_url=normalized_uuid, use_default=False
+                    )
 
-        return None
+        return NormalizationResult(normalized_url=None, use_default=False)
 
     @retry(tries=3, delay=1, backoff=2)
     def _fetch_child_blocks(
