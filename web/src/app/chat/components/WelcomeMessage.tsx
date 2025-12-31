@@ -1,7 +1,10 @@
 "use client";
 
 import Logo from "@/refresh-components/Logo";
-import { getRandomGreeting } from "@/lib/chat/greetingMessages";
+import {
+  GREETING_MESSAGES,
+  getRandomGreeting,
+} from "@/lib/chat/greetingMessages";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
