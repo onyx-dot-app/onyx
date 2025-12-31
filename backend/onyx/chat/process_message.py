@@ -31,6 +31,7 @@ from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
+from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.models import CitationDocInfo
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import create_new_chat_message
@@ -464,6 +465,18 @@ def stream_chat_message_objects(
             forced_tool_ids=new_msg_req.forced_tool_ids,
             search_tool_id=search_tool_id,
         )
+
+        # TODO: Remove this with the rework of the API - this forces search tool
+        # when retrieval_options.run_search is set to ALWAYS
+        if (
+            retrieval_options
+            and retrieval_options.run_search == OptionalSearchSetting.ALWAYS
+            and search_tool_id is not None
+        ):
+            if new_msg_req.forced_tool_ids is None:
+                new_msg_req.forced_tool_ids = [search_tool_id]
+            elif search_tool_id not in new_msg_req.forced_tool_ids:
+                new_msg_req.forced_tool_ids.insert(0, search_tool_id)
 
         emitter = get_default_emitter()
 
