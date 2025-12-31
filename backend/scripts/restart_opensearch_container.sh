@@ -1,11 +1,12 @@
 #!/bin/bash
 
-# We get OPENSEARCH_INITIAL_ADMIN_PASSWORD from the repo .env file.
+# We get OPENSEARCH_ADMIN_PASSWORD from the repo .env file.
 source "$(dirname "$0")/../../.vscode/.env"
 
 OPENSEARCH_CONTAINER_NAME="onyx-opensearch"
 OPENSEARCH_IMAGE="opensearchproject/opensearch:3.2.0"
-OPENSEARCH_REST_API_PORT=9200
+# First check the env for OPENSEARCH_REST_API_PORT, else hardcode to 9200.
+OPENSEARCH_REST_API_PORT=${OPENSEARCH_REST_API_PORT:-9200}
 OPENSEARCH_PERFORMANCE_ANALYZER_PORT=9600
 
 function stop_and_remove_opensearch_container() {
@@ -14,10 +15,10 @@ function stop_and_remove_opensearch_container() {
   docker rm "$OPENSEARCH_CONTAINER_NAME" 2>/dev/null || true
 }
 
-# Set OPENSEARCH_INITIAL_ADMIN_PASSWORD=<some password> in your .env file.
-if [ -z "$OPENSEARCH_INITIAL_ADMIN_PASSWORD" ]; then
-  echo "Error: OPENSEARCH_INITIAL_ADMIN_PASSWORD environment variable is not set." >&2
-  echo "Please set OPENSEARCH_INITIAL_ADMIN_PASSWORD=<some password> in your .env file." >&2
+# Set OPENSEARCH_ADMIN_PASSWORD=<some password> in your .env file.
+if [ -z "$OPENSEARCH_ADMIN_PASSWORD" ]; then
+  echo "Error: OPENSEARCH_ADMIN_PASSWORD environment variable is not set." >&2
+  echo "Please set OPENSEARCH_ADMIN_PASSWORD=<some password> in your .env file." >&2
   exit 1
 fi
 
@@ -26,4 +27,4 @@ stop_and_remove_opensearch_container
 
 # Start the OpenSearch container.
 echo "Starting OpenSearch container..."
-docker run --detach --name "$OPENSEARCH_CONTAINER_NAME" --publish "$OPENSEARCH_REST_API_PORT:$OPENSEARCH_REST_API_PORT" --publish "$OPENSEARCH_PERFORMANCE_ANALYZER_PORT:$OPENSEARCH_PERFORMANCE_ANALYZER_PORT" -e "discovery.type=single-node" -e "OPENSEARCH_INITIAL_ADMIN_PASSWORD=$OPENSEARCH_INITIAL_ADMIN_PASSWORD" "$OPENSEARCH_IMAGE"
+docker run --detach --name "$OPENSEARCH_CONTAINER_NAME" --publish "$OPENSEARCH_REST_API_PORT:$OPENSEARCH_REST_API_PORT" --publish "$OPENSEARCH_PERFORMANCE_ANALYZER_PORT:$OPENSEARCH_PERFORMANCE_ANALYZER_PORT" -e "discovery.type=single-node" -e "OPENSEARCH_INITIAL_ADMIN_PASSWORD=$OPENSEARCH_ADMIN_PASSWORD" "$OPENSEARCH_IMAGE"
