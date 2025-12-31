@@ -1,10 +1,11 @@
 import React, { memo } from "react";
 import { SvgArrowExchange, SvgOnyxLogo } from "@opal/icons";
+
 type ConnectionProviderIconProps = {
   icon: React.ReactNode;
 };
 
-const ConnectionProviderIconInner = ({ icon }: ConnectionProviderIconProps) => {
+const ConnectionProviderIcon = memo(({ icon }: ConnectionProviderIconProps) => {
   return (
     <div className="flex items-center gap-1">
       <div className="w-7 h-7 flex items-center justify-center">{icon}</div>
@@ -16,7 +17,6 @@ const ConnectionProviderIconInner = ({ icon }: ConnectionProviderIconProps) => {
       </div>
     </div>
   );
-};
+});
 
-const ConnectionProviderIcon = memo(ConnectionProviderIconInner);
 export default ConnectionProviderIcon;
