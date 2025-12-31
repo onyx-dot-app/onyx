@@ -24,7 +24,9 @@ export function AdvancedOptions({
       {showAdvancedOptions && (
         <>
           <div className="flex flex-col gap-3">
-            <Text headingH3>Access Controls</Text>
+            <Text as="p" headingH3>
+              Access Controls
+            </Text>
             <IsPublicGroupSelector
               formikProps={formikProps}
               objectName="LLM Provider"

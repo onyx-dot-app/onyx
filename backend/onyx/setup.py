@@ -46,7 +46,6 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.llm.well_known_providers.llm_provider_options import get_openai_model_names
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder
-from onyx.natural_language_processing.search_nlp_models import warm_up_cross_encoder
 from onyx.seeding.load_yamls import load_input_prompts_from_yaml
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
@@ -116,16 +115,6 @@ def setup_onyx(
             logger.notice(
                 f"Multilingual query expansion is enabled with {search_settings.multilingual_expansion}."
             )
-    if (
-        search_settings.rerank_model_name
-        and not search_settings.provider_type
-        and not search_settings.rerank_provider_type
-    ):
-        # In integration tests, do not block API startup on warm-up
-        warm_up_cross_encoder(
-            search_settings.rerank_model_name,
-            non_blocking=INTEGRATION_TESTS_MODE,
-        )
 
     logger.notice("Verifying query preprocessing (NLTK) data is downloaded")
     download_nltk_data()

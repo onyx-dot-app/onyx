@@ -51,9 +51,6 @@ from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.adapters.user_file_indexing_adapter import UserFileIndexingAdapter
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
-from onyx.natural_language_processing.search_nlp_models import (
-    InformationContentClassificationModel,
-)
 from onyx.redis.redis_pool import get_redis_client
 
 
@@ -257,10 +254,6 @@ def process_single_user_file(self: Task, *, user_file_id: str, tenant_id: str) -
                     search_settings=current_search_settings,
                 )
 
-                information_content_classification_model = (
-                    InformationContentClassificationModel()
-                )
-
                 document_index = get_default_document_index(
                     current_search_settings,
                     None,
@@ -275,7 +268,6 @@ def process_single_user_file(self: Task, *, user_file_id: str, tenant_id: str) -
                 # real work happens here!
                 index_pipeline_result = run_indexing_pipeline(
                     embedder=embedding_model,
-                    information_content_classification_model=information_content_classification_model,
                     document_index=document_index,
                     ignore_time_skip=True,
                     db_session=db_session,

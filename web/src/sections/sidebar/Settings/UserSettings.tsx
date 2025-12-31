@@ -551,7 +551,7 @@ export default function UserSettings() {
                   {personalizationValues.name.length === 0 && (
                     <div className="flex items-center gap-1 mt-1">
                       <SvgXOctagon className="h-3 w-3 stroke-status-error-05" />
-                      <Text text03 secondaryBody>
+                      <Text as="p" text03 secondaryBody>
                         Please enter a name to continue.
                       </Text>
                     </div>

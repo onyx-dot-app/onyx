@@ -137,7 +137,9 @@ export default function SelectButton({
   const content = useMemo(
     () => (
       <div className="flex flex-row items-center justify-center">
-        <Text className={cn("whitespace-nowrap", textClasses)}>{children}</Text>
+        <Text as="p" className={cn("whitespace-nowrap", textClasses)}>
+          {children}
+        </Text>
 
         {rightChevronIcon && (
           <SvgChevronDownSmall

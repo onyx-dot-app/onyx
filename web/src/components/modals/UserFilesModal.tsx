@@ -214,7 +214,9 @@ export default function UserFilesModal({
             {/* File display section */}
             {filtered.length === 0 ? (
               <div className="p-4 flex w-full h-full items-center justify-center">
-                <Text text03>No files found</Text>
+                <Text as="p" text03>
+                  No files found
+                </Text>
               </div>
             ) : (
               <ScrollIndicatorDiv className="p-2 gap-2" variant="shadow">
@@ -269,7 +271,7 @@ export default function UserFilesModal({
             {/* Left side: file count and controls */}
             {onPickRecent && (
               <div className="flex items-center gap-2">
-                <Text text03>
+                <Text as="p" text03>
                   {selectedCount} {selectedCount === 1 ? "file" : "files"}{" "}
                   selected
                 </Text>

@@ -184,7 +184,7 @@ export function CustomForm({
 
                     <Separator />
 
-                    <Text secondaryBody text03>
+                    <Text as="p" secondaryBody text03>
                       Fill in the following as needed. Refer to the LiteLLM
                       documentation for the provider specified above to
                       determine which fields are required.
@@ -206,8 +206,10 @@ export function CustomForm({
 
                     <Separator />
 
-                    <Text mainUiAction>[Optional] Custom Configs</Text>
-                    <Text secondaryBody text03>
+                    <Text as="p" mainUiAction>
+                      [Optional] Custom Configs
+                    </Text>
+                    <Text as="p" secondaryBody text03>
                       <div>
                         Additional configurations needed by the model provider.
                         These are passed to LiteLLM via environment variables
@@ -235,7 +237,9 @@ export function CustomForm({
                                 <div className="flex w-full">
                                   <div className="w-full mr-6 border border-border p-3 rounded">
                                     <div>
-                                      <Text mainUiAction>Key</Text>
+                                      <Text as="p" mainUiAction>
+                                        Key
+                                      </Text>
                                       <Field
                                         name={`custom_config_list[${index}][0]`}
                                         className="border border-border bg-background rounded w-full py-2 px-3 mr-4"
@@ -248,7 +252,9 @@ export function CustomForm({
                                       />
                                     </div>
                                     <div className="mt-3">
-                                      <Text mainUiAction>Value</Text>
+                                      <Text as="p" mainUiAction>
+                                        Value
+                                      </Text>
                                       <Field
                                         name={`custom_config_list[${index}][1]`}
                                         className="border border-border bg-background rounded w-full py-2 px-3 mr-4"

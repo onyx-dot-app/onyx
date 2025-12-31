@@ -8,17 +8,10 @@ from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.llm.well_known_providers.constants import ANTHROPIC_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import AZURE_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import BEDROCK_PROVIDER_NAME
-from onyx.llm.well_known_providers.constants import BEDROCK_REGION_OPTIONS
-from onyx.llm.well_known_providers.constants import OLLAMA_API_KEY_CONFIG_KEY
 from onyx.llm.well_known_providers.constants import OLLAMA_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENROUTER_PROVIDER_NAME
-from onyx.llm.well_known_providers.constants import VERTEX_CREDENTIALS_FILE_KWARG
-from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.llm.well_known_providers.constants import VERTEXAI_PROVIDER_NAME
-from onyx.llm.well_known_providers.models import CustomConfigKey
-from onyx.llm.well_known_providers.models import CustomConfigKeyType
-from onyx.llm.well_known_providers.models import CustomConfigOption
 from onyx.llm.well_known_providers.models import WellKnownLLMProviderDescriptor
 from onyx.server.manage.llm.models import ModelConfigurationView
 from onyx.utils.logger import setup_logger
@@ -216,182 +209,45 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
     return [
         WellKnownLLMProviderDescriptor(
             name=LlmProviderNames.OPENAI,
-            display_name="OpenAI",
-            title="GPT",
-            api_key_required=True,
-            api_base_required=False,
-            api_version_required=False,
-            custom_config_keys=[],
             model_configurations=fetch_model_configurations_for_provider(
                 LlmProviderNames.OPENAI
             ),
-            default_model=fetch_default_model_for_provider(OPENAI_PROVIDER_NAME),
         ),
         WellKnownLLMProviderDescriptor(
             name=LlmProviderNames.OLLAMA_CHAT,
-            display_name="Ollama",
-            title="Ollama",
-            api_key_required=False,
-            api_base_required=True,
-            api_version_required=False,
-            custom_config_keys=[
-                CustomConfigKey(
-                    name=OLLAMA_API_KEY_CONFIG_KEY,
-                    display_name="Ollama API Key",
-                    description="Optional API key used when connecting to Ollama Cloud (i.e. API base is https://ollama.com).",
-                    is_required=False,
-                    is_secret=True,
-                )
-            ],
             model_configurations=fetch_model_configurations_for_provider(
                 LlmProviderNames.OLLAMA_CHAT
             ),
-            # we don't know what models are available, so we can't pre-fetch a default
-            default_model=None,
-            default_api_base="http://127.0.0.1:11434",
         ),
         WellKnownLLMProviderDescriptor(
             name=LlmProviderNames.ANTHROPIC,
-            display_name="Anthropic",
-            title="Claude",
-            api_key_required=True,
-            api_base_required=False,
-            api_version_required=False,
-            custom_config_keys=[],
             model_configurations=fetch_model_configurations_for_provider(
                 LlmProviderNames.ANTHROPIC
             ),
-            default_model=fetch_default_model_for_provider(ANTHROPIC_PROVIDER_NAME),
         ),
         WellKnownLLMProviderDescriptor(
             name=LlmProviderNames.AZURE,
-            display_name="Microsoft Azure Cloud",
-            title="Azure OpenAI",
-            api_key_required=True,
-            api_base_required=True,
-            api_version_required=True,
-            custom_config_keys=[],
             model_configurations=fetch_model_configurations_for_provider(
                 LlmProviderNames.AZURE
             ),
-            deployment_name_required=True,
-            single_model_supported=True,
         ),
         WellKnownLLMProviderDescriptor(
             name=LlmProviderNames.BEDROCK,
-            display_name="AWS",
-            title="Amazon Bedrock",
-            api_key_required=False,
-            api_base_required=False,
-            api_version_required=False,
-            custom_config_keys=[
-                CustomConfigKey(
-                    name="AWS_REGION_NAME",
-                    display_name="AWS Region Name",
-                    description="Region where your Amazon Bedrock models are hosted.",
-                    key_type=CustomConfigKeyType.SELECT,
-                    options=BEDROCK_REGION_OPTIONS,
-                ),
-                CustomConfigKey(
-                    name="BEDROCK_AUTH_METHOD",
-                    display_name="Authentication",
-                    description="Choose how Onyx should authenticate with Bedrock.",
-                    is_required=False,
-                    key_type=CustomConfigKeyType.SELECT,
-                    default_value="access_key",
-                    options=[
-                        CustomConfigOption(
-                            label="Environment IAM Role",
-                            value="iam",
-                            description="Recommended for AWS environments",
-                        ),
-                        CustomConfigOption(
-                            label="Access Key",
-                            value="access_key",
-                            description="For non-AWS environments",
-                        ),
-                        CustomConfigOption(
-                            label="Long-term API Key",
-                            value="long_term_api_key",
-                            description="For non-AWS environments",
-                        ),
-                    ],
-                ),
-                CustomConfigKey(
-                    name="AWS_ACCESS_KEY_ID",
-                    display_name="AWS Access Key ID",
-                    is_required=False,
-                    description="If using IAM role or a long-term API key, leave this field blank.",
-                ),
-                CustomConfigKey(
-                    name="AWS_SECRET_ACCESS_KEY",
-                    display_name="AWS Secret Access Key",
-                    is_required=False,
-                    is_secret=True,
-                    description="If using IAM role or a long-term API key, leave this field blank.",
-                ),
-                CustomConfigKey(
-                    name="AWS_BEARER_TOKEN_BEDROCK",
-                    display_name="AWS Bedrock Long-term API Key",
-                    is_required=False,
-                    is_secret=True,
-                    description=(
-                        "If using IAM role or access key, leave this field blank."
-                    ),
-                ),
-            ],
             model_configurations=fetch_model_configurations_for_provider(
                 LlmProviderNames.BEDROCK
             ),
-            # we don't know what models are available, so we can't pre-fetch a default
-            default_model=None,
         ),
         WellKnownLLMProviderDescriptor(
             name=LlmProviderNames.VERTEX_AI,
-            display_name="Google Cloud Vertex AI",
-            title="Gemini",
-            api_key_required=False,
-            api_base_required=False,
-            api_version_required=False,
             model_configurations=fetch_model_configurations_for_provider(
                 LlmProviderNames.VERTEX_AI
             ),
-            custom_config_keys=[
-                CustomConfigKey(
-                    name=VERTEX_CREDENTIALS_FILE_KWARG,
-                    display_name="Credentials File",
-                    description="This should be a JSON file containing some private credentials.",
-                    is_required=True,
-                    is_secret=False,
-                    key_type=CustomConfigKeyType.FILE_INPUT,
-                ),
-                CustomConfigKey(
-                    name=VERTEX_LOCATION_KWARG,
-                    display_name="Location",
-                    description="The location of Google model deployment. Please refer to the "
-                    "[Vertex AI docs](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations) "
-                    "to decide which location to use.",
-                    is_required=False,
-                    is_secret=False,
-                    key_type=CustomConfigKeyType.TEXT_INPUT,
-                    default_value="global",
-                ),
-            ],
-            default_model=fetch_default_model_for_provider(VERTEXAI_PROVIDER_NAME),
         ),
         WellKnownLLMProviderDescriptor(
             name=LlmProviderNames.OPENROUTER,
-            display_name="OpenRouter",
-            title="OpenRouter",
-            api_key_required=True,
-            api_base_required=True,
-            api_version_required=False,
-            custom_config_keys=[],
             model_configurations=fetch_model_configurations_for_provider(
                 LlmProviderNames.OPENROUTER
             ),
-            default_model=fetch_default_model_for_provider(OPENROUTER_PROVIDER_NAME),
-            default_api_base="https://openrouter.ai/api/v1",
         ),
     ]
 

@@ -76,7 +76,7 @@ export const FormFieldLabel: React.FC<LabelProps> = ({
       {leftIcon && <span className="flex items-center">{leftIcon}</span>}
       {children}
       {optional ? (
-        <Text text03 mainUiMuted className="mx-0.5">
+        <Text as="p" text03 mainUiMuted className="mx-0.5">
           {"(Optional)"}
         </Text>
       ) : null}
@@ -122,6 +122,7 @@ export const FormFieldDescription: React.FC<DescriptionProps> = ({
   if (!content) return null;
   return (
     <Text
+      as="p"
       id={`${baseId}-desc`}
       text03
       secondaryBody

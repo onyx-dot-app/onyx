@@ -44,12 +44,16 @@ export const CodeBlock = memo(function CodeBlock({
       {copied ? (
         <div className="flex items-center space-x-2">
           <SvgCheck height={14} width={14} stroke="currentColor" />
-          <Text secondaryMono>Copied!</Text>
+          <Text as="p" secondaryMono>
+            Copied!
+          </Text>
         </div>
       ) : (
         <div className="flex items-center space-x-2">
           <SvgCopy height={14} width={14} stroke="currentColor" />
-          <Text secondaryMono>Copy</Text>
+          <Text as="p" secondaryMono>
+            Copy
+          </Text>
         </div>
       )}
     </div>
@@ -63,7 +67,6 @@ export const CodeBlock = memo(function CodeBlock({
           "text-text-05",
           "bg-background-tint-00",
           "rounded",
-          "align-bottom",
           "text-xs",
           "inline-block",
           "whitespace-pre-wrap",
@@ -109,7 +112,7 @@ export const CodeBlock = memo(function CodeBlock({
   return (
     <div className="bg-background-tint-00 px-1 pb-1 rounded-12 max-w-full min-w-0">
       {language && (
-        <div className="flex px-2 py-1 text-sm text-text-04 gap-x-2">
+        <div className="flex items-center px-2 py-1 text-sm text-text-04 gap-x-2">
           <SvgCode
             height={12}
             width={12}

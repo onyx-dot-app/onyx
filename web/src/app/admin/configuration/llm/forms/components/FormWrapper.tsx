@@ -136,17 +136,19 @@ export function ProviderFormEntrypointWrapper({
           <>
             <div className="my-auto">
               <Text
+                as="p"
                 headingH3
                 text04
                 className="text-ellipsis overflow-hidden max-w-32"
               >
                 {existingLlmProvider.name}
               </Text>
-              <Text secondaryBody text03 className="italic">
+              <Text as="p" secondaryBody text03 className="italic">
                 ({providerName})
               </Text>
               {!existingLlmProvider.is_default_provider && (
                 <Text
+                  as="p"
                   className={cn("text-action-link-05", "cursor-pointer")}
                   onClick={handleSetAsDefault}
                 >
@@ -178,7 +180,9 @@ export function ProviderFormEntrypointWrapper({
         ) : (
           <>
             <div className="my-auto">
-              <Text headingH3>{providerName}</Text>
+              <Text as="p" headingH3>
+                {providerName}
+              </Text>
             </div>
             <div className="ml-auto my-auto">
               <Button action onClick={() => setFormIsVisible(true)}>

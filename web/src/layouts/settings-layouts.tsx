@@ -149,7 +149,7 @@ function SettingsRoot(props: SettingsRootProps) {
  *   title="API Keys"
  *   description={
  *     <div>
- *       <Text secondaryBody text03>
+ *       <Text as="p" secondaryBody text03>
  *         Manage your API keys. Last updated: {lastUpdated}
  *       </Text>
  *     </div>
@@ -221,11 +221,13 @@ function SettingsHeader({
           </div>
           <div className="flex flex-col">
             <div aria-label="admin-page-title">
-              <Text headingH2>{title}</Text>
+              <Text as="p" headingH2>
+                {title}
+              </Text>
             </div>
             {description &&
               (typeof description === "string" ? (
-                <Text secondaryBody text03>
+                <Text as="p" secondaryBody text03>
                   {description}
                 </Text>
               ) : (

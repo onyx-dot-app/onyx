@@ -99,7 +99,7 @@ def _build_project_file_citation_mapping(
 
 
 def construct_message_history(
-    system_prompt: ChatMessageSimple,
+    system_prompt: ChatMessageSimple | None,
     custom_agent_prompt: ChatMessageSimple | None,
     simple_chat_history: list[ChatMessageSimple],
     reminder_message: ChatMessageSimple | None,
@@ -114,7 +114,7 @@ def construct_message_history(
             )
 
     history_token_budget = available_tokens
-    history_token_budget -= system_prompt.token_count
+    history_token_budget -= system_prompt.token_count if system_prompt else 0
     history_token_budget -= (
         custom_agent_prompt.token_count if custom_agent_prompt else 0
     )
@@ -127,7 +127,7 @@ def construct_message_history(
 
     # If no history, build minimal context
     if not simple_chat_history:
-        result = [system_prompt]
+        result = [system_prompt] if system_prompt else []
         if custom_agent_prompt:
             result.append(custom_agent_prompt)
         if project_files and project_files.project_file_texts:
@@ -218,7 +218,7 @@ def construct_message_history(
     # Build the final message list according to README ordering:
     # [system], [history_before_last_user], [custom_agent], [project_files],
     # [last_user_message], [messages_after_last_user], [reminder]
-    result = [system_prompt]
+    result = [system_prompt] if system_prompt else []
 
     # 1. Add truncated history before last user message
     result.extend(truncated_history_before)
@@ -342,6 +342,10 @@ def run_llm_loop(
         has_called_search_tool: bool = False
         citation_mapping: dict[int, str] = {}  # Maps citation_num -> document_id/URL
 
+        default_base_system_prompt: str = get_default_base_system_prompt(db_session)
+        system_prompt = None
+        custom_agent_prompt_msg = None
+
         reasoning_cycles = 0
         for llm_cycle_count in range(MAX_LLM_CYCLES):
             if forced_tool_id:
@@ -370,35 +374,47 @@ def run_llm_loop(
                 )
                 custom_agent_prompt_msg = None
             else:
-                # System message and custom agent message are both included.
-                open_ai_formatting_enabled = model_needs_formatting_reenabled(
-                    llm.config.model_name
-                )
-
-                system_prompt_str = build_system_prompt(
-                    base_system_prompt=get_default_base_system_prompt(db_session),
-                    datetime_aware=persona.datetime_aware if persona else True,
-                    memories=memories,
-                    tools=tools,
-                    should_cite_documents=should_cite_documents
-                    or always_cite_documents,
-                    open_ai_formatting_enabled=open_ai_formatting_enabled,
-                )
-                system_prompt = ChatMessageSimple(
-                    message=system_prompt_str,
-                    token_count=token_counter(system_prompt_str),
-                    message_type=MessageType.SYSTEM,
-                )
-
-                custom_agent_prompt_msg = (
-                    ChatMessageSimple(
-                        message=custom_agent_prompt,
-                        token_count=token_counter(custom_agent_prompt),
-                        message_type=MessageType.USER,
+                # If it's an empty string, we assume the user does not want to include it as an empty System message
+                if default_base_system_prompt:
+                    open_ai_formatting_enabled = model_needs_formatting_reenabled(
+                        llm.config.model_name
                     )
-                    if custom_agent_prompt
-                    else None
-                )
+
+                    system_prompt_str = build_system_prompt(
+                        base_system_prompt=default_base_system_prompt,
+                        datetime_aware=persona.datetime_aware if persona else True,
+                        memories=memories,
+                        tools=tools,
+                        should_cite_documents=should_cite_documents
+                        or always_cite_documents,
+                        open_ai_formatting_enabled=open_ai_formatting_enabled,
+                    )
+                    system_prompt = ChatMessageSimple(
+                        message=system_prompt_str,
+                        token_count=token_counter(system_prompt_str),
+                        message_type=MessageType.SYSTEM,
+                    )
+                    custom_agent_prompt_msg = (
+                        ChatMessageSimple(
+                            message=custom_agent_prompt,
+                            token_count=token_counter(custom_agent_prompt),
+                            message_type=MessageType.USER,
+                        )
+                        if custom_agent_prompt
+                        else None
+                    )
+                else:
+                    # If there is a custom agent prompt, it replaces the system prompt when the default system prompt is empty
+                    system_prompt = (
+                        ChatMessageSimple(
+                            message=custom_agent_prompt,
+                            token_count=token_counter(custom_agent_prompt),
+                            message_type=MessageType.SYSTEM,
+                        )
+                        if custom_agent_prompt
+                        else None
+                    )
+                    custom_agent_prompt_msg = None
 
             reminder_message_text: str | None
             if ran_image_gen:

@@ -42,10 +42,10 @@ const NameStepInner = ({
           <SvgUser className="w-4 h-4 stroke-text-03" />
         </div>
         <div>
-          <Text text04 mainUiAction>
+          <Text as="p" text04 mainUiAction>
             What should Onyx call you?
           </Text>
-          <Text text03 secondaryBody>
+          <Text as="p" text03 secondaryBody>
             We will display this name in the app.
           </Text>
         </div>
@@ -77,11 +77,11 @@ const NameStepInner = ({
             "w-5 h-5"
           )}
         >
-          <Text inverted secondaryBody>
+          <Text as="p" inverted secondaryBody>
             {userName?.[0]?.toUpperCase()}
           </Text>
         </InputAvatar>
-        <Text text04 mainUiAction>
+        <Text as="p" text04 mainUiAction>
           {userName}
         </Text>
       </div>

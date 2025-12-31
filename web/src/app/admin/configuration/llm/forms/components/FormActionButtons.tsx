@@ -64,12 +64,16 @@ export function FormActionButtons({
 
   return (
     <>
-      {testError && <Text className="text-error mt-2">{testError}</Text>}
+      {testError && (
+        <Text as="p" className="text-error mt-2">
+          {testError}
+        </Text>
+      )}
 
       <div className="flex w-full mt-4 gap-2">
         <Button type="submit" disabled={isTesting || !isFormValid}>
           {isTesting ? (
-            <Text inverted>
+            <Text as="p" inverted>
               <LoadingAnimation text="Testing" />
             </Text>
           ) : existingLlmProvider ? (
