@@ -636,18 +636,6 @@ async function completeOauthFlow(
   await tryConfirmConnected(false);
 }
 
-async function ensurePublicAssistant(page: Page) {
-  const publicRow = page
-    .locator("div.flex.items-center")
-    .filter({ hasText: "Organization Public" })
-    .first();
-  const switchLocator = publicRow.locator('[role="switch"]').first();
-  const state = await switchLocator.getAttribute("aria-checked");
-  if (state !== "true") {
-    await switchLocator.click();
-  }
-}
-
 async function selectMcpTools(
   page: Page,
   serverId: number,
@@ -1365,7 +1353,6 @@ test.describe("MCP OAuth flows", () => {
       .getByRole("button", { name: /Advanced Options/i })
       .click()
       .catch(() => {});
-    await ensurePublicAssistant(page);
     await selectMcpTools(page, serverId, [TOOL_NAMES.admin]);
 
     await page.getByRole("button", { name: "Create" }).click();
@@ -1623,7 +1610,6 @@ test.describe("MCP OAuth flows", () => {
         .getByRole("button", { name: /Advanced Options/i })
         .click()
         .catch(() => {});
-      await ensurePublicAssistant(page);
       await selectMcpTools(page, serverId, [TOOL_NAMES.curator]);
 
       await page.getByRole("button", { name: "Create" }).click();
