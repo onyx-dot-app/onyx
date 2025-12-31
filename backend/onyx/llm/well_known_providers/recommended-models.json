@@ -5,6 +5,7 @@
     "openai": {
       "default_model": { "name": "gpt-5.2" },
       "additional_visible_models": [
+        { "name": "gpt-5-mini" },
         { "name": "gpt-4.1" }
       ]
     },
@@ -31,15 +32,23 @@
       ]
     },
     "openrouter": {
-      "default_model": "z-ai/glm-4.6v",
+      "default_model": "z-ai/glm-4.7",
       "additional_visible_models": [
         {
-          "name": "o3-mini",
-          "display_name": "O3 Mini"
+          "name": "z-ai/glm-4.7",
+          "display_name": "GLM 4.7"
         },
         {
-          "name": "o3-mini-high",
-          "display_name": "O3 Mini High"
+          "name": "deepseek/deepseek-v3.2",
+          "display_name": "DeepSeek V3.2"
+        },
+        {
+          "name": "qwen/qwen3-235b-a22b-2507",
+          "display_name": "Qwen3 235B A22B Instruct 2507"
+        },
+        {
+          "name": "moonshotai/kimi-k2-0905",
+          "display_name": "Kimi K2 0905"
         }
       ]
     }

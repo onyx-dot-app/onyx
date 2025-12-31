@@ -52,6 +52,7 @@ export function AnthropicForm({
           api_base: existingLlmProvider?.api_base ?? "",
           default_model_name:
             existingLlmProvider?.default_model_name ??
+            wellKnownLLMProvider?.recommended_default_model ??
             DEFAULT_DEFAULT_MODEL_NAME,
           // Default to auto mode for new Anthropic providers
           is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
