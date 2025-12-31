@@ -284,8 +284,108 @@ def translate_history_to_llm_format(
     handling different message types and image files for multimodal support.
     """
     messages: list[ChatCompletionMessage] = []
+    pending_tool_calls: list[ChatMessageSimple] = []
+    pending_tool_responses: list[ChatMessageSimple] = []
+
+    def flush_tool_calls() -> None:
+        if not pending_tool_calls:
+            return
+
+        tool_calls: list[ToolCall] = []
+        for tool_msg in pending_tool_calls:
+            if not tool_msg.tool_call_id:
+                logger.warning(
+                    "Tool call message missing tool_call_id, skipping tool call parsing."
+                )
+                continue
+            try:
+                # Parse the message content (which should contain function_name and arguments)
+                tool_call_data = (
+                    json.loads(tool_msg.message) if tool_msg.message else {}
+                )
+
+                if (
+                    isinstance(tool_call_data, dict)
+                    and TOOL_CALL_MSG_FUNC_NAME in tool_call_data
+                ):
+                    function_name = tool_call_data.get(
+                        TOOL_CALL_MSG_FUNC_NAME, "unknown"
+                    )
+                    raw_args = tool_call_data.get(TOOL_CALL_MSG_ARGUMENTS, {})
+                else:
+                    function_name = "unknown"
+                    raw_args = (
+                        tool_call_data if isinstance(tool_call_data, dict) else {}
+                    )
+
+                # IMPORTANT: `FunctionCall.arguments` must be a JSON object string.
+                # If `raw_args` is accidentally a JSON string literal of an object
+                # (e.g. '"{\\"queries\\":[...]}"'), calling `json.dumps(raw_args)`
+                # would produce a quoted JSON literal and break Anthropic tool parsing.
+                tool_args = _parse_tool_args_to_dict(raw_args)
+
+                # NOTE: if the model is trained on a different tool call format, this may slightly interfere
+                # with the future tool calls, if it doesn't look like this. Almost certainly not a big deal.
+                tool_call = ToolCall(
+                    id=tool_msg.tool_call_id,
+                    type="function",
+                    function=FunctionCall(
+                        name=function_name,
+                        arguments=json.dumps(tool_args) if tool_args else "{}",
+                    ),
+                )
+                tool_calls.append(tool_call)
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.warning(
+                    f"Failed to parse tool call data for tool_call_id {tool_msg.tool_call_id}: {e}. "
+                    "Including as content-only message."
+                )
+
+        assistant_msg_with_tool = AssistantMessage(
+            role="assistant",
+            content=None,  # The tool call is parsed, doesn't need to be duplicated in the content
+            tool_calls=tool_calls if tool_calls else None,
+        )
+        messages.append(assistant_msg_with_tool)
+        pending_tool_calls.clear()
+
+    def flush_tool_responses() -> None:
+        if not pending_tool_responses:
+            return
+
+        for tool_msg in pending_tool_responses:
+            if not tool_msg.tool_call_id:
+                raise ValueError(
+                    f"Tool call response message encountered but tool_call_id is not available. Message: {tool_msg}"
+                )
+
+        for tool_msg in pending_tool_responses:
+            tool_message = ToolMessage(
+                role="tool",
+                content=tool_msg.message,
+                tool_call_id=tool_msg.tool_call_id,
+            )
+            messages.append(tool_message)
+        pending_tool_responses.clear()
 
     for msg in history:
+        if msg.message_type == MessageType.TOOL_CALL:
+            if pending_tool_responses:
+                flush_tool_responses()
+            pending_tool_calls.append(msg)
+            continue
+
+        if msg.message_type == MessageType.TOOL_CALL_RESPONSE:
+            if pending_tool_calls:
+                flush_tool_calls()
+            pending_tool_responses.append(msg)
+            continue
+
+        if pending_tool_calls:
+            flush_tool_calls()
+        if pending_tool_responses:
+            flush_tool_responses()
+
         if msg.message_type == MessageType.SYSTEM:
             system_msg = SystemMessage(
                 role="system",
@@ -346,76 +446,15 @@ def translate_history_to_llm_format(
             )
             messages.append(assistant_msg)
 
-        elif msg.message_type == MessageType.TOOL_CALL:
-            # Tool calls are represented as Assistant Messages with tool_calls field
-            # Try to reconstruct tool call structure if we have tool_call_id
-            tool_calls: list[ToolCall] = []
-            if msg.tool_call_id:
-                try:
-                    # Parse the message content (which should contain function_name and arguments)
-                    tool_call_data = json.loads(msg.message) if msg.message else {}
-
-                    if (
-                        isinstance(tool_call_data, dict)
-                        and TOOL_CALL_MSG_FUNC_NAME in tool_call_data
-                    ):
-                        function_name = tool_call_data.get(
-                            TOOL_CALL_MSG_FUNC_NAME, "unknown"
-                        )
-                        raw_args = tool_call_data.get(TOOL_CALL_MSG_ARGUMENTS, {})
-                    else:
-                        function_name = "unknown"
-                        raw_args = (
-                            tool_call_data if isinstance(tool_call_data, dict) else {}
-                        )
-
-                    # IMPORTANT: `FunctionCall.arguments` must be a JSON object string.
-                    # If `raw_args` is accidentally a JSON string literal of an object
-                    # (e.g. '"{\\"queries\\":[...]}"'), calling `json.dumps(raw_args)`
-                    # would produce a quoted JSON literal and break Anthropic tool parsing.
-                    tool_args = _parse_tool_args_to_dict(raw_args)
-
-                    # NOTE: if the model is trained on a different tool call format, this may slightly interfere
-                    # with the future tool calls, if it doesn't look like this. Almost certainly not a big deal.
-                    tool_call = ToolCall(
-                        id=msg.tool_call_id,
-                        type="function",
-                        function=FunctionCall(
-                            name=function_name,
-                            arguments=json.dumps(tool_args) if tool_args else "{}",
-                        ),
-                    )
-                    tool_calls.append(tool_call)
-                except (json.JSONDecodeError, ValueError) as e:
-                    logger.warning(
-                        f"Failed to parse tool call data for tool_call_id {msg.tool_call_id}: {e}. "
-                        "Including as content-only message."
-                    )
-
-            assistant_msg_with_tool = AssistantMessage(
-                role="assistant",
-                content=None,  # The tool call is parsed, doesn't need to be duplicated in the content
-                tool_calls=tool_calls if tool_calls else None,
-            )
-            messages.append(assistant_msg_with_tool)
-
-        elif msg.message_type == MessageType.TOOL_CALL_RESPONSE:
-            if not msg.tool_call_id:
-                raise ValueError(
-                    f"Tool call response message encountered but tool_call_id is not available. Message: {msg}"
-                )
-
-            tool_msg = ToolMessage(
-                role="tool",
-                content=msg.message,
-                tool_call_id=msg.tool_call_id,
-            )
-            messages.append(tool_msg)
-
         else:
             logger.warning(
                 f"Unknown message type {msg.message_type} in history. Skipping message."
             )
+
+    if pending_tool_calls:
+        flush_tool_calls()
+    if pending_tool_responses:
+        flush_tool_responses()
 
     return messages
 
