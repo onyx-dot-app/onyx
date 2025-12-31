@@ -22,6 +22,8 @@ interface OptionsListProps {
   inputValue: string;
   /** Whether to show create option when no exact match */
   allowCreate: boolean;
+  /** Whether to show create option (pre-computed by parent) */
+  showCreateOption: boolean;
 }
 
 /**
@@ -42,14 +44,8 @@ export const OptionsList: React.FC<OptionsListProps> = ({
   isExactMatch,
   inputValue,
   allowCreate,
+  showCreateOption,
 }) => {
-  // Show create option when: allowCreate is true, user has typed something, and no partial matches
-  const showCreateOption =
-    allowCreate &&
-    hasSearchTerm &&
-    inputValue.trim() !== "" &&
-    matchedOptions.length === 0;
-
   // Index offset for other options when create option is shown
   const indexOffset = showCreateOption ? 1 : 0;
 
@@ -74,6 +70,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
           data-index={0}
           role="option"
           aria-selected={false}
+          aria-label={`Create "${inputValue}"`}
           onClick={(e) => {
             e.stopPropagation();
             onSelect({ value: inputValue, label: inputValue });

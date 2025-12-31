@@ -436,6 +436,7 @@ const InputComboBox = ({
           isExactMatch={isExactMatch}
           inputValue={inputValue}
           allowCreate={!strict}
+          showCreateOption={showCreateOption}
         />
       </div>
 

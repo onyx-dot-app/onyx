@@ -5,7 +5,7 @@ import { ComboBoxOption } from "../types";
  * Encodes characters that are invalid in IDs (spaces, special chars).
  */
 export function sanitizeOptionId(value: string): string {
-  return encodeURIComponent(value);
+  return `option-${encodeURIComponent(value)}`;
 }
 
 interface BuildAriaAttributesProps {

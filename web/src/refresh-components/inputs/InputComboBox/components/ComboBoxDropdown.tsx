@@ -25,6 +25,8 @@ interface ComboBoxDropdownProps {
   inputValue: string;
   /** Whether to show create option when no exact match */
   allowCreate: boolean;
+  /** Whether to show create option (pre-computed by parent) */
+  showCreateOption: boolean;
 }
 
 /**
@@ -55,6 +57,7 @@ export const ComboBoxDropdown = forwardRef<
       isExactMatch,
       inputValue,
       allowCreate,
+      showCreateOption,
     },
     ref
   ) => {
@@ -73,7 +76,7 @@ export const ComboBoxDropdown = forwardRef<
         if (highlightedElement) {
           highlightedElement.scrollIntoView({
             block: "nearest",
-            behavior: "smooth",
+            behavior: "instant",
           });
         }
       }
@@ -128,6 +131,7 @@ export const ComboBoxDropdown = forwardRef<
           isExactMatch={isExactMatch}
           inputValue={inputValue}
           allowCreate={allowCreate}
+          showCreateOption={showCreateOption}
         />
       </div>,
       document.body
