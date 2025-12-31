@@ -1,6 +1,3 @@
-from onyx.llm.well_known_providers.models import CustomConfigOption
-
-
 OPENAI_PROVIDER_NAME = "openai"
 # Curated list of OpenAI models to show by default in the UI
 OPENAI_VISIBLE_MODEL_NAMES = {
@@ -34,38 +31,6 @@ def _fallback_bedrock_regions() -> list[str]:
         "eu-west-2",
     ]
 
-
-def _build_bedrock_region_options() -> list[CustomConfigOption]:
-    try:
-        import boto3
-
-        session = boto3.session.Session()
-        regions: set[str] = set()
-        # Include both commercial and GovCloud partitions so GovCloud users can select their region.
-        for partition_name in ("aws", "aws-us-gov"):
-            try:
-                regions.update(
-                    session.get_available_regions(
-                        "bedrock", partition_name=partition_name
-                    )
-                )
-                regions.update(
-                    session.get_available_regions(
-                        "bedrock-runtime", partition_name=partition_name
-                    )
-                )
-            except Exception:
-                continue
-        if not regions:
-            raise ValueError("No Bedrock regions returned from boto3")
-        sorted_regions = sorted(regions)
-    except Exception:
-        sorted_regions = _fallback_bedrock_regions()
-
-    return [CustomConfigOption(label=region, value=region) for region in sorted_regions]
-
-
-BEDROCK_REGION_OPTIONS = _build_bedrock_region_options()
 
 OLLAMA_PROVIDER_NAME = "ollama_chat"
 OLLAMA_API_KEY_CONFIG_KEY = "OLLAMA_API_KEY"
