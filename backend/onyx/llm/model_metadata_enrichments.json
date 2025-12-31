@@ -2018,6 +2018,11 @@
     "model_vendor": "google",
     "model_version": "preview"
   },
+  "gemini-3-flash-preview": {
+    "display_name": "Gemini 3 Flash Preview",
+    "model_vendor": "google",
+    "model_version": "preview"
+  },
   "gemini-flash-experimental": {
     "display_name": "Gemini Flash Experimental",
     "model_vendor": "google",
@@ -4086,6 +4091,11 @@
   },
   "vertex_ai/gemini-3-pro-preview": {
     "display_name": "Gemini 3 Pro Preview",
+    "model_vendor": "google",
+    "model_version": "preview"
+  },
+  "vertex_ai/gemini-3-flash-preview": {
+    "display_name": "Gemini 3 Flash Preview",
     "model_vendor": "google",
     "model_version": "preview"
   },
