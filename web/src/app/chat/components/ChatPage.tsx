@@ -97,8 +97,13 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
   const searchParams = useSearchParams();
 
   // Use SWR hooks for data fetching
-  const { refreshChatSessions, currentChatSession, currentChatSessionId } =
-    useChatSessions();
+  const {
+    refreshChatSessions,
+    currentChatSession,
+    currentChatSessionId,
+    chatSessions,
+    isLoading: isLoadingChatSessions,
+  } = useChatSessions();
   const { ccPairs } = useCCPairs();
   const { tags } = useTags();
   const { documentSets } = useDocumentSets();
@@ -195,13 +200,13 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
     liveAssistant
   );
 
-  // On first render, open onboarding if there are no configured LLM providers
+  // On first render, open onboarding if there are no chat sessions
   // AND the user hasn't explicitly finished onboarding yet.
-  // Wait until providers have loaded before making this decision.
+  // Wait until chat sessions have loaded before making this decision.
   const hasCheckedOnboarding = useRef(false);
   useEffect(() => {
-    // Only check once, and only after data has loaded
-    if (hasCheckedOnboarding.current || llmManager.isLoadingProviders) {
+    // Only check once, and only after chat sessions have loaded
+    if (hasCheckedOnboarding.current || isLoadingChatSessions) {
       return;
     }
     hasCheckedOnboarding.current = true;
@@ -210,22 +215,22 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
     const hasFinishedOnboarding =
       localStorage.getItem(HAS_FINISHED_ONBOARDING_KEY) === "true";
 
-    // If user already has providers configured but hasn't finished onboarding,
+    const hasAnyChatSessions = chatSessions.length > 0;
+
+    // If user already has chat sessions but hasn't finished onboarding,
     // auto-set the key to prevent showing onboarding to existing users.
-    // This handles the case where users set up providers before the
+    // This handles the case where users had chat sessions before the
     // hasFinishedOnboarding key was introduced.
-    if (llmManager.hasAnyProvider && !hasFinishedOnboarding) {
+    if (hasAnyChatSessions && !hasFinishedOnboarding) {
       localStorage.setItem(HAS_FINISHED_ONBOARDING_KEY, "true");
       setShowOnboarding(false);
       return;
     }
 
-    // Show onboarding only if no LLM providers configured AND user hasn't
+    // Show onboarding only if no chat sessions AND user hasn't
     // explicitly finished onboarding (they navigated away before clicking "Finish Setup")
-    setShowOnboarding(
-      llmManager.hasAnyProvider === false && !hasFinishedOnboarding
-    );
-  }, [llmManager.isLoadingProviders, llmManager.hasAnyProvider]);
+    setShowOnboarding(!hasAnyChatSessions && !hasFinishedOnboarding);
+  }, [isLoadingChatSessions, chatSessions.length]);
 
   const noAssistants = liveAssistant === null || liveAssistant === undefined;
 
