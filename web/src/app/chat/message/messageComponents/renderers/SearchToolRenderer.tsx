@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo, JSX } from "react";
-import { SvgSearch, SvgGlobe, SvgBookOpen } from "@opal/icons";
+import { SvgSearch, SvgGlobe, SvgBookOpen, SvgXCircle } from "@opal/icons";
 import {
   PacketType,
   SearchToolPacket,
@@ -100,6 +100,7 @@ export const constructCurrentSearchState = (
 function SearchToolStepRenderer<T>({
   packets,
   isActive,
+  isCancelled,
   children,
   icon,
   status,
@@ -113,6 +114,7 @@ function SearchToolStepRenderer<T>({
 }: {
   packets: SearchToolPacket[];
   isActive: boolean;
+  isCancelled?: boolean;
   children: (result: RendererResult) => JSX.Element;
   icon: IconType | OnyxIconType;
   status: string;
@@ -170,7 +172,12 @@ function SearchToolStepRenderer<T>({
               />
             </div>
           )}
-          {items.length === 0 && <BlinkingDot />}
+          {items.length === 0 &&
+            (isCancelled ? (
+              <SvgXCircle size={14} className="text-text-400" />
+            ) : (
+              <BlinkingDot />
+            ))}
         </div>
       </div>
     ),
@@ -181,16 +188,19 @@ function SearchToolStepRenderer<T>({
 export function SourceRetrievalStepRenderer({
   packets,
   isActive,
+  isCancelled,
   children,
 }: {
   packets: SearchToolPacket[];
   isActive: boolean;
+  isCancelled?: boolean;
   children: (result: RendererResult) => JSX.Element;
 }) {
   return (
     <SearchToolStepRenderer
       packets={packets}
       isActive={isActive}
+      isCancelled={isCancelled}
       icon={SvgSearch}
       status="Searching internally"
       getItems={(state) => state.queries}
@@ -209,16 +219,19 @@ export function SourceRetrievalStepRenderer({
 export function ReadDocumentsStepRenderer({
   packets,
   isActive,
+  isCancelled,
   children,
 }: {
   packets: SearchToolPacket[];
   isActive: boolean;
+  isCancelled?: boolean;
   children: (result: RendererResult) => JSX.Element;
 }) {
   return (
     <SearchToolStepRenderer
       packets={packets}
       isActive={isActive}
+      isCancelled={isCancelled}
       icon={SvgBookOpen}
       status="Reading"
       getItems={(state) => state.results}

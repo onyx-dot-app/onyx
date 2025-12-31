@@ -234,6 +234,8 @@ def downgrade() -> None:
         if "instructions" in columns:
             op.drop_column("user_project", "instructions")
         op.execute("ALTER TABLE user_project RENAME TO user_folder")
+        # Update NULL descriptions to empty string before setting NOT NULL constraint
+        op.execute("UPDATE user_folder SET description = '' WHERE description IS NULL")
         op.alter_column("user_folder", "description", nullable=False)
         logger.info("Renamed user_project back to user_folder")
 

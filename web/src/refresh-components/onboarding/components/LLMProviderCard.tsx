@@ -1,13 +1,8 @@
 import React, { memo, useCallback, useState } from "react";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
-import ConnectionProviderIcon from "@/refresh-components/ConnectionProviderIcon";
-import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { OnboardingActions, OnboardingState } from "../types";
 import { cn, noProp } from "@/lib/utils";
-import { LLMConnectionModalProps } from "./LLMConnectionModal";
-import { ModalCreationInterface } from "@/refresh-components/contexts/ModalContext";
 import {
   SvgArrowExchange,
   SvgCheckCircle,
@@ -16,33 +11,23 @@ import {
 } from "@opal/icons";
 import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 
-export interface LLMProviderProps {
+export interface LLMProviderCardProps {
   title: string;
   subtitle: string;
   providerName?: string;
-  llmDescriptor?: WellKnownLLMProviderDescriptor;
   disabled?: boolean;
   isConnected?: boolean;
-  onClick: (props: LLMConnectionModalProps) => void;
-  onboardingState: OnboardingState;
-  onboardingActions: OnboardingActions;
-  onOpenModal?: () => void;
-  modal: ModalCreationInterface;
+  onClick: () => void;
 }
 
-function LLMProviderInner({
+function LLMProviderCardInner({
   title,
   subtitle,
   providerName,
-  llmDescriptor,
   disabled,
   isConnected,
-  onboardingState,
-  onboardingActions,
   onClick,
-  onOpenModal,
-  modal,
-}: LLMProviderProps) {
+}: LLMProviderCardProps) {
   const [isHovered, setIsHovered] = useState(false);
 
   const handleCardClick = useCallback(() => {
@@ -52,36 +37,9 @@ function LLMProviderInner({
       return;
     }
 
-    // If not connected, open the modal
-    const iconNode = providerName ? (
-      <ProviderIcon provider={providerName} size={24} />
-    ) : (
-      <SvgServer className="w-6 h-6 stroke-text-04" />
-    );
-
-    onClick({
-      icon: <ConnectionProviderIcon icon={iconNode} />,
-      title: "Set up " + title,
-      llmDescriptor,
-      isCustomProvider: !llmDescriptor,
-      onboardingState,
-      onboardingActions,
-      modal,
-    });
-    if (onOpenModal) {
-      onOpenModal();
-    }
-  }, [
-    providerName,
-    llmDescriptor,
-    title,
-    onboardingState,
-    onboardingActions,
-    isConnected,
-    onClick,
-    onOpenModal,
-    modal,
-  ]);
+    // If not connected, call onClick to open the form
+    onClick();
+  }, [isConnected, onClick]);
 
   const handleSettingsClick = useCallback(
     noProp(() => (window.location.href = "/admin/configuration/llm")),
@@ -156,5 +114,5 @@ function LLMProviderInner({
   );
 }
 
-const LLMProvider = memo(LLMProviderInner);
-export default LLMProvider;
+const LLMProviderCard = memo(LLMProviderCardInner);
+export default LLMProviderCard;

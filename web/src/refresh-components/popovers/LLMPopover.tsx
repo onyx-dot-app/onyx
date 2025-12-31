@@ -402,7 +402,7 @@ export default function LLMPopover({
           {/* Model List with Vendor Groups */}
           <PopoverMenu
             scrollContainerRef={scrollContainerRef}
-            className="w-full"
+            className="w-full max-h-[22.5rem]"
           >
             {isLoadingProviders
               ? [
@@ -411,7 +411,7 @@ export default function LLMPopover({
                     className="flex items-center gap-2 px-2 py-3"
                   >
                     <SimpleLoader />
-                    <Text as="p" secondaryBody text03>
+                    <Text secondaryBody text03>
                       Loading models...
                     </Text>
                   </div>,
@@ -419,7 +419,7 @@ export default function LLMPopover({
               : groupedOptions.length === 0
                 ? [
                     <div key="empty" className="px-2 py-3">
-                      <Text as="p" secondaryBody text03>
+                      <Text secondaryBody text03>
                         No models found
                       </Text>
                     </div>,
@@ -460,7 +460,6 @@ export default function LLMPopover({
                                     <group.Icon size={16} />
                                   </div>
                                   <Text
-                                    as="p"
                                     secondaryBody
                                     text03
                                     nowrap
@@ -507,10 +506,10 @@ export default function LLMPopover({
                   className="w-full"
                 />
                 <div className="flex flex-row items-center justify-between">
-                  <Text as="p" secondaryBody text03>
+                  <Text secondaryBody text03>
                     Temperature (creativity)
                   </Text>
-                  <Text as="p" secondaryBody text03>
+                  <Text secondaryBody text03>
                     {localTemperature.toFixed(1)}
                   </Text>
                 </div>

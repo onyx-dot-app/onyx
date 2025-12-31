@@ -1,13 +1,5 @@
-from typing import cast
-
-from openinference.instrumentation import OITracer
-from openinference.instrumentation import TraceConfig
-from opentelemetry import trace as trace_api
-
 from onyx.configs.app_configs import LANGFUSE_PUBLIC_KEY
 from onyx.configs.app_configs import LANGFUSE_SECRET_KEY
-from onyx.tracing.framework import set_trace_processors
-from onyx.tracing.openinference_tracing_processor import OpenInferenceTracingProcessor
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -19,8 +11,19 @@ def setup_langfuse_if_creds_available() -> None:
         logger.info("Langfuse credentials not provided, skipping Langfuse setup")
         return
 
+    # Lazy imports to avoid loading OpenTelemetry/OpenInference when not needed
+    from typing import cast
+
     import nest_asyncio  # type: ignore
     from langfuse import get_client
+    from openinference.instrumentation import OITracer
+    from openinference.instrumentation import TraceConfig
+    from opentelemetry import trace as trace_api
+
+    from onyx.tracing.framework import set_trace_processors
+    from onyx.tracing.openinference_tracing_processor import (
+        OpenInferenceTracingProcessor,
+    )
 
     nest_asyncio.apply()
     config = TraceConfig()

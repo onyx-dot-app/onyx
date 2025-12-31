@@ -83,6 +83,7 @@ class PersonaUpsertRequest(BaseModel):
 
     # prompt fields
     system_prompt: str
+    replace_base_system_prompt: bool = False
     task_prompt: str
     datetime_aware: bool
 
@@ -186,6 +187,7 @@ class PersonaSnapshot(BaseModel):
 
     # Embedded prompt fields (no longer separate prompt_ids)
     system_prompt: str | None = None
+    replace_base_system_prompt: bool = False
     task_prompt: str | None = None
     datetime_aware: bool = True
 
@@ -230,6 +232,7 @@ class PersonaSnapshot(BaseModel):
             llm_model_version_override=persona.llm_model_version_override,
             num_chunks=persona.num_chunks,
             system_prompt=persona.system_prompt,
+            replace_base_system_prompt=persona.replace_base_system_prompt,
             task_prompt=persona.task_prompt,
             datetime_aware=persona.datetime_aware,
         )
@@ -293,6 +296,7 @@ class FullPersonaSnapshot(PersonaSnapshot):
             llm_model_provider_override=persona.llm_model_provider_override,
             llm_model_version_override=persona.llm_model_version_override,
             system_prompt=persona.system_prompt,
+            replace_base_system_prompt=persona.replace_base_system_prompt,
             task_prompt=persona.task_prompt,
             datetime_aware=persona.datetime_aware,
         )
