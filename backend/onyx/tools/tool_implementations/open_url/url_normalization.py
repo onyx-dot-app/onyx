@@ -36,33 +36,28 @@ def _default_url_normalizer(url: str) -> str | None:
     return normalized or None
 
 
-def _try_connector_normalize(url: str, source_type: DocumentSource) -> str | None:
-    """Try to normalize URL using connector's normalize_url method."""
-    try:
-        connector_class = identify_connector_class(source_type)
-        return connector_class.normalize_url(url)
-    except Exception:
-        return None
-
-
 def normalize_url(url: str, source_type: DocumentSource | None = None) -> str | None:
     """Normalize a URL to match the canonical Document.id format.
 
     Dispatches to the connector's normalize_url() method or falls back to default normalizer.
     """
+    # If source_type not provided, try to detect it
+    if source_type is None:
+        source_type = _detect_source_type(url)
+
     if source_type:
-        result = _try_connector_normalize(url, source_type)
-        if result:
+        try:
+            connector_class = identify_connector_class(source_type)
+            result = connector_class.normalize_url(url)
             return result
-        return _default_url_normalizer(url)
+        except Exception as exc:
+            logger.debug(
+                "Failed to normalize URL for source %s: %s. Using default normalizer.",
+                source_type,
+                exc,
+            )
 
-    # Try to detect source type from URL patterns
-    detected = _detect_source_type(url)
-    if detected:
-        result = _try_connector_normalize(url, detected)
-        if result:
-            return result
-
+    # No source_type or connector not found - fall back to default
     return _default_url_normalizer(url)
 
 
