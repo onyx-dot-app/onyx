@@ -207,7 +207,8 @@ describe("AzureOnboardingForm", () => {
 
       mockFetch
         .mockResolvedValueOnce(mockResponses.testApiSuccess)
-        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1));
+        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1))
+        .mockResolvedValueOnce(mockResponses.setDefaultSuccess);
 
       render(<AzureOnboardingForm {...defaultProps} />);
 
@@ -244,7 +245,8 @@ describe("AzureOnboardingForm", () => {
 
       mockFetch
         .mockResolvedValueOnce(mockResponses.testApiSuccess)
-        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1));
+        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1))
+        .mockResolvedValueOnce(mockResponses.setDefaultSuccess);
 
       render(<AzureOnboardingForm {...defaultProps} />);
 
@@ -278,7 +280,8 @@ describe("AzureOnboardingForm", () => {
 
       mockFetch
         .mockResolvedValueOnce(mockResponses.testApiSuccess)
-        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1));
+        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1))
+        .mockResolvedValueOnce(mockResponses.setDefaultSuccess);
 
       render(
         <AzureOnboardingForm {...defaultProps} onOpenChange={onOpenChange} />
@@ -310,7 +313,8 @@ describe("AzureOnboardingForm", () => {
 
       mockFetch
         .mockResolvedValueOnce(mockResponses.testApiSuccess)
-        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1));
+        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1))
+        .mockResolvedValueOnce(mockResponses.setDefaultSuccess);
 
       render(
         <AzureOnboardingForm

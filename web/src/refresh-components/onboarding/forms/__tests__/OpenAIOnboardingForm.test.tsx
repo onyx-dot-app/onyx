@@ -282,7 +282,8 @@ describe("OpenAIOnboardingForm", () => {
 
       mockFetch
         .mockResolvedValueOnce(mockResponses.testApiSuccess)
-        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1));
+        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1))
+        .mockResolvedValueOnce(mockResponses.setDefaultSuccess);
 
       render(<OpenAIOnboardingForm {...defaultProps} />);
 
@@ -307,7 +308,8 @@ describe("OpenAIOnboardingForm", () => {
 
       mockFetch
         .mockResolvedValueOnce(mockResponses.testApiSuccess)
-        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1));
+        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1))
+        .mockResolvedValueOnce(mockResponses.setDefaultSuccess);
 
       render(<OpenAIOnboardingForm {...defaultProps} />);
 
@@ -333,7 +335,8 @@ describe("OpenAIOnboardingForm", () => {
 
       mockFetch
         .mockResolvedValueOnce(mockResponses.testApiSuccess)
-        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1));
+        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1))
+        .mockResolvedValueOnce(mockResponses.setDefaultSuccess);
 
       render(
         <OpenAIOnboardingForm {...defaultProps} onOpenChange={onOpenChange} />
@@ -356,7 +359,8 @@ describe("OpenAIOnboardingForm", () => {
 
       mockFetch
         .mockResolvedValueOnce(mockResponses.testApiSuccess)
-        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1));
+        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1))
+        .mockResolvedValueOnce(mockResponses.setDefaultSuccess);
 
       render(
         <OpenAIOnboardingForm

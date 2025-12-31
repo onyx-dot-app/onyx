@@ -235,7 +235,8 @@ describe("VertexAIOnboardingForm", () => {
 
       mockFetch
         .mockResolvedValueOnce(mockResponses.testApiSuccess)
-        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1));
+        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1))
+        .mockResolvedValueOnce(mockResponses.setDefaultSuccess);
 
       render(
         <VertexAIOnboardingForm {...defaultProps} onOpenChange={onOpenChange} />
@@ -256,7 +257,8 @@ describe("VertexAIOnboardingForm", () => {
 
       mockFetch
         .mockResolvedValueOnce(mockResponses.testApiSuccess)
-        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1));
+        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1))
+        .mockResolvedValueOnce(mockResponses.setDefaultSuccess);
 
       render(
         <VertexAIOnboardingForm

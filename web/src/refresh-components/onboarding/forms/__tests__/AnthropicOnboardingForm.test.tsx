@@ -259,7 +259,8 @@ describe("AnthropicOnboardingForm", () => {
 
       mockFetch
         .mockResolvedValueOnce(mockResponses.testApiSuccess)
-        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1));
+        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1))
+        .mockResolvedValueOnce(mockResponses.setDefaultSuccess);
 
       render(<AnthropicOnboardingForm {...defaultProps} />);
 
@@ -284,7 +285,8 @@ describe("AnthropicOnboardingForm", () => {
 
       mockFetch
         .mockResolvedValueOnce(mockResponses.testApiSuccess)
-        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1));
+        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1))
+        .mockResolvedValueOnce(mockResponses.setDefaultSuccess);
 
       render(<AnthropicOnboardingForm {...defaultProps} />);
 
@@ -309,7 +311,8 @@ describe("AnthropicOnboardingForm", () => {
 
       mockFetch
         .mockResolvedValueOnce(mockResponses.testApiSuccess)
-        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1));
+        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1))
+        .mockResolvedValueOnce(mockResponses.setDefaultSuccess);
 
       render(
         <AnthropicOnboardingForm
@@ -335,7 +338,8 @@ describe("AnthropicOnboardingForm", () => {
 
       mockFetch
         .mockResolvedValueOnce(mockResponses.testApiSuccess)
-        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1));
+        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1))
+        .mockResolvedValueOnce(mockResponses.setDefaultSuccess);
 
       render(
         <AnthropicOnboardingForm

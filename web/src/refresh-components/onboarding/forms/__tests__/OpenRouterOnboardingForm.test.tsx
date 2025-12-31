@@ -187,7 +187,8 @@ describe("OpenRouterOnboardingForm", () => {
 
       mockFetch
         .mockResolvedValueOnce(mockResponses.testApiSuccess)
-        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1));
+        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1))
+        .mockResolvedValueOnce(mockResponses.setDefaultSuccess);
 
       render(<OpenRouterOnboardingForm {...defaultProps} />);
 
@@ -212,7 +213,8 @@ describe("OpenRouterOnboardingForm", () => {
 
       mockFetch
         .mockResolvedValueOnce(mockResponses.testApiSuccess)
-        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1));
+        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1))
+        .mockResolvedValueOnce(mockResponses.setDefaultSuccess);
 
       render(<OpenRouterOnboardingForm {...defaultProps} />);
 
@@ -238,7 +240,8 @@ describe("OpenRouterOnboardingForm", () => {
 
       mockFetch
         .mockResolvedValueOnce(mockResponses.testApiSuccess)
-        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1));
+        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1))
+        .mockResolvedValueOnce(mockResponses.setDefaultSuccess);
 
       render(
         <OpenRouterOnboardingForm
@@ -264,7 +267,8 @@ describe("OpenRouterOnboardingForm", () => {
 
       mockFetch
         .mockResolvedValueOnce(mockResponses.testApiSuccess)
-        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1));
+        .mockResolvedValueOnce(mockResponses.createProviderSuccess(1))
+        .mockResolvedValueOnce(mockResponses.setDefaultSuccess);
 
       render(
         <OpenRouterOnboardingForm
