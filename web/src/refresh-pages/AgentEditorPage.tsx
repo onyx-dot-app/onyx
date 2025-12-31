@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Button from "@/refresh-components/buttons/Button";
@@ -451,6 +451,40 @@ export default function AgentEditorPage({
   const appRouter = useAppRouter();
   const { popup, setPopup } = usePopup();
   const { refresh: refreshAgents } = useAgents();
+
+  // LLM Model Selection
+  const getCurrentLlm = useCallback(
+    (values: any, llmProviders: any) =>
+      values.llm_model_version_override && values.llm_model_provider_override
+        ? (() => {
+            const provider = llmProviders?.find(
+              (p: any) => p.name === values.llm_model_provider_override
+            );
+            return structureValue(
+              values.llm_model_provider_override,
+              provider?.provider || "",
+              values.llm_model_version_override
+            );
+          })()
+        : null,
+    []
+  );
+
+  const onLlmSelect = useCallback(
+    (selected: string | null, setFieldValue: any) => {
+      if (selected === null) {
+        setFieldValue("llm_model_version_override", null);
+        setFieldValue("llm_model_provider_override", null);
+      } else {
+        const { modelName, name } = parseLlmDescriptor(selected);
+        if (modelName && name) {
+          setFieldValue("llm_model_version_override", modelName);
+          setFieldValue("llm_model_provider_override", name);
+        }
+      }
+    },
+    []
+  );
 
   // Hooks for Knowledge section
   const { allRecentFiles, beginUpload } = useProjectsContext();
@@ -1312,57 +1346,13 @@ export default function AgentEditorPage({
                               label="Default Model"
                               description="Select the LLM model to use for this agent. If not set, the user's default model will be used."
                             >
-                              {llmProviders && llmProviders.length > 0 ? (
-                                <LLMSelector
-                                  llmProviders={llmProviders}
-                                  currentLlm={
-                                    values.llm_model_version_override &&
-                                    values.llm_model_provider_override
-                                      ? (() => {
-                                          const provider = llmProviders.find(
-                                            (p) =>
-                                              p.name ===
-                                              values.llm_model_provider_override
-                                          );
-                                          return structureValue(
-                                            values.llm_model_provider_override,
-                                            provider?.provider || "",
-                                            values.llm_model_version_override
-                                          );
-                                        })()
-                                      : null
-                                  }
-                                  onSelect={(selected) => {
-                                    if (selected === null) {
-                                      setFieldValue(
-                                        "llm_model_version_override",
-                                        null
-                                      );
-                                      setFieldValue(
-                                        "llm_model_provider_override",
-                                        null
-                                      );
-                                    } else {
-                                      const { modelName, name } =
-                                        parseLlmDescriptor(selected);
-                                      if (modelName && name) {
-                                        setFieldValue(
-                                          "llm_model_version_override",
-                                          modelName
-                                        );
-                                        setFieldValue(
-                                          "llm_model_provider_override",
-                                          name
-                                        );
-                                      }
-                                    }
-                                  }}
-                                />
-                              ) : (
-                                <div className="text-sm text-text-secondary">
-                                  No LLM providers available
-                                </div>
-                              )}
+                              <LLMSelector
+                                llmProviders={llmProviders ?? []}
+                                currentLlm={getCurrentLlm(values, llmProviders)}
+                                onSelect={(selected) =>
+                                  onLlmSelect(selected, setFieldValue)
+                                }
+                              />
                             </InputLayouts.Horizontal>
                             <InputLayouts.Horizontal
                               name="knowledge_cutoff_date"
