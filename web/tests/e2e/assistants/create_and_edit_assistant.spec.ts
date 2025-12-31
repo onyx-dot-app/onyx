@@ -255,7 +255,6 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await getStarterMessageInput(page).fill(editedAssistantStarterMessage);
 
       // Submit the edit form
-      await page.pause();
       await getUpdateSubmitButton(page).click();
 
       // Verify redirection back to the chat page
