@@ -232,13 +232,13 @@ class OpenSearchClient:
                 f'Document chunk with ID "{document_chunk_id}" was not found.'
             )
 
-        document_chunk_source: str = result.get("_source", "")
+        document_chunk_source: dict[str, Any] | None = result.get("_source")
         if not document_chunk_source:
             raise RuntimeError(
                 f'Document chunk with ID "{document_chunk_id}" has no data.'
             )
 
-        return DocumentChunk.model_validate_json(document_chunk_source)
+        return DocumentChunk.model_validate(document_chunk_source)
 
     def create_search_pipeline(
         self,
@@ -300,24 +300,33 @@ class OpenSearchClient:
 
         if result.get("timed_out", False):
             raise RuntimeError(f"Search timed out for index {self._index_name}.")
-        hits_first_layer: dict[Any, Any] = result.get("hits", {})
+        hits_first_layer: dict[str, Any] = result.get("hits", {})
         if not hits_first_layer:
             raise RuntimeError(
                 f"Hits field missing from response when trying to search index {self._index_name}."
             )
-        hits_second_layer: list[dict] = hits_first_layer.get("hits", [])
+        hits_second_layer: list[Any] = hits_first_layer.get("hits", [])
 
         result_chunks: list[DocumentChunk] = []
         for hit in hits_second_layer:
-            document_chunk_source: str = hit.get("_source", "")
+            document_chunk_source: dict[str, Any] | None = hit.get("_source")
             if not document_chunk_source:
                 raise RuntimeError(
                     f"Document chunk with ID \"{hit.get('_id', '')}\" has no data."
                 )
-            result_chunks.append(
-                DocumentChunk.model_validate_json(document_chunk_source)
-            )
+            result_chunks.append(DocumentChunk.model_validate(document_chunk_source))
         return result_chunks
+
+    def refresh_index(self) -> None:
+        """Refreshes the index to make recent changes searchable.
+
+        In OpenSearch, documents are not immediately searchable after indexing.
+        This method forces a refresh to make them available for search.
+
+        Raises:
+            Exception: There was an error refreshing the index.
+        """
+        self._client.indices.refresh(index=self._index_name)
 
     def ping(self) -> bool:
         """Pings the OpenSearch cluster.
