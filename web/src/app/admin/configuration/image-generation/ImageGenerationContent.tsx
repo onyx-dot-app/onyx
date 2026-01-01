@@ -25,7 +25,7 @@ export default function ImageGenerationContent() {
     error: llmError,
     mutate: refetchProviders,
   } = useSWR<LLMProviderView[]>(
-    "/api/admin/llm/provider",
+    "/api/admin/llm/provider?include_image_gen=true",
     errorHandlingFetcher
   );
 
