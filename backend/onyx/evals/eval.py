@@ -298,7 +298,7 @@ def _get_answer_with_tools(
                 skip_gen_ai_answer_generation=False,
                 llm_override=full_configuration.llm,
                 allowed_tool_ids=full_configuration.allowed_tool_ids,
-                forced_tool_ids=forced_tool_ids if forced_tool_ids else None,
+                forced_tool_ids=forced_tool_ids or None,
             )
 
             packets = stream_chat_message_objects(
