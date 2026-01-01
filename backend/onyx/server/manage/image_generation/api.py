@@ -5,13 +5,12 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.image_generation import create_image_generation_config
-from onyx.db.image_generation import delete_image_generation_config
+from onyx.db.image_generation import create_image_generation_config__no_commit
+from onyx.db.image_generation import delete_image_generation_config__no_commit
 from onyx.db.image_generation import get_all_image_generation_configs
 from onyx.db.image_generation import get_image_generation_config
 from onyx.db.image_generation import set_default_image_generation_config
-from onyx.db.llm import remove_llm_provider
-from onyx.db.llm import upsert_llm_provider
+from onyx.db.llm import remove_llm_provider__no_commit
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import ModelConfiguration
 from onyx.db.models import User
@@ -117,28 +116,48 @@ def _build_llm_provider_request(
         )
 
 
-def _create_llm_provider_and_get_model_config_id(
+def _create_image_gen_llm_provider__no_commit(
     db_session: Session,
     provider_request: LLMProviderUpsertRequest,
     model_name: str,
 ) -> int:
-    """Create LLM provider and return the model configuration ID."""
-    new_provider = upsert_llm_provider(provider_request, db_session)
+    """Create a new LLM provider for image generation. Returns model_config_id.
 
-    model_config = (
-        db_session.query(ModelConfiguration)
-        .filter(
-            ModelConfiguration.llm_provider_id == new_provider.id,
-            ModelConfiguration.name == model_name,
-        )
-        .first()
+    Unlike upsert_llm_provider, this always creates a new provider and never
+    deletes existing model configurations (which would cascade-delete ImageGenerationConfig).
+
+    Note: Does not commit. Caller is responsible for committing.
+    """
+    from onyx.llm.utils import get_max_input_tokens
+
+    # Always create a new provider (don't look up by name to avoid upsert behavior)
+    new_provider = LLMProviderModel(
+        name=provider_request.name,
+        provider=provider_request.provider,
+        api_key=provider_request.api_key,
+        api_base=provider_request.api_base,
+        api_version=provider_request.api_version,
+        default_model_name=provider_request.default_model_name,
+        deployment_name=provider_request.deployment_name,
+        is_public=provider_request.is_public,
+    )
+    db_session.add(new_provider)
+    db_session.flush()  # Get the ID
+
+    # Create model configuration
+    max_input_tokens = get_max_input_tokens(
+        model_name=model_name,
+        model_provider=provider_request.provider,
     )
 
-    if not model_config:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to create model configuration for new provider",
-        )
+    model_config = ModelConfiguration(
+        llm_provider_id=new_provider.id,
+        name=model_name,
+        is_visible=True,
+        max_input_tokens=max_input_tokens,
+    )
+    db_session.add(model_config)
+    db_session.flush()
 
     return model_config.id
 
@@ -266,20 +285,20 @@ def create_config(
             deployment_name=config_create.deployment_name,
         )
 
-        model_configuration_id = _create_llm_provider_and_get_model_config_id(
+        model_configuration_id = _create_image_gen_llm_provider__no_commit(
             db_session=db_session,
             provider_request=provider_request,
             model_name=config_create.model_name,
         )
 
         # Create the ImageGenerationConfig
-        config = create_image_generation_config(
+        config = create_image_generation_config__no_commit(
             db_session=db_session,
             image_provider_id=config_create.image_provider_id,
             model_configuration_id=model_configuration_id,
             is_default=config_create.is_default,
         )
-        # Refresh to load relationships
+        db_session.commit()
         db_session.refresh(config)
         return ImageGenerationConfigView.from_model(config)
     except HTTPException:
@@ -357,7 +376,7 @@ def update_config(
             deployment_name=config_update.deployment_name,
         )
 
-        new_model_config_id = _create_llm_provider_and_get_model_config_id(
+        new_model_config_id = _create_image_gen_llm_provider__no_commit(
             db_session=db_session,
             provider_request=provider_request,
             model_name=config_update.model_name,
@@ -365,12 +384,11 @@ def update_config(
 
         # 3. Update the ImageGenerationConfig to point to new model config
         existing_config.model_configuration_id = new_model_config_id
-        db_session.commit()
 
         # 4. Delete old LLM provider (it was exclusively for image gen)
-        remove_llm_provider(db_session, old_llm_provider_id)
+        remove_llm_provider__no_commit(db_session, old_llm_provider_id)
 
-        # Refresh to load relationships
+        db_session.commit()
         db_session.refresh(existing_config)
         return ImageGenerationConfigView.from_model(existing_config)
 
@@ -399,10 +417,12 @@ def delete_config(
         llm_provider_id = existing_config.model_configuration.llm_provider_id
 
         # Delete the image generation config first
-        delete_image_generation_config(db_session, image_provider_id)
+        delete_image_generation_config__no_commit(db_session, image_provider_id)
 
         # Clean up the orphaned LLM provider (it was exclusively for image gen)
-        remove_llm_provider(db_session, llm_provider_id)
+        remove_llm_provider__no_commit(db_session, llm_provider_id)
+
+        db_session.commit()
     except HTTPException:
         raise
     except ValueError as e:
