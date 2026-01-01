@@ -21,13 +21,10 @@ from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.reset import reset_all
 from tests.integration.common_utils.test_models import DATestUser
 
-# Skip all tests in this module
-pytestmark = pytest.mark.skip(reason="Auto LLM update tests temporarily disabled")
-
 
 # How long to wait for the celery task to run and sync models
 # This should be longer than AUTO_LLM_UPDATE_INTERVAL_SECONDS
-MAX_WAIT_TIME_SECONDS = 60
+MAX_WAIT_TIME_SECONDS = 120
 POLL_INTERVAL_SECONDS = 5
 
 
