@@ -171,7 +171,9 @@ export function OpenRouterForm({
 
                 return (
                   <Form className="flex flex-col flex-1 overflow-hidden">
-                    <Modal.Body className={`${LLM_FORM_CLASS_NAME} overflow-y-auto flex-1`}>
+                    <Modal.Body
+                      className={`${LLM_FORM_CLASS_NAME} overflow-y-auto flex-1`}
+                    >
                       <DisplayNameField disabled={!!existingLlmProvider} />
 
                       <ApiKeyField />

@@ -161,7 +161,9 @@ export function CustomForm({
               {(formikProps) => {
                 return (
                   <Form className="flex flex-col flex-1 overflow-hidden">
-                    <Modal.Body className={`${LLM_FORM_CLASS_NAME} overflow-y-auto flex-1`}>
+                    <Modal.Body
+                      className={`${LLM_FORM_CLASS_NAME} overflow-y-auto flex-1`}
+                    >
                       <DisplayNameField disabled={!!existingLlmProvider} />
 
                       <TextFormField
@@ -213,9 +215,9 @@ export function CustomForm({
                       </Text>
                       <Text as="p" secondaryBody text03>
                         <div>
-                          Additional configurations needed by the model provider.
-                          These are passed to LiteLLM via environment variables
-                          and as arguments into the completion call.
+                          Additional configurations needed by the model
+                          provider. These are passed to LiteLLM via environment
+                          variables and as arguments into the completion call.
                         </div>
                         <div className="mt-2">
                           For example, when configuring the Cloudflare provider,
@@ -273,7 +275,9 @@ export function CustomForm({
                                       <IconButton
                                         icon={SvgX}
                                         className="my-auto"
-                                        onClick={() => arrayHelpers.remove(index)}
+                                        onClick={() =>
+                                          arrayHelpers.remove(index)
+                                        }
                                         secondary
                                       />
                                     </div>

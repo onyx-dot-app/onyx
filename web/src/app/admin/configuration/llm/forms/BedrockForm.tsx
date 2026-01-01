@@ -166,7 +166,9 @@ function BedrockFormInternals({
           >
             <TabsList>
               <TabsTrigger value={AUTH_METHOD_IAM}>IAM Role</TabsTrigger>
-              <TabsTrigger value={AUTH_METHOD_ACCESS_KEY}>Access Key</TabsTrigger>
+              <TabsTrigger value={AUTH_METHOD_ACCESS_KEY}>
+                Access Key
+              </TabsTrigger>
               <TabsTrigger value={AUTH_METHOD_LONG_TERM_API_KEY}>
                 Long-term API Key
               </TabsTrigger>

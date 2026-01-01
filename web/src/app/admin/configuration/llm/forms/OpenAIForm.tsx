@@ -90,7 +90,9 @@ export function OpenAIForm({
               {(formikProps) => {
                 return (
                   <Form className="flex flex-col flex-1 overflow-hidden">
-                    <Modal.Body className={`${LLM_FORM_CLASS_NAME} overflow-y-auto flex-1`}>
+                    <Modal.Body
+                      className={`${LLM_FORM_CLASS_NAME} overflow-y-auto flex-1`}
+                    >
                       <DisplayNameField disabled={!!existingLlmProvider} />
 
                       <ApiKeyField />
@@ -99,7 +101,8 @@ export function OpenAIForm({
                         modelConfigurations={modelConfigurations}
                         formikProps={formikProps}
                         recommendedDefaultModel={
-                          wellKnownLLMProvider?.recommended_default_model ?? null
+                          wellKnownLLMProvider?.recommended_default_model ??
+                          null
                         }
                         shouldShowAutoUpdateToggle={true}
                       />
