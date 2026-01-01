@@ -1,7 +1,7 @@
 """add_extra_reasoning_details_to_chat_message_and_tool_call
 
 Revision ID: 7699d3d60c21
-Revises: 7206234e012a
+Revises: 9a0296d7421e
 Create Date: 2025-12-30 19:22:02.221988
 
 """
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "7699d3d60c21"
-down_revision = "7206234e012a"
+down_revision = "9a0296d7421e"
 branch_labels = None
 depends_on = None
 
