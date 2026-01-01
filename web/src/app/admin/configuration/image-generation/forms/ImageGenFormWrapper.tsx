@@ -177,7 +177,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
             apiBase: payload.apiBase,
             apiVersion: payload.apiVersion,
             deploymentName: payload.deploymentName,
-            isDefault: false,
+            isDefault: true,
           });
         }
       } else {
@@ -216,7 +216,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
             apiBase: payload.apiBase,
             apiVersion: payload.apiVersion,
             deploymentName: payload.deploymentName,
-            isDefault: false,
+            isDefault: true,
           });
         }
       }

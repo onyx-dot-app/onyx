@@ -10,6 +10,7 @@ from onyx.db.image_generation import delete_image_generation_config__no_commit
 from onyx.db.image_generation import get_all_image_generation_configs
 from onyx.db.image_generation import get_image_generation_config
 from onyx.db.image_generation import set_default_image_generation_config
+from onyx.db.image_generation import unset_default_image_generation_config
 from onyx.db.llm import remove_llm_provider__no_commit
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import ModelConfiguration
@@ -438,5 +439,18 @@ def set_config_as_default(
     """Set a configuration as the default for image generation."""
     try:
         set_default_image_generation_config(db_session, image_provider_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@admin_router.delete("/config/{image_provider_id}/default")
+def unset_config_as_default(
+    image_provider_id: str,
+    _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    """Unset a configuration as the default for image generation."""
+    try:
+        unset_default_image_generation_config(db_session, image_provider_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

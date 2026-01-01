@@ -126,6 +126,20 @@ def set_default_image_generation_config(
     db_session.commit()
 
 
+def unset_default_image_generation_config(
+    db_session: Session,
+    image_provider_id: str,
+) -> None:
+    """Unset a config as the default."""
+    config = db_session.get(ImageGenerationConfig, image_provider_id)
+    if not config:
+        raise ValueError(
+            f"ImageGenerationConfig with image_provider_id {image_provider_id} not found"
+        )
+    config.is_default = False
+    db_session.commit()
+
+
 def delete_image_generation_config__no_commit(
     db_session: Session,
     image_provider_id: str,

@@ -13,6 +13,7 @@ import ImageGenerationConnectionModal from "./ImageGenerationConnectionModal";
 import {
   ImageGenerationConfigView,
   setDefaultImageGenerationConfig,
+  unsetDefaultImageGenerationConfig,
 } from "@/lib/configuration/imageConfigurationService";
 import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 import Message from "@/refresh-components/messages/Message";
@@ -91,8 +92,26 @@ export default function ImageGenerationContent() {
     }
   };
 
-  const handleDeselect = () => {
-    refetchConfigs();
+  const handleDeselect = async (provider: ImageProvider) => {
+    const config = configs.find(
+      (c) => c.image_provider_id === provider.image_provider_id
+    );
+    if (config) {
+      try {
+        await unsetDefaultImageGenerationConfig(config.image_provider_id);
+        setPopup({
+          message: `${provider.title} deselected`,
+          type: "success",
+        });
+        refetchConfigs();
+      } catch (error) {
+        setPopup({
+          message:
+            error instanceof Error ? error.message : "Failed to deselect",
+          type: "error",
+        });
+      }
+    }
   };
 
   const handleEdit = (provider: ImageProvider) => {
@@ -161,7 +180,7 @@ export default function ImageGenerationContent() {
                   status={getStatus(provider)}
                   onConnect={() => handleConnect(provider)}
                   onSelect={() => handleSelect(provider)}
-                  onDeselect={handleDeselect}
+                  onDeselect={() => handleDeselect(provider)}
                   onEdit={() => handleEdit(provider)}
                 />
               ))}

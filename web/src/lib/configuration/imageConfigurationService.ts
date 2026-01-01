@@ -228,6 +228,25 @@ export async function setDefaultImageGenerationConfig(
 }
 
 /**
+ * Unset image generation config as default
+ */
+export async function unsetDefaultImageGenerationConfig(
+  imageProviderId: string
+): Promise<void> {
+  const response = await fetch(
+    `${IMAGE_GEN_CONFIG_URL}/${imageProviderId}/default`,
+    {
+      method: "DELETE",
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Failed to unset default");
+  }
+}
+
+/**
  * Delete image generation configuration
  */
 export async function deleteImageGenerationConfig(
