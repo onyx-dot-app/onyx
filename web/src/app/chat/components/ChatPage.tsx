@@ -101,6 +101,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
     refreshChatSessions,
     currentChatSession,
     currentChatSessionId,
+    isLoading: isLoadingChatSessions,
   } = useChatSessions();
   const { ccPairs } = useCCPairs();
   const { tags } = useTags();
@@ -201,6 +202,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
     liveAssistant,
     isLoadingProviders: llmManager.isLoadingProviders,
     hasAnyProvider: llmManager.hasAnyProvider,
+    isLoadingChatSessions,
     chatSessionsCount: chatSessions.length,
   });
 
