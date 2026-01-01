@@ -18,6 +18,7 @@ from onyx.db.engine.sql_engine import SqlEngine
 from onyx.evals.eval import run_eval
 from onyx.evals.models import EvalationAck
 from onyx.evals.models import EvalConfigurationOptions
+from onyx.evals.provider import get_provider
 from onyx.tracing.braintrust_tracing import setup_braintrust_if_creds_available
 
 
@@ -43,6 +44,7 @@ def run_local(
     remote_dataset_name: str | None,
     search_permissions_email: str | None = None,
     no_send_logs: bool = False,
+    local_only: bool = False,
 ) -> EvalationAck:
     """
     Run evaluation with local configurations.
@@ -57,25 +59,34 @@ def run_local(
         remote_dataset_name: Name of remote Braintrust dataset
         search_permissions_email: Optional email address to impersonate for the evaluation
         no_send_logs: Whether to skip sending logs to Braintrust
+        local_only: If True, use LocalEvalProvider (CLI output only, no Braintrust)
 
     Returns:
         EvalationAck: The evaluation result
     """
     setup_session_factory()
-    setup_braintrust_if_creds_available()
+
+    # Only setup Braintrust if not running in local-only mode
+    if not local_only:
+        setup_braintrust_if_creds_available()
 
     if search_permissions_email is None:
         raise ValueError("search_permissions_email is required for local evaluation")
 
     configuration = EvalConfigurationOptions(
         search_permissions_email=search_permissions_email,
-        dataset_name=remote_dataset_name or "blank",
+        dataset_name=remote_dataset_name or "local",
         no_send_logs=no_send_logs,
     )
 
+    # Get the appropriate provider
+    provider = get_provider(local_only=local_only)
+
     if remote_dataset_name:
         score = run_eval(
-            configuration=configuration, remote_dataset_name=remote_dataset_name
+            configuration=configuration,
+            remote_dataset_name=remote_dataset_name,
+            provider=provider,
         )
     else:
         if local_data_path is None:
@@ -83,7 +94,7 @@ def run_local(
                 "local_data_path or remote_dataset_name is required for local evaluation"
             )
         data = load_data_local(local_data_path)
-        score = run_eval(configuration=configuration, data=data)
+        score = run_eval(configuration=configuration, data=data, provider=provider)
 
     return score
 
@@ -190,11 +201,23 @@ def main() -> None:
         default=False,
     )
 
+    parser.add_argument(
+        "--local-only",
+        action="store_true",
+        help="Run evals locally without Braintrust, output results to CLI only",
+        default=False,
+    )
+
     args = parser.parse_args()
 
     if args.local_data_path:
         print(f"Loading data from local file: {args.local_data_path}")
     elif args.remote_dataset_name:
+        if args.local_only:
+            raise ValueError(
+                "--local-only cannot be used with --remote-dataset-name. "
+                "Use --local-data-path with a local JSON file instead."
+            )
         print(f"Loading data from remote dataset: {args.remote_dataset_name}")
         dataset = braintrust.init_dataset(
             project=args.braintrust_project, name=args.remote_dataset_name
@@ -224,7 +247,10 @@ def main() -> None:
             print(f"Error triggering remote evaluation: {e}")
             return
     else:
-        print(f"Using Braintrust project: {args.braintrust_project}")
+        if args.local_only:
+            print("Running in local-only mode (no Braintrust)")
+        else:
+            print(f"Using Braintrust project: {args.braintrust_project}")
 
         if args.search_permissions_email:
             print(f"Using search permissions email: {args.search_permissions_email}")
@@ -234,6 +260,7 @@ def main() -> None:
             remote_dataset_name=args.remote_dataset_name,
             search_permissions_email=args.search_permissions_email,
             no_send_logs=args.no_send_logs,
+            local_only=args.local_only,
         )
 
 

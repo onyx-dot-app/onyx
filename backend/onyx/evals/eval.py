@@ -1,3 +1,4 @@
+import time
 from collections.abc import Callable
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -22,9 +23,11 @@ from onyx.db.users import get_user_by_email
 from onyx.evals.models import EvalationAck
 from onyx.evals.models import EvalConfigurationOptions
 from onyx.evals.models import EvalProvider
+from onyx.evals.models import EvalTimings
 from onyx.evals.models import EvalToolResult
 from onyx.evals.models import ToolAssertion
-from onyx.evals.provider import get_default_provider
+from onyx.evals.provider import get_provider
+from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
@@ -86,6 +89,7 @@ class GatherStreamResult(BaseModel):
     message_id: int
     error_msg: str | None = None
     citations: list[CitationInfo] = []
+    timings: EvalTimings | None = None
 
 
 def gather_stream_with_tools(packets: AnswerStream) -> GatherStreamResult:
@@ -94,6 +98,8 @@ def gather_stream_with_tools(packets: AnswerStream) -> GatherStreamResult:
 
     Returns a GatherStreamResult containing the answer and all tools that were called.
     """
+    stream_start_time = time.time()
+
     answer: str | None = None
     citations: list[CitationInfo] = []
     error_msg: str | None = None
@@ -101,24 +107,46 @@ def gather_stream_with_tools(packets: AnswerStream) -> GatherStreamResult:
     tools_called: list[str] = []
     tool_call_details: list[dict[str, Any]] = []
 
+    # Timing tracking
+    first_token_time: float | None = None
+    tool_start_times: dict[str, float] = {}  # tool_name -> start time
+    tool_execution_ms: dict[str, float] = {}  # tool_name -> duration in ms
+    current_tool: str | None = None
+
+    def _finalize_tool_timing(tool_name: str) -> None:
+        """Record the duration for a tool that just finished."""
+        if tool_name in tool_start_times:
+            duration_ms = (time.time() - tool_start_times[tool_name]) * 1000
+            tool_execution_ms[tool_name] = duration_ms
+
     for packet in packets:
         if isinstance(packet, Packet):
             obj = packet.obj
 
             # Handle answer content
             if isinstance(obj, AgentResponseStart):
-                pass  # AgentResponseStart contains metadata
+                # When answer starts, finalize any in-progress tool
+                if current_tool:
+                    _finalize_tool_timing(current_tool)
+                    current_tool = None
             elif isinstance(obj, AgentResponseDelta):
                 if answer is None:
                     answer = ""
+                    first_token_time = time.time()
                 if obj.content:
                     answer += obj.content
             elif isinstance(obj, CitationInfo):
                 citations.append(obj)
 
-            # Track tool calls
+            # Track tool calls with timing
             elif isinstance(obj, SearchToolStart):
+                # Finalize any previous tool
+                if current_tool:
+                    _finalize_tool_timing(current_tool)
+
                 tool_name = "WebSearchTool" if obj.is_internet_search else "SearchTool"
+                current_tool = tool_name
+                tool_start_times[tool_name] = time.time()
                 tools_called.append(tool_name)
                 tool_call_details.append(
                     {
@@ -128,35 +156,59 @@ def gather_stream_with_tools(packets: AnswerStream) -> GatherStreamResult:
                     }
                 )
             elif isinstance(obj, ImageGenerationToolStart):
-                tools_called.append("ImageGenerationTool")
+                if current_tool:
+                    _finalize_tool_timing(current_tool)
+
+                tool_name = "ImageGenerationTool"
+                current_tool = tool_name
+                tool_start_times[tool_name] = time.time()
+                tools_called.append(tool_name)
                 tool_call_details.append(
                     {
-                        "tool_name": "ImageGenerationTool",
+                        "tool_name": tool_name,
                         "tool_type": "image_generation",
                     }
                 )
             elif isinstance(obj, PythonToolStart):
-                tools_called.append("PythonTool")
+                if current_tool:
+                    _finalize_tool_timing(current_tool)
+
+                tool_name = "PythonTool"
+                current_tool = tool_name
+                tool_start_times[tool_name] = time.time()
+                tools_called.append(tool_name)
                 tool_call_details.append(
                     {
-                        "tool_name": "PythonTool",
+                        "tool_name": tool_name,
                         "tool_type": "python",
                         "code": obj.code,
                     }
                 )
             elif isinstance(obj, OpenUrlStart):
-                tools_called.append("OpenURLTool")
+                if current_tool:
+                    _finalize_tool_timing(current_tool)
+
+                tool_name = "OpenURLTool"
+                current_tool = tool_name
+                tool_start_times[tool_name] = time.time()
+                tools_called.append(tool_name)
                 tool_call_details.append(
                     {
-                        "tool_name": "OpenURLTool",
+                        "tool_name": tool_name,
                         "tool_type": "open_url",
                     }
                 )
             elif isinstance(obj, CustomToolStart):
-                tools_called.append(obj.tool_name)
+                if current_tool:
+                    _finalize_tool_timing(current_tool)
+
+                tool_name = obj.tool_name
+                current_tool = tool_name
+                tool_start_times[tool_name] = time.time()
+                tools_called.append(tool_name)
                 tool_call_details.append(
                     {
-                        "tool_name": obj.tool_name,
+                        "tool_name": tool_name,
                         "tool_type": "custom",
                     }
                 )
@@ -167,11 +219,31 @@ def gather_stream_with_tools(packets: AnswerStream) -> GatherStreamResult:
         elif isinstance(packet, MessageResponseIDInfo):
             message_id = packet.reserved_assistant_message_id
 
+    # Finalize any remaining tool timing
+    if current_tool:
+        _finalize_tool_timing(current_tool)
+
+    stream_end_time = time.time()
+
     if message_id is None:
         raise ValueError("Message ID is required")
 
     if answer is None:
         raise RuntimeError("Answer was not generated")
+
+    # Calculate timings
+    total_ms = (stream_end_time - stream_start_time) * 1000
+    first_token_ms = (
+        (first_token_time - stream_start_time) * 1000 if first_token_time else None
+    )
+    stream_processing_ms = (stream_end_time - stream_start_time) * 1000
+
+    timings = EvalTimings(
+        total_ms=total_ms,
+        llm_first_token_ms=first_token_ms,
+        tool_execution_ms=tool_execution_ms,
+        stream_processing_ms=stream_processing_ms,
+    )
 
     return GatherStreamResult(
         answer=answer,
@@ -181,6 +253,7 @@ def gather_stream_with_tools(packets: AnswerStream) -> GatherStreamResult:
         message_id=message_id,
         error_msg=error_msg,
         citations=citations,
+        timings=timings,
     )
 
 
@@ -246,6 +319,9 @@ def _get_answer_with_tools(
             - 'force_tools' (optional): List of tool types to force for this input
             - 'expected_tools' (optional): List of tool types expected to be called
             - 'require_all_tools' (optional): If true, all expected tools must be called
+            - 'model' (optional): Model version to use (e.g., "gpt-4o", "claude-3-5-sonnet")
+            - 'model_provider' (optional): Model provider (e.g., "openai", "anthropic")
+            - 'temperature' (optional): Temperature for the model
         configuration: Evaluation configuration options
 
     Returns:
@@ -280,6 +356,24 @@ def _get_answer_with_tools(
                     require_all=eval_input.get("require_all_tools", False),
                 )
 
+            # Handle per-input model configuration
+            llm_override = full_configuration.llm
+            input_model = eval_input.get("model")
+            input_model_provider = eval_input.get("model_provider")
+            input_temperature = eval_input.get("temperature")
+
+            if input_model or input_model_provider or input_temperature is not None:
+                # Create a new LLMOverride with per-input values, falling back to config
+                llm_override = LLMOverride(
+                    model_provider=input_model_provider or llm_override.model_provider,
+                    model_version=input_model or llm_override.model_version,
+                    temperature=(
+                        input_temperature
+                        if input_temperature is not None
+                        else llm_override.temperature
+                    ),
+                )
+
             user = (
                 get_user_by_email(configuration.search_permissions_email, db_session)
                 if configuration.search_permissions_email
@@ -296,7 +390,7 @@ def _get_answer_with_tools(
                 rerank_settings=None,
                 db_session=db_session,
                 skip_gen_ai_answer_generation=False,
-                llm_override=full_configuration.llm,
+                llm_override=llm_override,
                 allowed_tool_ids=full_configuration.allowed_tool_ids,
                 forced_tool_ids=forced_tool_ids or None,
             )
@@ -327,6 +421,7 @@ def _get_answer_with_tools(
                 citations=result.citations,
                 assertion_passed=assertion_passed,
                 assertion_details=assertion_details,
+                timings=result.timings,
             )
 
 
@@ -334,7 +429,7 @@ def run_eval(
     configuration: EvalConfigurationOptions,
     data: list[dict[str, Any]] | None = None,
     remote_dataset_name: str | None = None,
-    provider: EvalProvider = get_default_provider(),
+    provider: EvalProvider = get_provider(),
 ) -> EvalationAck:
     if data is not None and remote_dataset_name is not None:
         raise ValueError("Cannot specify both data and remote_dataset_name")
