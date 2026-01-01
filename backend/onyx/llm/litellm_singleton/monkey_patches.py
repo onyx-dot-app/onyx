@@ -113,6 +113,9 @@ def _patch_ollama_transform_request() -> None:
         function_name = optional_params.pop("function_name", None)
         litellm_params["function_name"] = function_name
         tools = optional_params.pop("tools", None)
+        # tool_choice is not supported by Ollama and causes warnings if left in options
+        # See also, https://github.com/ollama/ollama/issues/11171
+        optional_params.pop("tool_choice", None)
 
         new_messages = []
         for m in messages:
