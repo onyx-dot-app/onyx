@@ -13,6 +13,9 @@ from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
+from tests.integration.common_utils.managers.image_generation import (
+    ImageGenerationConfigManager,
+)
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.user import build_email
 from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
@@ -20,6 +23,7 @@ from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.reset import reset_all
 from tests.integration.common_utils.reset import reset_all_multitenant
 from tests.integration.common_utils.test_models import DATestAPIKey
+from tests.integration.common_utils.test_models import DATestImageGenerationConfig
 from tests.integration.common_utils.test_models import DATestLLMProvider
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.test_models import SimpleTestDocument
@@ -176,6 +180,17 @@ def reset_multitenant() -> None:
 @pytest.fixture
 def llm_provider(admin_user: DATestUser | None) -> DATestLLMProvider:
     return LLMProviderManager.create(user_performing_action=admin_user)
+
+
+@pytest.fixture
+def image_generation_config(
+    admin_user: DATestUser | None,
+) -> DATestImageGenerationConfig:
+    """Create a default image generation config for tests."""
+    return ImageGenerationConfigManager.create(
+        is_default=True,
+        user_performing_action=admin_user,
+    )
 
 
 @pytest.fixture
