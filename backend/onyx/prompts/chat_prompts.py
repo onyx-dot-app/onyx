@@ -2,13 +2,19 @@ from onyx.prompts.constants import GENERAL_SEP_PAT
 
 # ruff: noqa: E501, W605 start
 
+DATETIME_REPLACEMENT_PAT = "{{CURRENT_DATETIME}}"
+CITATION_GUIDANCE_REPLACEMENT_PAT = "{{CITATION_GUIDANCE}}"
+ALT_DATETIME_REPLACEMENT_PAT = "[[CURRENT_DATETIME]]"
+ALT_CITATION_GUIDANCE_REPLACEMENT_PAT = "[[CITATION_GUIDANCE]]"
+
+
 # Note this uses a string pattern replacement so the user can also include it in their custom prompts. Keeps the replacement logic simple
 # This is editable by the user in the admin UI.
 # The first line is intended to help guide the general feel/behavior of the system.
-DEFAULT_SYSTEM_PROMPT = """
+DEFAULT_SYSTEM_PROMPT = f"""
 You are a highly capable, thoughtful, and precise assistant. Your goal is to deeply understand the user's intent, ask clarifying questions when needed, think step-by-step through complex problems, provide clear and accurate answers, and proactively anticipate helpful follow-up information. Always prioritize being truthful, nuanced, insightful, and efficient.
 
-The current date is [[CURRENT_DATETIME]].[[CITATION_GUIDANCE]]
+The current date is {DATETIME_REPLACEMENT_PAT}.{CITATION_GUIDANCE_REPLACEMENT_PAT}
 
 # Response Style
 You use different text styles, bolding, emojis (sparingly), block quotes, and other formatting to make your responses more readable and engaging.

@@ -6,6 +6,8 @@ import {
   StreamingCitation,
   FetchToolDocuments,
   TopLevelBranching,
+  StopReason,
+  Stop,
 } from "@/app/chat/services/streamingModels";
 import { CitationMap } from "@/app/chat/interfaces";
 import { FullChatState } from "@/app/chat/message/messageComponents/interfaces";
@@ -28,6 +30,7 @@ import MessageSwitcher from "@/app/chat/message/MessageSwitcher";
 import { BlinkingDot } from "@/app/chat/message/BlinkingDot";
 import {
   getTextContent,
+  isActualToolCallPacket,
   isDisplayPacket,
   isFinalAnswerComing,
   isStreamingComplete,
@@ -171,6 +174,12 @@ export default function AIMessage({
     stopPacketSeenRef.current = value;
   };
 
+  // Track the reason for stopping (e.g., user cancelled)
+  const [stopReason, setStopReason] = useState<StopReason | undefined>(
+    undefined
+  );
+  const stopReasonRef = useRef<StopReason | undefined>(undefined);
+
   // Incremental packet processing state
   const lastProcessedIndexRef = useRef<number>(0);
   const citationsRef = useRef<StreamingCitation[]>([]);
@@ -204,6 +213,8 @@ export default function AIMessage({
     finalAnswerComingRef.current = isFinalAnswerComing(rawPackets);
     displayCompleteRef.current = isStreamingComplete(rawPackets);
     stopPacketSeenRef.current = isStreamingComplete(rawPackets);
+    stopReasonRef.current = undefined;
+    setStopReason(undefined);
     seenGroupKeysRef.current = new Set();
     groupKeysWithSectionEndRef.current = new Set();
     expectedBranchesRef.current = new Map();
@@ -367,6 +378,10 @@ export default function AIMessage({
 
       if (packet.obj.type === PacketType.STOP && !stopPacketSeenRef.current) {
         setStopPacketSeen(true);
+        // Extract and store the stop reason
+        const stopPacket = packet.obj as Stop;
+        setStopReason(stopPacket.stop_reason);
+        stopReasonRef.current = stopPacket.stop_reason;
         // Inject SECTION_END for all group keys that don't have one
         Array.from(seenGroupKeysRef.current).forEach((groupKey) => {
           if (!groupKeysWithSectionEndRef.current.has(groupKey)) {
@@ -376,11 +391,15 @@ export default function AIMessage({
       }
 
       // handles case where we get a Message packet from Claude, and then tool
-      // calling packets
+      // calling packets. We use isActualToolCallPacket instead of isToolPacket
+      // to exclude reasoning packets - reasoning is just the model thinking,
+      // not an actual tool call that would produce new content. If we reset
+      // finalAnswerComing for reasoning packets, the message content won't
+      // display until page refresh.
       if (
         finalAnswerComingRef.current &&
         !stopPacketSeenRef.current &&
-        isToolPacket(packet, false)
+        isActualToolCallPacket(packet)
       ) {
         setFinalAnswerComing(false);
         setDisplayComplete(false);
@@ -511,6 +530,7 @@ export default function AIMessage({
                             isComplete={finalAnswerComing}
                             isFinalAnswerComing={finalAnswerComingRef.current}
                             stopPacketSeen={stopPacketSeen}
+                            stopReason={stopReason}
                             isStreaming={globalChatState === "streaming"}
                             onAllToolsDisplayed={() =>
                               setFinalAnswerComing(true)

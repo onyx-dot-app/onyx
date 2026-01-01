@@ -5,11 +5,13 @@ TOOL_SECTION_HEADER = "\n\n# Tools\n"
 
 # This section is included if there are search type tools, currently internal_search and web_search
 TOOL_DESCRIPTION_SEARCH_GUIDANCE = """
-For questions that can be fully answered from existing knowledge which is unlikely to change, answer the user directly without using any tools. When there is ambiguity, default to searching to get more context.
+For questions that can be answered from existing knowledge, answer the user directly without using any tools. If you suspect your knowledge is outdated or for topics where things are rapidly changing, use search tools to get more context.
 
-When using any search type tool, do not make any assumptions and stay as faithful to the user's query as possible. Between internal and web search, think about if the user's query is likely better answered by team internal sources or online web pages. \
-For queries that are short phrases, ambiguous/unclear, or keyword heavy, prioritize internal search. If ambiguious, prioritize internal search.
+When using any search type tool, do not make any assumptions and stay as faithful to the user's query as possible. \
+Between internal and web search (if both are available), think about if the user's query is likely better answered by team internal sources or online web pages. \
 When searching for information, if the initial results cannot fully answer the user's query, try again with different tools or arguments. Do not repeat the same or very similar queries if it already has been run in the chat history.
+
+If it is unclear which tool to use, consider using multiple in parallel to be efficient with time.
 """
 
 
@@ -62,6 +64,6 @@ NEVER use generate_image unless the user specifically requests an image.
 """
 
 TOOL_CALL_FAILURE_PROMPT = """
-LLM attempted to call a tool but failed. Most likely the tool name was misspelled.
+LLM attempted to call a tool but failed. Most likely the tool name or arguments were misspelled.
 """.strip()
 # ruff: noqa: E501, W605 end

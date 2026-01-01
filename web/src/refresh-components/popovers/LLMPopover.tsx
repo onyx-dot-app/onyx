@@ -402,7 +402,7 @@ export default function LLMPopover({
           {/* Model List with Vendor Groups */}
           <PopoverMenu
             scrollContainerRef={scrollContainerRef}
-            className="w-full"
+            className="w-full max-h-[22.5rem]"
           >
             {isLoadingProviders
               ? [

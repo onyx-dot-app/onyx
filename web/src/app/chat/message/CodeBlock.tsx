@@ -67,7 +67,6 @@ export const CodeBlock = memo(function CodeBlock({
           "text-text-05",
           "bg-background-tint-00",
           "rounded",
-          "align-bottom",
           "text-xs",
           "inline-block",
           "whitespace-pre-wrap",

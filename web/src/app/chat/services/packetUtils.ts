@@ -37,6 +37,33 @@ export function isToolPacket(
   return toolPacketTypes.includes(packet.obj.type as PacketType);
 }
 
+// Check if a packet is an actual tool call (not reasoning/thinking).
+// This is used to determine if we should reset finalAnswerComing state
+// when a tool packet arrives after message packets (Claude workaround).
+// Reasoning packets should NOT reset finalAnswerComing since they are
+// just the model thinking, not actual tool calls that would produce new content.
+export function isActualToolCallPacket(packet: Packet): boolean {
+  const actualToolCallTypes = [
+    PacketType.SEARCH_TOOL_START,
+    PacketType.SEARCH_TOOL_QUERIES_DELTA,
+    PacketType.SEARCH_TOOL_DOCUMENTS_DELTA,
+    PacketType.PYTHON_TOOL_START,
+    PacketType.PYTHON_TOOL_DELTA,
+    PacketType.CUSTOM_TOOL_START,
+    PacketType.CUSTOM_TOOL_DELTA,
+    PacketType.FETCH_TOOL_START,
+    PacketType.FETCH_TOOL_URLS,
+    PacketType.FETCH_TOOL_DOCUMENTS,
+    PacketType.DEEP_RESEARCH_PLAN_START,
+    PacketType.DEEP_RESEARCH_PLAN_DELTA,
+    PacketType.RESEARCH_AGENT_START,
+    PacketType.INTERMEDIATE_REPORT_START,
+    PacketType.INTERMEDIATE_REPORT_DELTA,
+    PacketType.INTERMEDIATE_REPORT_CITED_DOCS,
+  ];
+  return actualToolCallTypes.includes(packet.obj.type as PacketType);
+}
+
 export function isDisplayPacket(packet: Packet) {
   return (
     packet.obj.type === PacketType.MESSAGE_START ||

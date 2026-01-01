@@ -9,25 +9,6 @@ export enum LLMProviderName {
   CUSTOM = "custom",
 }
 
-export interface CustomConfigOption {
-  label: string;
-  value: string;
-  description?: string | null;
-}
-
-export interface CustomConfigKey {
-  name: string;
-  display_name: string;
-  description: string | null;
-  is_required: boolean;
-  is_secret: boolean;
-  key_type: CustomConfigKeyType;
-  default_value?: string;
-  options?: CustomConfigOption[] | null;
-}
-
-export type CustomConfigKeyType = "text_input" | "file_input" | "select";
-
 export interface ModelConfiguration {
   name: string;
   is_visible: boolean;
@@ -41,23 +22,16 @@ export interface ModelConfiguration {
   region?: string;
 }
 
+export interface SimpleKnownModel {
+  name: string;
+  display_name: string | null;
+}
+
 export interface WellKnownLLMProviderDescriptor {
   name: string;
-  display_name: string;
-  title: string;
+  known_models: ModelConfiguration[];
 
-  deployment_name_required: boolean;
-  api_key_required: boolean;
-  api_base_required: boolean;
-  api_version_required: boolean;
-
-  single_model_supported: boolean;
-  custom_config_keys: CustomConfigKey[] | null;
-  model_configurations: ModelConfiguration[];
-  default_model: string | null;
-  default_api_base: string | null;
-  is_public: boolean;
-  groups: number[];
+  recommended_default_model: SimpleKnownModel | null;
 }
 
 export interface LLMModelDescriptor {
@@ -75,6 +49,7 @@ export interface LLMProvider {
   custom_config: { [key: string]: string } | null;
   default_model_name: string;
   is_public: boolean;
+  is_auto_mode: boolean;
   groups: number[];
   personas: number[];
   deployment_name: string | null;

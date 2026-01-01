@@ -13,7 +13,7 @@ export function detectIfRealOpenAIProvider(provider: LLMProviderView) {
     provider.provider === LLMProviderName.OPENAI &&
     provider.api_key &&
     !provider.api_base &&
-    !provider.custom_config
+    Object.keys(provider.custom_config || {}).length === 0
   );
 }
 

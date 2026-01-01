@@ -21,7 +21,13 @@ import { cn } from "@/lib/utils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import UserSettings from "@/sections/sidebar/Settings/UserSettings";
-import { SvgBell, SvgLogOut, SvgUser, SvgX } from "@opal/icons";
+import {
+  SvgBell,
+  SvgExternalLink,
+  SvgLogOut,
+  SvgUser,
+  SvgX,
+} from "@opal/icons";
 
 function getDisplayName(email?: string, personalName?: string): string {
   // Prioritize custom personal name if set
@@ -103,6 +109,13 @@ function SettingsPopover({
                 ? `(${notifications.length})`
                 : ""
             }`}
+          </LineItem>,
+          <LineItem
+            key="help-faq"
+            icon={SvgExternalLink}
+            onClick={() => window.open("https://docs.onyx.app", "_blank")}
+          >
+            Help & FAQ
           </LineItem>,
           null,
           showLogout && (

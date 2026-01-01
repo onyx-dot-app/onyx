@@ -37,7 +37,7 @@ def get_default_base_system_prompt(db_session: Session) -> str:
     default_persona = get_default_behavior_persona(db_session)
     return (
         default_persona.system_prompt
-        if default_persona and default_persona.system_prompt
+        if default_persona and default_persona.system_prompt is not None
         else DEFAULT_SYSTEM_PROMPT
     )
 

@@ -284,9 +284,12 @@ const ModalContent = React.forwardRef<
               contentRef(node);
             }}
             className={cn(
-              "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-modal",
+              "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
+              "z-modal",
               "bg-background-tint-00 border rounded-16 shadow-2xl",
               "flex flex-col overflow-auto",
+              // Never exceed viewport on small screens
+              "max-w-[calc(100dvw-2rem)] max-h-[calc(100dvh-2rem)]",
               "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
               "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
               "data-[state=open]:slide-in-from-top-1/2 data-[state=closed]:slide-out-to-top-1/2",
@@ -339,6 +342,7 @@ ModalContent.displayName = DialogPrimitive.Content.displayName;
 interface ModalHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
   icon: React.FunctionComponent<IconProps>;
   title: string;
+  titleClassName?: string;
   description?: string;
   onClose?: () => void;
   withBottomShadow?: boolean;
@@ -349,6 +353,7 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
       withBottomShadow = false,
       icon: Icon,
       title,
+      titleClassName,
       description,
       onClose,
       className,
@@ -384,7 +389,7 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
             )}
           </div>
           <DialogPrimitive.Title asChild>
-            <Truncated headingH3 as="span">
+            <Truncated headingH3 as="span" className={titleClassName}>
               {title}
             </Truncated>
           </DialogPrimitive.Title>

@@ -10,7 +10,6 @@ import { StreamStopInfo } from "@/lib/search/interfaces";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
-import { usePostHog } from "posthog-js/react";
 import { stopChatSession } from "../chat_search/utils";
 import {
   getLastSuccessfulMessageId,
@@ -34,7 +33,6 @@ import {
   Message,
   MessageResponseIDInfo,
   RegenerationState,
-  ResearchType,
   RetrievalType,
   StreamingError,
   ToolCallMetadata,
@@ -129,9 +127,8 @@ export function useChatController({
   const { refreshChatSessions } = useChatSessions();
   const { assistantPreferences } = useAssistantPreferences();
   const { forcedToolIds } = useForcedTools();
-  const { fetchProjects, uploadFiles, setCurrentMessageFiles, beginUpload } =
+  const { fetchProjects, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
-  const posthog = usePostHog();
 
   // Use selectors to access only the specific fields we need
   const currentSessionId = useChatSessionStore(
@@ -156,7 +153,6 @@ export function useChatController({
   const updateSessionMessageTree = useChatSessionStore(
     (state) => state.updateSessionMessageTree
   );
-  const abortSession = useChatSessionStore((state) => state.abortSession);
   const updateSubmittedMessage = useChatSessionStore(
     (state) => state.updateSubmittedMessage
   );
@@ -310,66 +306,33 @@ export function useChatController({
     const currentSession = getCurrentSessionId();
     const lastMessage = currentMessageHistory[currentMessageHistory.length - 1];
 
-    // Check if the current message uses agent search (any non-null research type)
-    const isDeepResearch = lastMessage?.researchType === ResearchType.Deep;
-    const isSimpleAgentFrameworkDisabled =
-      posthog.isFeatureEnabled("disable-simple-agent-framework") ?? false;
-
-    // Always call the backend stop endpoint unless feature flag is enabled to disable it
-    if (!isSimpleAgentFrameworkDisabled) {
-      try {
-        await stopChatSession(currentSession);
-      } catch (error) {
-        console.error("Failed to stop chat session:", error);
-        // Continue with UI cleanup even if backend call fails
-      }
+    // Call the backend stop endpoint to set the Redis fence
+    // This signals the backend to stop processing as soon as possible
+    // The backend will emit a STOP packet when it detects the fence
+    try {
+      await stopChatSession(currentSession);
+    } catch (error) {
+      console.error("Failed to stop chat session:", error);
+      // Continue with UI cleanup even if backend call fails
     }
 
-    // Only do the subsequent cleanup if the message was agent search or feature flag is enabled to disable it
-    if (isDeepResearch || isSimpleAgentFrameworkDisabled) {
-      abortSession(currentSession);
-
-      if (
-        lastMessage &&
-        lastMessage.type === "assistant" &&
-        lastMessage.toolCall &&
-        lastMessage.toolCall.tool_result === undefined
-      ) {
-        const newMessageTree = new Map(currentMessageTree);
-        const updatedMessage = { ...lastMessage, toolCall: null };
-        newMessageTree.set(lastMessage.nodeId, updatedMessage);
-        updateSessionMessageTree(currentSession, newMessageTree);
-      }
-
-      // Ensure UI reflects a STOP event by appending a STOP packet to the
-      // currently streaming assistant message if one exists and doesn't already
-      // contain a STOP. This makes AIMessage behave as if a STOP packet arrived.
-      if (lastMessage && lastMessage.type === "assistant") {
-        const packets = lastMessage.packets || [];
-        const hasStop = packets.some((p) => p.obj.type === PacketType.STOP);
-        if (!hasStop) {
-          const maxTurnIndex =
-            packets.length > 0
-              ? Math.max(...packets.map((p) => p.placement.turn_index))
-              : 0;
-          const stopPacket: Packet = {
-            placement: { turn_index: maxTurnIndex + 1 },
-            obj: { type: PacketType.STOP },
-          } as Packet;
-
-          const newMessageTree = new Map(currentMessageTree);
-          const updatedMessage = {
-            ...lastMessage,
-            packets: [...packets, stopPacket],
-          } as Message;
-          newMessageTree.set(lastMessage.nodeId, updatedMessage);
-          updateSessionMessageTree(currentSession, newMessageTree);
-        }
-      }
+    // Clean up incomplete tool calls for immediate UI feedback
+    if (
+      lastMessage &&
+      lastMessage.type === "assistant" &&
+      lastMessage.toolCall &&
+      lastMessage.toolCall.tool_result === undefined
+    ) {
+      const newMessageTree = new Map(currentMessageTree);
+      const updatedMessage = { ...lastMessage, toolCall: null };
+      newMessageTree.set(lastMessage.nodeId, updatedMessage);
+      updateSessionMessageTree(currentSession, newMessageTree);
     }
 
+    // Update chat state to input immediately for good UX
+    // The stream will close naturally when the backend sends the STOP packet
     updateChatStateAction(currentSession, "input");
-  }, [currentMessageHistory, currentMessageTree, posthog]);
+  }, [currentMessageHistory, currentMessageTree]);
 
   const onSubmit = useCallback(
     async ({

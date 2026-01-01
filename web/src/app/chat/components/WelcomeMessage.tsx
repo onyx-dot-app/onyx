@@ -6,6 +6,7 @@ import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { useMemo } from "react";
+import { useSettingsContext } from "@/components/settings/SettingsProvider";
 
 export interface WelcomeMessageProps {
   agent?: MinimalPersonaSnapshot;
@@ -16,10 +17,18 @@ export default function WelcomeMessage({
   agent,
   isDefaultAgent,
 }: WelcomeMessageProps) {
+  const settings = useSettingsContext();
+  const enterpriseSettings = settings?.enterpriseSettings;
+  const greeting = useMemo(() => {
+    if (enterpriseSettings?.custom_greeting_message) {
+      return enterpriseSettings.custom_greeting_message;
+    }
+    return getRandomGreeting();
+  }, [enterpriseSettings]);
+
   let content: React.ReactNode = null;
 
   if (isDefaultAgent) {
-    const greeting = useMemo(getRandomGreeting, []);
     content = (
       <div data-testid="onyx-logo" className="flex flex-row items-center gap-4">
         <Logo folded size={32} />

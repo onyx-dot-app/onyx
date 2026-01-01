@@ -144,6 +144,7 @@ def run_chat_loop_with_state_containers(
     thread = run_in_background(run_with_exception_capture)
 
     pkt: Packet | None = None
+    last_turn_index = 0  # Track the highest turn_index seen for stop packet
     try:
         while True:
             # Poll queue with 300ms timeout for natural stop signal checking
@@ -152,12 +153,20 @@ def run_chat_loop_with_state_containers(
                 pkt = emitter.bus.get(timeout=0.3)
             except Empty:
                 if not is_connected():
-                    # Stop signal detected, kill the thread
+                    # Stop signal detected
+                    yield Packet(
+                        placement=Placement(turn_index=last_turn_index + 1),
+                        obj=OverallStop(type="stop", stop_reason="user_cancelled"),
+                    )
                     break
                 continue
 
             if pkt is not None:
-                if pkt.obj == OverallStop(type="stop"):
+                # Track the highest turn_index for the stop packet
+                if pkt.placement and pkt.placement.turn_index > last_turn_index:
+                    last_turn_index = pkt.placement.turn_index
+
+                if isinstance(pkt.obj, OverallStop):
                     yield pkt
                     break
                 elif isinstance(pkt.obj, PacketException):

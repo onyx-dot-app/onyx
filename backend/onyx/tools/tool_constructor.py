@@ -26,6 +26,7 @@ from onyx.db.oauth_config import get_oauth_config
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tools import get_builtin_tool
 from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.interfaces import DocumentIndex
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
@@ -76,11 +77,29 @@ class SearchToolUsage(str, Enum):
 
 def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
     """Helper function to get image generation LLM config based on available providers"""
+    from onyx.db.image_generation import get_default_image_generation_config
+
+    # Try to get default from database first
+    default_config = get_default_image_generation_config(db_session)
     if (
-        llm
-        and llm.config.api_key
-        and llm.config.model_provider == LlmProviderNames.OPENAI
+        default_config
+        and default_config.model_configuration
+        and default_config.model_configuration.llm_provider
     ):
+        llm_provider = default_config.model_configuration.llm_provider
+        return LLMConfig(
+            model_provider=llm_provider.provider,
+            model_name=default_config.model_configuration.name,
+            temperature=GEN_AI_TEMPERATURE,
+            api_key=llm_provider.api_key,
+            api_base=llm_provider.api_base,
+            api_version=llm_provider.api_version,
+            deployment_name=llm_provider.deployment_name,
+            max_input_tokens=llm.config.max_input_tokens,
+        )
+
+    # Fallback to current env-based logic
+    if llm.config.api_key and llm.config.model_provider == LlmProviderNames.OPENAI:
         return LLMConfig(
             model_provider=llm.config.model_provider,
             model_name=IMAGE_MODEL_NAME,
@@ -161,6 +180,19 @@ def construct_tools(
     if user and user.oauth_accounts:
         user_oauth_token = user.oauth_accounts[0].access_token
 
+    document_index_cache: DocumentIndex | None = None
+    search_settings_cache = None
+
+    def _get_document_index() -> DocumentIndex:
+        nonlocal document_index_cache, search_settings_cache
+        if document_index_cache is None:
+            if search_settings_cache is None:
+                search_settings_cache = get_current_search_settings(db_session)
+            document_index_cache = get_default_document_index(
+                search_settings_cache, None
+            )
+        return document_index_cache
+
     added_search_tool = False
     for db_tool_model in persona.tools:
         # If allowed_tool_ids is specified, skip tools not in the allowed list
@@ -194,9 +226,7 @@ def construct_tools(
                 if not search_tool_config:
                     search_tool_config = SearchToolConfig()
 
-                search_settings = get_current_search_settings(db_session)
-                document_index = get_default_document_index(search_settings, None)
-
+                # TODO concerning passing the db_session here.
                 search_tool = SearchTool(
                     tool_id=db_tool_model.id,
                     db_session=db_session,
@@ -204,7 +234,7 @@ def construct_tools(
                     user=user,
                     persona=persona,
                     llm=llm,
-                    document_index=document_index,
+                    document_index=_get_document_index(),
                     user_selected_filters=search_tool_config.user_selected_filters,
                     project_id=search_tool_config.project_id,
                     bypass_acl=search_tool_config.bypass_acl,
@@ -246,7 +276,12 @@ def construct_tools(
             elif tool_cls.__name__ == OpenURLTool.__name__:
                 try:
                     tool_dict[db_tool_model.id] = [
-                        OpenURLTool(tool_id=db_tool_model.id, emitter=emitter)
+                        OpenURLTool(
+                            tool_id=db_tool_model.id,
+                            emitter=emitter,
+                            document_index=_get_document_index(),
+                            user=user,
+                        )
                     ]
                 except RuntimeError as e:
                     logger.error(f"Failed to initialize Open URL Tool: {e}")
@@ -399,6 +434,7 @@ def construct_tools(
 
         search_settings = get_current_search_settings(db_session)
         document_index = get_default_document_index(search_settings, None)
+
         search_tool = SearchTool(
             tool_id=search_tool_db_model.id,
             db_session=db_session,

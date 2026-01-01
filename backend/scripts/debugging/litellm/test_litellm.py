@@ -13,7 +13,6 @@ Usage:
     python test_litellm.py
 """
 
-import json
 import os
 from typing import Any
 
@@ -158,7 +157,67 @@ def _to_jsonable(x: Any) -> Any:
     return str(x)
 
 
+def _filter_null_fields(obj: Any) -> Any:
+    """Recursively filter out None/null values from a data structure."""
+    if isinstance(obj, dict):
+        return {
+            k: _filter_null_fields(v)
+            for k, v in obj.items()
+            if v is not None
+            and (not isinstance(v, (dict, list)) or _filter_null_fields(v))
+        }
+    if isinstance(obj, list):
+        filtered = [_filter_null_fields(item) for item in obj]
+        return [item for item in filtered if item is not None]
+    return obj
+
+
+def _pretty_print_event(event: Any) -> str:
+    """Pretty print an event, showing only non-null fields with newlines."""
+    jsonable = _to_jsonable(event)
+    filtered = _filter_null_fields(jsonable)
+
+    lines = []
+
+    def _format_value(key: str, value: Any, indent: int = 0) -> None:
+        """Recursively format key-value pairs."""
+        prefix = "  " * indent
+        if isinstance(value, dict):
+            if indent == 0:
+                # Top-level: print each key-value pair on separate lines
+                for k, v in value.items():
+                    _format_value(k, v, indent)
+            else:
+                # Nested dict: print key and then nested items
+                lines.append(f"{prefix}{key}:")
+                for k, v in value.items():
+                    _format_value(k, v, indent + 1)
+        elif isinstance(value, list):
+            if not value:
+                return  # Skip empty lists
+            lines.append(f"{prefix}{key}:")
+            for i, item in enumerate(value):
+                if isinstance(item, dict):
+                    lines.append(f"{prefix}  [{i}]:")
+                    for k, v in item.items():
+                        _format_value(k, v, indent + 2)
+                else:
+                    lines.append(f"{prefix}  [{i}]: {item}")
+        else:
+            lines.append(f"{prefix}{key}: {value}")
+
+    if isinstance(filtered, dict):
+        for k, v in filtered.items():
+            _format_value(k, v, 0)
+    else:
+        lines.append(str(filtered))
+
+    return "\n".join(lines)
+
+
 if __name__ == "__main__":
-    # Output raw stream events as JSON, one per line
+    # Output raw stream events in a pretty format
     for event in stream:
-        print(json.dumps(_to_jsonable(event), ensure_ascii=False), flush=True)
+        print("=" * 80, flush=True)
+        print(_pretty_print_event(event), flush=True)
+        print(flush=True)

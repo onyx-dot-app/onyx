@@ -4,7 +4,13 @@
  */
 
 import React from "react";
-import { render, screen, waitFor, setupUser } from "@tests/setup/test-utils";
+import {
+  act,
+  render,
+  screen,
+  waitFor,
+  setupUser,
+} from "@tests/setup/test-utils";
 import MultiToolRenderer from "./MultiToolRenderer";
 import {
   createToolGroups,
@@ -198,8 +204,11 @@ describe("MultiToolRenderer - Streaming Mode", () => {
     jest.useFakeTimers();
   });
 
-  afterEach(() => {
-    jest.runOnlyPendingTimers();
+  afterEach(async () => {
+    // Wrap timer execution in act() since it triggers React state updates
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+    });
     jest.useRealTimers();
   });
 
@@ -318,10 +327,12 @@ describe("MultiToolRenderer - State Transitions", () => {
     expect(onAllToolsDisplayed).not.toHaveBeenCalled();
   });
 
-  test("shows Done node only when allToolsDisplayed=true", async () => {
+  test("shows Done node when allToolsDisplayed=true", async () => {
     const user = setupUser();
 
-    // Without final answer coming
+    // With isComplete=true, all tools are visible and completed, so Done should appear
+    // Note: allToolsDisplayed is now independent of isFinalAnswerComing to avoid
+    // circular dependency (parent uses onAllToolsDisplayed to set finalAnswerComing)
     const { rerender } = render(
       <MultiToolRenderer
         packetGroups={createToolGroups(2)}
@@ -335,10 +346,12 @@ describe("MultiToolRenderer - State Transitions", () => {
     // Expand
     await user.click(screen.getByText("2 steps"));
 
-    // Done should not appear
-    expect(screen.queryByText("Done")).not.toBeInTheDocument();
+    // Done should appear because all tools are complete (regardless of isFinalAnswerComing)
+    await waitFor(() => {
+      expect(screen.getByText("Done")).toBeInTheDocument();
+    });
 
-    // Now with final answer coming
+    // Remains visible after setting final answer coming
     rerender(
       <MultiToolRenderer
         packetGroups={createToolGroups(2)}
@@ -349,7 +362,7 @@ describe("MultiToolRenderer - State Transitions", () => {
       />
     );
 
-    // Done should appear
+    // Done should still appear
     await waitFor(() => {
       expect(screen.getByText("Done")).toBeInTheDocument();
     });

@@ -269,6 +269,7 @@ def create_update_persona(
             system_prompt=create_persona_request.system_prompt,
             task_prompt=create_persona_request.task_prompt,
             datetime_aware=create_persona_request.datetime_aware,
+            replace_base_system_prompt=create_persona_request.replace_base_system_prompt,
             uploaded_image_id=create_persona_request.uploaded_image_id,
             icon_name=create_persona_request.icon_name,
             display_priority=create_persona_request.display_priority,
@@ -797,6 +798,7 @@ def upsert_persona(
     user_file_ids: list[UUID] | None = None,
     chunks_above: int = CONTEXT_CHUNKS_ABOVE,
     chunks_below: int = CONTEXT_CHUNKS_BELOW,
+    replace_base_system_prompt: bool = False,
 ) -> Persona:
     """
     NOTE: This operation cannot update persona configuration options that
@@ -905,6 +907,7 @@ def upsert_persona(
             existing_persona.task_prompt = task_prompt
         if datetime_aware is not None:
             existing_persona.datetime_aware = datetime_aware
+        existing_persona.replace_base_system_prompt = replace_base_system_prompt
 
         # Do not delete any associations manually added unless
         # a new updated list is provided
@@ -945,6 +948,7 @@ def upsert_persona(
             system_prompt=system_prompt or "",
             task_prompt=task_prompt or "",
             datetime_aware=(datetime_aware if datetime_aware is not None else True),
+            replace_base_system_prompt=replace_base_system_prompt,
             document_sets=document_sets or [],
             llm_model_provider_override=llm_model_provider_override,
             llm_model_version_override=llm_model_version_override,
@@ -1183,13 +1187,15 @@ def update_default_assistant_configuration(
     db_session: Session,
     tool_ids: list[int] | None = None,
     system_prompt: str | None = None,
+    update_system_prompt: bool = False,
 ) -> Persona:
     """Update only tools and system_prompt for the default assistant.
 
     Args:
         db_session: Database session
         tool_ids: List of tool IDs to enable (if None, tools are not updated)
-        system_prompt: New system prompt (if None, system prompt is not updated)
+        system_prompt: New system prompt value (None means use default)
+        update_system_prompt: If True, update the system_prompt field (allows setting to None)
 
     Returns:
         Updated Persona object
@@ -1202,8 +1208,8 @@ def update_default_assistant_configuration(
     if not persona:
         raise ValueError("Default assistant not found")
 
-    # Update system prompt if provided
-    if system_prompt is not None:
+    # Update system prompt if explicitly requested
+    if update_system_prompt:
         persona.system_prompt = system_prompt
 
     # Update tools if provided

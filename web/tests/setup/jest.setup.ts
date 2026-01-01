@@ -1,6 +1,11 @@
 import "@testing-library/jest-dom";
 import { TextEncoder, TextDecoder } from "util";
 
+// Tell React 18+ this is a test environment where act() is available
+// This suppresses "not configured to support act(...)" warnings
+// @ts-ignore
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
 // Polyfill TextEncoder/TextDecoder (required for some libraries)
 global.TextEncoder = TextEncoder as any;
 global.TextDecoder = TextDecoder as any;
@@ -61,22 +66,26 @@ if (typeof window !== "undefined") {
   global.scrollTo = jest.fn();
 }
 
-// Suppress console errors in tests (optional - comment out if you want to see them)
-// const originalError = console.error;
-// beforeAll(() => {
-//   console.error = (...args: any[]) => {
-//     // Filter out known React warnings that are not actionable in tests
-//     if (
-//       typeof args[0] === "string" &&
-//       (args[0].includes("Warning: ReactDOM.render") ||
-//         args[0].includes("Not implemented: HTMLFormElement.prototype.submit"))
-//     ) {
-//       return;
-//     }
-//     originalError.call(console, ...args);
-//   };
-// });
+// Suppress specific known console errors that are not actionable in tests.
+// This pattern is recommended for handling third-party library warnings:
+// https://github.com/testing-library/user-event/issues/1114#issuecomment-1876164351
+//
+// Radix UI's compose-refs package triggers state updates during component unmount
+// which causes React to emit "not configured to support act" warnings. This happens
+// because the updates occur in React's commit phase, outside of any act() boundary.
+// The IS_REACT_ACT_ENVIRONMENT flag doesn't help because jsdom's globalThis is set
+// up before our setup file runs.
+const SUPPRESSED_ERRORS = [
+  "The current testing environment is not configured to support act",
+] as const;
 
-// afterAll(() => {
-//   console.error = originalError;
-// });
+const originalError = console.error;
+console.error = (...args: any[]) => {
+  if (
+    typeof args[0] === "string" &&
+    SUPPRESSED_ERRORS.some((error) => args[0].includes(error))
+  ) {
+    return;
+  }
+  originalError.call(console, ...args);
+};

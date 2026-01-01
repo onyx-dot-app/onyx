@@ -63,8 +63,8 @@ import ProjectChatSessionList from "@/app/chat/components/projects/ProjectChatSe
 import { cn } from "@/lib/utils";
 import Suggestions from "@/sections/Suggestions";
 import OnboardingFlow from "@/refresh-components/onboarding/OnboardingFlow";
-import { useOnboardingState } from "@/refresh-components/onboarding/useOnboardingState";
 import { OnboardingStep } from "@/refresh-components/onboarding/types";
+import { useShowOnboarding } from "@/hooks/useShowOnboarding";
 import * as AppLayouts from "@/layouts/app-layouts";
 import { SvgFileText } from "@opal/icons";
 import Spacer from "@/refresh-components/Spacer";
@@ -96,8 +96,13 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
   const searchParams = useSearchParams();
 
   // Use SWR hooks for data fetching
-  const { refreshChatSessions, currentChatSession, currentChatSessionId } =
-    useChatSessions();
+  const {
+    chatSessions,
+    refreshChatSessions,
+    currentChatSession,
+    currentChatSessionId,
+    isLoading: isLoadingChatSessions,
+  } = useChatSessions();
   const { ccPairs } = useCCPairs();
   const { tags } = useTags();
   const { documentSets } = useDocumentSets();
@@ -179,32 +184,27 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
 
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-
-  // Initialize onboarding state
-  const {
-    state: onboardingState,
-    actions: onboardingActions,
-    llmDescriptors,
-    isLoading: isLoadingOnboarding,
-  } = useOnboardingState(liveAssistant);
 
   const llmManager = useLlmManager(
     currentChatSession ?? undefined,
     liveAssistant
   );
 
-  // On first render, open onboarding if there are no configured LLM providers.
-  // Wait until providers have loaded before making this decision.
-  const hasCheckedOnboarding = useRef(false);
-  useEffect(() => {
-    // Only check once, and only after data has loaded
-    if (hasCheckedOnboarding.current || llmManager.isLoadingProviders) {
-      return;
-    }
-    hasCheckedOnboarding.current = true;
-    setShowOnboarding(llmManager.hasAnyProvider === false);
-  }, [llmManager.isLoadingProviders, llmManager.hasAnyProvider]);
+  const {
+    showOnboarding,
+    onboardingState,
+    onboardingActions,
+    llmDescriptors,
+    isLoadingOnboarding,
+    finishOnboarding,
+    hideOnboarding,
+  } = useShowOnboarding({
+    liveAssistant,
+    isLoadingProviders: llmManager.isLoadingProviders,
+    hasAnyProvider: llmManager.hasAnyProvider,
+    isLoadingChatSessions,
+    chatSessionsCount: chatSessions.length,
+  });
 
   const noAssistants = liveAssistant === null || liveAssistant === undefined;
 
@@ -434,9 +434,17 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
         currentMessageFiles: currentMessageFiles,
         deepResearch: deepResearchEnabled,
       });
-      setShowOnboarding(false);
+      if (showOnboarding) {
+        finishOnboarding();
+      }
     },
-    [onSubmit, currentMessageFiles, deepResearchEnabled]
+    [
+      onSubmit,
+      currentMessageFiles,
+      deepResearchEnabled,
+      showOnboarding,
+      finishOnboarding,
+    ]
   );
 
   // Memoized callbacks for DocumentsSidebar
@@ -662,7 +670,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
                     !user?.personalization?.name)) &&
                   currentProjectId === null && (
                     <OnboardingFlow
-                      handleHideOnboarding={() => setShowOnboarding(false)}
+                      handleHideOnboarding={hideOnboarding}
                       state={onboardingState}
                       actions={onboardingActions}
                       llmDescriptors={llmDescriptors}

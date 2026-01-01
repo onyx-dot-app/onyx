@@ -7,14 +7,6 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Setup uv
-      uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a # ratchet:astral-sh/setup-uv@v7
-      with:
-        version: "0.9.9"
-      # TODO: Enable caching once there is a uv.lock file checked in.
-      # with:
-      #   enable-cache: true
-
     - name: Compute requirements hash
       id: req-hash
       shell: bash
@@ -30,6 +22,8 @@ runs:
         done <<< "$REQUIREMENTS"
         echo "hash=$(echo "$hash" | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
+    # NOTE: This comes before Setup uv since clean-ups run in reverse chronological order
+    # such that Setup uv's prune-cache is able to prune the cache before we upload.
     - name: Cache uv cache directory
       uses: runs-on/cache@50350ad4242587b6c8c2baa2e740b1bc11285ff4 # ratchet:runs-on/cache@v4
       with:
@@ -37,6 +31,14 @@ runs:
         key: ${{ runner.os }}-uv-${{ steps.req-hash.outputs.hash }}
         restore-keys: |
           ${{ runner.os }}-uv-
+
+    - name: Setup uv
+      uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a # ratchet:astral-sh/setup-uv@v7
+      with:
+        version: "0.9.9"
+      # TODO: Enable caching once there is a uv.lock file checked in.
+      # with:
+      #   enable-cache: true
 
     - name: Setup Python
       uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # ratchet:actions/setup-python@v5

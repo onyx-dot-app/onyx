@@ -48,7 +48,7 @@ jobs:
         id: set-matrix
         run: |
           # Find all leaf-level directories in both test directories
-          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" -exec basename {} \; | sort)
+          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "mcp" -exec basename {} \; | sort)
           connector_dirs=$(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" -exec basename {} \; | sort)
 
           # Create JSON array with directory info
@@ -301,6 +301,7 @@ jobs:
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID}
           INTEGRATION_TESTS_MODE=true
           MCP_SERVER_ENABLED=true
+          AUTO_LLM_UPDATE_INTERVAL_SECONDS=1
           EOF
 
       - name: Start Docker containers
@@ -314,7 +315,6 @@ jobs:
             api_server \
             inference_model_server \
             indexing_model_server \
-            mcp_server \
             background \
             -d
         id: start_docker
@@ -357,12 +357,6 @@ jobs:
           }
 
           wait_for_service "http://localhost:8080/health" "API server"
-          test_dir="${{ matrix.test-dir.path }}"
-          if [ "$test_dir" = "tests/mcp" ]; then
-            wait_for_service "http://localhost:8090/health" "MCP server"
-          else
-            echo "Skipping MCP server wait for non-MCP suite: $test_dir"
-          fi
           echo "Finished waiting for services."
 
       - name: Start Mock Services
@@ -393,8 +387,6 @@ jobs:
               -e VESPA_HOST=index \
               -e REDIS_HOST=cache \
               -e API_SERVER_HOST=api_server \
-              -e MCP_SERVER_HOST=mcp_server \
-              -e MCP_SERVER_PORT=8090 \
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
               -e EXA_API_KEY=${EXA_API_KEY} \
               -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
