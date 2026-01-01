@@ -92,7 +92,7 @@ export interface TextProps extends Omit<HTMLAttributes<HTMLElement>, "as"> {
   textDark05?: boolean;
 
   // Tag type override
-  as?: "p" | "span" | "div" | "li";
+  as?: "p" | "span" | "li";
 }
 
 export default function Text({

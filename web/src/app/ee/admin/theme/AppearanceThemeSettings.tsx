@@ -7,7 +7,7 @@ import Separator from "@/refresh-components/Separator";
 import { Preview } from "./Preview";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Switch from "@/refresh-components/inputs/Switch";
-import Text from "@/refresh-components/texts/Text";
+import CharacterCount from "@/refresh-components/CharacterCount";
 import InputImage from "@/refresh-components/inputs/InputImage";
 import Button from "@/refresh-components/buttons/Button";
 import { useFormikContext } from "formik";
@@ -21,19 +21,6 @@ import {
 } from "react";
 import type { PreviewHighlightTarget } from "./Preview";
 import { SvgEdit } from "@opal/icons";
-interface CharacterCountProps {
-  value: string;
-  limit: number;
-}
-
-function CharacterCount({ value, limit }: CharacterCountProps) {
-  const length = value?.length || 0;
-  return (
-    <Text text03 secondaryBody>
-      ({length}/{limit} characters)
-    </Text>
-  );
-}
 
 interface AppearanceThemeSettingsProps {
   selectedLogo: File | null;

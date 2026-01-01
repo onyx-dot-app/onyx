@@ -63,6 +63,7 @@ import {
 } from "@opal/icons";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
+import { getWebVersion } from "@/lib/version";
 
 const footerMarkdownComponents = {
   p: ({ children }) => (
@@ -373,7 +374,7 @@ function AppFooter() {
 
   const customFooterContent =
     settings?.enterpriseSettings?.custom_lower_disclaimer_content ||
-    "[Onyx v2.0.8-dev](https://www.onyx.app/) - Open Source AI Platform";
+    `[Onyx ${getWebVersion()}](https://www.onyx.app/) - Open Source AI Platform`;
 
   return (
     <footer className="w-full flex flex-row justify-center items-center gap-2 py-3">
