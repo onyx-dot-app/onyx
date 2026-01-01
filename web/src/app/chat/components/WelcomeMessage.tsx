@@ -17,15 +17,16 @@ export default function WelcomeMessage({
   agent,
   isDefaultAgent,
 }: WelcomeMessageProps) {
-  let content: React.ReactNode = null;
   const settings = useSettingsContext();
   const enterpriseSettings = settings?.enterpriseSettings;
   const greeting = useMemo(() => {
     if (enterpriseSettings?.custom_greeting_message) {
-      return enterpriseSettings?.custom_greeting_message;
+      return enterpriseSettings.custom_greeting_message;
     }
     return getRandomGreeting();
   }, [enterpriseSettings]);
+
+  let content: React.ReactNode = null;
 
   if (isDefaultAgent) {
     content = (

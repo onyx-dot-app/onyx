@@ -5,7 +5,10 @@ import { FormField } from "@/refresh-components/form/FormField";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import Separator from "@/refresh-components/Separator";
-import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import {
+  ModelConfiguration,
+  WellKnownLLMProviderDescriptor,
+} from "@/app/admin/configuration/llm/interfaces";
 import {
   OnboardingFormWrapper,
   OnboardingFormChildProps,
@@ -156,6 +159,16 @@ export function AnthropicOnboardingForm({
     />
   );
 
+  // Enable auto mode if user keeps the recommended default model
+  const transformValues = (
+    values: AnthropicFormValues,
+    modelConfigurations: ModelConfiguration[]
+  ) => ({
+    ...values,
+    model_configurations: modelConfigurations,
+    is_auto_mode: values.default_model_name === DEFAULT_DEFAULT_MODEL_NAME,
+  });
+
   return (
     <OnboardingFormWrapper<AnthropicFormValues>
       icon={icon}
@@ -168,6 +181,7 @@ export function AnthropicOnboardingForm({
       onOpenChange={onOpenChange}
       initialValues={initialValues}
       validationSchema={validationSchema}
+      transformValues={transformValues}
     >
       {(props) => <AnthropicFormFields {...props} />}
     </OnboardingFormWrapper>
