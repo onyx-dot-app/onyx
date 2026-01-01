@@ -273,7 +273,7 @@ test.describe("Default Assistant Tests", () => {
 
       const apiClient = new OnyxApiClient(page);
       let webSearchProviderId: number | null = null;
-      let imageGenProviderId: number | null = null;
+      let imageGenConfigId: string | null = null;
 
       try {
         // Set up a web search provider so the tool is available
@@ -281,9 +281,9 @@ test.describe("Default Assistant Tests", () => {
           "exa",
           `Test Web Search Provider ${Date.now()}`
         );
-        // Set up an image generation provider so the tool is available
-        imageGenProviderId = await apiClient.createImageGenProvider(
-          `Test Image Gen Provider ${Date.now()}`
+        // Set up an image generation config so the tool is available
+        imageGenConfigId = await apiClient.createImageGenerationConfig(
+          `test-image-gen-${Date.now()}`
         );
       } catch (error) {
         console.warn(
@@ -353,13 +353,13 @@ test.describe("Default Assistant Tests", () => {
         }
       }
 
-      // Clean up image generation provider
-      if (imageGenProviderId !== null) {
+      // Clean up image generation config
+      if (imageGenConfigId !== null) {
         try {
-          await apiClient.deleteProvider(imageGenProviderId);
+          await apiClient.deleteImageGenerationConfig(imageGenConfigId);
         } catch (error) {
           console.warn(
-            `Failed to delete image gen provider ${imageGenProviderId}: ${error}`
+            `Failed to delete image gen config ${imageGenConfigId}: ${error}`
           );
         }
       }
