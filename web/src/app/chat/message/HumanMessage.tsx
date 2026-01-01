@@ -93,8 +93,8 @@ interface HumanMessageProps {
   otherMessagesCanSwitchTo?: number[];
   onMessageSelection?: (messageId: number) => void;
 
-  // Editing functionality
-  onEdit?: (editedContent: string) => void;
+  // Editing functionality - takes (editedContent, messageId) to allow stable callback reference
+  onEdit?: (editedContent: string, messageId: number) => void;
 
   // Streaming and generation
   stopGenerating?: () => void;
@@ -114,8 +114,9 @@ function arePropsEqual(
     prev.messageId === next.messageId &&
     prev.files === next.files &&
     prev.disableSwitchingForStreaming === next.disableSwitchingForStreaming &&
-    prev.otherMessagesCanSwitchTo === next.otherMessagesCanSwitchTo
-    // Skip: onEdit, stopGenerating, onMessageSelection (function props)
+    prev.otherMessagesCanSwitchTo === next.otherMessagesCanSwitchTo &&
+    prev.onEdit === next.onEdit
+    // Skip: stopGenerating, onMessageSelection (inline function props)
   );
 }
 
@@ -178,7 +179,12 @@ const HumanMessage = React.memo(function HumanMessage({
             <MessageEditing
               content={content}
               onSubmitEdit={(editedContent) => {
-                onEdit?.(editedContent);
+                // Don't update UI for edits that can't be persisted
+                if (messageId === undefined || messageId === null) {
+                  setIsEditing(false);
+                  return;
+                }
+                onEdit?.(editedContent, messageId);
                 setContent(editedContent);
                 setIsEditing(false);
               }}
