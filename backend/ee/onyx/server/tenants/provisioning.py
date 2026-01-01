@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import uuid
 
 import aiohttp  # Async HTTP client
@@ -57,6 +56,7 @@ from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRe
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.setup import setup_onyx
+from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
@@ -65,7 +65,7 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.enums import EmbeddingProvider
 
 
-logger = logging.getLogger(__name__)
+logger = setup_logger()
 
 
 async def get_or_provision_tenant(
@@ -312,7 +312,11 @@ def configure_default_api_keys(db_session: Session) -> None:
     # Configure OpenAI provider
     if OPENAI_DEFAULT_API_KEY:
         default_model = recommendations.get_default_model(OPENAI_PROVIDER_NAME)
-        default_model_name = default_model.name if default_model else "gpt-4o"
+        if default_model is None:
+            logger.error(
+                f"No default model found for {OPENAI_PROVIDER_NAME} in recommendations"
+            )
+        default_model_name = default_model.name if default_model else "gpt-5.2"
 
         openai_provider = LLMProviderUpsertRequest(
             name="OpenAI",
@@ -334,6 +338,10 @@ def configure_default_api_keys(db_session: Session) -> None:
     # Configure Anthropic provider
     if ANTHROPIC_DEFAULT_API_KEY:
         default_model = recommendations.get_default_model(ANTHROPIC_PROVIDER_NAME)
+        if default_model is None:
+            logger.error(
+                f"No default model found for {ANTHROPIC_PROVIDER_NAME} in recommendations"
+            )
         default_model_name = (
             default_model.name if default_model else "claude-sonnet-4-5"
         )
@@ -358,6 +366,10 @@ def configure_default_api_keys(db_session: Session) -> None:
     # Configure Vertex AI provider
     if VERTEXAI_DEFAULT_CREDENTIALS:
         default_model = recommendations.get_default_model(VERTEXAI_PROVIDER_NAME)
+        if default_model is None:
+            logger.error(
+                f"No default model found for {VERTEXAI_PROVIDER_NAME} in recommendations"
+            )
         default_model_name = default_model.name if default_model else "gemini-2.5-pro"
 
         # Vertex AI uses custom_config for credentials and location
@@ -386,6 +398,10 @@ def configure_default_api_keys(db_session: Session) -> None:
     # Configure OpenRouter provider
     if OPENROUTER_DEFAULT_API_KEY:
         default_model = recommendations.get_default_model(OPENROUTER_PROVIDER_NAME)
+        if default_model is None:
+            logger.error(
+                f"No default model found for {OPENROUTER_PROVIDER_NAME} in recommendations"
+            )
         default_model_name = default_model.name if default_model else "z-ai/glm-4.7"
 
         # For OpenRouter, we use the visible models from recommendations as model_configurations
