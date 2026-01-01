@@ -297,6 +297,40 @@ def configure_default_api_keys(db_session: Session) -> None:
     # Load recommendations from JSON config
     recommendations = get_reccomendations()
 
+    has_set_default_provider = False
+
+    def _upsert(request: LLMProviderUpsertRequest) -> None:
+        nonlocal has_set_default_provider
+        try:
+            provider = upsert_llm_provider(request, db_session)
+            if not has_set_default_provider:
+                update_default_provider(provider.id, db_session)
+                has_set_default_provider = True
+        except Exception as e:
+            logger.error(f"Failed to configure {request.provider} provider: {e}")
+
+    # Configure OpenAI provider
+    if OPENAI_DEFAULT_API_KEY:
+        default_model = recommendations.get_default_model(OPENAI_PROVIDER_NAME)
+        default_model_name = default_model.name if default_model else "gpt-4o"
+
+        openai_provider = LLMProviderUpsertRequest(
+            name="OpenAI",
+            provider=OPENAI_PROVIDER_NAME,
+            api_key=OPENAI_DEFAULT_API_KEY,
+            default_model_name=default_model_name,
+            model_configurations=_build_model_configuration_upsert_requests(
+                OPENAI_PROVIDER_NAME, recommendations
+            ),
+            api_key_changed=True,
+            is_auto_mode=True,
+        )
+        _upsert(openai_provider)
+    else:
+        logger.info(
+            "OPENAI_DEFAULT_API_KEY not set, skipping OpenAI provider configuration"
+        )
+
     # Configure Anthropic provider
     if ANTHROPIC_DEFAULT_API_KEY:
         default_model = recommendations.get_default_model(ANTHROPIC_PROVIDER_NAME)
@@ -315,40 +349,10 @@ def configure_default_api_keys(db_session: Session) -> None:
             api_key_changed=True,
             is_auto_mode=True,
         )
-        try:
-            full_provider = upsert_llm_provider(anthropic_provider, db_session)
-            update_default_provider(full_provider.id, db_session)
-        except Exception as e:
-            logger.error(f"Failed to configure Anthropic provider: {e}")
+        _upsert(anthropic_provider)
     else:
         logger.info(
             "ANTHROPIC_DEFAULT_API_KEY not set, skipping Anthropic provider configuration"
-        )
-
-    # Configure OpenAI provider
-    if OPENAI_DEFAULT_API_KEY:
-        default_model = recommendations.get_default_model(OPENAI_PROVIDER_NAME)
-        default_model_name = default_model.name if default_model else "gpt-4o"
-
-        openai_provider = LLMProviderUpsertRequest(
-            name="OpenAI",
-            provider=OPENAI_PROVIDER_NAME,
-            api_key=OPENAI_DEFAULT_API_KEY,
-            default_model_name=default_model_name,
-            model_configurations=_build_model_configuration_upsert_requests(
-                OPENAI_PROVIDER_NAME, recommendations
-            ),
-            api_key_changed=True,
-            is_auto_mode=True,
-        )
-        try:
-            full_provider = upsert_llm_provider(openai_provider, db_session)
-            update_default_provider(full_provider.id, db_session)
-        except Exception as e:
-            logger.error(f"Failed to configure OpenAI provider: {e}")
-    else:
-        logger.info(
-            "OPENAI_DEFAULT_API_KEY not set, skipping OpenAI provider configuration"
         )
 
     # Configure Vertex AI provider
@@ -373,11 +377,7 @@ def configure_default_api_keys(db_session: Session) -> None:
             api_key_changed=True,
             is_auto_mode=True,
         )
-        try:
-            full_provider = upsert_llm_provider(vertexai_provider, db_session)
-            update_default_provider(full_provider.id, db_session)
-        except Exception as e:
-            logger.error(f"Failed to configure Vertex AI provider: {e}")
+        _upsert(vertexai_provider)
     else:
         logger.info(
             "VERTEXAI_DEFAULT_CREDENTIALS not set, skipping Vertex AI provider configuration"
@@ -410,11 +410,7 @@ def configure_default_api_keys(db_session: Session) -> None:
             api_key_changed=True,
             is_auto_mode=True,
         )
-        try:
-            full_provider = upsert_llm_provider(openrouter_provider, db_session)
-            update_default_provider(full_provider.id, db_session)
-        except Exception as e:
-            logger.error(f"Failed to configure OpenRouter provider: {e}")
+        _upsert(openrouter_provider)
     else:
         logger.info(
             "OPENROUTER_DEFAULT_API_KEY not set, skipping OpenRouter provider configuration"
