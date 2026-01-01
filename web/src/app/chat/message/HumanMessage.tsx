@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { FileDescriptor } from "@/app/chat/interfaces";
 import "katex/dist/katex.min.css";
 import MessageSwitcher from "@/app/chat/message/MessageSwitcher";
@@ -101,7 +101,25 @@ interface HumanMessageProps {
   disableSwitchingForStreaming?: boolean;
 }
 
-export default function HumanMessage({
+// TODO: Consider using shallow array comparison for `files` and
+// `otherMessagesCanSwitchTo` instead of reference equality. Currently we rely
+// on stable references from the parent, but shallow comparison would be more
+// robust if those arrays are recreated.
+function arePropsEqual(
+  prev: HumanMessageProps,
+  next: HumanMessageProps
+): boolean {
+  return (
+    prev.content === next.content &&
+    prev.messageId === next.messageId &&
+    prev.files === next.files &&
+    prev.disableSwitchingForStreaming === next.disableSwitchingForStreaming &&
+    prev.otherMessagesCanSwitchTo === next.otherMessagesCanSwitchTo
+    // Skip: onEdit, stopGenerating, onMessageSelection (function props)
+  );
+}
+
+const HumanMessage = React.memo(function HumanMessage({
   content: initialContent,
   files,
   messageId,
@@ -257,4 +275,6 @@ export default function HumanMessage({
       </div>
     </div>
   );
-}
+}, arePropsEqual);
+
+export default HumanMessage;

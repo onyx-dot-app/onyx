@@ -1,3 +1,10 @@
+import React, {
+  useRef,
+  useState,
+  useEffect,
+  useCallback,
+  RefObject,
+} from "react";
 import {
   Packet,
   PacketType,
@@ -15,7 +22,6 @@ import { FeedbackType } from "@/app/chat/interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import CitedSourcesToggle from "@/app/chat/message/messageComponents/CitedSourcesToggle";
 import { TooltipGroup } from "@/components/tooltip/CustomTooltip";
-import { useRef, useState, useEffect, useCallback, RefObject } from "react";
 import {
   useChatSessionStore,
   useDocumentSidebarVisible,
@@ -66,7 +72,30 @@ export interface AIMessageProps {
   onMessageSelection?: (nodeId: number) => void;
 }
 
-export default function AIMessage({
+// TODO: Consider more robust comparisons:
+// - `rawPackets.length` assumes packets are append-only. Could compare the last
+//   packet or use a shallow comparison if packets can be modified in place.
+// - `chatState.docs`, `chatState.citations`, and `otherMessagesCanSwitchTo` use
+//   reference equality. Shallow array/object comparison would be more robust if
+//   these are recreated with the same values.
+function arePropsEqual(prev: AIMessageProps, next: AIMessageProps): boolean {
+  return (
+    prev.nodeId === next.nodeId &&
+    prev.messageId === next.messageId &&
+    prev.currentFeedback === next.currentFeedback &&
+    prev.rawPackets.length === next.rawPackets.length &&
+    prev.chatState.assistant?.id === next.chatState.assistant?.id &&
+    prev.chatState.docs === next.chatState.docs &&
+    prev.chatState.citations === next.chatState.citations &&
+    prev.chatState.overriddenModel === next.chatState.overriddenModel &&
+    prev.chatState.researchType === next.chatState.researchType &&
+    prev.otherMessagesCanSwitchTo === next.otherMessagesCanSwitchTo
+    // Skip: chatState.regenerate, chatState.setPresentingDocument,
+    //       llmManager, onMessageSelection (function/object props)
+  );
+}
+
+const AIMessage = React.memo(function AIMessage({
   rawPackets,
   chatState,
   nodeId,
@@ -696,4 +725,6 @@ export default function AIMessage({
       </div>
     </>
   );
-}
+}, arePropsEqual);
+
+export default AIMessage;
