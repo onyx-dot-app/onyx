@@ -48,7 +48,7 @@ from onyx.llm.well_known_providers.constants import VERTEX_CREDENTIALS_FILE_KWAR
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.llm.well_known_providers.constants import VERTEXAI_PROVIDER_NAME
 from onyx.llm.well_known_providers.llm_provider_options import (
-    get_reccomendations,
+    get_recommendations,
 )
 from onyx.llm.well_known_providers.llm_provider_options import (
     model_configurations_for_provider,
@@ -295,7 +295,7 @@ def _build_model_configuration_upsert_requests(
 def configure_default_api_keys(db_session: Session) -> None:
     """Configure default LLM providers using recommended-models.json for model selection."""
     # Load recommendations from JSON config
-    recommendations = get_reccomendations()
+    recommendations = get_recommendations()
 
     has_set_default_provider = False
 

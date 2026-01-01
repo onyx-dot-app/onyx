@@ -40,7 +40,7 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
     }
 
 
-def get_reccomendations() -> LLMRecommendations:
+def get_recommendations() -> LLMRecommendations:
     """Get the recommendations from the GitHub config."""
     recommendations_from_github = fetch_llm_recommendations_from_github()
     if recommendations_from_github:
@@ -227,7 +227,7 @@ def model_configurations_for_provider(
 
 
 def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
-    llm_recommendations = get_reccomendations()
+    llm_recommendations = get_recommendations()
 
     well_known_llms = []
     for provider_name in LlmProviderNames:
@@ -298,6 +298,6 @@ def fetch_default_model_for_provider(provider_name: str) -> str | None:
     First checks the GitHub-hosted recommended-models.json config (via fetch_github_config),
     then falls back to hardcoded defaults if unavailable.
     """
-    llm_recommendations = get_reccomendations()
+    llm_recommendations = get_recommendations()
     default_model = llm_recommendations.get_default_model(provider_name)
     return default_model.name if default_model else None
