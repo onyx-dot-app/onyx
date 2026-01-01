@@ -97,8 +97,12 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
   const searchParams = useSearchParams();
 
   // Use SWR hooks for data fetching
-  const { refreshChatSessions, currentChatSession, currentChatSessionId } =
-    useChatSessions();
+  const {
+    chatSessions,
+    refreshChatSessions,
+    currentChatSession,
+    currentChatSessionId,
+  } = useChatSessions();
   const { ccPairs } = useCCPairs();
   const { tags } = useTags();
   const { documentSets } = useDocumentSets();
@@ -198,6 +202,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
   // On first render, open onboarding if there are no configured LLM providers
   // OR if the user hasn't explicitly finished onboarding yet.
   // Wait until providers have loaded before making this decision.
+  // Skip onboarding entirely if the user has any existing chat sessions.
   const hasCheckedOnboarding = useRef(false);
   useEffect(() => {
     // Only check once, and only after data has loaded
@@ -205,6 +210,12 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
       return;
     }
     hasCheckedOnboarding.current = true;
+
+    // Skip onboarding if user has any chat sessions
+    if (chatSessions.length > 0) {
+      setShowOnboarding(false);
+      return;
+    }
 
     // Check if user has explicitly finished onboarding
     const hasFinishedOnboarding =
@@ -216,7 +227,11 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
     setShowOnboarding(
       llmManager.hasAnyProvider === false || !hasFinishedOnboarding
     );
-  }, [llmManager.isLoadingProviders, llmManager.hasAnyProvider]);
+  }, [
+    llmManager.isLoadingProviders,
+    llmManager.hasAnyProvider,
+    chatSessions.length,
+  ]);
 
   const noAssistants = liveAssistant === null || liveAssistant === undefined;
 
