@@ -42,6 +42,7 @@ import {
   SvgUser,
   SvgUsers,
   SvgZoomIn,
+  SvgPaintBrush,
 } from "@opal/icons";
 import SvgMcp from "@opal/icons/mcp";
 const connectors_items = () => [
@@ -271,9 +272,9 @@ const collections = (
             ...(enableEnterprise
               ? [
                   {
-                    name: "Whitelabeling",
-                    icon: PaintingIconSkeleton,
-                    link: "/admin/whitelabeling",
+                    name: "Appearance & Theming",
+                    icon: SvgPaintBrush,
+                    link: "/admin/theme",
                   },
                 ]
               : []),

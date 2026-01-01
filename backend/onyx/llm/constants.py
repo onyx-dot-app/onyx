@@ -32,6 +32,17 @@ class LlmProviderNames(str, Enum):
         return self.value
 
 
+WELL_KNOWN_PROVIDER_NAMES = [
+    LlmProviderNames.OPENAI,
+    LlmProviderNames.ANTHROPIC,
+    LlmProviderNames.VERTEX_AI,
+    LlmProviderNames.BEDROCK,
+    LlmProviderNames.OPENROUTER,
+    LlmProviderNames.AZURE,
+    LlmProviderNames.OLLAMA_CHAT,
+]
+
+
 # Proper capitalization for known providers and vendors
 PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.OPENAI: "OpenAI",
@@ -209,6 +220,60 @@ BEDROCK_MODEL_TOKEN_LIMITS: dict[str, int] = {
     "jamba-1-5": 256000,
     "jamba-instruct": 70000,
     "jamba": 256000,  # Default to newer version
+}
+
+
+# Models that should keep their hyphenated format in display names
+# These are model families where the hyphen is part of the brand name
+HYPHENATED_MODEL_NAMES: set[str] = {
+    "gpt-oss",
+}
+
+
+# General model prefix to vendor mapping (used as fallback when enrichment data is missing)
+# This covers common model families across all providers
+MODEL_PREFIX_TO_VENDOR: dict[str, str] = {
+    # Google
+    "gemini": "google",
+    "gemma": "google",
+    "palm": "google",
+    # Anthropic
+    "claude": "anthropic",
+    # OpenAI
+    "gpt": "openai",
+    "o1": "openai",
+    "o3": "openai",
+    "o4": "openai",
+    "chatgpt": "openai",
+    # Meta
+    "llama": "meta",
+    "codellama": "meta",
+    # Mistral
+    "mistral": "mistral",
+    "mixtral": "mistral",
+    "codestral": "mistral",
+    "ministral": "mistral",
+    "pixtral": "mistral",
+    "magistral": "mistral",
+    # Cohere
+    "command": "cohere",
+    "aya": "cohere",
+    # Amazon
+    "nova": "amazon",
+    "titan": "amazon",
+    # AI21
+    "jamba": "ai21",
+    # DeepSeek
+    "deepseek": "deepseek",
+    # Alibaba/Qwen
+    "qwen": "alibaba",
+    "qwq": "alibaba",
+    # Microsoft
+    "phi": "microsoft",
+    # NVIDIA
+    "nemotron": "nvidia",
+    # xAI
+    "grok": "xai",
 }
 
 
