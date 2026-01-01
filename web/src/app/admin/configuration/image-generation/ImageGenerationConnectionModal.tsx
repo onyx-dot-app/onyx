@@ -1,7 +1,7 @@
 "use client";
 
 import { ModalCreationInterface } from "@/refresh-components/contexts/ModalContext";
-import { ImageProvider } from "./constants";
+import { ImageProvider } from "@/app/admin/configuration/image-generation/constants";
 import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
 import { ImageGenerationConfigView } from "@/lib/configuration/imageConfigurationService";
 import { PopupSpec } from "@/components/admin/connectors/Popup";

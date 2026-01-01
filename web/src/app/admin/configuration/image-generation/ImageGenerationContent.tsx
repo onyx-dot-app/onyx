@@ -8,8 +8,11 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
-import { IMAGE_PROVIDER_GROUPS, ImageProvider } from "./constants";
-import ImageGenerationConnectionModal from "./ImageGenerationConnectionModal";
+import {
+  IMAGE_PROVIDER_GROUPS,
+  ImageProvider,
+} from "@/app/admin/configuration/image-generation/constants";
+import ImageGenerationConnectionModal from "@/app/admin/configuration/image-generation/ImageGenerationConnectionModal";
 import {
   ImageGenerationConfigView,
   setDefaultImageGenerationConfig,

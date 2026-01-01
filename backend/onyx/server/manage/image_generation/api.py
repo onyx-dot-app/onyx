@@ -239,9 +239,10 @@ def test_image_generation(
     except HTTPException:
         raise
     except Exception as e:
-        error_msg = str(e)
-        logger.warning(f"Image generation test failed: {error_msg}")
-        raise HTTPException(status_code=400, detail=error_msg)
+        # Log only exception type to avoid exposing sensitive data
+        # (LiteLLM errors may contain URLs with API keys or auth tokens)
+        logger.warning(f"Image generation test failed: {type(e).__name__}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @admin_router.post("/config")
@@ -347,9 +348,10 @@ def update_config(
 
     Flow:
     1. Get existing config and its LLM provider
-    2. Create new LLM provider + model config (same as create flow)
-    3. Update ImageGenerationConfig to point to new model config
-    4. Delete old LLM provider
+    2. Rename old LLM provider to free up the name (avoids unique constraint)
+    3. Create new LLM provider + model config (same as create flow)
+    4. Update ImageGenerationConfig to point to new model config
+    5. Delete old LLM provider (safe now - nothing references it)
     """
     try:
         # 1. Get existing config
@@ -362,7 +364,14 @@ def update_config(
 
         old_llm_provider_id = existing_config.model_configuration.llm_provider_id
 
-        # 2. Build and create new LLM provider
+        # 2. Rename old LLM provider to free up the name
+        # (Can't delete first due to cascade: LLMProvider -> ModelConfig -> ImageGenConfig)
+        old_provider = db_session.get(LLMProviderModel, old_llm_provider_id)
+        if old_provider:
+            old_provider.name = f"{old_provider.name}-old-{old_llm_provider_id}"
+            db_session.flush()
+
+        # 3. Build and create new LLM provider
         provider_request = _build_llm_provider_request(
             db_session=db_session,
             image_provider_id=image_provider_id,
@@ -381,10 +390,10 @@ def update_config(
             model_name=config_update.model_name,
         )
 
-        # 3. Update the ImageGenerationConfig to point to new model config
+        # 4. Update the ImageGenerationConfig to point to new model config
         existing_config.model_configuration_id = new_model_config_id
 
-        # 4. Delete old LLM provider (it was exclusively for image gen)
+        # 5. Delete old LLM provider (safe now - nothing references it)
         remove_llm_provider__no_commit(db_session, old_llm_provider_id)
 
         db_session.commit()
