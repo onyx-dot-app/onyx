@@ -56,7 +56,6 @@ class CacheManager:
     def store_cache_metadata(
         self,
         metadata: CacheMetadata,
-        ttl_seconds: int | None = None,
     ) -> None:
         """Store cache metadata.
 

@@ -549,7 +549,7 @@ def add_chunk_summaries(
             # Apply prompt caching: cache the document context (prompt1), chunk content is the suffix
             # For string inputs with continuation=True, the result will be a concatenated string
             processed_prompt, _ = process_with_prompt_cache(
-                llm=llm,
+                llm_config=llm.config,
                 cacheable_prefix=context_prompt1,
                 suffix=context_prompt2,
                 continuation=True,  # Append chunk to the document context
@@ -559,8 +559,7 @@ def add_chunk_summaries(
                 llm.invoke(
                     processed_prompt,
                     max_tokens=MAX_CONTEXT_TOKENS,
-                ).choice.message.content
-                or ""
+                )
             )
 
         except LLMRateLimitError as e:

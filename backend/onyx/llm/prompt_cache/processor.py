@@ -4,8 +4,8 @@ from datetime import datetime
 from datetime import timezone
 
 from onyx.configs.model_configs import ENABLE_PROMPT_CACHING
-from onyx.llm.interfaces import LanguageModelInput
-from onyx.llm.interfaces import LLM
+from onyx.llm.interfaces import LLMConfig
+from onyx.llm.models import LanguageModelInput
 from onyx.llm.prompt_cache.cache_manager import generate_cache_key_hash
 from onyx.llm.prompt_cache.interfaces import CacheMetadata
 from onyx.llm.prompt_cache.providers.factory import get_provider_adapter
@@ -15,8 +15,9 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 
+# TODO: test with a history containing images
 def process_with_prompt_cache(
-    llm: LLM,
+    llm_config: LLMConfig,
     cacheable_prefix: LanguageModelInput | None,
     suffix: LanguageModelInput,
     continuation: bool = False,
@@ -62,12 +63,12 @@ def process_with_prompt_cache(
         return suffix, None
 
     # Get provider adapter
-    provider_adapter = get_provider_adapter(llm.config.model_provider)
+    provider_adapter = get_provider_adapter(llm_config.model_provider)
 
     # If provider doesn't support caching, combine and return unchanged
     if not provider_adapter.supports_caching():
         logger.debug(
-            f"Provider {llm.config.model_provider} does not support caching, "
+            f"Provider {llm_config.model_provider} does not support caching, "
             "combining messages without caching"
         )
         # Use no-op adapter to combine messages
@@ -86,8 +87,8 @@ def process_with_prompt_cache(
     tenant_id = get_current_tenant_id()
     cache_key_hash = generate_cache_key_hash(
         cacheable_prefix=cacheable_prefix,
-        provider=llm.config.model_provider,
-        model_name=llm.config.model_name,
+        provider=llm_config.model_provider,
+        model_name=llm_config.model_name,
         tenant_id=tenant_id,
     )
 
@@ -105,8 +106,8 @@ def process_with_prompt_cache(
         )
 
         logger.debug(
-            f"Processed prompt with caching: provider={llm.config.model_provider}, "
-            f"model={llm.config.model_name}, cache_key={cache_key_hash[:16]}..., "
+            f"Processed prompt with caching: provider={llm_config.model_provider}, "
+            f"model={llm_config.model_name}, cache_key={cache_key_hash[:16]}..., "
             f"continuation={continuation}"
         )
 
@@ -114,8 +115,8 @@ def process_with_prompt_cache(
         # This allows us to track cache usage and effectiveness
         cache_metadata = CacheMetadata(
             cache_key=cache_key_hash,
-            provider=llm.config.model_provider,
-            model_name=llm.config.model_name,
+            provider=llm_config.model_provider,
+            model_name=llm_config.model_name,
             tenant_id=tenant_id,
             created_at=datetime.now(timezone.utc),
             last_accessed=datetime.now(timezone.utc),
@@ -126,7 +127,7 @@ def process_with_prompt_cache(
     except Exception as e:
         # Best-effort: log error and fall back to no-op behavior
         logger.warning(
-            f"Error processing prompt with caching for provider={llm.config.model_provider}: {str(e)}. "
+            f"Error processing prompt with caching for provider={llm_config.model_provider}: {str(e)}. "
             "Falling back to non-cached behavior."
         )
         # Fall back to no-op adapter

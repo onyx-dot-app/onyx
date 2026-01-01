@@ -236,7 +236,7 @@ def test_openai_prompt_caching_reduces_costs(
 
         # Apply prompt caching (for OpenAI, this is mostly a no-op but should still work)
         processed_messages1, _ = process_with_prompt_cache(
-            llm=llm,
+            llm_config=llm.config,
             cacheable_prefix=cacheable_prefix,
             suffix=question1,
             continuation=False,
@@ -269,7 +269,7 @@ def test_openai_prompt_caching_reduces_costs(
 
         # Apply prompt caching (same cacheable prefix)
         processed_messages2, _ = process_with_prompt_cache(
-            llm=llm,
+            llm_config=llm.config,
             cacheable_prefix=cacheable_prefix,
             suffix=question2,
             continuation=False,
@@ -351,7 +351,7 @@ def test_anthropic_prompt_caching_reduces_costs(
 
     # Apply prompt caching
     processed_messages1, _ = process_with_prompt_cache(
-        llm=llm,
+        llm_config=llm.config,
         cacheable_prefix=base_messages,
         suffix=question1,
         continuation=False,
@@ -378,7 +378,7 @@ def test_anthropic_prompt_caching_reduces_costs(
 
     # Apply prompt caching (same cacheable prefix)
     processed_messages2, _ = process_with_prompt_cache(
-        llm=llm,
+        llm_config=llm.config,
         cacheable_prefix=base_messages,
         suffix=question2,
         continuation=False,
@@ -495,7 +495,7 @@ def test_google_genai_prompt_caching_reduces_costs(
             ]
 
             processed_messages1, _ = process_with_prompt_cache(
-                llm=llm,
+                llm_config=llm.config,
                 cacheable_prefix=cacheable_prefix,
                 suffix=question1,
                 continuation=False,
@@ -530,7 +530,7 @@ def test_google_genai_prompt_caching_reduces_costs(
             ]
 
             processed_messages2, _ = process_with_prompt_cache(
-                llm=llm,
+                llm_config=llm.config,
                 cacheable_prefix=cacheable_prefix,
                 suffix=question2,
                 continuation=False,

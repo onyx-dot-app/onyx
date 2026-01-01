@@ -1,6 +1,6 @@
 """No-op provider adapter for providers without caching support."""
 
-from onyx.llm.interfaces import LanguageModelInput
+from onyx.llm.models import LanguageModelInput
 from onyx.llm.prompt_cache.interfaces import CacheMetadata
 from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
 from onyx.llm.prompt_cache.utils import prepare_messages_with_cacheable_transform

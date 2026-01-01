@@ -5,7 +5,6 @@ import json
 from collections.abc import Callable
 from collections.abc import Sequence
 from typing import Any
-from typing import cast
 
 from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.models import ChatCompletionMessage
@@ -38,7 +37,7 @@ def combine_messages_with_continuation(
     suffix_msgs: Sequence[ChatCompletionMessage],
     continuation: bool,
     was_prefix_string: bool,
-) -> Sequence[ChatCompletionMessage]:
+) -> list[ChatCompletionMessage]:
     """Combine prefix and suffix messages, handling continuation flag.
 
     Args:
@@ -52,38 +51,37 @@ def combine_messages_with_continuation(
     Returns:
         Combined messages
     """
-    if continuation and prefix_msgs and not was_prefix_string:
-        # Append suffix content to last message of prefix
-        result = list(prefix_msgs)
-        last_msg = dict(result[-1])
-        suffix_first = dict(suffix_msgs[0]) if suffix_msgs else {}
+    if not continuation or not prefix_msgs or was_prefix_string:
+        # Simple concatenation (or prefix was a string, so keep separate)
+        return list(prefix_msgs) + list(suffix_msgs)
+    # Append suffix content to last message of prefix
+    result = list(prefix_msgs)
+    last_msg = dict(result[-1])
+    suffix_first = dict(suffix_msgs[0]) if suffix_msgs else {}
 
-        # Combine content
-        if "content" in last_msg and "content" in suffix_first:
-            if isinstance(last_msg["content"], str) and isinstance(
-                suffix_first["content"], str
-            ):
-                last_msg["content"] = last_msg["content"] + suffix_first["content"]
-            else:
-                # Handle list content (multimodal)
-                prefix_content = (
-                    last_msg["content"]
-                    if isinstance(last_msg["content"], list)
-                    else [{"type": "text", "text": last_msg["content"]}]
-                )
-                suffix_content = (
-                    suffix_first["content"]
-                    if isinstance(suffix_first["content"], list)
-                    else [{"type": "text", "text": suffix_first["content"]}]
-                )
-                last_msg["content"] = prefix_content + suffix_content
+    # Combine content
+    if "content" in last_msg and "content" in suffix_first:
+        if isinstance(last_msg["content"], str) and isinstance(
+            suffix_first["content"], str
+        ):
+            last_msg["content"] = last_msg["content"] + suffix_first["content"]
+        else:
+            # Handle list content (multimodal)
+            prefix_content = (
+                last_msg["content"]
+                if isinstance(last_msg["content"], list)
+                else [{"type": "text", "text": last_msg["content"]}]
+            )
+            suffix_content = (
+                suffix_first["content"]
+                if isinstance(suffix_first["content"], list)
+                else [{"type": "text", "text": suffix_first["content"]}]
+            )
+            last_msg["content"] = prefix_content + suffix_content
 
-        result[-1] = cast(ChatCompletionMessage, last_msg)
-        result.extend(suffix_msgs[1:])
-        return result
-
-    # Simple concatenation (or prefix was a string, so keep separate)
-    return list(prefix_msgs) + list(suffix_msgs)
+    result[-1] = revalidate_message_from_original(original=result[-1], mutated=last_msg)
+    result.extend(suffix_msgs[1:])
+    return result
 
 
 def revalidate_message_from_original(

@@ -1,8 +1,6 @@
 """Factory for creating provider-specific prompt cache adapters."""
 
-from onyx.llm.llm_provider_options import ANTHROPIC_PROVIDER_NAME
-from onyx.llm.llm_provider_options import OPENAI_PROVIDER_NAME
-from onyx.llm.llm_provider_options import VERTEXAI_PROVIDER_NAME
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.prompt_cache.providers.anthropic import AnthropicPromptCacheProvider
 from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
 from onyx.llm.prompt_cache.providers.noop import NoOpPromptCacheProvider
@@ -19,11 +17,11 @@ def get_provider_adapter(provider: str) -> PromptCacheProvider:
     Returns:
         PromptCacheProvider instance for the given provider
     """
-    if provider == OPENAI_PROVIDER_NAME:
+    if provider == LlmProviderNames.OPENAI:
         return OpenAIPromptCacheProvider()
-    elif provider == ANTHROPIC_PROVIDER_NAME:
+    elif provider == LlmProviderNames.ANTHROPIC:
         return AnthropicPromptCacheProvider()
-    elif provider == VERTEXAI_PROVIDER_NAME:
+    elif provider == LlmProviderNames.VERTEX_AI:
         return VertexAIPromptCacheProvider()
     else:
         # Default to no-op for providers without caching support
