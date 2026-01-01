@@ -1,4 +1,5 @@
 import { Form, Formik } from "formik";
+import Modal from "@/refresh-components/Modal";
 import { TextFormField, FileUploadFormField } from "@/components/Field";
 import { LLMProviderFormProps } from "../interfaces";
 import * as Yup from "yup";
@@ -128,35 +129,37 @@ export function VertexAIForm({
             >
               {(formikProps) => {
                 return (
-                  <Form className={LLM_FORM_CLASS_NAME}>
-                    <DisplayNameField disabled={!!existingLlmProvider} />
+                  <Form className="flex flex-col flex-1 overflow-hidden">
+                    <Modal.Body className={`${LLM_FORM_CLASS_NAME} overflow-y-auto flex-1`}>
+                      <DisplayNameField disabled={!!existingLlmProvider} />
 
-                    <FileUploadFormField
-                      name="custom_config.vertex_credentials"
-                      label="Credentials File"
-                      subtext="Upload your Google Cloud service account JSON credentials file."
-                    />
+                      <FileUploadFormField
+                        name="custom_config.vertex_credentials"
+                        label="Credentials File"
+                        subtext="Upload your Google Cloud service account JSON credentials file."
+                      />
 
-                    <TextFormField
-                      name="custom_config.vertex_location"
-                      label="Location"
-                      placeholder={VERTEXAI_DEFAULT_LOCATION}
-                      subtext="The Google Cloud region for your Vertex AI models (e.g., global, us-east1, us-central1, europe-west1). See [Google's documentation](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#google_model_endpoint_locations) to find the appropriate region for your model."
-                      optional
-                    />
+                      <TextFormField
+                        name="custom_config.vertex_location"
+                        label="Location"
+                        placeholder={VERTEXAI_DEFAULT_LOCATION}
+                        subtext="The Google Cloud region for your Vertex AI models (e.g., global, us-east1, us-central1, europe-west1). See [Google's documentation](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#google_model_endpoint_locations) to find the appropriate region for your model."
+                        optional
+                      />
 
-                    <Separator />
+                      <Separator />
 
-                    <DisplayModels
-                      modelConfigurations={modelConfigurations}
-                      formikProps={formikProps}
-                      recommendedDefaultModel={
-                        wellKnownLLMProvider?.recommended_default_model ?? null
-                      }
-                      shouldShowAutoUpdateToggle={true}
-                    />
+                      <DisplayModels
+                        modelConfigurations={modelConfigurations}
+                        formikProps={formikProps}
+                        recommendedDefaultModel={
+                          wellKnownLLMProvider?.recommended_default_model ?? null
+                        }
+                        shouldShowAutoUpdateToggle={true}
+                      />
 
-                    <AdvancedOptions formikProps={formikProps} />
+                      <AdvancedOptions formikProps={formikProps} />
+                    </Modal.Body>
 
                     <FormActionButtons
                       isTesting={isTesting}

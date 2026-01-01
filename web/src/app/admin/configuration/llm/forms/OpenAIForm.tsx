@@ -1,4 +1,5 @@
 import { Form, Formik } from "formik";
+import Modal from "@/refresh-components/Modal";
 
 import { LLMProviderFormProps } from "../interfaces";
 import * as Yup from "yup";
@@ -88,21 +89,23 @@ export function OpenAIForm({
             >
               {(formikProps) => {
                 return (
-                  <Form className={LLM_FORM_CLASS_NAME}>
-                    <DisplayNameField disabled={!!existingLlmProvider} />
+                  <Form className="flex flex-col flex-1 overflow-hidden">
+                    <Modal.Body className={`${LLM_FORM_CLASS_NAME} overflow-y-auto flex-1`}>
+                      <DisplayNameField disabled={!!existingLlmProvider} />
 
-                    <ApiKeyField />
+                      <ApiKeyField />
 
-                    <DisplayModels
-                      modelConfigurations={modelConfigurations}
-                      formikProps={formikProps}
-                      recommendedDefaultModel={
-                        wellKnownLLMProvider?.recommended_default_model ?? null
-                      }
-                      shouldShowAutoUpdateToggle={true}
-                    />
+                      <DisplayModels
+                        modelConfigurations={modelConfigurations}
+                        formikProps={formikProps}
+                        recommendedDefaultModel={
+                          wellKnownLLMProvider?.recommended_default_model ?? null
+                        }
+                        shouldShowAutoUpdateToggle={true}
+                      />
 
-                    <AdvancedOptions formikProps={formikProps} />
+                      <AdvancedOptions formikProps={formikProps} />
+                    </Modal.Body>
 
                     <FormActionButtons
                       isTesting={isTesting}

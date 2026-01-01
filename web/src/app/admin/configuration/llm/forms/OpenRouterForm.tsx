@@ -1,4 +1,5 @@
 import Separator from "@/refresh-components/Separator";
+import Modal from "@/refresh-components/Modal";
 import { Form, Formik } from "formik";
 import { TextFormField } from "@/components/Field";
 import {
@@ -169,52 +170,54 @@ export function OpenRouterForm({
                   !formikProps.values.api_base || !formikProps.values.api_key;
 
                 return (
-                  <Form className={LLM_FORM_CLASS_NAME}>
-                    <DisplayNameField disabled={!!existingLlmProvider} />
+                  <Form className="flex flex-col flex-1 overflow-hidden">
+                    <Modal.Body className={`${LLM_FORM_CLASS_NAME} overflow-y-auto flex-1`}>
+                      <DisplayNameField disabled={!!existingLlmProvider} />
 
-                    <ApiKeyField />
+                      <ApiKeyField />
 
-                    <TextFormField
-                      name="api_base"
-                      label="API Base URL"
-                      subtext="The base URL for OpenRouter API."
-                      placeholder={DEFAULT_API_BASE}
-                    />
+                      <TextFormField
+                        name="api_base"
+                        label="API Base URL"
+                        subtext="The base URL for OpenRouter API."
+                        placeholder={DEFAULT_API_BASE}
+                      />
 
-                    <FetchModelsButton
-                      onFetch={() =>
-                        fetchOpenRouterModels({
-                          apiBase: formikProps.values.api_base,
-                          apiKey: formikProps.values.api_key,
-                          providerName: existingLlmProvider?.name,
-                        })
-                      }
-                      isDisabled={isFetchDisabled}
-                      disabledHint={
-                        !formikProps.values.api_key
-                          ? "Enter your API key first."
-                          : !formikProps.values.api_base
-                            ? "Enter the API base URL."
-                            : undefined
-                      }
-                      onModelsFetched={setFetchedModels}
-                      autoFetchOnInitialLoad={!!existingLlmProvider}
-                    />
+                      <FetchModelsButton
+                        onFetch={() =>
+                          fetchOpenRouterModels({
+                            apiBase: formikProps.values.api_base,
+                            apiKey: formikProps.values.api_key,
+                            providerName: existingLlmProvider?.name,
+                          })
+                        }
+                        isDisabled={isFetchDisabled}
+                        disabledHint={
+                          !formikProps.values.api_key
+                            ? "Enter your API key first."
+                            : !formikProps.values.api_base
+                              ? "Enter the API base URL."
+                              : undefined
+                        }
+                        onModelsFetched={setFetchedModels}
+                        autoFetchOnInitialLoad={!!existingLlmProvider}
+                      />
 
-                    <Separator />
+                      <Separator />
 
-                    <DisplayModels
-                      modelConfigurations={currentModels}
-                      formikProps={formikProps}
-                      noModelConfigurationsMessage={
-                        "Fetch available models first, then you'll be able to select " +
-                        "the models you want to make available in Onyx."
-                      }
-                      recommendedDefaultModel={null}
-                      shouldShowAutoUpdateToggle={false}
-                    />
+                      <DisplayModels
+                        modelConfigurations={currentModels}
+                        formikProps={formikProps}
+                        noModelConfigurationsMessage={
+                          "Fetch available models first, then you'll be able to select " +
+                          "the models you want to make available in Onyx."
+                        }
+                        recommendedDefaultModel={null}
+                        shouldShowAutoUpdateToggle={false}
+                      />
 
-                    <AdvancedOptions formikProps={formikProps} />
+                      <AdvancedOptions formikProps={formikProps} />
+                    </Modal.Body>
 
                     <FormActionButtons
                       isTesting={isTesting}

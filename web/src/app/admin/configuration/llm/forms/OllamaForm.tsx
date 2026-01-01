@@ -1,4 +1,5 @@
 import { Form, Formik, FormikProps } from "formik";
+import Modal from "@/refresh-components/Modal";
 import { TextFormField } from "@/components/Field";
 import {
   LLMProviderFormProps,
@@ -81,35 +82,37 @@ function OllamaFormContent({
   }, [formikProps.values.api_base]);
 
   return (
-    <Form className={LLM_FORM_CLASS_NAME}>
-      <DisplayNameField disabled={!!existingLlmProvider} />
+    <Form className="flex flex-col flex-1 overflow-hidden">
+      <Modal.Body className={`${LLM_FORM_CLASS_NAME} overflow-y-auto flex-1`}>
+        <DisplayNameField disabled={!!existingLlmProvider} />
 
-      <TextFormField
-        name="api_base"
-        label="API Base URL"
-        subtext="The base URL for your Ollama instance (e.g., http://127.0.0.1:11434)"
-        placeholder={DEFAULT_API_BASE}
-      />
+        <TextFormField
+          name="api_base"
+          label="API Base URL"
+          subtext="The base URL for your Ollama instance (e.g., http://127.0.0.1:11434)"
+          placeholder={DEFAULT_API_BASE}
+        />
 
-      <TextFormField
-        name="custom_config.OLLAMA_API_KEY"
-        label="API Key (Optional)"
-        subtext="Optional API key for Ollama Cloud (https://ollama.com). Leave blank for local instances."
-        placeholder=""
-        type="password"
-        showPasswordToggle
-      />
+        <TextFormField
+          name="custom_config.OLLAMA_API_KEY"
+          label="API Key (Optional)"
+          subtext="Optional API key for Ollama Cloud (https://ollama.com). Leave blank for local instances."
+          placeholder=""
+          type="password"
+          showPasswordToggle
+        />
 
-      <DisplayModels
-        modelConfigurations={availableModels}
-        formikProps={formikProps}
-        noModelConfigurationsMessage="No models found. Please provide a valid API base URL."
-        isLoading={isLoadingModels}
-        recommendedDefaultModel={null}
-        shouldShowAutoUpdateToggle={false}
-      />
+        <DisplayModels
+          modelConfigurations={availableModels}
+          formikProps={formikProps}
+          noModelConfigurationsMessage="No models found. Please provide a valid API base URL."
+          isLoading={isLoadingModels}
+          recommendedDefaultModel={null}
+          shouldShowAutoUpdateToggle={false}
+        />
 
-      <AdvancedOptions formikProps={formikProps} />
+        <AdvancedOptions formikProps={formikProps} />
+      </Modal.Body>
 
       <FormActionButtons
         isTesting={isTesting}

@@ -1,6 +1,7 @@
 import { LoadingAnimation } from "@/components/Loading";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
+import Modal from "@/refresh-components/Modal";
 import { SvgTrash } from "@opal/icons";
 import { LLMProviderView } from "../../interfaces";
 import { LLM_PROVIDERS_ADMIN_URL } from "../../constants";
@@ -63,14 +64,14 @@ export function FormActionButtons({
   };
 
   return (
-    <>
+    <Modal.Footer className="flex-col items-stretch border-t border-border-subtle">
       {testError && (
-        <Text as="p" className="text-error mt-2">
+        <Text as="p" className="text-error">
           {testError}
         </Text>
       )}
 
-      <div className="flex w-full mt-4 gap-2">
+      <div className="flex w-full gap-2">
         <Button type="submit" disabled={isTesting || !isFormValid}>
           {isTesting ? (
             <Text as="p" inverted>
@@ -88,6 +89,6 @@ export function FormActionButtons({
           </Button>
         )}
       </div>
-    </>
+    </Modal.Footer>
   );
 }

@@ -1,4 +1,5 @@
 import Separator from "@/refresh-components/Separator";
+import Modal from "@/refresh-components/Modal";
 import {
   ArrayHelpers,
   Field,
@@ -159,154 +160,156 @@ export function CustomForm({
             >
               {(formikProps) => {
                 return (
-                  <Form className={LLM_FORM_CLASS_NAME}>
-                    <DisplayNameField disabled={!!existingLlmProvider} />
+                  <Form className="flex flex-col flex-1 overflow-hidden">
+                    <Modal.Body className={`${LLM_FORM_CLASS_NAME} overflow-y-auto flex-1`}>
+                      <DisplayNameField disabled={!!existingLlmProvider} />
 
-                    <TextFormField
-                      name="provider"
-                      label="Provider Name"
-                      subtext={
-                        <>
-                          Should be one of the providers listed at{" "}
-                          <a
-                            target="_blank"
-                            href="https://docs.litellm.ai/docs/providers"
-                            className="text-link"
-                            rel="noreferrer"
-                          >
-                            https://docs.litellm.ai/docs/providers
-                          </a>
-                          .
-                        </>
-                      }
-                      placeholder="Name of the custom provider"
-                    />
+                      <TextFormField
+                        name="provider"
+                        label="Provider Name"
+                        subtext={
+                          <>
+                            Should be one of the providers listed at{" "}
+                            <a
+                              target="_blank"
+                              href="https://docs.litellm.ai/docs/providers"
+                              className="text-link"
+                              rel="noreferrer"
+                            >
+                              https://docs.litellm.ai/docs/providers
+                            </a>
+                            .
+                          </>
+                        }
+                        placeholder="Name of the custom provider"
+                      />
 
-                    <Separator />
+                      <Separator />
 
-                    <Text as="p" secondaryBody text03>
-                      Fill in the following as needed. Refer to the LiteLLM
-                      documentation for the provider specified above to
-                      determine which fields are required.
-                    </Text>
+                      <Text as="p" secondaryBody text03>
+                        Fill in the following as needed. Refer to the LiteLLM
+                        documentation for the provider specified above to
+                        determine which fields are required.
+                      </Text>
 
-                    <ApiKeyField label="[Optional] API Key" />
+                      <ApiKeyField label="[Optional] API Key" />
 
-                    <TextFormField
-                      name="api_base"
-                      label="[Optional] API Base"
-                      placeholder="API Base URL"
-                    />
+                      <TextFormField
+                        name="api_base"
+                        label="[Optional] API Base"
+                        placeholder="API Base URL"
+                      />
 
-                    <TextFormField
-                      name="api_version"
-                      label="[Optional] API Version"
-                      placeholder="API Version"
-                    />
+                      <TextFormField
+                        name="api_version"
+                        label="[Optional] API Version"
+                        placeholder="API Version"
+                      />
 
-                    <Separator />
+                      <Separator />
 
-                    <Text as="p" mainUiAction>
-                      [Optional] Custom Configs
-                    </Text>
-                    <Text as="p" secondaryBody text03>
-                      <div>
-                        Additional configurations needed by the model provider.
-                        These are passed to LiteLLM via environment variables
-                        and as arguments into the completion call.
-                      </div>
-                      <div className="mt-2">
-                        For example, when configuring the Cloudflare provider,
-                        you would need to set CLOUDFLARE_ACCOUNT_ID as the key
-                        and your Cloudflare account ID as the value.
-                      </div>
-                    </Text>
+                      <Text as="p" mainUiAction>
+                        [Optional] Custom Configs
+                      </Text>
+                      <Text as="p" secondaryBody text03>
+                        <div>
+                          Additional configurations needed by the model provider.
+                          These are passed to LiteLLM via environment variables
+                          and as arguments into the completion call.
+                        </div>
+                        <div className="mt-2">
+                          For example, when configuring the Cloudflare provider,
+                          you would need to set CLOUDFLARE_ACCOUNT_ID as the key
+                          and your Cloudflare account ID as the value.
+                        </div>
+                      </Text>
 
-                    <FieldArray
-                      name="custom_config_list"
-                      render={(arrayHelpers: ArrayHelpers<any[]>) => (
-                        <div className="w-full">
-                          {formikProps.values.custom_config_list.map(
-                            (_, index) => (
-                              <div
-                                key={index}
-                                className={
-                                  (index === 0 ? "mt-2" : "mt-6") + " w-full"
-                                }
-                              >
-                                <div className="flex w-full">
-                                  <div className="w-full mr-6 border border-border p-3 rounded">
-                                    <div>
-                                      <Text as="p" mainUiAction>
-                                        Key
-                                      </Text>
-                                      <Field
-                                        name={`custom_config_list[${index}][0]`}
-                                        className="border border-border bg-background rounded w-full py-2 px-3 mr-4"
-                                        autoComplete="off"
-                                      />
-                                      <ErrorMessage
-                                        name={`custom_config_list[${index}][0]`}
-                                        component="div"
-                                        className="text-error text-sm mt-1"
+                      <FieldArray
+                        name="custom_config_list"
+                        render={(arrayHelpers: ArrayHelpers<any[]>) => (
+                          <div className="w-full">
+                            {formikProps.values.custom_config_list.map(
+                              (_, index) => (
+                                <div
+                                  key={index}
+                                  className={
+                                    (index === 0 ? "mt-2" : "mt-6") + " w-full"
+                                  }
+                                >
+                                  <div className="flex w-full">
+                                    <div className="w-full mr-6 border border-border p-3 rounded">
+                                      <div>
+                                        <Text as="p" mainUiAction>
+                                          Key
+                                        </Text>
+                                        <Field
+                                          name={`custom_config_list[${index}][0]`}
+                                          className="border border-border bg-background rounded w-full py-2 px-3 mr-4"
+                                          autoComplete="off"
+                                        />
+                                        <ErrorMessage
+                                          name={`custom_config_list[${index}][0]`}
+                                          component="div"
+                                          className="text-error text-sm mt-1"
+                                        />
+                                      </div>
+                                      <div className="mt-3">
+                                        <Text as="p" mainUiAction>
+                                          Value
+                                        </Text>
+                                        <Field
+                                          name={`custom_config_list[${index}][1]`}
+                                          className="border border-border bg-background rounded w-full py-2 px-3 mr-4"
+                                          autoComplete="off"
+                                        />
+                                        <ErrorMessage
+                                          name={`custom_config_list[${index}][1]`}
+                                          component="div"
+                                          className="text-error text-sm mt-1"
+                                        />
+                                      </div>
+                                    </div>
+                                    <div className="my-auto">
+                                      <IconButton
+                                        icon={SvgX}
+                                        className="my-auto"
+                                        onClick={() => arrayHelpers.remove(index)}
+                                        secondary
                                       />
                                     </div>
-                                    <div className="mt-3">
-                                      <Text as="p" mainUiAction>
-                                        Value
-                                      </Text>
-                                      <Field
-                                        name={`custom_config_list[${index}][1]`}
-                                        className="border border-border bg-background rounded w-full py-2 px-3 mr-4"
-                                        autoComplete="off"
-                                      />
-                                      <ErrorMessage
-                                        name={`custom_config_list[${index}][1]`}
-                                        component="div"
-                                        className="text-error text-sm mt-1"
-                                      />
-                                    </div>
-                                  </div>
-                                  <div className="my-auto">
-                                    <IconButton
-                                      icon={SvgX}
-                                      className="my-auto"
-                                      onClick={() => arrayHelpers.remove(index)}
-                                      secondary
-                                    />
                                   </div>
                                 </div>
-                              </div>
-                            )
-                          )}
-                          <CreateButton
-                            onClick={() => arrayHelpers.push(["", ""])}
-                            className="mt-3"
-                            type="button"
-                          >
-                            Add New
-                          </CreateButton>
-                        </div>
-                      )}
-                    />
+                              )
+                            )}
+                            <CreateButton
+                              onClick={() => arrayHelpers.push(["", ""])}
+                              className="mt-3"
+                              type="button"
+                            >
+                              Add New
+                            </CreateButton>
+                          </div>
+                        )}
+                      />
 
-                    <Separator />
+                      <Separator />
 
-                    <ModelConfigurationField
-                      name="model_configurations"
-                      formikProps={formikProps as any}
-                    />
+                      <ModelConfigurationField
+                        name="model_configurations"
+                        formikProps={formikProps as any}
+                      />
 
-                    <Separator />
+                      <Separator />
 
-                    <TextFormField
-                      name="default_model_name"
-                      label="Default Model"
-                      subtext="The model to use by default for this provider. Must be one of the models listed above."
-                      placeholder="e.g. gpt-4"
-                    />
+                      <TextFormField
+                        name="default_model_name"
+                        label="Default Model"
+                        subtext="The model to use by default for this provider. Must be one of the models listed above."
+                        placeholder="e.g. gpt-4"
+                      />
 
-                    <AdvancedOptions formikProps={formikProps} />
+                      <AdvancedOptions formikProps={formikProps} />
+                    </Modal.Body>
 
                     <FormActionButtons
                       isTesting={isTesting}

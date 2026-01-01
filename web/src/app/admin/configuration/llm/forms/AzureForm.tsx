@@ -1,4 +1,5 @@
 import { Form, Formik } from "formik";
+import Modal from "@/refresh-components/Modal";
 import { TextFormField } from "@/components/Field";
 import { LLMProviderFormProps, LLMProviderView } from "../interfaces";
 import * as Yup from "yup";
@@ -137,23 +138,25 @@ export function AzureForm({
             >
               {(formikProps) => {
                 return (
-                  <Form className={LLM_FORM_CLASS_NAME}>
-                    <DisplayNameField disabled={!!existingLlmProvider} />
+                  <Form className="flex flex-col flex-1 overflow-hidden">
+                    <Modal.Body className={`${LLM_FORM_CLASS_NAME} overflow-y-auto flex-1`}>
+                      <DisplayNameField disabled={!!existingLlmProvider} />
 
-                    <ApiKeyField />
+                      <ApiKeyField />
 
-                    <TextFormField
-                      name="target_uri"
-                      label="Target URI"
-                      placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
-                      subtext="The complete target URI for your deployment from the Azure AI portal."
-                    />
+                      <TextFormField
+                        name="target_uri"
+                        label="Target URI"
+                        placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
+                        subtext="The complete target URI for your deployment from the Azure AI portal."
+                      />
 
-                    <Separator />
-                    <SingleDefaultModelField placeholder="E.g. gpt-4o" />
-                    <Separator />
+                      <Separator />
+                      <SingleDefaultModelField placeholder="E.g. gpt-4o" />
+                      <Separator />
 
-                    <AdvancedOptions formikProps={formikProps} />
+                      <AdvancedOptions formikProps={formikProps} />
+                    </Modal.Body>
 
                     <FormActionButtons
                       isTesting={isTesting}

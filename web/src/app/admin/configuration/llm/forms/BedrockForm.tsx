@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Form, Formik, FormikProps } from "formik";
+import Modal from "@/refresh-components/Modal";
 import { SelectorFormField, TextFormField } from "@/components/Field";
 import {
   LLMProviderFormProps,
@@ -138,131 +139,133 @@ function BedrockFormInternals({
     !formikProps.values.custom_config?.AWS_REGION_NAME || !isAuthComplete;
 
   return (
-    <Form className={LLM_FORM_CLASS_NAME}>
-      <DisplayNameField disabled={!!existingLlmProvider} />
+    <Form className="flex flex-col flex-1 overflow-hidden">
+      <Modal.Body className={`${LLM_FORM_CLASS_NAME} overflow-y-auto flex-1`}>
+        <DisplayNameField disabled={!!existingLlmProvider} />
 
-      <SelectorFormField
-        name={FIELD_AWS_REGION_NAME}
-        label="AWS Region"
-        subtext="Region where your Amazon Bedrock models are hosted."
-        options={AWS_REGION_OPTIONS}
-      />
+        <SelectorFormField
+          name={FIELD_AWS_REGION_NAME}
+          label="AWS Region"
+          subtext="Region where your Amazon Bedrock models are hosted."
+          options={AWS_REGION_OPTIONS}
+        />
 
-      <div>
-        <Text as="p" mainUiAction>
-          Authentication Method
-        </Text>
-        <Text as="p" secondaryBody text03>
-          Choose how Onyx should authenticate with Bedrock.
-        </Text>
-        <Tabs
-          value={authMethod || AUTH_METHOD_ACCESS_KEY}
-          onValueChange={(value) =>
-            formikProps.setFieldValue(FIELD_BEDROCK_AUTH_METHOD, value)
+        <div>
+          <Text as="p" mainUiAction>
+            Authentication Method
+          </Text>
+          <Text as="p" secondaryBody text03>
+            Choose how Onyx should authenticate with Bedrock.
+          </Text>
+          <Tabs
+            value={authMethod || AUTH_METHOD_ACCESS_KEY}
+            onValueChange={(value) =>
+              formikProps.setFieldValue(FIELD_BEDROCK_AUTH_METHOD, value)
+            }
+            className="mt-2"
+          >
+            <TabsList>
+              <TabsTrigger value={AUTH_METHOD_IAM}>IAM Role</TabsTrigger>
+              <TabsTrigger value={AUTH_METHOD_ACCESS_KEY}>Access Key</TabsTrigger>
+              <TabsTrigger value={AUTH_METHOD_LONG_TERM_API_KEY}>
+                Long-term API Key
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent
+              value={AUTH_METHOD_IAM}
+              className="data-[state=active]:animate-fade-in-scale"
+            >
+              <Text as="p" text03>
+                Uses the IAM role attached to your AWS environment. Recommended
+                for EC2, ECS, Lambda, or other AWS services.
+              </Text>
+            </TabsContent>
+
+            <TabsContent
+              value={AUTH_METHOD_ACCESS_KEY}
+              className={cn(
+                "data-[state=active]:animate-fade-in-scale",
+                "mt-4 ml-2"
+              )}
+            >
+              <div className="flex flex-col gap-4">
+                <TextFormField
+                  name={FIELD_AWS_ACCESS_KEY_ID}
+                  label="AWS Access Key ID"
+                  placeholder="AKIAIOSFODNN7EXAMPLE"
+                />
+                <TextFormField
+                  name={FIELD_AWS_SECRET_ACCESS_KEY}
+                  label="AWS Secret Access Key"
+                  placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+                  type="password"
+                />
+              </div>
+            </TabsContent>
+
+            <TabsContent
+              value={AUTH_METHOD_LONG_TERM_API_KEY}
+              className={cn(
+                "data-[state=active]:animate-fade-in-scale",
+                "mt-4 ml-2"
+              )}
+            >
+              <div className="flex flex-col gap-4">
+                <TextFormField
+                  name={FIELD_AWS_BEARER_TOKEN_BEDROCK}
+                  label="AWS Bedrock Long-term API Key"
+                  placeholder="Your long-term API key"
+                  type="password"
+                />
+              </div>
+            </TabsContent>
+          </Tabs>
+        </div>
+
+        <FetchModelsButton
+          onFetch={() =>
+            fetchBedrockModels({
+              aws_region_name:
+                formikProps.values.custom_config?.AWS_REGION_NAME ?? "",
+              aws_access_key_id:
+                formikProps.values.custom_config?.AWS_ACCESS_KEY_ID,
+              aws_secret_access_key:
+                formikProps.values.custom_config?.AWS_SECRET_ACCESS_KEY,
+              aws_bearer_token_bedrock:
+                formikProps.values.custom_config?.AWS_BEARER_TOKEN_BEDROCK,
+              provider_name: existingLlmProvider?.name,
+            })
           }
-          className="mt-2"
-        >
-          <TabsList>
-            <TabsTrigger value={AUTH_METHOD_IAM}>IAM Role</TabsTrigger>
-            <TabsTrigger value={AUTH_METHOD_ACCESS_KEY}>Access Key</TabsTrigger>
-            <TabsTrigger value={AUTH_METHOD_LONG_TERM_API_KEY}>
-              Long-term API Key
-            </TabsTrigger>
-          </TabsList>
+          isDisabled={isFetchDisabled}
+          disabledHint={
+            !formikProps.values.custom_config?.AWS_REGION_NAME
+              ? "Select an AWS region."
+              : !isAuthComplete
+                ? 'Complete the "Authentication Method" section.'
+                : undefined
+          }
+          onModelsFetched={setFetchedModels}
+          autoFetchOnInitialLoad={!!existingLlmProvider}
+        />
 
-          <TabsContent
-            value={AUTH_METHOD_IAM}
-            className="data-[state=active]:animate-fade-in-scale"
-          >
-            <Text as="p" text03>
-              Uses the IAM role attached to your AWS environment. Recommended
-              for EC2, ECS, Lambda, or other AWS services.
-            </Text>
-          </TabsContent>
+        <Separator />
 
-          <TabsContent
-            value={AUTH_METHOD_ACCESS_KEY}
-            className={cn(
-              "data-[state=active]:animate-fade-in-scale",
-              "mt-4 ml-2"
-            )}
-          >
-            <div className="flex flex-col gap-4">
-              <TextFormField
-                name={FIELD_AWS_ACCESS_KEY_ID}
-                label="AWS Access Key ID"
-                placeholder="AKIAIOSFODNN7EXAMPLE"
-              />
-              <TextFormField
-                name={FIELD_AWS_SECRET_ACCESS_KEY}
-                label="AWS Secret Access Key"
-                placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-                type="password"
-              />
-            </div>
-          </TabsContent>
+        <DisplayModels
+          modelConfigurations={currentModels}
+          formikProps={formikProps}
+          noModelConfigurationsMessage={
+            "Fetch available models first, then you'll be able to select " +
+            "the models you want to make available in Onyx."
+          }
+          recommendedDefaultModel={null}
+          shouldShowAutoUpdateToggle={false}
+        />
 
-          <TabsContent
-            value={AUTH_METHOD_LONG_TERM_API_KEY}
-            className={cn(
-              "data-[state=active]:animate-fade-in-scale",
-              "mt-4 ml-2"
-            )}
-          >
-            <div className="flex flex-col gap-4">
-              <TextFormField
-                name={FIELD_AWS_BEARER_TOKEN_BEDROCK}
-                label="AWS Bedrock Long-term API Key"
-                placeholder="Your long-term API key"
-                type="password"
-              />
-            </div>
-          </TabsContent>
-        </Tabs>
-      </div>
+        <Separator />
 
-      <FetchModelsButton
-        onFetch={() =>
-          fetchBedrockModels({
-            aws_region_name:
-              formikProps.values.custom_config?.AWS_REGION_NAME ?? "",
-            aws_access_key_id:
-              formikProps.values.custom_config?.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key:
-              formikProps.values.custom_config?.AWS_SECRET_ACCESS_KEY,
-            aws_bearer_token_bedrock:
-              formikProps.values.custom_config?.AWS_BEARER_TOKEN_BEDROCK,
-            provider_name: existingLlmProvider?.name,
-          })
-        }
-        isDisabled={isFetchDisabled}
-        disabledHint={
-          !formikProps.values.custom_config?.AWS_REGION_NAME
-            ? "Select an AWS region."
-            : !isAuthComplete
-              ? 'Complete the "Authentication Method" section.'
-              : undefined
-        }
-        onModelsFetched={setFetchedModels}
-        autoFetchOnInitialLoad={!!existingLlmProvider}
-      />
-
-      <Separator />
-
-      <DisplayModels
-        modelConfigurations={currentModels}
-        formikProps={formikProps}
-        noModelConfigurationsMessage={
-          "Fetch available models first, then you'll be able to select " +
-          "the models you want to make available in Onyx."
-        }
-        recommendedDefaultModel={null}
-        shouldShowAutoUpdateToggle={false}
-      />
-
-      <Separator />
-
-      <AdvancedOptions formikProps={formikProps} />
+        <AdvancedOptions formikProps={formikProps} />
+      </Modal.Body>
 
       <FormActionButtons
         isTesting={isTesting}
