@@ -3,6 +3,7 @@ import pathlib
 
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
+from onyx.llm.constants import WELL_KNOWN_PROVIDER_NAMES
 from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
@@ -211,7 +212,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
     llm_recommendations = _get_reccomendations()
 
     well_known_llms = []
-    for provider_name in LlmProviderNames:
+    for provider_name in WELL_KNOWN_PROVIDER_NAMES:
         known_model_names = fetch_models_for_provider(provider_name)
         recommended_visible_models = llm_recommendations.get_visible_models(
             provider_name

@@ -32,6 +32,17 @@ class LlmProviderNames(str, Enum):
         return self.value
 
 
+WELL_KNOWN_PROVIDER_NAMES = [
+    LlmProviderNames.OPENAI,
+    LlmProviderNames.ANTHROPIC,
+    LlmProviderNames.VERTEX_AI,
+    LlmProviderNames.BEDROCK,
+    LlmProviderNames.OPENROUTER,
+    LlmProviderNames.AZURE,
+    LlmProviderNames.OLLAMA_CHAT,
+]
+
+
 # Proper capitalization for known providers and vendors
 PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.OPENAI: "OpenAI",
