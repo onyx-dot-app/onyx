@@ -564,7 +564,7 @@ def fetch_auto_mode_providers(db_session: Session) -> list[LLMProviderModel]:
     return list(
         db_session.scalars(
             select(LLMProviderModel)
-            .where(LLMProviderModel.is_auto_mode == True)  # noqa: E712
+            .where(LLMProviderModel.is_auto_mode.is_(True))
             .options(selectinload(LLMProviderModel.model_configurations))
         ).all()
     )
