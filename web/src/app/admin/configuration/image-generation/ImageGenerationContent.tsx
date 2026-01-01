@@ -3,14 +3,11 @@
 import { useState, useMemo } from "react";
 import useSWR from "swr";
 import Text from "@/refresh-components/texts/Text";
-import { Select } from "@/refresh-components/card";
+import { Select } from "@/refresh-components/cards";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import {
-  LLMProviderView,
-  WellKnownLLMProviderDescriptor,
-} from "@/app/admin/configuration/llm/interfaces";
+import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
 import { IMAGE_PROVIDER_GROUPS, ImageProvider } from "./constants";
 import ImageGenerationConnectionModal from "./ImageGenerationConnectionModal";
 import {
@@ -40,15 +37,6 @@ export default function ImageGenerationContent() {
     "/api/admin/image-generation/config",
     errorHandlingFetcher
   );
-
-  const { data: llmDescriptors = [] } = useSWR<
-    WellKnownLLMProviderDescriptor[]
-  >("/api/admin/llm/built-in/options", errorHandlingFetcher);
-
-  const getLLMDescriptor = (imageProvider: ImageProvider) => {
-    const llmProviderName = imageProvider.provider_name;
-    return llmDescriptors.find((d) => d.name === llmProviderName);
-  };
 
   const modal = useCreateModal();
   const [activeProvider, setActiveProvider] = useState<ImageProvider | null>(
@@ -187,7 +175,6 @@ export default function ImageGenerationContent() {
           <ImageGenerationConnectionModal
             modal={modal}
             imageProvider={activeProvider}
-            llmDescriptor={getLLMDescriptor(activeProvider)}
             existingProviders={llmProviders}
             existingConfig={editConfig || undefined}
             onSuccess={handleModalSuccess}
