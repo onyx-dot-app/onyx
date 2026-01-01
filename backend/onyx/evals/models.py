@@ -1,6 +1,7 @@
 from abc import ABC
 from abc import abstractmethod
 from collections.abc import Callable
+from typing import Any
 
 from pydantic import BaseModel
 from pydantic import Field
@@ -11,7 +12,26 @@ from onyx.chat.models import PromptOverrideConfig
 from onyx.chat.models import ToolConfig
 from onyx.db.tools import get_builtin_tool
 from onyx.llm.override_models import LLMOverride
+from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_MAP
+
+
+class ToolAssertion(BaseModel):
+    """Assertion about expected tool usage during evaluation."""
+
+    expected_tools: list[str]  # Tool type names that should be called
+    require_all: bool = False  # If True, ALL expected tools must be called
+
+
+class EvalToolResult(BaseModel):
+    """Result of a single eval with tool call information."""
+
+    answer: str
+    tools_called: list[str]  # Names of tools that were called
+    tool_call_details: list[dict[str, Any]]  # Full tool call info
+    citations: list[CitationInfo]  # Citations used in the answer
+    assertion_passed: bool | None = None  # None if no assertion configured
+    assertion_details: str | None = None  # Explanation of pass/fail
 
 
 class EvalConfiguration(BaseModel):
@@ -26,8 +46,8 @@ class EvalConfigurationOptions(BaseModel):
     builtin_tool_types: list[str] = list(BUILT_IN_TOOL_MAP.keys())
     persona_override_config: PersonaOverrideConfig | None = None
     llm: LLMOverride = LLMOverride(
-        model_provider="Default",
-        model_version="gpt-4.1",
+        model_provider=None,
+        model_version="gpt-4o",
         temperature=0.0,
     )
     search_permissions_email: str
@@ -52,6 +72,7 @@ class EvalConfigurationOptions(BaseModel):
                 )
             ],
         )
+
         return EvalConfiguration(
             persona_override_config=persona_override_config,
             llm=self.llm,
@@ -71,9 +92,9 @@ class EvalProvider(ABC):
     @abstractmethod
     def eval(
         self,
-        task: Callable[[dict[str, str]], str],
+        task: Callable[[dict[str, Any]], EvalToolResult],
         configuration: EvalConfigurationOptions,
-        data: list[dict[str, dict[str, str]]] | None = None,
+        data: list[dict[str, Any]] | None = None,
         remote_dataset_name: str | None = None,
     ) -> EvalationAck:
         pass
