@@ -1,15 +1,12 @@
 "use client";
 
 import Logo from "@/refresh-components/Logo";
-import {
-  GREETING_MESSAGES,
-  getRandomGreeting,
-} from "@/lib/chat/greetingMessages";
+import { getRandomGreeting } from "@/lib/chat/greetingMessages";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import useOnMount from "@/hooks/useOnMount";
-import { useState } from "react";
+import { useMemo } from "react";
+import { useSettingsContext } from "@/components/settings/SettingsProvider";
 
 export interface WelcomeMessageProps {
   agent?: MinimalPersonaSnapshot;
@@ -20,9 +17,14 @@ export default function WelcomeMessage({
   agent,
   isDefaultAgent,
 }: WelcomeMessageProps) {
-  const [greeting, setGreeting] = useState(() => GREETING_MESSAGES[0] ?? "");
-
-  useOnMount(() => setGreeting(getRandomGreeting()));
+  const settings = useSettingsContext();
+  const enterpriseSettings = settings?.enterpriseSettings;
+  const greeting = useMemo(() => {
+    if (enterpriseSettings?.custom_greeting_message) {
+      return enterpriseSettings.custom_greeting_message;
+    }
+    return getRandomGreeting();
+  }, [enterpriseSettings]);
 
   let content: React.ReactNode = null;
 

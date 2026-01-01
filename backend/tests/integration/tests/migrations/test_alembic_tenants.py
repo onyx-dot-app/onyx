@@ -15,10 +15,10 @@ from collections.abc import Generator
 from typing import Any
 
 import pytest
-from pytest_alembic import create_alembic_fixture
-from pytest_alembic.tests import test_single_head_revision
-from pytest_alembic.tests import test_up_down_consistency
-from pytest_alembic.tests import test_upgrade
+from pytest_alembic import create_alembic_fixture  # type: ignore[import-not-found,unused-ignore]
+from pytest_alembic.tests import test_single_head_revision  # type: ignore[import-not-found,unused-ignore]
+from pytest_alembic.tests import test_up_down_consistency  # type: ignore[import-not-found,unused-ignore]
+from pytest_alembic.tests import test_upgrade  # type: ignore[import-not-found,unused-ignore]
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 

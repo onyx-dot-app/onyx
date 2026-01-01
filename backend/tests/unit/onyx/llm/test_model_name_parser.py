@@ -41,9 +41,10 @@ def test_direct_provider_inference() -> None:
 
 
 def test_unknown_model_fallback() -> None:
-    """Test that unknown models fall back to raw name for display."""
+    """Test that unknown models get a cleaned-up display name."""
     result = parse_litellm_model_name("some-unknown-model-xyz")
 
     assert result.raw_name == "some-unknown-model-xyz"
-    assert result.display_name == "some-unknown-model-xyz"
+    # Unknown models get title-cased display names
+    assert result.display_name == "Some Unknown Model Xyz"
     assert result.vendor is None
