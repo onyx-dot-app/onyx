@@ -51,8 +51,8 @@ class DocumentChunk(BaseModel):
     max_chunk_size: int = DEFAULT_MAX_CHUNK_SIZE
 
     # Either both should be None or both should be non-None.
-    title: str | None
-    title_vector: list[float] | None
+    title: str | None = None
+    title_vector: list[float] | None = None
     content: str
     content_vector: list[float]
     # The actual number of tokens in the chunk.
@@ -83,7 +83,7 @@ class DocumentChunk(BaseModel):
         """
         Returns a unique identifier for the chunk.
         """
-        return f"{self.document_id}__{self.max_chunk_size}__{self.chunk_index}"
+        return f"{self.source_type}__{self.document_id}__{self.max_chunk_size}__{self.chunk_index}"
 
     @field_serializer("last_updated", "created_at", mode="plain")
     def serialize_datetime_fields_to_epoch_millis(
