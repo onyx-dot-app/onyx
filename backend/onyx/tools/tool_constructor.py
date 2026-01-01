@@ -7,16 +7,10 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import OAuthTokenManager
 from onyx.chat.emitter import Emitter
-from onyx.configs.app_configs import AZURE_IMAGE_API_BASE
-from onyx.configs.app_configs import AZURE_IMAGE_API_KEY
-from onyx.configs.app_configs import AZURE_IMAGE_API_VERSION
-from onyx.configs.app_configs import AZURE_IMAGE_DEPLOYMENT_NAME
-from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.models import BaseFilters
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
-from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.mcp import get_all_mcp_tools_for_server
 from onyx.db.mcp import get_mcp_server_by_id
 from onyx.db.mcp import get_user_connection_config
@@ -27,7 +21,6 @@ from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tools import get_builtin_tool
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import DocumentIndex
-from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.onyxbot.slack.models import SlackContext
@@ -76,78 +69,26 @@ class SearchToolUsage(str, Enum):
 
 
 def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
-    """Helper function to get image generation LLM config based on available providers"""
+    """Get image generation LLM config from the default image generation configuration."""
     from onyx.db.image_generation import get_default_image_generation_config
 
-    # Try to get default from database first
     default_config = get_default_image_generation_config(db_session)
     if (
-        default_config
-        and default_config.model_configuration
-        and default_config.model_configuration.llm_provider
+        not default_config
+        or not default_config.model_configuration
+        or not default_config.model_configuration.llm_provider
     ):
-        llm_provider = default_config.model_configuration.llm_provider
-        return LLMConfig(
-            model_provider=llm_provider.provider,
-            model_name=default_config.model_configuration.name,
-            temperature=GEN_AI_TEMPERATURE,
-            api_key=llm_provider.api_key,
-            api_base=llm_provider.api_base,
-            api_version=llm_provider.api_version,
-            deployment_name=llm_provider.deployment_name,
-            max_input_tokens=llm.config.max_input_tokens,
-        )
+        raise ValueError("No default image generation configuration found")
 
-    # Fallback to current env-based logic
-    if llm.config.api_key and llm.config.model_provider == LlmProviderNames.OPENAI:
-        return LLMConfig(
-            model_provider=llm.config.model_provider,
-            model_name=IMAGE_MODEL_NAME,
-            temperature=GEN_AI_TEMPERATURE,
-            api_key=llm.config.api_key,
-            api_base=llm.config.api_base,
-            api_version=llm.config.api_version,
-            max_input_tokens=llm.config.max_input_tokens,
-        )
-
-    if (
-        llm.config.model_provider == LlmProviderNames.AZURE
-        and AZURE_IMAGE_API_KEY is not None
-    ):
-        return LLMConfig(
-            model_provider=LlmProviderNames.AZURE,
-            model_name=f"azure/{AZURE_IMAGE_DEPLOYMENT_NAME}",
-            temperature=GEN_AI_TEMPERATURE,
-            api_key=AZURE_IMAGE_API_KEY,
-            api_base=AZURE_IMAGE_API_BASE,
-            api_version=AZURE_IMAGE_API_VERSION,
-            deployment_name=AZURE_IMAGE_DEPLOYMENT_NAME,
-            max_input_tokens=llm.config.max_input_tokens,
-        )
-
-    # Fallback to checking for OpenAI provider in database
-    llm_providers = fetch_existing_llm_providers(db_session)
-    openai_provider = next(
-        iter(
-            [
-                llm_provider
-                for llm_provider in llm_providers
-                if llm_provider.provider == LlmProviderNames.OPENAI
-            ]
-        ),
-        None,
-    )
-
-    if not openai_provider or not openai_provider.api_key:
-        raise ValueError("Image generation tool requires an OpenAI API key")
-
+    llm_provider = default_config.model_configuration.llm_provider
     return LLMConfig(
-        model_provider=openai_provider.provider,
-        model_name=IMAGE_MODEL_NAME,
+        model_provider=llm_provider.provider,
+        model_name=default_config.model_configuration.name,
         temperature=GEN_AI_TEMPERATURE,
-        api_key=openai_provider.api_key,
-        api_base=openai_provider.api_base,
-        api_version=openai_provider.api_version,
+        api_key=llm_provider.api_key,
+        api_base=llm_provider.api_base,
+        api_version=llm_provider.api_version,
+        deployment_name=llm_provider.deployment_name,
         max_input_tokens=llm.config.max_input_tokens,
     )
 
