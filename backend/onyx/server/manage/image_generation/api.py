@@ -15,6 +15,7 @@ from onyx.db.llm import remove_llm_provider__no_commit
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import ModelConfiguration
 from onyx.db.models import User
+from onyx.llm.utils import get_max_input_tokens
 from onyx.server.manage.image_generation.models import ImageGenerationConfigCreate
 from onyx.server.manage.image_generation.models import ImageGenerationConfigUpdate
 from onyx.server.manage.image_generation.models import ImageGenerationConfigView
@@ -126,10 +127,7 @@ def _create_image_gen_llm_provider__no_commit(
 
     Unlike upsert_llm_provider, this always creates a new provider and never
     deletes existing model configurations (which would cascade-delete ImageGenerationConfig).
-
-    Note: Does not commit. Caller is responsible for committing.
     """
-    from onyx.llm.utils import get_max_input_tokens
 
     # Always create a new provider (don't look up by name to avoid upsert behavior)
     new_provider = LLMProviderModel(
