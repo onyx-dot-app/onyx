@@ -1,7 +1,11 @@
 import { useState, ReactNode } from "react";
 import useSWR, { useSWRConfig, KeyedMutator } from "swr";
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
-import { LLMProviderView, ModelConfiguration } from "../../interfaces";
+import {
+  LLMProviderView,
+  ModelConfiguration,
+  WellKnownLLMProviderDescriptor,
+} from "../../interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
@@ -20,7 +24,7 @@ export interface ProviderFormContext {
   setIsTesting: (testing: boolean) => void;
   testError: string;
   setTestError: (error: string) => void;
-  modelConfigurations: ModelConfiguration[];
+  wellKnownLLMProvider: WellKnownLLMProviderDescriptor | undefined;
 }
 
 interface ProviderFormEntrypointWrapperProps {
@@ -53,13 +57,12 @@ export function ProviderFormEntrypointWrapper({
   const [testError, setTestError] = useState<string>("");
 
   // Fetch model configurations for this provider
-  const { data: _modelConfigurations } = useSWR<ModelConfiguration[]>(
+  const { data: wellKnownLLMProvider } = useSWR<WellKnownLLMProviderDescriptor>(
     providerEndpoint
       ? `/api/admin/llm/built-in/options/${providerEndpoint}`
       : null,
     errorHandlingFetcher
   );
-  const modelConfigurations = _modelConfigurations ?? [];
 
   const onClose = () => setFormIsVisible(false);
 
@@ -97,7 +100,7 @@ export function ProviderFormEntrypointWrapper({
     setIsTesting,
     testError,
     setTestError,
-    modelConfigurations,
+    wellKnownLLMProvider,
   };
 
   // Button mode: simple button that opens a modal

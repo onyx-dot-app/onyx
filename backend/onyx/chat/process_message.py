@@ -1,3 +1,8 @@
+"""
+IMPORTANT: familiarize yourself with the design concepts prior to contributing to this file.
+An overview can be found in the README.md file in this directory.
+"""
+
 import re
 import traceback
 from collections.abc import Callable

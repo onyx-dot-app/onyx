@@ -1,4 +1,5 @@
 import threading
+import time
 from collections.abc import Callable
 from collections.abc import Generator
 from queue import Empty
@@ -145,6 +146,8 @@ def run_chat_loop_with_state_containers(
 
     pkt: Packet | None = None
     last_turn_index = 0  # Track the highest turn_index seen for stop packet
+    last_cancel_check = time.monotonic()
+    cancel_check_interval = 0.3  # Check for cancellation every 300ms
     try:
         while True:
             # Poll queue with 300ms timeout for natural stop signal checking
@@ -159,6 +162,7 @@ def run_chat_loop_with_state_containers(
                         obj=OverallStop(type="stop", stop_reason="user_cancelled"),
                     )
                     break
+                last_cancel_check = time.monotonic()
                 continue
 
             if pkt is not None:
@@ -173,6 +177,19 @@ def run_chat_loop_with_state_containers(
                     raise pkt.obj.exception
                 else:
                     yield pkt
+
+                # Check for cancellation periodically even when packets are flowing
+                # This ensures stop signal is checked during active streaming
+                current_time = time.monotonic()
+                if current_time - last_cancel_check >= cancel_check_interval:
+                    if not is_connected():
+                        # Stop signal detected during streaming
+                        yield Packet(
+                            placement=Placement(turn_index=last_turn_index + 1),
+                            obj=OverallStop(type="stop", stop_reason="user_cancelled"),
+                        )
+                        break
+                    last_cancel_check = current_time
     finally:
         # Wait for thread to complete on normal exit to propagate exceptions and ensure cleanup.
         # Skip waiting if user disconnected to exit quickly.

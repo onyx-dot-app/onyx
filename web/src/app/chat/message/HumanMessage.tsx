@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { FileDescriptor } from "@/app/chat/interfaces";
 import "katex/dist/katex.min.css";
 import MessageSwitcher from "@/app/chat/message/MessageSwitcher";
 import Text from "@/refresh-components/texts/Text";
-import { cn } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Button from "@/refresh-components/buttons/Button";
@@ -46,15 +45,15 @@ function MessageEditing({
   return (
     <div className="w-full">
       <div
-        className={cn(
+        className={
           "w-full h-full border rounded-16 overflow-hidden p-3 flex flex-col gap-2"
-        )}
+        }
       >
         <textarea
           ref={textareaRef}
-          className={cn(
+          className={
             "w-full h-full resize-none outline-none bg-transparent overflow-y-scroll whitespace-normal break-word"
-          )}
+          }
           aria-multiline
           role="textarea"
           value={editedContent}
@@ -94,15 +93,34 @@ interface HumanMessageProps {
   otherMessagesCanSwitchTo?: number[];
   onMessageSelection?: (messageId: number) => void;
 
-  // Editing functionality
-  onEdit?: (editedContent: string) => void;
+  // Editing functionality - takes (editedContent, messageId) to allow stable callback reference
+  onEdit?: (editedContent: string, messageId: number) => void;
 
   // Streaming and generation
   stopGenerating?: () => void;
   disableSwitchingForStreaming?: boolean;
 }
 
-export default function HumanMessage({
+// TODO: Consider using shallow array comparison for `files` and
+// `otherMessagesCanSwitchTo` instead of reference equality. Currently we rely
+// on stable references from the parent, but shallow comparison would be more
+// robust if those arrays are recreated.
+function arePropsEqual(
+  prev: HumanMessageProps,
+  next: HumanMessageProps
+): boolean {
+  return (
+    prev.content === next.content &&
+    prev.messageId === next.messageId &&
+    prev.files === next.files &&
+    prev.disableSwitchingForStreaming === next.disableSwitchingForStreaming &&
+    prev.otherMessagesCanSwitchTo === next.otherMessagesCanSwitchTo &&
+    prev.onEdit === next.onEdit
+    // Skip: stopGenerating, onMessageSelection (inline function props)
+  );
+}
+
+const HumanMessage = React.memo(function HumanMessage({
   content: initialContent,
   files,
   messageId,
@@ -150,18 +168,23 @@ export default function HumanMessage({
   return (
     <div
       id="onyx-human-message"
-      className="pt-5 pb-1 w-full lg:px-5 flex justify-center -mr-6 relative"
+      className="pt-5 pb-1 w-full flex justify-center -mr-6 relative"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className={cn("text-user-text max-w-[790px] px-4 w-full")}>
+      <div className={"text-user-text max-w-[790px] w-full"}>
         <FileDisplay alignBubble files={files || []} />
         <div className="flex flex-wrap justify-end break-words">
           {isEditing ? (
             <MessageEditing
               content={content}
               onSubmitEdit={(editedContent) => {
-                onEdit?.(editedContent);
+                // Don't update UI for edits that can't be persisted
+                if (messageId === undefined || messageId === null) {
+                  setIsEditing(false);
+                  return;
+                }
+                onEdit?.(editedContent, messageId);
                 setContent(editedContent);
                 setIsEditing(false);
               }}
@@ -258,4 +281,6 @@ export default function HumanMessage({
       </div>
     </div>
   );
-}
+}, arePropsEqual);
+
+export default HumanMessage;

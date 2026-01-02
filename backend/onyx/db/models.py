@@ -2393,6 +2393,8 @@ class LLMProvider(Base):
     default_vision_model: Mapped[str | None] = mapped_column(String, nullable=True)
     # EE only
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Auto mode: models, visibility, and defaults are managed by GitHub config
+    is_auto_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     groups: Mapped[list["UserGroup"]] = relationship(
         "UserGroup",
         secondary="llm_provider__user_group",
@@ -2448,6 +2450,29 @@ class ModelConfiguration(Base):
     llm_provider: Mapped["LLMProvider"] = relationship(
         "LLMProvider",
         back_populates="model_configurations",
+    )
+
+
+class ImageGenerationConfig(Base):
+    __tablename__ = "image_generation_config"
+
+    image_provider_id: Mapped[str] = mapped_column(String, primary_key=True)
+    model_configuration_id: Mapped[int] = mapped_column(
+        ForeignKey("model_configuration.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    model_configuration: Mapped["ModelConfiguration"] = relationship(
+        "ModelConfiguration"
+    )
+
+    __table_args__ = (
+        Index("ix_image_generation_config_is_default", "is_default"),
+        Index(
+            "ix_image_generation_config_model_configuration_id",
+            "model_configuration_id",
+        ),
     )
 
 

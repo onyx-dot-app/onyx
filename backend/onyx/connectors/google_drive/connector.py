@@ -12,7 +12,9 @@ from functools import partial
 from typing import Any
 from typing import cast
 from typing import Protocol
+from urllib.parse import parse_qs
 from urllib.parse import urlparse
+from urllib.parse import urlunparse
 
 from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials as OAuthCredentials
@@ -64,6 +66,7 @@ from onyx.connectors.google_utils.shared_constants import USER_FIELDS
 from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
+from onyx.connectors.interfaces import NormalizationResult
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import ConnectorFailure
@@ -280,6 +283,54 @@ class GoogleDriveConnector(
                 "before calling load_credentials"
             )
         return self._creds
+
+    @classmethod
+    @override
+    def normalize_url(cls, url: str) -> NormalizationResult:
+        """Normalize a Google Drive URL to match the canonical Document.id format.
+
+        Reuses the connector's existing document ID creation logic from
+        onyx_document_id_from_drive_file.
+        """
+        parsed = urlparse(url)
+        netloc = parsed.netloc.lower()
+
+        if not (
+            netloc.startswith("docs.google.com")
+            or netloc.startswith("drive.google.com")
+        ):
+            return NormalizationResult(normalized_url=None, use_default=False)
+
+        # Handle ?id= query parameter case
+        query_params = parse_qs(parsed.query)
+        doc_id = query_params.get("id", [None])[0]
+        if doc_id:
+            scheme = parsed.scheme or "https"
+            netloc = "drive.google.com"
+            path = f"/file/d/{doc_id}"
+            params = ""
+            query = ""
+            fragment = ""
+            normalized = urlunparse(
+                (scheme, netloc, path, params, query, fragment)
+            ).rstrip("/")
+            return NormalizationResult(normalized_url=normalized, use_default=False)
+
+        # Extract file ID and use connector's function
+        path_parts = parsed.path.split("/")
+        file_id = None
+        for i, part in enumerate(path_parts):
+            if part == "d" and i + 1 < len(path_parts):
+                file_id = path_parts[i + 1]
+                break
+
+        if not file_id:
+            return NormalizationResult(normalized_url=None, use_default=False)
+
+        # Create minimal file object for connector function
+        file_obj = {"webViewLink": url, "id": file_id}
+        normalized = onyx_document_id_from_drive_file(file_obj).rstrip("/")
+        return NormalizationResult(normalized_url=normalized, use_default=False)
 
     # TODO: ensure returned new_creds_dict is actually persisted when this is called?
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, str] | None:

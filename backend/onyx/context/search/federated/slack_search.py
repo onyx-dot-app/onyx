@@ -1016,9 +1016,15 @@ def slack_retrieval(
         for query_string in query_strings
     ]
 
-    # If include_dm is True, add additional searches without channel filters
-    # This allows searching DMs/group DMs while still searching the specified channels
-    if entities and entities.get("include_dm"):
+    # If include_dm is True AND we're not already searching all channels,
+    # add additional searches without channel filters.
+    # This allows searching DMs/group DMs while still searching the specified channels.
+    # Skip this if search_all_channels is already True (would be duplicate queries).
+    if (
+        entities
+        and entities.get("include_dm")
+        and not entities.get("search_all_channels")
+    ):
         # Create a minimal entities dict that won't add channel filters
         # This ensures we search ALL conversations (DMs, group DMs, private channels)
         # BUT we still want to exclude channels specified in exclude_channels

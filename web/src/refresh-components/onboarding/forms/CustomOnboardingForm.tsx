@@ -16,7 +16,7 @@ import {
 } from "./OnboardingFormWrapper";
 import { OnboardingActions, OnboardingState } from "../types";
 import { buildInitialValues } from "../components/llmConnectionHelpers";
-import LLMConnectionIcons from "../components/LLMConnectionIcons";
+import ConnectionProviderIcon from "@/refresh-components/ConnectionProviderIcon";
 
 // Field name constants
 const FIELD_PROVIDER = "provider";
@@ -97,7 +97,7 @@ function CustomFormFields(props: OnboardingFormChildProps<CustomFormValues>) {
     })) || [];
 
   return (
-    <>
+    <div className="flex flex-col gap-2 w-full">
       <FormikField<string>
         name={FIELD_PROVIDER}
         render={(field, helper, meta, state) => (
@@ -134,7 +134,7 @@ function CustomFormFields(props: OnboardingFormChildProps<CustomFormValues>) {
         )}
       />
 
-      <Separator className="my-0" />
+      <Separator />
 
       <Text as="p" text03 secondaryBody className="ml-0.5">
         Fill in the following fields as needed. Refer to{" "}
@@ -223,7 +223,7 @@ function CustomFormFields(props: OnboardingFormChildProps<CustomFormValues>) {
         )}
       />
 
-      <Separator className="my-0" />
+      <Separator />
 
       <div className="w-full">
         <FormField
@@ -253,7 +253,7 @@ function CustomFormFields(props: OnboardingFormChildProps<CustomFormValues>) {
         </FormField>
       </div>
 
-      <Separator className="my-0" />
+      <Separator />
 
       <div className="w-full">
         <FormField
@@ -291,7 +291,7 @@ function CustomFormFields(props: OnboardingFormChildProps<CustomFormValues>) {
         </FormField>
       </div>
 
-      <Separator className="my-0" />
+      <Separator />
 
       <FormikField<string>
         name={FIELD_DEFAULT_MODEL_NAME}
@@ -319,7 +319,7 @@ function CustomFormFields(props: OnboardingFormChildProps<CustomFormValues>) {
           </FormField>
         )}
       />
-    </>
+    </div>
   );
 }
 
@@ -374,7 +374,7 @@ export function CustomOnboardingForm({
   });
 
   const icon = () => (
-    <LLMConnectionIcons
+    <ConnectionProviderIcon
       icon={<SvgServer className="w-6 h-6 stroke-text-04" />}
     />
   );

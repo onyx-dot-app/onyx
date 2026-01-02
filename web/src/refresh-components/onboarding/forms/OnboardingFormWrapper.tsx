@@ -132,8 +132,8 @@ export function OnboardingFormWrapper<T extends Record<string, any>>({
       return getModelOptions(fetchedModelConfigurations);
     }
     // For providers that don't support dynamic fetching, use static visible models from descriptor
-    if (llmDescriptor?.model_configurations) {
-      return getModelOptions(llmDescriptor.model_configurations);
+    if (llmDescriptor?.known_models) {
+      return getModelOptions(llmDescriptor.known_models);
     }
     return [];
   }, [fetchedModelConfigurations, llmDescriptor]);
@@ -166,7 +166,7 @@ export function OnboardingFormWrapper<T extends Record<string, any>>({
     const modelConfigsToUse =
       fetchedModelConfigurations.length > 0
         ? fetchedModelConfigurations
-        : llmDescriptor?.model_configurations ?? [];
+        : llmDescriptor?.known_models ?? [];
 
     // Transform values if transformer provided
     const payload = transformValues

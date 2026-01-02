@@ -10,7 +10,7 @@ import { OnyxApiClient } from "../utils/onyxApiClient";
 test.describe("Default Assistant Admin Page", () => {
   let testCcPairId: number | null = null;
   let webSearchProviderId: number | null = null;
-  let imageGenProviderId: number | null = null;
+  let imageGenConfigId: string | null = null;
 
   test.beforeEach(async ({ page }) => {
     // Log in as admin
@@ -30,8 +30,8 @@ test.describe("Default Assistant Admin Page", () => {
         "exa",
         `Test Web Search Provider ${Date.now()}`
       );
-      imageGenProviderId = await apiClient.createImageGenProvider(
-        `Test Image Gen Provider ${Date.now()}`
+      imageGenConfigId = await apiClient.createImageGenerationConfig(
+        `test-image-gen-${Date.now()}`
       );
     } catch (error) {
       console.warn(`Failed to create tool providers: ${error}`);
@@ -114,14 +114,14 @@ test.describe("Default Assistant Admin Page", () => {
       }
     }
 
-    // Clean up image gen provider
-    if (imageGenProviderId !== null) {
+    // Clean up image gen config
+    if (imageGenConfigId !== null) {
       try {
-        await apiClient.deleteProvider(imageGenProviderId);
-        imageGenProviderId = null;
+        await apiClient.deleteImageGenerationConfig(imageGenConfigId);
+        imageGenConfigId = null;
       } catch (error) {
         console.warn(
-          `Failed to delete image gen provider ${imageGenProviderId}: ${error}`
+          `Failed to delete image gen config ${imageGenConfigId}: ${error}`
         );
       }
     }

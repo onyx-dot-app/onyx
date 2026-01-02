@@ -19,6 +19,7 @@ export default function SwitchField({
   return (
     <Switch
       id={name}
+      name={name}
       checked={field.value}
       onCheckedChange={onChange}
       {...props}

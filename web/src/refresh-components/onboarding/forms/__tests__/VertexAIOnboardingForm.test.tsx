@@ -169,7 +169,7 @@ describe("VertexAIOnboardingForm", () => {
       ];
 
       // Verify MOCK_PROVIDERS.vertexAi has the correct model configurations
-      const actualModelNames = MOCK_PROVIDERS.vertexAi.model_configurations.map(
+      const actualModelNames = MOCK_PROVIDERS.vertexAi.known_models.map(
         (config) => config.name
       );
 
@@ -182,7 +182,7 @@ describe("VertexAIOnboardingForm", () => {
       expect(actualModelNames).toHaveLength(expectedModelNames.length);
 
       // Verify each model has is_visible set to true
-      MOCK_PROVIDERS.vertexAi.model_configurations.forEach((config) => {
+      MOCK_PROVIDERS.vertexAi.known_models.forEach((config) => {
         expect(config.is_visible).toBe(true);
       });
     });

@@ -118,10 +118,20 @@ class DATestLLMProvider(BaseModel):
     api_key: str
     default_model_name: str
     is_public: bool
+    is_auto_mode: bool = False
     groups: list[int]
     personas: list[int]
     api_base: str | None = None
     api_version: str | None = None
+
+
+class DATestImageGenerationConfig(BaseModel):
+    image_provider_id: str
+    model_configuration_id: int
+    model_name: str
+    llm_provider_id: int
+    llm_provider_name: str
+    is_default: bool
 
 
 class DATestDocumentSet(BaseModel):

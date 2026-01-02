@@ -27,6 +27,10 @@ services:
       - "19071:19071"
       - "8081:8081"
 
+  inference_model_server:
+    ports:
+      - "9000:9000"
+
   cache:
     ports:
       - "6379:6379"
