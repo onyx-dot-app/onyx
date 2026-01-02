@@ -23,7 +23,7 @@ test.describe("Default Assistant Tests", () => {
     await loginAsRandomUser(page);
 
     // Navigate to the chat page
-    await page.goto("http://localhost:3000/chat");
+    await page.goto("/chat");
     await page.waitForLoadState("networkidle");
   });
 
@@ -310,7 +310,7 @@ test.describe("Default Assistant Tests", () => {
       // Note: Image generation config is already created by beforeAll
       await page.context().clearCookies();
       await loginAs(page, "admin");
-      await page.goto("http://localhost:3000/chat");
+      await page.goto("/chat");
       await page.waitForLoadState("networkidle");
 
       const apiClient = new OnyxApiClient(page);
@@ -368,7 +368,7 @@ test.describe("Default Assistant Tests", () => {
       console.log(`[test] Enabled tools via API: ${uniqueToolIds}`);
 
       // Go back to chat
-      await page.goto("http://localhost:3000/chat");
+      await page.goto("/chat");
       await page.waitForLoadState("networkidle");
       // Wait for tools to be picked up
       await page.waitForTimeout(2000);
@@ -537,7 +537,7 @@ test.describe("End-to-End Default Assistant Flow", () => {
     await loginAsRandomUser(page);
 
     // Navigate to the chat page
-    await page.goto("http://localhost:3000/chat");
+    await page.goto("/chat");
     await page.waitForLoadState("networkidle");
 
     // Verify greeting message appears

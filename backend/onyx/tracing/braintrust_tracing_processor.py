@@ -67,10 +67,13 @@ class BraintrustTracingProcessor(TracingProcessor):
         self._spans: Dict[str, Any] = {}
         self._first_input: Dict[str, Any] = {}
         self._last_output: Dict[str, Any] = {}
+        self._trace_metadata: Dict[str, Dict[str, Any]] = {}
 
     def on_trace_start(self, trace: Trace) -> None:
         trace_meta = trace.export() or {}
         metadata = trace_meta.get("metadata") or {}
+        if metadata:
+            self._trace_metadata[trace.trace_id] = metadata
 
         current_context = braintrust.current_span()
         if current_context != NOOP_SPAN:
@@ -95,6 +98,7 @@ class BraintrustTracingProcessor(TracingProcessor):
 
     def on_trace_end(self, trace: Trace) -> None:
         span: Any = self._spans.pop(trace.trace_id)
+        self._trace_metadata.pop(trace.trace_id, None)
         # Get the first input and last output for this specific trace
         trace_first_input = self._first_input.pop(trace.trace_id, None)
         trace_last_output = self._last_output.pop(trace.trace_id, None)
@@ -172,12 +176,16 @@ class BraintrustTracingProcessor(TracingProcessor):
             if span.parent_id is not None
             else self._spans[span.trace_id]
         )
-        created_span: Any = parent.start_span(
+        trace_metadata = self._trace_metadata.get(span.trace_id)
+        span_kwargs: Dict[str, Any] = dict(
             id=span.span_id,
             name=_span_name(span),
             type=_span_type(span),
             start_time=_timestamp_from_maybe_iso(span.started_at),
         )
+        if trace_metadata:
+            span_kwargs["metadata"] = trace_metadata
+        created_span: Any = parent.start_span(**span_kwargs)
         self._spans[span.span_id] = created_span
 
         # Set the span as current so current_span() calls will return it

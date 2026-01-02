@@ -18,7 +18,7 @@ test("Chat workflow", async ({ page }) => {
   await loginAsRandomUser(page);
 
   // Navigate to the chat page
-  await page.goto("http://localhost:3000/chat");
+  await page.goto("/chat");
   await page.waitForLoadState("networkidle");
 
   // Test interaction with the Default assistant
