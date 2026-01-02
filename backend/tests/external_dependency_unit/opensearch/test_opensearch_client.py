@@ -106,7 +106,7 @@ class TestOpenSearchClient:
 
         # Postcondition.
         # Verify index exists.
-        assert test_client.validate_index(mappings=mappings) is True
+        assert test_client.validate_index(expected_mappings=mappings) is True
 
     def test_delete_existing_index(self, test_client: OpenSearchClient) -> None:
         """Tests deleting an existing index returns True."""
@@ -123,7 +123,7 @@ class TestOpenSearchClient:
 
         # Postcondition.
         assert result is True
-        assert test_client.validate_index(mappings=mappings) is False
+        assert test_client.validate_index(expected_mappings=mappings) is False
 
     def test_delete_nonexistent_index(self, test_client: OpenSearchClient) -> None:
         """Tests deleting a nonexistent index returns False."""
@@ -144,7 +144,7 @@ class TestOpenSearchClient:
 
         # Under test and postcondition.
         # Should return False before creation.
-        assert test_client.validate_index(mappings=mappings) is False
+        assert test_client.validate_index(expected_mappings=mappings) is False
 
         # Precondition.
         # Create index.
@@ -152,7 +152,7 @@ class TestOpenSearchClient:
 
         # Under test and postcondition.
         # Should return True after creation.
-        assert test_client.validate_index(mappings=mappings) is True
+        assert test_client.validate_index(expected_mappings=mappings) is True
 
     def test_create_duplicate_index(self, test_client: OpenSearchClient) -> None:
         """Tests creating an index twice raises an error."""
