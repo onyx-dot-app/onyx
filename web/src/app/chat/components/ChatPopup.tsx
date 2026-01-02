@@ -124,6 +124,7 @@ export function ChatPopup() {
                 <div className="flex items-center gap-1">
                   <FormField.Control>
                     <Checkbox
+                      aria-label="Consent checkbox"
                       checked={consentChecked}
                       onCheckedChange={(checked) => {
                         setConsentChecked(checked);
