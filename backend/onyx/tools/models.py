@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from enum import Enum
 from typing import Any
 from typing import Literal
 from uuid import UUID
@@ -22,6 +23,12 @@ from onyx.tools.tool_implementations.images.models import FinalImageGenerationRe
 
 TOOL_CALL_MSG_FUNC_NAME = "function_name"
 TOOL_CALL_MSG_ARGUMENTS = "arguments"
+
+
+class SearchToolUsage(str, Enum):
+    DISABLED = "disabled"
+    ENABLED = "enabled"
+    AUTO = "auto"
 
 
 class CustomToolUserFileSnapshot(BaseModel):

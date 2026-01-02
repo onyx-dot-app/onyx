@@ -1,4 +1,3 @@
-from enum import Enum
 from typing import cast
 from uuid import UUID
 
@@ -27,6 +26,7 @@ from onyx.onyxbot.slack.models import SlackContext
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.interface import Tool
 from onyx.tools.models import DynamicSchemaInfo
+from onyx.tools.models import SearchToolUsage
 from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
 )
@@ -60,12 +60,6 @@ class CustomToolConfig(BaseModel):
     chat_session_id: UUID | None = None
     message_id: int | None = None
     additional_headers: dict[str, str] | None = None
-
-
-class SearchToolUsage(str, Enum):
-    DISABLED = "disabled"
-    ENABLED = "enabled"
-    AUTO = "auto"
 
 
 def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:

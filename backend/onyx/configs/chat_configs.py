@@ -11,9 +11,6 @@ NUM_POSTPROCESSED_RESULTS = 20
 
 # May be less depending on model
 MAX_CHUNKS_FED_TO_CHAT = int(os.environ.get("MAX_CHUNKS_FED_TO_CHAT") or 25)
-# For Chat, need to keep enough space for history and other prompt pieces
-# ~3k input, half for docs, half for chat history + prompts
-CHAT_TARGET_CHUNK_PERCENTAGE = 512 * 3 / 3072
 
 # Maximum percentage of the context window to fill with selected sections
 SELECTED_SECTIONS_MAX_WINDOW_PERCENTAGE = 0.8

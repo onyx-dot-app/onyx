@@ -33,6 +33,9 @@ from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import Packet
 
 
+AUTO_PLACE_AFTER_LATEST_MESSAGE = -1
+
+
 if TYPE_CHECKING:
     pass
 
@@ -63,10 +66,6 @@ class ChatSessionCreationRequest(BaseModel):
     project_id: int | None = None
 
 
-class CreateChatSessionID(BaseModel):
-    chat_session_id: UUID
-
-
 class ChatFeedbackRequest(BaseModel):
     chat_message_id: int
     is_positive: bool | None = None
@@ -77,6 +76,44 @@ class ChatFeedbackRequest(BaseModel):
     def check_is_positive_or_feedback_text(self) -> "ChatFeedbackRequest":
         if self.is_positive is None and self.feedback_text is None:
             raise ValueError("Empty feedback received.")
+        return self
+
+
+class SendMessageRequest(BaseModel):
+    message: str
+
+    llm_override: LLMOverride | None = None
+
+    allowed_tool_ids: list[int] | None = None
+    forced_tool_id: int | None = None
+
+    file_descriptors: list[FileDescriptor] = []
+
+    internal_search_filters: BaseFilters | None = None
+
+    deep_research: bool = False
+
+    # Placement information for the message in the conversation tree:
+    # - -1: auto-place after latest message in chain
+    # - null: regeneration from root (first message)
+    # - positive int: place after that specific parent message
+    # NOTE: for regeneration, this is the only case currently where there is branching on the user message.
+    # If the message of parent_message_id is a user message, the message will be ignored and it will use the
+    # original user message for regeneration.
+    parent_message_id: int | None = AUTO_PLACE_AFTER_LATEST_MESSAGE
+    chat_session_id: UUID | None = None
+    chat_session_info: ChatSessionCreationRequest | None = None
+
+    @model_validator(mode="after")
+    def check_chat_session_id_or_info(self) -> "SendMessageRequest":
+        if self.chat_session_id is None and self.chat_session_info is None:
+            raise ValueError(
+                "Either chat_session_id or chat_session_info must be provided."
+            )
+        if self.chat_session_id is not None and self.chat_session_info is not None:
+            raise ValueError(
+                "Only one of chat_session_id or chat_session_info should be provided, not both."
+            )
         return self
 
 

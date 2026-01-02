@@ -229,9 +229,15 @@ export default function LLMPopover({
     });
   }, [filteredOptions]);
 
-  // Get display name for the currently selected model
+  // Get display name for the model to show in the button
+  // Use currentModelName prop if provided (e.g., for regenerate showing the model used),
+  // otherwise fall back to the globally selected model
   const currentLlmDisplayName = useMemo(() => {
-    const currentModel = llmManager.currentLlm.modelName;
+    // Only use currentModelName if it's a non-empty string
+    const currentModel =
+      currentModelName && currentModelName.trim()
+        ? currentModelName
+        : llmManager.currentLlm.modelName;
     if (!llmProviders) return currentModel;
 
     for (const provider of llmProviders) {
@@ -243,7 +249,7 @@ export default function LLMPopover({
       }
     }
     return currentModel;
-  }, [llmProviders, llmManager.currentLlm.modelName]);
+  }, [llmProviders, currentModelName, llmManager.currentLlm.modelName]);
 
   // Determine which group the current model belongs to (for auto-expand)
   const currentGroupKey = useMemo(() => {

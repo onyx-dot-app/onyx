@@ -88,6 +88,7 @@ export default function SharedChatDisplay({
                     key={message.messageId}
                     content={message.message}
                     files={message.files}
+                    nodeId={message.nodeId}
                   />
                 );
               } else if (message.type === "assistant") {

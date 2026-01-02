@@ -3,6 +3,7 @@ from collections.abc import Iterator
 from datetime import datetime
 from enum import Enum
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import Field
@@ -17,6 +18,7 @@ from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.tools.models import SearchToolUsage
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
 
@@ -132,6 +134,13 @@ class ToolConfig(BaseModel):
     id: int
 
 
+class ProjectSearchConfig(BaseModel):
+    """Configuration for search tool availability in project context."""
+
+    search_usage: SearchToolUsage
+    disable_forced_tool: bool
+
+
 class PromptOverrideConfig(BaseModel):
     name: str
     description: str = ""
@@ -171,6 +180,10 @@ AnswerQuestionPossibleReturn = (
 )
 
 
+class CreateChatSessionID(BaseModel):
+    chat_session_id: UUID
+
+
 AnswerQuestionStreamReturn = Iterator[AnswerQuestionPossibleReturn]
 
 
@@ -181,12 +194,14 @@ class LLMMetricsContainer(BaseModel):
 
 StreamProcessor = Callable[[Iterator[str]], AnswerQuestionStreamReturn]
 
+
 AnswerStreamPart = (
     Packet
     | StreamStopInfo
     | MessageResponseIDInfo
     | StreamingError
     | UserKnowledgeFilePacket
+    | CreateChatSessionID
 )
 
 AnswerStream = Iterator[AnswerStreamPart]
@@ -234,6 +249,8 @@ class ExtractedProjectFiles(BaseModel):
     total_token_count: int
     # Metadata for project files to enable citations
     project_file_metadata: list[ProjectFileMetadata]
+    # None if not a project
+    project_uncapped_token_count: int | None
 
 
 class LlmStepResult(BaseModel):
