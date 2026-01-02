@@ -42,6 +42,8 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { ValidSources } from "@/lib/types";
 import { getSourceMetadata } from "@/lib/sources";
 import Separator from "@/refresh-components/Separator";
+import Modal from "@/refresh-components/Modal";
+import Text from "@/refresh-components/texts/Text";
 
 function GeneralSettings() {
   const {
@@ -53,6 +55,10 @@ function GeneralSettings() {
   } = useUser();
   const { theme, setTheme } = useTheme();
   const { popup, setPopup } = usePopup();
+  const router = useRouter();
+  const pathname = usePathname();
+  const [isDeleteAllLoading, setIsDeleteAllLoading] = useState(false);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
 
   const {
     personalizationValues,
@@ -72,9 +78,67 @@ function GeneralSettings() {
       }),
   });
 
+  const handleDeleteAllChats = useCallback(async () => {
+    setIsDeleteAllLoading(true);
+    try {
+      const response = await deleteAllChatSessions();
+      if (response.ok) {
+        setPopup({
+          message: "All your chat sessions have been deleted.",
+          type: "success",
+        });
+        if (pathname.includes("/chat")) {
+          router.push("/chat");
+        }
+      } else {
+        throw new Error("Failed to delete all chat sessions");
+      }
+    } catch (error) {
+      setPopup({
+        message: "Failed to delete all chat sessions",
+        type: "error",
+      });
+    } finally {
+      setIsDeleteAllLoading(false);
+      setShowDeleteConfirmation(false);
+    }
+  }, [pathname, router, setPopup]);
+
   return (
     <>
       {popup}
+      {/*<Modal
+        open={showDeleteConfirmation}
+        onOpenChange={setShowDeleteConfirmation}
+      >
+        <Modal.Content>
+          <Modal.Header>
+            <Modal.Title>Delete All Chats</Modal.Title>
+            <Modal.Description>
+              Are you sure you want to delete all your chat sessions? This
+              action cannot be undone.
+            </Modal.Description>
+          </Modal.Header>
+          <Modal.Footer>
+            <Button
+              secondary
+              onClick={() => setShowDeleteConfirmation(false)}
+              disabled={isDeleteAllLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              danger
+              onClick={() => {
+                void handleDeleteAllChats();
+              }}
+              disabled={isDeleteAllLoading}
+            >
+              {isDeleteAllLoading ? "Deleting..." : "Yes, Delete All"}
+            </Button>
+          </Modal.Footer>
+        </Modal.Content>
+      </Modal>*/}
 
       <GeneralLayouts.Section gap={2}>
         <GeneralLayouts.Section gap={0.75}>
@@ -182,7 +246,20 @@ function GeneralSettings() {
 
         <GeneralLayouts.Section gap={0.75}>
           <InputLayouts.Label label="Danger Zone" />
-          <Card></Card>
+          <Card>
+            <InputLayouts.Horizontal
+              label="Delete All Chats"
+              description="Permanently delete all your chat sessions."
+            >
+              <Button
+                danger
+                onClick={() => setShowDeleteConfirmation(true)}
+                leftIcon={SvgTrash}
+              >
+                Delete All Chats
+              </Button>
+            </InputLayouts.Horizontal>
+          </Card>
         </GeneralLayouts.Section>
       </GeneralLayouts.Section>
     </>
@@ -199,13 +276,10 @@ function ChatPreferencesSettings() {
   const { popup, setPopup } = usePopup();
   const { llmProviders } = useLLMProviders();
   const router = useRouter();
-  const pathname = usePathname();
   const [isModelUpdating, setIsModelUpdating] = useState(false);
   const [currentDefaultModel, setCurrentDefaultModel] = useState<string | null>(
     null
   );
-  const [isDeleteAllLoading, setIsDeleteAllLoading] = useState(false);
-  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
 
   const defaultModel = user?.preferences?.default_model;
   const displayModel = currentDefaultModel ?? defaultModel;
@@ -261,32 +335,6 @@ function ChatPreferencesSettings() {
     },
     [user, refreshUser, router, setPopup]
   );
-
-  const handleDeleteAllChats = useCallback(async () => {
-    setIsDeleteAllLoading(true);
-    try {
-      const response = await deleteAllChatSessions();
-      if (response.ok) {
-        setPopup({
-          message: "All your chat sessions have been deleted.",
-          type: "success",
-        });
-        if (pathname.includes("/chat")) {
-          router.push("/chat");
-        }
-      } else {
-        throw new Error("Failed to delete all chat sessions");
-      }
-    } catch (error) {
-      setPopup({
-        message: "Failed to delete all chat sessions",
-        type: "error",
-      });
-    } finally {
-      setIsDeleteAllLoading(false);
-      setShowDeleteConfirmation(false);
-    }
-  }, [pathname, router, setPopup]);
 
   return (
     <>
@@ -394,51 +442,6 @@ function ChatPreferencesSettings() {
                 ? "Saving Personalization..."
                 : "Save Personalization"}
             </Button>
-          </div>
-        </Card>
-
-        <Card>
-          <div className="space-y-3">
-            <div>
-              <h3 className="text-lg font-medium">Delete All Chats</h3>
-              <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                This will permanently delete all your chat sessions and cannot
-                be undone.
-              </p>
-            </div>
-            {!showDeleteConfirmation ? (
-              <Button
-                danger
-                onClick={() => setShowDeleteConfirmation(true)}
-                leftIcon={SvgTrash}
-              >
-                Delete All Chats
-              </Button>
-            ) : (
-              <div className="space-y-3">
-                <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                  Are you sure you want to delete all your chat sessions?
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    danger
-                    onClick={() => {
-                      void handleDeleteAllChats();
-                    }}
-                    disabled={isDeleteAllLoading}
-                  >
-                    {isDeleteAllLoading ? "Deleting..." : "Yes, Delete All"}
-                  </Button>
-                  <Button
-                    secondary
-                    onClick={() => setShowDeleteConfirmation(false)}
-                    disabled={isDeleteAllLoading}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            )}
           </div>
         </Card>
       </GeneralLayouts.Section>
