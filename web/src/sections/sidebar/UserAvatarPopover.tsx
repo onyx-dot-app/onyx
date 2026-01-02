@@ -86,13 +86,6 @@ function SettingsPopover({
     <>
       <PopoverMenu>
         {[
-          // TODO (@raunakab):
-          // Not sure what this does; leave it out for now.
-          // ...dropdownItems.map((item, index) => (
-          //   <NavigationTab key={index} href={item.link}>
-          //     {item.title}
-          //   </NavigationTab>
-          // )),
           <div key="user-settings" data-testid="Settings/user-settings">
             <LineItem icon={SvgUser} onClick={onUserSettingsClick}>
               User Settings
