@@ -334,6 +334,7 @@ class LitellmLLM(LLM):
                 custom_llm_provider=self._custom_llm_provider or None,
                 messages=_prompt_to_dicts(prompt),
                 tools=tools,
+                tool_choice=tool_choice,
                 stream=stream,
                 temperature=temperature,
                 timeout=timeout_override or self._timeout,
