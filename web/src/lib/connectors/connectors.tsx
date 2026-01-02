@@ -888,53 +888,26 @@ export const connectorConfigs: Record<
           "The base URL of your Drupal Wiki instance (e.g., https://help.drupal-wiki.com )",
       },
       {
-        type: "tab",
-        name: "drupal_wiki_scope",
-        label: "What should we index from Drupal Wiki?",
+        type: "list",
+        query: "Enter space IDs to include:",
+        label: "Space IDs",
+        name: "spaces",
+        description:
+          "Specify one or more space IDs to index. If no spaces or pages are specified, all spaces will be indexed. Only numeric values are allowed.",
         optional: true,
-        tabs: [
-          {
-            value: "all_spaces",
-            label: "All Spaces",
-            fields: [
-              {
-                type: "string_tab",
-                label: "All Spaces",
-                name: "all_spaces_description",
-                description:
-                  "This connector will index all spaces the provided credentials have access to!",
-              },
-            ],
-          },
-          {
-            value: "specific_spaces",
-            label: "Specific Spaces and/or Pages",
-            fields: [
-              {
-                type: "list",
-                query: "Enter space IDs to include:",
-                label: "Space IDs",
-                name: "spaces",
-                description:
-                  "Specify one or more space IDs to index. You can include spaces even if you also specify page IDs below. Only numeric values are allowed.",
-                optional: true,
-                transform: (values) =>
-                  values.filter((value) => /^\d+$/.test(value.trim())),
-              },
-              {
-                type: "list",
-                query: "Enter page IDs to include:",
-                label: "Page IDs",
-                name: "pages",
-                description:
-                  "Specify one or more page IDs to index. You can include specific pages even if you also specify spaces above. Only numeric values are allowed.",
-                optional: true,
-                transform: (values) =>
-                  values.filter((value) => /^\d+$/.test(value.trim())),
-              },
-            ],
-          },
-        ],
+        transform: (values) =>
+          values.filter((value) => /^\d+$/.test(value.trim())),
+      },
+      {
+        type: "list",
+        query: "Enter page IDs to include:",
+        label: "Page IDs",
+        name: "pages",
+        description:
+          "Specify one or more page IDs to index. Only numeric values are allowed.",
+        optional: true,
+        transform: (values) =>
+          values.filter((value) => /^\d+$/.test(value.trim())),
       },
       {
         type: "checkbox",
@@ -1879,8 +1852,6 @@ export interface DrupalWikiConfig {
   base_url: string;
   spaces?: string[];
   pages?: string[];
-  include_all_spaces?: boolean;
-  drupal_wiki_scope?: string;
   include_attachments?: boolean;
 }
 

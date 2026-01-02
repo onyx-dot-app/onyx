@@ -63,10 +63,8 @@ class DrupalWikiConnector(
         base_url: str,
         spaces: list[str] | None = None,
         pages: list[str] | None = None,
-        include_all_spaces: bool = False,
         batch_size: int = INDEX_BATCH_SIZE,
         continue_on_failure: bool = CONTINUE_ON_CONNECTOR_FAILURE,
-        drupal_wiki_scope: str | None = None,
         include_attachments: bool = False,
         allow_images: bool = False,
     ) -> None:
@@ -75,12 +73,10 @@ class DrupalWikiConnector(
 
         Args:
             base_url: The base URL of the Drupal Wiki instance (e.g., https://help.drupal-wiki.com)
-            spaces: List of space IDs to index. If None and include_all_spaces is False, no spaces will be indexed.
-            pages: List of page IDs to index. If provided, only these specific pages will be indexed.
-            include_all_spaces: If True, all spaces will be indexed regardless of the spaces parameter.
+            spaces: List of space IDs to index. If None and pages is also None, all spaces will be indexed.
+            pages: List of page IDs to index. If provided, these specific pages will be indexed.
             batch_size: Number of documents to process in a batch.
             continue_on_failure: If True, continue indexing even if some documents fail.
-            drupal_wiki_scope: The selected tab value from the frontend. If "all_spaces", all spaces will be indexed.
             include_attachments: If True, enable processing of page attachments including images and documents.
             allow_images: If True, enable processing of image attachments.
         """
@@ -88,21 +84,8 @@ class DrupalWikiConnector(
         self.spaces = spaces or []
         self.pages = pages or []
 
-        # Determine whether to include all spaces based on the selected tab
-        # If drupal_wiki_scope is "all_spaces", we should index all spaces
-        # If it's "specific_spaces", we should only index the specified spaces
-        # If it's None, we use the include_all_spaces parameter
-
-        if drupal_wiki_scope is not None:
-            logger.debug(f"drupal_wiki_scope is set to {drupal_wiki_scope}")
-
-            self.include_all_spaces = drupal_wiki_scope == "all_spaces"
-            # If scope is specific_spaces, include_all_spaces correctly defaults to False
-        else:
-            logger.debug(
-                f"drupal_wiki_scope is not set, using include_all_spaces={include_all_spaces}"
-            )
-            self.include_all_spaces = include_all_spaces
+        # If no specific spaces or pages are provided, index all spaces
+        self.include_all_spaces = not self.spaces and not self.pages
 
         self.batch_size = batch_size
         self.continue_on_failure = continue_on_failure
