@@ -58,6 +58,9 @@ class DrupalWikiConnector(
     CheckpointedConnector[DrupalWikiCheckpoint],
     SlimConnector,
 ):
+    # Deprecated parameters that may exist in old connector configurations
+    _DEPRECATED_PARAMS = {"drupal_wiki_scope", "include_all_spaces"}
+
     def __init__(
         self,
         base_url: str,
@@ -67,6 +70,7 @@ class DrupalWikiConnector(
         continue_on_failure: bool = CONTINUE_ON_CONNECTOR_FAILURE,
         include_attachments: bool = False,
         allow_images: bool = False,
+        **kwargs: Any,
     ) -> None:
         """
         Initialize the Drupal Wiki connector.
@@ -80,6 +84,27 @@ class DrupalWikiConnector(
             include_attachments: If True, enable processing of page attachments including images and documents.
             allow_images: If True, enable processing of image attachments.
         """
+
+        #########################################################
+        # TODO: Remove this after 02/01/2026 and remove **kwargs from the function signature
+        # Check for deprecated parameters from old connector configurations
+        # If attempting to update without deleting the connector:
+        # Remove the deprecated parameters from the custom_connector_config in the relevant connector table rows
+        deprecated_found = set(kwargs.keys()) & self._DEPRECATED_PARAMS
+        if deprecated_found:
+            raise ConnectorValidationError(
+                f"Outdated Drupal Wiki connector configuration detected "
+                f"(found deprecated parameters: {', '.join(deprecated_found)}). "
+                f"Please delete and recreate this connector, or contact Onyx support "
+                f"for assistance with updating the configuration without deleting the connector."
+            )
+        # Reject any other unexpected parameters
+        if kwargs:
+            raise ConnectorValidationError(
+                f"Unexpected parameters for Drupal Wiki connector: {', '.join(kwargs.keys())}"
+            )
+        #########################################################
+
         self.base_url = base_url.rstrip("/")
         self.spaces = spaces or []
         self.pages = pages or []

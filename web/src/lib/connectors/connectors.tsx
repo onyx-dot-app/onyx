@@ -888,26 +888,53 @@ export const connectorConfigs: Record<
           "The base URL of your Drupal Wiki instance (e.g., https://help.drupal-wiki.com )",
       },
       {
-        type: "list",
-        query: "Enter space IDs to include:",
-        label: "Space IDs",
-        name: "spaces",
-        description:
-          "Specify one or more space IDs to index. If no spaces or pages are specified, all spaces will be indexed. Only numeric values are allowed.",
+        type: "tab",
+        name: "indexing_scope",
+        label: "What should we index from Drupal Wiki?",
         optional: true,
-        transform: (values) =>
-          values.filter((value) => /^\d+$/.test(value.trim())),
-      },
-      {
-        type: "list",
-        query: "Enter page IDs to include:",
-        label: "Page IDs",
-        name: "pages",
-        description:
-          "Specify one or more page IDs to index. Only numeric values are allowed.",
-        optional: true,
-        transform: (values) =>
-          values.filter((value) => /^\d+$/.test(value.trim())),
+        tabs: [
+          {
+            value: "everything",
+            label: "Everything",
+            fields: [
+              {
+                type: "string_tab",
+                label: "Everything",
+                name: "everything_description",
+                description:
+                  "This connector will index all spaces the provided credentials have access to!",
+              },
+            ],
+          },
+          {
+            value: "specific",
+            label: "Specific Spaces/Pages",
+            fields: [
+              {
+                type: "list",
+                query: "Enter space IDs to include:",
+                label: "Space IDs",
+                name: "spaces",
+                description:
+                  "Specify one or more space IDs to index. Only numeric values are allowed.",
+                optional: true,
+                transform: (values: string[]) =>
+                  values.filter((value) => /^\d+$/.test(value.trim())),
+              },
+              {
+                type: "list",
+                query: "Enter page IDs to include:",
+                label: "Page IDs",
+                name: "pages",
+                description:
+                  "Specify one or more page IDs to index. Only numeric values are allowed.",
+                optional: true,
+                transform: (values: string[]) =>
+                  values.filter((value) => /^\d+$/.test(value.trim())),
+              },
+            ],
+          },
+        ],
       },
       {
         type: "checkbox",
