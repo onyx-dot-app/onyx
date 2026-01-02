@@ -148,5 +148,60 @@ test.describe("Appearance Theme Settings", () => {
       await expect(appNameInput).toHaveValue(TEST_THEME.applicationName);
       await expect(greetingInput).toHaveValue(TEST_THEME.greetingMessage);
     });
+
+    test("Admin sees first visit notice on chat page", async ({ page }) => {
+      // Login as admin
+      await page.context().clearCookies();
+      // Clear the localStorage to ensure first visit notice shows
+      await page.goto("http://localhost:3000");
+      await page.evaluate(() => {
+        localStorage.removeItem("allUsersInitialPopupFlowCompleted");
+      });
+
+      await loginAs(page, "admin");
+
+      // Navigate to chat page
+      await page.goto("http://localhost:3000/chat");
+      await page.waitForLoadState("networkidle");
+
+      // Handle and verify first visit notice
+      await handleFirstVisitNotice(page, TEST_THEME);
+    });
+
+    test("Admin sees correct branding on chat page", async ({ page }) => {
+      // Login as admin (localStorage should persist from previous test)
+      await page.context().clearCookies();
+      await loginAs(page, "admin");
+
+      // Navigate to chat page
+      await page.goto("http://localhost:3000/chat");
+      await page.waitForLoadState("networkidle");
+
+      // The first visit notice should not appear since we completed it in the previous test
+      // But if it does appear (fresh session), handle it
+      const modal = page.getByRole("dialog");
+      if (await modal.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await handleFirstVisitNotice(page, TEST_THEME);
+      }
+
+      // Verify branding
+      await verifyChatPageBranding(page, TEST_THEME);
+    });
+
+    test("Admin sees correct branding on admin sidebar", async ({ page }) => {
+      // Login as admin
+      await page.context().clearCookies();
+      await loginAs(page, "admin");
+
+      // Navigate to admin theme page (or any admin page)
+      await page.goto("http://localhost:3000/admin/theme");
+      await page.waitForLoadState("networkidle");
+
+      // Verify sidebar shows the custom application name
+      // The sidebar uses the Logo component which displays application_name
+      await expect(
+        page.getByText(TEST_THEME.applicationName).first()
+      ).toBeVisible({ timeout: 10000 });
+    });
   });
 });
