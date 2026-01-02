@@ -139,8 +139,8 @@ function BedrockFormInternals({
     !formikProps.values.custom_config?.AWS_REGION_NAME || !isAuthComplete;
 
   return (
-    <Form className="flex flex-col flex-1 min-h-0">
-      <Modal.Body className="overflow-y-auto flex-1 min-h-0">
+    <Form className="flex flex-col min-h-0">
+      <Modal.Body className="overflow-y-auto min-h-0">
         <DisplayNameField disabled={!!existingLlmProvider} />
 
         <SelectorFormField
