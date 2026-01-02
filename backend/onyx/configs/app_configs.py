@@ -772,9 +772,6 @@ try:
 except json.JSONDecodeError:
     pass
 
-# LLM Model Update API endpoint
-LLM_MODEL_UPDATE_API_URL = os.environ.get("LLM_MODEL_UPDATE_API_URL")
-
 # Auto LLM Configuration - fetches model configs from GitHub for providers in Auto mode
 AUTO_LLM_CONFIG_URL = os.environ.get(
     "AUTO_LLM_CONFIG_URL",
