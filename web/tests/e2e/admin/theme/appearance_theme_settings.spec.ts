@@ -11,6 +11,60 @@ const TEST_THEME = {
   consentPrompt: "I agree to the terms and conditions",
 };
 
+async function handleFirstVisitNotice(
+  page: import("@playwright/test").Page,
+  expected: typeof TEST_THEME
+) {
+  // Wait for modal to appear
+  const modal = page.getByRole("dialog");
+  await expect(modal).toBeVisible({ timeout: 10000 });
+
+  // Verify notice header
+  await expect(modal.getByText(expected.noticeHeader)).toBeVisible();
+
+  // Verify notice content
+  await expect(modal.getByText(expected.noticeContent)).toBeVisible();
+
+  // Verify consent prompt is visible
+  await expect(modal.getByText(expected.consentPrompt)).toBeVisible();
+
+  // Check the consent checkbox
+  const checkbox = modal.getByRole("checkbox");
+  await checkbox.check();
+
+  // Click Start button to dismiss
+  const startButton = modal.getByRole("button", { name: /start/i });
+  await startButton.click();
+
+  // Verify modal is dismissed
+  await expect(modal).not.toBeVisible({ timeout: 5000 });
+}
+
+async function verifyChatPageBranding(
+  page: import("@playwright/test").Page,
+  expected: typeof TEST_THEME
+) {
+  // Verify sidebar branding - application name should be visible
+  // The Logo component renders the application name in a Truncated component
+  await expect(page.getByText(expected.applicationName).first()).toBeVisible({
+    timeout: 10000,
+  });
+
+  // Verify greeting message on chat home
+  // WelcomeMessage component renders the greeting in a Text with headingH2
+  const chatIntro = page.getByTestId("chat-intro");
+  await expect(chatIntro).toBeVisible();
+  await expect(chatIntro.getByText(expected.greetingMessage)).toBeVisible();
+
+  // Verify chat header text
+  // AppHeader renders custom_header_content in a Text component
+  await expect(page.getByText(expected.chatHeaderText)).toBeVisible();
+
+  // Verify chat footer text
+  // AppFooter renders custom_lower_disclaimer_content via MinimalMarkdown
+  await expect(page.getByText(expected.chatFooterText)).toBeVisible();
+}
+
 test.describe("Appearance Theme Settings", () => {
   test.describe.serial("Theme configuration and verification", () => {
     test("Admin configures theme settings", async ({ page }) => {
