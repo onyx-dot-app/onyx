@@ -52,7 +52,8 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import { parseLlmDescriptor } from "@/lib/llm/utils";
-import { LlmManager } from "@/lib/hooks";
+import { LlmDescriptor, LlmManager } from "@/lib/hooks";
+import { Message } from "@/app/chat/interfaces";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import FeedbackModal, {
   FeedbackModalProps,
@@ -60,6 +61,13 @@ import FeedbackModal, {
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useFeedbackController } from "../../hooks/useFeedbackController";
 import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
+
+// Type for the regeneration factory function passed from ChatUI
+export type RegenerationFactory = (regenerationRequest: {
+  messageId: number;
+  parentMessage: Message;
+  forceSearch?: boolean;
+}) => (modelOverride: LlmDescriptor) => Promise<void>;
 
 export interface AIMessageProps {
   rawPackets: Packet[];
@@ -70,6 +78,10 @@ export interface AIMessageProps {
   llmManager: LlmManager | null;
   otherMessagesCanSwitchTo?: number[];
   onMessageSelection?: (nodeId: number) => void;
+  // Stable regeneration callback - takes (parentMessage) and returns a function that takes (modelOverride)
+  onRegenerate?: RegenerationFactory;
+  // Parent message needed to construct regeneration request
+  parentMessage?: Message | null;
 }
 
 // TODO: Consider more robust comparisons:
@@ -89,7 +101,9 @@ function arePropsEqual(prev: AIMessageProps, next: AIMessageProps): boolean {
     prev.chatState.citations === next.chatState.citations &&
     prev.chatState.overriddenModel === next.chatState.overriddenModel &&
     prev.chatState.researchType === next.chatState.researchType &&
-    prev.otherMessagesCanSwitchTo === next.otherMessagesCanSwitchTo
+    prev.otherMessagesCanSwitchTo === next.otherMessagesCanSwitchTo &&
+    prev.onRegenerate === next.onRegenerate &&
+    prev.parentMessage?.messageId === next.parentMessage?.messageId
     // Skip: chatState.regenerate, chatState.setPresentingDocument,
     //       llmManager, onMessageSelection (function/object props)
   );
@@ -104,6 +118,8 @@ const AIMessage = React.memo(function AIMessage({
   llmManager,
   otherMessagesCanSwitchTo,
   onMessageSelection,
+  onRegenerate,
+  parentMessage,
 }: AIMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
   const finalAnswerRef = useRef<HTMLDivElement>(null);
@@ -676,20 +692,27 @@ const AIMessage = React.memo(function AIMessage({
                         data-testid="AIMessage/dislike-button"
                       />
 
-                      {chatState.regenerate && llmManager && (
-                        <div data-testid="AIMessage/regenerate">
-                          <LLMPopover
-                            llmManager={llmManager}
-                            currentModelName={chatState.overriddenModel}
-                            onSelect={(modelName) => {
-                              const llmDescriptor =
-                                parseLlmDescriptor(modelName);
-                              chatState.regenerate!(llmDescriptor);
-                            }}
-                            folded
-                          />
-                        </div>
-                      )}
+                      {onRegenerate &&
+                        messageId !== undefined &&
+                        parentMessage &&
+                        llmManager && (
+                          <div data-testid="AIMessage/regenerate">
+                            <LLMPopover
+                              llmManager={llmManager}
+                              currentModelName={chatState.overriddenModel}
+                              onSelect={(modelName) => {
+                                const llmDescriptor =
+                                  parseLlmDescriptor(modelName);
+                                const regenerator = onRegenerate({
+                                  messageId,
+                                  parentMessage,
+                                });
+                                regenerator(llmDescriptor);
+                              }}
+                              folded
+                            />
+                          </div>
+                        )}
 
                       {nodeId &&
                         (citations.length > 0 || documentMap.size > 0) && (

@@ -305,19 +305,11 @@ const ChatUI = React.memo(
                   // since this is a "parsed" version of the message tree
                   // so the previous message is guaranteed to be the parent of the current message
                   const previousMessage = i !== 0 ? messages[i - 1] : null;
-                  const regenerate =
-                    message.messageId !== undefined && previousMessage
-                      ? createRegenerator({
-                          messageId: message.messageId,
-                          parentMessage: previousMessage,
-                        })
-                      : undefined;
                   const chatStateData = {
                     assistant: liveAssistant,
                     docs: message.documents ?? emptyDocs,
                     citations: message.citations,
                     setPresentingDocument,
-                    regenerate,
                     overriddenModel: llmManager.currentLlm?.modelName,
                     researchType: message.researchType,
                   };
@@ -337,6 +329,8 @@ const ChatUI = React.memo(
                           parentMessage?.childrenNodeIds ?? emptyChildrenIds
                         }
                         onMessageSelection={onMessageSelection}
+                        onRegenerate={createRegenerator}
+                        parentMessage={previousMessage}
                       />
                     </div>
                   );
