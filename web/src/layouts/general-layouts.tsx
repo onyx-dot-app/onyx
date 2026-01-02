@@ -67,7 +67,7 @@ export function Section({
 
   return (
     <div
-      className={cn("flex", width, direction)}
+      className={cn("flex justify-center items-center", width, direction)}
       style={{ gap: `${gap}rem` }}
       {...rest}
     />
