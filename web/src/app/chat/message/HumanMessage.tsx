@@ -168,7 +168,7 @@ const HumanMessage = React.memo(function HumanMessage({
   return (
     <div
       id="onyx-human-message"
-      className="pt-5 pb-1 w-full lg:px-5 flex justify-center -mr-6 relative"
+      className="pt-5 pb-1 w-full flex justify-center -mr-6 relative"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >

@@ -527,7 +527,7 @@ const AIMessage = React.memo(function AIMessage({
       <div
         // for e2e tests
         data-testid={displayComplete ? "onyx-ai-message" : undefined}
-        className="flex items-start px-4 pb-5 md:pt-5"
+        className="flex items-start pb-5 md:pt-5"
       >
         {/** TODO(jamison): These fragments were kept to preserve whitespace and
           improve the diff while removing elements. Remove them separately so

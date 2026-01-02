@@ -251,7 +251,7 @@ const ChatUI = React.memo(
             className="flex flex-1 justify-center min-h-0 overflow-y-auto overflow-x-hidden default-scrollbar"
             onScroll={handleScroll}
           >
-            <div className="w-[min(50rem,100%)]">
+            <div className="w-[min(50rem,100%)] px-4">
               {messages.map((message, i) => {
                 const messageReactComponentKey = `message-${message.nodeId}`;
                 const parentMessage = message.parentNodeId
