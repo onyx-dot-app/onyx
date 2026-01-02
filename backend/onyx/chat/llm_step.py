@@ -1,4 +1,5 @@
 import json
+import time
 from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Mapping
@@ -429,6 +430,10 @@ def _increment_turns(
         return turn_index, sub_turn_index + 1
 
 
+def _delta_has_content(delta: Delta) -> bool:
+    return bool(delta.content or delta.reasoning_content or delta.tool_calls)
+
+
 def run_llm_step_pkt_generator(
     history: list[ChatMessageSimple],
     tool_definitions: list[dict],
@@ -526,6 +531,8 @@ def run_llm_step_pkt_generator(
         span_generation.span_data.input = cast(
             Sequence[Mapping[str, Any]], llm_msg_history
         )
+        stream_start_time = time.monotonic()
+        first_token_recorded = False
         for packet in llm.stream(
             prompt=llm_msg_history,
             tools=tool_definitions,
@@ -545,6 +552,11 @@ def run_llm_step_pkt_generator(
                 }
                 # Note: LLM cost tracking is now handled in multi_llm.py
             delta = packet.choice.delta
+            if not first_token_recorded and _delta_has_content(delta):
+                span_generation.span_data.time_to_first_token_seconds = (
+                    time.monotonic() - stream_start_time
+                )
+                first_token_recorded = True
 
             if custom_token_processor:
                 # The custom token processor can modify the deltas for specific custom logic

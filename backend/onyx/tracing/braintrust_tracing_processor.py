@@ -130,6 +130,11 @@ class BraintrustTracingProcessor(TracingProcessor):
         if total_latency is not None:
             metrics["total_latency_seconds"] = total_latency
 
+        if span.span_data.time_to_first_token_seconds is not None:
+            metrics["time_to_first_token_seconds"] = (
+                span.span_data.time_to_first_token_seconds
+            )
+
         usage = span.span_data.usage or {}
         if "prompt_tokens" in usage:
             metrics["prompt_tokens"] = usage["prompt_tokens"]
