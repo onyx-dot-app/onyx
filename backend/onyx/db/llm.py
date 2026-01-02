@@ -237,6 +237,7 @@ def upsert_llm_provider(
         llm_provider_upsert_request.default_model_name
     )
     existing_llm_provider.is_public = llm_provider_upsert_request.is_public
+    existing_llm_provider.is_onyx_managed = llm_provider_upsert_request.is_onyx_managed
     existing_llm_provider.is_auto_mode = llm_provider_upsert_request.is_auto_mode
     existing_llm_provider.deployment_name = llm_provider_upsert_request.deployment_name
 
@@ -438,6 +439,19 @@ def fetch_default_provider(db_session: Session) -> LLMProviderView | None:
     if not provider_model:
         return None
     return LLMProviderView.from_model(provider_model)
+
+
+def fetch_default_provider_model(
+    db_session: Session,
+) -> LLMProviderModel | None:
+    return db_session.scalar(
+        select(LLMProviderModel)
+        .where(LLMProviderModel.is_default_provider == True)  # noqa: E712
+        .options(
+            selectinload(LLMProviderModel.groups),
+            selectinload(LLMProviderModel.personas),
+        )
+    )
 
 
 def fetch_default_vision_provider(db_session: Session) -> LLMProviderView | None:

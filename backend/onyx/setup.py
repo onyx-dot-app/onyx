@@ -293,6 +293,7 @@ def setup_postgres(db_session: Session) -> None:
             custom_config=None,
             default_model_name=llm_model,
             is_public=True,
+            is_onyx_managed=True,
             groups=[],
             model_configurations=[
                 ModelConfigurationUpsertRequest(name=name, is_visible=True)

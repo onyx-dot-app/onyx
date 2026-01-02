@@ -63,6 +63,9 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.secondary_llm_flows.chat_session_naming import (
     get_renamed_conversation_name,
 )
+from onyx.server.query_and_chat.managed_llm_call_limit import (
+    enforce_managed_llm_call_limit,
+)
 from onyx.server.query_and_chat.models import ChatFeedbackRequest
 from onyx.server.query_and_chat.models import ChatMessageIdentifier
 from onyx.server.query_and_chat.models import ChatRenameRequest
@@ -456,6 +459,8 @@ def handle_new_chat_message(
 
     if not chat_message_req.message and not chat_message_req.use_existing_user_message:
         raise HTTPException(status_code=400, detail="Empty chat message is invalid")
+
+    enforce_managed_llm_call_limit(chat_message_req=chat_message_req, user=user)
 
     mt_cloud_telemetry(
         tenant_id=tenant_id,

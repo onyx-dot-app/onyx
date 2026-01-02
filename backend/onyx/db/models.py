@@ -2393,6 +2393,10 @@ class LLMProvider(Base):
     default_vision_model: Mapped[str | None] = mapped_column(String, nullable=True)
     # EE only
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # If true, this provider is managed by Onyx (calls count against our budget).
+    is_onyx_managed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     # Auto mode: models, visibility, and defaults are managed by GitHub config
     is_auto_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     groups: Mapped[list["UserGroup"]] = relationship(
@@ -3312,6 +3316,17 @@ class TokenRateLimit__UserGroup(Base):
     )
     user_group_id: Mapped[int] = mapped_column(
         ForeignKey("user_group.id"), primary_key=True
+    )
+
+
+class ManagedLLMCallLimit(Base):
+    __tablename__ = "managed_llm_call_limit"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    daily_call_limit: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )
 
 

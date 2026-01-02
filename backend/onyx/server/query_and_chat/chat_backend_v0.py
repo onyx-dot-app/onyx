@@ -24,6 +24,9 @@ from onyx.chat.process_message import stream_chat_message_objects
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import User
+from onyx.server.query_and_chat.managed_llm_call_limit import (
+    enforce_managed_llm_call_limit,
+)
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
@@ -237,6 +240,8 @@ def handle_new_chat_message_v0(
 
     if not chat_message_req.message and not chat_message_req.use_existing_user_message:
         raise HTTPException(status_code=400, detail="Empty chat message is invalid")
+
+    enforce_managed_llm_call_limit(chat_message_req=chat_message_req, user=user)
 
     def stream_generator() -> Generator[str, None, None]:
         """Generate v0 format responses from the modern streaming objects."""
