@@ -162,6 +162,7 @@ def test_default_provider(
 
 @admin_router.get("/provider")
 def list_llm_providers(
+    include_image_gen: bool = Query(False),
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[LLMProviderView]:
@@ -170,7 +171,7 @@ def list_llm_providers(
 
     llm_provider_list: list[LLMProviderView] = []
     for llm_provider_model in fetch_existing_llm_providers(
-        db_session, exclude_image_generation_providers=True
+        db_session, exclude_image_generation_providers=not include_image_gen
     ):
         from_model_start = datetime.now(timezone.utc)
         full_llm_provider = LLMProviderView.from_model(llm_provider_model)

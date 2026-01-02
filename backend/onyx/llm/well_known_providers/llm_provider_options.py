@@ -3,9 +3,13 @@ import pathlib
 
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
+from onyx.llm.constants import WELL_KNOWN_PROVIDER_NAMES
 from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
+from onyx.llm.well_known_providers.auto_update_service import (
+    fetch_llm_recommendations_from_github,
+)
 from onyx.llm.well_known_providers.constants import ANTHROPIC_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import AZURE_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import BEDROCK_PROVIDER_NAME
@@ -13,7 +17,6 @@ from onyx.llm.well_known_providers.constants import OLLAMA_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENROUTER_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import VERTEXAI_PROVIDER_NAME
-from onyx.llm.well_known_providers.models import SimpleKnownModel
 from onyx.llm.well_known_providers.models import WellKnownLLMProviderDescriptor
 from onyx.server.manage.llm.models import ModelConfigurationView
 from onyx.utils.logger import setup_logger
@@ -38,11 +41,11 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
     }
 
 
-def _get_reccomendations() -> LLMRecommendations:
+def get_recommendations() -> LLMRecommendations:
     """Get the recommendations from the GitHub config."""
-    # recommendations_from_github = fetch_llm_recommendations_from_github()
-    # if recommendations_from_github:
-    #     return recommendations_from_github
+    recommendations_from_github = fetch_llm_recommendations_from_github()
+    if recommendations_from_github:
+        return recommendations_from_github
 
     # Fall back to json bundled with code
     json_path = pathlib.Path(__file__).parent / "recommended-models.json"
@@ -207,41 +210,37 @@ def get_vertexai_model_names() -> list[str]:
     )
 
 
+def model_configurations_for_provider(
+    provider_name: str, llm_recommendations: LLMRecommendations
+) -> list[ModelConfigurationView]:
+    recommended_visible_models = llm_recommendations.get_visible_models(provider_name)
+    recommended_visible_models_names = [m.name for m in recommended_visible_models]
+    return [
+        ModelConfigurationView(
+            name=model_name,
+            is_visible=model_name in recommended_visible_models_names,
+            max_input_tokens=get_max_input_tokens(model_name, provider_name),
+            supports_image_input=model_supports_image_input(model_name, provider_name),
+        )
+        for model_name in set(fetch_models_for_provider(provider_name))
+        | set(recommended_visible_models_names)
+    ]
+
+
 def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
-    llm_recommendations = _get_reccomendations()
+    llm_recommendations = get_recommendations()
 
     well_known_llms = []
-    for provider_name in LlmProviderNames:
-        known_model_names = fetch_models_for_provider(provider_name)
-        recommended_visible_models = llm_recommendations.get_visible_models(
-            provider_name
+    for provider_name in WELL_KNOWN_PROVIDER_NAMES:
+        model_configurations = model_configurations_for_provider(
+            provider_name, llm_recommendations
         )
-        recommended_visible_models_names = [m.name for m in recommended_visible_models]
-        recommended_default_model = llm_recommendations.get_default_model(provider_name)
-
-        model_configurations = [
-            ModelConfigurationView(
-                name=model_name,
-                is_visible=model_name in recommended_visible_models_names,
-                max_input_tokens=get_max_input_tokens(model_name, provider_name),
-                supports_image_input=model_supports_image_input(
-                    model_name, provider_name
-                ),
-            )
-            for model_name in known_model_names
-        ]
-
         well_known_llms.append(
             WellKnownLLMProviderDescriptor(
                 name=provider_name,
                 known_models=model_configurations,
-                recommended_default_model=(
-                    SimpleKnownModel(
-                        name=recommended_default_model.name,
-                        display_name=recommended_default_model.display_name,
-                    )
-                    if recommended_default_model
-                    else None
+                recommended_default_model=llm_recommendations.get_default_model(
+                    provider_name
                 ),
             )
         )
@@ -300,6 +299,6 @@ def fetch_default_model_for_provider(provider_name: str) -> str | None:
     First checks the GitHub-hosted recommended-models.json config (via fetch_github_config),
     then falls back to hardcoded defaults if unavailable.
     """
-    llm_recommendations = _get_reccomendations()
+    llm_recommendations = get_recommendations()
     default_model = llm_recommendations.get_default_model(provider_name)
     return default_model.name if default_model else None

@@ -33,7 +33,7 @@ import {
   OPEN_URL_TOOL_ID,
 } from "@/app/chat/components/tools/constants";
 import Text from "@/refresh-components/texts/Text";
-import Card from "@/refresh-components/Card";
+import { Card } from "@/refresh-components/cards";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import InputSelectField from "@/refresh-components/form/InputSelectField";

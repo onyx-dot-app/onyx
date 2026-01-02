@@ -118,10 +118,10 @@ class BraintrustTracingProcessor(TracingProcessor):
 
     def _generation_log_data(self, span: Span[GenerationSpanData]) -> Dict[str, Any]:
         metrics = {}
-        ttft = _maybe_timestamp_elapsed(span.ended_at, span.started_at)
+        total_latency = _maybe_timestamp_elapsed(span.ended_at, span.started_at)
 
-        if ttft is not None:
-            metrics["time_to_first_token"] = ttft
+        if total_latency is not None:
+            metrics["total_latency_seconds"] = total_latency
 
         usage = span.span_data.usage or {}
         if "prompt_tokens" in usage:

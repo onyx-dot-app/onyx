@@ -7,23 +7,13 @@ from onyx.db.models import ImageGenerationConfig
 from onyx.db.models import ModelConfiguration
 
 
-def create_image_generation_config(
+def create_image_generation_config__no_commit(
     db_session: Session,
     image_provider_id: str,
     model_configuration_id: int,
     is_default: bool = False,
 ) -> ImageGenerationConfig:
-    """Create a new image generation config.
-
-    Args:
-        db_session: Database session
-        image_provider_id: Static unique key for UI-DB mapping
-        model_configuration_id: ID of the model configuration to use
-        is_default: Whether this should be the default config
-
-    Returns:
-        The created ImageGenerationConfig
-    """
+    """Create a new image generation config."""
     # If setting as default, clear ALL existing defaults in a single atomic update
     # This is more atomic than select-then-update pattern
     if is_default:
@@ -39,8 +29,7 @@ def create_image_generation_config(
         is_default=is_default,
     )
     db_session.add(new_config)
-    db_session.commit()
-    db_session.refresh(new_config)
+    db_session.flush()
     return new_config
 
 
@@ -137,19 +126,25 @@ def set_default_image_generation_config(
     db_session.commit()
 
 
-def delete_image_generation_config(
+def unset_default_image_generation_config(
     db_session: Session,
     image_provider_id: str,
 ) -> None:
-    """Delete an image generation config by image_provider_id.
+    """Unset a config as the default."""
+    config = db_session.get(ImageGenerationConfig, image_provider_id)
+    if not config:
+        raise ValueError(
+            f"ImageGenerationConfig with image_provider_id {image_provider_id} not found"
+        )
+    config.is_default = False
+    db_session.commit()
 
-    Args:
-        db_session: Database session
-        image_provider_id: The image provider ID to delete
 
-    Raises:
-        ValueError: If config not found
-    """
+def delete_image_generation_config__no_commit(
+    db_session: Session,
+    image_provider_id: str,
+) -> None:
+    """Delete an image generation config by image_provider_id."""
     config = db_session.get(ImageGenerationConfig, image_provider_id)
     if not config:
         raise ValueError(
@@ -157,4 +152,4 @@ def delete_image_generation_config(
         )
 
     db_session.delete(config)
-    db_session.commit()
+    db_session.flush()
