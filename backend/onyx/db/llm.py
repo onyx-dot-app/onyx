@@ -611,11 +611,12 @@ def sync_auto_mode_models(
         ).all()
     }
 
-    # Remove models that are no longer in GitHub config
+    # Mark models that are no longer in GitHub config as not visible
     for model_name, model in existing_models.items():
         if model_name not in recommended_visible_model_names:
-            db_session.delete(model)
-            changes += 1
+            if model.is_visible:
+                model.is_visible = False
+                changes += 1
 
     # Add or update models from GitHub config
     for model_config in recommended_visible_models:

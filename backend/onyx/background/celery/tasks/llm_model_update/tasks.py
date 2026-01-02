@@ -12,6 +12,9 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import LLMProvider
 from onyx.db.models import ModelConfiguration
+from onyx.llm.well_known_providers.auto_update_service import (
+    sync_llm_models_from_github,
+)
 
 
 def _process_model_list_response(model_list_json: Any) -> list[str]:
@@ -155,24 +158,9 @@ def check_for_auto_llm_updates(self: Task, *, tenant_id: str) -> bool | None:
         return None
 
     try:
-        # Import here to avoid circular imports
-        from onyx.llm.well_known_providers.auto_update_service import (
-            fetch_llm_recommendations_from_github,
-        )
-        from onyx.llm.well_known_providers.auto_update_service import (
-            sync_llm_models_from_github,
-        )
-
-        # Fetch config from GitHub
-        config = fetch_llm_recommendations_from_github()
-
-        if not config:
-            task_logger.warning("Failed to fetch GitHub config")
-            return None
-
         # Sync to database
         with get_session_with_current_tenant() as db_session:
-            results = sync_llm_models_from_github(db_session, config)
+            results = sync_llm_models_from_github(db_session)
 
             if results:
                 task_logger.info(f"Auto mode sync results: {results}")
