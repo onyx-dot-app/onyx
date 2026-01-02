@@ -104,6 +104,14 @@ const ChatUI = React.memo(
       const [aboveHorizon, setAboveHorizon] = useState(false);
       const debounceNumber = 100;
 
+      // Use refs to keep callbacks stable while always using latest values
+      const onSubmitRef = useRef(onSubmit);
+      const deepResearchEnabledRef = useRef(deepResearchEnabled);
+      const currentMessageFilesRef = useRef(currentMessageFiles);
+      onSubmitRef.current = onSubmit;
+      deepResearchEnabledRef.current = deepResearchEnabled;
+      currentMessageFilesRef.current = currentMessageFiles;
+
       const createRegenerator = useCallback(
         (regenerationRequest: {
           messageId: number;
@@ -111,10 +119,10 @@ const ChatUI = React.memo(
           forceSearch?: boolean;
         }) => {
           return async function (modelOverride: LlmDescriptor) {
-            return await onSubmit({
+            return await onSubmitRef.current({
               message: regenerationRequest.parentMessage.message,
-              currentMessageFiles,
-              deepResearch: deepResearchEnabled,
+              currentMessageFiles: currentMessageFilesRef.current,
+              deepResearch: deepResearchEnabledRef.current,
               modelOverride,
               messageIdToResend: regenerationRequest.parentMessage.messageId,
               regenerationRequest,
@@ -122,19 +130,19 @@ const ChatUI = React.memo(
             });
           };
         },
-        [onSubmit, deepResearchEnabled, currentMessageFiles]
+        [] // Stable - uses refs for latest values
       );
 
       const handleEditWithMessageId = useCallback(
         (editedContent: string, msgId: number) => {
-          onSubmit({
+          onSubmitRef.current({
             message: editedContent,
             messageIdToResend: msgId,
             currentMessageFiles: [],
-            deepResearch: deepResearchEnabled,
+            deepResearch: deepResearchEnabledRef.current,
           });
         },
-        [onSubmit, deepResearchEnabled]
+        [] // Stable - uses refs for latest values
       );
 
       const handleScroll = useCallback(() => {
