@@ -166,7 +166,7 @@ describe("useToolDisplayTiming", () => {
         { initialProps: { isFinalAnswerComing: false } }
       );
 
-      // Initially false
+      // Initially false (not all tools visible/completed yet)
       expect(result.current.allToolsDisplayed).toBe(false);
 
       // Complete both tools
@@ -180,13 +180,13 @@ describe("useToolDisplayTiming", () => {
         jest.advanceTimersByTime(1500);
       });
 
-      // Still false because final answer not coming
-      expect(result.current.allToolsDisplayed).toBe(false);
+      // Now true because all tools are visible and completed
+      // Note: allToolsDisplayed is independent of isFinalAnswerComing to avoid
+      // circular dependency (parent uses onAllToolsDisplayed to set finalAnswerComing)
+      expect(result.current.allToolsDisplayed).toBe(true);
 
-      // Set final answer coming
+      // Remains true after setting final answer coming
       rerender({ isFinalAnswerComing: true });
-
-      // Now should be true
       expect(result.current.allToolsDisplayed).toBe(true);
     });
 

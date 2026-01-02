@@ -15,7 +15,7 @@ import {
   SvgSun,
   SvgTrash,
 } from "@opal/icons";
-import Card from "@/refresh-components/Card";
+import Card from "@/refresh-components/cards/Card";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";

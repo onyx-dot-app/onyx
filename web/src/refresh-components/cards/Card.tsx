@@ -14,7 +14,7 @@
  *
  * @example
  * ```tsx
- * import Card from "@/refresh-components/Card";
+ * import { Card } from "@/refresh-components/cards";
  *
  * // Basic usage
  * <Card>

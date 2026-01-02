@@ -1,3 +1,4 @@
+import os
 from uuid import uuid4
 
 import requests
@@ -14,7 +15,7 @@ class ImageGenerationConfigManager:
         image_provider_id: str | None = None,
         model_name: str = "gpt-image-1",
         provider: str = "openai",
-        api_key: str = "sk-test-fake-key-for-integration-tests",
+        api_key: str | None = None,
         api_base: str | None = None,
         api_version: str | None = None,
         deployment_name: str | None = None,
@@ -30,7 +31,7 @@ class ImageGenerationConfigManager:
                 "image_provider_id": image_provider_id,
                 "model_name": model_name,
                 "provider": provider,
-                "api_key": api_key,
+                "api_key": api_key or os.environ["OPENAI_API_KEY"],
                 "api_base": api_base,
                 "api_version": api_version,
                 "deployment_name": deployment_name,

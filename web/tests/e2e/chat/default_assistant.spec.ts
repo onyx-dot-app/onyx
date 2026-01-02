@@ -254,6 +254,47 @@ test.describe("Default Assistant Tests", () => {
   });
 
   test.describe("Action Management Toggle", () => {
+    let imageGenConfigId: string | null = null;
+
+    test.beforeAll(async ({ browser }) => {
+      // Create image generation config as admin so ImageGenerationTool becomes available
+      // Use saved admin auth state instead of logging in again
+      const adminContext = await browser.newContext({
+        storageState: "admin_auth.json",
+      });
+      const adminPage = await adminContext.newPage();
+      await adminPage.goto("http://localhost:3000/chat");
+      await adminPage.waitForLoadState("networkidle");
+
+      const apiClient = new OnyxApiClient(adminPage);
+      try {
+        imageGenConfigId = await apiClient.createImageGenerationConfig(
+          `test-action-toggle-${Date.now()}`
+        );
+      } catch (error) {
+        console.warn(`Failed to create image generation config: ${error}`);
+      }
+
+      await adminContext.close();
+    });
+
+    test.afterAll(async ({ browser }) => {
+      // Cleanup the image generation config
+      if (imageGenConfigId) {
+        const adminContext = await browser.newContext({
+          storageState: "admin_auth.json",
+        });
+        const adminPage = await adminContext.newPage();
+        await adminPage.goto("http://localhost:3000/chat");
+        await adminPage.waitForLoadState("networkidle");
+
+        const apiClient = new OnyxApiClient(adminPage);
+        await apiClient.deleteImageGenerationConfig(imageGenConfigId);
+
+        await adminContext.close();
+      }
+    });
+
     test("should display action management toggle", async ({ page }) => {
       // Look for action management toggle button
       const actionToggle = await page.waitForSelector(TOOL_IDS.actionToggle, {
@@ -265,7 +306,8 @@ test.describe("Default Assistant Tests", () => {
     test("should show web-search + image-generation tools options when clicked", async ({
       page,
     }) => {
-      // This test requires admin permissions to create tool providers
+      // This test requires admin permissions to create web search provider
+      // Note: Image generation config is already created by beforeAll
       await page.context().clearCookies();
       await loginAs(page, "admin");
       await page.goto("http://localhost:3000/chat");
@@ -273,7 +315,6 @@ test.describe("Default Assistant Tests", () => {
 
       const apiClient = new OnyxApiClient(page);
       let webSearchProviderId: number | null = null;
-      let imageGenProviderId: number | null = null;
 
       try {
         // Set up a web search provider so the tool is available
@@ -281,13 +322,9 @@ test.describe("Default Assistant Tests", () => {
           "exa",
           `Test Web Search Provider ${Date.now()}`
         );
-        // Set up an image generation provider so the tool is available
-        imageGenProviderId = await apiClient.createImageGenProvider(
-          `Test Image Gen Provider ${Date.now()}`
-        );
       } catch (error) {
         console.warn(
-          `Failed to create tool providers for test: ${error}. Test may fail.`
+          `Failed to create web search provider for test: ${error}. Test may fail.`
         );
       }
 
@@ -342,24 +379,13 @@ test.describe("Default Assistant Tests", () => {
       expect(await page.$(TOOL_IDS.webSearchOption)).toBeTruthy();
       expect(await page.$(TOOL_IDS.imageGenerationOption)).toBeTruthy();
 
-      // Clean up web search provider
+      // Clean up web search provider only (image gen config is managed by beforeAll/afterAll)
       if (webSearchProviderId !== null) {
         try {
           await apiClient.deleteWebSearchProvider(webSearchProviderId);
         } catch (error) {
           console.warn(
             `Failed to delete web search provider ${webSearchProviderId}: ${error}`
-          );
-        }
-      }
-
-      // Clean up image generation provider
-      if (imageGenProviderId !== null) {
-        try {
-          await apiClient.deleteProvider(imageGenProviderId);
-        } catch (error) {
-          console.warn(
-            `Failed to delete image gen provider ${imageGenProviderId}: ${error}`
           );
         }
       }
@@ -464,6 +490,47 @@ test.describe("Default Assistant Tests", () => {
 });
 
 test.describe("End-to-End Default Assistant Flow", () => {
+  let imageGenConfigId: string | null = null;
+
+  test.beforeAll(async ({ browser }) => {
+    // Create image generation config as admin so ImageGenerationTool becomes available
+    // Use saved admin auth state instead of logging in again
+    const adminContext = await browser.newContext({
+      storageState: "admin_auth.json",
+    });
+    const adminPage = await adminContext.newPage();
+    await adminPage.goto("http://localhost:3000/chat");
+    await adminPage.waitForLoadState("networkidle");
+
+    const apiClient = new OnyxApiClient(adminPage);
+    try {
+      imageGenConfigId = await apiClient.createImageGenerationConfig(
+        `test-e2e-journey-${Date.now()}`
+      );
+    } catch (error) {
+      console.warn(`Failed to create image generation config: ${error}`);
+    }
+
+    await adminContext.close();
+  });
+
+  test.afterAll(async ({ browser }) => {
+    // Cleanup the image generation config
+    if (imageGenConfigId) {
+      const adminContext = await browser.newContext({
+        storageState: "admin_auth.json",
+      });
+      const adminPage = await adminContext.newPage();
+      await adminPage.goto("http://localhost:3000/chat");
+      await adminPage.waitForLoadState("networkidle");
+
+      const apiClient = new OnyxApiClient(adminPage);
+      await apiClient.deleteImageGenerationConfig(imageGenConfigId);
+
+      await adminContext.close();
+    }
+  });
+
   test("complete user journey with default assistant", async ({ page }) => {
     // Clear cookies and log in as a random user
     await page.context().clearCookies();

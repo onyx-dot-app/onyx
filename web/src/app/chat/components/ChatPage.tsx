@@ -63,9 +63,8 @@ import ProjectChatSessionList from "@/app/chat/components/projects/ProjectChatSe
 import { cn } from "@/lib/utils";
 import Suggestions from "@/sections/Suggestions";
 import OnboardingFlow from "@/refresh-components/onboarding/OnboardingFlow";
-import { useOnboardingState } from "@/refresh-components/onboarding/useOnboardingState";
 import { OnboardingStep } from "@/refresh-components/onboarding/types";
-import { HAS_FINISHED_ONBOARDING_KEY } from "@/refresh-components/onboarding/constants";
+import { useShowOnboarding } from "@/hooks/useShowOnboarding";
 import * as AppLayouts from "@/layouts/app-layouts";
 import { SvgFileText } from "@opal/icons";
 import Spacer from "@/refresh-components/Spacer";
@@ -97,8 +96,13 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
   const searchParams = useSearchParams();
 
   // Use SWR hooks for data fetching
-  const { refreshChatSessions, currentChatSession, currentChatSessionId } =
-    useChatSessions();
+  const {
+    chatSessions,
+    refreshChatSessions,
+    currentChatSession,
+    currentChatSessionId,
+    isLoading: isLoadingChatSessions,
+  } = useChatSessions();
   const { ccPairs } = useCCPairs();
   const { tags } = useTags();
   const { documentSets } = useDocumentSets();
@@ -180,43 +184,27 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
 
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-
-  // Initialize onboarding state
-  const {
-    state: onboardingState,
-    actions: onboardingActions,
-    llmDescriptors,
-    isLoading: isLoadingOnboarding,
-  } = useOnboardingState(liveAssistant);
 
   const llmManager = useLlmManager(
     currentChatSession ?? undefined,
     liveAssistant
   );
 
-  // On first render, open onboarding if there are no configured LLM providers
-  // OR if the user hasn't explicitly finished onboarding yet.
-  // Wait until providers have loaded before making this decision.
-  const hasCheckedOnboarding = useRef(false);
-  useEffect(() => {
-    // Only check once, and only after data has loaded
-    if (hasCheckedOnboarding.current || llmManager.isLoadingProviders) {
-      return;
-    }
-    hasCheckedOnboarding.current = true;
-
-    // Check if user has explicitly finished onboarding
-    const hasFinishedOnboarding =
-      localStorage.getItem(HAS_FINISHED_ONBOARDING_KEY) === "true";
-
-    // Show onboarding if:
-    // 1. No LLM providers configured, OR
-    // 2. User hasn't explicitly finished onboarding (they navigated away before clicking "Finish Setup")
-    setShowOnboarding(
-      llmManager.hasAnyProvider === false || !hasFinishedOnboarding
-    );
-  }, [llmManager.isLoadingProviders, llmManager.hasAnyProvider]);
+  const {
+    showOnboarding,
+    onboardingState,
+    onboardingActions,
+    llmDescriptors,
+    isLoadingOnboarding,
+    finishOnboarding,
+    hideOnboarding,
+  } = useShowOnboarding({
+    liveAssistant,
+    isLoadingProviders: llmManager.isLoadingProviders,
+    hasAnyProvider: llmManager.hasAnyProvider,
+    isLoadingChatSessions,
+    chatSessionsCount: chatSessions.length,
+  });
 
   const noAssistants = liveAssistant === null || liveAssistant === undefined;
 
@@ -447,11 +435,16 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
         deepResearch: deepResearchEnabled,
       });
       if (showOnboarding) {
-        localStorage.setItem(HAS_FINISHED_ONBOARDING_KEY, "true");
-        setShowOnboarding(false);
+        finishOnboarding();
       }
     },
-    [onSubmit, currentMessageFiles, deepResearchEnabled, showOnboarding]
+    [
+      onSubmit,
+      currentMessageFiles,
+      deepResearchEnabled,
+      showOnboarding,
+      finishOnboarding,
+    ]
   );
 
   // Memoized callbacks for DocumentsSidebar
@@ -671,13 +664,13 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
               )}
 
               {/* ChatInputBar container */}
-              <div className="max-w-[50rem] w-full pointer-events-auto z-sticky flex flex-col px-4 lg:px-0 justify-center items-center">
+              <div className="w-[min(50rem,100%)] pointer-events-auto z-sticky flex flex-col px-4 justify-center items-center">
                 {(showOnboarding ||
                   (user?.role !== UserRole.ADMIN &&
                     !user?.personalization?.name)) &&
                   currentProjectId === null && (
                     <OnboardingFlow
-                      handleHideOnboarding={() => setShowOnboarding(false)}
+                      handleHideOnboarding={hideOnboarding}
                       state={onboardingState}
                       actions={onboardingActions}
                       llmDescriptors={llmDescriptors}

@@ -193,61 +193,106 @@ def test_get_credentials_not_found(
     assert response.status_code == 404
 
 
-# @subash: will be tested in the next PR
-# def test_update_config(
-#     setup_image_generation_tests: tuple[DATestUser, DATestLLMProvider],
-# ) -> None:
-#     """Test updating an existing image generation config."""
-#     admin_user, _ = setup_image_generation_tests
-
-#     # Create initial config
-#     config = ImageGenerationConfigManager.create(
-#         image_provider_id="update-test",
-#         model_name="dall-e-3",
-#         provider="openai",
-#         api_key="sk-original-key",
-#         user_performing_action=admin_user,
-#     )
-
-#     assert config.model_name == "dall-e-3"
-
-#     # Update the config
-#     updated_config = ImageGenerationConfigManager.update(
-#         image_provider_id=config.image_provider_id,
-#         model_name="dall-e-3",
-#         provider="openai",
-#         api_key="sk-updated-key",
-#         user_performing_action=admin_user,
-#     )
-
-#     assert updated_config.image_provider_id == config.image_provider_id
-#     assert updated_config.model_name == "dall-e-3"
-
-#     # Verify the update
-#     credentials = ImageGenerationConfigManager.get_credentials(
-#         image_provider_id=config.image_provider_id,
-#         user_performing_action=admin_user,
-#     )
-#     assert credentials["api_key"] == "sk-updated-key"
-
-
-def test_update_config_not_found(
+def test_update_config_direct_key_entry(
     setup_image_generation_tests: tuple[DATestUser, DATestLLMProvider],
 ) -> None:
-    """Test updating a non-existent config returns 404."""
+    """Test updating an image generation config with new direct credentials."""
     admin_user, _ = setup_image_generation_tests
 
+    # Create initial config
+    config = ImageGenerationConfigManager.create(
+        image_provider_id="update-direct-test",
+        model_name="dall-e-3",
+        provider="openai",
+        api_key="sk-initial-key",
+        user_performing_action=admin_user,
+    )
+
+    assert config.model_name == "dall-e-3"
+
+    # Update with new credentials and model
+    new_api_key = "sk-updated-key-12345"
+    updated_config = ImageGenerationConfigManager.update(
+        image_provider_id=config.image_provider_id,
+        model_name="dall-e-3",
+        provider="openai",
+        api_key=new_api_key,
+        user_performing_action=admin_user,
+    )
+
+    assert updated_config.image_provider_id == config.image_provider_id
+    assert updated_config.model_name == "dall-e-3"
+
+    # Verify credentials were updated
+    credentials = ImageGenerationConfigManager.get_credentials(
+        image_provider_id=config.image_provider_id,
+        user_performing_action=admin_user,
+    )
+    assert credentials["api_key"] == new_api_key
+
+
+def test_update_config_clone_mode(
+    setup_image_generation_tests: tuple[DATestUser, DATestLLMProvider],
+) -> None:
+    """Test updating an image generation config by cloning from an LLM provider."""
+    admin_user, llm_provider = setup_image_generation_tests
+
+    # Create initial config with direct credentials
+    config = ImageGenerationConfigManager.create(
+        image_provider_id="update-clone-test",
+        model_name="dall-e-3",
+        provider="openai",
+        api_key="sk-initial-direct-key",
+        user_performing_action=admin_user,
+    )
+
+    assert config.model_name == "dall-e-3"
+
+    # Update by cloning from LLM provider
+    updated_config = ImageGenerationConfigManager.update(
+        image_provider_id=config.image_provider_id,
+        model_name="gpt-image-1",
+        source_llm_provider_id=llm_provider.id,
+        user_performing_action=admin_user,
+    )
+
+    assert updated_config.image_provider_id == config.image_provider_id
+    assert updated_config.model_name == "gpt-image-1"
+
+    # Verify config still exists and is accessible
+    ImageGenerationConfigManager.verify(
+        config=updated_config,
+        user_performing_action=admin_user,
+    )
+
+
+def test_update_config_source_provider_not_found(
+    setup_image_generation_tests: tuple[DATestUser, DATestLLMProvider],
+) -> None:
+    """Test that updating with non-existent source_llm_provider_id fails."""
+    admin_user, _ = setup_image_generation_tests
+
+    # Create initial config
+    config = ImageGenerationConfigManager.create(
+        image_provider_id="update-bad-source-test",
+        model_name="dall-e-3",
+        provider="openai",
+        api_key="sk-initial-key",
+        user_performing_action=admin_user,
+    )
+
+    # Try to update with non-existent source provider
     response = requests.put(
-        f"{API_SERVER_URL}/admin/image-generation/config/non-existent-id",
+        f"{API_SERVER_URL}/admin/image-generation/config/{config.image_provider_id}",
         json={
-            "model_name": "dall-e-3",
-            "provider": "openai",
-            "api_key": "sk-test-key",
+            "model_name": "gpt-image-1",
+            "source_llm_provider_id": 999999,
         },
         headers=admin_user.headers,
     )
 
     assert response.status_code == 404
+    assert "not found" in response.json()["detail"]
 
 
 def test_delete_config(

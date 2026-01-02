@@ -146,3 +146,5 @@ export { default as SvgX } from "@opal/icons/x";
 export { default as SvgZoomIn } from "@opal/icons/zoom-in";
 export { default as SvgZoomOut } from "@opal/icons/zoom-out";
 export { default as SvgMcp } from "@opal/icons/mcp";
+export { default as SvgPaintBrush } from "@opal/icons/paint-brush";
+export { default as SvgRevert } from "@opal/icons/revert";

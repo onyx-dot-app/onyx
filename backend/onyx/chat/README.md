@@ -63,7 +63,7 @@ To ensure the LLM follows certain specific instructions, instructions are added 
 tool is used, a citation reminder is always added. Otherwise, by default there is no reminder. If the user configures reminders, those are added to the
 final message. If a search related tool just ran and the user has reminders, both appear in a single message.
 
-If a search related tool is called at any point during the turn, the reminder will remain at the end until the turn is over and the agent as responded.
+If a search related tool is called at any point during the turn, the reminder will remain at the end until the turn is over and the agent has responded.
 
 
 ## Tool Calls
@@ -145,9 +145,83 @@ attention despite having global access.
 In a similar concept, LLM instructions in the system prompt are structured specifically so that there are coherent sections for the LLM to attend to. This is
 fairly surprising actually but if there is a line of instructions effectively saying "If you try to use some tools and find that you need more information or
 need to call additional tools, you are encouraged to do this", having this in the Tool section of the System prompt makes all the LLMs follow it well but if it's
-even just a paragraph away like near the beginning of the prompt, it is often often ignored. The difference is as drastic as a 30% follow rate to a 90% follow
+even just a paragraph away like near the beginning of the prompt, it is often ignored. The difference is as drastic as a 30% follow rate to a 90% follow
 rate even just moving the same statement a few sentences.
 
 
 ## Other related pointers
 - How messages, files, images are stored can be found in backend/onyx/db/models.py, there is also a README.md under that directory that may be helpful.
+
+---
+
+# Overview of LLM flow architecture
+
+**Concepts:**
+Turn: User sends a message and AI does some set of things and responds
+Step/Cycle: 1 single LLM inference given some context and some tools
+
+
+## 1. Top Level (process_message function):
+This function can be thought of as the set-up and validation layer. It ensures that the database is in a valid state, reads the
+messages in the session and sets up all the necessary items to run the chat loop and state containers. The major things it does
+are:
+- Validates the request
+- Builds the chat history for the session
+- Fetches any additional context such as files and images
+- Prepares all of the tools for the LLM
+- Creates the state container objects for use in the loop
+
+### Wrapper (run_chat_loop_with_state_containers function):
+This wrapper is used to run the LLM flow in a background thread and monitor the emitter for stop signals. This means the top
+level is as isolated from the LLM flow as possible and can continue to yield packets as soon as they are available from the lower
+levels. This also means that if the lower levels fail, the top level will still guarantee a reasonable response to the user.
+All of the saving and database operations are abstracted away from the lower levels.
+
+### Emitter
+The emitter is designed to be an object queue so that lower levels do not need to yield objects all the way back to the top.
+This way the functions can be better designed (not everything as a generator) and more easily tested. The wrapper around the
+LLM flow (run_chat_loop_with_state_containers) is used to monitor the emitter and handle packets as soon as they are available
+from the lower levels. Both the emitter and the state container are mutating state objects and only used to accumulate state.
+There should be no logic dependent on the states of these objects, especially in the lower levels. The emitter should only take
+packets and should not be used for other things.
+
+### State Container
+The state container is used to accumulate state during the LLM flow. Similar to the emitter, it should not be used for logic,
+only for accumulating state. It is used to gather all of the necessary information for saving the chat turn into the database.
+So it will accumulate answer tokens, reasoning tokens, tool calls, citation info, etc. This is used at the end of the flow once
+the lower level is completed whether on its own or stopped by the user. At that point, all of the state is read and stored into
+the database. The state container can be added to by any of the underlying layers, this is fine.
+
+### Stopping Generation
+A stop signal is checked every 300ms by the wrapper around the LLM flow. The signal itself
+is stored in Redis and is set by the user calling the stop endpoint. The wrapper ensures that no matter what the lower level is
+doing at the time, the thread can be killed by the top level. It does not require a cooperative cancellation from the lower level
+and in fact the lower level does not know about the stop signal at all.
+
+
+## 2. LLM Loop (run_llm_loop function)
+This function handles the logic of the Turn. It's essentially a while loop where context is added and modified (according what
+is outlined in the first half of this doc). Its main functionality is:
+- Translate and truncate the context for the LLM inference
+- Add context modifiers like reminders, updates to the system prompts, etc.
+- Run tool calls and gather results
+- Build some of the objects stored in the state container.
+
+
+## 3. LLM Step (run_llm_step function)
+This function is a single inference of the LLM. It's a wrapper around the LLM stream function which handles packet translations
+so that the Emitter can emit individual tokens as soon as they arrive. It also keeps track of the different sections since they
+do not all come at once (reasoning, answers, tool calls are all built up token by token). This layer also tracks the different
+tool calls and returns that to the LLM Loop to execute.
+
+
+## Things to know
+- Packets are labeled with a "turn_index" field as part of the Placement of the packet. This is not the same as the backend
+concept of a turn. The turn_index for the frontend is which block does this packet belong to. So while a reasoning + tool call
+comes from the same LLM inference (same backend LLM step), they are 2 turns to the frontend because that's how it's rendered.
+
+- There are 3 representations of "message". The first is the database model ChatMessage, this one should be translated away and
+not used deep into the flow. The second is ChatMessageSimple which is the data model which should be used throughout the code
+as much as possible. If modifications/additions are needed, it should be to this object. This is the rich representation of a
+message for the code. Finally there is the LanguageModelInput representation of a message. This one is for the LLM interface
+layer and is as stripped down as possible so that the LLM interface can be clean and easy to maintain/extend.

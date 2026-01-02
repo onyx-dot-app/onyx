@@ -30,6 +30,7 @@ import {
   SvgFileText,
   SvgFolder,
   SvgGlobe,
+  SvgImage,
   SvgKey,
   SvgOnyxLogo,
   SvgOnyxOctagon,
@@ -42,6 +43,7 @@ import {
   SvgUser,
   SvgUsers,
   SvgZoomIn,
+  SvgPaintBrush,
 } from "@opal/icons";
 import SvgMcp from "@opal/icons/mcp";
 const connectors_items = () => [
@@ -173,6 +175,11 @@ const collections = (
               icon: SvgGlobe,
               link: "/admin/configuration/web-search",
             },
+            {
+              name: "Image Generation",
+              icon: SvgImage,
+              link: "/admin/configuration/image-generation",
+            },
             ...(!enableCloud
               ? [
                   {
@@ -271,9 +278,9 @@ const collections = (
             ...(enableEnterprise
               ? [
                   {
-                    name: "Whitelabeling",
-                    icon: PaintingIconSkeleton,
-                    link: "/admin/whitelabeling",
+                    name: "Appearance & Theming",
+                    icon: SvgPaintBrush,
+                    link: "/admin/theme",
                   },
                 ]
               : []),

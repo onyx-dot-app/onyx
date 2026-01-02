@@ -104,6 +104,14 @@ const ChatUI = React.memo(
       const [aboveHorizon, setAboveHorizon] = useState(false);
       const debounceNumber = 100;
 
+      // Use refs to keep callbacks stable while always using latest values
+      const onSubmitRef = useRef(onSubmit);
+      const deepResearchEnabledRef = useRef(deepResearchEnabled);
+      const currentMessageFilesRef = useRef(currentMessageFiles);
+      onSubmitRef.current = onSubmit;
+      deepResearchEnabledRef.current = deepResearchEnabled;
+      currentMessageFilesRef.current = currentMessageFiles;
+
       const createRegenerator = useCallback(
         (regenerationRequest: {
           messageId: number;
@@ -111,10 +119,10 @@ const ChatUI = React.memo(
           forceSearch?: boolean;
         }) => {
           return async function (modelOverride: LlmDescriptor) {
-            return await onSubmit({
+            return await onSubmitRef.current({
               message: regenerationRequest.parentMessage.message,
-              currentMessageFiles,
-              deepResearch: deepResearchEnabled,
+              currentMessageFiles: currentMessageFilesRef.current,
+              deepResearch: deepResearchEnabledRef.current,
               modelOverride,
               messageIdToResend: regenerationRequest.parentMessage.messageId,
               regenerationRequest,
@@ -122,19 +130,19 @@ const ChatUI = React.memo(
             });
           };
         },
-        [onSubmit, deepResearchEnabled, currentMessageFiles]
+        [] // Stable - uses refs for latest values
       );
 
       const handleEditWithMessageId = useCallback(
         (editedContent: string, msgId: number) => {
-          onSubmit({
+          onSubmitRef.current({
             message: editedContent,
             messageIdToResend: msgId,
             currentMessageFiles: [],
-            deepResearch: deepResearchEnabled,
+            deepResearch: deepResearchEnabledRef.current,
           });
         },
-        [onSubmit, deepResearchEnabled]
+        [] // Stable - uses refs for latest values
       );
 
       const handleScroll = useCallback(() => {
@@ -240,135 +248,118 @@ const ChatUI = React.memo(
           <div
             key={currentChatSessionId}
             ref={scrollContainerRef}
-            className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden default-scrollbar"
+            className="flex flex-1 justify-center min-h-0 overflow-y-auto overflow-x-hidden default-scrollbar"
             onScroll={handleScroll}
           >
-            {messages.map((message, i) => {
-              const messageReactComponentKey = `message-${message.nodeId}`;
-              const parentMessage = message.parentNodeId
-                ? messageTree?.get(message.parentNodeId)
-                : null;
+            <div className="w-[min(50rem,100%)] px-4">
+              {messages.map((message, i) => {
+                const messageReactComponentKey = `message-${message.nodeId}`;
+                const parentMessage = message.parentNodeId
+                  ? messageTree?.get(message.parentNodeId)
+                  : null;
 
-              if (message.type === "user") {
-                const nextMessage =
-                  messages.length > i + 1 ? messages[i + 1] : null;
+                if (message.type === "user") {
+                  const nextMessage =
+                    messages.length > i + 1 ? messages[i + 1] : null;
 
-                return (
-                  <div
-                    id={messageReactComponentKey}
-                    key={messageReactComponentKey}
-                  >
-                    <HumanMessage
-                      disableSwitchingForStreaming={
-                        (nextMessage && nextMessage.is_generating) || false
-                      }
-                      stopGenerating={stopGenerating}
-                      content={message.message}
-                      files={message.files}
-                      messageId={message.messageId}
-                      onEdit={(editedContent) => {
-                        if (
-                          message.messageId !== undefined &&
-                          message.messageId !== null
-                        ) {
-                          handleEditWithMessageId(
-                            editedContent,
-                            message.messageId
-                          );
-                        }
-                      }}
-                      otherMessagesCanSwitchTo={
-                        parentMessage?.childrenNodeIds ?? emptyChildrenIds
-                      }
-                      onMessageSelection={onMessageSelection}
-                    />
-                  </div>
-                );
-              } else if (message.type === "assistant") {
-                if ((error || loadError) && i === messages.length - 1) {
                   return (
                     <div
-                      key={`error-${message.nodeId}`}
-                      className="max-w-[min(50rem,100%)] mx-auto p-4"
+                      id={messageReactComponentKey}
+                      key={messageReactComponentKey}
                     >
-                      <ErrorBanner
-                        resubmit={handleResubmitLastMessage}
-                        error={error || loadError || ""}
-                        errorCode={message.errorCode || undefined}
-                        isRetryable={message.isRetryable ?? true}
-                        details={message.errorDetails || undefined}
-                        stackTrace={message.stackTrace || undefined}
+                      <HumanMessage
+                        disableSwitchingForStreaming={
+                          (nextMessage && nextMessage.is_generating) || false
+                        }
+                        stopGenerating={stopGenerating}
+                        content={message.message}
+                        files={message.files}
+                        messageId={message.messageId}
+                        onEdit={handleEditWithMessageId}
+                        otherMessagesCanSwitchTo={
+                          parentMessage?.childrenNodeIds ?? emptyChildrenIds
+                        }
+                        onMessageSelection={onMessageSelection}
+                      />
+                    </div>
+                  );
+                } else if (message.type === "assistant") {
+                  if ((error || loadError) && i === messages.length - 1) {
+                    return (
+                      <div key={`error-${message.nodeId}`} className="p-4">
+                        <ErrorBanner
+                          resubmit={handleResubmitLastMessage}
+                          error={error || loadError || ""}
+                          errorCode={message.errorCode || undefined}
+                          isRetryable={message.isRetryable ?? true}
+                          details={message.errorDetails || undefined}
+                          stackTrace={message.stackTrace || undefined}
+                        />
+                      </div>
+                    );
+                  }
+
+                  // NOTE: it's fine to use the previous entry in messageHistory
+                  // since this is a "parsed" version of the message tree
+                  // so the previous message is guaranteed to be the parent of the current message
+                  const previousMessage = i !== 0 ? messages[i - 1] : null;
+                  const chatStateData = {
+                    assistant: liveAssistant,
+                    docs: message.documents ?? emptyDocs,
+                    citations: message.citations,
+                    setPresentingDocument,
+                    overriddenModel: llmManager.currentLlm?.modelName,
+                    researchType: message.researchType,
+                  };
+                  return (
+                    <div
+                      id={`message-${message.nodeId}`}
+                      key={messageReactComponentKey}
+                    >
+                      <AIMessage
+                        rawPackets={message.packets}
+                        chatState={chatStateData}
+                        nodeId={message.nodeId}
+                        messageId={message.messageId}
+                        currentFeedback={message.currentFeedback}
+                        llmManager={llmManager}
+                        otherMessagesCanSwitchTo={
+                          parentMessage?.childrenNodeIds ?? emptyChildrenIds
+                        }
+                        onMessageSelection={onMessageSelection}
+                        onRegenerate={createRegenerator}
+                        parentMessage={previousMessage}
                       />
                     </div>
                   );
                 }
+              })}
 
-                // NOTE: it's fine to use the previous entry in messageHistory
-                // since this is a "parsed" version of the message tree
-                // so the previous message is guaranteed to be the parent of the current message
-                const previousMessage = i !== 0 ? messages[i - 1] : null;
-                const regenerate =
-                  message.messageId !== undefined && previousMessage
-                    ? createRegenerator({
-                        messageId: message.messageId,
-                        parentMessage: previousMessage,
-                      })
-                    : undefined;
-                const chatStateData = {
-                  assistant: liveAssistant,
-                  docs: message.documents ?? emptyDocs,
-                  citations: message.citations,
-                  setPresentingDocument,
-                  regenerate,
-                  overriddenModel: llmManager.currentLlm?.modelName,
-                  researchType: message.researchType,
-                };
-                return (
-                  <div
-                    id={`message-${message.nodeId}`}
-                    key={messageReactComponentKey}
-                  >
-                    <AIMessage
-                      rawPackets={message.packets}
-                      chatState={chatStateData}
-                      nodeId={message.nodeId}
-                      messageId={message.messageId}
-                      currentFeedback={message.currentFeedback}
-                      llmManager={llmManager}
-                      otherMessagesCanSwitchTo={
-                        parentMessage?.childrenNodeIds ?? emptyChildrenIds
-                      }
-                      onMessageSelection={onMessageSelection}
-                    />
-                  </div>
-                );
-              }
-            })}
+              {(((error !== null || loadError !== null) &&
+                messages[messages.length - 1]?.type === "user") ||
+                messages[messages.length - 1]?.type === "error") && (
+                <div className="p-4">
+                  <ErrorBanner
+                    resubmit={handleResubmitLastMessage}
+                    error={error || loadError || ""}
+                    errorCode={
+                      messages[messages.length - 1]?.errorCode || undefined
+                    }
+                    isRetryable={
+                      messages[messages.length - 1]?.isRetryable ?? true
+                    }
+                    details={
+                      messages[messages.length - 1]?.errorDetails || undefined
+                    }
+                    stackTrace={
+                      messages[messages.length - 1]?.stackTrace || undefined
+                    }
+                  />
+                </div>
+              )}
 
-            {(((error !== null || loadError !== null) &&
-              messages[messages.length - 1]?.type === "user") ||
-              messages[messages.length - 1]?.type === "error") && (
-              <div className="max-w-[min(50rem,100%)] mx-auto p-4">
-                <ErrorBanner
-                  resubmit={handleResubmitLastMessage}
-                  error={error || loadError || ""}
-                  errorCode={
-                    messages[messages.length - 1]?.errorCode || undefined
-                  }
-                  isRetryable={
-                    messages[messages.length - 1]?.isRetryable ?? true
-                  }
-                  details={
-                    messages[messages.length - 1]?.errorDetails || undefined
-                  }
-                  stackTrace={
-                    messages[messages.length - 1]?.stackTrace || undefined
-                  }
-                />
-              </div>
-            )}
-
-            <div ref={endDivRef} />
+              <div ref={endDivRef} />
+            </div>
           </div>
         </div>
       );
