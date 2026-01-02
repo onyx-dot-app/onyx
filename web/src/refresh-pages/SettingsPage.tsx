@@ -1,15 +1,17 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import type { Route } from "next";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
+import { Formik, Form } from "formik";
 import {
   SvgCpu,
   SvgExternalLink,
+  SvgLock,
   SvgMoon,
   SvgSliders,
   SvgSun,
@@ -21,17 +23,13 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Button from "@/refresh-components/buttons/Button";
 import Switch from "@/refresh-components/inputs/Switch";
-import { SubLabel } from "@/components/Field";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { useUser } from "@/components/user/UserProvider";
 import { useTheme } from "next-themes";
 import { ThemePreference } from "@/lib/types";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
-import { parseLlmDescriptor, structureValue } from "@/lib/llm/utils";
-import { setUserDefaultModel } from "@/lib/userSettings";
 import { deleteAllChatSessions } from "@/app/chat/services/lib";
 import { useAuthType, useLlmManager } from "@/lib/hooks";
 import { AuthType } from "@/lib/constants";
@@ -42,18 +40,12 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { ValidSources } from "@/lib/types";
 import { getSourceMetadata } from "@/lib/sources";
 import Separator from "@/refresh-components/Separator";
-import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 
 function GeneralSettings() {
-  const {
-    user,
-    updateUserAutoScroll,
-    updateUserShortcuts,
-    updateUserPersonalization,
-    updateUserThemePreference,
-  } = useUser();
+  const { user, updateUserPersonalization, updateUserThemePreference } =
+    useUser();
   const { theme, setTheme } = useTheme();
   const { popup, setPopup } = usePopup();
   const router = useRouter();
@@ -380,23 +372,21 @@ function AccountsAccessSettings() {
   const { user } = useUser();
   const { popup, setPopup } = usePopup();
   const authType = useAuthType();
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   const showPasswordSection = Boolean(user?.password_configured);
   const showTokensSection = authType && authType !== AuthType.DISABLED;
 
   const handleChangePassword = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (newPassword !== confirmPassword) {
+    async (values: {
+      currentPassword: string;
+      newPassword: string;
+      confirmPassword: string;
+    }) => {
+      if (values.newPassword !== values.confirmPassword) {
         setPopup({ message: "New passwords do not match", type: "error" });
         return;
       }
-
-      setIsLoading(true);
 
       try {
         const response = await fetch("/api/password/change-password", {
@@ -405,8 +395,8 @@ function AccountsAccessSettings() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            old_password: currentPassword,
-            new_password: newPassword,
+            old_password: values.currentPassword,
+            new_password: values.newPassword,
           }),
         });
 
@@ -415,9 +405,7 @@ function AccountsAccessSettings() {
             message: "Password changed successfully",
             type: "success",
           });
-          setCurrentPassword("");
-          setNewPassword("");
-          setConfirmPassword("");
+          setShowPasswordModal(false);
         } else {
           const errorData = await response.json();
           setPopup({
@@ -430,11 +418,9 @@ function AccountsAccessSettings() {
           message: "An error occurred while changing the password",
           type: "error",
         });
-      } finally {
-        setIsLoading(false);
       }
     },
-    [currentPassword, newPassword, confirmPassword, setPopup]
+    [setPopup]
   );
 
   if (!showPasswordSection && !showTokensSection) {
@@ -450,73 +436,101 @@ function AccountsAccessSettings() {
   return (
     <>
       {popup}
-      <GeneralLayouts.Section gap={2}>
-        {showPasswordSection && (
-          <GeneralLayouts.Section gap={0.75}>
-            <InputLayouts.Label label="Security" />
-            <Card>
-              <div className="space-y-2">
-                <h3 className="text-lg font-medium">Change Password</h3>
-                <SubLabel>
-                  Enter your current password and new password to change your
-                  password.
-                </SubLabel>
-              </div>
-              <form onSubmit={handleChangePassword} className="space-y-4">
-                <div>
-                  <label
-                    htmlFor="currentPassword"
-                    className="text-sm font-medium"
+
+      {showPasswordModal && (
+        <Formik
+          initialValues={{
+            currentPassword: "",
+            newPassword: "",
+            confirmPassword: "",
+          }}
+          onSubmit={async (values, { setSubmitting }) => {
+            await handleChangePassword(values);
+            setSubmitting(false);
+          }}
+        >
+          {({ values, handleChange, isSubmitting, dirty }) => (
+            <Form>
+              <ConfirmationModalLayout
+                icon={SvgLock}
+                title="Change Password"
+                submit={
+                  <Button
+                    type="submit"
+                    disabled={
+                      isSubmitting ||
+                      !dirty ||
+                      !values.currentPassword ||
+                      !values.newPassword ||
+                      !values.confirmPassword
+                    }
                   >
-                    Current Password
-                  </label>
-                  <InputTypeIn
-                    id="currentPassword"
-                    type="password"
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    required
-                    className="mt-2"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="newPassword" className="text-sm font-medium">
-                    New Password
-                  </label>
-                  <InputTypeIn
-                    id="newPassword"
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    required
-                    className="mt-2"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="confirmPassword"
-                    className="text-sm font-medium"
-                  >
-                    Confirm New Password
-                  </label>
-                  <InputTypeIn
-                    id="confirmPassword"
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    required
-                    className="mt-2"
-                  />
-                </div>
-                <div className="flex justify-end">
-                  <Button type="submit" disabled={isLoading}>
-                    {isLoading ? "Changing..." : "Change Password"}
+                    {isSubmitting ? "Updating..." : "Update"}
                   </Button>
-                </div>
-              </form>
-            </Card>
-          </GeneralLayouts.Section>
-        )}
+                }
+                onClose={() => {
+                  setShowPasswordModal(false);
+                }}
+              >
+                <GeneralLayouts.Section gap={1}>
+                  <InputLayouts.Vertical label="Current Password">
+                    <InputTypeIn
+                      name="currentPassword"
+                      type="password"
+                      value={values.currentPassword}
+                      onChange={handleChange}
+                    />
+                  </InputLayouts.Vertical>
+                  <InputLayouts.Vertical label="New Password">
+                    <InputTypeIn
+                      name="newPassword"
+                      type="password"
+                      value={values.newPassword}
+                      onChange={handleChange}
+                    />
+                  </InputLayouts.Vertical>
+                  <InputLayouts.Vertical label="Confirm New Password">
+                    <InputTypeIn
+                      name="confirmPassword"
+                      type="password"
+                      value={values.confirmPassword}
+                      onChange={handleChange}
+                    />
+                  </InputLayouts.Vertical>
+                </GeneralLayouts.Section>
+              </ConfirmationModalLayout>
+            </Form>
+          )}
+        </Formik>
+      )}
+
+      <GeneralLayouts.Section gap={2}>
+        <GeneralLayouts.Section gap={0.75}>
+          <InputLayouts.Label label="Accounts" />
+          <Card>
+            <InputLayouts.Horizontal
+              label="Email"
+              description="Your account email address."
+            >
+              <Text>{user?.email ?? "anonymous"}</Text>
+            </InputLayouts.Horizontal>
+
+            {showPasswordSection && (
+              <InputLayouts.Horizontal
+                label="Password"
+                description="Update your account password."
+              >
+                <Button
+                  secondary
+                  leftIcon={SvgLock}
+                  onClick={() => setShowPasswordModal(true)}
+                >
+                  Change Password
+                </Button>
+              </InputLayouts.Horizontal>
+            )}
+          </Card>
+        </GeneralLayouts.Section>
 
         {showTokensSection && (
           <GeneralLayouts.Section gap={0.75}>
