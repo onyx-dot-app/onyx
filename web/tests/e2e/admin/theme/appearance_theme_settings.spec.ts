@@ -203,5 +203,49 @@ test.describe("Appearance Theme Settings", () => {
         page.getByText(TEST_THEME.applicationName).first()
       ).toBeVisible({ timeout: 10000 });
     });
+
+    test("Fresh user sees first visit notice", async ({ page }) => {
+      // Clear cookies to ensure fresh state
+      await page.context().clearCookies();
+
+      // Create and login as a random new user
+      await loginAsRandomUser(page);
+
+      // The new user should be redirected to /chat after signup
+      // Wait for the page to load
+      await page.waitForLoadState("networkidle");
+
+      // Handle and verify first visit notice
+      await handleFirstVisitNotice(page, TEST_THEME);
+    });
+
+    test("Fresh user sees correct branding on chat page", async ({ page }) => {
+      // Clear cookies to ensure fresh state
+      await page.context().clearCookies();
+
+      // Create and login as a random new user
+      await loginAsRandomUser(page);
+
+      // Wait for the page to load
+      await page.waitForLoadState("networkidle");
+
+      // Handle first visit notice if it appears
+      const modal = page.getByRole("dialog");
+      if (await modal.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await handleFirstVisitNotice(page, TEST_THEME);
+      }
+
+      // Navigate to chat page (in case signup redirected elsewhere)
+      await page.goto("http://localhost:3000/chat");
+      await page.waitForLoadState("networkidle");
+
+      // Handle first visit notice again if it appears
+      if (await modal.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await handleFirstVisitNotice(page, TEST_THEME);
+      }
+
+      // Verify branding
+      await verifyChatPageBranding(page, TEST_THEME);
+    });
   });
 });
