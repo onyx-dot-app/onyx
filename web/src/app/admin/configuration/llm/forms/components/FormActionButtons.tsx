@@ -71,7 +71,7 @@ export function FormActionButtons({
         </Text>
       )}
 
-      <div className="flex w-full gap-2">
+      <div className="flex w-full justify-start gap-2">
         <Button type="submit" disabled={isTesting || !isFormValid}>
           {isTesting ? (
             <Text as="p" inverted>
