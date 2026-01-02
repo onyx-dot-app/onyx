@@ -194,6 +194,7 @@ function GeneralSettings() {
         <ConfirmationModalLayout
           icon={SvgTrash}
           title="Delete All Chats"
+          onClose={() => setShowDeleteConfirmation(false)}
           submit={
             <Button
               danger
