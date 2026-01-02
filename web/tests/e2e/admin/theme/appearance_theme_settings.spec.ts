@@ -248,4 +248,64 @@ test.describe("Appearance Theme Settings", () => {
       await verifyChatPageBranding(page, TEST_THEME);
     });
   });
+
+  test.afterAll(async ({ browser }) => {
+    // Reset theme settings to defaults
+    const context = await browser.newContext();
+    const page = await context.newPage();
+
+    try {
+      await loginAs(page, "admin");
+      await page.goto("http://localhost:3000/admin/theme");
+      await page.waitForLoadState("networkidle");
+
+      // Clear Application Display Name
+      const appNameInput = page.getByRole("textbox", {
+        name: /application display name/i,
+      });
+      await appNameInput.clear();
+
+      // Clear Greeting Message
+      const greetingInput = page.getByRole("textbox", {
+        name: /greeting message/i,
+      });
+      await greetingInput.clear();
+
+      // Clear Chat Header Text
+      const headerInput = page.getByRole("textbox", {
+        name: /chat header text/i,
+      });
+      await headerInput.clear();
+
+      // Clear Chat Footer Text
+      const footerTextarea = page.getByRole("textbox", {
+        name: /chat footer text/i,
+      });
+      await footerTextarea.clear();
+
+      // Disable First Visit Notice (if enabled)
+      const firstVisitToggle = page
+        .locator("label", { hasText: /show first visit notice/i })
+        .locator("..")
+        .getByRole("switch");
+      const isFirstVisitEnabled =
+        (await firstVisitToggle.getAttribute("aria-checked")) === "true";
+      if (isFirstVisitEnabled) {
+        await firstVisitToggle.click();
+        await page.waitForTimeout(300);
+      }
+
+      // Save changes
+      const saveButton = page.getByRole("button", { name: /apply changes/i });
+      const isDisabled = await saveButton.isDisabled();
+      if (!isDisabled) {
+        await saveButton.click();
+        await expect(page.getByText(/success/i)).toBeVisible({
+          timeout: 10000,
+        });
+      }
+    } finally {
+      await context.close();
+    }
+  });
 });
