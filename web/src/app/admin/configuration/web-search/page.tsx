@@ -148,6 +148,7 @@ export default function Page() {
     dispatchSearchModal({
       type: "OPEN",
       providerType,
+      existingProviderId: provider?.id ?? null,
       initialApiKeyValue:
         requiresApiKey && hasStoredKey ? MASKED_API_KEY_PLACEHOLDER : "",
       initialConfigValue: getSingleConfigFieldValueForForm(
@@ -167,6 +168,7 @@ export default function Page() {
     dispatchContentModal({
       type: "OPEN",
       providerType,
+      existingProviderId: provider?.id ?? null,
       initialApiKeyValue: hasStoredKey ? MASKED_API_KEY_PLACEHOLDER : "",
       initialConfigValue:
         providerType === "firecrawl"
@@ -410,9 +412,12 @@ export default function Page() {
       searchProviderValues.config
     );
 
-    const existingProvider = searchProviders.find(
-      (provider) => provider.provider_type === selectedProviderType
-    );
+    // Use the stored provider ID from the modal state instead of looking it up again.
+    // This ensures we update the correct provider even if the data has changed.
+    const existingProviderId = searchModal.existingProviderId;
+    const existingProvider = existingProviderId
+      ? searchProviders.find((p) => p.id === existingProviderId)
+      : null;
 
     const providerRequiresApiKey =
       searchProviderRequiresApiKey(selectedProviderType);
@@ -703,9 +708,12 @@ export default function Page() {
       contentProviderValues.config
     );
 
-    const existingProvider = contentProviders.find(
-      (provider) => provider.provider_type === selectedContentProviderType
-    );
+    // Use the stored provider ID from the modal state instead of looking it up again.
+    // This ensures we update the correct provider even if the data has changed.
+    const existingProviderId = contentModal.existingProviderId;
+    const existingProvider = existingProviderId
+      ? contentProviders.find((p) => p.id === existingProviderId)
+      : null;
 
     // Check if config changed from stored values
     const storedBaseUrl = getSingleContentConfigFieldValueForForm(
