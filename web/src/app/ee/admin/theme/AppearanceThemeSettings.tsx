@@ -225,6 +225,7 @@ export const AppearanceThemeSettings = forwardRef<
             <FormField.Control asChild>
               <InputTypeIn
                 ref={applicationNameInputRef}
+                data-label="application-name-input"
                 showClearButton
                 error={!!errors.application_name}
                 value={values.application_name}
@@ -356,6 +357,7 @@ export const AppearanceThemeSettings = forwardRef<
         <FormField.Control asChild>
           <InputTypeIn
             ref={greetingMessageInputRef}
+            data-label="greeting-message-input"
             showClearButton
             error={!!errors.custom_greeting_message}
             value={values.custom_greeting_message}
@@ -387,6 +389,7 @@ export const AppearanceThemeSettings = forwardRef<
         <FormField.Control asChild>
           <InputTypeIn
             ref={headerContentInputRef}
+            data-label="chat-header-input"
             showClearButton
             error={!!errors.custom_header_content}
             value={values.custom_header_content}
@@ -417,6 +420,7 @@ export const AppearanceThemeSettings = forwardRef<
         <FormField.Control asChild>
           <InputTextArea
             ref={lowerDisclaimerInputRef}
+            data-label="chat-footer-textarea"
             rows={3}
             placeholder="Add markdown content"
             error={!!errors.custom_lower_disclaimer_content}
@@ -444,6 +448,7 @@ export const AppearanceThemeSettings = forwardRef<
             <FormField.Control>
               <Switch
                 aria-label="Show First Visit Notice"
+                data-label="first-visit-notice-toggle"
                 checked={values.show_first_visit_notice}
                 onCheckedChange={(checked) =>
                   setFieldValue("show_first_visit_notice", checked)
@@ -473,6 +478,7 @@ export const AppearanceThemeSettings = forwardRef<
               <FormField.Control asChild>
                 <InputTypeIn
                   ref={noticeHeaderInputRef}
+                  data-label="notice-header-input"
                   showClearButton
                   error={!!errors.custom_popup_header}
                   value={values.custom_popup_header}
@@ -501,6 +507,7 @@ export const AppearanceThemeSettings = forwardRef<
               <FormField.Control asChild>
                 <InputTextArea
                   ref={noticeContentInputRef}
+                  data-label="notice-content-textarea"
                   rows={3}
                   placeholder="Add markdown content"
                   error={!!errors.custom_popup_content}
@@ -521,6 +528,7 @@ export const AppearanceThemeSettings = forwardRef<
                 <FormField.Control>
                   <Switch
                     aria-label="Require Consent to Notice"
+                    data-label="require-consent-toggle"
                     checked={values.enable_consent_screen}
                     onCheckedChange={(checked) =>
                       setFieldValue("enable_consent_screen", checked)
@@ -552,6 +560,7 @@ export const AppearanceThemeSettings = forwardRef<
                 <FormField.Control asChild>
                   <InputTextArea
                     ref={consentPromptTextAreaRef}
+                    data-label="consent-prompt-textarea"
                     rows={3}
                     placeholder="Add markdown content"
                     error={!!errors.consent_screen_prompt}
