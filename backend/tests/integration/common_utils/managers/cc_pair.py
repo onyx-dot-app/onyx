@@ -350,23 +350,35 @@ class CCPairManager:
         This is used to test pausing a connector in the middle of indexing and
         terminating that indexing."""
         start = time.monotonic()
+        print(
+            f"Waiting for indexing to start and reach {num_docs} docs: cc_pair={cc_pair.id}"
+        )
+
         while True:
             fetched_cc_pairs = CCPairManager.get_indexing_statuses(
                 user_performing_action
             )
+
+            cc_pair_found = False
             for fetched_cc_pair in fetched_cc_pairs:
                 if fetched_cc_pair.cc_pair_id != cc_pair.id:
                     continue
 
+                cc_pair_found = True
+
                 if not fetched_cc_pair.in_progress:
-                    continue
+                    print(
+                        f"CC pair not in progress yet: cc_pair={cc_pair.id} "
+                        f"status={fetched_cc_pair.cc_pair_status}"
+                    )
+                    break
 
                 if fetched_cc_pair.docs_indexed < num_docs:
                     print(
                         f"Indexing in progress: cc_pair={cc_pair.id} "
                         f"docs_indexed={fetched_cc_pair.docs_indexed} num_docs={num_docs}"
                     )
-                    continue
+                    break
 
                 if fetched_cc_pair.docs_indexed >= num_docs:
                     print(
@@ -377,16 +389,27 @@ class CCPairManager:
                     )
                     return
 
+            if not cc_pair_found:
+                print(f"CC pair not found in indexing statuses: cc_pair={cc_pair.id}")
+
             elapsed = time.monotonic() - start
             if elapsed > timeout:
+                # Provide more detailed error information
+                final_status = "not found"
+                for fetched_cc_pair in fetched_cc_pairs:
+                    if fetched_cc_pair.cc_pair_id == cc_pair.id:
+                        final_status = (
+                            f"in_progress={fetched_cc_pair.in_progress}, "
+                            f"docs_indexed={fetched_cc_pair.docs_indexed}, "
+                            f"status={fetched_cc_pair.cc_pair_status}"
+                        )
+                        break
+
                 raise TimeoutError(
-                    f"Indexing in progress wait timed out: cc_pair={cc_pair.id} timeout={timeout}s"
+                    f"Indexing in progress wait timed out: cc_pair={cc_pair.id} "
+                    f"timeout={timeout}s, final_status={final_status}"
                 )
 
-            print(
-                f"Indexing in progress waiting: cc_pair={cc_pair.id} "
-                f"elapsed={elapsed:.2f} timeout={timeout}s"
-            )
             time.sleep(5)
 
     @staticmethod
