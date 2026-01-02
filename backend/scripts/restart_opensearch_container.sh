@@ -27,4 +27,4 @@ stop_and_remove_opensearch_container
 
 # Start the OpenSearch container.
 echo "Starting OpenSearch container..."
-docker run --detach --name "$OPENSEARCH_CONTAINER_NAME" --publish "$OPENSEARCH_REST_API_PORT:$OPENSEARCH_REST_API_PORT" --publish "$OPENSEARCH_PERFORMANCE_ANALYZER_PORT:$OPENSEARCH_PERFORMANCE_ANALYZER_PORT" -e "discovery.type=single-node" -e "OPENSEARCH_INITIAL_ADMIN_PASSWORD=$OPENSEARCH_ADMIN_PASSWORD" "$OPENSEARCH_IMAGE"
+docker run --detach --name "$OPENSEARCH_CONTAINER_NAME" --publish "$OPENSEARCH_REST_API_PORT:9200" --publish "$OPENSEARCH_PERFORMANCE_ANALYZER_PORT:9600" -e "discovery.type=single-node" -e "OPENSEARCH_INITIAL_ADMIN_PASSWORD=$OPENSEARCH_ADMIN_PASSWORD" "$OPENSEARCH_IMAGE"

@@ -77,18 +77,25 @@ class OpenSearchClient:
         Returns:
             True if the index was deleted, False if it did not exist.
         """
-        if self._client.indices.exists(index=self._index_name):
-            response = self._client.indices.delete(index=self._index_name)
-            if not response.get("acknowledged", False):
-                raise RuntimeError(f"Failed to delete index {self._index_name}.")
-            return True
-        return False
+        if not self._client.indices.exists(index=self._index_name):
+            logger.warning(
+                f"Tried to delete index {self._index_name} but it does not exist."
+            )
+            return False
 
-    def validate_index(self, mappings: dict[str, Any]) -> bool:
+        response = self._client.indices.delete(index=self._index_name)
+        if not response.get("acknowledged", False):
+            raise RuntimeError(f"Failed to delete index {self._index_name}.")
+        return True
+
+    def validate_index(self, expected_mappings: dict[str, Any]) -> bool:
         """Validates the index.
+
+        Short-circuit returns False on the first mismatch. Logs the mismatch.
 
         See the OpenSearch documentation for more information on the index
         mappings.
+        https://docs.opensearch.org/latest/mappings/
 
         Args:
             mappings: The expected mappings of the index to validate.
@@ -110,10 +117,44 @@ class OpenSearchClient:
             )
             return False
         get_result = self._client.indices.get(index=self._index_name)
-        # I don't understand this response schema yet so just print for
-        # examination.
-        # TODO(andrei): Implement actual schema validation.
-        logger.debug("[ANDREI] OpenSearch index validation response: %s", get_result)
+        index_info: dict[str, Any] = get_result.get(self._index_name, {})
+        if not index_info:
+            raise ValueError(
+                f"Bug: OpenSearch did not return any index info for index {self._index_name}, "
+                "even though it confirmed that the index exists."
+            )
+        index_mapping_properties: dict[str, Any] = index_info.get("mappings", {}).get(
+            "properties", {}
+        )
+        expected_mapping_properties: dict[str, Any] = expected_mappings.get(
+            "properties", {}
+        )
+        assert (
+            expected_mapping_properties
+        ), "Bug: No properties were found in the provided expected mappings."
+
+        for property in expected_mapping_properties:
+            if property not in index_mapping_properties:
+                logger.warning(
+                    f'The field "{property}" was not found in the index {self._index_name}.'
+                )
+                return False
+
+            expected_property_type = expected_mapping_properties[property].get(
+                "type", ""
+            )
+            assert (
+                expected_property_type
+            ), f'Bug: The field "{property}" in the supplied expected schema mappings has no type.'
+
+            index_property_type = index_mapping_properties[property].get("type", "")
+            if expected_property_type != index_property_type:
+                logger.warning(
+                    f'The field "{property}" in the index {self._index_name} has type {index_property_type} '
+                    f"but the expected type is {expected_property_type}."
+                )
+                return False
+
         return True
 
     def update_settings(self, settings: dict[str, Any]) -> None:
@@ -121,6 +162,7 @@ class OpenSearchClient:
 
         See the OpenSearch documentation for more information on the index
         settings.
+        https://docs.opensearch.org/latest/install-and-configure/configuring-opensearch/index-settings/
 
         Args:
             settings: The settings to update the index with.
@@ -166,7 +208,7 @@ class OpenSearchClient:
             # Sanity check.
             case "updated":
                 raise RuntimeError(
-                    f'The OpenSearch client returned result "updated" for indexing document chunk {document_chunk_id}. '
+                    f'The OpenSearch client returned result "updated" for indexing document chunk "{document_chunk_id}". '
                     "This indicates that a document chunk with that ID already exists, which is not expected."
                 )
             case _:
@@ -194,17 +236,17 @@ class OpenSearchClient:
                 return False
             else:
                 raise e
-        else:
-            result_string: str = result.get("result", "")
-            match result_string:
-                case "deleted":
-                    return True
-                case "not_found":
-                    return False
-                case _:
-                    raise RuntimeError(
-                        f'Unknown OpenSearch deletion result: "{result_string}".'
-                    )
+
+        result_string: str = result.get("result", "")
+        match result_string:
+            case "deleted":
+                return True
+            case "not_found":
+                return False
+            case _:
+                raise RuntimeError(
+                    f'Unknown OpenSearch deletion result: "{result_string}".'
+                )
 
     def update_document(self) -> None:
         # TODO(andrei): Implement this.
@@ -249,6 +291,7 @@ class OpenSearchClient:
 
         See the OpenSearch documentation for more information on the search
         pipeline body.
+        https://docs.opensearch.org/latest/search-plugins/search-pipelines/index/
 
         Args:
             pipeline_id: The ID of the search pipeline to create.
