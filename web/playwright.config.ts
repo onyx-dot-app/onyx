@@ -33,6 +33,8 @@ export default defineConfig({
   testMatch: /.*\/tests\/e2e\/.*\.spec\.ts/,
   outputDir: "test-results",
   use: {
+    // Base URL for the application, can be overridden via BASE_URL environment variable
+    baseURL: process.env.BASE_URL || "http://localhost:3000",
     // Capture trace on failure
     trace: "retain-on-failure",
   },
