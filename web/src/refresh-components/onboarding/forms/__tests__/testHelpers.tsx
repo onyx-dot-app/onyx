@@ -2,6 +2,9 @@
  * Shared test helpers and mocks for onboarding form tests
  */
 import React from "react";
+
+// Mock Element.prototype.scrollIntoView for JSDOM (not implemented in jsdom)
+Element.prototype.scrollIntoView = jest.fn();
 import {
   WellKnownLLMProviderDescriptor,
   LLMProviderName,
@@ -22,7 +25,7 @@ export function createMockLLMDescriptor(
 ): WellKnownLLMProviderDescriptor {
   return {
     name,
-    model_configurations:
+    known_models:
       modelConfigurations.length > 0
         ? modelConfigurations
         : [
@@ -39,6 +42,7 @@ export function createMockLLMDescriptor(
               supports_image_input: true,
             },
           ],
+    recommended_default_model: null,
   };
 }
 

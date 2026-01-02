@@ -50,6 +50,8 @@ This will run the evaluation with the following default settings:
 - `--remote-dataset-name`: Name of remote Braintrust dataset
 - `--braintrust-project`: Braintrust project name (overrides `BRAINTRUST_PROJECT` env var)
 - `--verbose`: Enable verbose output
+- `--no-send-logs`: Skip sending logs to Braintrust (useful for local testing)
+- `--local-only`: Run evals locally without Braintrust, output results to CLI only
 
 ## Test Data
 
@@ -64,3 +66,63 @@ Example test case:
     }
 }
 ```
+
+### Per-Test Configuration
+
+Configure tool forcing, assertions, and model settings per-test by adding optional fields to each test case.
+
+#### Tool Configuration
+
+- `force_tools`: List of tool type names to force for this specific test
+- `expected_tools`: List of tool type names expected to be called
+- `require_all_tools`: If true, all expected tools must be called (default: false)
+
+#### Model Configuration
+
+- `model`: Model version to use (e.g., "gpt-4o", "claude-3-5-sonnet")
+- `model_provider`: Model provider (e.g., "openai", "anthropic")
+- `temperature`: Temperature for the model (default: 0.0)
+
+Example with tool and model configuration:
+```json
+[
+  {
+    "input": {
+      "message": "Find information about Python programming"
+    },
+    "expected_tools": ["SearchTool"],
+    "force_tools": ["SearchTool"],
+    "model": "gpt-4o"
+  },
+  {
+    "input": {
+      "message": "Search the web for recent news about AI"
+    },
+    "expected_tools": ["WebSearchTool"],
+    "model": "claude-3-5-sonnet",
+    "model_provider": "anthropic"
+  },
+  {
+    "input": {
+      "message": "Calculate 2 + 2"
+    },
+    "expected_tools": ["PythonTool"],
+    "temperature": 0.5
+  }
+]
+```
+
+### Available Tool Types
+
+The following built-in tool types can be used:
+- `SearchTool`: Internal document search
+- `WebSearchTool`: Internet/web search
+- `ImageGenerationTool`: Image generation
+- `PythonTool`: Python code execution
+- `OpenURLTool`: Open and read URLs
+
+### Braintrust Dashboard
+
+After running evaluations, you can view results in the Braintrust dashboard. The evaluation will report:
+- `tool_assertion`: Score of 1.0 if tool assertions passed (or no assertions configured), 0.0 if failed
+- Metadata including `tools_called`, `tools_called_count`, and assertion details

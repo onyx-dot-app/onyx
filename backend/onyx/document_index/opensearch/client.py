@@ -1,7 +1,7 @@
-from enum import StrEnum
 from typing import Any
 
 from opensearchpy import OpenSearch
+from opensearchpy.exceptions import TransportError
 
 from onyx.configs.app_configs import OPENSEARCH_ADMIN_PASSWORD
 from onyx.configs.app_configs import OPENSEARCH_ADMIN_USERNAME
@@ -12,14 +12,6 @@ from onyx.utils.logger import setup_logger
 
 
 logger = setup_logger(__name__)
-
-
-class OpenSearchIndexingResult(StrEnum):
-    CREATED = "created"
-    DELETED = "deleted"
-    NOOP = "noop"
-    NOT_FOUND = "not_found"
-    UPDATED = "updated"
 
 
 class OpenSearchClient:
@@ -85,18 +77,25 @@ class OpenSearchClient:
         Returns:
             True if the index was deleted, False if it did not exist.
         """
-        if self._client.indices.exists(index=self._index_name):
-            response = self._client.indices.delete(index=self._index_name)
-            if not response.get("acknowledged", False):
-                raise RuntimeError(f"Failed to delete index {self._index_name}.")
-            return True
-        return False
+        if not self._client.indices.exists(index=self._index_name):
+            logger.warning(
+                f"Tried to delete index {self._index_name} but it does not exist."
+            )
+            return False
 
-    def validate_index(self, mappings: dict[str, Any]) -> bool:
+        response = self._client.indices.delete(index=self._index_name)
+        if not response.get("acknowledged", False):
+            raise RuntimeError(f"Failed to delete index {self._index_name}.")
+        return True
+
+    def validate_index(self, expected_mappings: dict[str, Any]) -> bool:
         """Validates the index.
+
+        Short-circuit returns False on the first mismatch. Logs the mismatch.
 
         See the OpenSearch documentation for more information on the index
         mappings.
+        https://docs.opensearch.org/latest/mappings/
 
         Args:
             mappings: The expected mappings of the index to validate.
@@ -108,13 +107,62 @@ class OpenSearchClient:
             True if the index is valid, False if it is not based on the mappings
                 supplied.
         """
-        raise NotImplementedError("Not implemented.")
+        # OpenSearch's documentation makes no mention of what happens when you
+        # invoke client.indices.get on an index that does not exist, so we check
+        # for existence explicitly just to be sure.
+        exists_response = self._client.indices.exists(index=self._index_name)
+        if not exists_response:
+            logger.warning(
+                f"Tried to validate index {self._index_name} but it does not exist."
+            )
+            return False
+        get_result = self._client.indices.get(index=self._index_name)
+        index_info: dict[str, Any] = get_result.get(self._index_name, {})
+        if not index_info:
+            raise ValueError(
+                f"Bug: OpenSearch did not return any index info for index {self._index_name}, "
+                "even though it confirmed that the index exists."
+            )
+        index_mapping_properties: dict[str, Any] = index_info.get("mappings", {}).get(
+            "properties", {}
+        )
+        expected_mapping_properties: dict[str, Any] = expected_mappings.get(
+            "properties", {}
+        )
+        assert (
+            expected_mapping_properties
+        ), "Bug: No properties were found in the provided expected mappings."
+
+        for property in expected_mapping_properties:
+            if property not in index_mapping_properties:
+                logger.warning(
+                    f'The field "{property}" was not found in the index {self._index_name}.'
+                )
+                return False
+
+            expected_property_type = expected_mapping_properties[property].get(
+                "type", ""
+            )
+            assert (
+                expected_property_type
+            ), f'Bug: The field "{property}" in the supplied expected schema mappings has no type.'
+
+            index_property_type = index_mapping_properties[property].get("type", "")
+            if expected_property_type != index_property_type:
+                logger.warning(
+                    f'The field "{property}" in the index {self._index_name} has type {index_property_type} '
+                    f"but the expected type is {expected_property_type}."
+                )
+                return False
+
+        return True
 
     def update_settings(self, settings: dict[str, Any]) -> None:
         """Updates the settings of the index.
 
         See the OpenSearch documentation for more information on the index
         settings.
+        https://docs.opensearch.org/latest/install-and-configure/configuring-opensearch/index-settings/
 
         Args:
             settings: The settings to update the index with.
@@ -122,12 +170,13 @@ class OpenSearchClient:
         Raises:
             Exception: There was an error updating the settings of the index.
         """
-        raise NotImplementedError("Not implemented.")
+        # TODO(andrei): Implement this.
+        raise NotImplementedError
 
-    def index_document(self, document: DocumentChunk) -> OpenSearchIndexingResult:
+    def index_document(self, document: DocumentChunk) -> None:
         """Indexes a document.
 
-        TODO(andrei): Check if the doc ID exists before indexing it!
+        Indexing will fail if a document with the same ID already exists.
 
         Args:
             document: The document to index. In Onyx this is a chunk of a
@@ -135,50 +184,103 @@ class OpenSearchClient:
                 well.
 
         Raises:
-            Exception: There was an error indexing the document.
-
-        Returns:
-            The result of the indexing operation.
+            Exception: There was an error indexing the document. This includes
+                the case where a document with the same ID already exists.
         """
         document_chunk_id: str = document.get_opensearch_doc_chunk_id()
         body: dict[str, Any] = document.model_dump(exclude_none=True)
-        result = self._client.index(
+        # client.create will raise if a doc with the same ID exists.
+        # client.index does not do this.
+        result = self._client.create(
             index=self._index_name, id=document_chunk_id, body=body
         )
         result_id = result.get("_id", "")
+        # Sanity check.
         if result_id != document_chunk_id:
             raise RuntimeError(
-                f"OpenSearch responded with ID {id} instead of {document_chunk_id} which is the ID it was given."
+                f'Upon trying to index a document, OpenSearch responded with ID "{result_id}" '
+                f'instead of "{document_chunk_id}" which is the ID it was given.'
             )
         result_string: str = result.get("result", "")
         match result_string:
             case "created":
-                return OpenSearchIndexingResult.CREATED
-            case "deleted":
-                return OpenSearchIndexingResult.DELETED
-            case "noop":
-                return OpenSearchIndexingResult.NOOP
-            case "not_found":
-                return OpenSearchIndexingResult.NOT_FOUND
+                return
+            # Sanity check.
             case "updated":
-                return OpenSearchIndexingResult.UPDATED
+                raise RuntimeError(
+                    f'The OpenSearch client returned result "updated" for indexing document chunk "{document_chunk_id}". '
+                    "This indicates that a document chunk with that ID already exists, which is not expected."
+                )
             case _:
                 raise RuntimeError(
-                    f"Unknown OpenSearch indexing result: {result_string}."
+                    f'Unknown OpenSearch indexing result: "{result_string}".'
                 )
 
-    def delete_document(self) -> None:
-        # TODO(andrei): For OS delete returns 404 if not found.
-        raise NotImplementedError("Not implemented.")
+    def delete_document(self, document_chunk_id: str) -> bool:
+        """Deletes a document.
+
+        Args:
+            document_chunk_id: The OpenSearch ID of the document chunk to
+                delete.
+
+        Raises:
+            Exception: There was an error deleting the document.
+
+        Returns:
+            True if the document was deleted, False if it was not found.
+        """
+        try:
+            result = self._client.delete(index=self._index_name, id=document_chunk_id)
+        except TransportError as e:
+            if e.status_code == 404:
+                return False
+            else:
+                raise e
+
+        result_string: str = result.get("result", "")
+        match result_string:
+            case "deleted":
+                return True
+            case "not_found":
+                return False
+            case _:
+                raise RuntimeError(
+                    f'Unknown OpenSearch deletion result: "{result_string}".'
+                )
 
     def update_document(self) -> None:
+        # TODO(andrei): Implement this.
         raise NotImplementedError("Not implemented.")
 
-    def get_document(self) -> DocumentChunk:
-        raise NotImplementedError("Not implemented.")
+    def get_document(self, document_chunk_id: str) -> DocumentChunk:
+        """Gets a document.
 
-    def check_if_document_exists(self, document_chunk_id: str) -> bool:
-        raise NotImplementedError("Not implemented.")
+        Will raise an exception if the document is not found.
+
+        Args:
+            document_chunk_id: The OpenSearch ID of the document chunk to get.
+
+        Raises:
+            Exception: There was an error getting the document. This includes
+                the case where the document is not found.
+
+        Returns:
+            The document chunk.
+        """
+        result = self._client.get(index=self._index_name, id=document_chunk_id)
+        found_result: bool = result.get("found", False)
+        if not found_result:
+            raise RuntimeError(
+                f'Document chunk with ID "{document_chunk_id}" was not found.'
+            )
+
+        document_chunk_source: dict[str, Any] | None = result.get("_source")
+        if not document_chunk_source:
+            raise RuntimeError(
+                f'Document chunk with ID "{document_chunk_id}" has no data.'
+            )
+
+        return DocumentChunk.model_validate(document_chunk_source)
 
     def create_search_pipeline(
         self,
@@ -189,6 +291,7 @@ class OpenSearchClient:
 
         See the OpenSearch documentation for more information on the search
         pipeline body.
+        https://docs.opensearch.org/latest/search-plugins/search-pipelines/index/
 
         Args:
             pipeline_id: The ID of the search pipeline to create.
@@ -217,28 +320,64 @@ class OpenSearchClient:
     def search(
         self, body: dict[str, Any], search_pipeline_id: str | None
     ) -> list[DocumentChunk]:
+        """Searches the index.
+
+        Args:
+            body: The body of the search request. See the OpenSearch
+                documentation for more information on search request bodies.
+            search_pipeline_id: The ID of the search pipeline to use. If None,
+                the default search pipeline will be used.
+
+        Raises:
+            Exception: There was an error searching the index.
+
+        Returns:
+            List of document chunks that match the search request.
+        """
         if search_pipeline_id:
-            result: dict[Any, Any] = self._client.search(
+            result = self._client.search(
                 index=self._index_name, search_pipeline=search_pipeline_id, body=body
             )
         else:
-            result: dict[Any, Any] = self._client.search(
-                index=self._index_name, body=body
-            )
+            result = self._client.search(index=self._index_name, body=body)
 
         if result.get("timed_out", False):
             raise RuntimeError(f"Search timed out for index {self._index_name}.")
-        hits_first_layer: dict[Any, Any] = result.get("hits", {})
+        hits_first_layer: dict[str, Any] = result.get("hits", {})
         if not hits_first_layer:
             raise RuntimeError(
                 f"Hits field missing from response when trying to search index {self._index_name}."
             )
         hits_second_layer: list[Any] = hits_first_layer.get("hits", [])
 
-        result_chunks: list[DocumentChunk] = [
-            DocumentChunk.model_validate(hit) for hit in hits_second_layer
-        ]
+        result_chunks: list[DocumentChunk] = []
+        for hit in hits_second_layer:
+            document_chunk_source: dict[str, Any] | None = hit.get("_source")
+            if not document_chunk_source:
+                raise RuntimeError(
+                    f"Document chunk with ID \"{hit.get('_id', '')}\" has no data."
+                )
+            result_chunks.append(DocumentChunk.model_validate(document_chunk_source))
         return result_chunks
+
+    def refresh_index(self) -> None:
+        """Refreshes the index to make recent changes searchable.
+
+        In OpenSearch, documents are not immediately searchable after indexing.
+        This method forces a refresh to make them available for search.
+
+        Raises:
+            Exception: There was an error refreshing the index.
+        """
+        self._client.indices.refresh(index=self._index_name)
+
+    def ping(self) -> bool:
+        """Pings the OpenSearch cluster.
+
+        Returns:
+            True if OpenSearch could be reached, False if it could not.
+        """
+        return self._client.ping()
 
     def close(self) -> None:
         """Closes the client.

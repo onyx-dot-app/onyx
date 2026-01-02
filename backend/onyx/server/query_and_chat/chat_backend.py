@@ -120,9 +120,14 @@ def _get_available_tokens_for_persona(
     llm = get_llm_for_persona(persona=persona, user=user)
     token_counter = get_llm_token_counter(llm)
 
-    system_prompt = get_default_base_system_prompt(db_session)
-    agent_prompt = persona.system_prompt + " " if persona.system_prompt else ""
-    combined_prompt_tokens = token_counter(agent_prompt + system_prompt)
+    if persona.replace_base_system_prompt and persona.system_prompt:
+        # User has opted to replace the base system prompt entirely
+        combined_prompt_tokens = token_counter(persona.system_prompt)
+    else:
+        # Default behavior: prepend custom prompt to base system prompt
+        system_prompt = get_default_base_system_prompt(db_session)
+        agent_prompt = persona.system_prompt + " " if persona.system_prompt else ""
+        combined_prompt_tokens = token_counter(agent_prompt + system_prompt)
 
     return _get_non_reserved_input_tokens(
         model_max_input_tokens=llm.config.max_input_tokens,

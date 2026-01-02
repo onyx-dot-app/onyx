@@ -68,6 +68,7 @@ export default function InputDatePicker({
               const now = new Date();
               setSelectedDate(now);
               setDisplayedMonth(now);
+              setOpen(false);
             }}
           >
             Today

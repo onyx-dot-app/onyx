@@ -15,6 +15,7 @@ from http.client import RemoteDisconnected
 from typing import Any
 from typing import cast
 from urllib.error import URLError
+from urllib.parse import urlparse
 
 from pydantic import BaseModel
 from redis import Redis
@@ -41,6 +42,7 @@ from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import CredentialsConnector
 from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
+from onyx.connectors.interfaces import NormalizationResult
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import BasicExpertInfo
@@ -625,6 +627,43 @@ class SlackConnector(
         self.use_redis: bool = use_redis
         # self.delay_lock: str | None = None  # the redis key for the shared lock
         # self.delay_key: str | None = None  # the redis key for the shared delay
+
+    @classmethod
+    @override
+    def normalize_url(cls, url: str) -> NormalizationResult:
+        """Normalize a Slack URL to extract channel_id__thread_ts format."""
+        parsed = urlparse(url)
+        if "slack.com" not in parsed.netloc.lower():
+            return NormalizationResult(normalized_url=None, use_default=False)
+
+        # Slack document IDs are format: channel_id__thread_ts
+        # Extract from URL pattern: .../archives/{channel_id}/p{timestamp}
+        path_parts = parsed.path.split("/")
+        if "archives" not in path_parts:
+            return NormalizationResult(normalized_url=None, use_default=False)
+
+        archives_idx = path_parts.index("archives")
+        if archives_idx + 1 >= len(path_parts):
+            return NormalizationResult(normalized_url=None, use_default=False)
+
+        channel_id = path_parts[archives_idx + 1]
+        if archives_idx + 2 >= len(path_parts):
+            return NormalizationResult(normalized_url=None, use_default=False)
+
+        thread_part = path_parts[archives_idx + 2]
+        if not thread_part.startswith("p"):
+            return NormalizationResult(normalized_url=None, use_default=False)
+
+        # Convert p1234567890123456 to 1234567890.123456 format
+        timestamp_str = thread_part[1:]  # Remove 'p' prefix
+        if len(timestamp_str) == 16:
+            # Insert dot at position 10 to match canonical format
+            thread_ts = f"{timestamp_str[:10]}.{timestamp_str[10:]}"
+        else:
+            thread_ts = timestamp_str
+
+        normalized = f"{channel_id}__{thread_ts}"
+        return NormalizationResult(normalized_url=normalized, use_default=False)
 
     @staticmethod
     def make_credential_prefix(key: str) -> str:

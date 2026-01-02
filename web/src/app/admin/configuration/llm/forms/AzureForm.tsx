@@ -12,6 +12,7 @@ import { FormActionButtons } from "./components/FormActionButtons";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
+  buildAvailableModelConfigurations,
   submitLLMProvider,
   BaseLLMFormValues,
   LLM_FORM_CLASS_NAME,
@@ -65,8 +66,12 @@ export function AzureForm({
         setIsTesting,
         testError,
         setTestError,
-        modelConfigurations,
+        wellKnownLLMProvider,
       }: ProviderFormContext) => {
+        const modelConfigurations = buildAvailableModelConfigurations(
+          existingLlmProvider,
+          wellKnownLLMProvider
+        );
         const initialValues: AzureFormValues = {
           ...buildDefaultInitialValues(
             existingLlmProvider,

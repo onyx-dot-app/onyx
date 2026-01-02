@@ -3,12 +3,12 @@ import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { OptionsList } from "./OptionsList";
 import { ComboBoxOption } from "../types";
-import { DropdownPosition } from "@/hooks/useDropdownPosition";
 
 interface ComboBoxDropdownProps {
   isOpen: boolean;
   disabled: boolean;
-  dropdownPosition: DropdownPosition | null;
+  floatingStyles: React.CSSProperties;
+  setFloatingRef: (node: HTMLDivElement | null) => void;
   fieldId: string;
   placeholder: string;
   matchedOptions: ComboBoxOption[];
@@ -21,6 +21,12 @@ interface ComboBoxDropdownProps {
   onMouseEnter: (index: number) => void;
   onMouseMove: () => void;
   isExactMatch: (option: ComboBoxOption) => boolean;
+  /** Current input value for creating new option */
+  inputValue: string;
+  /** Whether to show create option when no exact match */
+  allowCreate: boolean;
+  /** Whether to show create option (pre-computed by parent) */
+  showCreateOption: boolean;
 }
 
 /**
@@ -35,7 +41,8 @@ export const ComboBoxDropdown = forwardRef<
     {
       isOpen,
       disabled,
-      dropdownPosition,
+      floatingStyles,
+      setFloatingRef,
       fieldId,
       placeholder,
       matchedOptions,
@@ -48,6 +55,9 @@ export const ComboBoxDropdown = forwardRef<
       onMouseEnter,
       onMouseMove,
       isExactMatch,
+      inputValue,
+      allowCreate,
+      showCreateOption,
     },
     ref
   ) => {
@@ -66,36 +76,35 @@ export const ComboBoxDropdown = forwardRef<
         if (highlightedElement) {
           highlightedElement.scrollIntoView({
             block: "nearest",
-            behavior: "smooth",
+            behavior: "instant",
           });
         }
       }
     }, [highlightedIndex, isOpen, ref]);
 
-    if (
-      !isOpen ||
-      disabled ||
-      !dropdownPosition ||
-      typeof document === "undefined"
-    ) {
+    if (!isOpen || disabled || typeof document === "undefined") {
       return null;
     }
 
     return createPortal(
       <div
-        ref={ref}
+        ref={(node) => {
+          // Handle both the forwarded ref and the floating ref
+          setFloatingRef(node);
+          if (typeof ref === "function") {
+            ref(node);
+          } else if (ref) {
+            ref.current = node;
+          }
+        }}
         id={`${fieldId}-listbox`}
         role="listbox"
         aria-label={placeholder}
         className={cn(
-          "fixed z-[10000] bg-background-neutral-00 border border-border-02 rounded-12 shadow-02 max-h-60 overflow-y-auto overflow-x-hidden p-1 pointer-events-auto touch-auto"
+          "z-[10000] bg-background-neutral-00 border border-border-02 rounded-12 shadow-02 max-h-60 overflow-y-auto overflow-x-hidden p-1 pointer-events-auto touch-auto"
         )}
         style={{
-          top: `${dropdownPosition.top}px`,
-          left: `${dropdownPosition.left}px`,
-          ...(dropdownPosition.width && {
-            width: `${dropdownPosition.width}px`,
-          }),
+          ...floatingStyles,
           // Ensure the dropdown can scroll independently
           overscrollBehavior: "contain",
         }}
@@ -120,6 +129,9 @@ export const ComboBoxDropdown = forwardRef<
           onMouseEnter={onMouseEnter}
           onMouseMove={onMouseMove}
           isExactMatch={isExactMatch}
+          inputValue={inputValue}
+          allowCreate={allowCreate}
+          showCreateOption={showCreateOption}
         />
       </div>,
       document.body

@@ -106,7 +106,7 @@ test.describe("First user onboarding flow", () => {
       });
     });
 
-    await page.goto("http://localhost:3000/chat");
+    await page.goto("/chat");
     await page.waitForLoadState("networkidle");
 
     const dismissNewTeamModal = async () => {

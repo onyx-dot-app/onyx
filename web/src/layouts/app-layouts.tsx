@@ -28,7 +28,8 @@
 
 "use client";
 
-import { cn, noProp } from "@/lib/utils";
+import { cn, ensureHrefProtocol, noProp } from "@/lib/utils";
+import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import { useCallback, useMemo, useState, useEffect } from "react";
@@ -60,7 +61,33 @@ import {
   SvgSidebar,
   SvgTrash,
 } from "@opal/icons";
+import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
+
+const footerMarkdownComponents = {
+  p: ({ children }) => (
+    //dont remove the !my-0 class, it's important for the markdown to render without any alignment issues
+    <Text as="p" text03 secondaryAction className="!my-0 text-center">
+      {children}
+    </Text>
+  ),
+  a: ({ node, href, className, children, ...rest }) => {
+    const fullHref = ensureHrefProtocol(href);
+    return (
+      <a
+        href={fullHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        {...rest}
+        className={cn(className, "underline underline-offset-2")}
+      >
+        <Text as="span" text03 secondaryAction>
+          {children}
+        </Text>
+      </a>
+    );
+  },
+} satisfies Partial<Components>;
 
 function AppHeader() {
   const settings = useSettingsContext();
@@ -290,8 +317,13 @@ function AppHeader() {
           </div>
 
           {/* Center - contains the custom-header-content */}
-          <div className="flex-1 flex flex-col items-center">
-            <Text as="p" text03>
+          <div className="flex-1 flex flex-col items-center overflow-hidden">
+            <Text
+              as="p"
+              text03
+              mainUiBody
+              className="text-center break-words w-full"
+            >
               {customHeaderContent}
             </Text>
           </div>
@@ -340,16 +372,18 @@ function AppFooter() {
   const settings = useSettingsContext();
 
   const customFooterContent =
-    settings?.enterpriseSettings?.custom_lower_disclaimer_content;
-
-  // When there's custom footer content, show it
-  if (!customFooterContent) return null;
+    settings?.enterpriseSettings?.custom_lower_disclaimer_content ||
+    `[Onyx ${
+      settings?.webVersion || "dev"
+    }](https://www.onyx.app/) - Open Source AI Platform`;
 
   return (
     <footer className="w-full flex flex-row justify-center items-center gap-2 py-3">
-      <Text as="p" text03 secondaryBody>
-        {customFooterContent}
-      </Text>
+      <MinimalMarkdown
+        content={customFooterContent}
+        className={cn("max-w-full text-center")}
+        components={footerMarkdownComponents}
+      />
     </footer>
   );
 }

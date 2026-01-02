@@ -2,12 +2,8 @@ import os
 import re
 from typing import Any
 
-import braintrust
-
 from onyx.configs.app_configs import BRAINTRUST_API_KEY
 from onyx.configs.app_configs import BRAINTRUST_PROJECT
-from onyx.tracing.braintrust_tracing_processor import BraintrustTracingProcessor
-from onyx.tracing.framework import set_trace_processors
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -74,6 +70,12 @@ def setup_braintrust_if_creds_available() -> None:
     if not BRAINTRUST_API_KEY:
         logger.info("Braintrust API key not provided, skipping Braintrust setup")
         return
+
+    # Lazy imports to avoid loading braintrust when not needed
+    import braintrust
+
+    from onyx.tracing.braintrust_tracing_processor import BraintrustTracingProcessor
+    from onyx.tracing.framework import set_trace_processors
 
     braintrust_logger = braintrust.init_logger(
         project=BRAINTRUST_PROJECT,

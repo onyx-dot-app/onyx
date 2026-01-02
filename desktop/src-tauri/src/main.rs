@@ -427,16 +427,30 @@ fn setup_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 
     let app_handle = app.clone();
 
+    // Avoid hijacking the system-wide Cmd+R on macOS.
+    #[cfg(target_os = "macos")]
+    let shortcuts = [
+        new_chat,
+        back,
+        forward,
+        new_window_shortcut,
+        show_app,
+        open_settings,
+    ];
+
+    #[cfg(not(target_os = "macos"))]
+    let shortcuts = [
+        new_chat,
+        reload,
+        back,
+        forward,
+        new_window_shortcut,
+        show_app,
+        open_settings,
+    ];
+
     app.global_shortcut().on_shortcuts(
-        [
-            new_chat,
-            reload,
-            back,
-            forward,
-            new_window_shortcut,
-            show_app,
-            open_settings,
-        ],
+        shortcuts,
         move |_app, shortcut, _event| {
             if shortcut == &new_chat {
                 trigger_new_chat(&app_handle);

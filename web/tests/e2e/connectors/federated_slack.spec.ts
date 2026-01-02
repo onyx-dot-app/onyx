@@ -9,7 +9,7 @@ const SLACK_CLIENT_SECRET = process.env.SLACK_CLIENT_SECRET;
 
 async function createFederatedSlackConnector(page: Page) {
   // Navigate to add connector page
-  await page.goto("http://localhost:3000/admin/add-connector");
+  await page.goto("/admin/add-connector");
   await page.waitForLoadState("networkidle");
 
   // Click on Slack connector tile (specifically the one with "Logo Slack" text, not "Slack Bots")
@@ -72,7 +72,7 @@ async function openConnectorsTab(page: Page) {
  */
 async function deleteFederatedSlackConnector(page: Page) {
   // Navigate to admin indexing status page
-  await page.goto("http://localhost:3000/admin/indexing/status");
+  await page.goto("/admin/indexing/status");
   await page.waitForLoadState("networkidle");
 
   // Expand the Slack section first (summary row toggles open on click)
@@ -146,7 +146,7 @@ test.skip("Federated Slack Connector - Create, OAuth Modal, and User Settings Fl
     await loginAsRandomUser(page);
 
     // Navigate back to main page and verify OAuth modal appears
-    await page.goto("http://localhost:3000/chat");
+    await page.goto("/chat");
     await page.waitForLoadState("networkidle");
 
     // Check if the OAuth modal appears

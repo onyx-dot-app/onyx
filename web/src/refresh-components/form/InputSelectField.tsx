@@ -23,6 +23,7 @@ export default function InputSelectField({
 
   return (
     <InputSelect
+      name={name}
       value={field.value}
       onValueChange={onChange}
       error={!!hasError}
