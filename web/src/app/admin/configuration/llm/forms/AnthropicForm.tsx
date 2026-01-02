@@ -93,7 +93,7 @@ export function AnthropicForm({
               {(formikProps) => {
                 return (
                   <Form className="flex flex-col min-h-0">
-                    <Modal.Body className="overflow-y-auto min-h-0">
+                    <Modal.Body className="overflow-y-auto min-h-0 w-full">
                       <DisplayNameField disabled={!!existingLlmProvider} />
 
                       <ApiKeyField />
