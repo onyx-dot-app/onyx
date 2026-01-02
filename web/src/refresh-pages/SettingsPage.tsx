@@ -22,7 +22,6 @@ import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Button from "@/refresh-components/buttons/Button";
 import Switch from "@/refresh-components/inputs/Switch";
 import { SubLabel } from "@/components/Field";
-import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { useUser } from "@/components/user/UserProvider";
 import { useTheme } from "next-themes";
@@ -42,6 +41,7 @@ import { useCCPairs } from "@/lib/hooks/useCCPairs";
 import { SourceIcon } from "@/components/SourceIcon";
 import { ValidSources } from "@/lib/types";
 import { getSourceMetadata } from "@/lib/sources";
+import Separator from "@/refresh-components/Separator";
 
 function GeneralSettings() {
   const {
@@ -75,98 +75,115 @@ function GeneralSettings() {
   return (
     <>
       {popup}
-      <GeneralLayouts.Section gap={1}>
-        <Card>
-          <InputLayouts.Horizontal
-            label="Full Name"
-            description="We'll display this name in the app."
-          >
-            <InputTypeIn
-              placeholder="Your name"
-              value={personalizationValues.name}
-              onChange={(e) =>
-                updatePersonalizationField("name", e.target.value)
-              }
-            />
-          </InputLayouts.Horizontal>
-          <InputLayouts.Horizontal
-            label="Work Role"
-            description="Share your role to better tailor responses."
-          >
-            <InputTypeIn
-              placeholder="Your role"
-              value={personalizationValues.role}
-              onChange={(e) =>
-                updatePersonalizationField("role", e.target.value)
-              }
-            />
-          </InputLayouts.Horizontal>
-          <div className="flex justify-end">
-            <Button
-              onClick={() => {
-                void handleSavePersonalization();
-              }}
-              disabled={
-                isSavingPersonalization ||
-                personalizationValues.name.length === 0
-              }
+
+      <GeneralLayouts.Section gap={2}>
+        <GeneralLayouts.Section gap={0.75}>
+          <InputLayouts.Label label="Profile" />
+          <Card>
+            <InputLayouts.Horizontal
+              label="Full Name"
+              description="We'll display this name in the app."
             >
-              {isSavingPersonalization ? "Saving..." : "Save"}
-            </Button>
-          </div>
-        </Card>
-
-        <Card>
-          <InputLayouts.Horizontal
-            label="Color Mode"
-            description="Select your preferred color mode for the UI."
-          >
-            <InputSelect
-              value={theme}
-              onValueChange={(value) => {
-                setTheme(value);
-                updateUserThemePreference(value as ThemePreference);
-              }}
+              <InputTypeIn
+                placeholder="Your name"
+                value={personalizationValues.name}
+                onChange={(e) =>
+                  updatePersonalizationField("name", e.target.value)
+                }
+              />
+            </InputLayouts.Horizontal>
+            <InputLayouts.Horizontal
+              label="Work Role"
+              description="Share your role to better tailor responses."
             >
-              <InputSelect.Trigger />
-              <InputSelect.Content>
-                <InputSelect.Item value={ThemePreference.SYSTEM} icon={SvgCpu}>
-                  System
-                </InputSelect.Item>
-                <InputSelect.Item value={ThemePreference.LIGHT} icon={SvgSun}>
-                  Light
-                </InputSelect.Item>
-                <InputSelect.Item value={ThemePreference.DARK} icon={SvgMoon}>
-                  Dark
-                </InputSelect.Item>
-              </InputSelect.Content>
-            </InputSelect>
-          </InputLayouts.Horizontal>
+              <InputTypeIn
+                placeholder="Your role"
+                value={personalizationValues.role}
+                onChange={(e) =>
+                  updatePersonalizationField("role", e.target.value)
+                }
+              />
+            </InputLayouts.Horizontal>
+            <div className="flex justify-end">
+              <Button
+                onClick={() => {
+                  void handleSavePersonalization();
+                }}
+                disabled={
+                  isSavingPersonalization ||
+                  personalizationValues.name.length === 0
+                }
+              >
+                {isSavingPersonalization ? "Saving..." : "Save"}
+              </Button>
+            </div>
+          </Card>
+        </GeneralLayouts.Section>
 
-          <InputLayouts.Horizontal
-            label="Auto-scroll"
-            description="Automatically scroll to new content"
-          >
-            <Switch
-              checked={user?.preferences.auto_scroll}
-              onCheckedChange={(checked) => {
-                updateUserAutoScroll(checked);
-              }}
-            />
-          </InputLayouts.Horizontal>
+        <GeneralLayouts.Section gap={0.75}>
+          <InputLayouts.Label label="Appearance" />
+          <Card>
+            <InputLayouts.Horizontal
+              label="Color Mode"
+              description="Select your preferred color mode for the UI."
+            >
+              <InputSelect
+                value={theme}
+                onValueChange={(value) => {
+                  setTheme(value);
+                  updateUserThemePreference(value as ThemePreference);
+                }}
+              >
+                <InputSelect.Trigger />
+                <InputSelect.Content>
+                  <InputSelect.Item
+                    value={ThemePreference.SYSTEM}
+                    icon={SvgCpu}
+                  >
+                    System
+                  </InputSelect.Item>
+                  <InputSelect.Item value={ThemePreference.LIGHT} icon={SvgSun}>
+                    Light
+                  </InputSelect.Item>
+                  <InputSelect.Item value={ThemePreference.DARK} icon={SvgMoon}>
+                    Dark
+                  </InputSelect.Item>
+                </InputSelect.Content>
+              </InputSelect>
+            </InputLayouts.Horizontal>
 
-          <InputLayouts.Horizontal
-            label="Prompt Shortcuts"
-            description="Enable keyboard shortcuts for prompts"
-          >
-            <Switch
-              checked={user?.preferences?.shortcut_enabled}
-              onCheckedChange={(checked) => {
-                updateUserShortcuts(checked);
-              }}
-            />
-          </InputLayouts.Horizontal>
-        </Card>
+            <InputLayouts.Horizontal
+              label="Auto-scroll"
+              description="Automatically scroll to new content"
+            >
+              <Switch
+                checked={user?.preferences.auto_scroll}
+                onCheckedChange={(checked) => {
+                  updateUserAutoScroll(checked);
+                }}
+              />
+            </InputLayouts.Horizontal>
+
+            <InputLayouts.Horizontal
+              label="Prompt Shortcuts"
+              description="Enable keyboard shortcuts for prompts"
+            >
+              <Switch
+                checked={user?.preferences?.shortcut_enabled}
+                onCheckedChange={(checked) => {
+                  updateUserShortcuts(checked);
+                }}
+              />
+            </InputLayouts.Horizontal>
+          </Card>
+        </GeneralLayouts.Section>
+
+        <Separator noPadding />
+
+        <GeneralLayouts.Section gap={0.75}>
+          <InputLayouts.Label label="Danger Zone" />
+          <Card></Card>
+        </GeneralLayouts.Section>
       </GeneralLayouts.Section>
     </>
   );
@@ -826,7 +843,7 @@ export default function SettingsPage() {
       <SettingsLayouts.Body>
         <div className="grid grid-cols-[auto_1fr]">
           {/* Left: Tab Navigation */}
-          <div className="flex flex-col px-2 py-6 w-[12.5rem]">
+          <div className="flex flex-col px-2 w-[12.5rem]">
             <SidebarTab
               transient={activeTab === 0}
               onClick={() => setActiveTab(0)}
@@ -856,7 +873,7 @@ export default function SettingsPage() {
           </div>
 
           {/* Right: Tab Content */}
-          <div className="px-4 py-6">
+          <div className="px-4">
             {activeTab === 0 && <GeneralSettings />}
             {activeTab === 1 && <ChatPreferencesSettings />}
             {activeTab === 2 && showAccountsAccessTab && (
