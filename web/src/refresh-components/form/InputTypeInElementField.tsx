@@ -1,5 +1,6 @@
 "use client";
 
+import * as GeneralLayouts from "@/layouts/general-layouts";
 import { useField } from "formik";
 import InputTypeIn, {
   InputTypeInProps,
@@ -29,7 +30,7 @@ export default function InputTypeInElementField({
   const isEmpty = !field.value || field.value.trim() === "";
 
   return (
-    <div className="flex flex-row items-center gap-1">
+    <GeneralLayouts.Section horizontal gap={0.25}>
       {/* Input */}
       <InputTypeIn
         {...inputProps}
@@ -48,6 +49,6 @@ export default function InputTypeInElementField({
         onClick={onRemove}
         tooltip="Remove"
       />
-    </div>
+    </GeneralLayouts.Section>
   );
 }

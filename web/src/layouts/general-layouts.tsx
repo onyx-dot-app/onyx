@@ -52,6 +52,11 @@ export interface SectionProps
   horizontal?: boolean;
   gap?: number;
   fit?: boolean;
+  wrap?: boolean;
+
+  start?: boolean;
+  center?: boolean;
+  end?: boolean;
 }
 
 export function Section({
@@ -59,15 +64,32 @@ export function Section({
   horizontal,
   gap = 1,
   fit,
+  wrap,
+  start,
+  center,
+  end,
   ...rest
 }: SectionProps) {
   // Determine direction: horizontal overrides vertical, default is vertical
   const direction = horizontal ? "flex-row" : "flex-col";
   const width = fit ? "w-fit" : "w-full";
+  const items = start
+    ? "items-start"
+    : center
+      ? "items-center"
+      : end
+        ? "items-end"
+        : "items-center";
 
   return (
     <div
-      className={cn("flex justify-center items-center", width, direction)}
+      className={cn(
+        "flex justify-center",
+        wrap && "flex-wrap",
+        items,
+        width,
+        direction
+      )}
       style={{ gap: `${gap}rem` }}
       {...rest}
     />

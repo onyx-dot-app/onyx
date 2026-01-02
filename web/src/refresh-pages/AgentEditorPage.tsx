@@ -319,7 +319,7 @@ function MCPServerCard({
           description={server.description ?? server.server_url}
           icon={getActionIcon(server.server_url, server.name)}
           rightChildren={
-            <div className="flex flex-row gap-2 items-center justify-center">
+            <GeneralLayouts.Section horizontal gap={0.5}>
               <EnabledCount
                 enabledCount={enabledCount}
                 totalCount={enabledTools.length}
@@ -337,10 +337,10 @@ function MCPServerCard({
                   actionsLayouts.setIsFolded(false);
                 }}
               />
-            </div>
+            </GeneralLayouts.Section>
           }
         >
-          <div className="flex flex-row gap-2 items-center justify-center">
+          <GeneralLayouts.Section horizontal gap={0.5}>
             <InputTypeIn
               placeholder="Search tools..."
               internal
@@ -355,7 +355,7 @@ function MCPServerCard({
             >
               {actionsLayouts.isFolded ? "Expand" : "Fold"}
             </Button>
-          </div>
+          </GeneralLayouts.Section>
         </ActionsLayouts.Header>
         <ActionsLayouts.Content>
           {isLoading ? (
@@ -411,7 +411,7 @@ function StarterMessages() {
   return (
     <FieldArray name="starter_messages">
       {(arrayHelpers) => (
-        <div className="flex flex-col gap-2">
+        <GeneralLayouts.Section gap={0.5}>
           {Array.from({ length: visibleCount }, (_, i) => (
             <InputTypeInElementField
               key={`starter_messages.${i}`}
@@ -423,7 +423,7 @@ function StarterMessages() {
               onRemove={() => arrayHelpers.remove(i)}
             />
           ))}
-        </div>
+        </GeneralLayouts.Section>
       )}
     </FieldArray>
   );
@@ -1011,7 +1011,7 @@ export default function AgentEditorPage({
 
                     {/* Agent Form Content */}
                     <SettingsLayouts.Body>
-                      <div className="flex flex-row gap-10 justify-between items-start w-full">
+                      <GeneralLayouts.Section horizontal gap={2.5} start>
                         <GeneralLayouts.Section>
                           <InputLayouts.Vertical name="name" label="Name">
                             <InputTypeInField
@@ -1041,7 +1041,7 @@ export default function AgentEditorPage({
                             <AgentIconEditor existingAgent={existingAgent} />
                           </InputLayouts.Vertical>
                         </GeneralLayouts.Section>
-                      </div>
+                      </GeneralLayouts.Section>
 
                       <Separator noPadding />
 
@@ -1071,7 +1071,7 @@ export default function AgentEditorPage({
                       <Separator noPadding />
 
                       <GeneralLayouts.Section>
-                        <div className="flex flex-col gap-4">
+                        <GeneralLayouts.Section gap={1}>
                           <InputLayouts.Label
                             name="knowledge"
                             label="Knowledge"
@@ -1112,7 +1112,7 @@ export default function AgentEditorPage({
                             {values.enable_knowledge &&
                               values.knowledge_source === "team_knowledge" &&
                               ((documentSets?.length ?? 0) > 0 ? (
-                                <div className="flex gap-2 flex-wrap">
+                                <GeneralLayouts.Section gap={0.5}>
                                   {documentSets!.map((documentSet) => (
                                     <DocumentSetSelectable
                                       key={documentSet.id}
@@ -1143,7 +1143,7 @@ export default function AgentEditorPage({
                                       }}
                                     />
                                   ))}
-                                </div>
+                                </GeneralLayouts.Section>
                               ) : (
                                 <CreateButton href="/admin/documents/sets/new">
                                   Create a Document Set
@@ -1152,7 +1152,7 @@ export default function AgentEditorPage({
 
                             {values.enable_knowledge &&
                               values.knowledge_source === "user_knowledge" && (
-                                <div className="flex flex-col gap-2">
+                                <GeneralLayouts.Section gap={0.5}>
                                   <FilePickerPopover
                                     trigger={(open) => (
                                       <CreateButton transient={open}>
@@ -1185,7 +1185,11 @@ export default function AgentEditorPage({
                                   />
 
                                   {values.user_file_ids.length > 0 && (
-                                    <div className="flex flex-wrap gap-2">
+                                    <GeneralLayouts.Section
+                                      horizontal
+                                      wrap
+                                      gap={0.5}
+                                    >
                                       {values.user_file_ids.map((fileId) => {
                                         const file = allRecentFiles.find(
                                           (f) => f.id === fileId
@@ -1213,12 +1217,12 @@ export default function AgentEditorPage({
                                           />
                                         );
                                       })}
-                                    </div>
+                                    </GeneralLayouts.Section>
                                   )}
-                                </div>
+                                </GeneralLayouts.Section>
                               )}
                           </Card>
-                        </div>
+                        </GeneralLayouts.Section>
                       </GeneralLayouts.Section>
 
                       <Separator noPadding />
@@ -1294,7 +1298,7 @@ export default function AgentEditorPage({
 
                             {/* MCP tools */}
                             {mcpServersWithTools.length > 0 && (
-                              <div className="flex flex-col gap-2">
+                              <GeneralLayouts.Section gap={0.5}>
                                 {mcpServersWithTools.map(
                                   ({ server, tools, isLoading }) => (
                                     <MCPServerCard
@@ -1305,16 +1309,16 @@ export default function AgentEditorPage({
                                     />
                                   )
                                 )}
-                              </div>
+                              </GeneralLayouts.Section>
                             )}
 
                             {/* OpenAPI tools */}
                             {openApiTools.length > 0 && (
-                              <div className="flex flex-col gap-2">
+                              <GeneralLayouts.Section gap={0.5}>
                                 {openApiTools.map((tool) => (
                                   <OpenApiToolCard key={tool.id} tool={tool} />
                                 ))}
-                              </div>
+                              </GeneralLayouts.Section>
                             )}
                           </>
                         </GeneralLayouts.Section>
@@ -1361,7 +1365,7 @@ export default function AgentEditorPage({
                             </InputLayouts.Horizontal>
                           </Card>
 
-                          <div className="flex flex-col gap-1">
+                          <GeneralLayouts.Section gap={0.25}>
                             <InputLayouts.Vertical
                               name="reminders"
                               label="Reminders"
@@ -1378,7 +1382,7 @@ export default function AgentEditorPage({
                               progresses. This should be brief and not interfere
                               with the user messages.
                             </Text>
-                          </div>
+                          </GeneralLayouts.Section>
                         </GeneralLayouts.Section>
                       </SimpleCollapsible>
                     </SettingsLayouts.Body>

@@ -43,7 +43,7 @@ export type CardProps = WithoutStyles<React.HTMLAttributes<HTMLDivElement>>;
 export default function Card(props: CardProps) {
   return (
     <div
-      className="bg-background-tint-00 p-4 flex flex-col gap-4 border rounded-16"
+      className="bg-background-tint-00 p-4 flex flex-col gap-4 border rounded-16 w-full h-full"
       {...props}
     />
   );
