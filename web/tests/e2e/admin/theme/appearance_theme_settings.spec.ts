@@ -1,5 +1,7 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, Page } from "@playwright/test";
 import { loginAs, loginAsRandomUser } from "../../utils/auth";
+
+const BASE_URL = "http://localhost:3000";
 
 const TEST_THEME = {
   applicationName: "Acme Corp Chat",
@@ -11,8 +13,12 @@ const TEST_THEME = {
   consentPrompt: "I agree to the terms and conditions",
 };
 
+/**
+ * Handles the first visit notice modal - verifies content and dismisses it.
+ * Only checks for consent checkbox if consentPrompt is provided.
+ */
 async function handleFirstVisitNotice(
-  page: import("@playwright/test").Page,
+  page: Page,
   expected: typeof TEST_THEME
 ) {
   // Wait for modal to appear
@@ -25,12 +31,12 @@ async function handleFirstVisitNotice(
   // Verify notice content
   await expect(modal.getByText(expected.noticeContent)).toBeVisible();
 
-  // Verify consent prompt is visible
-  await expect(modal.getByText(expected.consentPrompt)).toBeVisible();
-
-  // Check the consent checkbox
-  const checkbox = modal.getByRole("checkbox");
-  await checkbox.check();
+  // Verify consent prompt and check checkbox if consent is required
+  if (expected.consentPrompt) {
+    await expect(modal.getByText(expected.consentPrompt)).toBeVisible();
+    const checkbox = modal.getByRole("checkbox");
+    await checkbox.check();
+  }
 
   // Click Start button to dismiss
   const startButton = modal.getByRole("button", { name: /start/i });
@@ -40,10 +46,20 @@ async function handleFirstVisitNotice(
   await expect(modal).not.toBeVisible({ timeout: 5000 });
 }
 
-async function verifyChatPageBranding(
-  page: import("@playwright/test").Page,
-  expected: typeof TEST_THEME
-) {
+/**
+ * Dismisses the first visit notice modal if it's visible.
+ */
+async function dismissModalIfVisible(page: Page, expected: typeof TEST_THEME) {
+  const modal = page.getByRole("dialog");
+  if (await modal.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await handleFirstVisitNotice(page, expected);
+  }
+}
+
+/**
+ * Verifies all branding elements are visible on the chat page.
+ */
+async function verifyChatPageBranding(page: Page, expected: typeof TEST_THEME) {
   // Verify sidebar branding - application name should be visible
   // The Logo component renders the application name in a Truncated component
   await expect(page.getByText(expected.applicationName).first()).toBeVisible({
@@ -73,7 +89,7 @@ test.describe("Appearance Theme Settings", () => {
       await loginAs(page, "admin");
 
       // Navigate to theme settings page
-      await page.goto("http://localhost:3000/admin/theme");
+      await page.goto(`${BASE_URL}/admin/theme`);
       await page.waitForLoadState("networkidle");
 
       // Fill Application Display Name
@@ -100,18 +116,15 @@ test.describe("Appearance Theme Settings", () => {
       });
       await footerTextarea.fill(TEST_THEME.chatFooterText);
 
-      // Enable First Visit Notice
-      const firstVisitToggle = page
-        .locator("label", { hasText: /show first visit notice/i })
-        .locator("..")
-        .getByRole("switch");
+      // Enable First Visit Notice using aria-label
+      const firstVisitToggle = page.getByLabel("Show First Visit Notice");
       await firstVisitToggle.click();
-      await page.waitForTimeout(300);
 
-      // Fill Notice Header (appears after toggle)
+      // Wait for Notice Header input to appear (proves toggle worked)
       const noticeHeaderInput = page.getByRole("textbox", {
         name: /notice header/i,
       });
+      await expect(noticeHeaderInput).toBeVisible({ timeout: 5000 });
       await noticeHeaderInput.fill(TEST_THEME.noticeHeader);
 
       // Fill Notice Content
@@ -120,18 +133,15 @@ test.describe("Appearance Theme Settings", () => {
         .first();
       await noticeContentTextarea.fill(TEST_THEME.noticeContent);
 
-      // Enable Require Consent
-      const consentToggle = page
-        .locator("label", { hasText: /require consent to notice/i })
-        .locator("..")
-        .getByRole("switch");
+      // Enable Require Consent using aria-label
+      const consentToggle = page.getByLabel("Require Consent to Notice");
       await consentToggle.click();
-      await page.waitForTimeout(300);
 
-      // Fill Consent Prompt (appears after toggle)
+      // Wait for Consent Prompt textarea to appear (proves toggle worked)
       const consentPromptTextarea = page
         .getByPlaceholder("Add markdown content")
         .last();
+      await expect(consentPromptTextarea).toBeVisible({ timeout: 5000 });
       await consentPromptTextarea.fill(TEST_THEME.consentPrompt);
 
       // Save changes
@@ -153,7 +163,7 @@ test.describe("Appearance Theme Settings", () => {
       // Login as admin
       await page.context().clearCookies();
       // Clear the localStorage to ensure first visit notice shows
-      await page.goto("http://localhost:3000");
+      await page.goto(BASE_URL);
       await page.evaluate(() => {
         localStorage.removeItem("allUsersInitialPopupFlowCompleted");
       });
@@ -161,7 +171,7 @@ test.describe("Appearance Theme Settings", () => {
       await loginAs(page, "admin");
 
       // Navigate to chat page
-      await page.goto("http://localhost:3000/chat");
+      await page.goto(`${BASE_URL}/chat`);
       await page.waitForLoadState("networkidle");
 
       // Handle and verify first visit notice
@@ -169,20 +179,16 @@ test.describe("Appearance Theme Settings", () => {
     });
 
     test("Admin sees correct branding on chat page", async ({ page }) => {
-      // Login as admin (localStorage should persist from previous test)
+      // Login as admin
       await page.context().clearCookies();
       await loginAs(page, "admin");
 
       // Navigate to chat page
-      await page.goto("http://localhost:3000/chat");
+      await page.goto(`${BASE_URL}/chat`);
       await page.waitForLoadState("networkidle");
 
-      // The first visit notice should not appear since we completed it in the previous test
-      // But if it does appear (fresh session), handle it
-      const modal = page.getByRole("dialog");
-      if (await modal.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await handleFirstVisitNotice(page, TEST_THEME);
-      }
+      // Dismiss first visit notice if it appears (fresh session)
+      await dismissModalIfVisible(page, TEST_THEME);
 
       // Verify branding
       await verifyChatPageBranding(page, TEST_THEME);
@@ -194,7 +200,7 @@ test.describe("Appearance Theme Settings", () => {
       await loginAs(page, "admin");
 
       // Navigate to admin theme page (or any admin page)
-      await page.goto("http://localhost:3000/admin/theme");
+      await page.goto(`${BASE_URL}/admin/theme`);
       await page.waitForLoadState("networkidle");
 
       // Verify sidebar shows the custom application name
@@ -230,19 +236,14 @@ test.describe("Appearance Theme Settings", () => {
       await page.waitForLoadState("networkidle");
 
       // Handle first visit notice if it appears
-      const modal = page.getByRole("dialog");
-      if (await modal.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await handleFirstVisitNotice(page, TEST_THEME);
-      }
+      await dismissModalIfVisible(page, TEST_THEME);
 
       // Navigate to chat page (in case signup redirected elsewhere)
-      await page.goto("http://localhost:3000/chat");
+      await page.goto(`${BASE_URL}/chat`);
       await page.waitForLoadState("networkidle");
 
       // Handle first visit notice again if it appears
-      if (await modal.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await handleFirstVisitNotice(page, TEST_THEME);
-      }
+      await dismissModalIfVisible(page, TEST_THEME);
 
       // Verify branding
       await verifyChatPageBranding(page, TEST_THEME);
@@ -256,7 +257,7 @@ test.describe("Appearance Theme Settings", () => {
 
     try {
       await loginAs(page, "admin");
-      await page.goto("http://localhost:3000/admin/theme");
+      await page.goto(`${BASE_URL}/admin/theme`);
       await page.waitForLoadState("networkidle");
 
       // Clear Application Display Name
@@ -283,16 +284,31 @@ test.describe("Appearance Theme Settings", () => {
       });
       await footerTextarea.clear();
 
+      // Disable Consent first (if enabled) - must be done before disabling First Visit Notice
+      const consentToggle = page.getByLabel("Require Consent to Notice");
+      // Check if consent toggle is visible (only visible when First Visit Notice is enabled)
+      if (await consentToggle.isVisible({ timeout: 1000 }).catch(() => false)) {
+        const isConsentEnabled =
+          (await consentToggle.getAttribute("aria-checked")) === "true";
+        if (isConsentEnabled) {
+          await consentToggle.click();
+          // Wait for consent prompt to disappear
+          await expect(
+            page.getByRole("textbox", { name: /notice consent prompt/i })
+          ).not.toBeVisible({ timeout: 5000 });
+        }
+      }
+
       // Disable First Visit Notice (if enabled)
-      const firstVisitToggle = page
-        .locator("label", { hasText: /show first visit notice/i })
-        .locator("..")
-        .getByRole("switch");
+      const firstVisitToggle = page.getByLabel("Show First Visit Notice");
       const isFirstVisitEnabled =
         (await firstVisitToggle.getAttribute("aria-checked")) === "true";
       if (isFirstVisitEnabled) {
         await firstVisitToggle.click();
-        await page.waitForTimeout(300);
+        // Wait for notice header to disappear
+        await expect(
+          page.getByRole("textbox", { name: /notice header/i })
+        ).not.toBeVisible({ timeout: 5000 });
       }
 
       // Save changes

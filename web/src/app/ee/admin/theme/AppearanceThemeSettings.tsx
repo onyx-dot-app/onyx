@@ -443,6 +443,7 @@ export const AppearanceThemeSettings = forwardRef<
             <FormField.Label>Show First Visit Notice</FormField.Label>
             <FormField.Control>
               <Switch
+                aria-label="Show First Visit Notice"
                 checked={values.show_first_visit_notice}
                 onCheckedChange={(checked) =>
                   setFieldValue("show_first_visit_notice", checked)
@@ -519,6 +520,7 @@ export const AppearanceThemeSettings = forwardRef<
                 <FormField.Label>Require Consent to Notice</FormField.Label>
                 <FormField.Control>
                   <Switch
+                    aria-label="Require Consent to Notice"
                     checked={values.enable_consent_screen}
                     onCheckedChange={(checked) =>
                       setFieldValue("enable_consent_screen", checked)
