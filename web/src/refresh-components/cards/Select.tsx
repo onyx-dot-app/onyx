@@ -86,6 +86,7 @@ export default function Select({
 
   return (
     <div
+      {...rest}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={isCardClickable ? handleCardClick : undefined}
@@ -98,7 +99,6 @@ export default function Select({
         disabled && "opacity-50 cursor-not-allowed",
         className
       )}
-      {...rest}
     >
       {/* Left section - Icon, Title, Description */}
       <div className="flex flex-1 items-start gap-1 p-1">
