@@ -177,7 +177,7 @@ class BraintrustTracingProcessor(TracingProcessor):
             else self._spans[span.trace_id]
         )
         trace_metadata = self._trace_metadata.get(span.trace_id)
-        span_kwargs = dict(
+        span_kwargs: Dict[str, Any] = dict(
             id=span.span_id,
             name=_span_name(span),
             type=_span_type(span),
