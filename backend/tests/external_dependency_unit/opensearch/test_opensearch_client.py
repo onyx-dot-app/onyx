@@ -89,6 +89,22 @@ def test_client(opensearch_available: None) -> Generator[OpenSearchClient, None,
         client.close()
 
 
+@pytest.fixture(scope="function")
+def search_pipeline(test_client: OpenSearchClient) -> Generator[None, None, None]:
+    """Creates a search pipeline for testing with automatic cleanup."""
+    test_client.create_search_pipeline(
+        pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME,
+        pipeline_body=MIN_MAX_NORMALIZATION_PIPELINE_CONFIG,
+    )
+    yield  # Test runs here.
+    try:
+        test_client.delete_search_pipeline(
+            pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME,
+        )
+    except Exception:
+        pass
+
+
 class TestOpenSearchClient:
     """Tests for OpenSearchClient."""
 
@@ -377,7 +393,9 @@ class TestOpenSearchClient:
             for chunk in results
         )
 
-    def test_search_with_pipeline(self, test_client: OpenSearchClient) -> None:
+    def test_search_with_pipeline(
+        self, test_client: OpenSearchClient, search_pipeline: None
+    ) -> None:
         """Tests search with a normalization pipeline."""
         # Precondition.
         mappings = DocumentSchema.get_document_schema(
@@ -385,12 +403,6 @@ class TestOpenSearchClient:
         )
         settings = DocumentSchema.get_index_settings()
         test_client.create_index(mappings=mappings, settings=settings)
-
-        # Create search pipeline.
-        test_client.create_search_pipeline(
-            pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME,
-            pipeline_body=MIN_MAX_NORMALIZATION_PIPELINE_CONFIG,
-        )
 
         # Index documents.
         docs = [
@@ -434,10 +446,6 @@ class TestOpenSearchClient:
         assert all(
             chunk.document_id in ["pipeline-doc-1", "pipeline-doc-2"]
             for chunk in results
-        )
-        # Cleanup pipeline.
-        test_client.delete_search_pipeline(
-            pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME
         )
 
     def test_search_empty_index(self, test_client: OpenSearchClient) -> None:
@@ -528,7 +536,7 @@ class TestOpenSearchClient:
         assert results[0].hidden is False
 
     def test_search_with_pipeline_and_filters_returns_chunks_with_related_content_first(
-        self, test_client: OpenSearchClient
+        self, test_client: OpenSearchClient, search_pipeline: None
     ) -> None:
         """
         Tests search with a normalization pipeline and filters returns chunks
@@ -540,10 +548,6 @@ class TestOpenSearchClient:
         )
         settings = DocumentSchema.get_index_settings()
         test_client.create_index(mappings=mappings, settings=settings)
-        test_client.create_search_pipeline(
-            pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME,
-            pipeline_body=MIN_MAX_NORMALIZATION_PIPELINE_CONFIG,
-        )
 
         # Index documents with varying relevance to the query.
         # Vectors closer to query_vector (0.1) should rank higher.
@@ -628,8 +632,3 @@ class TestOpenSearchClient:
 
         # Most relevant document should be first due to normalization pipeline.
         assert results[0].document_id == "highly-relevant-1"
-
-        # Cleanup pipeline.
-        test_client.delete_search_pipeline(
-            pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME
-        )
