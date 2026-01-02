@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import type { Route } from "next";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
@@ -9,8 +9,11 @@ import * as GeneralLayouts from "@/layouts/general-layouts";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import { Formik, Form } from "formik";
 import {
+  SvgCheck,
+  SvgCopy,
   SvgCpu,
   SvgExternalLink,
+  SvgKey,
   SvgLock,
   SvgMoon,
   SvgSliders,
@@ -33,7 +36,12 @@ import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import { deleteAllChatSessions } from "@/app/chat/services/lib";
 import { useAuthType, useLlmManager } from "@/lib/hooks";
 import { AuthType } from "@/lib/constants";
-import PATManagement from "@/components/user/PATManagement";
+import useSWR from "swr";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { humanReadableFormat, humanReadableFormatWithTime } from "@/lib/time";
+import useFilter from "@/hooks/useFilter";
+import CreateButton from "@/refresh-components/buttons/CreateButton";
+import IconButton from "@/refresh-components/buttons/IconButton";
 import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
 import { useCCPairs } from "@/lib/hooks/useCCPairs";
 import { SourceIcon } from "@/components/SourceIcon";
@@ -42,6 +50,86 @@ import { getSourceMetadata } from "@/lib/sources";
 import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+
+interface PAT {
+  id: number;
+  name: string;
+  token_display: string;
+  created_at: string;
+  expires_at: string | null;
+  last_used_at: string | null;
+}
+
+interface CreatedTokenState {
+  id: number;
+  token: string;
+}
+
+interface PATModalProps {
+  isCreating: boolean;
+  newTokenName: string;
+  setNewTokenName: (name: string) => void;
+  expirationDays: string;
+  setExpirationDays: (days: string) => void;
+  onClose: () => void;
+  onCreate: () => void;
+}
+
+function PATModal({
+  isCreating,
+  newTokenName,
+  setNewTokenName,
+  expirationDays,
+  setExpirationDays,
+  onClose,
+  onCreate,
+}: PATModalProps) {
+  return (
+    <ConfirmationModalLayout
+      icon={SvgKey}
+      title="Create Access Token"
+      onClose={onClose}
+      submit={
+        <Button
+          onClick={onCreate}
+          disabled={isCreating || !newTokenName.trim()}
+        >
+          {isCreating ? "Creating..." : "Create"}
+        </Button>
+      }
+    >
+      <GeneralLayouts.Section gap={1}>
+        <InputLayouts.Vertical label="Token Name">
+          <InputTypeIn
+            placeholder="e.g., 'MCP Client'"
+            value={newTokenName}
+            onChange={(e) => setNewTokenName(e.target.value)}
+            disabled={isCreating}
+            autoComplete="new-password"
+          />
+        </InputLayouts.Vertical>
+        <InputLayouts.Vertical
+          label="Expires in"
+          description="Expires at end of day (23:59 UTC)."
+        >
+          <InputSelect
+            value={expirationDays}
+            onValueChange={setExpirationDays}
+            disabled={isCreating}
+          >
+            <InputSelect.Trigger placeholder="Select expiration" />
+            <InputSelect.Content>
+              <InputSelect.Item value="7">7 days</InputSelect.Item>
+              <InputSelect.Item value="30">30 days</InputSelect.Item>
+              <InputSelect.Item value="365">365 days</InputSelect.Item>
+              <InputSelect.Item value="null">No expiration</InputSelect.Item>
+            </InputSelect.Content>
+          </InputSelect>
+        </InputLayouts.Vertical>
+      </GeneralLayouts.Section>
+    </ConfirmationModalLayout>
+  );
+}
 
 function GeneralSettings() {
   const { user, updateUserPersonalization, updateUserThemePreference } =
@@ -374,8 +462,133 @@ function AccountsAccessSettings() {
   const authType = useAuthType();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
+  // PAT state
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [newTokenName, setNewTokenName] = useState("");
+  const [expirationDays, setExpirationDays] = useState<string>("30");
+  const [newlyCreatedToken, setNewlyCreatedToken] =
+    useState<CreatedTokenState | null>(null);
+  const [copiedTokenId, setCopiedTokenId] = useState<number | null>(null);
+  const [tokenToDelete, setTokenToDelete] = useState<{
+    id: number;
+    name: string;
+  } | null>(null);
+
   const showPasswordSection = Boolean(user?.password_configured);
   const showTokensSection = authType && authType !== AuthType.DISABLED;
+
+  // Fetch PATs with SWR
+  const {
+    data: pats = [],
+    mutate,
+    error,
+    isLoading,
+  } = useSWR<PAT[]>(
+    showTokensSection ? "/api/user/pats" : null,
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: true,
+      dedupingInterval: 2000,
+      fallbackData: [],
+    }
+  );
+
+  // Use filter hook for searching tokens
+  const {
+    query,
+    setQuery,
+    filtered: filteredPats,
+  } = useFilter(pats, (pat) => `${pat.name} ${pat.token_display}`);
+
+  // Show error popup if SWR fetch fails
+  useEffect(() => {
+    if (error) {
+      setPopup({ message: "Failed to load tokens", type: "error" });
+    }
+  }, [error, setPopup]);
+
+  const createPAT = useCallback(async () => {
+    if (!newTokenName.trim()) {
+      setPopup({ message: "Token name is required", type: "error" });
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      const response = await fetch("/api/user/pats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newTokenName,
+          expiration_days:
+            expirationDays === "null" ? null : parseInt(expirationDays),
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Store the newly created token with its ID and full token value
+        setNewlyCreatedToken({ id: data.id, token: data.token });
+        setNewTokenName("");
+        setExpirationDays("30");
+        setShowCreateModal(false);
+        setPopup({ message: "Token created successfully", type: "success" });
+        // Revalidate the token list
+        await mutate();
+      } else {
+        const errorData = await response.json();
+        setPopup({
+          message: errorData.detail || "Failed to create token",
+          type: "error",
+        });
+      }
+    } catch (error) {
+      setPopup({ message: "Network error creating token", type: "error" });
+    } finally {
+      setIsCreating(false);
+    }
+  }, [newTokenName, expirationDays, mutate, setPopup]);
+
+  const deletePAT = useCallback(
+    async (patId: number) => {
+      try {
+        const response = await fetch(`/api/user/pats/${patId}`, {
+          method: "DELETE",
+        });
+
+        if (response.ok) {
+          // Clear the newly created token if it's the one being deleted
+          if (newlyCreatedToken?.id === patId) {
+            setNewlyCreatedToken(null);
+          }
+          await mutate();
+          setPopup({ message: "Token deleted successfully", type: "success" });
+        } else {
+          setPopup({ message: "Failed to delete token", type: "error" });
+        }
+      } catch (error) {
+        setPopup({ message: "Network error deleting token", type: "error" });
+      } finally {
+        setTokenToDelete(null);
+      }
+    },
+    [newlyCreatedToken, mutate, setPopup]
+  );
+
+  const copyToken = useCallback(
+    async (token: string, tokenId: number) => {
+      try {
+        await navigator.clipboard.writeText(token);
+        setCopiedTokenId(tokenId);
+        setPopup({ message: "Copied to clipboard", type: "success" });
+        setTimeout(() => setCopiedTokenId(null), 2000);
+      } catch (error) {
+        setPopup({ message: "Failed to copy token", type: "error" });
+      }
+    },
+    [setPopup]
+  );
 
   const handleChangePassword = useCallback(
     async (values: {
@@ -436,6 +649,38 @@ function AccountsAccessSettings() {
   return (
     <>
       {popup}
+
+      {showCreateModal && (
+        <PATModal
+          isCreating={isCreating}
+          newTokenName={newTokenName}
+          setNewTokenName={setNewTokenName}
+          expirationDays={expirationDays}
+          setExpirationDays={setExpirationDays}
+          onClose={() => {
+            setShowCreateModal(false);
+            setNewTokenName("");
+            setExpirationDays("30");
+          }}
+          onCreate={createPAT}
+        />
+      )}
+
+      {tokenToDelete && (
+        <ConfirmationModalLayout
+          icon={SvgTrash}
+          title="Delete Token"
+          onClose={() => setTokenToDelete(null)}
+          submit={
+            <Button danger onClick={() => deletePAT(tokenToDelete.id)}>
+              Delete
+            </Button>
+          }
+        >
+          Are you sure you want to delete token &quot;{tokenToDelete.name}
+          &quot;? This action cannot be undone.
+        </ConfirmationModalLayout>
+      )}
 
       {showPasswordModal && (
         <Formik
@@ -536,12 +781,131 @@ function AccountsAccessSettings() {
           <GeneralLayouts.Section gap={0.75}>
             <InputLayouts.Label label="Access Tokens" />
             <Card>
-              <h2 className="text-xl font-bold mb-4">Personal Access Tokens</h2>
-              <p className="text-sm text-text-03 mb-4">
-                Create tokens to authenticate API requests. Tokens inherit all
-                your permissions.
-              </p>
-              <PATManagement />
+              <div className="space-y-4">
+                {/* Header with search/empty state and create button */}
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    {pats.length === 0 ? (
+                      <Text as="p" text03 secondaryBody>
+                        {isLoading
+                          ? "Loading tokens..."
+                          : "No access tokens created."}
+                      </Text>
+                    ) : (
+                      <InputTypeIn
+                        placeholder="Search tokens..."
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                      />
+                    )}
+                  </div>
+                  <div className="ml-4">
+                    <CreateButton onClick={() => setShowCreateModal(true)}>
+                      New Access Token
+                    </CreateButton>
+                  </div>
+                </div>
+
+                {/* Token List */}
+                {pats.length > 0 && (
+                  <div className="space-y-2">
+                    {filteredPats.map((pat) => {
+                      const isNewlyCreated = newlyCreatedToken?.id === pat.id;
+                      const isCopied = copiedTokenId === pat.id;
+
+                      return (
+                        <div
+                          key={pat.id}
+                          className={`flex items-center justify-between p-3 border rounded-lg ${
+                            isNewlyCreated
+                              ? "bg-accent-emphasis border-accent-strong"
+                              : "border-border-01 bg-background-tint-01"
+                          }`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <Text
+                              as="p"
+                              text05
+                              mainUiAction
+                              className="truncate"
+                            >
+                              {pat.name}
+                            </Text>
+                            {isNewlyCreated ? (
+                              <>
+                                <Text
+                                  as="p"
+                                  text05
+                                  secondaryBody
+                                  className="mb-2"
+                                >
+                                  Copy this token now. You won&apos;t be able to
+                                  see it again.
+                                </Text>
+                                <code className="block p-2 bg-background-02 border border-border-01 rounded text-xs break-all font-mono text-text-01 mb-2">
+                                  {newlyCreatedToken.token}
+                                </code>
+                                <Button
+                                  onClick={() =>
+                                    copyToken(newlyCreatedToken.token, pat.id)
+                                  }
+                                  primary
+                                  leftIcon={isCopied ? SvgCheck : SvgCopy}
+                                  aria-label="Copy token to clipboard"
+                                >
+                                  {isCopied ? "Copied!" : "Copy Token"}
+                                </Button>
+                              </>
+                            ) : (
+                              <Text as="p" text03 secondaryMono>
+                                {pat.token_display}
+                              </Text>
+                            )}
+                            <Text as="p" text03 secondaryBody className="mt-1">
+                              <span
+                                title={humanReadableFormatWithTime(
+                                  pat.created_at
+                                )}
+                              >
+                                Created: {humanReadableFormat(pat.created_at)}
+                              </span>
+                              {pat.expires_at && (
+                                <span
+                                  title={humanReadableFormatWithTime(
+                                    pat.expires_at
+                                  )}
+                                >
+                                  {" • Expires: "}
+                                  {humanReadableFormat(pat.expires_at)}
+                                </span>
+                              )}
+                              {pat.last_used_at && (
+                                <span
+                                  title={humanReadableFormatWithTime(
+                                    pat.last_used_at
+                                  )}
+                                >
+                                  {" • Last used: "}
+                                  {humanReadableFormat(pat.last_used_at)}
+                                </span>
+                              )}
+                            </Text>
+                          </div>
+                          <IconButton
+                            icon={SvgTrash}
+                            onClick={() =>
+                              setTokenToDelete({ id: pat.id, name: pat.name })
+                            }
+                            internal
+                            data-testid={`delete-pat-${pat.id}`}
+                            aria-label={`Delete token ${pat.name}`}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </Card>
           </GeneralLayouts.Section>
         )}
