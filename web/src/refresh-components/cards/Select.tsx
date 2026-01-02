@@ -20,7 +20,8 @@ const containerClasses = {
   disconnected: "border-border-01 bg-background-neutral-01 hover:shadow-00",
 } as const;
 
-export interface SelectProps {
+export interface SelectProps
+  extends Omit<React.ComponentPropsWithoutRef<"div">, "title"> {
   // Content
   icon: React.FunctionComponent<IconProps>;
   title: string;
@@ -65,6 +66,7 @@ export default function Select({
   medium,
   className,
   disabled,
+  ...rest
 }: SelectProps) {
   const sizeClass = medium ? "h-[3.75rem]" : "h-[4.25rem]";
   const containerClass = containerClasses[status];
@@ -96,6 +98,7 @@ export default function Select({
         disabled && "opacity-50 cursor-not-allowed",
         className
       )}
+      {...rest}
     >
       {/* Left section - Icon, Title, Description */}
       <div className="flex flex-1 items-start gap-1 p-1">

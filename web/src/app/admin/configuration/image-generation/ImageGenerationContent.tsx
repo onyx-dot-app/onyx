@@ -175,6 +175,7 @@ export default function ImageGenerationContent() {
               {group.providers.map((provider) => (
                 <Select
                   key={provider.image_provider_id}
+                  aria-label={`image-gen-provider-${provider.image_provider_id}`}
                   icon={() => (
                     <ProviderIcon provider={provider.provider_name} size={18} />
                   )}
