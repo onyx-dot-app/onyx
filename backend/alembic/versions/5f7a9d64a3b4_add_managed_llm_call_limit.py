@@ -29,7 +29,7 @@ def upgrade() -> None:
 
     op.create_table(
         "managed_llm_call_limit",
-        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
         sa.Column("enabled", sa.Boolean(), nullable=False),
         sa.Column("daily_call_limit", sa.Integer(), nullable=False),
         sa.Column(
@@ -38,7 +38,6 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.PrimaryKeyConstraint("id"),
     )
 
     op.execute(

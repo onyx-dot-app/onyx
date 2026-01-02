@@ -91,7 +91,7 @@ def enforce_managed_llm_call_limit(
     redis_client = get_redis_client()
     today = datetime.now(timezone.utc).date().isoformat()
     key = f"{_LIMIT_KEY_PREFIX}:{today}"
-    count = redis_client.incr(key)
+    count = redis_client.incrby(key, 1)
     if count == 1:
         redis_client.expire(key, _seconds_until_utc_midnight())
 

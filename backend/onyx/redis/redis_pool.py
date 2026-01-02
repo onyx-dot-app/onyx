@@ -111,6 +111,8 @@ class TenantRedis(redis.Redis):
             "set",
             "delete",
             "exists",
+            "expire",
+            "incr",
             "incrby",
             "hset",
             "hget",
