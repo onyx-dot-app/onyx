@@ -44,6 +44,7 @@ import { getSourceMetadata } from "@/lib/sources";
 import Separator from "@/refresh-components/Separator";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
+import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 
 function GeneralSettings() {
   const {
@@ -57,7 +58,7 @@ function GeneralSettings() {
   const { popup, setPopup } = usePopup();
   const router = useRouter();
   const pathname = usePathname();
-  const [isDeleteAllLoading, setIsDeleteAllLoading] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
 
   const {
@@ -79,7 +80,7 @@ function GeneralSettings() {
   });
 
   const handleDeleteAllChats = useCallback(async () => {
-    setIsDeleteAllLoading(true);
+    setIsDeleting(true);
     try {
       const response = await deleteAllChatSessions();
       if (response.ok) {
@@ -99,7 +100,7 @@ function GeneralSettings() {
         type: "error",
       });
     } finally {
-      setIsDeleteAllLoading(false);
+      setIsDeleting(false);
       setShowDeleteConfirmation(false);
     }
   }, [pathname, router, setPopup]);
@@ -107,38 +108,32 @@ function GeneralSettings() {
   return (
     <>
       {popup}
-      {/*<Modal
-        open={showDeleteConfirmation}
-        onOpenChange={setShowDeleteConfirmation}
-      >
-        <Modal.Content>
-          <Modal.Header>
-            <Modal.Title>Delete All Chats</Modal.Title>
-            <Modal.Description>
-              Are you sure you want to delete all your chat sessions? This
-              action cannot be undone.
-            </Modal.Description>
-          </Modal.Header>
-          <Modal.Footer>
-            <Button
-              secondary
-              onClick={() => setShowDeleteConfirmation(false)}
-              disabled={isDeleteAllLoading}
-            >
-              Cancel
-            </Button>
+
+      {showDeleteConfirmation && (
+        <ConfirmationModalLayout
+          icon={SvgTrash}
+          title="Delete All Chats"
+          submit={
             <Button
               danger
               onClick={() => {
                 void handleDeleteAllChats();
               }}
-              disabled={isDeleteAllLoading}
+              disabled={isDeleting}
             >
-              {isDeleteAllLoading ? "Deleting..." : "Yes, Delete All"}
+              {isDeleting ? "Deleting..." : "Delete"}
             </Button>
-          </Modal.Footer>
-        </Modal.Content>
-      </Modal>*/}
+          }
+        >
+          <GeneralLayouts.Section gap={0.5}>
+            <Text>
+              All your chat sessions and history will be permanently deleted.
+              Deletion cannot be undone.
+            </Text>
+            <Text>Are you sure you want to delete all chats?</Text>
+          </GeneralLayouts.Section>
+        </ConfirmationModalLayout>
+      )}
 
       <GeneralLayouts.Section gap={2}>
         <GeneralLayouts.Section gap={0.75}>
