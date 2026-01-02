@@ -88,20 +88,21 @@ function PATModal({
     <ConfirmationModalLayout
       icon={SvgKey}
       title="Create Access Token"
+      description="All API requests using this token will inherit your access permissions and be attributed to you as an individual."
       onClose={onClose}
       submit={
         <Button
           onClick={onCreate}
           disabled={isCreating || !newTokenName.trim()}
         >
-          {isCreating ? "Creating..." : "Create"}
+          {isCreating ? "Creating Token..." : "Create Token"}
         </Button>
       }
     >
       <GeneralLayouts.Section gap={1}>
         <InputLayouts.Vertical label="Token Name">
           <InputTypeIn
-            placeholder="e.g., 'MCP Client'"
+            placeholder="Name your token"
             value={newTokenName}
             onChange={(e) => setNewTokenName(e.target.value)}
             disabled={isCreating}

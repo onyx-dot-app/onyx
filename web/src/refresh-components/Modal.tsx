@@ -394,7 +394,7 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
             </Truncated>
           </DialogPrimitive.Title>
           {description && (
-            <DialogPrimitive.Description>
+            <DialogPrimitive.Description asChild>
               <Text secondaryBody text03 as="span">
                 {description}
               </Text>
