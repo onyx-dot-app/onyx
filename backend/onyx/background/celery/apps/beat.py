@@ -117,6 +117,14 @@ class DynamicTenantScheduler(PersistentScheduler):
 
         tasks_to_schedule: list[dict[str, Any]] = get_tasks_to_schedule()
 
+        # Log the tasks being scheduled for debugging
+        task_names = [t["name"] for t in tasks_to_schedule]
+        has_auto_llm = "check-for-auto-llm-update" in task_names
+        task_logger.info(
+            f"Generating schedule with {len(tasks_to_schedule)} tasks "
+            f"(has_auto_llm={has_auto_llm}): {task_names}"
+        )
+
         for tenant_id in tenant_ids:
             if IGNORED_SYNCING_TENANT_LIST and tenant_id in IGNORED_SYNCING_TENANT_LIST:
                 task_logger.debug(
@@ -215,13 +223,20 @@ class DynamicTenantScheduler(PersistentScheduler):
         # Ensure changes are persisted
         self.sync()
 
+        # Log the updated schedule task names for debugging
+        scheduled_task_names = list(new_schedule.keys())
+        has_auto_llm_in_schedule = any(
+            "check-for-auto-llm-update" in name for name in scheduled_task_names
+        )
         task_logger.info(
             f"_try_updating_schedule - Schedule updated: "
             f"prev_num_tasks={len(current_schedule)} "
             f"prev_beat_multiplier={self.last_beat_multiplier} "
             f"tasks={len(new_schedule)} "
-            f"beat_multiplier={beat_multiplier}"
+            f"beat_multiplier={beat_multiplier} "
+            f"has_auto_llm={has_auto_llm_in_schedule}"
         )
+        task_logger.info(f"Scheduled tasks: {scheduled_task_names}")
 
         self.last_beat_multiplier = beat_multiplier
 
