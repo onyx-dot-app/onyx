@@ -69,9 +69,9 @@
     "pageTitle": "Manage User Groups"
   },
   {
-    "name": "Performance - Whitelabeling",
-    "path": "whitelabeling",
-    "pageTitle": "Whitelabeling"
+    "name": "Appearance & Theming",
+    "path": "theme",
+    "pageTitle": "Appearance & Theming"
   },
   {
     "name": "Configuration - Search Settings",

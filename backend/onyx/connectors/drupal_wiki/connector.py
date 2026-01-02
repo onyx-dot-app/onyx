@@ -58,51 +58,59 @@ class DrupalWikiConnector(
     CheckpointedConnector[DrupalWikiCheckpoint],
     SlimConnector,
 ):
+    # Deprecated parameters that may exist in old connector configurations
+    _DEPRECATED_PARAMS = {"drupal_wiki_scope", "include_all_spaces"}
+
     def __init__(
         self,
         base_url: str,
         spaces: list[str] | None = None,
         pages: list[str] | None = None,
-        include_all_spaces: bool = False,
         batch_size: int = INDEX_BATCH_SIZE,
         continue_on_failure: bool = CONTINUE_ON_CONNECTOR_FAILURE,
-        drupal_wiki_scope: str | None = None,
         include_attachments: bool = False,
         allow_images: bool = False,
+        **kwargs: Any,
     ) -> None:
         """
         Initialize the Drupal Wiki connector.
 
         Args:
             base_url: The base URL of the Drupal Wiki instance (e.g., https://help.drupal-wiki.com)
-            spaces: List of space IDs to index. If None and include_all_spaces is False, no spaces will be indexed.
-            pages: List of page IDs to index. If provided, only these specific pages will be indexed.
-            include_all_spaces: If True, all spaces will be indexed regardless of the spaces parameter.
+            spaces: List of space IDs to index. If None and pages is also None, all spaces will be indexed.
+            pages: List of page IDs to index. If provided, these specific pages will be indexed.
             batch_size: Number of documents to process in a batch.
             continue_on_failure: If True, continue indexing even if some documents fail.
-            drupal_wiki_scope: The selected tab value from the frontend. If "all_spaces", all spaces will be indexed.
             include_attachments: If True, enable processing of page attachments including images and documents.
             allow_images: If True, enable processing of image attachments.
         """
+
+        #########################################################
+        # TODO: Remove this after 02/01/2026 and remove **kwargs from the function signature
+        # Check for deprecated parameters from old connector configurations
+        # If attempting to update without deleting the connector:
+        # Remove the deprecated parameters from the custom_connector_config in the relevant connector table rows
+        deprecated_found = set(kwargs.keys()) & self._DEPRECATED_PARAMS
+        if deprecated_found:
+            raise ConnectorValidationError(
+                f"Outdated Drupal Wiki connector configuration detected "
+                f"(found deprecated parameters: {', '.join(deprecated_found)}). "
+                f"Please delete and recreate this connector, or contact Onyx support "
+                f"for assistance with updating the configuration without deleting the connector."
+            )
+        # Reject any other unexpected parameters
+        if kwargs:
+            raise ConnectorValidationError(
+                f"Unexpected parameters for Drupal Wiki connector: {', '.join(kwargs.keys())}"
+            )
+        #########################################################
+
         self.base_url = base_url.rstrip("/")
         self.spaces = spaces or []
         self.pages = pages or []
 
-        # Determine whether to include all spaces based on the selected tab
-        # If drupal_wiki_scope is "all_spaces", we should index all spaces
-        # If it's "specific_spaces", we should only index the specified spaces
-        # If it's None, we use the include_all_spaces parameter
-
-        if drupal_wiki_scope is not None:
-            logger.debug(f"drupal_wiki_scope is set to {drupal_wiki_scope}")
-
-            self.include_all_spaces = drupal_wiki_scope == "all_spaces"
-            # If scope is specific_spaces, include_all_spaces correctly defaults to False
-        else:
-            logger.debug(
-                f"drupal_wiki_scope is not set, using include_all_spaces={include_all_spaces}"
-            )
-            self.include_all_spaces = include_all_spaces
+        # If no specific spaces or pages are provided, index all spaces
+        self.include_all_spaces = not self.spaces and not self.pages
 
         self.batch_size = batch_size
         self.continue_on_failure = continue_on_failure

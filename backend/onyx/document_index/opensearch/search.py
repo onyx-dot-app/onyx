@@ -21,6 +21,7 @@ MIN_MAX_NORMALIZATION_PIPELINE_CONFIG = {
     "description": "Normalization for keyword and vector scores using min-max",
     "phase_results_processors": [
         {
+            # https://docs.opensearch.org/latest/search-plugins/search-pipelines/normalization-processor/
             "normalization-processor": {
                 "normalization": {"technique": "min_max"},
                 "combination": {
@@ -45,6 +46,7 @@ ZSCORE_NORMALIZATION_PIPELINE_CONFIG = {
     "description": "Normalization for keyword and vector scores using z-score",
     "phase_results_processors": [
         {
+            # https://docs.opensearch.org/latest/search-plugins/search-pipelines/normalization-processor/
             "normalization-processor": {
                 "normalization": {"technique": "z_score"},
                 "combination": {
@@ -63,6 +65,19 @@ ZSCORE_NORMALIZATION_PIPELINE_CONFIG = {
         }
     ],
 }
+
+assert (
+    sum(
+        [
+            SEARCH_TITLE_VECTOR_WEIGHT,
+            SEARCH_CONTENT_VECTOR_WEIGHT,
+            SEARCH_TITLE_KEYWORD_WEIGHT,
+            SEARCH_CONTENT_KEYWORD_WEIGHT,
+            SEARCH_CONTENT_PHRASE_WEIGHT,
+        ]
+    )
+    == 1.0
+)
 
 
 class DocumentQuery:
@@ -103,8 +118,11 @@ class DocumentQuery:
     @staticmethod
     def _get_hybrid_search_subqueries(
         query_text: str, query_vector: list[float], num_candidates: int
-    ) -> list[Any]:
+    ) -> list[dict[str, Any]]:
         """Returns subqueries for hybrid search.
+
+        Each of these subqueries are the "hybrid" component of this search. We
+        search on various things and combine results.
 
         Matches:
           - Title vector
@@ -126,7 +144,7 @@ class DocumentQuery:
             num_candidates: The number of candidates to consider for vector
                 similarity search.
         """
-        hybrid_search_queries = [
+        hybrid_search_queries: list[dict[str, Any]] = [
             {
                 "knn": {
                     TITLE_VECTOR_FIELD_NAME: {
@@ -156,14 +174,14 @@ class DocumentQuery:
         return hybrid_search_queries
 
     @staticmethod
-    def _get_hybrid_search_filters() -> list[Any]:
+    def _get_hybrid_search_filters() -> list[dict[str, Any]]:
         """Returns filters for hybrid search.
 
         For now only fetches public and not hidden documents.
 
         TODO(andrei): Add ACL filters and stuff.
         """
-        hybrid_search_filters = [
+        hybrid_search_filters: list[dict[str, Any]] = [
             {"term": {PUBLIC_FIELD_NAME: {"value": True}}},
             {"term": {HIDDEN_FIELD_NAME: {"value": False}}},
         ]

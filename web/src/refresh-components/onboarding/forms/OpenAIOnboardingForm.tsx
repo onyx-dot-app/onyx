@@ -5,14 +5,17 @@ import { FormField } from "@/refresh-components/form/FormField";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import Separator from "@/refresh-components/Separator";
-import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import {
+  ModelConfiguration,
+  WellKnownLLMProviderDescriptor,
+} from "@/app/admin/configuration/llm/interfaces";
 import {
   OnboardingFormWrapper,
   OnboardingFormChildProps,
 } from "./OnboardingFormWrapper";
 import { OnboardingActions, OnboardingState } from "../types";
 import { buildInitialValues } from "../components/llmConnectionHelpers";
-import LLMConnectionIcons from "../components/LLMConnectionIcons";
+import ConnectionProviderIcon from "@/refresh-components/ConnectionProviderIcon";
 import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 
@@ -149,10 +152,20 @@ export function OpenAIOnboardingForm({
   });
 
   const icon = () => (
-    <LLMConnectionIcons
+    <ConnectionProviderIcon
       icon={<ProviderIcon provider={llmDescriptor.name} size={24} />}
     />
   );
+
+  // Enable auto mode if user keeps the recommended default model
+  const transformValues = (
+    values: OpenAIFormValues,
+    modelConfigurations: ModelConfiguration[]
+  ) => ({
+    ...values,
+    model_configurations: modelConfigurations,
+    is_auto_mode: values.default_model_name === DEFAULT_DEFAULT_MODEL_NAME,
+  });
 
   return (
     <OnboardingFormWrapper<OpenAIFormValues>
@@ -166,6 +179,7 @@ export function OpenAIOnboardingForm({
       onOpenChange={onOpenChange}
       initialValues={initialValues}
       validationSchema={validationSchema}
+      transformValues={transformValues}
     >
       {(props) => <OpenAIFormFields {...props} />}
     </OnboardingFormWrapper>

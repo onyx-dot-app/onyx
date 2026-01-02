@@ -69,7 +69,7 @@ export default function SharedChatDisplay({
         />
       )}
 
-      <div className="flex flex-col h-full w-full overflow-hidden overflow-y-scroll">
+      <div className="flex flex-col items-center h-full w-full overflow-hidden overflow-y-scroll">
         <div className="sticky top-0 z-10 flex flex-col w-full bg-background-tint-01 px-8 py-4">
           <Text as="p" headingH2>
             {chatSession.description || UNNAMED_CHAT}
@@ -80,7 +80,7 @@ export default function SharedChatDisplay({
         </div>
 
         {isMounted ? (
-          <div className="w-full px-8">
+          <div className="w-[min(50rem,100%)]">
             {messages.map((message, i) => {
               if (message.type === "user") {
                 return (

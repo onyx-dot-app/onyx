@@ -9,12 +9,14 @@ from sqlalchemy import select
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Tool
 from tests.integration.common_utils.managers.chat import ChatSessionManager
+from tests.integration.common_utils.test_models import DATestImageGenerationConfig
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.test_models import ToolName
 
 
 def test_force_tool_use(
     basic_user: DATestUser,
+    image_generation_config: DATestImageGenerationConfig,
 ) -> None:
     with get_session_with_current_tenant() as db_session:
         image_generation_tool = db_session.execute(

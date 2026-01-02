@@ -8,7 +8,10 @@ import Separator from "@/refresh-components/Separator";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn, noProp } from "@/lib/utils";
 import { SvgRefreshCw } from "@opal/icons";
-import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import {
+  ModelConfiguration,
+  WellKnownLLMProviderDescriptor,
+} from "@/app/admin/configuration/llm/interfaces";
 import {
   OnboardingFormWrapper,
   OnboardingFormChildProps,
@@ -18,7 +21,7 @@ import {
   buildInitialValues,
   testApiKeyHelper,
 } from "../components/llmConnectionHelpers";
-import LLMConnectionIcons from "../components/LLMConnectionIcons";
+import ConnectionProviderIcon from "@/refresh-components/ConnectionProviderIcon";
 import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 
@@ -224,10 +227,20 @@ export function VertexAIOnboardingForm({
   });
 
   const icon = () => (
-    <LLMConnectionIcons
+    <ConnectionProviderIcon
       icon={<ProviderIcon provider={llmDescriptor.name} size={24} />}
     />
   );
+
+  // Enable auto mode if user keeps the recommended default model
+  const transformValues = (
+    values: VertexAIFormValues,
+    modelConfigurations: ModelConfiguration[]
+  ) => ({
+    ...values,
+    model_configurations: modelConfigurations,
+    is_auto_mode: values.default_model_name === DEFAULT_DEFAULT_MODEL_NAME,
+  });
 
   return (
     <OnboardingFormWrapper<VertexAIFormValues>
@@ -241,6 +254,7 @@ export function VertexAIOnboardingForm({
       onOpenChange={onOpenChange}
       initialValues={initialValues}
       validationSchema={validationSchema}
+      transformValues={transformValues}
     >
       {(props) => <VertexAIFormFields {...props} />}
     </OnboardingFormWrapper>
