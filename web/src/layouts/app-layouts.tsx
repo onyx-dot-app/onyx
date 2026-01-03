@@ -378,7 +378,7 @@ function AppFooter() {
     }](https://www.onyx.app/) - Open Source AI Platform`;
 
   return (
-    <footer className="w-full flex flex-row justify-center items-center gap-2 py-3">
+    <footer className="w-full flex flex-row justify-center items-center gap-2 pb-2">
       <MinimalMarkdown
         content={customFooterContent}
         className={cn("max-w-full text-center")}

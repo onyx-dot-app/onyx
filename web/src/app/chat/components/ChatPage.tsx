@@ -711,7 +711,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
                   }
                 />
 
-                <Spacer />
+                <Spacer rem={0.5} />
 
                 {!!currentProjectId && <ProjectChatSessionList />}
               </div>
