@@ -312,6 +312,7 @@ jobs:
           CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS=0.001
           AUTO_LLM_UPDATE_INTERVAL_SECONDS=10
           MCP_SERVER_ENABLED=true
+          USE_LIGHTWEIGHT_BACKGROUND_WORKER=false
           EOF
 
       - name: Start Docker containers
