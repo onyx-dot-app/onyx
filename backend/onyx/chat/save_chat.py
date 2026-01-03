@@ -102,7 +102,6 @@ def _create_and_link_tool_calls(
                 if tool_call_info.generated_images
                 else None
             ),
-            extra_reasoning_details=tool_call_info.extra_reasoning_details,
             tab_index=tool_call_info.tab_index,
             add_only=True,
         )
@@ -159,7 +158,6 @@ def save_chat_turn(
     db_session: Session,
     assistant_message: ChatMessage,
     is_clarification: bool = False,
-    extra_reasoning_details: dict | None = None,
 ) -> None:
     """
     Save a chat turn by populating the assistant_message and creating related entities.
@@ -188,13 +186,11 @@ def save_chat_turn(
         db_session: Database session for persistence
         assistant_message: The ChatMessage object to populate (should already exist in DB)
         is_clarification: Whether this assistant message is a clarification question (deep research flow)
-        extra_reasoning_details: Optional reasoning verification details (thinking_blocks/reasoning_details)
     """
     # 1. Update ChatMessage with message content, reasoning tokens, and token count
     assistant_message.message = message_text
     assistant_message.reasoning_tokens = reasoning_tokens
     assistant_message.is_clarification = is_clarification
-    assistant_message.extra_reasoning_details = extra_reasoning_details
 
     # Calculate token count using default tokenizer, when storing, this should not use the LLM
     # specific one so we use a system default tokenizer here.

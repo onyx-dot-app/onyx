@@ -267,7 +267,7 @@ class ChatMessageSimple(BaseModel):
     # Extra reasoning details for verification, stored in provider-specific format:
     # - Anthropic: {"thinking_blocks": [...]}
     # - OpenRouter/Gemini: {"reasoning_details": [...]}
-    # Used when reconstructing LLM messages for conversation history
+    # Only used during the current turn (not persisted to DB)
     extra_reasoning_details: dict[str, Any] | None = None
 
 
@@ -298,3 +298,6 @@ class LlmStepResult(BaseModel):
     # - Anthropic: {"thinking_blocks": [...]}
     # - OpenRouter/Gemini: {"reasoning_details": [...]}
     extra_reasoning_details: dict[str, Any] | None = None
+    # Token count for extra_reasoning_details (excluding signature/data fields)
+    # Used for context window budget tracking during the turn
+    extra_reasoning_tokens: int = 0

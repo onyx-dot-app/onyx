@@ -87,6 +87,7 @@ class AssistantMessage(BaseModel):
     # Extra reasoning details for verification, stored in provider-specific format:
     # - Anthropic: {"thinking_blocks": [...]}
     # - OpenRouter/Gemini: {"reasoning_details": [...]}
+    # Used during the current turn only (not persisted to DB)
     extra_reasoning_details: dict[str, Any] | None = None
 
     def model_dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:

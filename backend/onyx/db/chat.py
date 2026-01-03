@@ -490,7 +490,6 @@ def add_chats_to_session_from_slack_thread(
             token_count=chat_message.token_count,
             message_type=chat_message.message_type,
             reasoning_tokens=chat_message.reasoning_tokens,
-            extra_reasoning_details=chat_message.extra_reasoning_details,
         )
 
 
@@ -662,7 +661,6 @@ def create_new_chat_message(
     commit: bool = True,
     reserved_message_id: int | None = None,
     reasoning_tokens: str | None = None,
-    extra_reasoning_details: dict | None = None,
 ) -> ChatMessage:
     if reserved_message_id is not None:
         # Edit existing message
@@ -678,7 +676,6 @@ def create_new_chat_message(
         existing_message.files = files
         existing_message.error = error
         existing_message.reasoning_tokens = reasoning_tokens
-        existing_message.extra_reasoning_details = extra_reasoning_details
         new_chat_message = existing_message
     else:
         # Create new message
@@ -692,7 +689,6 @@ def create_new_chat_message(
             files=files,
             error=error,
             reasoning_tokens=reasoning_tokens,
-            extra_reasoning_details=extra_reasoning_details,
         )
         db_session.add(new_chat_message)
 

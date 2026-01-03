@@ -31,6 +31,7 @@ from onyx.llm.models import TextContentPart
 from onyx.llm.models import ToolCall
 from onyx.llm.models import ToolMessage
 from onyx.llm.models import UserMessage
+from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
@@ -48,6 +49,44 @@ from onyx.utils.logger import setup_logger
 
 
 logger = setup_logger()
+
+# Fields to exclude from token counting in extra_reasoning_details
+# These are verification/metadata fields that aren't sent to the LLM
+_EXCLUDED_REASONING_FIELDS = {"signature", "data"}
+
+
+def _count_extra_reasoning_tokens(extra_reasoning_details: dict[str, Any]) -> int:
+    """Count tokens in extra_reasoning_details, excluding signature and data fields.
+
+    These fields are for verification purposes and shouldn't be counted towards
+    the context window budget since they're not sent to the LLM in the history.
+
+    Args:
+        extra_reasoning_details: Dict with provider-specific reasoning details
+            e.g., {"thinking_blocks": [...]} or {"reasoning_details": [...]}
+
+    Returns:
+        Token count of the reasoning content (excluding excluded fields)
+    """
+    tokenizer = get_tokenizer(None, None)
+    total_tokens = 0
+
+    for blocks in extra_reasoning_details.values():
+        if not isinstance(blocks, list):
+            continue
+        for block in blocks:
+            if not isinstance(block, dict):
+                continue
+            for key, value in block.items():
+                if key in _EXCLUDED_REASONING_FIELDS:
+                    continue
+                if isinstance(value, str):
+                    total_tokens += len(tokenizer.encode(value))
+                elif value is not None:
+                    # For non-string values, serialize and count
+                    total_tokens += len(tokenizer.encode(json.dumps(value)))
+
+    return total_tokens
 
 
 def _try_parse_json_string(value: Any) -> Any:
@@ -353,6 +392,7 @@ def translate_history_to_llm_format(
                 )
 
         # Get extra_reasoning_details from the first tool message (all share same reasoning)
+        # This will be None for history loaded from DB, but set for current turn messages
         extra_reasoning_details = None
         for tool_msg in pending_tool_calls:
             if tool_msg.extra_reasoning_details:
@@ -884,9 +924,11 @@ def run_llm_step_pkt_generator(
 
     # Build extra_reasoning_details dict from accumulated blocks
     extra_reasoning_details: dict[str, Any] | None = None
+    extra_reasoning_tokens = 0
     if accumulated_extra_reasoning_details and extra_reasoning_key:
         blocks_list = list(accumulated_extra_reasoning_details.values())
         extra_reasoning_details = {extra_reasoning_key: blocks_list}
+        extra_reasoning_tokens = _count_extra_reasoning_tokens(extra_reasoning_details)
 
     return (
         LlmStepResult(
@@ -894,6 +936,7 @@ def run_llm_step_pkt_generator(
             answer=accumulated_answer if accumulated_answer else None,
             tool_calls=tool_calls if tool_calls else None,
             extra_reasoning_details=extra_reasoning_details,
+            extra_reasoning_tokens=extra_reasoning_tokens,
         ),
         bool(has_reasoned),
     )

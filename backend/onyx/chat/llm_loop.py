@@ -588,6 +588,10 @@ def run_llm_loop(
                 tool_call_message = tool_call.to_msg_str()
                 tool_call_token_count = token_counter(tool_call_message)
 
+                # Add extra_reasoning_tokens to the first tool call only (all share same reasoning)
+                if tab_index == 0:
+                    tool_call_token_count += llm_step_result.extra_reasoning_tokens
+
                 tool_call_msg = ChatMessageSimple(
                     message=tool_call_message,
                     token_count=tool_call_token_count,
