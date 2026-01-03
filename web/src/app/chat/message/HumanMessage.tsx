@@ -209,29 +209,27 @@ const HumanMessage = React.memo(function HumanMessage({
                 </div>
               </div>
               {onEdit &&
-              isHovered &&
-              !isEditing &&
-              (!files || files.length === 0) ? (
-                <div className="flex flex-row gap-1 p-1">
-                  <CopyIconButton
-                    getCopyText={() => content}
-                    tertiary
-                    data-testid="HumanMessage/copy-button"
-                  />
-                  <IconButton
-                    icon={SvgEdit}
-                    tertiary
-                    tooltip="Edit"
-                    onClick={() => {
-                      setIsEditing(true);
-                      setIsHovered(false);
-                    }}
-                    data-testid="HumanMessage/edit-button"
-                  />
-                </div>
-              ) : (
-                <div className="w-7 h-10" />
-              )}
+                isHovered &&
+                !isEditing &&
+                (!files || files.length === 0) && (
+                  <div className="flex flex-row gap-1 p-1">
+                    <CopyIconButton
+                      getCopyText={() => content}
+                      tertiary
+                      data-testid="HumanMessage/copy-button"
+                    />
+                    <IconButton
+                      icon={SvgEdit}
+                      tertiary
+                      tooltip="Edit"
+                      onClick={() => {
+                        setIsEditing(true);
+                        setIsHovered(false);
+                      }}
+                      data-testid="HumanMessage/edit-button"
+                    />
+                  </div>
+                )}
             </>
           ) : (
             <>
