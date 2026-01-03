@@ -138,8 +138,8 @@ def wait_for_model_sync(
 
 
 def test_auto_mode_provider_gets_synced_from_github_config(
-    admin_user: DATestUser,
     reset: None,
+    admin_user: DATestUser,
 ) -> None:
     """
     Test that a provider in Auto mode gets its models synced from GitHub config.
@@ -227,8 +227,8 @@ def test_auto_mode_provider_gets_synced_from_github_config(
 
 
 def test_manual_mode_provider_not_affected_by_auto_sync(
-    admin_user: DATestUser,
     reset: None,
+    admin_user: DATestUser,
 ) -> None:
     """
     Test that a provider in Manual mode is NOT affected by auto sync.
