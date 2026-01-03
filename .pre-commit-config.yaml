@@ -9,7 +9,7 @@ repos:
     rev: d30b4298e4fb63ce8609e29acdbcf4c9018a483c
     hooks:
       - id: uv-sync
-        args: ["--active", "--locked", "--all-extras"]
+        args: ["--locked", "--all-extras"]
       - id: uv-lock
         files: ^pyproject\.toml$
       - id: uv-export
