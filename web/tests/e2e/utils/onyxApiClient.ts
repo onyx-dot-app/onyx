@@ -43,7 +43,7 @@ import { Page, expect, APIResponse } from "@playwright/test";
  * @param page - Playwright Page instance with authenticated session
  */
 export class OnyxApiClient {
-  private baseUrl = "http://localhost:3000/api";
+  private baseUrl = `${process.env.BASE_URL || "http://localhost:3000"}/api`;
 
   constructor(private page: Page) {}
 

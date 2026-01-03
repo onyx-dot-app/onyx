@@ -15,7 +15,7 @@ export async function createAssistant(page: Page, params: AssistantParams) {
   // Navigate to creation flow
   // We assume we're on /chat; if not, go there first
   if (!page.url().includes("/chat")) {
-    await page.goto("http://localhost:3000/chat");
+    await page.goto("/chat");
   }
 
   // Open Assistants modal/list
@@ -75,9 +75,7 @@ export async function pinAssistantByName(
  */
 export async function ensureImageGenerationEnabled(page: Page): Promise<void> {
   // Navigate to the default assistant configuration page
-  await page.goto(
-    "http://localhost:3000/admin/configuration/default-assistant"
-  );
+  await page.goto("/admin/configuration/default-assistant");
 
   // Wait for the page to load
   await page.waitForLoadState("networkidle");

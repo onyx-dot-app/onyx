@@ -26,6 +26,7 @@ from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RetrievalDetails
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import get_chat_messages_by_session
+from onyx.db.chat import get_or_create_root_message
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.kg_config import is_kg_config_settings_enabled_valid
 from onyx.db.llm import fetch_existing_doc_sets
@@ -37,6 +38,7 @@ from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.models import UserFile
+from onyx.db.projects import check_project_ownership
 from onyx.db.search_settings import get_current_search_settings
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
@@ -51,6 +53,7 @@ from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.prompts.chat_prompts import ADDITIONAL_CONTEXT_PROMPT
 from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 from onyx.prompts.tool_prompts import TOOL_CALL_FAILURE_PROMPT
+from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.models import ToolCallKickoff
@@ -61,7 +64,43 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time
 
+
 logger = setup_logger()
+
+
+def create_chat_session_from_request(
+    chat_session_request: ChatSessionCreationRequest,
+    user_id: UUID | None,
+    db_session: Session,
+) -> ChatSession:
+    """Create a chat session from a ChatSessionCreationRequest.
+
+    Includes project ownership validation when project_id is provided.
+
+    Args:
+        chat_session_request: The request containing persona_id, description, and project_id
+        user_id: The ID of the user creating the session (can be None for anonymous)
+        db_session: The database session
+
+    Returns:
+        The newly created ChatSession
+
+    Raises:
+        ValueError: If user lacks access to the specified project
+        Exception: If the persona is invalid
+    """
+    project_id = chat_session_request.project_id
+    if project_id:
+        if not check_project_ownership(project_id, user_id, db_session):
+            raise ValueError("User does not have access to project")
+
+    return create_chat_session(
+        db_session=db_session,
+        description=chat_session_request.description or "",
+        user_id=user_id,
+        persona_id=chat_session_request.persona_id,
+        project_id=chat_session_request.project_id,
+    )
 
 
 def prepare_chat_message_request(
@@ -166,13 +205,15 @@ def create_chat_history_chain(
     )
 
     if not all_chat_messages:
-        raise RuntimeError("No messages in Chat Session")
-
-    root_message = all_chat_messages[0]
-    if root_message.parent_message is not None:
-        raise RuntimeError(
-            "Invalid root message, unable to fetch valid chat message sequence"
+        root_message = get_or_create_root_message(
+            chat_session_id=chat_session_id, db_session=db_session
         )
+    else:
+        root_message = all_chat_messages[0]
+        if root_message.parent_message is not None:
+            raise RuntimeError(
+                "Invalid root message, unable to fetch valid chat message sequence"
+            )
 
     current_message: ChatMessage | None = root_message
     previous_message: ChatMessage | None = None
@@ -202,9 +243,6 @@ def create_chat_history_chain(
             mainline_messages.append(current_message)
 
         previous_message = current_message
-
-    if not mainline_messages:
-        raise RuntimeError("Could not trace chat message history")
 
     return mainline_messages
 

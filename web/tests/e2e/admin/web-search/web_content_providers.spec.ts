@@ -1,7 +1,7 @@
 import { test, expect, Page, Locator } from "@playwright/test";
 import { loginAs } from "../../utils/auth";
 
-const WEB_SEARCH_URL = "http://localhost:3000/admin/configuration/web-search";
+const WEB_SEARCH_URL = "/admin/configuration/web-search";
 
 // Helper to find a provider card by its label text
 async function findProviderCard(

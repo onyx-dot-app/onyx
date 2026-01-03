@@ -22,6 +22,7 @@ import {
 } from "../services/messageTree";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { SEARCH_PARAM_NAMES } from "../services/searchParams";
+import { SEARCH_TOOL_ID } from "../components/tools/constants";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { FilterManager, LlmDescriptor, LlmManager } from "@/lib/hooks";
 import {
@@ -619,11 +620,24 @@ export function useChatController({
           ? assistantPreferences?.[liveAssistant?.id]?.disabled_tool_ids
           : undefined;
 
+        // Find the search tool's numeric ID for forceSearch
+        const searchToolNumericId = liveAssistant?.tools.find(
+          (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
+        )?.id;
+
+        // Determine the forced tool ID:
+        // 1. If forceSearch is true, use the search tool's numeric ID
+        // 2. Otherwise, use the first forced tool ID from the forcedToolIds array
+        const effectiveForcedToolId = forceSearch
+          ? searchToolNumericId ?? null
+          : forcedToolIds.length > 0
+            ? forcedToolIds[0]
+            : null;
+
         const stack = new CurrentMessageFIFO();
         updateCurrentMessageFIFO(stack, {
           signal: controller.signal,
           message: currMessage,
-          alternateAssistantId: liveAssistant?.id,
           fileDescriptors: projectFilesToFileDescriptors(currentMessageFiles),
           parentMessageId: (() => {
             const parentId =
@@ -641,21 +655,6 @@ export function useChatController({
             filterManager.timeRange,
             filterManager.selectedTags
           ),
-          selectedDocumentIds: selectedDocuments
-            .filter(
-              (document) =>
-                document.db_doc_id !== undefined && document.db_doc_id !== null
-            )
-            .map((document) => document.db_doc_id as number),
-          queryOverride,
-          forceSearch,
-          currentMessageFiles: currentMessageFiles.map((file) => ({
-            id: file.file_id,
-            type: file.chat_file_type,
-            name: file.name,
-            user_file_id: file.id,
-          })),
-          regenerate: regenerationRequest !== undefined,
           modelProvider:
             modelOverride?.name || llmManager.currentLlm.name || undefined,
           modelVersion:
@@ -664,9 +663,6 @@ export function useChatController({
             searchParams?.get(SEARCH_PARAM_NAMES.MODEL_VERSION) ||
             undefined,
           temperature: llmManager.temperature || undefined,
-          systemPromptOverride:
-            searchParams?.get(SEARCH_PARAM_NAMES.SYSTEM_PROMPT) || undefined,
-          useExistingUserMessage: isSeededChat,
           deepResearch,
           enabledToolIds:
             disabledToolIds && liveAssistant
@@ -674,7 +670,7 @@ export function useChatController({
                   .filter((tool) => !disabledToolIds?.includes(tool.id))
                   .map((tool) => tool.id)
               : undefined,
-          forcedToolIds: forcedToolIds,
+          forcedToolId: effectiveForcedToolId,
         });
 
         const delay = (ms: number) => {

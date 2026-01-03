@@ -106,7 +106,6 @@ def handle_simplified_chat_message(
         new_msg_req=full_chat_msg_info,
         user=user,
         db_session=db_session,
-        enforce_chat_session_id_for_search_docs=False,
     )
 
     return gather_stream(packets)
@@ -210,7 +209,6 @@ def handle_send_message_simple_with_history(
         new_msg_req=full_chat_msg_info,
         user=user,
         db_session=db_session,
-        enforce_chat_session_id_for_search_docs=False,
     )
 
     return gather_stream(packets)

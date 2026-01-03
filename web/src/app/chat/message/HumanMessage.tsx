@@ -5,6 +5,7 @@ import { FileDescriptor } from "@/app/chat/interfaces";
 import "katex/dist/katex.min.css";
 import MessageSwitcher from "@/app/chat/message/MessageSwitcher";
 import Text from "@/refresh-components/texts/Text";
+import { cn } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Button from "@/refresh-components/buttons/Button";
@@ -45,15 +46,15 @@ function MessageEditing({
   return (
     <div className="w-full">
       <div
-        className={
+        className={cn(
           "w-full h-full border rounded-16 overflow-hidden p-3 flex flex-col gap-2"
-        }
+        )}
       >
         <textarea
           ref={textareaRef}
-          className={
+          className={cn(
             "w-full h-full resize-none outline-none bg-transparent overflow-y-scroll whitespace-normal break-word"
-          }
+          )}
           aria-multiline
           role="textarea"
           value={editedContent}
@@ -88,10 +89,11 @@ interface HumanMessageProps {
   content: string;
   files?: FileDescriptor[];
 
-  // Message navigation
+  // Message navigation - nodeId for tree position, messageId for editing
+  nodeId: number;
   messageId?: number | null;
   otherMessagesCanSwitchTo?: number[];
-  onMessageSelection?: (messageId: number) => void;
+  onMessageSelection?: (nodeId: number) => void;
 
   // Editing functionality - takes (editedContent, messageId) to allow stable callback reference
   onEdit?: (editedContent: string, messageId: number) => void;
@@ -101,16 +103,14 @@ interface HumanMessageProps {
   disableSwitchingForStreaming?: boolean;
 }
 
-// TODO: Consider using shallow array comparison for `files` and
-// `otherMessagesCanSwitchTo` instead of reference equality. Currently we rely
-// on stable references from the parent, but shallow comparison would be more
-// robust if those arrays are recreated.
+// Memoization comparison - compare by value for primitives, by reference for objects/arrays
 function arePropsEqual(
   prev: HumanMessageProps,
   next: HumanMessageProps
 ): boolean {
   return (
     prev.content === next.content &&
+    prev.nodeId === next.nodeId &&
     prev.messageId === next.messageId &&
     prev.files === next.files &&
     prev.disableSwitchingForStreaming === next.disableSwitchingForStreaming &&
@@ -123,6 +123,7 @@ function arePropsEqual(
 const HumanMessage = React.memo(function HumanMessage({
   content: initialContent,
   files,
+  nodeId,
   messageId,
   otherMessagesCanSwitchTo,
   onEdit,
@@ -139,9 +140,13 @@ const HumanMessage = React.memo(function HumanMessage({
   const [isHovered, setIsHovered] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
-  const currentMessageInd = messageId
-    ? otherMessagesCanSwitchTo?.indexOf(messageId)
-    : undefined;
+  // Use nodeId for switching (finding position in siblings)
+  const indexInSiblings = otherMessagesCanSwitchTo?.indexOf(nodeId);
+  // indexOf returns -1 if not found, treat that as undefined
+  const currentMessageInd =
+    indexInSiblings !== undefined && indexInSiblings !== -1
+      ? indexInSiblings
+      : undefined;
 
   const getPreviousMessage = () => {
     if (
@@ -168,11 +173,11 @@ const HumanMessage = React.memo(function HumanMessage({
   return (
     <div
       id="onyx-human-message"
-      className="pt-5 pb-1 w-full flex justify-center -mr-6 relative"
+      className="pt-5 pb-1 w-full lg:px-5 flex justify-center -mr-6 relative"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className={"text-user-text max-w-[790px] w-full"}>
+      <div className={cn("text-user-text max-w-[790px] px-4 w-full")}>
         <FileDisplay alignBubble files={files || []} />
         <div className="flex flex-wrap justify-end break-words">
           {isEditing ? (

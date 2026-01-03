@@ -95,9 +95,16 @@ class DocumentQuery:
             query_text, query_vector, num_candidates
         )
         hybrid_search_filters = DocumentQuery._get_hybrid_search_filters()
+
         hybrid_search_query: dict[str, Any] = {
-            "hybrid": {
-                "queries": hybrid_search_subqueries,
+            "bool": {
+                "must": [
+                    {
+                        "hybrid": {
+                            "queries": hybrid_search_subqueries,
+                        }
+                    }
+                ],
                 "filter": hybrid_search_filters,
             }
         }

@@ -103,9 +103,10 @@ function arePropsEqual(prev: AIMessageProps, next: AIMessageProps): boolean {
     prev.chatState.researchType === next.chatState.researchType &&
     prev.otherMessagesCanSwitchTo === next.otherMessagesCanSwitchTo &&
     prev.onRegenerate === next.onRegenerate &&
-    prev.parentMessage?.messageId === next.parentMessage?.messageId
+    prev.parentMessage?.messageId === next.parentMessage?.messageId &&
+    prev.llmManager?.isLoadingProviders === next.llmManager?.isLoadingProviders
     // Skip: chatState.regenerate, chatState.setPresentingDocument,
-    //       llmManager, onMessageSelection (function/object props)
+    //       most of llmManager, onMessageSelection (function/object props)
   );
 }
 
