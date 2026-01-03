@@ -238,19 +238,17 @@ class ChatFullResponse(BaseModel):
     # Core response fields
     answer: str
     answer_citationless: str
-    message_id: int
-    chat_session_id: UUID | None = None
-    error_msg: str | None = None
+    pre_answer_reasoning: str | None = None
+    tool_calls: list[ToolCallResponse] = []
 
     # Documents & citations
     top_documents: list[SearchDoc]
     citation_info: list[CitationInfo]
 
-    # Reasoning before the final answer
-    pre_answer_reasoning: str | None = None
-
-    # Tool calls with full details
-    tool_calls: list[ToolCallResponse] = []
+    # Metadata
+    message_id: int
+    chat_session_id: UUID | None = None
+    error_msg: str | None = None
 
 
 class ChatLoadedFile(InMemoryChatFile):

@@ -867,11 +867,11 @@ def gather_stream_full(
     return ChatFullResponse(
         answer=final_answer,
         answer_citationless=remove_answer_citations(final_answer),
+        pre_answer_reasoning=reasoning,
+        tool_calls=tool_call_responses,
+        top_documents=top_documents,
         citation_info=citations,
         message_id=message_id,
         chat_session_id=chat_session_id,
         error_msg=error_msg,
-        top_documents=top_documents,
-        pre_answer_reasoning=reasoning,
-        tool_calls=tool_call_responses,
     )

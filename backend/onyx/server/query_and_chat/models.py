@@ -82,10 +82,6 @@ class ChatFeedbackRequest(BaseModel):
 class SendMessageRequest(BaseModel):
     message: str
 
-    # When True (default), returns StreamingResponse with SSE
-    # When False, returns ChatFullResponse with complete data
-    stream: bool = True
-
     llm_override: LLMOverride | None = None
 
     allowed_tool_ids: list[int] | None = None
@@ -108,11 +104,17 @@ class SendMessageRequest(BaseModel):
     chat_session_id: UUID | None = None
     chat_session_info: ChatSessionCreationRequest | None = None
 
+    # When True (default), returns StreamingResponse with SSE
+    # When False, returns ChatFullResponse with complete data
+    stream: bool = True
+
     @model_validator(mode="after")
     def check_chat_session_id_or_info(self) -> "SendMessageRequest":
+        # If neither is provided, default to creating a new chat session using the
+        # default ChatSessionCreationRequest values.
         if self.chat_session_id is None and self.chat_session_info is None:
-            raise ValueError(
-                "Either chat_session_id or chat_session_info must be provided."
+            return self.model_copy(
+                update={"chat_session_info": ChatSessionCreationRequest()}
             )
         if self.chat_session_id is not None and self.chat_session_info is not None:
             raise ValueError(
