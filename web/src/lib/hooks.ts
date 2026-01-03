@@ -645,6 +645,21 @@ export function useLlmManager(
       return { name: "", provider: "", modelName: "" };
     }
 
+    // Helper to get the default model descriptor
+    const getDefaultDescriptor = (): LlmDescriptor => {
+      const defaultProvider = llmProviders.find(
+        (provider) => provider.is_default_provider
+      );
+      if (defaultProvider) {
+        return {
+          name: defaultProvider.name,
+          provider: defaultProvider.provider,
+          modelName: defaultProvider.default_model_name,
+        };
+      }
+      return { name: "", provider: "", modelName: "" };
+    };
+
     if (modelName) {
       const model = parseLlmDescriptor(modelName);
       if (!(model.modelName && model.modelName.length > 0)) {
@@ -672,7 +687,9 @@ export function useLlmManager(
         return { ...model, provider: provider.provider, name: provider.name };
       }
     }
-    return { name: "", provider: "", modelName: "" };
+
+    // Model not found in available providers - fall back to default model
+    return getDefaultDescriptor();
   }
 
   const [imageFilesPresent, setImageFilesPresent] = useState(false);
