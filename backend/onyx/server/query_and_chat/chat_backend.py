@@ -18,10 +18,13 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_user
+from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import create_chat_history_chain
 from onyx.chat.chat_utils import create_chat_session_from_request
 from onyx.chat.chat_utils import extract_headers
+from onyx.chat.models import ChatFullResponse
 from onyx.chat.models import CreateChatSessionID
+from onyx.chat.process_message import gather_stream_full
 from onyx.chat.process_message import handle_stream_message_objects
 from onyx.chat.process_message import stream_chat_message_objects
 from onyx.chat.prompt_utils import get_default_base_system_prompt
@@ -485,24 +488,26 @@ def handle_new_chat_message(
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
 
-@router.post("/send-chat-message")
+@router.post("/send-chat-message", response_model=None)
 def handle_send_chat_message(
     chat_message_req: SendMessageRequest,
     request: Request,
     user: User | None = Depends(current_chat_accessible_user),
     _rate_limit_check: None = Depends(check_token_rate_limits),
-) -> StreamingResponse:
+) -> StreamingResponse | ChatFullResponse:
     """
     This endpoint is used to send a new chat message.
 
     Args:
         chat_message_req (SendMessageRequest): Details about the new chat message.
+            - When stream=True (default): Returns StreamingResponse with SSE
+            - When stream=False: Returns ChatFullResponse with complete data
         request (Request): The current HTTP request context.
         user (User | None): The current user, obtained via dependency injection.
         _ (None): Rate limit check is run if user/group/global rate limits are enabled.
 
     Returns:
-        StreamingResponse: Streams the response to the new chat message.
+        StreamingResponse | ChatFullResponse: Either streams or returns complete response.
     """
     logger.debug(f"Received new chat message: {chat_message_req.message}")
 
@@ -513,6 +518,25 @@ def handle_send_chat_message(
         event=MilestoneRecordType.RAN_QUERY,
     )
 
+    # Non-streaming path: consume all packets and return complete response
+    if not chat_message_req.stream:
+        with get_session_with_current_tenant() as db_session:
+            state_container = ChatStateContainer()
+            packets = handle_stream_message_objects(
+                new_msg_req=chat_message_req,
+                user=user,
+                db_session=db_session,
+                litellm_additional_headers=extract_headers(
+                    request.headers, LITELLM_PASS_THROUGH_HEADERS
+                ),
+                custom_tool_additional_headers=get_custom_tool_additional_request_headers(
+                    request.headers
+                ),
+                external_state_container=state_container,
+            )
+            return gather_stream_full(packets, state_container)
+
+    # Streaming path, normal Onyx UI behavior
     def stream_generator() -> Generator[str, None, None]:
         try:
             with get_session_with_current_tenant() as db_session:

@@ -21,6 +21,7 @@ from onyx.chat.emitter import get_default_emitter
 from onyx.chat.llm_loop import run_llm_loop
 from onyx.chat.models import AnswerStream
 from onyx.chat.models import ChatBasicResponse
+from onyx.chat.models import ChatFullResponse
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import CreateChatSessionID
 from onyx.chat.models import ExtractedProjectFiles
@@ -28,6 +29,7 @@ from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import ProjectFileMetadata
 from onyx.chat.models import ProjectSearchConfig
 from onyx.chat.models import StreamingError
+from onyx.chat.models import ToolCallResponse
 from onyx.chat.prompt_utils import calculate_reserved_tokens
 from onyx.chat.save_chat import save_chat_turn
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
@@ -285,6 +287,8 @@ def handle_stream_message_objects(
     additional_context: str | None = None,
     # Slack context for federated Slack search
     slack_context: SlackContext | None = None,
+    # Optional external state container for non-streaming access to accumulated state
+    external_state_container: ChatStateContainer | None = None,
 ) -> AnswerStream:
     tenant_id = get_current_tenant_id()
 
@@ -523,8 +527,9 @@ def handle_stream_message_objects(
         def check_is_connected() -> bool:
             return check_stop_signal(chat_session.id, redis_client)
 
-        # Create state container for accumulating partial results
-        state_container = ChatStateContainer()
+        # Use external state container if provided, otherwise create internal one
+        # External container allows non-streaming callers to access accumulated state
+        state_container = external_state_container or ChatStateContainer()
 
         # Run the LLM loop with explicit wrapper for stop signal handling
         # The wrapper runs run_llm_loop in a background thread and polls every 300ms
@@ -789,4 +794,83 @@ def gather_stream(
         message_id=message_id,
         error_msg=error_msg,
         top_documents=top_documents,
+    )
+
+
+@log_function_time()
+def gather_stream_full(
+    packets: AnswerStream,
+    state_container: ChatStateContainer,
+) -> ChatFullResponse:
+    """
+    Aggregate streaming packets and state container into a complete ChatFullResponse.
+
+    This function consumes all packets from the stream and combines them with
+    the accumulated state from the ChatStateContainer to build a complete response
+    including answer, reasoning, citations, and tool calls.
+
+    Args:
+        packets: The stream of packets from handle_stream_message_objects
+        state_container: The state container that accumulates tool calls, reasoning, etc.
+
+    Returns:
+        ChatFullResponse with all available data
+    """
+    answer: str | None = None
+    citations: list[CitationInfo] = []
+    error_msg: str | None = None
+    message_id: int | None = None
+    top_documents: list[SearchDoc] = []
+    chat_session_id: UUID | None = None
+
+    for packet in packets:
+        if isinstance(packet, Packet):
+            if isinstance(packet.obj, AgentResponseStart):
+                if packet.obj.final_documents:
+                    top_documents = packet.obj.final_documents
+            elif isinstance(packet.obj, AgentResponseDelta):
+                if answer is None:
+                    answer = ""
+                if packet.obj.content:
+                    answer += packet.obj.content
+            elif isinstance(packet.obj, CitationInfo):
+                citations.append(packet.obj)
+        elif isinstance(packet, StreamingError):
+            error_msg = packet.error
+        elif isinstance(packet, MessageResponseIDInfo):
+            message_id = packet.reserved_assistant_message_id
+        elif isinstance(packet, CreateChatSessionID):
+            chat_session_id = packet.chat_session_id
+
+    if message_id is None:
+        raise ValueError("Message ID is required")
+
+    # Use state_container for complete answer (handles edge cases gracefully)
+    final_answer = state_container.get_answer_tokens() or answer or ""
+
+    # Get reasoning from state container (None when model doesn't produce reasoning)
+    reasoning = state_container.get_reasoning_tokens()
+
+    # Convert ToolCallInfo list to ToolCallResponse list
+    tool_call_responses = [
+        ToolCallResponse(
+            tool_name=tc.tool_name,
+            tool_arguments=tc.tool_call_arguments,
+            tool_result=tc.tool_call_response,
+            search_docs=tc.search_docs,
+            generated_images=tc.generated_images,
+        )
+        for tc in state_container.get_tool_calls()
+    ]
+
+    return ChatFullResponse(
+        answer=final_answer,
+        answer_citationless=remove_answer_citations(final_answer),
+        citation_info=citations,
+        message_id=message_id,
+        chat_session_id=chat_session_id,
+        error_msg=error_msg,
+        top_documents=top_documents,
+        reasoning=reasoning,
+        tool_calls=tool_call_responses,
     )

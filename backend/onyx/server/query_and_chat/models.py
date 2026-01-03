@@ -82,6 +82,10 @@ class ChatFeedbackRequest(BaseModel):
 class SendMessageRequest(BaseModel):
     message: str
 
+    # When True (default), returns StreamingResponse with SSE
+    # When False, returns ChatFullResponse with complete data
+    stream: bool = True
+
     llm_override: LLMOverride | None = None
 
     allowed_tool_ids: list[int] | None = None

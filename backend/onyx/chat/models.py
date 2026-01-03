@@ -17,6 +17,7 @@ from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
 from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.models import SearchToolUsage
 from onyx.tools.models import ToolCallKickoff
@@ -217,6 +218,37 @@ class ChatBasicResponse(BaseModel):
     error_msg: str | None
     message_id: int
     citation_info: list[CitationInfo]
+
+
+class ToolCallResponse(BaseModel):
+    """Tool call with full details for non-streaming response."""
+
+    tool_name: str
+    tool_arguments: dict[str, Any]
+    tool_result: str
+    search_docs: list[SearchDoc] | None = None
+    generated_images: list[GeneratedImage] | None = None
+
+
+class ChatFullResponse(BaseModel):
+    """Complete non-streaming response with all available data."""
+
+    # Core response fields
+    answer: str
+    answer_citationless: str
+    message_id: int
+    chat_session_id: UUID | None = None
+    error_msg: str | None = None
+
+    # Documents & citations
+    top_documents: list[SearchDoc]
+    citation_info: list[CitationInfo]
+
+    # Reasoning (null when model doesn't produce reasoning)
+    reasoning: str | None = None
+
+    # Tool calls with full details
+    tool_calls: list[ToolCallResponse] = []
 
 
 class ChatLoadedFile(InMemoryChatFile):
