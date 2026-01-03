@@ -859,6 +859,7 @@ def gather_stream_full(
             tool_result=tc.tool_call_response,
             search_docs=tc.search_docs,
             generated_images=tc.generated_images,
+            pre_reasoning=tc.reasoning_tokens,
         )
         for tc in state_container.get_tool_calls()
     ]
@@ -871,6 +872,6 @@ def gather_stream_full(
         chat_session_id=chat_session_id,
         error_msg=error_msg,
         top_documents=top_documents,
-        reasoning=reasoning,
+        pre_answer_reasoning=reasoning,
         tool_calls=tool_call_responses,
     )

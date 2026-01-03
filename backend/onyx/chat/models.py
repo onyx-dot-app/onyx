@@ -228,6 +228,8 @@ class ToolCallResponse(BaseModel):
     tool_result: str
     search_docs: list[SearchDoc] | None = None
     generated_images: list[GeneratedImage] | None = None
+    # Reasoning that led to the tool call
+    pre_reasoning: str | None = None
 
 
 class ChatFullResponse(BaseModel):
@@ -244,8 +246,8 @@ class ChatFullResponse(BaseModel):
     top_documents: list[SearchDoc]
     citation_info: list[CitationInfo]
 
-    # Reasoning (null when model doesn't produce reasoning)
-    reasoning: str | None = None
+    # Reasoning before the final answer
+    pre_answer_reasoning: str | None = None
 
     # Tool calls with full details
     tool_calls: list[ToolCallResponse] = []
