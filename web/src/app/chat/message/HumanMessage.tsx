@@ -177,111 +177,109 @@ const HumanMessage = React.memo(function HumanMessage({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <>
-        <FileDisplay alignBubble files={files || []} />
-        <div className="flex flex-wrap justify-end break-words">
-          {isEditing ? (
-            <MessageEditing
-              content={content}
-              onSubmitEdit={(editedContent) => {
-                // Don't update UI for edits that can't be persisted
-                if (messageId === undefined || messageId === null) {
-                  setIsEditing(false);
-                  return;
-                }
-                onEdit?.(editedContent, messageId);
-                setContent(editedContent);
+      <FileDisplay alignBubble files={files || []} />
+      <div className="flex flex-wrap justify-end break-words">
+        {isEditing ? (
+          <MessageEditing
+            content={content}
+            onSubmitEdit={(editedContent) => {
+              // Don't update UI for edits that can't be persisted
+              if (messageId === undefined || messageId === null) {
                 setIsEditing(false);
-              }}
-              onCancelEdit={() => setIsEditing(false)}
-            />
-          ) : typeof content === "string" ? (
-            <>
-              <div className="md:max-w-[25rem] flex basis-[100%] md:basis-auto justify-end md:order-1">
-                <div
-                  className={
-                    "max-w-[25rem] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3"
-                  }
-                >
-                  <Text as="p" mainContentBody>
-                    {content}
-                  </Text>
-                </div>
+                return;
+              }
+              onEdit?.(editedContent, messageId);
+              setContent(editedContent);
+              setIsEditing(false);
+            }}
+            onCancelEdit={() => setIsEditing(false)}
+          />
+        ) : typeof content === "string" ? (
+          <>
+            <div className="md:max-w-[25rem] flex basis-[100%] md:basis-auto justify-end md:order-1">
+              <div
+                className={
+                  "max-w-[25rem] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3"
+                }
+              >
+                <Text as="p" mainContentBody>
+                  {content}
+                </Text>
               </div>
-              {onEdit &&
-                isHovered &&
-                !isEditing &&
-                (!files || files.length === 0) && (
-                  <div className="flex flex-row gap-1 p-1">
-                    <CopyIconButton
-                      getCopyText={() => content}
-                      tertiary
-                      data-testid="HumanMessage/copy-button"
-                    />
-                    <IconButton
-                      icon={SvgEdit}
-                      tertiary
-                      tooltip="Edit"
-                      onClick={() => {
-                        setIsEditing(true);
-                        setIsHovered(false);
-                      }}
-                      data-testid="HumanMessage/edit-button"
-                    />
-                  </div>
-                )}
-            </>
-          ) : (
-            <>
-              {onEdit &&
+            </div>
+            {onEdit &&
               isHovered &&
               !isEditing &&
-              (!files || files.length === 0) ? (
-                <div className="my-auto">
+              (!files || files.length === 0) && (
+                <div className="flex flex-row gap-1 p-1">
+                  <CopyIconButton
+                    getCopyText={() => content}
+                    tertiary
+                    data-testid="HumanMessage/copy-button"
+                  />
                   <IconButton
                     icon={SvgEdit}
+                    tertiary
+                    tooltip="Edit"
                     onClick={() => {
                       setIsEditing(true);
                       setIsHovered(false);
                     }}
-                    tertiary
-                    tooltip="Edit"
+                    data-testid="HumanMessage/edit-button"
                   />
                 </div>
-              ) : (
-                <div className="h-[27px]" />
               )}
-              <div className="ml-auto rounded-lg p-1">{content}</div>
-            </>
-          )}
-          <div className="md:min-w-[100%] flex justify-end order-1 mt-1">
-            {currentMessageInd !== undefined &&
-              onMessageSelection &&
-              otherMessagesCanSwitchTo &&
-              otherMessagesCanSwitchTo.length > 1 && (
-                <MessageSwitcher
-                  disableForStreaming={disableSwitchingForStreaming}
-                  currentPage={currentMessageInd + 1}
-                  totalPages={otherMessagesCanSwitchTo.length}
-                  handlePrevious={() => {
-                    stopGenerating();
-                    const prevMessage = getPreviousMessage();
-                    if (prevMessage !== undefined) {
-                      onMessageSelection(prevMessage);
-                    }
+          </>
+        ) : (
+          <>
+            {onEdit &&
+            isHovered &&
+            !isEditing &&
+            (!files || files.length === 0) ? (
+              <div className="my-auto">
+                <IconButton
+                  icon={SvgEdit}
+                  onClick={() => {
+                    setIsEditing(true);
+                    setIsHovered(false);
                   }}
-                  handleNext={() => {
-                    stopGenerating();
-                    const nextMessage = getNextMessage();
-                    if (nextMessage !== undefined) {
-                      onMessageSelection(nextMessage);
-                    }
-                  }}
+                  tertiary
+                  tooltip="Edit"
                 />
-              )}
-          </div>
+              </div>
+            ) : (
+              <div className="h-[27px]" />
+            )}
+            <div className="ml-auto rounded-lg p-1">{content}</div>
+          </>
+        )}
+        <div className="md:min-w-[100%] flex justify-end order-1 mt-1">
+          {currentMessageInd !== undefined &&
+            onMessageSelection &&
+            otherMessagesCanSwitchTo &&
+            otherMessagesCanSwitchTo.length > 1 && (
+              <MessageSwitcher
+                disableForStreaming={disableSwitchingForStreaming}
+                currentPage={currentMessageInd + 1}
+                totalPages={otherMessagesCanSwitchTo.length}
+                handlePrevious={() => {
+                  stopGenerating();
+                  const prevMessage = getPreviousMessage();
+                  if (prevMessage !== undefined) {
+                    onMessageSelection(prevMessage);
+                  }
+                }}
+                handleNext={() => {
+                  stopGenerating();
+                  const nextMessage = getNextMessage();
+                  if (nextMessage !== undefined) {
+                    onMessageSelection(nextMessage);
+                  }
+                }}
+              />
+            )}
         </div>
-      </>
+      </div>
     </div>
   );
 }, arePropsEqual);
