@@ -173,11 +173,11 @@ const HumanMessage = React.memo(function HumanMessage({
   return (
     <div
       id="onyx-human-message"
-      className="pt-5 pb-1 w-full lg:px-5 flex justify-center -mr-6 relative"
+      className="flex justify-end pt-5 pb-1 w-full -mr-6 relative"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className={cn("text-user-text max-w-[790px] px-4 w-full")}>
+      <>
         <FileDisplay alignBubble files={files || []} />
         <div className="flex flex-wrap justify-end break-words">
           {isEditing ? (
@@ -283,7 +283,7 @@ const HumanMessage = React.memo(function HumanMessage({
               )}
           </div>
         </div>
-      </div>
+      </>
     </div>
   );
 }, arePropsEqual);
