@@ -67,8 +67,6 @@ export default function LLMPopover({
 }: LLMPopoverProps) {
   const llmProviders = llmManager.llmProviders;
   const isLoadingProviders = llmManager.isLoadingProviders;
-  console.log("llmManager", llmManager);
-  console.log("isLoadingProviders", isLoadingProviders);
 
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
