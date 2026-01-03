@@ -552,6 +552,16 @@ function getDefaultLlmDescriptor(
       modelName: defaultProvider.default_model_name,
     };
   }
+  const firstLlmProvider = llmProviders.find(
+    (provider) => provider.model_configurations.length > 0
+  );
+  if (firstLlmProvider) {
+    return {
+      name: firstLlmProvider.name,
+      provider: firstLlmProvider.provider,
+      modelName: firstLlmProvider.default_model_name,
+    };
+  }
   return null;
 }
 
