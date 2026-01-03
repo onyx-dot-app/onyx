@@ -173,7 +173,7 @@ const HumanMessage = React.memo(function HumanMessage({
   return (
     <div
       id="onyx-human-message"
-      className="flex justify-end pt-5 pb-1 w-full -mr-6 relative"
+      className="flex flex-col justify-end pt-5 pb-1 w-full -mr-6 relative"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
