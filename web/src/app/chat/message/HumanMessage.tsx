@@ -131,11 +131,13 @@ const HumanMessage = React.memo(function HumanMessage({
   stopGenerating = () => null,
   disableSwitchingForStreaming = false,
 }: HumanMessageProps) {
-  // TODO (@raunakab):
-  //
-  // This is some duplicated state that is patching a memoization issue with `HumanMessage`.
-  // Fix this later.
+  // Local state for optimistic updates when editing.
+  // Syncs with prop via useEffect so parent changes are reflected.
   const [content, setContent] = useState(initialContent);
+
+  useEffect(() => {
+    setContent(initialContent);
+  }, [initialContent]);
 
   const [isHovered, setIsHovered] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
