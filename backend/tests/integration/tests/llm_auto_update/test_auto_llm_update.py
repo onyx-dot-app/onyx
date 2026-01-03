@@ -18,7 +18,6 @@ import pytest
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.reset import reset_all
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -28,10 +27,10 @@ MAX_WAIT_TIME_SECONDS = 120
 POLL_INTERVAL_SECONDS = 5
 
 
-@pytest.fixture(scope="module", autouse=True)
-def reset_for_module() -> None:
-    """Reset all data once before running any tests in this module."""
-    reset_all()
+# @pytest.fixture(scope="module", autouse=True)
+# def reset_for_module() -> None:
+#     """Reset all data once before running any tests in this module."""
+#     reset_all()
 
 
 def _create_provider_with_api(
@@ -140,6 +139,7 @@ def wait_for_model_sync(
 
 def test_auto_mode_provider_gets_synced_from_github_config(
     admin_user: DATestUser,
+    reset: None,
 ) -> None:
     """
     Test that a provider in Auto mode gets its models synced from GitHub config.
@@ -228,6 +228,7 @@ def test_auto_mode_provider_gets_synced_from_github_config(
 
 def test_manual_mode_provider_not_affected_by_auto_sync(
     admin_user: DATestUser,
+    reset: None,
 ) -> None:
     """
     Test that a provider in Manual mode is NOT affected by auto sync.
