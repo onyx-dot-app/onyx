@@ -4,6 +4,7 @@ from typing import IO
 from typing import TYPE_CHECKING
 
 from onyx.configs.constants import KV_UNSTRUCTURED_API_KEY
+from onyx.configs.constants import KV_UNSTRUCTURED_SERVER_URL
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.utils.logger import setup_logger
@@ -33,6 +34,24 @@ def delete_unstructured_api_key() -> None:
     kv_store.delete(KV_UNSTRUCTURED_API_KEY)
 
 
+def get_unstructured_server_url() -> str | None:
+    kv_store = get_kv_store()
+    try:
+        return cast(str, kv_store.load(KV_UNSTRUCTURED_SERVER_URL))
+    except KvKeyNotFoundError:
+        return None
+
+
+def update_unstructured_server_url(server_url: str) -> None:
+    kv_store = get_kv_store()
+    kv_store.store(KV_UNSTRUCTURED_SERVER_URL, server_url)
+
+
+def delete_unstructured_server_url() -> None:
+    kv_store = get_kv_store()
+    kv_store.delete(KV_UNSTRUCTURED_SERVER_URL)
+
+
 def _sdk_partition_request(
     file: IO[Any], file_name: str, **kwargs: Any
 ) -> "operations.PartitionRequest":
@@ -60,7 +79,10 @@ def unstructured_to_text(file: IO[Any], file_name: str) -> str:
     logger.debug(f"Starting to read file: {file_name}")
     req = _sdk_partition_request(file, file_name, strategy="fast")
 
-    unstructured_client = UnstructuredClient(api_key_auth=get_unstructured_api_key())
+    unstructured_client = UnstructuredClient(
+        api_key_auth=get_unstructured_api_key(),
+        server_url=get_unstructured_server_url(),
+    )
 
     response = unstructured_client.general.partition(req)
     elements = dict_to_elements(response.elements)

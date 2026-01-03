@@ -25,8 +25,11 @@ from onyx.db.search_settings import update_search_settings_status
 from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.factory import get_default_document_index
 from onyx.file_processing.unstructured import delete_unstructured_api_key
+from onyx.file_processing.unstructured import delete_unstructured_server_url
 from onyx.file_processing.unstructured import get_unstructured_api_key
+from onyx.file_processing.unstructured import get_unstructured_server_url
 from onyx.file_processing.unstructured import update_unstructured_api_key
+from onyx.file_processing.unstructured import update_unstructured_server_url
 from onyx.natural_language_processing.search_nlp_models import clean_model_name
 from onyx.server.manage.embedding.models import SearchSettingsDeleteRequest
 from onyx.server.manage.models import FullModelVersionResponse
@@ -259,3 +262,26 @@ def delete_unstructured_api_key_endpoint(
     _: User | None = Depends(current_admin_user),
 ) -> None:
     delete_unstructured_api_key()
+
+
+@router.get("/unstructured-server-url-set")
+def unstructured_server_url_set(
+    _: User | None = Depends(current_admin_user),
+) -> bool:
+    server_url = get_unstructured_server_url()
+    return server_url is not None
+
+
+@router.put("/upsert-unstructured-server-url")
+def upsert_unstructured_server_url(
+    unstructured_server_url: str,
+    _: User | None = Depends(current_admin_user),
+) -> None:
+    update_unstructured_server_url(unstructured_server_url)
+
+
+@router.delete("/delete-unstructured-server-url")
+def delete_unstructured_server_url_endpoint(
+    _: User | None = Depends(current_admin_user),
+) -> None:
+    delete_unstructured_server_url()

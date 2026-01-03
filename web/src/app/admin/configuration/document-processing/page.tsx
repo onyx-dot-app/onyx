@@ -15,21 +15,33 @@ import { SvgLock } from "@opal/icons";
 function Main() {
   const {
     data: isApiKeySet,
-    error,
-    mutate,
-    isLoading,
-  } = useSWR<{
-    unstructured_api_key: string | null;
-  }>("/api/search-settings/unstructured-api-key-set", (url: string) =>
-    fetch(url).then((res) => res.json())
+    error: apiKeyError,
+    mutate: mutateApiKey,
+    isLoading: isApiKeyLoading,
+  } = useSWR<boolean>(
+    "/api/search-settings/unstructured-api-key-set",
+    (url: string) => fetch(url).then((res) => res.json())
+  );
+
+  const {
+    data: isServerUrlSet,
+    error: serverUrlError,
+    mutate: mutateServerUrl,
+    isLoading: isServerUrlLoading,
+  } = useSWR<boolean>(
+    "/api/search-settings/unstructured-server-url-set",
+    (url: string) => fetch(url).then((res) => res.json())
   );
 
   const [apiKey, setApiKey] = useState("");
+  const [serverUrl, setServerUrl] = useState("");
 
-  const handleSave = async () => {
+  const handleSaveApiKey = async () => {
     try {
       await fetch(
-        `/api/search-settings/upsert-unstructured-api-key?unstructured_api_key=${apiKey}`,
+        `/api/search-settings/upsert-unstructured-api-key?unstructured_api_key=${encodeURIComponent(
+          apiKey
+        )}`,
         {
           method: "PUT",
         }
@@ -37,10 +49,10 @@ function Main() {
     } catch (error) {
       console.error("Failed to save API key:", error);
     }
-    mutate();
+    mutateApiKey();
   };
 
-  const handleDelete = async () => {
+  const handleDeleteApiKey = async () => {
     try {
       await fetch("/api/search-settings/delete-unstructured-api-key", {
         method: "DELETE",
@@ -49,15 +61,44 @@ function Main() {
     } catch (error) {
       console.error("Failed to delete API key:", error);
     }
-    mutate();
+    mutateApiKey();
   };
 
-  if (isLoading) {
+  const handleSaveServerUrl = async () => {
+    try {
+      await fetch(
+        `/api/search-settings/upsert-unstructured-server-url?unstructured_server_url=${encodeURIComponent(
+          serverUrl
+        )}`,
+        {
+          method: "PUT",
+        }
+      );
+    } catch (error) {
+      console.error("Failed to save server URL:", error);
+    }
+    mutateServerUrl();
+  };
+
+  const handleDeleteServerUrl = async () => {
+    try {
+      await fetch("/api/search-settings/delete-unstructured-server-url", {
+        method: "DELETE",
+      });
+      setServerUrl("");
+    } catch (error) {
+      console.error("Failed to delete server URL:", error);
+    }
+    mutateServerUrl();
+  };
+
+  if (isApiKeyLoading || isServerUrlLoading) {
     return <ThreeDotsLoader />;
   }
+
   return (
     <div className="pb-36">
-      <div className="w-full max-w-2xl">
+      <div className="w-full max-w-2xl flex flex-col gap-4">
         <CardSection className="flex flex-col gap-2">
           <Text
             as="p"
@@ -65,7 +106,7 @@ function Main() {
             text05
             className="border-b border-border-01 pb-2"
           >
-            Process with Unstructured API
+            Unstructured API Key
           </Text>
 
           <div className="flex flex-col gap-2">
@@ -74,10 +115,6 @@ function Main() {
               like .pdf, .docx, .png, .pptx, etc. into clean text for Onyx to
               ingest. Provide an API key to enable Unstructured document
               processing.
-            </Text>
-            <Text as="p" mainContentMuted text03>
-              <span className="font-main-ui-action text-text-03">Note:</span>{" "}
-              this will send documents to Unstructured servers for processing.
             </Text>
             <Text as="p" mainContentBody text04 className="leading-relaxed">
               Learn more about Unstructured{" "}
@@ -127,7 +164,7 @@ function Main() {
             <div className="flex flex-col gap-2 desktop:flex-row desktop:items-center desktop:gap-2">
               {isApiKeySet ? (
                 <>
-                  <Button onClick={handleDelete} danger>
+                  <Button onClick={handleDeleteApiKey} danger>
                     Delete API Key
                   </Button>
                   <Text as="p" mainContentBody text04 className="desktop:mt-0">
@@ -135,8 +172,79 @@ function Main() {
                   </Text>
                 </>
               ) : (
-                <Button onClick={handleSave} action>
+                <Button onClick={handleSaveApiKey} action>
                   Save API Key
+                </Button>
+              )}
+            </div>
+          </div>
+        </CardSection>
+
+        <CardSection className="flex flex-col gap-2">
+          <Text
+            as="p"
+            headingH3
+            text05
+            className="border-b border-border-01 pb-2"
+          >
+            Self-Hosted Server URL
+          </Text>
+
+          <div className="flex flex-col gap-2">
+            <Text as="p" mainContentBody text04 className="leading-relaxed">
+              If you are running a self-hosted Unstructured server, provide the
+              server URL here. Leave empty to use the hosted Unstructured API.
+            </Text>
+            <Text as="p" mainContentMuted text03>
+              <span className="font-main-ui-action text-text-03">Example:</span>{" "}
+              http://localhost:8000
+            </Text>
+            <div className="pt-1.5">
+              {isServerUrlSet ? (
+                <div
+                  className={cn(
+                    "flex",
+                    "items-center",
+                    "gap-0.5",
+                    "rounded-08",
+                    "border",
+                    "border-border-01",
+                    "bg-background-neutral-01",
+                    "px-2",
+                    "py-1.5"
+                  )}
+                >
+                  <Text
+                    as="p"
+                    mainUiMuted
+                    text03
+                    className="flex-1 text-text-03"
+                  >
+                    Server URL configured
+                  </Text>
+                  <SvgLock className="h-4 w-4 stroke-text-03" aria-hidden />
+                </div>
+              ) : (
+                <InputTypeIn
+                  placeholder="Enter Server URL"
+                  value={serverUrl}
+                  onChange={(e) => setServerUrl(e.target.value)}
+                />
+              )}
+            </div>
+            <div className="flex flex-col gap-2 desktop:flex-row desktop:items-center desktop:gap-2">
+              {isServerUrlSet ? (
+                <>
+                  <Button onClick={handleDeleteServerUrl} danger>
+                    Delete Server URL
+                  </Button>
+                  <Text as="p" mainContentBody text04 className="desktop:mt-0">
+                    Delete to use the hosted Unstructured API.
+                  </Text>
+                </>
+              ) : (
+                <Button onClick={handleSaveServerUrl} action>
+                  Save Server URL
                 </Button>
               )}
             </div>
