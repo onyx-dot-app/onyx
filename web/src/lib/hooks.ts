@@ -539,6 +539,22 @@ This approach ensures that user preferences are maintained for existing chats wh
 providing appropriate defaults for new conversations based on the available tools.
 */
 
+function getDefaultLlmDescriptor(
+  llmProviders: LLMProviderDescriptor[]
+): LlmDescriptor | null {
+  const defaultProvider = llmProviders.find(
+    (provider) => provider.is_default_provider
+  );
+  if (defaultProvider) {
+    return {
+      name: defaultProvider.name,
+      provider: defaultProvider.provider,
+      modelName: defaultProvider.default_model_name,
+    };
+  }
+  return null;
+}
+
 export function useLlmManager(
   currentChatSession?: ChatSession,
   liveAssistant?: MinimalPersonaSnapshot
@@ -618,16 +634,9 @@ export function useLlmManager(
       } else if (user?.preferences?.default_model) {
         setCurrentLlm(getValidLlmDescriptor(user.preferences.default_model));
       } else {
-        const defaultProvider = llmProviders.find(
-          (provider) => provider.is_default_provider
-        );
-
-        if (defaultProvider) {
-          setCurrentLlm({
-            name: defaultProvider.name,
-            provider: defaultProvider.provider,
-            modelName: defaultProvider.default_model_name,
-          });
+        const defaultLlm = getDefaultLlmDescriptor(llmProviders);
+        if (defaultLlm) {
+          setCurrentLlm(defaultLlm);
         }
       }
     };
@@ -644,21 +653,6 @@ export function useLlmManager(
     if (llmProviders === undefined || llmProviders === null) {
       return { name: "", provider: "", modelName: "" };
     }
-
-    // Helper to get the default model descriptor
-    const getDefaultDescriptor = (): LlmDescriptor => {
-      const defaultProvider = llmProviders.find(
-        (provider) => provider.is_default_provider
-      );
-      if (defaultProvider) {
-        return {
-          name: defaultProvider.name,
-          provider: defaultProvider.provider,
-          modelName: defaultProvider.default_model_name,
-        };
-      }
-      return { name: "", provider: "", modelName: "" };
-    };
 
     if (modelName) {
       const model = parseLlmDescriptor(modelName);
@@ -689,7 +683,13 @@ export function useLlmManager(
     }
 
     // Model not found in available providers - fall back to default model
-    return getDefaultDescriptor();
+    return (
+      getDefaultLlmDescriptor(llmProviders) ?? {
+        name: "",
+        provider: "",
+        modelName: "",
+      }
+    );
   }
 
   const [imageFilesPresent, setImageFilesPresent] = useState(false);
