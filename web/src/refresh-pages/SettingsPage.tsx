@@ -15,6 +15,7 @@ import {
   SvgExternalLink,
   SvgKey,
   SvgLock,
+  SvgMinusCircle,
   SvgMoon,
   SvgSliders,
   SvgSun,
@@ -50,6 +51,8 @@ import { getSourceMetadata } from "@/lib/sources";
 import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { InputPrompt } from "@/app/chat/interfaces";
+import { useInputPrompts } from "@/hooks/useInputPrompts";
 
 interface PAT {
   id: number;
@@ -319,6 +322,222 @@ function GeneralSettings() {
   );
 }
 
+function PromptShortcuts() {
+  const { popup, setPopup } = usePopup();
+  const { inputPrompts, isLoading, error } = useInputPrompts();
+
+  const [shortcuts, setShortcuts] = useState<InputPrompt[]>([]);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
+  // Initialize shortcuts when input prompts are loaded
+  useEffect(() => {
+    if (isLoading || error) return;
+
+    // Always ensure there's at least one empty row
+    setShortcuts([
+      ...inputPrompts,
+      {
+        id: -Date.now(),
+        prompt: "",
+        content: "",
+        active: true,
+        is_public: false,
+      },
+    ]);
+    setIsInitialLoad(false);
+  }, [inputPrompts, isLoading, error]);
+
+  // Show error popup if fetch fails
+  useEffect(() => {
+    if (!error) return;
+    setPopup({ message: "Failed to load shortcuts", type: "error" });
+  }, [error, setPopup]);
+
+  // Auto-add empty row when user starts typing in the last row
+  useEffect(() => {
+    // Skip during initial load - the fetch useEffect handles the initial empty row
+    if (isInitialLoad) return;
+
+    // Count how many empty rows we have
+    const emptyRowsCount = shortcuts.filter(
+      (s) => !s.prompt.trim() && !s.content.trim()
+    ).length;
+
+    // If we have no empty rows, add one
+    if (emptyRowsCount === 0) {
+      setShortcuts((prev) => [
+        ...prev,
+        {
+          id: -Date.now(),
+          prompt: "",
+          content: "",
+          active: true,
+          is_public: false,
+        },
+      ]);
+    }
+    // If we have more than one empty row, keep only one
+    else if (emptyRowsCount > 1) {
+      setShortcuts((prev) => {
+        const filledShortcuts = prev.filter(
+          (s) => s.prompt.trim() || s.content.trim()
+        );
+        return [
+          ...filledShortcuts,
+          {
+            id: -Date.now(),
+            prompt: "",
+            content: "",
+            active: true,
+            is_public: false,
+          },
+        ];
+      });
+    }
+  }, [shortcuts]);
+
+  const handleUpdateShortcut = useCallback(
+    (index: number, field: "prompt" | "content", value: string) => {
+      setShortcuts((prev) =>
+        prev.map((shortcut, i) =>
+          i === index ? { ...shortcut, [field]: value } : shortcut
+        )
+      );
+    },
+    []
+  );
+
+  const handleRemoveShortcut = useCallback(
+    async (index: number) => {
+      const shortcut = shortcuts[index];
+      if (!shortcut) return;
+
+      // If it's a new shortcut (negative ID), just remove from state
+      if (shortcut.id < 0) {
+        setShortcuts((prev) => prev.filter((_, i) => i !== index));
+        return;
+      }
+
+      // Otherwise, delete from backend
+      try {
+        const response = await fetch(`/api/input_prompt/${shortcut.id}`, {
+          method: "DELETE",
+        });
+
+        if (response.ok) {
+          setShortcuts((prev) => prev.filter((_, i) => i !== index));
+          setPopup({ message: "Shortcut deleted", type: "success" });
+        } else {
+          throw new Error("Failed to delete shortcut");
+        }
+      } catch (error) {
+        setPopup({ message: "Failed to delete shortcut", type: "error" });
+      }
+    },
+    [shortcuts, setPopup]
+  );
+
+  const handleSaveShortcut = useCallback(
+    async (index: number) => {
+      const shortcut = shortcuts[index];
+      if (!shortcut || !shortcut.prompt.trim() || !shortcut.content.trim()) {
+        setPopup({
+          message: "Both shortcut and expansion are required",
+          type: "error",
+        });
+        return;
+      }
+
+      try {
+        if (shortcut.id < 0) {
+          // Create new shortcut
+          const response = await fetch("/api/input_prompt", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              prompt: shortcut.prompt,
+              content: shortcut.content,
+              active: true,
+            }),
+          });
+
+          if (response.ok) {
+            const newShortcut = await response.json();
+            setShortcuts((prev) =>
+              prev.map((s, i) => (i === index ? newShortcut : s))
+            );
+            setPopup({ message: "Shortcut created", type: "success" });
+          } else {
+            throw new Error("Failed to create shortcut");
+          }
+        } else {
+          // Update existing shortcut
+          const response = await fetch(`/api/input_prompt/${shortcut.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              prompt: shortcut.prompt,
+              content: shortcut.content,
+              active: true,
+            }),
+          });
+
+          if (response.ok) {
+            setPopup({ message: "Shortcut updated", type: "success" });
+          } else {
+            throw new Error("Failed to update shortcut");
+          }
+        }
+      } catch (error) {
+        setPopup({
+          message: "Failed to save shortcut",
+          type: "error",
+        });
+      }
+    },
+    [shortcuts, setPopup]
+  );
+
+  return (
+    <>
+      {popup}
+
+      {shortcuts.map((shortcut, index) => {
+        const isEmpty = !shortcut.prompt.trim() && !shortcut.content.trim();
+        return (
+          <div key={shortcut.id}>
+            <GeneralLayouts.Section horizontal gap={0.25}>
+              <div className="w-[60%]">
+                <InputTypeIn
+                  placeholder="/Shortcut"
+                  value={shortcut.prompt}
+                  onChange={(e) =>
+                    handleUpdateShortcut(index, "prompt", e.target.value)
+                  }
+                />
+              </div>
+              <InputTypeIn
+                placeholder="Full prompt"
+                value={shortcut.content}
+                onChange={(e) =>
+                  handleUpdateShortcut(index, "content", e.target.value)
+                }
+              />
+              <IconButton
+                icon={SvgMinusCircle}
+                onClick={() => void handleRemoveShortcut(index)}
+                tertiary
+                disabled={isEmpty}
+                aria-label="Remove shortcut"
+              />
+            </GeneralLayouts.Section>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 function ChatPreferencesSettings() {
   const {
     user,
@@ -420,6 +639,8 @@ function ChatPreferencesSettings() {
                 }}
               />
             </InputLayouts.Horizontal>
+
+            {user?.preferences?.shortcut_enabled && <PromptShortcuts />}
           </Card>
         </GeneralLayouts.Section>
 
