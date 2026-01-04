@@ -141,7 +141,8 @@ export interface LabelLayoutProps {
   label?: string;
   optional?: boolean;
   description?: string;
-  className?: string;
+  start?: boolean;
+  center?: boolean;
 }
 
 /**
@@ -170,8 +171,20 @@ export interface LabelLayoutProps {
  * />
  * ```
  */
-function LabelLayout({ name, label, optional, description }: LabelLayoutProps) {
-  const className = "flex flex-col w-full";
+function LabelLayout({
+  name,
+  label,
+  optional,
+  description,
+  start,
+  center,
+}: LabelLayoutProps) {
+  const alignment = start
+    ? "items-start"
+    : center
+      ? "items-center"
+      : "items-start";
+  const className = cn("flex flex-col w-full", alignment);
   const content = label ? (
     <>
       <div className="flex flex-row gap-1.5">
