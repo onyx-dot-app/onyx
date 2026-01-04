@@ -43,32 +43,40 @@ class TestGetCurrentWindowStart:
 class TestGetOrCreateTenantUsage:
     """Tests for get_or_create_tenant_usage function."""
 
-    def test_creates_new_usage_record_when_none_exists(self) -> None:
-        """Test that a new usage record is created when none exists."""
+    def test_creates_or_gets_usage_record(self) -> None:
+        """Test that get_or_create returns a usage record via atomic upsert."""
+        mock_usage = MagicMock()
+        mock_usage.llm_cost_cents = 0.0
+        mock_usage.chunks_indexed = 0
+
         mock_session = MagicMock()
-        mock_session.execute.return_value.scalar_one_or_none.return_value = None
+        # The new implementation uses INSERT ... ON CONFLICT with RETURNING
+        # which calls execute().scalar_one()
+        mock_session.execute.return_value.scalar_one.return_value = mock_usage
 
         window_start = datetime(2024, 1, 1, tzinfo=timezone.utc)
-        get_or_create_tenant_usage(mock_session, window_start)
+        usage = get_or_create_tenant_usage(mock_session, window_start)
 
-        # Verify a new TenantUsage was added
-        mock_session.add.assert_called_once()
+        # Verify execute was called (with the INSERT ... ON CONFLICT statement)
+        mock_session.execute.assert_called_once()
         mock_session.flush.assert_called_once()
+        assert usage == mock_usage
 
-    def test_returns_existing_usage_record(self) -> None:
-        """Test that existing usage record is returned if it exists."""
+    def test_returns_usage_record_from_atomic_upsert(self) -> None:
+        """Test that the returned usage record comes from the atomic upsert."""
         mock_usage = MagicMock()
         mock_usage.llm_cost_cents = 100.0
         mock_usage.chunks_indexed = 500
 
         mock_session = MagicMock()
-        mock_session.execute.return_value.scalar_one_or_none.return_value = mock_usage
+        mock_session.execute.return_value.scalar_one.return_value = mock_usage
 
         window_start = datetime(2024, 1, 1, tzinfo=timezone.utc)
         usage = get_or_create_tenant_usage(mock_session, window_start)
 
         assert usage == mock_usage
-        mock_session.add.assert_not_called()
+        assert usage.llm_cost_cents == 100.0
+        assert usage.chunks_indexed == 500
 
 
 class TestGetTenantUsageStats:
