@@ -127,7 +127,7 @@ const LineItem = React.forwardRef<HTMLButtonElement, LineItemProps>(
       <button
         ref={ref}
         className={cn(
-          "flex flex-col w-full justify-center items-start p-2 rounded-08 group/LineItem",
+          "flex flex-row w-full justify-start items-start p-2 rounded-08 group/LineItem gap-2",
           buttonClassNames[variant][emphasisKey],
           className
         )}
@@ -135,36 +135,29 @@ const LineItem = React.forwardRef<HTMLButtonElement, LineItemProps>(
         data-selected={selected}
         {...props}
       >
-        <div className="flex flex-row items-center justify-start w-full gap-2">
-          {Icon && (
-            <div className="flex flex-col justify-center items-center h-[1rem] min-w-[1rem]">
-              <Icon
-                className={cn("h-[1rem] w-[1rem]", iconClassNames[variant])}
-              />
-            </div>
-          )}
-          <Truncated
-            mainUiMuted
-            className={cn("text-left w-full", textClassNames[variant])}
-          >
-            {children}
-          </Truncated>
-          {rightChildren}
-        </div>
-        {description && (
-          <div className="flex flex-row">
-            {Icon && (
-              <>
-                <div className="w-[1rem]" />
-                <div className="w-2" />
-              </>
-            )}
-
+        {Icon && (
+          <div className="flex flex-col justify-center items-center h-[1rem] min-w-[1rem] mt-0.5">
+            <Icon
+              className={cn("h-[1rem] w-[1rem]", iconClassNames[variant])}
+            />
+          </div>
+        )}
+        <div className="flex flex-col items-start justify-start w-full min-w-0">
+          <div className="flex flex-row items-center justify-start w-full">
+            <Truncated
+              mainUiMuted
+              className={cn("text-left w-full", textClassNames[variant])}
+            >
+              {children}
+            </Truncated>
+            {rightChildren}
+          </div>
+          {description && (
             <Text as="p" secondaryBody text03>
               {description}
             </Text>
-          </div>
-        )}
+          )}
+        </div>
       </button>
     );
 
