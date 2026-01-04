@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import Link from "next/link";
 import type { Route } from "next";
 import type { IconProps } from "@opal/types";
-import Text from "../texts/Text";
+import Text from "@/refresh-components/texts/Text";
 
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -21,7 +21,6 @@ export interface ButtonProps
   internal?: boolean;
 
   // Button states:
-  disabled?: boolean;
   transient?: boolean;
 
   // Icons:
@@ -31,7 +30,7 @@ export interface ButtonProps
   href?: string;
 }
 
-const Button = React.forwardRef(
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   (
     {
       main,
@@ -53,8 +52,8 @@ const Button = React.forwardRef(
       children,
       className,
       ...props
-    }: ButtonProps,
-    ref: React.ForwardedRef<HTMLButtonElement>
+    },
+    ref
   ) => {
     if (LeftIcon && RightIcon)
       throw new Error(
