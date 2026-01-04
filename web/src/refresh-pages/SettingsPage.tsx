@@ -630,7 +630,7 @@ function ChatPreferencesSettings() {
 
             <InputLayouts.Horizontal
               label="Temperature override"
-              description="Set the temperature for the LLM"
+              description="Set the temperature for the LLM."
             >
               <Switch
                 checked={user?.preferences.temperature_override_enabled}
@@ -996,6 +996,7 @@ function AccountsAccessSettings() {
             <InputLayouts.Horizontal
               label="Email"
               description="Your account email address."
+              center
             >
               <Text>{user?.email ?? "anonymous"}</Text>
             </InputLayouts.Horizontal>
@@ -1004,6 +1005,7 @@ function AccountsAccessSettings() {
               <InputLayouts.Horizontal
                 label="Password"
                 description="Update your account password."
+                center
               >
                 <Button
                   secondary
@@ -1021,30 +1023,26 @@ function AccountsAccessSettings() {
           <GeneralLayouts.Section gap={0.75}>
             <InputLayouts.Label label="Access Tokens" />
             <Card>
-              <div className="space-y-4">
+              <GeneralLayouts.Section horizontal gap={1}>
                 {/* Header with search/empty state and create button */}
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    {pats.length === 0 ? (
-                      <Text as="p" text03 secondaryBody>
-                        {isLoading
-                          ? "Loading tokens..."
-                          : "No access tokens created."}
-                      </Text>
-                    ) : (
-                      <InputTypeIn
-                        placeholder="Search tokens..."
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                      />
-                    )}
-                  </div>
-                  <div className="ml-4">
-                    <CreateButton onClick={() => setShowCreateModal(true)}>
-                      New Access Token
-                    </CreateButton>
-                  </div>
-                </div>
+                <GeneralLayouts.Section horizontal gap={1}>
+                  {pats.length === 0 ? (
+                    <Text as="span" text03 secondaryBody className="flex-1">
+                      {isLoading
+                        ? "Loading tokens..."
+                        : "No access tokens created."}
+                    </Text>
+                  ) : (
+                    <InputTypeIn
+                      placeholder="Search tokens..."
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                    />
+                  )}
+                  <CreateButton onClick={() => setShowCreateModal(true)}>
+                    New Access Token
+                  </CreateButton>
+                </GeneralLayouts.Section>
 
                 {/* Token List */}
                 {pats.length > 0 && (
@@ -1145,7 +1143,7 @@ function AccountsAccessSettings() {
                     })}
                   </div>
                 )}
-              </div>
+              </GeneralLayouts.Section>
             </Card>
           </GeneralLayouts.Section>
         )}

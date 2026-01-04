@@ -129,7 +129,7 @@ function HorizontalInputLayout({
         <div className="w-[70%]">
           <LabelLayout {...fieldLabelProps} />
         </div>
-        <div className="flex flex-col items-end min-w-[14rem]">{children}</div>
+        <div className="flex flex-col items-end min-w-[12rem]">{children}</div>
       </label>
       {name && <ErrorLayout name={name} />}
     </div>
