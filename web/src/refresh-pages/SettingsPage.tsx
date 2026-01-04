@@ -341,7 +341,7 @@ function GeneralSettings() {
 
 function PromptShortcuts() {
   const { popup, setPopup } = usePopup();
-  const { inputPrompts, isLoading, error } = useInputPrompts();
+  const { inputPrompts, isLoading, error, refetch } = useInputPrompts();
 
   const [shortcuts, setShortcuts] = useState<InputPrompt[]>([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -375,13 +375,15 @@ function PromptShortcuts() {
     // Skip during initial load - the fetch useEffect handles the initial empty row
     if (isInitialLoad) return;
 
-    // Count how many empty rows we have
-    const emptyRowsCount = shortcuts.filter(
+    // Only manage new/unsaved rows (negative IDs) - never touch existing shortcuts
+    const newShortcuts = shortcuts.filter((s) => s.id < 0);
+    const emptyNewRows = newShortcuts.filter(
       (s) => !s.prompt.trim() && !s.content.trim()
-    ).length;
+    );
+    const emptyNewRowsCount = emptyNewRows.length;
 
-    // If we have no empty rows, add one
-    if (emptyRowsCount === 0) {
+    // If we have no empty new rows, add one
+    if (emptyNewRowsCount === 0) {
       setShortcuts((prev) => [
         ...prev,
         {
@@ -393,14 +395,19 @@ function PromptShortcuts() {
         },
       ]);
     }
-    // If we have more than one empty row, keep only one
-    else if (emptyRowsCount > 1) {
+    // If we have more than one empty new row, keep only one
+    else if (emptyNewRowsCount > 1) {
       setShortcuts((prev) => {
-        const filledShortcuts = prev.filter(
-          (s) => s.prompt.trim() || s.content.trim()
+        // Keep all existing shortcuts (id > 0) regardless of their state
+        // Keep all new shortcuts that have at least one field filled
+        // Add one empty new shortcut
+        const existingShortcuts = prev.filter((s) => s.id > 0);
+        const filledNewShortcuts = prev.filter(
+          (s) => s.id < 0 && (s.prompt.trim() || s.content.trim())
         );
         return [
-          ...filledShortcuts,
+          ...existingShortcuts,
+          ...filledNewShortcuts,
           {
             id: -Date.now(),
             prompt: "",
@@ -411,7 +418,7 @@ function PromptShortcuts() {
         ];
       });
     }
-  }, [shortcuts]);
+  }, [shortcuts, isInitialLoad]);
 
   const handleUpdateShortcut = useCallback(
     (index: number, field: "prompt" | "content", value: string) => {
@@ -442,7 +449,7 @@ function PromptShortcuts() {
         });
 
         if (response.ok) {
-          setShortcuts((prev) => prev.filter((_, i) => i !== index));
+          await refetch();
           setPopup({ message: "Shortcut deleted", type: "success" });
         } else {
           throw new Error("Failed to delete shortcut");
@@ -451,7 +458,7 @@ function PromptShortcuts() {
         setPopup({ message: "Failed to delete shortcut", type: "error" });
       }
     },
-    [shortcuts, setPopup]
+    [shortcuts, setPopup, refetch]
   );
 
   const handleSaveShortcut = useCallback(
@@ -480,10 +487,7 @@ function PromptShortcuts() {
           });
 
           if (response.ok) {
-            const newShortcut = await response.json();
-            setShortcuts((prev) =>
-              prev.map((s, i) => (i === index ? newShortcut : s))
-            );
+            await refetch();
             setPopup({ message: "Shortcut created", type: "success" });
           } else {
             throw new Error("Failed to create shortcut");
@@ -502,6 +506,7 @@ function PromptShortcuts() {
           });
 
           if (response.ok) {
+            await refetch();
             setPopup({ message: "Shortcut updated", type: "success" });
           } else {
             throw new Error("Failed to update shortcut");
@@ -514,7 +519,7 @@ function PromptShortcuts() {
         });
       }
     },
-    [shortcuts, setPopup]
+    [shortcuts, setPopup, refetch]
   );
 
   const handleBlurShortcut = useCallback(
@@ -529,13 +534,10 @@ function PromptShortcuts() {
       if (hasPrompt && hasContent) {
         await handleSaveShortcut(index);
       }
-      // Both fields are empty and it's an existing shortcut - delete it
-      else if (!hasPrompt && !hasContent && shortcut.id > 0) {
-        await handleRemoveShortcut(index);
-      }
-      // One field is filled, one is empty - do nothing (wait for the other field)
+      // For existing shortcuts with incomplete fields, error state will be shown in UI
+      // User must use the delete button to remove them
     },
-    [shortcuts, handleSaveShortcut, handleRemoveShortcut]
+    [shortcuts, handleSaveShortcut]
   );
 
   return (
@@ -544,6 +546,15 @@ function PromptShortcuts() {
 
       {shortcuts.map((shortcut, index) => {
         const isEmpty = !shortcut.prompt.trim() && !shortcut.content.trim();
+        const isExisting = shortcut.id > 0;
+        const hasPrompt = shortcut.prompt.trim();
+        const hasContent = shortcut.content.trim();
+
+        // Show error for existing shortcuts with incomplete fields
+        // (either one field empty or both fields empty)
+        const showPromptError = isExisting && !hasPrompt;
+        const showContentError = isExisting && !hasContent;
+
         return (
           <div key={shortcut.id}>
             <GeneralLayouts.Section horizontal gap={0.25}>
@@ -555,6 +566,7 @@ function PromptShortcuts() {
                     handleUpdateShortcut(index, "prompt", e.target.value)
                   }
                   onBlur={() => void handleBlurShortcut(index)}
+                  error={showPromptError}
                 />
               </div>
               <InputTypeIn
@@ -564,12 +576,13 @@ function PromptShortcuts() {
                   handleUpdateShortcut(index, "content", e.target.value)
                 }
                 onBlur={() => void handleBlurShortcut(index)}
+                error={showContentError}
               />
               <IconButton
                 icon={SvgMinusCircle}
                 onClick={() => void handleRemoveShortcut(index)}
                 tertiary
-                disabled={isEmpty}
+                disabled={isEmpty && !isExisting}
                 aria-label="Remove shortcut"
               />
             </GeneralLayouts.Section>
