@@ -293,6 +293,7 @@ function GeneralSettings() {
                   >
                     Auto
                   </InputSelect.Item>
+                  <InputSelect.Separator />
                   <InputSelect.Item
                     value={ThemePreference.LIGHT}
                     icon={() => <ColorSwatch light />}
