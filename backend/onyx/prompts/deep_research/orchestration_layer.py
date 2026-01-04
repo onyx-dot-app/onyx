@@ -19,16 +19,25 @@ If you need to ask questions, follow these guidelines:
 - Be concise and do not ask more than 5 questions.
 - If there are ambiguous terms or questions, ask the user to clarify.
 - Your questions should be a numbered list for clarity.
-- Make sure to gather all the information needed to carry out the research task in a concise, well-structured manner.
+- Make sure to gather all the information needed to carry out the research task in a concise, well-structured manner.{{internal_search_clarification_guidance}}
 - Wrap up with a quick sentence on what the clarification will help with, it's ok to reference the user query closely here.
 """.strip()
 
 
+INTERNAL_SEARCH_CLARIFICATION_GUIDANCE = """
+- The deep research system is connected with organization internal document search and web search capabilities. In cases where it is unclear which source is more appropriate, ask the user to clarify.
+"""
+
+# Here there is a bit of combating model behavior which during alignment may be overly tuned to be cautious about access to data and feasibility.
+# Sometimes the model will just apologize and claim the task is not possible, hence the long section following CRITICAL.
 RESEARCH_PLAN_PROMPT = """
 You are a research planner agent that generates the high level approach for deep research on a user query. Analyze the query carefully and break it down into main concepts and areas of exploration. \
 Stick closely to the user query and stay on topic but be curious and avoid duplicate or overlapped exploration directions. \
 Be sure to take into account the time sensitive aspects of the research topic and make sure to emphasize up to date information where appropriate. \
 Focus on providing a thorough research of the user's query over being helpful.
+
+CRITICAL - You MUST only output the research plan for the deep research flow and nothing else, you are not responding to the user. \
+Do not worry about the feasibility of the plan or access to data or tools, a different deep research flow will handle that.
 
 For context, the date is {current_datetime}.
 
@@ -37,6 +46,15 @@ The research plan should be formatted as a numbered list of steps and have 6 or 
 Each step should be a standalone exploration question or topic that can be researched independently but may build on previous steps.
 
 Output only the numbered list of steps with no additional prefix or suffix.
+""".strip()
+
+
+# Specifically for some models, it really struggles to not just answer the user when there are questions about internal knowledge.
+# A reminder (specifically the fact that it's also a User type message) helps to prevent this.
+RESEARCH_PLAN_REMINDER = """
+Remember to only output the research plan and nothing else. Do not worry about the feasibility of the plan or data access.
+
+Your response must only be a numbered list of steps with no additional prefix or suffix.
 """.strip()
 
 
@@ -57,10 +75,10 @@ You have currently used {{current_cycle_count}} of {{max_cycles}} max research c
 
 ## {RESEARCH_AGENT_TOOL_NAME}
 The research task provided to the {RESEARCH_AGENT_TOOL_NAME} should be reasonably high level with a clear direction for investigation. \
-It should not be a single short query, rather it should be 1 or 2 descriptive sentences that outline the direction of the investigation.
+It should not be a single short query, rather it should be 1 (or 2 if necessary) descriptive sentences that outline the direction of the investigation.
 
-CRITICAL - the {RESEARCH_AGENT_TOOL_NAME} only receives the task and has no additional context about the user's query, research plan, or message history. \
-You absolutely must provide all of the context needed to complete the task in the argument to the {RESEARCH_AGENT_TOOL_NAME}.
+CRITICAL - the {RESEARCH_AGENT_TOOL_NAME} only receives the task and has no additional context about the user's query, research plan, other research agents, or message history. \
+You absolutely must provide all of the context needed to complete the task in the argument to the {RESEARCH_AGENT_TOOL_NAME}.{{internal_search_research_task_guidance}}
 
 You should call the {RESEARCH_AGENT_TOOL_NAME} MANY times before completing with the {GENERATE_REPORT_TOOL_NAME} tool.
 
@@ -84,6 +102,13 @@ Before calling {GENERATE_REPORT_TOOL_NAME}, double check that all aspects of the
 # Research Plan
 {{research_plan}}
 """.strip()
+
+
+INTERNAL_SEARCH_RESEARCH_TASK_GUIDANCE = """
+ If necessary, clarify if the research agent should focus mostly on organization internal searches, web searches, or a combination of both. If the task doesn't require a clear priority, don't add sourcing guidance.
+""".strip(
+    "\n"
+)
 
 
 USER_ORCHESTRATOR_PROMPT = """
@@ -139,10 +164,10 @@ You have currently used {{current_cycle_count}} of {{max_cycles}} max research c
 
 ## {RESEARCH_AGENT_TOOL_NAME}
 The research task provided to the {RESEARCH_AGENT_TOOL_NAME} should be reasonably high level with a clear direction for investigation. \
-It should not be a single short query, rather it should be 1 or 2 descriptive sentences that outline the direction of the investigation.
+It should not be a single short query, rather it should be 1 (or 2 if necessary) descriptive sentences that outline the direction of the investigation.
 
 CRITICAL - the {RESEARCH_AGENT_TOOL_NAME} only receives the task and has no additional context about the user's query, research plan, or message history. \
-You absolutely must provide all of the context needed to complete the task in the argument to the {RESEARCH_AGENT_TOOL_NAME}.
+You absolutely must provide all of the context needed to complete the task in the argument to the {RESEARCH_AGENT_TOOL_NAME}.{{internal_search_research_task_guidance}}
 
 You should call the {RESEARCH_AGENT_TOOL_NAME} MANY times before completing with the {GENERATE_REPORT_TOOL_NAME} tool.
 
