@@ -228,10 +228,10 @@ USAGE_LIMIT_WINDOW_SECONDS = int(os.environ.get("USAGE_LIMIT_WINDOW_SECONDS", "6
 # Per-week LLM usage cost limits in cents (e.g., 1000 = $10.00)
 # Trial users get lower limits than paid users
 USAGE_LIMIT_LLM_COST_CENTS_TRIAL = int(
-    os.environ.get("USAGE_LIMIT_LLM_COST_CENTS_TRIAL", "200")  # $2.00 default
+    os.environ.get("USAGE_LIMIT_LLM_COST_CENTS_TRIAL", "800")  # $8.00 default
 )
 USAGE_LIMIT_LLM_COST_CENTS_PAID = int(
-    os.environ.get("USAGE_LIMIT_LLM_COST_CENTS_PAID", "400")  # $4.00 default
+    os.environ.get("USAGE_LIMIT_LLM_COST_CENTS_PAID", "1600")  # $16.00 default
 )
 
 # Per-week chunks indexed limits
