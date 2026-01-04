@@ -53,6 +53,7 @@ import Text from "@/refresh-components/texts/Text";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { InputPrompt } from "@/app/chat/interfaces";
 import { useInputPrompts } from "@/hooks/useInputPrompts";
+import ColorSwatch from "@/refresh-components/ColorSwatch";
 
 interface PAT {
   id: number;
@@ -138,7 +139,7 @@ function PATModal({
 function GeneralSettings() {
   const { user, updateUserPersonalization, updateUserThemePreference } =
     useUser();
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, resolvedTheme } = useTheme();
   const { popup, setPopup } = usePopup();
   const router = useRouter();
   const pathname = usePathname();
@@ -234,6 +235,11 @@ function GeneralSettings() {
                 onChange={(e) =>
                   updatePersonalizationField("name", e.target.value)
                 }
+                onBlur={() => {
+                  if (personalizationValues.name.trim()) {
+                    void handleSavePersonalization();
+                  }
+                }}
               />
             </InputLayouts.Horizontal>
             <InputLayouts.Horizontal
@@ -246,21 +252,11 @@ function GeneralSettings() {
                 onChange={(e) =>
                   updatePersonalizationField("role", e.target.value)
                 }
-              />
-            </InputLayouts.Horizontal>
-            <div className="flex justify-end">
-              <Button
-                onClick={() => {
+                onBlur={() => {
                   void handleSavePersonalization();
                 }}
-                disabled={
-                  isSavingPersonalization ||
-                  personalizationValues.name.length === 0
-                }
-              >
-                {isSavingPersonalization ? "Saving..." : "Save"}
-              </Button>
-            </div>
+              />
+            </InputLayouts.Horizontal>
           </Card>
         </GeneralLayouts.Section>
 
@@ -282,14 +278,31 @@ function GeneralSettings() {
                 <InputSelect.Content>
                   <InputSelect.Item
                     value={ThemePreference.SYSTEM}
-                    icon={SvgCpu}
+                    icon={() => (
+                      <ColorSwatch
+                        light={resolvedTheme === "light"}
+                        dark={resolvedTheme === "dark"}
+                      />
+                    )}
+                    description={
+                      resolvedTheme
+                        ? resolvedTheme.charAt(0).toUpperCase() +
+                          resolvedTheme.slice(1)
+                        : undefined
+                    }
                   >
-                    System
+                    Auto
                   </InputSelect.Item>
-                  <InputSelect.Item value={ThemePreference.LIGHT} icon={SvgSun}>
+                  <InputSelect.Item
+                    value={ThemePreference.LIGHT}
+                    icon={() => <ColorSwatch light />}
+                  >
                     Light
                   </InputSelect.Item>
-                  <InputSelect.Item value={ThemePreference.DARK} icon={SvgMoon}>
+                  <InputSelect.Item
+                    value={ThemePreference.DARK}
+                    icon={() => <ColorSwatch dark />}
+                  >
                     Dark
                   </InputSelect.Item>
                 </InputSelect.Content>
