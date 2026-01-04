@@ -86,6 +86,7 @@ from onyx.db.models import SearchSettings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
+from onyx.db.usage import UsageLimitExceededError
 from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
@@ -1320,7 +1321,7 @@ def _docprocessing_task(
     if USAGE_LIMITS_ENABLED:
         try:
             _check_chunk_usage_limit(tenant_id)
-        except Exception as e:
+        except UsageLimitExceededError as e:
             # Log the error and fail the indexing attempt
             task_logger.error(
                 f"Chunk indexing usage limit exceeded for tenant {tenant_id}: {e}"

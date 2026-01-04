@@ -348,7 +348,7 @@ def handle_stream_message_objects(
         )
         token_counter = get_llm_token_counter(llm)
 
-        # Check LLM cost limits before using the LLM (only for Onyx-managed keys
+        # Check LLM cost limits before using the LLM (only for Onyx-managed keys)
 
         check_llm_cost_limit_for_provider(
             db_session=db_session,

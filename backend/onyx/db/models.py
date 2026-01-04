@@ -4003,5 +4003,4 @@ class TenantUsage(Base):
     __table_args__ = (
         # Ensure only one row per window start (tenant_id is in the schema name)
         UniqueConstraint("window_start", name="uq_tenant_usage_window"),
-        Index("ix_tenant_usage_window_start", "window_start"),
     )

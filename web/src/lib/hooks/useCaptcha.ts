@@ -44,6 +44,8 @@ export function useCaptcha() {
       return;
     }
 
+    const scriptSrc = `https://www.google.com/recaptcha/api.js?render=${RECAPTCHA_SITE_KEY}`;
+
     // Check if the script is already loaded
     if (window.grecaptcha) {
       window.grecaptcha.ready(() => {
@@ -52,9 +54,23 @@ export function useCaptcha() {
       return;
     }
 
+    // Check if the script is already in the DOM (loading but not yet executed)
+    const existingScript = document.querySelector(`script[src="${scriptSrc}"]`);
+    if (existingScript) {
+      // Script exists but hasn't loaded yet, wait for it
+      existingScript.addEventListener("load", () => {
+        if (window.grecaptcha) {
+          window.grecaptcha.ready(() => {
+            setIsLoaded(true);
+          });
+        }
+      });
+      return;
+    }
+
     // Load the reCAPTCHA script
     const script = document.createElement("script");
-    script.src = `https://www.google.com/recaptcha/api.js?render=${RECAPTCHA_SITE_KEY}`;
+    script.src = scriptSrc;
     script.async = true;
     script.defer = true;
 

@@ -2,6 +2,7 @@
 
 import httpx
 from pydantic import BaseModel
+from pydantic import Field
 
 from onyx.configs.app_configs import CAPTCHA_ENABLED
 from onyx.configs.app_configs import RECAPTCHA_SCORE_THRESHOLD
@@ -25,7 +26,7 @@ class RecaptchaResponse(BaseModel):
     action: str | None = None
     challenge_ts: str | None = None
     hostname: str | None = None
-    error_codes: list[str] | None = None
+    error_codes: list[str] | None = Field(default=None, alias="error-codes")
 
 
 def is_captcha_enabled() -> bool:

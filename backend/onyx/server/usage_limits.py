@@ -168,7 +168,8 @@ def check_usage_and_raise(
                 f"LLM usage limit exceeded for {user_type} account. "
                 f"Current cost: ${e.current / 100:.2f}, "
                 f"Limit: ${e.limit / 100:.2f} per week. "
-                "Please upgrade your plan or wait for the next billing period."
+                "Please use your own LLM API key, upgrade your plan,"
+                " or wait for the next billing period (1 week)."
             )
         elif usage_type == UsageType.CHUNKS_INDEXED:
             detail = (

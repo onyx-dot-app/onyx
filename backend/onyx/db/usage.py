@@ -6,6 +6,7 @@ from enum import Enum
 
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from onyx.db.models import TenantUsage
@@ -79,31 +80,37 @@ def get_or_create_tenant_usage(
     """
     Get or create the usage record for the current window.
 
-    Uses SELECT ... FOR UPDATE to prevent race conditions.
+    Uses INSERT ... ON CONFLICT DO UPDATE to atomically create or get the record,
+    avoiding TOCTOU race conditions where two concurrent requests could both
+    attempt to insert a new record.
     """
     if window_start is None:
         window_start = get_current_window_start()
 
-    # Try to get existing record with row lock
-    usage = db_session.execute(
-        select(TenantUsage)
-        .where(TenantUsage.window_start == window_start)
-        .with_for_update()
-    ).scalar_one_or_none()
-
-    if usage is None:
-        # Create new record for this window
-        usage = TenantUsage(
+    # Atomic upsert: insert if not exists, or update a field to itself if exists
+    # This ensures we always get back a valid row without race conditions
+    stmt = (
+        pg_insert(TenantUsage)
+        .values(
             window_start=window_start,
             llm_cost_cents=0.0,
             chunks_indexed=0,
             api_calls=0,
             non_streaming_api_calls=0,
         )
-        db_session.add(usage)
-        db_session.flush()
+        .on_conflict_do_update(
+            index_elements=["window_start"],
+            # No-op update: just set a field to its current value
+            # This ensures the row is returned even on conflict
+            set_={"llm_cost_cents": TenantUsage.llm_cost_cents},
+        )
+        .returning(TenantUsage)
+    )
 
-    return usage
+    result = db_session.execute(stmt).scalar_one()
+    db_session.flush()
+
+    return result
 
 
 def get_tenant_usage_stats(
