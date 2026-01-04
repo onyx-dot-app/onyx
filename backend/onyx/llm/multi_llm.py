@@ -238,14 +238,15 @@ class LitellmLLM(LLM):
 
         if not is_usage_limits_enabled():
             return
-        # Import here to avoid circular imports
-        from onyx.db.engine.sql_engine import get_session_with_current_tenant
-        from onyx.db.usage import increment_usage
-        from onyx.db.usage import UsageType
+
         from onyx.server.usage_limits import is_onyx_managed_api_key
 
         if not is_onyx_managed_api_key(self._api_key):
             return
+        # Import here to avoid circular imports
+        from onyx.db.engine.sql_engine import get_session_with_current_tenant
+        from onyx.db.usage import increment_usage
+        from onyx.db.usage import UsageType
 
         # Calculate cost in cents
         cost_cents = calculate_llm_cost_cents(
