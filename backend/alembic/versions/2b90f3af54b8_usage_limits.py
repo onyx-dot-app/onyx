@@ -39,9 +39,6 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("window_start", name="uq_tenant_usage_window"),
     )
-    op.create_index(
-        "ix_tenant_usage_window_start", "tenant_usage", ["window_start"], unique=False
-    )
 
 
 def downgrade() -> None:
