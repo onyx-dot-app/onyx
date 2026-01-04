@@ -11,14 +11,11 @@ import { Formik, Form } from "formik";
 import {
   SvgCheck,
   SvgCopy,
-  SvgCpu,
   SvgExternalLink,
   SvgKey,
   SvgLock,
   SvgMinusCircle,
-  SvgMoon,
   SvgSliders,
-  SvgSun,
   SvgTrash,
 } from "@opal/icons";
 import Card from "@/refresh-components/cards/Card";
@@ -327,8 +324,10 @@ function GeneralSettings() {
             >
               <Button
                 danger
+                secondary
                 onClick={() => setShowDeleteConfirmation(true)}
                 leftIcon={SvgTrash}
+                transient={showDeleteConfirmation}
               >
                 Delete All Chats
               </Button>
