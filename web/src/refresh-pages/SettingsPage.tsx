@@ -9,8 +9,6 @@ import * as GeneralLayouts from "@/layouts/general-layouts";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import { Formik, Form } from "formik";
 import {
-  SvgCheck,
-  SvgCopy,
   SvgExternalLink,
   SvgKey,
   SvgLock,
@@ -48,6 +46,7 @@ import { getSourceMetadata } from "@/lib/sources";
 import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import Code from "@/refresh-components/Code";
 import { InputPrompt } from "@/app/chat/interfaces";
 import { useInputPrompts } from "@/hooks/useInputPrompts";
 import ColorSwatch from "@/refresh-components/ColorSwatch";
@@ -64,6 +63,7 @@ interface PAT {
 interface CreatedTokenState {
   id: number;
   token: string;
+  name: string;
 }
 
 interface PATModalProps {
@@ -74,6 +74,7 @@ interface PATModalProps {
   setExpirationDays: (days: string) => void;
   onClose: () => void;
   onCreate: () => void;
+  createdToken: CreatedTokenState | null;
 }
 
 function PATModal({
@@ -84,6 +85,7 @@ function PATModal({
   setExpirationDays,
   onClose,
   onCreate,
+  createdToken,
 }: PATModalProps) {
   return (
     <ConfirmationModalLayout
@@ -92,42 +94,58 @@ function PATModal({
       description="All API requests using this token will inherit your access permissions and be attributed to you as an individual."
       onClose={onClose}
       submit={
-        <Button
-          onClick={onCreate}
-          disabled={isCreating || !newTokenName.trim()}
-        >
-          {isCreating ? "Creating Token..." : "Create Token"}
-        </Button>
+        !!createdToken?.token ? (
+          <Button onClick={onClose}>Done</Button>
+        ) : (
+          <Button
+            onClick={onCreate}
+            disabled={isCreating || !newTokenName.trim()}
+          >
+            {isCreating ? "Creating Token..." : "Create Token"}
+          </Button>
+        )
       }
+      hideCancel={!!createdToken}
     >
       <GeneralLayouts.Section gap={1}>
-        <InputLayouts.Vertical label="Token Name">
-          <InputTypeIn
-            placeholder="Name your token"
-            value={newTokenName}
-            onChange={(e) => setNewTokenName(e.target.value)}
-            disabled={isCreating}
-            autoComplete="new-password"
-          />
-        </InputLayouts.Vertical>
-        <InputLayouts.Vertical
-          label="Expires in"
-          description="Expires at end of day (23:59 UTC)."
-        >
-          <InputSelect
-            value={expirationDays}
-            onValueChange={setExpirationDays}
-            disabled={isCreating}
-          >
-            <InputSelect.Trigger placeholder="Select expiration" />
-            <InputSelect.Content>
-              <InputSelect.Item value="7">7 days</InputSelect.Item>
-              <InputSelect.Item value="30">30 days</InputSelect.Item>
-              <InputSelect.Item value="365">365 days</InputSelect.Item>
-              <InputSelect.Item value="null">No expiration</InputSelect.Item>
-            </InputSelect.Content>
-          </InputSelect>
-        </InputLayouts.Vertical>
+        {/* Token Creation*/}
+        {!!createdToken?.token ? (
+          <InputLayouts.Vertical label="Token Value">
+            <Code>{createdToken.token}</Code>
+          </InputLayouts.Vertical>
+        ) : (
+          <>
+            <InputLayouts.Vertical label="Token Name">
+              <InputTypeIn
+                placeholder="Name your token"
+                value={newTokenName}
+                onChange={(e) => setNewTokenName(e.target.value)}
+                disabled={isCreating}
+                autoComplete="new-password"
+              />
+            </InputLayouts.Vertical>
+            <InputLayouts.Vertical
+              label="Expires in"
+              description="Expires at end of day (23:59 UTC)."
+            >
+              <InputSelect
+                value={expirationDays}
+                onValueChange={setExpirationDays}
+                disabled={isCreating}
+              >
+                <InputSelect.Trigger placeholder="Select expiration" />
+                <InputSelect.Content>
+                  <InputSelect.Item value="7">7 days</InputSelect.Item>
+                  <InputSelect.Item value="30">30 days</InputSelect.Item>
+                  <InputSelect.Item value="365">365 days</InputSelect.Item>
+                  <InputSelect.Item value="null">
+                    No expiration
+                  </InputSelect.Item>
+                </InputSelect.Content>
+              </InputSelect>
+            </InputLayouts.Vertical>
+          </>
+        )}
       </GeneralLayouts.Section>
     </ConfirmationModalLayout>
   );
@@ -766,7 +784,6 @@ function AccountsAccessSettings() {
   const [expirationDays, setExpirationDays] = useState<string>("30");
   const [newlyCreatedToken, setNewlyCreatedToken] =
     useState<CreatedTokenState | null>(null);
-  const [copiedTokenId, setCopiedTokenId] = useState<number | null>(null);
   const [tokenToDelete, setTokenToDelete] = useState<{
     id: number;
     name: string;
@@ -825,11 +842,12 @@ function AccountsAccessSettings() {
 
       if (response.ok) {
         const data = await response.json();
-        // Store the newly created token with its ID and full token value
-        setNewlyCreatedToken({ id: data.id, token: data.token });
-        setNewTokenName("");
-        setExpirationDays("30");
-        setShowCreateModal(false);
+        // Store the newly created token - modal will switch to display view
+        setNewlyCreatedToken({
+          id: data.id,
+          token: data.token,
+          name: newTokenName,
+        });
         setPopup({ message: "Token created successfully", type: "success" });
         // Revalidate the token list
         await mutate();
@@ -871,20 +889,6 @@ function AccountsAccessSettings() {
       }
     },
     [newlyCreatedToken, mutate, setPopup]
-  );
-
-  const copyToken = useCallback(
-    async (token: string, tokenId: number) => {
-      try {
-        await navigator.clipboard.writeText(token);
-        setCopiedTokenId(tokenId);
-        setPopup({ message: "Copied to clipboard", type: "success" });
-        setTimeout(() => setCopiedTokenId(null), 2000);
-      } catch (error) {
-        setPopup({ message: "Failed to copy token", type: "error" });
-      }
-    },
-    [setPopup]
   );
 
   const handleChangePassword = useCallback(
@@ -958,8 +962,10 @@ function AccountsAccessSettings() {
             setShowCreateModal(false);
             setNewTokenName("");
             setExpirationDays("30");
+            setNewlyCreatedToken(null);
           }}
           onCreate={createPAT}
+          createdToken={newlyCreatedToken}
         />
       )}
 
@@ -974,8 +980,10 @@ function AccountsAccessSettings() {
             </Button>
           }
         >
-          Are you sure you want to delete token &quot;{tokenToDelete.name}
-          &quot;? This action cannot be undone.
+          <Text>
+            Are you sure you want to delete token &quot;{tokenToDelete.name}
+            &quot;? This action cannot be undone.
+          </Text>
         </ConfirmationModalLayout>
       )}
 
@@ -1081,7 +1089,7 @@ function AccountsAccessSettings() {
           <GeneralLayouts.Section gap={0.75}>
             <InputLayouts.Label label="Access Tokens" />
             <Card>
-              <GeneralLayouts.Section horizontal gap={1}>
+              <GeneralLayouts.Section vertical gap={1}>
                 {/* Header with search/empty state and create button */}
                 <GeneralLayouts.Section horizontal gap={1}>
                   {pats.length === 0 ? (
@@ -1106,105 +1114,63 @@ function AccountsAccessSettings() {
                 </GeneralLayouts.Section>
 
                 {/* Token List */}
-                {pats.length > 0 && (
-                  <div className="space-y-2">
-                    {filteredPats.map((pat) => {
-                      const isNewlyCreated = newlyCreatedToken?.id === pat.id;
-                      const isCopied = copiedTokenId === pat.id;
-
-                      return (
-                        <div
-                          key={pat.id}
-                          className={`flex items-center justify-between p-3 border rounded-lg ${
-                            isNewlyCreated
-                              ? "bg-accent-emphasis border-accent-strong"
-                              : "border-border-01 bg-background-tint-01"
-                          }`}
-                        >
-                          <div className="flex-1 min-w-0">
-                            <Text
-                              as="p"
-                              text05
-                              mainUiAction
-                              className="truncate"
+                {pats.length > 0 &&
+                  filteredPats.map((pat) => {
+                    return (
+                      <div
+                        key={pat.id}
+                        className="flex items-center justify-between p-3 border rounded-lg border-border-01 bg-background-tint-01"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <Text as="p" text05 mainUiAction className="truncate">
+                            {pat.name}
+                          </Text>
+                          <Text as="p" text03 secondaryMono>
+                            {pat.token_display}
+                          </Text>
+                          <Text as="p" text03 secondaryBody className="mt-1">
+                            <span
+                              title={humanReadableFormatWithTime(
+                                pat.created_at
+                              )}
                             >
-                              {pat.name}
-                            </Text>
-                            {isNewlyCreated ? (
-                              <>
-                                <Text
-                                  as="p"
-                                  text05
-                                  secondaryBody
-                                  className="mb-2"
-                                >
-                                  Copy this token now. You won&apos;t be able to
-                                  see it again.
-                                </Text>
-                                <code className="block p-2 bg-background-02 border border-border-01 rounded text-xs break-all font-mono text-text-01 mb-2">
-                                  {newlyCreatedToken.token}
-                                </code>
-                                <Button
-                                  onClick={() =>
-                                    copyToken(newlyCreatedToken.token, pat.id)
-                                  }
-                                  primary
-                                  leftIcon={isCopied ? SvgCheck : SvgCopy}
-                                  aria-label="Copy token to clipboard"
-                                >
-                                  {isCopied ? "Copied!" : "Copy Token"}
-                                </Button>
-                              </>
-                            ) : (
-                              <Text as="p" text03 secondaryMono>
-                                {pat.token_display}
-                              </Text>
-                            )}
-                            <Text as="p" text03 secondaryBody className="mt-1">
+                              Created: {humanReadableFormat(pat.created_at)}
+                            </span>
+                            {pat.expires_at && (
                               <span
                                 title={humanReadableFormatWithTime(
-                                  pat.created_at
+                                  pat.expires_at
                                 )}
                               >
-                                Created: {humanReadableFormat(pat.created_at)}
+                                {" • Expires: "}
+                                {humanReadableFormat(pat.expires_at)}
                               </span>
-                              {pat.expires_at && (
-                                <span
-                                  title={humanReadableFormatWithTime(
-                                    pat.expires_at
-                                  )}
-                                >
-                                  {" • Expires: "}
-                                  {humanReadableFormat(pat.expires_at)}
-                                </span>
-                              )}
-                              {pat.last_used_at && (
-                                <span
-                                  title={humanReadableFormatWithTime(
-                                    pat.last_used_at
-                                  )}
-                                >
-                                  {" • Last used: "}
-                                  {humanReadableFormat(pat.last_used_at)}
-                                </span>
-                              )}
-                            </Text>
-                          </div>
-                          <IconButton
-                            icon={SvgTrash}
-                            onClick={() =>
-                              setTokenToDelete({ id: pat.id, name: pat.name })
-                            }
-                            internal
-                            transient={tokenToDelete?.id === pat.id}
-                            data-testid={`delete-pat-${pat.id}`}
-                            aria-label={`Delete token ${pat.name}`}
-                          />
+                            )}
+                            {pat.last_used_at && (
+                              <span
+                                title={humanReadableFormatWithTime(
+                                  pat.last_used_at
+                                )}
+                              >
+                                {" • Last used: "}
+                                {humanReadableFormat(pat.last_used_at)}
+                              </span>
+                            )}
+                          </Text>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                        <IconButton
+                          icon={SvgTrash}
+                          onClick={() =>
+                            setTokenToDelete({ id: pat.id, name: pat.name })
+                          }
+                          internal
+                          transient={tokenToDelete?.id === pat.id}
+                          data-testid={`delete-pat-${pat.id}`}
+                          aria-label={`Delete token ${pat.name}`}
+                        />
+                      </div>
+                    );
+                  })}
               </GeneralLayouts.Section>
             </Card>
           </GeneralLayouts.Section>
