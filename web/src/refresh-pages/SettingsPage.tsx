@@ -475,6 +475,7 @@ function PromptShortcuts() {
               prompt: shortcut.prompt,
               content: shortcut.content,
               active: true,
+              is_public: false,
             }),
           });
 
@@ -496,6 +497,7 @@ function PromptShortcuts() {
               prompt: shortcut.prompt,
               content: shortcut.content,
               active: true,
+              is_public: false,
             }),
           });
 
@@ -515,6 +517,27 @@ function PromptShortcuts() {
     [shortcuts, setPopup]
   );
 
+  const handleBlurShortcut = useCallback(
+    async (index: number) => {
+      const shortcut = shortcuts[index];
+      if (!shortcut) return;
+
+      const hasPrompt = shortcut.prompt.trim();
+      const hasContent = shortcut.content.trim();
+
+      // Both fields are filled - save/update the shortcut
+      if (hasPrompt && hasContent) {
+        await handleSaveShortcut(index);
+      }
+      // Both fields are empty and it's an existing shortcut - delete it
+      else if (!hasPrompt && !hasContent && shortcut.id > 0) {
+        await handleRemoveShortcut(index);
+      }
+      // One field is filled, one is empty - do nothing (wait for the other field)
+    },
+    [shortcuts, handleSaveShortcut, handleRemoveShortcut]
+  );
+
   return (
     <>
       {popup}
@@ -531,6 +554,7 @@ function PromptShortcuts() {
                   onChange={(e) =>
                     handleUpdateShortcut(index, "prompt", e.target.value)
                   }
+                  onBlur={() => void handleBlurShortcut(index)}
                 />
               </div>
               <InputTypeIn
@@ -539,6 +563,7 @@ function PromptShortcuts() {
                 onChange={(e) =>
                   handleUpdateShortcut(index, "content", e.target.value)
                 }
+                onBlur={() => void handleBlurShortcut(index)}
               />
               <IconButton
                 icon={SvgMinusCircle}
