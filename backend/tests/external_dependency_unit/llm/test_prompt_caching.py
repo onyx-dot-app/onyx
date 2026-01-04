@@ -33,67 +33,31 @@ DEFAULT_VERTEX_MODEL = "gemini-2.5-flash"
 def _extract_cached_tokens(usage: Usage | None) -> int:
     """Helper to extract cached_tokens from usage (dict or object)."""
     if not usage:
+        print("Usage is None")
         return 0
 
-    prompt_details = getattr(usage, "prompt_tokens_details", None)
-    if prompt_details is None and isinstance(usage, dict):
-        prompt_details = usage.get("prompt_tokens_details")
+    cached_tokens = usage.cache_creation_input_tokens
 
-    if not prompt_details:
-        return 0
-
-    cached_tokens = getattr(prompt_details, "cached_tokens", None)
-    if cached_tokens is None and isinstance(prompt_details, dict):
-        cached_tokens = prompt_details.get("cached_tokens")
-
-    return int(cached_tokens or 0)
+    return cached_tokens
 
 
 def _extract_prompt_tokens(usage: Usage | None) -> int:
     """Helper to extract prompt_tokens from usage (dict or object)."""
     if not usage:
+        print("Usage is None")
         return 0
 
-    prompt_tokens = getattr(usage, "prompt_tokens", None)
-    if prompt_tokens is None and isinstance(usage, dict):
-        prompt_tokens = usage.get("prompt_tokens")
-
-    return int(prompt_tokens or 0)
+    return usage.prompt_tokens
 
 
-def _extract_cache_read_tokens(usage: Any) -> int:
+def _extract_cache_read_tokens(usage: Usage | None) -> int:
     """Extract cache read metrics from usage (dict or object)."""
+    print(f"usage: {usage}")
     if not usage:
+        print("Usage is None")
         return 0
 
-    keys_to_check = (
-        "cache_read_input_tokens",
-        "cache_hit_input_tokens",
-        "cache_hits_input_tokens",
-    )
-
-    for key in keys_to_check:
-        value = getattr(usage, key, None)
-        if value is None and isinstance(usage, dict):
-            value = usage.get(key)
-        if value:
-            return int(value)
-
-    if isinstance(usage, dict):
-        metadata = usage.get("usage_metadata") or usage.get("metadata")
-        if isinstance(metadata, dict):
-            for key in keys_to_check:
-                value = metadata.get(key)
-                if value:
-                    return int(value)
-
-        prompt_details = usage.get("prompt_tokens_details")
-        if isinstance(prompt_details, dict):
-            cached_tokens = prompt_details.get("cached_tokens")
-            if cached_tokens:
-                return int(cached_tokens)
-
-    return 0
+    return usage.cache_read_input_tokens
 
 
 def _get_usage_value(usage: Any, key: str) -> int:
@@ -199,7 +163,7 @@ def test_openai_prompt_caching_reduces_costs(
         llm = LitellmLLM(
             api_key=os.environ["OPENAI_API_KEY"],
             model_provider="openai",
-            model_name="gpt-4o-mini",
+            model_name="gpt-4o",
             max_input_tokens=128000,
         )
         import random
@@ -258,7 +222,7 @@ def test_openai_prompt_caching_reduces_costs(
         # print(f"Response 1 usage: {usage1}")
         # print(f"Cost 1: ${cost1:.10f}")
 
-        # Wait to ensure cache is available. 15 seconds is not enough
+        # Wait to ensure cache is available
         time.sleep(5)
 
         # Second call with same context - should use cache
@@ -282,7 +246,7 @@ def test_openai_prompt_caching_reduces_costs(
         )
 
         usage2 = response2.usage
-        cached_tokens_2 = _extract_cached_tokens(usage2)
+        cached_tokens_2 = _extract_cache_read_tokens(usage2)
         prompt_tokens_2 = _extract_prompt_tokens(usage2)
         # print(f"Response 2 usage: {usage2}")
         # print(f"Cost 2: ${cost2:.10f}")
@@ -292,10 +256,9 @@ def test_openai_prompt_caching_reduces_costs(
         print(f"Prompt tokens call 1: {prompt_tokens_1}, call 2: {prompt_tokens_2}")
         print(f"Cost delta (1 -> 2): ${cost1 - cost2:.10f}")
 
-        # assert (
-        #     cached_tokens_1 > 0 or cached_tokens_2 > 0
-        # ), f"Expected cached tokens in prompt_tokens_details. call1={cached_tokens_1}, call2={cached_tokens_2}"
-        if cached_tokens_1 > 0 or cached_tokens_2 > 0:
+        # The first call is expected to *create* cache (cached_tokens may be 0).
+        # The second call should show cached tokens being used.
+        if cached_tokens_2 > 0:
             successes += 1
             break
 
@@ -318,15 +281,23 @@ def test_anthropic_prompt_caching_reduces_costs(
     Anthropic requires explicit cache_control parameters.
     """
     # Create Anthropic LLM
+    # NOTE: prompt caching support is model-specific; `claude-3-5-haiku-20241022` is known
+    # to return cache_creation/cache_read usage metrics, while some newer aliases may not.
     llm = LitellmLLM(
         api_key=os.environ["ANTHROPIC_API_KEY"],
         model_provider="anthropic",
-        model_name="claude-3-5-sonnet-20241022",
+        model_name="claude-3-5-haiku-20241022",
         max_input_tokens=200000,
     )
 
-    # Create a long context message
+    import random
+    import string
+
+    # Create a long context message.
+    # Add a random prefix to avoid reusing an existing ephemeral cache from prior test runs.
+    random_prefix = "".join(random.choices(string.ascii_lowercase, k=32))
     long_context = (
+        random_prefix + " "
         "This is a comprehensive document about artificial intelligence and machine learning. "
         + " ".join(
             [
