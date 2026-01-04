@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useRef, useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import type { Route } from "next";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
@@ -161,6 +161,16 @@ function GeneralSettings() {
       }),
   });
 
+  // Track initial values to detect changes
+  const initialNameRef = useRef(personalizationValues.name);
+  const initialRoleRef = useRef(personalizationValues.role);
+
+  // Update refs when personalization values change from external source
+  useEffect(() => {
+    initialNameRef.current = personalizationValues.name;
+    initialRoleRef.current = personalizationValues.role;
+  }, [user?.personalization]);
+
   const handleDeleteAllChats = useCallback(async () => {
     setIsDeleting(true);
     try {
@@ -234,8 +244,13 @@ function GeneralSettings() {
                   updatePersonalizationField("name", e.target.value)
                 }
                 onBlur={() => {
-                  if (personalizationValues.name.trim()) {
+                  // Only save if the value has changed and is not empty
+                  if (
+                    personalizationValues.name.trim() &&
+                    personalizationValues.name !== initialNameRef.current
+                  ) {
                     void handleSavePersonalization();
+                    initialNameRef.current = personalizationValues.name;
                   }
                 }}
               />
@@ -252,7 +267,11 @@ function GeneralSettings() {
                   updatePersonalizationField("role", e.target.value)
                 }
                 onBlur={() => {
-                  void handleSavePersonalization();
+                  // Only save if the value has changed
+                  if (personalizationValues.role !== initialRoleRef.current) {
+                    void handleSavePersonalization();
+                    initialRoleRef.current = personalizationValues.role;
+                  }
                 }}
               />
             </InputLayouts.Horizontal>
