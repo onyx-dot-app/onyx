@@ -1049,6 +1049,7 @@ function AccountsAccessSettings() {
                   secondary
                   leftIcon={SvgLock}
                   onClick={() => setShowPasswordModal(true)}
+                  transient={showPasswordModal}
                 >
                   Change Password
                 </Button>
@@ -1077,7 +1078,10 @@ function AccountsAccessSettings() {
                       onChange={(e) => setQuery(e.target.value)}
                     />
                   )}
-                  <CreateButton onClick={() => setShowCreateModal(true)}>
+                  <CreateButton
+                    onClick={() => setShowCreateModal(true)}
+                    transient={showCreateModal}
+                  >
                     New Access Token
                   </CreateButton>
                 </GeneralLayouts.Section>
@@ -1173,6 +1177,7 @@ function AccountsAccessSettings() {
                               setTokenToDelete({ id: pat.id, name: pat.name })
                             }
                             internal
+                            transient={tokenToDelete?.id === pat.id}
                             data-testid={`delete-pat-${pat.id}`}
                             aria-label={`Delete token ${pat.name}`}
                           />
