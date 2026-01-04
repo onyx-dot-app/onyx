@@ -228,6 +228,7 @@ function GeneralSettings() {
             <InputLayouts.Horizontal
               label="Full Name"
               description="We'll display this name in the app."
+              center
             >
               <InputTypeIn
                 placeholder="Your name"
@@ -245,6 +246,7 @@ function GeneralSettings() {
             <InputLayouts.Horizontal
               label="Work Role"
               description="Share your role to better tailor responses."
+              center
             >
               <InputTypeIn
                 placeholder="Your role"
@@ -266,6 +268,7 @@ function GeneralSettings() {
             <InputLayouts.Horizontal
               label="Color Mode"
               description="Select your preferred color mode for the UI."
+              center
             >
               <InputSelect
                 value={theme}
@@ -320,6 +323,7 @@ function GeneralSettings() {
             <InputLayouts.Horizontal
               label="Delete All Chats"
               description="Permanently delete all your chat sessions."
+              center
             >
               <Button
                 danger

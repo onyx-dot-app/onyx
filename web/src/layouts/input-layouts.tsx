@@ -47,6 +47,13 @@ function VerticalInputLayout({
   );
 }
 
+export interface HorizontalLayoutProps extends VandHLayoutProps {
+  /** Align input to the start (top) of the label/description */
+  start?: boolean;
+  /** Align input to the center (middle) of the label/description */
+  center?: boolean;
+}
+
 /**
  * HorizontalInputLayout - A layout component for form fields with horizontal label arrangement
  *
@@ -60,10 +67,30 @@ function VerticalInputLayout({
  * ```tsx
  * import { Horizontal } from "@/layouts/input-layouts";
  *
+ * // Default behavior (center-aligned when no description, start-aligned when description exists)
  * <Horizontal
  *   name="notifications"
  *   label="Enable Notifications"
  *   description="Receive updates about your account"
+ * >
+ *   <Switch name="notifications" />
+ * </Horizontal>
+ *
+ * // Force top alignment
+ * <Horizontal
+ *   name="notifications"
+ *   label="Enable Notifications"
+ *   start
+ * >
+ *   <Switch name="notifications" />
+ * </Horizontal>
+ *
+ * // Force center alignment (even with description)
+ * <Horizontal
+ *   name="notifications"
+ *   label="Enable Notifications"
+ *   description="Receive updates about your account"
+ *   center
  * >
  *   <Switch name="notifications" />
  * </Horizontal>
@@ -72,16 +99,31 @@ function VerticalInputLayout({
 function HorizontalInputLayout({
   children,
 
+  start,
+  center,
+
   name,
   ...fieldLabelProps
-}: VandHLayoutProps) {
+}: HorizontalLayoutProps) {
+  // Determine alignment:
+  // - If `center` is explicitly true, use center alignment
+  // - If `start` is explicitly true, use start alignment
+  // - Otherwise, use default behavior: start if description exists, center if not
+  const alignment = center
+    ? "items-center"
+    : start
+      ? "items-start"
+      : fieldLabelProps.description
+        ? "items-start"
+        : "items-center";
+
   return (
     <div className="flex flex-col gap-1 h-full w-full">
       <label
         htmlFor={name}
         className={cn(
           "flex flex-row justify-between gap-4 cursor-pointer",
-          fieldLabelProps.description ? "items-start" : "items-center"
+          alignment
         )}
       >
         <div className="w-[70%]">
