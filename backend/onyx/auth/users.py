@@ -292,6 +292,31 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         safe: bool = False,
         request: Optional[Request] = None,
     ) -> User:
+        # Verify captcha if enabled (for cloud signup protection)
+        from onyx.auth.captcha import CaptchaVerificationError
+        from onyx.auth.captcha import is_captcha_enabled
+        from onyx.auth.captcha import verify_captcha_token
+
+        if is_captcha_enabled() and request is not None:
+            # Get captcha token from request body or headers
+            captcha_token = None
+            if hasattr(user_create, "captcha_token"):
+                captcha_token = getattr(user_create, "captcha_token", None)
+
+            # Also check headers as a fallback
+            if not captcha_token:
+                captcha_token = request.headers.get("X-Captcha-Token")
+
+            try:
+                await verify_captcha_token(
+                    captcha_token or "", expected_action="signup"
+                )
+            except CaptchaVerificationError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={"reason": str(e)},
+                )
+
         # We verify the password here to make sure it's valid before we proceed
         await self.validate_password(
             user_create.password, cast(schemas.UC, user_create)

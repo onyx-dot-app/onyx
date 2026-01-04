@@ -543,6 +543,14 @@ def run_llm_step_pkt_generator(
                     "cache_read_input_tokens": usage.cache_read_input_tokens,
                     "cache_creation_input_tokens": usage.cache_creation_input_tokens,
                 }
+                # Track usage in state container for cost calculation
+                if state_container:
+                    state_container.add_llm_usage(
+                        prompt_tokens=usage.prompt_tokens,
+                        completion_tokens=usage.completion_tokens,
+                        model_name=llm.config.model_name,
+                        api_key=llm.config.api_key,
+                    )
             delta = packet.choice.delta
 
             if custom_token_processor:

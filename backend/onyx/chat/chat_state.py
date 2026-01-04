@@ -39,6 +39,11 @@ class ChatStateContainer:
         self.citation_to_doc: CitationMapping = {}
         # True if this turn is a clarification question (deep research flow)
         self.is_clarification: bool = False
+        # LLM usage tracking for cost calculation
+        self.llm_prompt_tokens: int = 0
+        self.llm_completion_tokens: int = 0
+        self.llm_model_name: str | None = None
+        self.llm_api_key: str | None = None
 
     def add_tool_call(self, tool_call: ToolCallInfo) -> None:
         """Add a tool call to the accumulated state."""
@@ -89,6 +94,32 @@ class ChatStateContainer:
         """Thread-safe getter for is_clarification."""
         with self._lock:
             return self.is_clarification
+
+    def add_llm_usage(
+        self,
+        prompt_tokens: int,
+        completion_tokens: int,
+        model_name: str | None = None,
+        api_key: str | None = None,
+    ) -> None:
+        """Add LLM token usage to accumulated totals."""
+        with self._lock:
+            self.llm_prompt_tokens += prompt_tokens
+            self.llm_completion_tokens += completion_tokens
+            if model_name and not self.llm_model_name:
+                self.llm_model_name = model_name
+            if api_key and not self.llm_api_key:
+                self.llm_api_key = api_key
+
+    def get_llm_usage(self) -> tuple[int, int, str | None, str | None]:
+        """Thread-safe getter for LLM usage (prompt_tokens, completion_tokens, model_name, api_key)."""
+        with self._lock:
+            return (
+                self.llm_prompt_tokens,
+                self.llm_completion_tokens,
+                self.llm_model_name,
+                self.llm_api_key,
+            )
 
 
 def run_chat_loop_with_state_containers(

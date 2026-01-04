@@ -46,6 +46,8 @@ from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tag import find_tags
+from onyx.db.usage import increment_usage
+from onyx.db.usage import UsageType
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.vespa.index import VespaIndex
 from onyx.llm.factory import get_default_llm
@@ -63,6 +65,8 @@ from onyx.server.query_and_chat.models import OneShotQAResponse
 from onyx.server.query_and_chat.models import SearchSessionDetailResponse
 from onyx.server.query_and_chat.models import SourceTag
 from onyx.server.query_and_chat.models import TagResponse
+from onyx.server.usage_limits import check_usage_and_raise
+from onyx.server.usage_limits import is_usage_limits_enabled
 from onyx.server.utils import get_json_line
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -273,6 +277,22 @@ def get_answer_with_citation(
     db_session: Session = Depends(get_session),
     user: User | None = Depends(current_user),
 ) -> OneShotQAResponse:
+    # Check and track non-streaming API usage limits
+    if is_usage_limits_enabled():
+        tenant_id = get_current_tenant_id()
+        check_usage_and_raise(
+            db_session=db_session,
+            usage_type=UsageType.NON_STREAMING_API_CALLS,
+            tenant_id=tenant_id,
+            pending_amount=1,
+        )
+        increment_usage(
+            db_session=db_session,
+            usage_type=UsageType.NON_STREAMING_API_CALLS,
+            amount=1,
+        )
+        db_session.commit()
+
     try:
         packets = get_answer_stream(request, user, db_session)
         answer = gather_stream(packets)
