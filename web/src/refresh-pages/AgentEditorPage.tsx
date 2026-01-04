@@ -1082,6 +1082,7 @@ export default function AgentEditorPage({
                             <InputLayouts.Horizontal
                               name="enable_knowledge"
                               label="Enable Knowledge"
+                              center
                             >
                               <SwitchField name="enable_knowledge" />
                             </InputLayouts.Horizontal>
@@ -1091,6 +1092,7 @@ export default function AgentEditorPage({
                                 name="knowledge_source"
                                 label="Knowledge Source"
                                 description="Choose the sources of truth this agent refers to."
+                                center
                               >
                                 <InputSelectField
                                   name="knowledge_source"
@@ -1340,6 +1342,7 @@ export default function AgentEditorPage({
                               name="llm_model"
                               label="Default Model"
                               description="Select the LLM model to use for this agent. If not set, the user's default model will be used."
+                              center
                             >
                               <LLMSelector
                                 llmProviders={llmProviders ?? []}
@@ -1353,6 +1356,7 @@ export default function AgentEditorPage({
                               name="knowledge_cutoff_date"
                               label="Knowledge Cutoff Date"
                               description="Set the knowledge cutoff date for this agent. The agent will only use information up to this date."
+                              center
                             >
                               <InputDatePickerField name="knowledge_cutoff_date" />
                             </InputLayouts.Horizontal>
