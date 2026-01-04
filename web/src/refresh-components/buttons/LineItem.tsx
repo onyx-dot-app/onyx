@@ -137,7 +137,7 @@ const LineItem = React.forwardRef<HTMLButtonElement, LineItemProps>(
       >
         <div className="flex flex-row items-center justify-start w-full gap-2">
           {Icon && (
-            <div className="h-[1rem] min-w-[1rem]">
+            <div className="flex flex-col justify-center items-center h-[1rem] min-w-[1rem]">
               <Icon
                 className={cn("h-[1rem] w-[1rem]", iconClassNames[variant])}
               />
