@@ -186,6 +186,12 @@ TRACK_EXTERNAL_IDP_EXPIRY = (
 # DB Configs
 #####
 DOCUMENT_INDEX_NAME = "danswer_index"
+
+OPENSEARCH_HOST = os.environ.get("OPENSEARCH_HOST") or "localhost"
+OPENSEARCH_REST_API_PORT = int(os.environ.get("OPENSEARCH_REST_API_PORT") or 9200)
+OPENSEARCH_ADMIN_USERNAME = os.environ.get("OPENSEARCH_ADMIN_USERNAME", "admin")
+OPENSEARCH_ADMIN_PASSWORD = os.environ.get("OPENSEARCH_ADMIN_PASSWORD", "")
+
 VESPA_HOST = os.environ.get("VESPA_HOST") or "localhost"
 # NOTE: this is used if and only if the vespa config server is accessible via a
 # different host than the main vespa application
@@ -771,9 +777,6 @@ try:
     )
 except json.JSONDecodeError:
     pass
-
-# LLM Model Update API endpoint
-LLM_MODEL_UPDATE_API_URL = os.environ.get("LLM_MODEL_UPDATE_API_URL")
 
 # Auto LLM Configuration - fetches model configs from GitHub for providers in Auto mode
 AUTO_LLM_CONFIG_URL = os.environ.get(

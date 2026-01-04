@@ -15,7 +15,7 @@ test("PAT Complete Workflow", async ({ page }, testInfo) => {
   await page.context().clearCookies();
   const { email } = await loginAsRandomUser(page);
 
-  await page.goto("http://localhost:3000/chat");
+  await page.goto("/chat");
   await page.waitForLoadState("networkidle");
 
   // Click on user dropdown and open settings (same pattern as other tests)
@@ -151,7 +151,7 @@ test("PAT Multiple Tokens Management", async ({ page }, testInfo) => {
   await page.context().clearCookies();
   await loginAsRandomUser(page);
 
-  await page.goto("http://localhost:3000/chat");
+  await page.goto("/chat");
   await page.waitForLoadState("networkidle");
 
   // Click on user dropdown and open settings (same pattern as other tests)

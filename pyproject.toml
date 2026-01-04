@@ -191,6 +191,11 @@ model_server = [
 [tool.uv.workspace]
 members = ["backend", "tools/ods"]
 
+[tool.basedpyright]
+include = ["backend"]
+exclude = ["backend/generated"]
+typeCheckingMode = "off"
+
 [tool.setuptools.packages.find]
 where = ["backend"]
 include = ["onyx*", "tests*"]

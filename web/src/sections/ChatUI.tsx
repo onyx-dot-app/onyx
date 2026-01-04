@@ -275,6 +275,7 @@ const ChatUI = React.memo(
                         content={message.message}
                         files={message.files}
                         messageId={message.messageId}
+                        nodeId={message.nodeId}
                         onEdit={handleEditWithMessageId}
                         otherMessagesCanSwitchTo={
                           parentMessage?.childrenNodeIds ?? emptyChildrenIds

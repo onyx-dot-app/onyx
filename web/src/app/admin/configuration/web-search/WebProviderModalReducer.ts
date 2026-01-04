@@ -2,6 +2,9 @@ export type WebProviderModalState = {
   /** Provider type currently being configured in the modal (null when closed). */
   providerType: string | null;
 
+  /** Existing provider ID when editing (null for new providers). */
+  existingProviderId: number | null;
+
   /** Raw API key input value (may be the masked placeholder). */
   apiKeyValue: string;
   /** Single provider-specific config field value (e.g. cx / base URL). */
@@ -22,6 +25,7 @@ export type WebProviderModalAction =
   | {
       type: "OPEN";
       providerType: string;
+      existingProviderId: number | null;
       initialApiKeyValue: string;
       initialConfigValue: string;
     }
@@ -35,6 +39,7 @@ export type WebProviderModalAction =
 
 export const initialWebProviderModalState: WebProviderModalState = {
   providerType: null,
+  existingProviderId: null,
   apiKeyValue: "",
   configValue: "",
   phase: "idle",
@@ -52,6 +57,7 @@ export function WebProviderModalReducer(
       return {
         ...state,
         providerType: action.providerType,
+        existingProviderId: action.existingProviderId,
         apiKeyValue: action.initialApiKeyValue,
         configValue: action.initialConfigValue,
         phase: "idle",
@@ -61,6 +67,7 @@ export function WebProviderModalReducer(
       return {
         ...state,
         providerType: null,
+        existingProviderId: null,
         apiKeyValue: "",
         configValue: "",
         phase: "idle",

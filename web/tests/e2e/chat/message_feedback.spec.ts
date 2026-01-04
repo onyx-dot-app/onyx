@@ -7,7 +7,7 @@ test.describe("Message feedback thumbs controls", () => {
     await page.context().clearCookies();
     await loginAsRandomUser(page);
 
-    await page.goto("http://localhost:3000/chat");
+    await page.goto("/chat");
     await page.waitForLoadState("networkidle");
   });
 

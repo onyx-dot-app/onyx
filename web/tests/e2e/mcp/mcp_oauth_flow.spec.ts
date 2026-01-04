@@ -1186,7 +1186,7 @@ test.describe("MCP OAuth flows", () => {
     const serverName = `PW MCP Admin ${Date.now()}`;
     const assistantName = `PW Admin Assistant ${Date.now()}`;
 
-    await page.goto("http://localhost:3000/admin/actions/mcp");
+    await page.goto("/admin/actions/mcp");
     await page.waitForURL("**/admin/actions/mcp**", { timeout: 15000 });
     logStep("Opened MCP actions page");
 
@@ -1370,7 +1370,7 @@ test.describe("MCP OAuth flows", () => {
         assistantName
       );
       assistantId = assistantRecord.id;
-      await page.goto(`http://localhost:3000/chat?assistantId=${assistantId}`);
+      await page.goto(`/chat?assistantId=${assistantId}`);
       await page.waitForURL(/\/chat\?assistantId=\d+/, { timeout: 20000 });
     }
     if (assistantId === null) {
@@ -1397,7 +1397,7 @@ test.describe("MCP OAuth flows", () => {
     logStep("Verified admin MCP tool row visible after reauth");
 
     // Verify server card still shows the server and tools
-    await page.goto("http://localhost:3000/admin/actions/mcp");
+    await page.goto("/admin/actions/mcp");
     await page.waitForURL("**/admin/actions/mcp**", { timeout: 15000 });
     await expect(
       page.getByText(serverName, { exact: false }).first()
@@ -1466,7 +1466,7 @@ test.describe("MCP OAuth flows", () => {
         curatorRuntimeMcpServerUrl = `http://${host}:${port}/mcp`;
       }
 
-      await page.goto("http://localhost:3000/admin/actions/mcp");
+      await page.goto("/admin/actions/mcp");
       await page.waitForURL("**/admin/actions/mcp**", { timeout: 15000 });
       logStep("Opened MCP actions page (curator)");
 
@@ -1580,7 +1580,7 @@ test.describe("MCP OAuth flows", () => {
 
       logStep("Tools auto-fetched and enabled via UI");
 
-      await page.goto("http://localhost:3000/chat/agents/create?admin=true");
+      await page.goto("/chat/agents/create?admin=true");
       await page.waitForURL("**/chat/agents/create**", { timeout: 15000 });
       logStep("Assistant editor loaded (curator)");
 
@@ -1676,7 +1676,7 @@ test.describe("MCP OAuth flows", () => {
         { email: curatorTwoCredentials!.email, role: "curator" },
         "CuratorFlow secondary login"
       );
-      await curatorTwoPage.goto("http://localhost:3000/admin/actions/mcp");
+      await curatorTwoPage.goto("/admin/actions/mcp");
       const serverLocator = curatorTwoPage.getByText(serverName, {
         exact: false,
       });
@@ -1720,7 +1720,7 @@ test.describe("MCP OAuth flows", () => {
     const serverName = adminArtifacts!.serverName;
     const toolName = adminArtifacts!.toolName;
 
-    await page.goto(`http://localhost:3000/chat?assistantId=${assistantId}`, {
+    await page.goto(`/chat?assistantId=${assistantId}`, {
       waitUntil: "load",
     });
     await ensureServerVisibleInActions(page, serverName);
