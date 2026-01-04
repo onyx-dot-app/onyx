@@ -14,6 +14,8 @@ import {
 } from "@/refresh-components/inputs/styles";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { SvgChevronDownSmall } from "@opal/icons";
+import Separator, { SeparatorProps } from "@/refresh-components/Separator";
+import { WithoutStyles } from "@/types";
 
 // ============================================================================
 // Context
@@ -304,7 +306,9 @@ const InputSelectContent = React.forwardRef<
       onMouseDown={noProp()}
       {...props}
     >
-      <SelectPrimitive.Viewport>{children}</SelectPrimitive.Viewport>
+      <SelectPrimitive.Viewport className="flex flex-col gap-1">
+        {children}
+      </SelectPrimitive.Viewport>
     </SelectPrimitive.Content>
   </SelectPrimitive.Portal>
 ));
@@ -454,6 +458,35 @@ const InputSelectLabel = React.forwardRef<
 InputSelectLabel.displayName = "InputSelectLabel";
 
 // ============================================================================
+// InputSelect Separator
+// ============================================================================
+
+/**
+ * InputSelect Separator Component
+ *
+ * A visual divider between items in the dropdown.
+ * Uses the app's standard Separator component with appropriate defaults for dropdown menus.
+ *
+ * @example
+ * ```tsx
+ * <InputSelect.Content>
+ *   <InputSelect.Item value="1">Option 1</InputSelect.Item>
+ *   <InputSelect.Separator />
+ *   <InputSelect.Item value="2">Option 2</InputSelect.Item>
+ * </InputSelect.Content>
+ * ```
+ */
+type InputSelectSeparatorProps = WithoutStyles<SeparatorProps>;
+
+const InputSelectSeparator = React.forwardRef<
+  React.ComponentRef<typeof Separator>,
+  InputSelectSeparatorProps
+>(({ noPadding = true, ...props }, ref) => (
+  <Separator ref={ref} noPadding={noPadding} className="px-2 py-1" {...props} />
+));
+InputSelectSeparator.displayName = "InputSelectSeparator";
+
+// ============================================================================
 // Exports
 // ============================================================================
 
@@ -496,6 +529,7 @@ export default Object.assign(InputSelectRoot, {
   Item: InputSelectItem,
   Group: InputSelectGroup,
   Label: InputSelectLabel,
+  Separator: InputSelectSeparator,
 });
 
 export {
@@ -505,4 +539,5 @@ export {
   type InputSelectItemProps,
   type InputSelectGroupProps,
   type InputSelectLabelProps,
+  type InputSelectSeparatorProps,
 };
