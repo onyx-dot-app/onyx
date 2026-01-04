@@ -209,3 +209,47 @@ SKIP_USERFILE_THRESHOLD_TENANT_LIST = (
 )
 
 ENVIRONMENT = os.environ.get("ENVIRONMENT") or "not_explicitly_set"
+
+
+#####
+# Usage Limits Configuration (meant for cloud, off by default for self-hosted)
+#####
+# Whether usage limits are enforced (defaults to MULTI_TENANT value)
+_USAGE_LIMITS_ENABLED_RAW = os.environ.get("USAGE_LIMITS_ENABLED")
+if _USAGE_LIMITS_ENABLED_RAW is not None:
+    USAGE_LIMITS_ENABLED = _USAGE_LIMITS_ENABLED_RAW.lower() == "true"
+else:
+    # Default: enabled on cloud (MULTI_TENANT), disabled for self-hosted
+    USAGE_LIMITS_ENABLED = MULTI_TENANT
+
+# Usage limit window in seconds (default: 1 week = 604800 seconds)
+USAGE_LIMIT_WINDOW_SECONDS = int(os.environ.get("USAGE_LIMIT_WINDOW_SECONDS", "604800"))
+
+# Per-week LLM usage cost limits in cents (e.g., 1000 = $10.00)
+# Trial users get lower limits than paid users
+USAGE_LIMIT_LLM_COST_CENTS_TRIAL = int(
+    os.environ.get("USAGE_LIMIT_LLM_COST_CENTS_TRIAL", "200")  # $2.00 default
+)
+USAGE_LIMIT_LLM_COST_CENTS_PAID = int(
+    os.environ.get("USAGE_LIMIT_LLM_COST_CENTS_PAID", "400")  # $4.00 default
+)
+
+# Per-week chunks indexed limits
+USAGE_LIMIT_CHUNKS_INDEXED_TRIAL = int(
+    os.environ.get("USAGE_LIMIT_CHUNKS_INDEXED_TRIAL", "10000")
+)
+USAGE_LIMIT_CHUNKS_INDEXED_PAID = int(
+    os.environ.get("USAGE_LIMIT_CHUNKS_INDEXED_PAID", "50000")
+)
+
+# Per-week API calls using API keys or Personal Access Tokens
+USAGE_LIMIT_API_CALLS_TRIAL = int(os.environ.get("USAGE_LIMIT_API_CALLS_TRIAL", "100"))
+USAGE_LIMIT_API_CALLS_PAID = int(os.environ.get("USAGE_LIMIT_API_CALLS_PAID", "10000"))
+
+# Per-week non-streaming API calls (more expensive, so lower limits)
+USAGE_LIMIT_NON_STREAMING_CALLS_TRIAL = int(
+    os.environ.get("USAGE_LIMIT_NON_STREAMING_CALLS_TRIAL", "20")
+)
+USAGE_LIMIT_NON_STREAMING_CALLS_PAID = int(
+    os.environ.get("USAGE_LIMIT_NON_STREAMING_CALLS_PAID", "40")
+)

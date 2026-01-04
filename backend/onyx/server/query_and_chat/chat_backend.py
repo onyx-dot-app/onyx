@@ -57,6 +57,8 @@ from onyx.db.feedback import remove_chat_message_feedback
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
+from onyx.db.usage import increment_usage
+from onyx.db.usage import UsageType
 from onyx.db.user_file import get_file_id_by_user_file_id
 from onyx.file_processing.extract_file_text import docx_to_txt_filename
 from onyx.file_store.file_store import get_default_file_store
@@ -69,6 +71,7 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.secondary_llm_flows.chat_session_naming import (
     get_renamed_conversation_name,
 )
+from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.query_and_chat.models import ChatFeedbackRequest
 from onyx.server.query_and_chat.models import ChatMessageIdentifier
 from onyx.server.query_and_chat.models import ChatRenameRequest
@@ -93,6 +96,8 @@ from onyx.server.query_and_chat.session_loading import (
 )
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
+from onyx.server.usage_limits import check_usage_and_raise
+from onyx.server.usage_limits import is_usage_limits_enabled
 from onyx.server.utils import get_json_line
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
@@ -364,6 +369,15 @@ def rename_chat_session(
         )
     )
 
+    # Check LLM cost limits before using the LLM (only for Onyx-managed keys)
+    from onyx.server.usage_limits import check_llm_cost_limit_for_provider
+
+    check_llm_cost_limit_for_provider(
+        db_session=db_session,
+        tenant_id=get_current_tenant_id(),
+        llm_provider_api_key=llm.config.api_key,
+    )
+
     new_name = get_renamed_conversation_name(full_history=full_history, llm=llm)
 
     update_chat_session(
@@ -431,6 +445,7 @@ def handle_new_chat_message(
     request: Request,
     user: User | None = Depends(current_chat_accessible_user),
     _rate_limit_check: None = Depends(check_token_rate_limits),
+    _api_key_usage_check: None = Depends(check_api_key_usage),
 ) -> StreamingResponse:
     """
     This endpoint is both used for all the following purposes:
@@ -494,6 +509,7 @@ def handle_send_chat_message(
     request: Request,
     user: User | None = Depends(current_chat_accessible_user),
     _rate_limit_check: None = Depends(check_token_rate_limits),
+    _api_key_usage_check: None = Depends(check_api_key_usage),
 ) -> StreamingResponse | ChatFullResponse:
     """
     This endpoint is used to send a new chat message.
@@ -521,6 +537,21 @@ def handle_send_chat_message(
     # Non-streaming path: consume all packets and return complete response
     if not chat_message_req.stream:
         with get_session_with_current_tenant() as db_session:
+            # Check and track non-streaming API usage limits
+            if is_usage_limits_enabled():
+                check_usage_and_raise(
+                    db_session=db_session,
+                    usage_type=UsageType.NON_STREAMING_API_CALLS,
+                    tenant_id=tenant_id,
+                    pending_amount=1,
+                )
+                increment_usage(
+                    db_session=db_session,
+                    usage_type=UsageType.NON_STREAMING_API_CALLS,
+                    amount=1,
+                )
+                db_session.commit()
+
             state_container = ChatStateContainer()
             packets = handle_stream_message_objects(
                 new_msg_req=chat_message_req,
@@ -534,10 +565,39 @@ def handle_send_chat_message(
                 ),
                 external_state_container=state_container,
             )
-            return gather_stream_full(packets, state_container)
+            result = gather_stream_full(packets, state_container)
+
+            # Record LLM usage after processing completes
+            # Only track costs when using Onyx-managed API keys
+            if is_usage_limits_enabled():
+                from onyx.server.usage_limits import is_onyx_managed_api_key
+
+                prompt_tokens, completion_tokens, model_name, api_key = (
+                    state_container.get_llm_usage()
+                )
+                if is_onyx_managed_api_key(api_key) and (
+                    prompt_tokens > 0 or completion_tokens > 0
+                ):
+                    from onyx.llm.cost import calculate_llm_cost_cents
+
+                    cost_cents = calculate_llm_cost_cents(
+                        model_name=model_name or "unknown",
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                    )
+                    if cost_cents > 0:
+                        increment_usage(
+                            db_session=db_session,
+                            usage_type=UsageType.LLM_COST,
+                            amount=cost_cents,
+                        )
+                        db_session.commit()
+
+            return result
 
     # Streaming path, normal Onyx UI behavior
     def stream_generator() -> Generator[str, None, None]:
+        state_container = ChatStateContainer()
         try:
             with get_session_with_current_tenant() as db_session:
                 for obj in handle_stream_message_objects(
@@ -550,8 +610,35 @@ def handle_send_chat_message(
                     custom_tool_additional_headers=get_custom_tool_additional_request_headers(
                         request.headers
                     ),
+                    external_state_container=state_container,
                 ):
                     yield get_json_line(obj.model_dump())
+
+                # Record LLM usage after stream completes
+                # Only track costs when using Onyx-managed API keys
+                if is_usage_limits_enabled():
+                    from onyx.server.usage_limits import is_onyx_managed_api_key
+
+                    prompt_tokens, completion_tokens, model_name, api_key = (
+                        state_container.get_llm_usage()
+                    )
+                    if is_onyx_managed_api_key(api_key) and (
+                        prompt_tokens > 0 or completion_tokens > 0
+                    ):
+                        from onyx.llm.cost import calculate_llm_cost_cents
+
+                        cost_cents = calculate_llm_cost_cents(
+                            model_name=model_name or "unknown",
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                        )
+                        if cost_cents > 0:
+                            increment_usage(
+                                db_session=db_session,
+                                usage_type=UsageType.LLM_COST,
+                                amount=cost_cents,
+                            )
+                            db_session.commit()
 
         except Exception as e:
             logger.exception("Error in chat message streaming")

@@ -33,9 +33,16 @@ from onyx.llm.models import ToolChoiceOptions
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.prompts.deep_research.orchestration_layer import CLARIFICATION_PROMPT
 from onyx.prompts.deep_research.orchestration_layer import FINAL_REPORT_PROMPT
+from onyx.prompts.deep_research.orchestration_layer import (
+    INTERNAL_SEARCH_CLARIFICATION_GUIDANCE,
+)
+from onyx.prompts.deep_research.orchestration_layer import (
+    INTERNAL_SEARCH_RESEARCH_TASK_GUIDANCE,
+)
 from onyx.prompts.deep_research.orchestration_layer import ORCHESTRATOR_PROMPT
 from onyx.prompts.deep_research.orchestration_layer import ORCHESTRATOR_PROMPT_REASONING
 from onyx.prompts.deep_research.orchestration_layer import RESEARCH_PLAN_PROMPT
+from onyx.prompts.deep_research.orchestration_layer import RESEARCH_PLAN_REMINDER
 from onyx.prompts.deep_research.orchestration_layer import USER_FINAL_REPORT_QUERY
 from onyx.prompts.prompt_utils import get_current_llm_day_time
 from onyx.server.query_and_chat.placement import Placement
@@ -198,14 +205,21 @@ def run_deep_research_llm_loop(
         # Filter tools to only allow web search, internal search, and open URL
         allowed_tool_names = {SearchTool.NAME, WebSearchTool.NAME, OpenURLTool.NAME}
         allowed_tools = [tool for tool in tools if tool.name in allowed_tool_names]
+        include_internal_search_tunings = SearchTool.NAME in allowed_tool_names
         orchestrator_start_turn_index = 1
 
         #########################################################
         # CLARIFICATION STEP (optional)
         #########################################################
+        internal_search_clarification_guidance = (
+            INTERNAL_SEARCH_CLARIFICATION_GUIDANCE
+            if include_internal_search_tunings
+            else ""
+        )
         if not skip_clarification:
             clarification_prompt = CLARIFICATION_PROMPT.format(
-                current_datetime=get_current_llm_day_time(full_sentence=False)
+                current_datetime=get_current_llm_day_time(full_sentence=False),
+                internal_search_clarification_guidance=internal_search_clarification_guidance,
             )
             system_prompt = ChatMessageSimple(
                 message=clarification_prompt,
@@ -262,15 +276,19 @@ def run_deep_research_llm_loop(
             token_count=300,
             message_type=MessageType.SYSTEM,
         )
-
+        reminder_message = ChatMessageSimple(
+            message=RESEARCH_PLAN_REMINDER,
+            token_count=100,
+            message_type=MessageType.USER,
+        )
         truncated_message_history = construct_message_history(
             system_prompt=system_prompt,
             custom_agent_prompt=None,
-            simple_chat_history=simple_chat_history,
+            simple_chat_history=simple_chat_history + [reminder_message],
             reminder_message=None,
             project_files=None,
             available_tokens=available_tokens,
-            last_n_user_messages=MAX_USER_MESSAGES_FOR_CONTEXT,
+            last_n_user_messages=MAX_USER_MESSAGES_FOR_CONTEXT + 1,
         )
 
         research_plan_generator = run_llm_step_pkt_generator(
@@ -345,11 +363,17 @@ def run_deep_research_llm_loop(
             else ORCHESTRATOR_PROMPT_REASONING
         )
 
+        internal_search_research_task_guidance = (
+            INTERNAL_SEARCH_RESEARCH_TASK_GUIDANCE
+            if include_internal_search_tunings
+            else ""
+        )
         token_count_prompt = orchestrator_prompt_template.format(
             current_datetime=get_current_llm_day_time(full_sentence=False),
             current_cycle_count=1,
             max_cycles=max_orchestrator_cycles,
             research_plan=research_plan,
+            internal_search_research_task_guidance=internal_search_research_task_guidance,
         )
         orchestration_tokens = token_counter(token_count_prompt)
 
@@ -386,6 +410,7 @@ def run_deep_research_llm_loop(
                 current_cycle_count=cycle,
                 max_cycles=max_orchestrator_cycles,
                 research_plan=research_plan,
+                internal_search_research_task_guidance=internal_search_research_task_guidance,
             )
 
             system_prompt = ChatMessageSimple(

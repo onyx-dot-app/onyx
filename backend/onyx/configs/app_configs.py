@@ -884,6 +884,19 @@ DEV_MODE = os.environ.get("DEV_MODE", "").lower() == "true"
 
 INTEGRATION_TESTS_MODE = os.environ.get("INTEGRATION_TESTS_MODE", "").lower() == "true"
 
+#####
+# Captcha Configuration (for cloud signup protection)
+#####
+# Enable captcha verification for new user registration
+CAPTCHA_ENABLED = os.environ.get("CAPTCHA_ENABLED", "").lower() == "true"
+
+# Google reCAPTCHA secret key (server-side validation)
+RECAPTCHA_SECRET_KEY = os.environ.get("RECAPTCHA_SECRET_KEY", "")
+
+# Minimum score threshold for reCAPTCHA v3 (0.0-1.0, higher = more likely human)
+# 0.5 is the recommended default
+RECAPTCHA_SCORE_THRESHOLD = float(os.environ.get("RECAPTCHA_SCORE_THRESHOLD", "0.5"))
+
 MOCK_CONNECTOR_FILE_PATH = os.environ.get("MOCK_CONNECTOR_FILE_PATH")
 
 # Set to true to mock LLM responses for testing purposes
@@ -937,3 +950,15 @@ S3_GENERATE_LOCAL_CHECKSUM = (
 # Forcing Vespa Language
 # English: en, German:de, etc. See: https://docs.vespa.ai/en/linguistics.html
 VESPA_LANGUAGE_OVERRIDE = os.environ.get("VESPA_LANGUAGE_OVERRIDE")
+
+
+#####
+# Default LLM API Keys (for cloud deployments)
+# These are Onyx-managed API keys provided to tenants by default
+#####
+OPENAI_DEFAULT_API_KEY = os.environ.get("OPENAI_DEFAULT_API_KEY")
+ANTHROPIC_DEFAULT_API_KEY = os.environ.get("ANTHROPIC_DEFAULT_API_KEY")
+COHERE_DEFAULT_API_KEY = os.environ.get("COHERE_DEFAULT_API_KEY")
+VERTEXAI_DEFAULT_CREDENTIALS = os.environ.get("VERTEXAI_DEFAULT_CREDENTIALS")
+VERTEXAI_DEFAULT_LOCATION = os.environ.get("VERTEXAI_DEFAULT_LOCATION", "global")
+OPENROUTER_DEFAULT_API_KEY = os.environ.get("OPENROUTER_DEFAULT_API_KEY")

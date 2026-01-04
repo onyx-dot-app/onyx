@@ -3962,3 +3962,45 @@ class License(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class TenantUsage(Base):
+    """
+    Tracks per-tenant usage statistics within a time window for cloud usage limits.
+
+    Each row represents usage for a specific tenant during a specific time window.
+    A new row is created when the window rolls over (typically weekly).
+    """
+
+    __tablename__ = "tenant_usage"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # The start of the usage tracking window (e.g., start of the week in UTC)
+    window_start: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+
+    # Cumulative LLM usage cost in cents for the window
+    llm_cost_cents: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    # Number of chunks indexed during the window
+    chunks_indexed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # Number of API calls using API keys or Personal Access Tokens
+    api_calls: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # Number of non-streaming API calls (more expensive operations)
+    non_streaming_api_calls: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+
+    # Last updated timestamp for tracking freshness
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        # Ensure only one row per window start (tenant_id is in the schema name)
+        UniqueConstraint("window_start", name="uq_tenant_usage_window"),
+    )

@@ -67,6 +67,7 @@ from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tools.constants import SEARCH_TOOL_ID
 from onyx.tools.interface import Tool
 from onyx.tools.models import SearchToolUsage
@@ -346,6 +347,14 @@ def handle_stream_message_objects(
             long_term_logger=long_term_logger,
         )
         token_counter = get_llm_token_counter(llm)
+
+        # Check LLM cost limits before using the LLM (only for Onyx-managed keys)
+
+        check_llm_cost_limit_for_provider(
+            db_session=db_session,
+            tenant_id=tenant_id,
+            llm_provider_api_key=llm.config.api_key,
+        )
 
         # Verify that the user specified files actually belong to the user
         verify_user_files(
