@@ -211,7 +211,7 @@ function GeneralSettings() {
             </Button>
           }
         >
-          <GeneralLayouts.Section gap={0.5}>
+          <GeneralLayouts.Section gap={0.5} start>
             <Text>
               All your chat sessions and history will be permanently deleted.
               Deletion cannot be undone.
