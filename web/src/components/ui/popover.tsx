@@ -61,7 +61,7 @@ export interface PopoverMenuProps {
 // # Filtering:
 // `undefined`s will be filtered out.
 // `null`s that are at the beginning / end will also be filtered out (separator lines don't make sense as the first / last element; they're supposed to *separate* options).
-export function PopoverMenu({
+function PopoverMenu({
   small,
   medium,
 
@@ -114,4 +114,4 @@ export function PopoverMenu({
   );
 }
 
-export { Popover, PopoverTrigger, PopoverContent, PopoverClose };
+export { Popover, PopoverTrigger, PopoverContent, PopoverClose, PopoverMenu };
