@@ -10,8 +10,7 @@ import isEqual from "lodash/isEqual";
 
 // Common class names for the Form component across all LLM provider forms
 export const LLM_FORM_CLASS_NAME =
-  "flex flex-col gap-y-4 min-h-0 items-stretch mt-6";
-// export const LLM_FORM_CLASS_NAME = "flex flex-col  flex-1 w-full";
+  "flex flex-col gap-y-4 min-h-0 items-stretch w-full";
 
 export const buildDefaultInitialValues = (
   existingLlmProvider?: LLMProviderView,

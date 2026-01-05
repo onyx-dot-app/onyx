@@ -304,9 +304,7 @@ const ModalContent = React.forwardRef<
               "bg-background-tint-00 border rounded-16 shadow-2xl",
               "flex flex-col overflow-hidden",
               // Never exceed viewport on small screens
-              "max-w-[calc(100dvw-2rem)]",
-              // Height constraint - 85vh for both modes
-              "max-h-[85vh]",
+              "max-w-[calc(100dvw-2rem)] max-h-[calc(100dvh-2rem)]",
               "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
               "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
               "data-[state=open]:slide-in-from-top-1/2 data-[state=closed]:slide-out-to-top-1/2",
@@ -403,7 +401,7 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
       <div
         ref={ref}
         className={cn(
-          "relative z-10 flex flex-col gap-4 p-4 flex-shrink-0",
+          "relative z-10 flex flex-col gap-4 p-4",
           withBottomShadow && "shadow-01",
           className
         )}
@@ -472,7 +470,7 @@ const ModalBody = React.forwardRef<HTMLDivElement, ModalBodyProps>(
       <div
         ref={ref}
         className={cn(
-          "pb-4 px-4 flex flex-col gap-4",
+          "pt-4 pb-4 px-4 flex flex-col gap-4",
           // "body" mode: this section scrolls independently
           // "fullBody" mode: wrapper handles scroll, so no overflow here
           scrollBehavior === "body" && "overflow-y-auto flex-1 min-h-0",

@@ -120,7 +120,9 @@ export function ProviderFormEntrypointWrapper({
                 title={`Setup ${providerName}`}
                 onClose={onClose}
               />
-              {children(context)}
+              <Modal.Body className="max-h-[70vh] overflow-y-auto">
+                {children(context)}
+              </Modal.Body>
             </Modal.Content>
           </Modal>
         )}
@@ -206,7 +208,9 @@ export function ProviderFormEntrypointWrapper({
               }`}
               onClose={onClose}
             />
-            {children(context)}
+            <Modal.Body className="max-h-[70vh] overflow-y-auto">
+              {children(context)}
+            </Modal.Body>
           </Modal.Content>
         </Modal>
       )}
