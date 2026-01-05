@@ -359,6 +359,23 @@ def translate_assistant_message_to_packets(
         for turn_num in sorted(tool_calls_by_turn.keys()):
             tool_calls_in_turn = tool_calls_by_turn[turn_num]
 
+            # Insert pre-tool reasoning once per turn (if available)
+            turn_reasoning = next(
+                (
+                    tool_call.reasoning_tokens
+                    for tool_call in tool_calls_in_turn
+                    if tool_call.reasoning_tokens
+                ),
+                None,
+            )
+            if turn_reasoning and turn_num > 0:
+                packet_list.extend(
+                    create_reasoning_packets(
+                        reasoning_text=turn_reasoning,
+                        turn_index=turn_num - 1,
+                    )
+                )
+
             # Process each tool call in this turn
             for tool_call in tool_calls_in_turn:
                 try:
@@ -469,8 +486,16 @@ def translate_assistant_message_to_packets(
                     )
                 )
 
-    # Message comes after tool calls
+    # Message comes after tool calls, with optional reasoning step beforehand
     message_turn_index = max_tool_turn + 1
+    if chat_message.reasoning_tokens:
+        packet_list.extend(
+            create_reasoning_packets(
+                reasoning_text=chat_message.reasoning_tokens,
+                turn_index=message_turn_index,
+            )
+        )
+        message_turn_index += 1
 
     if chat_message.message:
         packet_list.extend(
@@ -497,19 +522,17 @@ def translate_assistant_message_to_packets(
     # Return the highest turn_index used
     final_turn_index = 0
     if chat_message.message_type == MessageType.ASSISTANT:
-        # Determine the final turn based on what was added
         max_tool_turn = 0
         if chat_message.tool_calls:
             max_tool_turn = max(tc.turn_number for tc in chat_message.tool_calls)
 
-        # Start from tool turns, then message, then citations
         final_turn_index = max_tool_turn
+        if chat_message.reasoning_tokens:
+            final_turn_index = max(final_turn_index, max_tool_turn + 1)
         if chat_message.message:
-            final_turn_index = max_tool_turn + 1
+            final_turn_index = max(final_turn_index, message_turn_index)
         if citation_info_list:
-            final_turn_index = (
-                final_turn_index + 1 if chat_message.message else max_tool_turn + 1
-            )
+            final_turn_index = max(final_turn_index, citation_turn_index)
 
     # Add overall stop packet at the end
     packet_list.append(
