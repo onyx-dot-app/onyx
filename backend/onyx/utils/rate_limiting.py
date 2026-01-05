@@ -80,7 +80,7 @@ class ThreadSafeRateLimiter:
             if wait_time > 0:
                 logger.debug(
                     f"Rate limiter '{self.name}': waiting {wait_time:.2f}s "
-                    f"({len(self._call_timestamps)}/{self.max_calls} slots used)"
+                    f"(rate limit reached)"
                 )
                 time.sleep(wait_time + 0.01)  # Small buffer to ensure slot is free
 
