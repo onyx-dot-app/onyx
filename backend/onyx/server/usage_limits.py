@@ -71,29 +71,80 @@ def is_tenant_on_trial_fn(tenant_id: str) -> bool:
     return fn(tenant_id)
 
 
-def get_limit_for_usage_type(usage_type: UsageType, is_trial: bool) -> int:
-    """Get the appropriate limit based on usage type and trial status."""
+def _get_tenant_override(tenant_id: str, field_name: str) -> int | None:
+    """
+    Get a tenant-specific usage limit override if available.
+
+    Uses fetch_versioned_implementation to get EE version if available.
+
+    Returns:
+        - Positive int: Use this specific limit
+        - -1 (NO_LIMIT): No limit (unlimited)
+        - None: No override specified, use default env var value
+    """
+    try:
+        # Try to get EE version that has tenant overrides
+        get_overrides_fn = fetch_versioned_implementation(
+            "onyx.server.tenants.usage_limits", "get_tenant_usage_limit_overrides"
+        )
+        overrides = get_overrides_fn(tenant_id)
+        if overrides is not None:
+            # Get the field value - None means not set, use default
+            return getattr(overrides, field_name, None)
+    except Exception:
+        # EE module not available or error - fall back to defaults
+        pass
+    return None
+
+
+# Special value meaning "no limit" (unlimited)
+NO_LIMIT = -1
+
+
+def get_limit_for_usage_type(
+    usage_type: UsageType, is_trial: bool, tenant_id: str | None = None
+) -> int:
+    """
+    Get the appropriate limit based on usage type, trial status, and tenant overrides.
+
+    Returns:
+        - Positive int: The usage limit
+        - NO_LIMIT (-1): No limit (unlimited) for this tenant
+    """
+    # Determine field names for this usage type
     if usage_type == UsageType.LLM_COST:
-        return (
-            USAGE_LIMIT_LLM_COST_CENTS_TRIAL
-            if is_trial
-            else USAGE_LIMIT_LLM_COST_CENTS_PAID
-        )
-    if usage_type == UsageType.CHUNKS_INDEXED:
-        return (
-            USAGE_LIMIT_CHUNKS_INDEXED_TRIAL
-            if is_trial
-            else USAGE_LIMIT_CHUNKS_INDEXED_PAID
-        )
-    if usage_type == UsageType.API_CALLS:
-        return USAGE_LIMIT_API_CALLS_TRIAL if is_trial else USAGE_LIMIT_API_CALLS_PAID
-    if usage_type == UsageType.NON_STREAMING_API_CALLS:
-        return (
-            USAGE_LIMIT_NON_STREAMING_CALLS_TRIAL
-            if is_trial
-            else USAGE_LIMIT_NON_STREAMING_CALLS_PAID
-        )
-    return 0
+        trial_field = "llm_cost_cents_trial"
+        paid_field = "llm_cost_cents_paid"
+        default_trial = USAGE_LIMIT_LLM_COST_CENTS_TRIAL
+        default_paid = USAGE_LIMIT_LLM_COST_CENTS_PAID
+    elif usage_type == UsageType.CHUNKS_INDEXED:
+        trial_field = "chunks_indexed_trial"
+        paid_field = "chunks_indexed_paid"
+        default_trial = USAGE_LIMIT_CHUNKS_INDEXED_TRIAL
+        default_paid = USAGE_LIMIT_CHUNKS_INDEXED_PAID
+    elif usage_type == UsageType.API_CALLS:
+        trial_field = "api_calls_trial"
+        paid_field = "api_calls_paid"
+        default_trial = USAGE_LIMIT_API_CALLS_TRIAL
+        default_paid = USAGE_LIMIT_API_CALLS_PAID
+    elif usage_type == UsageType.NON_STREAMING_API_CALLS:
+        trial_field = "non_streaming_calls_trial"
+        paid_field = "non_streaming_calls_paid"
+        default_trial = USAGE_LIMIT_NON_STREAMING_CALLS_TRIAL
+        default_paid = USAGE_LIMIT_NON_STREAMING_CALLS_PAID
+    else:
+        return 0
+
+    # Check for tenant-specific override
+    field_name = trial_field if is_trial else paid_field
+    if tenant_id:
+        override = _get_tenant_override(tenant_id, field_name)
+        if override is not None:
+            # override is an int: either a specific limit or -1 (NO_LIMIT)
+            return override
+
+    # Fall back to defaults
+    return default_trial if is_trial else default_paid
 
 
 def check_llm_cost_limit_for_provider(
@@ -152,7 +203,11 @@ def check_usage_and_raise(
         return
 
     is_trial = is_tenant_on_trial_fn(tenant_id)
-    limit = get_limit_for_usage_type(usage_type, is_trial)
+    limit = get_limit_for_usage_type(usage_type, is_trial, tenant_id)
+
+    # NO_LIMIT means this tenant has unlimited usage for this type
+    if limit == NO_LIMIT:
+        return
 
     try:
         check_usage_limit(
