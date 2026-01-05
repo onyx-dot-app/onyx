@@ -34,7 +34,7 @@ import { useAuthType, useLlmManager } from "@/lib/hooks";
 import { AuthType } from "@/lib/constants";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { humanReadableFormat, humanReadableFormatWithTime } from "@/lib/time";
+import { humanReadableFormat } from "@/lib/time";
 import useFilter from "@/hooks/useFilter";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -50,6 +50,7 @@ import Code from "@/refresh-components/Code";
 import { InputPrompt } from "@/app/chat/interfaces";
 import { useInputPrompts } from "@/hooks/useInputPrompts";
 import ColorSwatch from "@/refresh-components/ColorSwatch";
+import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
 
 interface PAT {
   id: number;
@@ -675,6 +676,9 @@ function ChatPreferencesSettings() {
             >
               <LLMPopover
                 llmManager={llmManager}
+                // TODO (@raunakab)
+                // Update saving default model.
+                //
                 // onSelect={(selected) => {
                 //   if (selected === null) {
                 //     void handleChangeDefaultModel(null);
@@ -1088,10 +1092,10 @@ function AccountsAccessSettings() {
         {showTokensSection && (
           <GeneralLayouts.Section gap={0.75}>
             <InputLayouts.Label label="Access Tokens" />
-            <Card>
-              <GeneralLayouts.Section vertical gap={1}>
+            <Card padding={0.25}>
+              <GeneralLayouts.Section gap={0}>
                 {/* Header with search/empty state and create button */}
-                <GeneralLayouts.Section horizontal gap={1}>
+                <GeneralLayouts.Section horizontal padding={0.25} gap={0.5}>
                   {pats.length === 0 ? (
                     <Text as="span" text03 secondaryBody className="flex-1">
                       {isLoading
@@ -1100,13 +1104,17 @@ function AccountsAccessSettings() {
                     </Text>
                   ) : (
                     <InputTypeIn
-                      placeholder="Search tokens..."
+                      placeholder="Search..."
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
+                      leftSearchIcon
+                      internal
                     />
                   )}
                   <CreateButton
                     onClick={() => setShowCreateModal(true)}
+                    secondary={false}
+                    internal
                     transient={showCreateModal}
                   >
                     New Access Token
@@ -1114,63 +1122,19 @@ function AccountsAccessSettings() {
                 </GeneralLayouts.Section>
 
                 {/* Token List */}
-                {pats.length > 0 &&
-                  filteredPats.map((pat) => {
-                    return (
-                      <div
-                        key={pat.id}
-                        className="flex items-center justify-between p-3 border rounded-lg border-border-01 bg-background-tint-01"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <Text as="p" text05 mainUiAction className="truncate">
-                            {pat.name}
-                          </Text>
-                          <Text as="p" text03 secondaryMono>
-                            {pat.token_display}
-                          </Text>
-                          <Text as="p" text03 secondaryBody className="mt-1">
-                            <span
-                              title={humanReadableFormatWithTime(
-                                pat.created_at
-                              )}
-                            >
-                              Created: {humanReadableFormat(pat.created_at)}
-                            </span>
-                            {pat.expires_at && (
-                              <span
-                                title={humanReadableFormatWithTime(
-                                  pat.expires_at
-                                )}
-                              >
-                                {" • Expires: "}
-                                {humanReadableFormat(pat.expires_at)}
-                              </span>
-                            )}
-                            {pat.last_used_at && (
-                              <span
-                                title={humanReadableFormatWithTime(
-                                  pat.last_used_at
-                                )}
-                              >
-                                {" • Last used: "}
-                                {humanReadableFormat(pat.last_used_at)}
-                              </span>
-                            )}
-                          </Text>
-                        </div>
-                        <IconButton
-                          icon={SvgTrash}
-                          onClick={() =>
-                            setTokenToDelete({ id: pat.id, name: pat.name })
-                          }
-                          internal
-                          transient={tokenToDelete?.id === pat.id}
-                          data-testid={`delete-pat-${pat.id}`}
-                          aria-label={`Delete token ${pat.name}`}
-                        />
-                      </div>
-                    );
-                  })}
+                {filteredPats.map((pat) => (
+                  <AttachmentButton
+                    key={pat.id}
+                    leftIcon={SvgKey}
+                    description={pat.token_display}
+                    rightText={humanReadableFormat(pat.created_at)}
+                    onDelete={() =>
+                      setTokenToDelete({ id: pat.id, name: pat.name })
+                    }
+                  >
+                    {pat.name}
+                  </AttachmentButton>
+                ))}
               </GeneralLayouts.Section>
             </Card>
           </GeneralLayouts.Section>
