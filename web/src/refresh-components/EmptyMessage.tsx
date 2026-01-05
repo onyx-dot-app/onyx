@@ -41,8 +41,8 @@ export default function EmptyMessage({ children }: EmptyMessageProps) {
   return (
     <Card translucent>
       <GeneralLayouts.Section horizontal left gap={0.5}>
-        <SvgEmpty size={16} />
-        <Text>{children}</Text>
+        <SvgEmpty size={16} className="stroke-text-03" />
+        <Text text03>{children}</Text>
       </GeneralLayouts.Section>
     </Card>
   );
