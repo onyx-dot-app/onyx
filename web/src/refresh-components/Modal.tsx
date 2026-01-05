@@ -53,12 +53,20 @@ const ModalOverlay = React.forwardRef<
 ModalOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
 /**
- * Modal Context for managing close button ref and warning state
+ * Scroll behavior modes for modals
+ * - "body" (default): Fixed header + fixed footer, body scrolls independently
+ * - "fullBody": Fixed header only, body + footer scroll together (for read-through forms)
+ */
+type ModalScrollBehavior = "body" | "fullBody";
+
+/**
+ * Modal Context for managing close button ref, warning state, and scroll behavior
  */
 interface ModalContextValue {
   closeButtonRef: React.RefObject<HTMLDivElement | null>;
   hasAttemptedClose: boolean;
   setHasAttemptedClose: (value: boolean) => void;
+  scrollBehavior: ModalScrollBehavior;
 }
 
 const ModalContext = React.createContext<ModalContextValue | null>(null);
@@ -126,6 +134,7 @@ interface ModalContentProps
   mini?: boolean;
   preventAccidentalClose?: boolean;
   skipOverlay?: boolean;
+  scrollBehavior?: ModalScrollBehavior;
 }
 const ModalContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
@@ -142,6 +151,7 @@ const ModalContent = React.forwardRef<
       mini,
       preventAccidentalClose = true,
       skipOverlay = false,
+      scrollBehavior = "body",
       ...props
     },
     ref
@@ -268,7 +278,12 @@ const ModalContent = React.forwardRef<
 
     return (
       <ModalContext.Provider
-        value={{ closeButtonRef, hasAttemptedClose, setHasAttemptedClose }}
+        value={{
+          closeButtonRef,
+          hasAttemptedClose,
+          setHasAttemptedClose,
+          scrollBehavior,
+        }}
       >
         <DialogPrimitive.Portal>
           {!skipOverlay && <ModalOverlay />}
@@ -287,9 +302,11 @@ const ModalContent = React.forwardRef<
               "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
               "z-modal",
               "bg-background-tint-00 border rounded-16 shadow-2xl",
-              "flex flex-col overflow-auto",
+              "flex flex-col overflow-hidden",
               // Never exceed viewport on small screens
-              "max-w-[calc(100dvw-2rem)] max-h-[calc(100dvh-2rem)]",
+              "max-w-[calc(100dvw-2rem)]",
+              // Height constraint - 85vh for both modes
+              "max-h-[85vh]",
               "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
               "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
               "data-[state=open]:slide-in-from-top-1/2 data-[state=closed]:slide-out-to-top-1/2",
@@ -312,7 +329,25 @@ const ModalContent = React.forwardRef<
             onPointerDownOutside={handleInteractOutside}
             {...props}
           >
-            {children}
+            {scrollBehavior === "fullBody" ? (
+              // fullBody mode: Header is fixed, body+footer scroll together
+              <>
+                {/* Render header children first (they stay fixed) */}
+                {React.Children.toArray(children).filter(
+                  (child) =>
+                    React.isValidElement(child) && child.type === ModalHeader
+                )}
+                <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">
+                  {React.Children.toArray(children).filter(
+                    (child) =>
+                      !React.isValidElement(child) || child.type !== ModalHeader
+                  )}
+                </div>
+              </>
+            ) : (
+              // body mode (default): Header+footer fixed, body scrolls
+              children
+            )}
           </DialogPrimitive.Content>
         </DialogPrimitive.Portal>
       </ModalContext.Provider>
@@ -368,7 +403,7 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
       <div
         ref={ref}
         className={cn(
-          "relative z-10 flex flex-col gap-4 p-4",
+          "relative z-10 flex flex-col gap-4 p-4 flex-shrink-0",
           withBottomShadow && "shadow-01",
           className
         )}
@@ -411,7 +446,10 @@ ModalHeader.displayName = "ModalHeader";
 /**
  * Modal Body Component
  *
- * Content area for the main modal content. All styling via className.
+ * Content area for the main modal content. Scroll behavior is controlled
+ * by the parent Modal.Content's scrollBehavior prop:
+ * - "body" (default): This component scrolls independently
+ * - "fullBody": This component scrolls together with footer (wrapper handles scroll)
  *
  * @example
  * ```tsx
@@ -419,19 +457,27 @@ ModalHeader.displayName = "ModalHeader";
  *   {/* Content *\/}
  * </Modal.Body>
  *
- * // With custom background and overflow
- * <Modal.Body className="bg-background-tint-02 flex-1 overflow-auto p-6">
- *   {/* Scrollable content *\/}
+ * // With custom background
+ * <Modal.Body className="bg-background-tint-02 p-6">
+ *   {/* Content - scroll behavior controlled by parent *\/}
  * </Modal.Body>
  * ```
  */
 interface ModalBodyProps extends React.HTMLAttributes<HTMLDivElement> {}
 const ModalBody = React.forwardRef<HTMLDivElement, ModalBodyProps>(
   ({ className, children, ...props }, ref) => {
+    const { scrollBehavior } = useModalContext();
+
     return (
       <div
         ref={ref}
-        className={cn("pb-4 px-4 flex flex-col gap-4", className)}
+        className={cn(
+          "pb-4 px-4 flex flex-col gap-4",
+          // "body" mode: this section scrolls independently
+          // "fullBody" mode: wrapper handles scroll, so no overflow here
+          scrollBehavior === "body" && "overflow-y-auto flex-1 min-h-0",
+          className
+        )}
         {...props}
       >
         {children}
@@ -444,7 +490,7 @@ ModalBody.displayName = "ModalBody";
 /**
  * Modal Footer Component
  *
- * Footer section for actions/buttons. All styling via className.
+ * Footer section for actions/buttons.
  *
  * @example
  * ```tsx
@@ -464,11 +510,14 @@ ModalBody.displayName = "ModalBody";
 interface ModalFooterProps extends React.HTMLAttributes<HTMLDivElement> {}
 const ModalFooter = React.forwardRef<HTMLDivElement, ModalFooterProps>(
   ({ className, children, ...props }, ref) => {
+    const { scrollBehavior } = useModalContext();
+
     return (
       <div
         ref={ref}
         className={cn(
           "flex flex-row items-center justify-end gap-1 p-4 w-full",
+          scrollBehavior === "body" && "flex-shrink-0",
           className
         )}
         {...props}

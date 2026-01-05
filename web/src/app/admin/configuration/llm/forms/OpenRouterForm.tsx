@@ -170,8 +170,8 @@ export function OpenRouterForm({
                   !formikProps.values.api_base || !formikProps.values.api_key;
 
                 return (
-                  <Form className="flex flex-col min-h-0">
-                    <Modal.Body className="overflow-y-auto min-h-0 w-full">
+                  <Form className={LLM_FORM_CLASS_NAME}>
+                    <Modal.Body>
                       <DisplayNameField disabled={!!existingLlmProvider} />
 
                       <ApiKeyField />

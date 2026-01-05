@@ -82,8 +82,8 @@ function OllamaFormContent({
   }, [formikProps.values.api_base]);
 
   return (
-    <Form className="flex flex-col min-h-0">
-      <Modal.Body className="overflow-y-auto min-h-0 w-full">
+    <Form className={LLM_FORM_CLASS_NAME}>
+      <Modal.Body>
         <DisplayNameField disabled={!!existingLlmProvider} />
 
         <TextFormField

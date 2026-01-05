@@ -114,7 +114,7 @@ export function ProviderFormEntrypointWrapper({
 
         {formIsVisible && (
           <Modal open onOpenChange={onClose}>
-            <Modal.Content medium className="max-h-[85vh]">
+            <Modal.Content medium>
               <Modal.Header
                 icon={SvgSettings}
                 title={`Setup ${providerName}`}
@@ -196,7 +196,7 @@ export function ProviderFormEntrypointWrapper({
 
       {formIsVisible && (
         <Modal open onOpenChange={onClose}>
-          <Modal.Content medium className="max-h-[85vh]">
+          <Modal.Content medium>
             <Modal.Header
               icon={SvgSettings}
               title={`${existingLlmProvider ? "Configure" : "Setup"} ${
