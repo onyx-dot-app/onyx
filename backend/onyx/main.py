@@ -294,15 +294,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     else:
         setup_multitenant_onyx()
 
-        # Load tenant-specific usage limit overrides from control plane
-        try:
-            load_overrides_fn = fetch_versioned_implementation(
-                "onyx.server.tenants.usage_limits", "load_usage_limit_overrides"
-            )
-            load_overrides_fn()
-        except Exception as e:
-            logger.warning(f"Failed to load usage limit overrides: {e}")
-
     if not MULTI_TENANT:
         # don't emit a metric for every pod rollover/restart
         optional_telemetry(

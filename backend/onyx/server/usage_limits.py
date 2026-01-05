@@ -12,6 +12,8 @@ from onyx.configs.app_configs import OPENROUTER_DEFAULT_API_KEY
 from onyx.db.usage import check_usage_limit
 from onyx.db.usage import UsageLimitExceededError
 from onyx.db.usage import UsageType
+from onyx.server.tenants.usage_limits import TenantUsageLimitKeys
+from onyx.server.tenants.usage_limits import TenantUsageLimitOverrides
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.configs import USAGE_LIMIT_API_CALLS_PAID
@@ -87,7 +89,7 @@ def _get_tenant_override(tenant_id: str, field_name: str) -> int | None:
         get_overrides_fn = fetch_versioned_implementation(
             "onyx.server.tenants.usage_limits", "get_tenant_usage_limit_overrides"
         )
-        overrides = get_overrides_fn(tenant_id)
+        overrides: TenantUsageLimitOverrides | None = get_overrides_fn(tenant_id)
         if overrides is not None:
             # Get the field value - None means not set, use default
             return getattr(overrides, field_name, None)
@@ -99,6 +101,42 @@ def _get_tenant_override(tenant_id: str, field_name: str) -> int | None:
 
 # Special value meaning "no limit" (unlimited)
 NO_LIMIT = -1
+_FIELD_AND_DEFAULT = {
+    UsageType.LLM_COST: {
+        True: (
+            TenantUsageLimitKeys.LLM_COST_CENTS_TRIAL,
+            USAGE_LIMIT_LLM_COST_CENTS_TRIAL,
+        ),
+        False: (
+            TenantUsageLimitKeys.LLM_COST_CENTS_PAID,
+            USAGE_LIMIT_LLM_COST_CENTS_PAID,
+        ),
+    },
+    UsageType.CHUNKS_INDEXED: {
+        True: (
+            TenantUsageLimitKeys.CHUNKS_INDEXED_TRIAL,
+            USAGE_LIMIT_CHUNKS_INDEXED_TRIAL,
+        ),
+        False: (
+            TenantUsageLimitKeys.CHUNKS_INDEXED_PAID,
+            USAGE_LIMIT_CHUNKS_INDEXED_PAID,
+        ),
+    },
+    UsageType.API_CALLS: {
+        True: (TenantUsageLimitKeys.API_CALLS_TRIAL, USAGE_LIMIT_API_CALLS_TRIAL),
+        False: (TenantUsageLimitKeys.API_CALLS_PAID, USAGE_LIMIT_API_CALLS_PAID),
+    },
+    UsageType.NON_STREAMING_API_CALLS: {
+        True: (
+            TenantUsageLimitKeys.NON_STREAMING_CALLS_TRIAL,
+            USAGE_LIMIT_NON_STREAMING_CALLS_TRIAL,
+        ),
+        False: (
+            TenantUsageLimitKeys.NON_STREAMING_CALLS_PAID,
+            USAGE_LIMIT_NON_STREAMING_CALLS_PAID,
+        ),
+    },
+}
 
 
 def get_limit_for_usage_type(
@@ -111,40 +149,13 @@ def get_limit_for_usage_type(
         - Positive int: The usage limit
         - NO_LIMIT (-1): No limit (unlimited) for this tenant
     """
-    # Determine field names for this usage type
-    if usage_type == UsageType.LLM_COST:
-        trial_field = "llm_cost_cents_trial"
-        paid_field = "llm_cost_cents_paid"
-        default_trial = USAGE_LIMIT_LLM_COST_CENTS_TRIAL
-        default_paid = USAGE_LIMIT_LLM_COST_CENTS_PAID
-    elif usage_type == UsageType.CHUNKS_INDEXED:
-        trial_field = "chunks_indexed_trial"
-        paid_field = "chunks_indexed_paid"
-        default_trial = USAGE_LIMIT_CHUNKS_INDEXED_TRIAL
-        default_paid = USAGE_LIMIT_CHUNKS_INDEXED_PAID
-    elif usage_type == UsageType.API_CALLS:
-        trial_field = "api_calls_trial"
-        paid_field = "api_calls_paid"
-        default_trial = USAGE_LIMIT_API_CALLS_TRIAL
-        default_paid = USAGE_LIMIT_API_CALLS_PAID
-    elif usage_type == UsageType.NON_STREAMING_API_CALLS:
-        trial_field = "non_streaming_calls_trial"
-        paid_field = "non_streaming_calls_paid"
-        default_trial = USAGE_LIMIT_NON_STREAMING_CALLS_TRIAL
-        default_paid = USAGE_LIMIT_NON_STREAMING_CALLS_PAID
-    else:
-        return 0
 
-    # Check for tenant-specific override
-    field_name = trial_field if is_trial else paid_field
+    field_name, default_value = _FIELD_AND_DEFAULT[usage_type][is_trial]
     if tenant_id:
         override = _get_tenant_override(tenant_id, field_name)
         if override is not None:
-            # override is an int: either a specific limit or -1 (NO_LIMIT)
             return override
-
-    # Fall back to defaults
-    return default_trial if is_trial else default_paid
+    return default_value
 
 
 def check_llm_cost_limit_for_provider(

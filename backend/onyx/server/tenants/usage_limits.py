@@ -8,7 +8,21 @@ The EE version (ee.onyx.server.tenants.usage_limits) fetches per-tenant
 overrides from the control plane.
 """
 
+from enum import Enum
+
 from pydantic import BaseModel
+
+
+# NOTE: this must be updated along with the BaseModel below
+class TenantUsageLimitKeys(str, Enum):
+    LLM_COST_CENTS_TRIAL = "llm_cost_cents_trial"
+    LLM_COST_CENTS_PAID = "llm_cost_cents_paid"
+    CHUNKS_INDEXED_TRIAL = "chunks_indexed_trial"
+    CHUNKS_INDEXED_PAID = "chunks_indexed_paid"
+    API_CALLS_TRIAL = "api_calls_trial"
+    API_CALLS_PAID = "api_calls_paid"
+    NON_STREAMING_CALLS_TRIAL = "non_streaming_calls_trial"
+    NON_STREAMING_CALLS_PAID = "non_streaming_calls_paid"
 
 
 class TenantUsageLimitOverrides(BaseModel):
@@ -54,3 +68,4 @@ def load_usage_limit_overrides() -> None:
 
     Non-EE version is a no-op since there's no control plane to fetch from.
     """
+    return None

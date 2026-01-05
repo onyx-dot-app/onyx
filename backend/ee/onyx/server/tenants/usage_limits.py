@@ -11,7 +11,7 @@ logger = setup_logger()
 
 
 # In-memory storage for tenant overrides (populated at startup)
-_tenant_usage_limit_overrides: dict[str, TenantUsageLimitOverrides] = {}
+_tenant_usage_limit_overrides: dict[str, TenantUsageLimitOverrides] | None = None
 
 
 def fetch_usage_limit_overrides() -> dict[str, TenantUsageLimitOverrides]:
@@ -55,7 +55,7 @@ def fetch_usage_limit_overrides() -> dict[str, TenantUsageLimitOverrides]:
         return {}
 
 
-def load_usage_limit_overrides() -> None:
+def load_usage_limit_overrides() -> dict[str, TenantUsageLimitOverrides]:
     """
     Load tenant usage limit overrides from the control plane.
 
@@ -71,6 +71,7 @@ def load_usage_limit_overrides() -> None:
         logger.info(f"Loaded usage limit overrides for {len(overrides)} tenants")
     else:
         logger.info("No tenant-specific usage limit overrides found")
+    return overrides
 
 
 def get_tenant_usage_limit_overrides(
@@ -85,13 +86,7 @@ def get_tenant_usage_limit_overrides(
     Returns:
         TenantUsageLimitOverrides if the tenant has overrides, None otherwise.
     """
+    global _tenant_usage_limit_overrides
+    if _tenant_usage_limit_overrides is None:
+        _tenant_usage_limit_overrides = load_usage_limit_overrides()
     return _tenant_usage_limit_overrides.get(tenant_id)
-
-
-def refresh_usage_limit_overrides() -> None:
-    """
-    Refresh the tenant usage limit overrides from the control plane.
-
-    Can be called periodically or on-demand to update the cache.
-    """
-    load_usage_limit_overrides()
