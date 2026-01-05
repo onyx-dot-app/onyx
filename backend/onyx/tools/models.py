@@ -197,8 +197,6 @@ class ToolCallInfo(BaseModel):
     tool_call_response: str
     search_docs: list[SearchDoc] | None = None
     generated_images: list[GeneratedImage] | None = None
-    # Extra reasoning details for verification (thinking_blocks/reasoning_details)
-    extra_reasoning_details: dict[str, Any] | None = None
 
 
 CHAT_SESSION_ID_PLACEHOLDER = "CHAT_SESSION_ID"

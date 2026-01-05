@@ -692,12 +692,7 @@ def convert_chat_history(
                     # Sort by tool_id within the turn for consistent ordering
                     turn_tool_calls.sort(key=lambda tc: tc.tool_id)
 
-                    # Parallel tool calls are grouped together (sequentially in the history)
-                    # then, eventually, concatenated into a single assistant message.
-                    # Parallel tool results are also grouped together, but not concatenated.
-                    tool_call_messages: list[ChatMessageSimple] = []
-                    tool_response_messages: list[ChatMessageSimple] = []
-
+                    # Add each tool call as a separate message with the tool arguments
                     for tool_call in turn_tool_calls:
                         # Create a message containing the tool call information
                         tool_name = tool_id_to_name_map.get(
@@ -708,7 +703,8 @@ def convert_chat_history(
                             "arguments": tool_call.tool_call_arguments,
                         }
                         tool_call_message = json.dumps(tool_call_data)
-                        tool_call_messages.append(
+
+                        simple_messages.append(
                             ChatMessageSimple(
                                 message=tool_call_message,
                                 token_count=tool_call.tool_call_tokens,
@@ -717,8 +713,7 @@ def convert_chat_history(
                                 tool_call_id=tool_call.tool_call_id,
                             )
                         )
-
-                        tool_response_messages.append(
+                        simple_messages.append(
                             ChatMessageSimple(
                                 message=TOOL_CALL_RESPONSE_CROSS_MESSAGE,
                                 token_count=20,  # Tiny overestimate
@@ -727,9 +722,6 @@ def convert_chat_history(
                                 tool_call_id=tool_call.tool_call_id,
                             )
                         )
-
-                    simple_messages.extend(tool_call_messages)
-                    simple_messages.extend(tool_response_messages)
 
             # Add the assistant message itself
             simple_messages.append(

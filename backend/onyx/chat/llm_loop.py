@@ -579,7 +579,6 @@ def run_llm_loop(
                     tool_call_response=tool_response.llm_facing_response,
                     search_docs=search_docs,
                     generated_images=generated_images,
-                    extra_reasoning_details=llm_step_result.extra_reasoning_details,
                 )
                 # Add to state container for partial save support
                 state_container.add_tool_call(tool_call_info)
@@ -642,12 +641,6 @@ def run_llm_loop(
 
         if not llm_step_result or not llm_step_result.answer:
             raise RuntimeError("LLM did not return an answer.")
-
-        # Set extra_reasoning_details on state_container for the final answer
-        if llm_step_result.extra_reasoning_details:
-            state_container.set_extra_reasoning_details(
-                llm_step_result.extra_reasoning_details
-            )
 
         emitter.emit(
             Packet(
