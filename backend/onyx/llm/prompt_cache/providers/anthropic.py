@@ -21,20 +21,22 @@ def _add_anthropic_cache_control(
     Returns:
         Messages with cache_control added
     """
-    cacheable_messages: list[ChatCompletionMessage] = []
-    for msg in messages:
-        msg_dict = dict(msg)
-        # Add cache_control parameter
-        # Anthropic supports up to 4 cache breakpoints
-        msg_dict["cache_control"] = {"type": "ephemeral"}
-        cacheable_messages.append(
-            revalidate_message_from_original(original=msg, mutated=msg_dict)
-        )
-    return cacheable_messages
+    last_message_dict = dict(messages[-1])
+    last_message_dict["cache_control"] = {"type": "ephemeral"}
+    last_message = revalidate_message_from_original(
+        original=messages[-1], mutated=last_message_dict
+    )
+    return list(messages[:-1]) + [last_message]
 
 
 class AnthropicPromptCacheProvider(PromptCacheProvider):
-    """Anthropic adapter for prompt caching (explicit caching with cache_control)."""
+    """Anthropic adapter for prompt caching (explicit caching with cache_control).
+    implicit caching = just need to ensure byte-equivalent prefixes, and the provider
+                       auto-detects and reuses them.
+    explicit caching = the caller must do _something_ to enable provider-side caching.
+    In this case, anthropic supports explicit caching via the cache_control parameter:
+    https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+    """
 
     def supports_caching(self) -> bool:
         """Anthropic supports explicit prompt caching."""
