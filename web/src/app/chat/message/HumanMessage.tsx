@@ -11,6 +11,7 @@ import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Button from "@/refresh-components/buttons/Button";
 import { SvgEdit } from "@opal/icons";
 import FileDisplay from "./FileDisplay";
+import { handleCopy } from "./copyingUtils";
 
 interface MessageEditingProps {
   content: string;
@@ -136,6 +137,7 @@ const HumanMessage = React.memo(function HumanMessage({
   // This is some duplicated state that is patching a memoization issue with `HumanMessage`.
   // Fix this later.
   const [content, setContent] = useState(initialContent);
+  const messageRef = useRef<HTMLDivElement>(null);
 
   const [isEditing, setIsEditing] = useState(false);
 
@@ -195,9 +197,11 @@ const HumanMessage = React.memo(function HumanMessage({
           <>
             <div className="md:max-w-[25rem] flex basis-[100%] md:basis-auto justify-end md:order-1">
               <div
+                ref={messageRef}
                 className={
                   "max-w-[25rem] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3"
                 }
+                onCopy={(e) => handleCopy(e, messageRef)}
               >
                 <Text as="p" mainContentBody>
                   {content}
