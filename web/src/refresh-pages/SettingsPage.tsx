@@ -1155,16 +1155,13 @@ function ConnectorsSettings() {
   const {
     connectors: federatedConnectors,
     refetch: refetchFederatedConnectors,
-    loading: isFederatedLoading,
   } = useFederatedOAuthStatus();
 
-  const { ccPairs, isLoading: isCCPairsLoading } = useCCPairs();
+  const { ccPairs } = useCCPairs();
 
   const hasConnectors =
     (ccPairs && ccPairs.length > 0) ||
     (federatedConnectors && federatedConnectors.length > 0);
-
-  const isLoadingConnectors = isCCPairsLoading || isFederatedLoading;
 
   const handleConnectOAuth = useCallback(
     (authorizeUrl: string) => {
@@ -1211,28 +1208,14 @@ function ConnectorsSettings() {
       .join(" ");
   };
 
-  if (isLoadingConnectors) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <SimpleLoader />
-      </div>
-    );
-  }
-
   return (
     <>
       {popup}
       <GeneralLayouts.Section gap={2}>
         <GeneralLayouts.Section gap={0.75}>
-          <InputLayouts.Label label="Data Sources" />
-          <Card>
-            <div>
-              <h3 className="text-lg font-medium mb-4">Connected Services</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                Manage your connected services to search across all your
-                content.
-              </p>
-
+          <InputLayouts.Label label="Connectors" />
+          {hasConnectors ? (
+            <Card>
               {/* Indexed Connectors Section */}
               {ccPairs && ccPairs.length > 0 && (
                 <div className="space-y-3 mb-6">
@@ -1362,16 +1345,12 @@ function ConnectorsSettings() {
                   })}
                 </div>
               )}
-
-              {!hasConnectors && (
-                <div className="text-center py-8">
-                  <p className="text-sm text-muted-foreground">
-                    No connectors available.
-                  </p>
-                </div>
-              )}
-            </div>
-          </Card>
+            </Card>
+          ) : (
+            <Card translucent>
+              <Text>No connectors set up for your organization.</Text>
+            </Card>
+          )}
         </GeneralLayouts.Section>
       </GeneralLayouts.Section>
     </>
