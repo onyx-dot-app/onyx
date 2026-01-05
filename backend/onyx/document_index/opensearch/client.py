@@ -432,7 +432,7 @@ class OpenSearchClient:
         if "_source" not in body or body["_source"] is not False:
             logger.warning(
                 "The body of the search request for document chunk IDs is missing the key, value pair of "
-                + '"_source": False. This query will therefore be inefficient.'
+                '"_source": False. This query will therefore be inefficient.'
             )
 
         result: dict[str, Any] = self._client.search(index=self._index_name, body=body)
@@ -444,7 +444,7 @@ class OpenSearchClient:
         if len(hits) == DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW:
             logger.warning(
                 "The search request for document chunk IDs returned the maximum number of results. "
-                + "It is extremely likely that there are more hits in OpenSearch than the returned results."
+                "It is extremely likely that there are more hits in OpenSearch than the returned results."
             )
 
         # Extract only the _id field from each hit.
