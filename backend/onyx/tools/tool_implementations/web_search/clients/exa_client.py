@@ -14,9 +14,14 @@ from onyx.tools.tool_implementations.web_search.models import (
     WebSearchResult,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.rate_limiting import get_exa_rate_limiter
 from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
+
+# Global rate limiter shared across all ExaClient instances
+# Exa has a 5 req/sec limit; we use 4 to leave headroom
+_rate_limiter = get_exa_rate_limiter()
 
 
 # TODO can probably break this up
@@ -26,6 +31,7 @@ class ExaClient(WebSearchProvider, WebContentProvider):
         self._num_results = num_results
 
     @retry_builder(tries=3, delay=1, backoff=2)
+    @_rate_limiter
     def search(self, query: str) -> list[WebSearchResult]:
         response = self.exa.search_and_contents(
             query,
@@ -82,6 +88,7 @@ class ExaClient(WebSearchProvider, WebContentProvider):
         return {"status": "ok"}
 
     @retry_builder(tries=3, delay=1, backoff=2)
+    @_rate_limiter
     def contents(self, urls: Sequence[str]) -> list[WebContent]:
         response = self.exa.get_contents(
             urls=list(urls),
