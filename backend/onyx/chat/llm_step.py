@@ -430,7 +430,7 @@ def _increment_turns(
         return turn_index, sub_turn_index + 1
 
 
-def _delta_has_content(delta: Delta) -> bool:
+def _delta_has_action(delta: Delta) -> bool:
     return bool(delta.content or delta.reasoning_content or delta.tool_calls)
 
 
@@ -532,7 +532,7 @@ def run_llm_step_pkt_generator(
             Sequence[Mapping[str, Any]], llm_msg_history
         )
         stream_start_time = time.monotonic()
-        first_token_recorded = False
+        first_action_recorded = False
         for packet in llm.stream(
             prompt=llm_msg_history,
             tools=tool_definitions,
@@ -552,11 +552,11 @@ def run_llm_step_pkt_generator(
                 }
                 # Note: LLM cost tracking is now handled in multi_llm.py
             delta = packet.choice.delta
-            if not first_token_recorded and _delta_has_content(delta):
-                span_generation.span_data.time_to_first_token_seconds = (
+            if not first_action_recorded and _delta_has_action(delta):
+                span_generation.span_data.time_to_first_action_seconds = (
                     time.monotonic() - stream_start_time
                 )
-                first_token_recorded = True
+                first_action_recorded = True
 
             if custom_token_processor:
                 # The custom token processor can modify the deltas for specific custom logic
@@ -715,6 +715,15 @@ def run_llm_step_pkt_generator(
         # Flush custom token processor to get any final tool calls
         if custom_token_processor:
             flush_delta, processor_state = custom_token_processor(None, processor_state)
+            if (
+                not first_action_recorded
+                and flush_delta is not None
+                and _delta_has_action(flush_delta)
+            ):
+                span_generation.span_data.time_to_first_action_seconds = (
+                    time.monotonic() - stream_start_time
+                )
+                first_action_recorded = True
             if flush_delta and flush_delta.tool_calls:
                 for tool_call_delta in flush_delta.tool_calls:
                     _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
