@@ -37,16 +37,27 @@
  */
 
 import { WithoutStyles } from "@/types";
+import { cn } from "@/lib/utils";
 
 export interface CardProps
   extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
   padding?: number;
+  translucent?: boolean;
 }
 
-export default function Card({ padding = 1, ...props }: CardProps) {
+export default function Card({
+  padding = 1,
+  translucent = false,
+  ...props
+}: CardProps) {
   return (
     <div
-      className="bg-background-tint-00 flex flex-col gap-4 border rounded-16 w-full h-full"
+      className={cn(
+        "flex flex-col gap-4 rounded-16 w-full h-full",
+        translucent
+          ? "bg-transparent border border-dashed"
+          : "bg-background-tint-00 border"
+      )}
       style={{
         padding: `${padding}rem`,
       }}
