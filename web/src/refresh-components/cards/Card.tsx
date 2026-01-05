@@ -36,7 +36,6 @@
  * ```
  */
 
-import { cn } from "@/lib/utils";
 import { WithoutStyles } from "@/types";
 
 export interface CardProps
