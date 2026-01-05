@@ -38,12 +38,15 @@ def query_independent_context_explorer(
 
     del relevant_cheat_sheet_context["answer_preferences"]
 
-    cheat_sheet_string = f"""\n\nThe Query-Dependent-Context Tool was used and resulted in the \
-following learnings that may inform the \
-process (plan generation if applicable, reasoning, \
-tool calls, etc.):\n{str(relevant_cheat_sheet_context)}\n###\n\n"""
+    cheat_sheet_string = f"""\n\nThe Query-Independent-Context Tool was used and resulted in the \
+following learnings that may inform the process (plan generation if applicable, reasoning, \
+tool calls like searches, etc.):\n{str(relevant_cheat_sheet_context)}\n###\n\n"""
 
     new_messages.append(HumanMessage(content=cheat_sheet_string))
+
+    logger.info(
+        f"Query-Independent-Context-Explorer-Tool used at iteration {state.iteration_nr}"
+    )
 
     return OrchestrationUpdate(
         # message_history_for_continuation=new_messages,

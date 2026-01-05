@@ -91,6 +91,7 @@ class OrchestrationSetup(OrchestrationUpdate):
     use_context_explorer: bool = False
     use_temporary_db_session: bool = False
     use_cs_updates: bool = True
+    force_context_tool_use: bool = False
 
 
 class AnswerUpdate(LoggerUpdate):

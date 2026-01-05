@@ -169,6 +169,10 @@ def query_dependent_context_explorer(
 
     new_messages.append(HumanMessage(content=dynamic_learnings_string))
 
+    logger.info(
+        f"Query-Dependent-Context-Explorer-Tool used at iteration {state.iteration_nr}"
+    )
+
     return OrchestrationUpdate(
         # message_history_for_continuation=new_messages,
         iteration_responses=[

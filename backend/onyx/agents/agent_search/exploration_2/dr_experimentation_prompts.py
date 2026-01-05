@@ -9,6 +9,8 @@ a description of the tools that MAY be available to you throughout the conversat
 
 The current date is ---current_date---.
 
+Here are the description of the tools that may be available to you:
+
 ###
 ---available_tool_descriptions_str---
 ###

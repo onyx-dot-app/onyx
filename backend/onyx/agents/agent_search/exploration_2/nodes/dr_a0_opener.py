@@ -49,9 +49,6 @@ from onyx.configs.exploration_research_configs import (
 from onyx.configs.exploration_research_configs import (
     EXPLORATION_TEST_USE_CALRIFIER_DEFAULT,
 )
-from onyx.configs.exploration_research_configs import (
-    EXPLORATION_TEST_USE_CORPUS_HISTORY_DEFAULT,
-)
 from onyx.configs.exploration_research_configs import EXPLORATION_TEST_USE_PLAN_DEFAULT
 from onyx.configs.exploration_research_configs import (
     EXPLORATION_TEST_USE_PLAN_UPDATES_DEFAULT,
@@ -291,10 +288,12 @@ this tool to find actual answer information; it is just for providing context an
                 llm_path=DRPath.QUERY_DEPENDENT_CONTEXT_EXPLORER.value,
                 path=DRPath.QUERY_DEPENDENT_CONTEXT_EXPLORER,
                 description="""This tool can be used to aquire more context from a 'memory' that has \
-information about how similar queries were answered in the past. If you think that the question may be somewhat complex \
-and using experiences and learnings from similar queries may help to answer the question, you should use this tool.
+information about how similar queries/questions were answered in the past. If the question is either somewhat complex \
+or somewhat ambiguous (as in 'analyze xyz'... what does 'analyze' mean here?), then using experiences and learnings from similar \
+queries may help to answer the question. In those situations you SHOULD use this tool.
 Only use this tool though if you think LEARNINGS and INSTRUCTIONS based on previous, similar queries may be useful to \
-answer the user's question/request. NEVER use this tool to find actual answer information and facts for the user's \
+answer the user's question/request. This could be the case if the approach of how to address the question may be somewhat \
+unclear or complex. But NEVER use this tool to find actual answer information and facts for the user's \
 question/request; \
 this is what the non-context and non-thinking tools are for. This tool is just for providing context and instructions \
 to guide \
@@ -507,16 +506,22 @@ def opener(
     _EXPLORATION_TEST_USE_CALRIFIER = EXPLORATION_TEST_USE_CALRIFIER_DEFAULT
     _EXPLORATION_TEST_USE_PLAN = EXPLORATION_TEST_USE_PLAN_DEFAULT
     _EXPLORATION_TEST_USE_PLAN_UPDATES = EXPLORATION_TEST_USE_PLAN_UPDATES_DEFAULT
-    _EXPLORATION_TEST_USE_CORPUS_HISTORY = EXPLORATION_TEST_USE_CORPUS_HISTORY_DEFAULT
+    # _EXPLORATION_TEST_USE_CORPUS_HISTORY = EXPLORATION_TEST_USE_CORPUS_HISTORY_DEFAULT
+    _EXPLORATION_TEST_USE_CORPUS_HISTORY = False
     _EXPLORATION_TEST_USE_THINKING = EXPLORATION_TEST_USE_THINKING_DEFAULT
     # _EXPLORATION_TEST_USE_CONTEXT_EXPLORER = EXPLORATION_TEST_USE_CONTEXT_EXPLORER_DEFAULT
+
     _EXPLORATION_TEST_USE_CONTEXT_EXPLORER = True
     # _EXPLORATION_TEST_USE_CONTEXT_EXPLORER = False
+
     _EXPLORATION_TEST_SCRIPT_USE_DEFAULT = EXPLORATION_TEST_SCRIPT_USE_DEFAULT
     _EXPLORATION_TEST_USE_INTERNAL_TOPICS = True
+    # _EXPLORATION_TEST_USE_INTERNAL_TOPICS = False
 
     _EXPLORATION_TEST_USE_PLAN = False
     _EXPLORATION_TEST_USE_CS_UPDATES = False
+
+    _FORCE_CONTEXT_TOOL_USE = True
 
     node_start_time = datetime.now()
     current_step_nr = 0
@@ -663,6 +668,8 @@ def opener(
             user=user, db_session=db_session
         )
         logger.info(f"User: {user.email}")
+    else:
+        raise ValueError("User is not set")
 
     dynamic_learnings_string = ""
     cheat_sheet_string = ""
@@ -701,6 +708,9 @@ hold relevant information to provide context for the user question:\n\n###\n"
     else:
         cheat_sheet_string = ""
 
+    # REMOVE FOR CS!
+    cheat_sheet_string = ""
+
     if _EXPLORATION_TEST_USE_PLAN:
         plan_instruction_insertion = _PLAN_INSTRUCTION_INSERTION
     else:
@@ -722,6 +732,9 @@ topics are listed as 'not_covered', it does not mean that there are no documents
 It just means that it is \
 less likely and other search options or going straight to the answer generation may \
 be more appropriate):\n\n{str(original_cheat_sheet_context["internal_search_topics"])}\n###\n\n"""
+
+    # REMOVE FOR CS!
+    internal_search_topic_string = ""
 
     system_message = (
         BASE_SYSTEM_MESSAGE_TEMPLATE.replace(
@@ -837,4 +850,5 @@ gathering steps.
         use_dc=_EXPLORATION_TEST_USE_DC,
         use_temporary_db_session=USE_TEMPORARY_DB_SESSION,
         use_cs_updates=_EXPLORATION_TEST_USE_CS_UPDATES,
+        force_context_tool_use=_FORCE_CONTEXT_TOOL_USE,
     )

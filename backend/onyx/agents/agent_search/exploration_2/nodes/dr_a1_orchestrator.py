@@ -53,7 +53,7 @@ of strings. If the list is kept empty, no filters are applied. Do not use any so
 they are implied in question, but if they are make sure to use them!
 The date fields should be in the format 'YYYY-MM-DD'. If the date fields are kept empty, no date filters are applied.
 
-NOTE: don't be redundant, NEVER use source or date filter information in the search query itself! If the original question \
+NOTE: don't be redundant, DON'T use source or date filter information in the search query itself! If the original question \
 had implied a filter, pupulate the source_filters and date_filter_start and date_filter_end fields accordingly, but \
 do not insert the information into the search query itself! \
 If a filter is chosen, the filter content MUST NOT be repeated in the search query itself! \
@@ -112,7 +112,8 @@ _WEB_SEARCH_TOOL = {
     "type": "function",
     "function": {
         "name": "web_search_tool",
-        "description": """This tool is used to search the web for information. It should be used if information \
+        "description": """This tool is used to search the web for information. A more detailed description was \
+given in the System Prompt. It should be used if information \
 is public and either internal searches (if available) have already been done, or the information requested \
 is unlikely to be found in the internal documents.
 """,
@@ -209,10 +210,12 @@ _QUERY_DEPENDENT_CONTEXT_EXPLORER_TOOL = {
     "function": {
         "name": "query_dependent_context_explorer_tool",
         "description": """This tool can be used to aquire more context from a 'memory' that has \
-information about how similar queries were answered in the past. If you think that the question may be somewhat complex \
-and using experiences and learnings from similar queries may help to answer the question, you should use this tool.
+information about how similar queries/questions were answered in the past. If the question is either somewhat complex \
+or somewhat ambiguous (as in 'analyze xyz'... what does 'analyze' mean here?), then using experiences and learnings from similar \
+queries may help to answer the question. In those situations you should use this tool.
 Only use this tool though if you think LEARNINGS and INSTRUCTIONS based on previous, similar queries may be useful to \
-answer the user's question/request. NEVER use this tool to find actual answer information and facts for the user's \
+answer the user's question/request. This could be the case if the approach of how to address the question may be somewhat \
+unclear or complex. But NEVER use this tool to find actual answer information and facts for the user's \
 question/request; \
 this is what the non-context and non-thinking tools are for. This tool is just for providing context and instructions \
 to guide \
@@ -278,7 +281,8 @@ def orchestrator(
 
     _EXPLORATION_TEST_USE_CALRIFIER = state.use_clarifier
     _EXPLORATION_TEST_USE_THINKING = state.use_thinking
-    _EXPLORATION_TEST_USE_CONTEXT_EXPLORER = state.use_context_explorer
+    state.use_context_explorer
+    state.force_context_tool_use
 
     previous_tool_call_name = state.tools_used[-1] if state.tools_used else ""
 
@@ -407,19 +411,19 @@ def orchestrator(
     ):
         tools.append(_CLARIFIER_TOOL)
 
-    if (
-        _EXPLORATION_TEST_USE_CONTEXT_EXPLORER
-        and num_search_iterations <= 2
-        and DRPath.QUERY_INDEPENDENT_CONTEXT_EXPLORER.value not in state.tools_used
-    ):
-        tools.append(_QUERY_INDEPENDENT_CONTEXT_EXPLORER_TOOL)
+    # if (
+    #     _EXPLORATION_TEST_USE_CONTEXT_EXPLORER
+    #     and num_search_iterations <= 2
+    #     and DRPath.QUERY_INDEPENDENT_CONTEXT_EXPLORER.value not in state.tools_used
+    # ):
+    #     tools.append(_QUERY_INDEPENDENT_CONTEXT_EXPLORER_TOOL)
 
-    if (
-        _EXPLORATION_TEST_USE_CONTEXT_EXPLORER
-        and num_search_iterations <= 2
-        and DRPath.QUERY_DEPENDENT_CONTEXT_EXPLORER.value not in state.tools_used
-    ):
-        tools.append(_QUERY_DEPENDENT_CONTEXT_EXPLORER_TOOL)
+    # if (
+    #     _EXPLORATION_TEST_USE_CONTEXT_EXPLORER
+    #     and num_search_iterations <= 1
+    #      and DRPath.QUERY_DEPENDENT_CONTEXT_EXPLORER.value not in state.tools_used
+    # ):
+    #     tools.append(_QUERY_DEPENDENT_CONTEXT_EXPLORER_TOOL)
 
     in_orchestration_iteration_answers: list[IterationAnswer] = []
 
@@ -432,66 +436,75 @@ def orchestrator(
 
     if remaining_time_budget > 0:
 
-        orchestrator_action: AIMessage = invoke_llm_raw(
-            llm=graph_config.tooling.primary_llm,
-            prompt=message_history_for_continuation,
-            tools=tools,
-            timeout_override=TF_DR_TIMEOUT_LONG,
-            # max_tokens=1500,
-        )
+        # if iteration_nr == 1 and _FORCE_CONTEXT_TOOL_USE:
+        #     next_tool_name = DRPath.QUERY_INDEPENDENT_CONTEXT_EXPLORER.value
+        #     reasoning_result = "Forced"
+        # elif iteration_nr == 2 and _FORCE_CONTEXT_TOOL_USE:
+        #     next_tool_name = DRPath.QUERY_DEPENDENT_CONTEXT_EXPLORER.value
+        #     reasoning_result = "Forced"
+        if True:
+            orchestrator_action: AIMessage = invoke_llm_raw(
+                llm=graph_config.tooling.primary_llm,
+                prompt=message_history_for_continuation,
+                tools=tools,
+                timeout_override=TF_DR_TIMEOUT_LONG,
+                # max_tokens=1500,
+            )
 
-        tool_calls = orchestrator_action.tool_calls
-        if tool_calls:
-            for tool_call in tool_calls:
-                if tool_call["name"] == "search_tool":
-                    query_list = tool_call["args"]["request"]
-                    next_tool_name = DRPath.INTERNAL_SEARCH.value
-                    num_search_iterations += 1
-                elif tool_call["name"] == "query_independent_context_explorer_tool":
-                    reasoning_result = tool_call["args"]["request"]
-                    next_tool_name = DRPath.QUERY_INDEPENDENT_CONTEXT_EXPLORER.value
-                elif tool_call["name"] == "query_dependent_context_explorer_tool":
-                    reasoning_result = tool_call["args"]["request"]
-                    next_tool_name = DRPath.QUERY_DEPENDENT_CONTEXT_EXPLORER.value
-                elif tool_call["name"] == "thinking_tool":
-                    reasoning_result = tool_call["args"]["request"]
-                    next_tool_name = DRPath.THINKING.value
-                elif tool_call["name"] == "web_search_tool":
-                    query_list = tool_call["args"]["request"]
-                    next_tool_name = DRPath.WEB_SEARCH.value
-                elif tool_call["name"] == "closer_tool":
-                    reasoning_result = "Time to wrap up."
-                    next_tool_name = DRPath.CLOSER.value
-                elif tool_call["name"] == "clarifier_tool":
-                    reasoning_result = tool_call["args"]["request"]
-                    next_tool_name = DRPath.CLARIFIER.value
-                    message_history_for_continuation.append(
-                        AIMessage(content=reasoning_result)
-                    )
-                    new_messages_for_continuation.append(
-                        AIMessage(content=reasoning_result)
-                    )
-
-                    in_orchestration_iteration_answers.append(
-                        IterationAnswer(
-                            tool=DRPath.CLARIFIER.value,
-                            tool_id=103,
-                            iteration_nr=iteration_nr,
-                            parallelization_nr=0,
-                            question="",
-                            cited_documents={},
-                            answer=reasoning_result,
-                            reasoning=reasoning_result,
+            tool_calls = orchestrator_action.tool_calls
+            if tool_calls:
+                for tool_call in tool_calls:
+                    if tool_call["name"] == "search_tool":
+                        query_list = tool_call["args"]["request"]
+                        next_tool_name = DRPath.INTERNAL_SEARCH.value
+                        num_search_iterations += 1
+                    elif tool_call["name"] == "query_independent_context_explorer_tool":
+                        reasoning_result = tool_call["args"]["request"]
+                        next_tool_name = DRPath.QUERY_INDEPENDENT_CONTEXT_EXPLORER.value
+                    elif tool_call["name"] == "query_dependent_context_explorer_tool":
+                        reasoning_result = tool_call["args"]["request"]
+                        next_tool_name = DRPath.QUERY_DEPENDENT_CONTEXT_EXPLORER.value
+                    elif tool_call["name"] == "thinking_tool":
+                        reasoning_result = tool_call["args"]["request"]
+                        next_tool_name = DRPath.THINKING.value
+                    elif tool_call["name"] == "web_search_tool":
+                        query_list = tool_call["args"]["request"]
+                        next_tool_name = DRPath.WEB_SEARCH.value
+                    elif tool_call["name"] == "closer_tool":
+                        reasoning_result = "Time to wrap up."
+                        next_tool_name = DRPath.CLOSER.value
+                    elif tool_call["name"] == "clarifier_tool":
+                        reasoning_result = tool_call["args"]["request"]
+                        next_tool_name = DRPath.CLARIFIER.value
+                        message_history_for_continuation.append(
+                            AIMessage(content=reasoning_result)
                         )
-                    )
-                else:
-                    raise ValueError(f"Unknown tool: {tool_call['name']}")
+                        new_messages_for_continuation.append(
+                            AIMessage(content=reasoning_result)
+                        )
 
-        else:
-            reasoning_result = "Time to wrap up. All information is available"
-            new_messages_for_continuation.append(AIMessage(content=reasoning_result))
-            next_tool_name = DRPath.CLOSER.value
-            response_wrapper = "No further tool calls were requested."
+                        in_orchestration_iteration_answers.append(
+                            IterationAnswer(
+                                tool=DRPath.CLARIFIER.value,
+                                tool_id=103,
+                                iteration_nr=iteration_nr,
+                                parallelization_nr=0,
+                                question="",
+                                cited_documents={},
+                                answer=reasoning_result,
+                                reasoning=reasoning_result,
+                            )
+                        )
+                    else:
+                        raise ValueError(f"Unknown tool: {tool_call['name']}")
+
+            else:
+                reasoning_result = "Time to wrap up. All information is available"
+                new_messages_for_continuation.append(
+                    AIMessage(content=reasoning_result)
+                )
+                next_tool_name = DRPath.CLOSER.value
+                response_wrapper = "No further tool calls were requested."
 
     else:
         reasoning_result = "Time to wrap up. All information is available"
