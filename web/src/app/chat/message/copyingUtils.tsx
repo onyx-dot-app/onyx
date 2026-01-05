@@ -11,7 +11,7 @@ import rehypeStringify from "rehype-stringify";
 
 export function handleCopy(
   event: React.ClipboardEvent,
-  markdownRef: React.RefObject<HTMLDivElement>
+  markdownRef: React.RefObject<HTMLDivElement | null>
 ) {
   // Check if we have a selection
   const selection = window.getSelection();
