@@ -976,18 +976,21 @@ function AccountsAccessSettings() {
       {tokenToDelete && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title="Delete Token"
+          title="Revoke Access Token"
           onClose={() => setTokenToDelete(null)}
           submit={
             <Button danger onClick={() => deletePAT(tokenToDelete.id)}>
-              Delete
+              Revoke
             </Button>
           }
         >
-          <Text>
-            Are you sure you want to delete token &quot;{tokenToDelete.name}
-            &quot;? This action cannot be undone.
-          </Text>
+          <GeneralLayouts.Section gap={0.5} start>
+            <Text>
+              Any application using this token will lose access to Onyx. This
+              action cannot be undone.
+            </Text>
+            <Text>Are you sure you want to revoke this token?</Text>
+          </GeneralLayouts.Section>
         </ConfirmationModalLayout>
       )}
 
