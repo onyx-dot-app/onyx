@@ -27,9 +27,10 @@ def upgrade() -> None:
     conn = op.get_bind()
 
     # Check if image_generation_config table already has records
-    existing_configs = conn.execute(
-        sa.text("SELECT COUNT(*) FROM image_generation_config")
-    ).scalar()
+    existing_configs = (
+        conn.execute(sa.text("SELECT COUNT(*) FROM image_generation_config")).scalar()
+        or 0
+    )
 
     if existing_configs > 0:
         # Skip if configs already exist - user may have configured manually
@@ -55,90 +56,78 @@ def upgrade() -> None:
 
     source_provider_id, api_key = openai_provider
 
-    # Start transaction for atomic operations
-    conn.execute(sa.text("BEGIN"))
+    # Create new LLM provider for image generation (clone only api_key)
+    result = conn.execute(
+        sa.text(
+            """
+            INSERT INTO llm_provider (
+                name, provider, api_key, api_base, api_version,
+                deployment_name, default_model_name, is_public,
+                is_default_provider, is_default_vision_provider, is_auto_mode
+            )
+            VALUES (
+                :name, :provider, :api_key, NULL, NULL,
+                NULL, :default_model_name, :is_public,
+                NULL, NULL, :is_auto_mode
+            )
+            RETURNING id
+            """
+        ),
+        {
+            "name": f"Image Gen - {IMAGE_PROVIDER_ID}",
+            "provider": PROVIDER_NAME,
+            "api_key": api_key,
+            "default_model_name": MODEL_NAME,
+            "is_public": True,
+            "is_auto_mode": False,
+        },
+    )
+    new_provider_id = result.scalar()
 
-    try:
-        # Create new LLM provider for image generation (clone only api_key)
-        result = conn.execute(
-            sa.text(
-                """
-                INSERT INTO llm_provider (
-                    name, provider, api_key, api_base, api_version,
-                    deployment_name, default_model_name, is_public,
-                    is_default_provider, is_default_vision_provider, is_auto_mode
-                )
-                VALUES (
-                    :name, :provider, :api_key, NULL, NULL,
-                    NULL, :default_model_name, :is_public,
-                    NULL, NULL, :is_auto_mode
-                )
-                RETURNING id
-                """
-            ),
-            {
-                "name": f"Image Gen - {IMAGE_PROVIDER_ID}",
-                "provider": PROVIDER_NAME,
-                "api_key": api_key,
-                "default_model_name": MODEL_NAME,
-                "is_public": True,
-                "is_auto_mode": False,
-            },
-        )
-        new_provider_id = result.scalar()
+    # Create model configuration
+    result = conn.execute(
+        sa.text(
+            """
+            INSERT INTO model_configuration (
+                llm_provider_id, name, is_visible, max_input_tokens,
+                supports_image_input, display_name
+            )
+            VALUES (
+                :llm_provider_id, :name, :is_visible, :max_input_tokens,
+                :supports_image_input, :display_name
+            )
+            RETURNING id
+            """
+        ),
+        {
+            "llm_provider_id": new_provider_id,
+            "name": MODEL_NAME,
+            "is_visible": True,
+            "max_input_tokens": None,
+            "supports_image_input": False,
+            "display_name": None,
+        },
+    )
+    model_config_id = result.scalar()
 
-        # Create model configuration
-        result = conn.execute(
-            sa.text(
-                """
-                INSERT INTO model_configuration (
-                    llm_provider_id, name, is_visible, max_input_tokens,
-                    supports_image_input, display_name
-                )
-                VALUES (
-                    :llm_provider_id, :name, :is_visible, :max_input_tokens,
-                    :supports_image_input, :display_name
-                )
-                RETURNING id
-                """
-            ),
-            {
-                "llm_provider_id": new_provider_id,
-                "name": MODEL_NAME,
-                "is_visible": True,
-                "max_input_tokens": None,
-                "supports_image_input": False,
-                "display_name": None,
-            },
-        )
-        model_config_id = result.scalar()
-
-        # Create image generation config
-        conn.execute(
-            sa.text(
-                """
-                INSERT INTO image_generation_config (
-                    image_provider_id, model_configuration_id, is_default
-                )
-                VALUES (
-                    :image_provider_id, :model_configuration_id, :is_default
-                )
-                """
-            ),
-            {
-                "image_provider_id": IMAGE_PROVIDER_ID,
-                "model_configuration_id": model_config_id,
-                "is_default": True,
-            },
-        )
-
-        # Commit transaction
-        conn.execute(sa.text("COMMIT"))
-
-    except Exception as e:
-        # Rollback on error
-        conn.execute(sa.text("ROLLBACK"))
-        raise e
+    # Create image generation config
+    conn.execute(
+        sa.text(
+            """
+            INSERT INTO image_generation_config (
+                image_provider_id, model_configuration_id, is_default
+            )
+            VALUES (
+                :image_provider_id, :model_configuration_id, :is_default
+            )
+            """
+        ),
+        {
+            "image_provider_id": IMAGE_PROVIDER_ID,
+            "model_configuration_id": model_config_id,
+            "is_default": True,
+        },
+    )
 
 
 def downgrade() -> None:

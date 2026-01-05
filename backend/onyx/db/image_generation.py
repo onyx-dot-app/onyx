@@ -188,51 +188,59 @@ def create_default_image_gen_config_from_api_key(
         The created ImageGenerationConfig, or None if:
         - image_generation_config table already has records
     """
-    # Check if any image generation configs already exist
+    # Check if any image generation configs already exist (optimization to avoid work)
     existing_configs = get_all_image_generation_configs(db_session)
     if existing_configs:
         logger.info("Image generation config already exists, skipping default creation")
         return None
 
-    # Create new LLM provider for image generation
-    new_provider = LLMProvider(
-        name=f"Image Gen - {image_provider_id}",
-        provider=provider,
-        api_key=api_key,
-        api_base=None,
-        api_version=None,
-        default_model_name=model_name,
-        deployment_name=None,
-        is_public=True,
-    )
-    db_session.add(new_provider)
-    db_session.flush()
+    try:
+        # Create new LLM provider for image generation
+        new_provider = LLMProvider(
+            name=f"Image Gen - {image_provider_id}",
+            provider=provider,
+            api_key=api_key,
+            api_base=None,
+            api_version=None,
+            default_model_name=model_name,
+            deployment_name=None,
+            is_public=True,
+        )
+        db_session.add(new_provider)
+        db_session.flush()
 
-    # Create model configuration
-    max_input_tokens = get_max_input_tokens(
-        model_name=model_name,
-        model_provider=provider,
-    )
+        # Create model configuration
+        max_input_tokens = get_max_input_tokens(
+            model_name=model_name,
+            model_provider=provider,
+        )
 
-    model_config = ModelConfiguration(
-        llm_provider_id=new_provider.id,
-        name=model_name,
-        is_visible=True,
-        max_input_tokens=max_input_tokens,
-    )
-    db_session.add(model_config)
-    db_session.flush()
+        model_config = ModelConfiguration(
+            llm_provider_id=new_provider.id,
+            name=model_name,
+            is_visible=True,
+            max_input_tokens=max_input_tokens,
+        )
+        db_session.add(model_config)
+        db_session.flush()
 
-    # Create image generation config
-    config = create_image_generation_config__no_commit(
-        db_session=db_session,
-        image_provider_id=image_provider_id,
-        model_configuration_id=model_config.id,
-        is_default=True,
-    )
+        # Create image generation config
+        config = create_image_generation_config__no_commit(
+            db_session=db_session,
+            image_provider_id=image_provider_id,
+            model_configuration_id=model_config.id,
+            is_default=True,
+        )
 
-    db_session.commit()
+        db_session.commit()
 
-    logger.info(f"Created default image generation config: {image_provider_id}")
+        logger.info(f"Created default image generation config: {image_provider_id}")
 
-    return config
+        return config
+
+    except Exception:
+        db_session.rollback()
+        logger.exception(
+            f"Failed to create default image generation config {image_provider_id}"
+        )
+        return None
