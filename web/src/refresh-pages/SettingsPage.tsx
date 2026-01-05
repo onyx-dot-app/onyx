@@ -9,6 +9,7 @@ import * as GeneralLayouts from "@/layouts/general-layouts";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import { Formik, Form } from "formik";
 import {
+  SvgActivity,
   SvgExternalLink,
   SvgKey,
   SvgLock,
@@ -22,7 +23,6 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Button from "@/refresh-components/buttons/Button";
 import Switch from "@/refresh-components/inputs/Switch";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { useUser } from "@/components/user/UserProvider";
 import { useTheme } from "next-themes";
 import { ThemePreference } from "@/lib/types";
@@ -38,8 +38,8 @@ import { humanReadableFormat } from "@/lib/time";
 import useFilter from "@/hooks/useFilter";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
-import { useCCPairs } from "@/lib/hooks/useCCPairs";
+import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
+import useCCPairs from "@/hooks/useCCPairs";
 import { SourceIcon } from "@/components/SourceIcon";
 import { ValidSources } from "@/lib/types";
 import { getSourceMetadata } from "@/lib/sources";
@@ -51,6 +51,7 @@ import { InputPrompt } from "@/app/chat/interfaces";
 import { useInputPrompts } from "@/hooks/useInputPrompts";
 import ColorSwatch from "@/refresh-components/ColorSwatch";
 import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
+import EmptyMessage from "@/refresh-components/EmptyMessage";
 
 interface PAT {
   id: number;
@@ -237,7 +238,7 @@ function GeneralSettings() {
             </Button>
           }
         >
-          <GeneralLayouts.Section gap={0.5} start>
+          <GeneralLayouts.Section gap={0.5} left>
             <Text>
               All your chat sessions and history will be permanently deleted.
               Deletion cannot be undone.
@@ -984,7 +985,7 @@ function AccountsAccessSettings() {
             </Button>
           }
         >
-          <GeneralLayouts.Section gap={0.5} start>
+          <GeneralLayouts.Section gap={0.5} left>
             <Text>
               Any application using this token will lose access to Onyx. This
               action cannot be undone.
@@ -1151,17 +1152,11 @@ function ConnectorsSettings() {
   const { popup, setPopup } = usePopup();
   const router = useRouter();
   const [isDisconnecting, setIsDisconnecting] = useState<number | null>(null);
-
   const {
     connectors: federatedConnectors,
     refetch: refetchFederatedConnectors,
   } = useFederatedOAuthStatus();
-
   const { ccPairs } = useCCPairs();
-
-  const hasConnectors =
-    (ccPairs && ccPairs.length > 0) ||
-    (federatedConnectors && federatedConnectors.length > 0);
 
   const handleConnectOAuth = useCallback(
     (authorizeUrl: string) => {
@@ -1201,23 +1196,28 @@ function ConnectorsSettings() {
     [refetchFederatedConnectors, setPopup]
   );
 
-  const formatSourceName = (source: string) => {
+  function formatSourceName(source: string) {
     return source
       .split("_")
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(" ");
-  };
+  }
+
+  const hasConnectors =
+    (ccPairs && ccPairs.length > 0) ||
+    (federatedConnectors && federatedConnectors.length > 0);
 
   return (
     <>
       {popup}
+
       <GeneralLayouts.Section gap={2}>
         <GeneralLayouts.Section gap={0.75}>
           <InputLayouts.Label label="Connectors" />
           {hasConnectors ? (
             <Card>
               {/* Indexed Connectors Section */}
-              {ccPairs && ccPairs.length > 0 && (
+              {ccPairs.length > 0 && (
                 <div className="space-y-3 mb-6">
                   <h4 className="text-md font-medium text-muted-foreground">
                     Indexed Connectors
@@ -1277,7 +1277,7 @@ function ConnectorsSettings() {
               )}
 
               {/* Federated Search Section */}
-              {federatedConnectors && federatedConnectors.length > 0 && (
+              {federatedConnectors.length > 0 && (
                 <div className="space-y-3">
                   <h4 className="text-md font-medium text-muted-foreground">
                     Federated Connectors
@@ -1347,9 +1347,9 @@ function ConnectorsSettings() {
               )}
             </Card>
           ) : (
-            <Card translucent>
-              <Text>No connectors set up for your organization.</Text>
-            </Card>
+            <EmptyMessage>
+              No connectors set up for your organization.
+            </EmptyMessage>
           )}
         </GeneralLayouts.Section>
       </GeneralLayouts.Section>

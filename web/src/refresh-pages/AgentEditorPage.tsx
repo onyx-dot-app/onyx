@@ -1011,7 +1011,7 @@ export default function AgentEditorPage({
 
                     {/* Agent Form Content */}
                     <SettingsLayouts.Body>
-                      <GeneralLayouts.Section horizontal gap={2.5} start>
+                      <GeneralLayouts.Section horizontal gap={2.5} top>
                         <GeneralLayouts.Section>
                           <InputLayouts.Vertical name="name" label="Name">
                             <InputTypeInField

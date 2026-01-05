@@ -12,7 +12,7 @@ import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import { InputPrompt } from "@/app/chat/interfaces";
 import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
 import { useInputPrompts } from "@/lib/hooks/useInputPrompts";
-import { useCCPairs } from "@/lib/hooks/useCCPairs";
+import useCCPairs from "@/hooks/useCCPairs";
 import { DocumentIcon2, FileIcon } from "@/components/icons/icons";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ChatState } from "@/app/chat/interfaces";

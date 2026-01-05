@@ -9,7 +9,7 @@ import { SvgExternalLink, SvgTrash } from "@opal/icons";
 import { WithoutStyles } from "@/types";
 
 const bgClassNames = {
-  defaulted: ["bg-background-tint-00 "],
+  defaulted: ["bg-background-tint-00"],
   selected: ["bg-action-link-01"],
   processing: ["bg-background-tint-00"],
 } as const;
