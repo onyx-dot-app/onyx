@@ -17,17 +17,23 @@ from onyx.chat.models import StreamingError
 from onyx.chat.process_message import AnswerStream
 from onyx.chat.process_message import remove_answer_citations
 from onyx.chat.process_message import stream_chat_message_objects
+from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.context.search.models import RetrievalDetails
+from onyx.db.chat import create_chat_session
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.db.users import get_user_by_email
 from onyx.evals.models import EvalationAck
 from onyx.evals.models import EvalConfigurationOptions
+from onyx.evals.models import EvalMessage
 from onyx.evals.models import EvalProvider
 from onyx.evals.models import EvalTimings
 from onyx.evals.models import EvalToolResult
+from onyx.evals.models import MultiTurnEvalResult
 from onyx.evals.models import ToolAssertion
 from onyx.evals.provider import get_provider
 from onyx.llm.override_models import LLMOverride
+from onyx.server.query_and_chat.models import AUTO_PLACE_AFTER_LATEST_MESSAGE
+from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
@@ -425,6 +431,175 @@ def _get_answer_with_tools(
             )
 
 
+def _get_multi_turn_answer_with_tools(
+    eval_input: dict[str, Any],
+    configuration: EvalConfigurationOptions,
+) -> MultiTurnEvalResult:
+    """
+    Get answers from a multi-turn conversation with tool call tracking for each turn.
+
+    Args:
+        eval_input: Dictionary containing:
+            - 'messages': List of message dicts, each with:
+                - 'message': The user message text
+                - 'expected_tools' (optional): List of expected tool types
+                - 'require_all_tools' (optional): If true, all expected tools must be called
+                - 'model' (optional): Model version override for this turn
+                - 'model_provider' (optional): Provider override for this turn
+                - 'temperature' (optional): Temperature override for this turn
+                - 'force_tools' (optional): List of tool types to force
+        configuration: Evaluation configuration options
+
+    Returns:
+        MultiTurnEvalResult containing per-turn results and aggregate metrics
+    """
+    messages_data = eval_input.get("messages", [])
+    if not messages_data:
+        raise ValueError("Multi-turn eval requires 'messages' array in input")
+
+    # Parse messages into EvalMessage objects
+    messages: list[EvalMessage] = []
+    for msg_data in messages_data:
+        messages.append(
+            EvalMessage(
+                message=msg_data["message"],
+                expected_tools=msg_data.get("expected_tools", []),
+                require_all_tools=msg_data.get("require_all_tools", False),
+                model=msg_data.get("model"),
+                model_provider=msg_data.get("model_provider"),
+                temperature=msg_data.get("temperature"),
+                force_tools=msg_data.get("force_tools", []),
+            )
+        )
+
+    turn_results: list[EvalToolResult] = []
+
+    engine = get_sqlalchemy_engine()
+    with isolated_ephemeral_session_factory(engine) as SessionLocal:
+        with SessionLocal() as db_session:
+            full_configuration = configuration.get_configuration(db_session)
+
+            user = (
+                get_user_by_email(configuration.search_permissions_email, db_session)
+                if configuration.search_permissions_email
+                else None
+            )
+
+            # Create a single chat session for all turns
+            chat_session = create_chat_session(
+                db_session=db_session,
+                description="Multi-turn eval session",
+                user_id=user.id if user else None,
+                persona_id=DEFAULT_PERSONA_ID,
+                onyxbot_flow=True,
+            )
+
+            # Process each turn sequentially
+            for turn_idx, msg in enumerate(messages):
+                logger.info(
+                    f"Processing turn {turn_idx + 1}/{len(messages)}: {msg.message[:50]}..."
+                )
+
+                # Handle per-turn tool forcing
+                forced_tool_ids: list[int] = []
+                if msg.force_tools:
+                    from onyx.db.tools import get_builtin_tool
+                    from onyx.tools.built_in_tools import BUILT_IN_TOOL_MAP
+
+                    for tool_type in msg.force_tools:
+                        if tool_type in BUILT_IN_TOOL_MAP:
+                            tool_id = get_builtin_tool(
+                                db_session, BUILT_IN_TOOL_MAP[tool_type]
+                            ).id
+                            if tool_id not in forced_tool_ids:
+                                forced_tool_ids.append(tool_id)
+
+                # Build tool assertions for this turn
+                tool_assertions: ToolAssertion | None = None
+                if msg.expected_tools:
+                    tool_assertions = ToolAssertion(
+                        expected_tools=msg.expected_tools,
+                        require_all=msg.require_all_tools,
+                    )
+
+                # Handle per-turn model configuration
+                llm_override = full_configuration.llm
+                if msg.model or msg.model_provider or msg.temperature is not None:
+                    llm_override = LLMOverride(
+                        model_provider=msg.model_provider
+                        or llm_override.model_provider,
+                        model_version=msg.model or llm_override.model_version,
+                        temperature=(
+                            msg.temperature
+                            if msg.temperature is not None
+                            else llm_override.temperature
+                        ),
+                    )
+
+                # Create request for this turn
+                # Use AUTO_PLACE_AFTER_LATEST_MESSAGE to chain messages
+                request = CreateChatMessageRequest(
+                    chat_session_id=chat_session.id,
+                    parent_message_id=AUTO_PLACE_AFTER_LATEST_MESSAGE,
+                    message=msg.message,
+                    file_descriptors=[],
+                    search_doc_ids=None,
+                    retrieval_options=RetrievalDetails(),
+                    rerank_settings=None,
+                    llm_override=llm_override,
+                    persona_override_config=full_configuration.persona_override_config,
+                    skip_gen_ai_answer_generation=False,
+                    allowed_tool_ids=full_configuration.allowed_tool_ids,
+                    forced_tool_ids=forced_tool_ids or None,
+                )
+
+                # Stream and gather results for this turn
+                packets = stream_chat_message_objects(
+                    new_msg_req=request,
+                    user=user,
+                    db_session=db_session,
+                )
+
+                result = gather_stream_with_tools(packets)
+
+                # Evaluate tool assertions for this turn
+                assertion_passed, assertion_details = evaluate_tool_assertions(
+                    result.tools_called, tool_assertions
+                )
+
+                logger.info(
+                    f"Turn {turn_idx + 1} completed. Tools called: {result.tools_called}.\n"
+                    f"Assertion passed: {assertion_passed}. Details: {assertion_details}\n"
+                )
+
+                turn_results.append(
+                    EvalToolResult(
+                        answer=result.answer,
+                        tools_called=result.tools_called,
+                        tool_call_details=result.tool_call_details,
+                        citations=result.citations,
+                        assertion_passed=assertion_passed,
+                        assertion_details=assertion_details,
+                        timings=result.timings,
+                    )
+                )
+
+    # Calculate aggregate metrics
+    pass_count = sum(1 for r in turn_results if r.assertion_passed is True)
+    fail_count = sum(1 for r in turn_results if r.assertion_passed is False)
+    # Consider "all passed" only if there are no failures
+    # (turns with no assertions don't count as failures)
+    all_passed = fail_count == 0
+
+    return MultiTurnEvalResult(
+        turn_results=turn_results,
+        all_passed=all_passed,
+        pass_count=pass_count,
+        fail_count=fail_count,
+        total_turns=len(turn_results),
+    )
+
+
 def run_eval(
     configuration: EvalConfigurationOptions,
     data: list[dict[str, Any]] | None = None,
@@ -442,4 +617,7 @@ def run_eval(
         configuration=configuration,
         data=data,
         remote_dataset_name=remote_dataset_name,
+        multi_turn_task=lambda eval_input: _get_multi_turn_answer_with_tools(
+            eval_input, configuration
+        ),
     )

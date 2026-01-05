@@ -46,6 +46,31 @@ class EvalToolResult(BaseModel):
     timings: EvalTimings | None = None  # Timing information for the eval
 
 
+class EvalMessage(BaseModel):
+    """Single message in a multi-turn evaluation conversation."""
+
+    message: str  # The message text to send
+    expected_tools: list[str] = Field(
+        default_factory=list
+    )  # Expected tools for this turn
+    require_all_tools: bool = False  # If True, ALL expected tools must be called
+    # Per-message model configuration overrides
+    model: str | None = None
+    model_provider: str | None = None
+    temperature: float | None = None
+    force_tools: list[str] = Field(default_factory=list)  # Tools to force for this turn
+
+
+class MultiTurnEvalResult(BaseModel):
+    """Result of a multi-turn evaluation containing per-message results."""
+
+    turn_results: list[EvalToolResult]  # Results for each turn/message
+    all_passed: bool  # True if all turn assertions passed
+    pass_count: int  # Number of turns that passed
+    fail_count: int  # Number of turns that failed
+    total_turns: int  # Total number of turns
+
+
 class EvalConfiguration(BaseModel):
     builtin_tool_types: list[str] = Field(default_factory=list)
     persona_override_config: PersonaOverrideConfig | None = None
@@ -108,5 +133,6 @@ class EvalProvider(ABC):
         configuration: EvalConfigurationOptions,
         data: list[dict[str, Any]] | None = None,
         remote_dataset_name: str | None = None,
+        multi_turn_task: "Callable[[dict[str, Any]], MultiTurnEvalResult] | None" = None,
     ) -> EvalationAck:
         pass

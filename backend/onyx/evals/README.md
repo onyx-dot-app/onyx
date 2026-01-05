@@ -112,6 +112,42 @@ Example with tool and model configuration:
 ]
 ```
 
+### Multi-Turn Evaluations
+
+For testing realistic multi-turn conversations where each turn may require different tools, use the `messages` array format instead of a single `message`:
+
+```json
+{
+  "input": {
+    "messages": [
+      {
+        "message": "What's the latest news about OpenAI today?",
+        "expected_tools": ["WebSearchTool", "OpenURLTool"]
+      },
+      {
+        "message": "Now search our internal docs for our OpenAI integration guide",
+        "expected_tools": ["SearchTool"]
+      },
+      {
+        "message": "Thanks, that's helpful!",
+        "expected_tools": []
+      }
+    ]
+  }
+}
+```
+
+Each message in the `messages` array can have its own configuration:
+- `message`: The user message text (required)
+- `expected_tools`: List of tool types expected to be called for this turn
+- `require_all_tools`: If true, all expected tools must be called (default: false)
+- `force_tools`: List of tool types to force for this turn
+- `model`: Model version override for this turn
+- `model_provider`: Model provider override for this turn
+- `temperature`: Temperature override for this turn
+
+Multi-turn evals run within a single chat session, so the model has full context of previous turns when responding.
+
 ### Available Tool Types
 
 The following built-in tool types can be used:
