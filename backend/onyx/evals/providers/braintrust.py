@@ -149,7 +149,7 @@ class BraintrustEvalProvider(EvalProvider):
 
         metadata = configuration.model_dump()
 
-        Eval(
+        Eval(  # type: ignore[misc]
             name=BRAINTRUST_PROJECT,
             data=eval_data,
             task=dispatch_task,
