@@ -173,7 +173,7 @@ export default function SelectButton({
       <button
         className={cn(
           baseClasses,
-          "group/SelectButton flex items-center px-2 py-1 rounded-12 h-fit w-fit",
+          "group/SelectButton flex items-center px-2 py-2 rounded-12 h-fit w-fit",
           className
         )}
         onClick={disabled ? undefined : onClick}
@@ -190,7 +190,7 @@ export default function SelectButton({
         {/* Animation component */}
         <div
           className={cn(
-            "flex items-center transition-all duration-300 ease-in-out overflow-hidden py-0.5",
+            "flex items-center transition-all duration-300 ease-in-out overflow-hidden",
             folded
               ? engaged || transient || hovered
                 ? "opacity-100"
