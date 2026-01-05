@@ -6,8 +6,8 @@ from collections.abc import Callable
 from collections.abc import Sequence
 from typing import Any
 
-from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.models import ChatCompletionMessage
+from onyx.llm.models import LanguageModelInput
 from onyx.llm.models import UserMessage
 from onyx.utils.logger import setup_logger
 

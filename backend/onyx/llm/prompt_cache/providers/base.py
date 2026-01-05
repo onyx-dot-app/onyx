@@ -4,7 +4,7 @@ from abc import ABC
 from abc import abstractmethod
 
 from onyx.llm.interfaces import LanguageModelInput
-from onyx.llm.prompt_cache.interfaces import CacheMetadata
+from onyx.llm.prompt_cache.models import CacheMetadata
 
 
 class PromptCacheProvider(ABC):

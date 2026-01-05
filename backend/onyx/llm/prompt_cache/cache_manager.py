@@ -7,7 +7,7 @@ from datetime import timezone
 
 from onyx.key_value_store.store import PgRedisKVStore
 from onyx.llm.interfaces import LanguageModelInput
-from onyx.llm.prompt_cache.interfaces import CacheMetadata
+from onyx.llm.prompt_cache.models import CacheMetadata
 from onyx.llm.prompt_cache.utils import normalize_language_model_input
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id

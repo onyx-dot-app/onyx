@@ -7,7 +7,7 @@ and explicit caching (with cache metadata management).
 
 from onyx.llm.prompt_cache.cache_manager import CacheManager
 from onyx.llm.prompt_cache.cache_manager import generate_cache_key_hash
-from onyx.llm.prompt_cache.interfaces import CacheMetadata
+from onyx.llm.prompt_cache.models import CacheMetadata
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.prompt_cache.providers.anthropic import AnthropicPromptCacheProvider
 from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
