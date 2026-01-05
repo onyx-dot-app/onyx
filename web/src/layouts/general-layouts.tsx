@@ -149,7 +149,7 @@ export function Section({
   return (
     <div
       className={cn(
-        "flex",
+        "flex w-full",
         wrap && "flex-wrap",
         justifyContent,
         alignItems,
