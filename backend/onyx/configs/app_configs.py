@@ -192,6 +192,10 @@ OPENSEARCH_REST_API_PORT = int(os.environ.get("OPENSEARCH_REST_API_PORT") or 920
 OPENSEARCH_ADMIN_USERNAME = os.environ.get("OPENSEARCH_ADMIN_USERNAME", "admin")
 OPENSEARCH_ADMIN_PASSWORD = os.environ.get("OPENSEARCH_ADMIN_PASSWORD", "")
 
+ENABLE_OPENSEARCH_FOR_ONYX = (
+    os.environ.get("ENABLE_OPENSEARCH_FOR_ONYX", "").lower() == "true"
+)
+
 VESPA_HOST = os.environ.get("VESPA_HOST") or "localhost"
 # NOTE: this is used if and only if the vespa config server is accessible via a
 # different host than the main vespa application

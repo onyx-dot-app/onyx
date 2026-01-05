@@ -1,17 +1,4 @@
 import httpx
-from backend.onyx.document_index.opensearch.search import DocumentQuery
-from backend.onyx.document_index.opensearch.search import (
-    MIN_MAX_NORMALIZATION_PIPELINE_CONFIG,
-)
-from backend.onyx.document_index.opensearch.search import (
-    MIN_MAX_NORMALIZATION_PIPELINE_NAME,
-)
-from backend.onyx.document_index.opensearch.search import (
-    ZSCORE_NORMALIZATION_PIPELINE_CONFIG,
-)
-from backend.onyx.document_index.opensearch.search import (
-    ZSCORE_NORMALIZATION_PIPELINE_NAME,
-)
 
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
 from onyx.context.search.enums import QueryType
@@ -39,6 +26,19 @@ from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchClient
 from onyx.document_index.opensearch.schema import DocumentChunk
 from onyx.document_index.opensearch.schema import DocumentSchema
+from onyx.document_index.opensearch.search import DocumentQuery
+from onyx.document_index.opensearch.search import (
+    MIN_MAX_NORMALIZATION_PIPELINE_CONFIG,
+)
+from onyx.document_index.opensearch.search import (
+    MIN_MAX_NORMALIZATION_PIPELINE_NAME,
+)
+from onyx.document_index.opensearch.search import (
+    ZSCORE_NORMALIZATION_PIPELINE_CONFIG,
+)
+from onyx.document_index.opensearch.search import (
+    ZSCORE_NORMALIZATION_PIPELINE_NAME,
+)
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import Document
 from onyx.utils.logger import setup_logger

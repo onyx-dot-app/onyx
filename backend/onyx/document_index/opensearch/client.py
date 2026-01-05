@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 from opensearchpy import OpenSearch
@@ -14,6 +15,10 @@ from onyx.utils.logger import setup_logger
 
 
 logger = setup_logger(__name__)
+# Set the logging level to WARNING to ignore INFO and DEBUG logs from
+# opensearch. By default it emits INFO-level logs for every request.
+opensearch_logger = logging.getLogger("opensearchpy")
+opensearch_logger.setLevel(logging.WARNING)
 
 
 class OpenSearchClient:
