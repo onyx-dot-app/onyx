@@ -32,8 +32,11 @@ export function handleCopy(
     tempDiv.appendChild(fragment);
 
     // Create clipboard data with both HTML and plain text
+    // Strip trailing newlines that come from nested block-level wrapper divs
+    // (the browser's selection-to-text algorithm inserts \n at block boundaries)
+    const plainText = selection.toString().replace(/[\r\n]+$/, "");
     event.clipboardData.setData("text/html", tempDiv.innerHTML);
-    event.clipboardData.setData("text/plain", selection.toString());
+    event.clipboardData.setData("text/plain", plainText);
   }
 }
 
