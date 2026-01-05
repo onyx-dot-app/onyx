@@ -264,6 +264,11 @@ class ChatMessageSimple(BaseModel):
     image_files: list[ChatLoadedFile] | None = None
     # Only for TOOL_CALL_RESPONSE type messages
     tool_call_id: str | None = None
+    # Extra reasoning details for verification, stored in provider-specific format:
+    # - Anthropic: {"thinking_blocks": [...]}
+    # - OpenRouter/Gemini: {"reasoning_details": [...]}
+    # Only used during the current turn (not persisted to DB)
+    extra_reasoning_details: dict[str, Any] | None = None
 
 
 class ProjectFileMetadata(BaseModel):
@@ -289,3 +294,10 @@ class LlmStepResult(BaseModel):
     reasoning: str | None
     answer: str | None
     tool_calls: list[ToolCallKickoff] | None
+    # Structured reasoning details for verification, stored in provider-specific format:
+    # - Anthropic: {"thinking_blocks": [...]}
+    # - OpenRouter/Gemini: {"reasoning_details": [...]}
+    extra_reasoning_details: dict[str, Any] | None = None
+    # Token count for extra_reasoning_details (excluding signature/data fields)
+    # Used for context window budget tracking during the turn
+    extra_reasoning_tokens: int = 0

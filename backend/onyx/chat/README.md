@@ -75,7 +75,6 @@ rich and generally very few tokens.
 Instead of dropping the Tool Call response, we might summarize it using an LLM so that it is just 1-2 sentences and captures the main points. That said,
 this is questionable value add because anything relevant and useful should be already captured in the Agent response.
 
-
 ## Examples
 ```
 S -> System Message
@@ -225,3 +224,14 @@ not used deep into the flow. The second is ChatMessageSimple which is the data m
 as much as possible. If modifications/additions are needed, it should be to this object. This is the rich representation of a
 message for the code. Finally there is the LanguageModelInput representation of a message. This one is for the LLM interface
 layer and is as stripped down as possible so that the LLM interface can be clean and easy to maintain/extend.
+
+### Extended Thinking / Reasoning Verification
+Some LLM providers (Anthropic, OpenRouter/Gemini) support extended thinking where the model outputs reasoning content that must be echoed back
+in subsequent requests to maintain the thinking chain. This is required for reasoning verification.
+Without this, providers like Anthropic will drop the thinking parameter and the model won't use extended thinking.
+
+**How**: We capture `extra_reasoning_details` from streaming deltas and store them in-memory on `ChatMessageSimple` for the current turn's tool call messages. 
+The `extra_reasoning_details` are not persisted to the DB since we only keep them for the current turn. 
+
+The format is provider-agnostic: `{"thinking_blocks": [...]}` for Anthropic or `{"reasoning_details": [...]}` for OpenRouter/Gemini.
+When converting to LLM format, `AssistantMessage.model_dump()` flattens this to top-level fields (e.g., `thinking_blocks: [...]`) as expected by LiteLLM.

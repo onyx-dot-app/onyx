@@ -518,6 +518,9 @@ def run_llm_loop(
                 simple_chat_history.extend(failure_messages)
                 continue
 
+            tool_call_messages: list[ChatMessageSimple] = []
+            tool_response_messages: list[ChatMessageSimple] = []
+
             for tool_response in tool_responses:
                 # Extract tool_call from the response (set by run_tool_calls)
                 if tool_response.tool_call is None:
@@ -533,8 +536,9 @@ def run_llm_loop(
                 # Build a mapping of tool names to tool objects for getting tool_id
                 tools_by_name = {tool.name: tool for tool in final_tools}
 
-                # Add the results to the chat history. Even though tools may run in parallel,
-                # LLM APIs require linear history, so results are added sequentially.
+                # Add the results to the chat history.
+                # Even though tools may run in parallel, LLM APIs require linear history.
+                # Parallel tool calls are grouped before responses, then all are added sequentially.
                 # Get the tool object to retrieve tool_id
                 tool = tools_by_name.get(tool_call.tool_name)
                 if not tool:
@@ -583,14 +587,19 @@ def run_llm_loop(
                 tool_call_message = tool_call.to_msg_str()
                 tool_call_token_count = token_counter(tool_call_message)
 
+                # Add extra_reasoning_tokens to the first tool call only (all share same reasoning)
+                if tab_index == 0:
+                    tool_call_token_count += llm_step_result.extra_reasoning_tokens
+
                 tool_call_msg = ChatMessageSimple(
                     message=tool_call_message,
                     token_count=tool_call_token_count,
                     message_type=MessageType.TOOL_CALL,
                     tool_call_id=tool_call.tool_call_id,
                     image_files=None,
+                    extra_reasoning_details=llm_step_result.extra_reasoning_details,
                 )
-                simple_chat_history.append(tool_call_msg)
+                tool_call_messages.append(tool_call_msg)
 
                 tool_response_message = tool_response.llm_facing_response
                 tool_response_token_count = token_counter(tool_response_message)
@@ -602,12 +611,15 @@ def run_llm_loop(
                     tool_call_id=tool_call.tool_call_id,
                     image_files=None,
                 )
-                simple_chat_history.append(tool_response_msg)
+                tool_response_messages.append(tool_response_msg)
 
                 # Update citation processor if this was a search tool
                 update_citation_processor_from_tool_response(
                     tool_response, citation_processor
                 )
+
+            simple_chat_history.extend(tool_call_messages)
+            simple_chat_history.extend(tool_response_messages)
 
             # If no tool calls, then it must have answered, wrap up
             if not llm_step_result.tool_calls or len(llm_step_result.tool_calls) == 0:

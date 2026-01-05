@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel
 from pydantic import Field
 
+from onyx.llm.constants import KNOWN_REASONING_DETAILS_KEYS
+
 
 class FunctionCall(BaseModel):
     arguments: str | None = None
@@ -30,6 +32,9 @@ class Delta(BaseModel):
     content: str | None = None
     reasoning_content: str | None = None
     tool_calls: List[ChatCompletionDeltaToolCall] = Field(default_factory=list)
+    # Extra reasoning details for verification (Anthropic/OpenRouter/Gemini)
+    # Stored with key name preserved: {"thinking_blocks": [...]} or {"reasoning_details": [...]}
+    extra_reasoning_details: dict[str, Any] | None = None
 
 
 class StreamingChoice(BaseModel):
@@ -139,6 +144,21 @@ def _parse_message_tool_calls(
     return parsed_tool_calls
 
 
+def _extract_extra_reasoning_details(
+    delta_data: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Extract extra reasoning details from delta, preserving the key name.
+
+    Checks for thinking_blocks (Anthropic) or reasoning_details (OpenRouter/Gemini)
+    and returns the entire value with its key name preserved.
+    """
+    # There should only ever be one of these keys in the delta data at a time
+    for key in KNOWN_REASONING_DETAILS_KEYS:
+        if delta_data.get(key) is not None:
+            return {key: delta_data[key]}
+    return None
+
+
 def _validate_and_extract_base_fields(
     response_data: dict[str, Any], error_prefix: str
 ) -> tuple[str, str, dict[str, Any]]:
@@ -176,6 +196,7 @@ def from_litellm_model_response_stream(
         content=delta_data.get("content"),
         reasoning_content=delta_data.get("reasoning_content"),
         tool_calls=_parse_delta_tool_calls(delta_data.get("tool_calls")),
+        extra_reasoning_details=_extract_extra_reasoning_details(delta_data),
     )
 
     streaming_choice = StreamingChoice(

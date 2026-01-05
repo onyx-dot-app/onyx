@@ -32,6 +32,7 @@ from onyx.llm.models import TextContentPart
 from onyx.llm.models import ToolCall
 from onyx.llm.models import ToolMessage
 from onyx.llm.models import UserMessage
+from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
@@ -49,6 +50,44 @@ from onyx.utils.logger import setup_logger
 
 
 logger = setup_logger()
+
+# Fields to exclude from token counting in extra_reasoning_details
+# These are verification/metadata fields that aren't sent to the LLM
+_EXCLUDED_REASONING_FIELDS = {"signature", "data"}
+
+
+def _count_extra_reasoning_tokens(extra_reasoning_details: dict[str, Any]) -> int:
+    """Count tokens in extra_reasoning_details, excluding signature and data fields.
+
+    These fields are for verification purposes and shouldn't be counted towards
+    the context window budget since they're not sent to the LLM in the history.
+
+    Args:
+        extra_reasoning_details: Dict with provider-specific reasoning details
+            e.g., {"thinking_blocks": [...]} or {"reasoning_details": [...]}
+
+    Returns:
+        Token count of the reasoning content (excluding excluded fields)
+    """
+    tokenizer = get_tokenizer(None, None)
+    total_tokens = 0
+
+    for blocks in extra_reasoning_details.values():
+        if not isinstance(blocks, list):
+            continue
+        for block in blocks:
+            if not isinstance(block, dict):
+                continue
+            for key, value in block.items():
+                if key in _EXCLUDED_REASONING_FIELDS:
+                    continue
+                if isinstance(value, str):
+                    total_tokens += len(tokenizer.encode(value))
+                elif value is not None:
+                    # For non-string values, serialize and count
+                    total_tokens += len(tokenizer.encode(json.dumps(value)))
+
+    return total_tokens
 
 
 def _try_parse_json_string(value: Any) -> Any:
@@ -169,6 +208,12 @@ def _format_message_history_for_logging(
             if msg.content:
                 formatted_lines.append(f"{msg.content}")
 
+            if msg.extra_reasoning_details:
+                formatted_lines.append("Extra reasoning details:")
+                formatted_lines.append(
+                    json.dumps(msg.extra_reasoning_details, indent=4)
+                )
+
             if msg.tool_calls:
                 formatted_lines.append("Tool calls:")
                 for tool_call in msg.tool_calls:
@@ -285,9 +330,108 @@ def translate_history_to_llm_format(
     handling different message types and image files for multimodal support.
     """
     messages: list[ChatCompletionMessage] = []
+    pending_tool_calls: list[ChatMessageSimple] = []
+
+    def _flush_tool_calls() -> None:
+        """Combine pending tool call messages into a single AssistantMessage.
+
+        Parses tool call data from each message and creates an AssistantMessage
+        with a tool_calls array. Includes extra_reasoning_details from the first
+        tool message (all parallel tool calls share the same reasoning).
+        """
+        if not pending_tool_calls:
+            return
+
+        tool_calls: list[ToolCall] = []
+        for tool_msg in pending_tool_calls:
+            if not tool_msg.tool_call_id:
+                logger.warning(
+                    "Tool call message missing tool_call_id, skipping tool call parsing."
+                )
+                continue
+            try:
+                # Parse the message content (which should contain function_name and arguments)
+                tool_call_data = (
+                    json.loads(tool_msg.message) if tool_msg.message else {}
+                )
+
+                if (
+                    isinstance(tool_call_data, dict)
+                    and TOOL_CALL_MSG_FUNC_NAME in tool_call_data
+                ):
+                    function_name = tool_call_data.get(
+                        TOOL_CALL_MSG_FUNC_NAME, "unknown"
+                    )
+                    raw_args = tool_call_data.get(TOOL_CALL_MSG_ARGUMENTS, {})
+                else:
+                    function_name = "unknown"
+                    raw_args = (
+                        tool_call_data if isinstance(tool_call_data, dict) else {}
+                    )
+
+                # IMPORTANT: `FunctionCall.arguments` must be a JSON object string.
+                # If `raw_args` is accidentally a JSON string literal of an object
+                # (e.g. '"{\\"queries\\":[...]}"'), calling `json.dumps(raw_args)`
+                # would produce a quoted JSON literal and break Anthropic tool parsing.
+                tool_args = _parse_tool_args_to_dict(raw_args)
+
+                # NOTE: if the model is trained on a different tool call format, this may slightly interfere
+                # with the future tool calls, if it doesn't look like this. Almost certainly not a big deal.
+                tool_call = ToolCall(
+                    id=tool_msg.tool_call_id,
+                    type="function",
+                    function=FunctionCall(
+                        name=function_name,
+                        arguments=json.dumps(tool_args) if tool_args else "{}",
+                    ),
+                )
+                tool_calls.append(tool_call)
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.warning(
+                    f"Failed to parse tool call data for tool_call_id {tool_msg.tool_call_id}: {e}. "
+                    "Including as content-only message."
+                )
+
+        # Get extra_reasoning_details from the first tool message (all share same reasoning)
+        # This will be None for history loaded from DB, but set for current turn messages
+        extra_reasoning_details = None
+        for tool_msg in pending_tool_calls:
+            if tool_msg.extra_reasoning_details:
+                extra_reasoning_details = tool_msg.extra_reasoning_details
+                break
+
+        assistant_msg_with_tool = AssistantMessage(
+            role="assistant",
+            content=None,  # The tool call is parsed, doesn't need to be duplicated in the content
+            tool_calls=tool_calls if tool_calls else None,
+            extra_reasoning_details=extra_reasoning_details,
+        )
+        messages.append(assistant_msg_with_tool)
+        pending_tool_calls.clear()
 
     for msg in history:
-        if msg.message_type == MessageType.SYSTEM:
+        # Parallel tool calls are stored sequentially and should be combined into a single AssistantMessage.
+        # Tool responses are not combined.
+        if msg.message_type == MessageType.TOOL_CALL:
+            pending_tool_calls.append(msg)
+            continue
+
+        # Flush pending tool calls before processing any other message type
+        _flush_tool_calls()
+
+        if msg.message_type == MessageType.TOOL_CALL_RESPONSE:
+            if not msg.tool_call_id:
+                raise ValueError(
+                    f"Tool response message missing tool_call_id. Message: {msg}"
+                )
+            messages.append(
+                ToolMessage(
+                    role="tool",
+                    content=msg.message,
+                    tool_call_id=msg.tool_call_id,
+                )
+            )
+        elif msg.message_type == MessageType.SYSTEM:
             system_msg = SystemMessage(
                 role="system",
                 content=msg.message,
@@ -344,79 +488,17 @@ def translate_history_to_llm_format(
                 role="assistant",
                 content=msg.message or None,
                 tool_calls=None,
+                extra_reasoning_details=msg.extra_reasoning_details,
             )
             messages.append(assistant_msg)
-
-        elif msg.message_type == MessageType.TOOL_CALL:
-            # Tool calls are represented as Assistant Messages with tool_calls field
-            # Try to reconstruct tool call structure if we have tool_call_id
-            tool_calls: list[ToolCall] = []
-            if msg.tool_call_id:
-                try:
-                    # Parse the message content (which should contain function_name and arguments)
-                    tool_call_data = json.loads(msg.message) if msg.message else {}
-
-                    if (
-                        isinstance(tool_call_data, dict)
-                        and TOOL_CALL_MSG_FUNC_NAME in tool_call_data
-                    ):
-                        function_name = tool_call_data.get(
-                            TOOL_CALL_MSG_FUNC_NAME, "unknown"
-                        )
-                        raw_args = tool_call_data.get(TOOL_CALL_MSG_ARGUMENTS, {})
-                    else:
-                        function_name = "unknown"
-                        raw_args = (
-                            tool_call_data if isinstance(tool_call_data, dict) else {}
-                        )
-
-                    # IMPORTANT: `FunctionCall.arguments` must be a JSON object string.
-                    # If `raw_args` is accidentally a JSON string literal of an object
-                    # (e.g. '"{\\"queries\\":[...]}"'), calling `json.dumps(raw_args)`
-                    # would produce a quoted JSON literal and break Anthropic tool parsing.
-                    tool_args = _parse_tool_args_to_dict(raw_args)
-
-                    # NOTE: if the model is trained on a different tool call format, this may slightly interfere
-                    # with the future tool calls, if it doesn't look like this. Almost certainly not a big deal.
-                    tool_call = ToolCall(
-                        id=msg.tool_call_id,
-                        type="function",
-                        function=FunctionCall(
-                            name=function_name,
-                            arguments=json.dumps(tool_args) if tool_args else "{}",
-                        ),
-                    )
-                    tool_calls.append(tool_call)
-                except (json.JSONDecodeError, ValueError) as e:
-                    logger.warning(
-                        f"Failed to parse tool call data for tool_call_id {msg.tool_call_id}: {e}. "
-                        "Including as content-only message."
-                    )
-
-            assistant_msg_with_tool = AssistantMessage(
-                role="assistant",
-                content=None,  # The tool call is parsed, doesn't need to be duplicated in the content
-                tool_calls=tool_calls if tool_calls else None,
-            )
-            messages.append(assistant_msg_with_tool)
-
-        elif msg.message_type == MessageType.TOOL_CALL_RESPONSE:
-            if not msg.tool_call_id:
-                raise ValueError(
-                    f"Tool call response message encountered but tool_call_id is not available. Message: {msg}"
-                )
-
-            tool_msg = ToolMessage(
-                role="tool",
-                content=msg.message,
-                tool_call_id=msg.tool_call_id,
-            )
-            messages.append(tool_msg)
 
         else:
             logger.warning(
                 f"Unknown message type {msg.message_type} in history. Skipping message."
             )
+
+    # Final flush for any remaining pending tool calls
+    _flush_tool_calls()
 
     return messages
 
@@ -518,6 +600,14 @@ def run_llm_step_pkt_generator(
     answer_start = False
     accumulated_reasoning = ""
     accumulated_answer = ""
+    # Certain reasoning models expect their reasoning details to be returned unmodified.
+    # These details include both the reasoning content and metadata like an encrypted signature.
+    # These details have different shapes and names depending on the model,
+    # so we attempt to accumulate and store exactly what they give us.
+    # Key is (type, index) to handle OpenRouter/Gemini which can send different
+    # block types (reasoning.text vs reasoning.encrypted) at the same index.
+    accumulated_extra_reasoning_details: dict[tuple[str, int], dict[str, Any]] = {}
+    extra_reasoning_key: str | None = None
 
     processor_state: Any = None
 
@@ -712,6 +802,39 @@ def run_llm_step_pkt_generator(
                 for tool_call_delta in delta.tool_calls:
                     _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
 
+            # Accumulate extra_reasoning_details for reasoning verification (Anthropic/Gemini)
+            # delta.extra_reasoning_details is {"thinking_blocks": [...]} or {"reasoning_details": [...]}
+            if delta.extra_reasoning_details:
+                # Extract the key and blocks from the dict
+                for key_name, blocks in delta.extra_reasoning_details.items():
+                    if extra_reasoning_key is None:
+                        extra_reasoning_key = key_name
+
+                    for block in blocks:
+                        # Use (type, index) as accumulator key to handle OpenRouter/Gemini
+                        # which can send different block types at the same index
+                        block_index: int = int(block.get("index") or 0)
+                        block_type: str = block.get("type", "thinking")
+                        accumulation_key = (block_type, block_index)
+
+                        if accumulation_key not in accumulated_extra_reasoning_details:
+                            accumulated_extra_reasoning_details[accumulation_key] = {}
+
+                        current_block = accumulated_extra_reasoning_details[
+                            accumulation_key
+                        ]
+
+                        # Merge fields: if value differs from existing, concatenate
+                        # Metadata fields (type, index) are same each time → skipped
+                        # Content fields (thinking, text, data) differ → concatenated
+                        for field_name, field_value in block.items():
+                            if field_value is None:
+                                continue
+                            if field_name not in current_block:
+                                current_block[field_name] = field_value
+                            elif current_block[field_name] != field_value:
+                                current_block[field_name] += field_value
+
         # Flush custom token processor to get any final tool calls
         if custom_token_processor:
             flush_delta, processor_state = custom_token_processor(None, processor_state)
@@ -820,11 +943,21 @@ def run_llm_step_pkt_generator(
     else:
         logger.debug("Tool calls: []")
 
+    # Build extra_reasoning_details dict from accumulated blocks
+    extra_reasoning_details: dict[str, Any] | None = None
+    extra_reasoning_tokens = 0
+    if accumulated_extra_reasoning_details and extra_reasoning_key:
+        blocks_list = list(accumulated_extra_reasoning_details.values())
+        extra_reasoning_details = {extra_reasoning_key: blocks_list}
+        extra_reasoning_tokens = _count_extra_reasoning_tokens(extra_reasoning_details)
+
     return (
         LlmStepResult(
             reasoning=accumulated_reasoning if accumulated_reasoning else None,
             answer=accumulated_answer if accumulated_answer else None,
             tool_calls=tool_calls if tool_calls else None,
+            extra_reasoning_details=extra_reasoning_details,
+            extra_reasoning_tokens=extra_reasoning_tokens,
         ),
         bool(has_reasoned),
     )
