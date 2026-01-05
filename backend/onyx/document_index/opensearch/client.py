@@ -8,6 +8,7 @@ from onyx.configs.app_configs import OPENSEARCH_ADMIN_USERNAME
 from onyx.configs.app_configs import OPENSEARCH_HOST
 from onyx.configs.app_configs import OPENSEARCH_REST_API_PORT
 from onyx.document_index.opensearch.schema import DocumentChunk
+from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
 from onyx.document_index.opensearch.search import DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW
 from onyx.utils.logger import setup_logger
 
@@ -204,7 +205,11 @@ class OpenSearchClient:
             Exception: There was an error indexing the document. This includes
                 the case where a document with the same ID already exists.
         """
-        document_chunk_id: str = document.get_opensearch_doc_chunk_id()
+        document_chunk_id: str = get_opensearch_doc_chunk_id(
+            document_id=document.document_id,
+            chunk_index=document.chunk_index,
+            max_chunk_size=document.max_chunk_size,
+        )
         body: dict[str, Any] = document.model_dump(exclude_none=True)
         # client.create will raise if a doc with the same ID exists.
         # client.index does not do this.

@@ -51,7 +51,6 @@ logger = setup_logger(__name__)
 def _convert_opensearch_chunk_to_inference_chunk_uncleaned(
     chunk: DocumentChunk,
 ) -> InferenceChunkUncleaned:
-    # we will have niche feature regressions
     return InferenceChunkUncleaned(
         chunk_id=chunk.chunk_index,
         # TODO(andrei): Do this in a followup. This is the top of the doc, we
