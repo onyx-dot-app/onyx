@@ -1,5 +1,3 @@
-"use client";
-
 import { cn } from "@/lib/utils";
 import { WithoutStyles } from "@/types";
 import React from "react";
@@ -51,6 +49,7 @@ export interface SectionProps
   vertical?: boolean;
   horizontal?: boolean;
   gap?: number;
+  padding?: number;
   fit?: boolean;
   wrap?: boolean;
 
@@ -63,6 +62,7 @@ export function Section({
   vertical,
   horizontal,
   gap = 1,
+  padding = 0,
   fit,
   wrap,
   start,
@@ -90,7 +90,7 @@ export function Section({
         width,
         direction
       )}
-      style={{ gap: `${gap}rem` }}
+      style={{ gap: `${gap}rem`, padding: `${padding}rem` }}
       {...rest}
     />
   );

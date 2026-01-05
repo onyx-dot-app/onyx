@@ -1,5 +1,3 @@
-"use client";
-
 import React from "react";
 import { cn, noProp } from "@/lib/utils";
 import Truncated from "@/refresh-components/texts/Truncated";
@@ -8,6 +6,7 @@ import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import { SvgExternalLink, SvgTrash } from "@opal/icons";
+import { WithoutStyles } from "@/types";
 
 const bgClassNames = {
   defaulted: ["bg-background-tint-00 "],
@@ -21,8 +20,8 @@ const iconClassNames = {
   processing: ["stroke-text-01"],
 } as const;
 
-interface AttachmentProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+export interface AttachmentProps
+  extends WithoutStyles<React.ButtonHTMLAttributes<HTMLButtonElement>> {
   selected?: boolean;
   processing?: boolean;
 
@@ -44,8 +43,8 @@ export default function AttachmentButton({
   rightText,
   onView,
   onDelete,
-  className,
-  ...rest
+
+  ...props
 }: AttachmentProps) {
   const variant = selected
     ? "selected"
@@ -58,10 +57,9 @@ export default function AttachmentButton({
       type="button"
       className={cn(
         "flex flex-row w-full p-1 bg-background-tint-00 hover:bg-background-tint-02 rounded-12 gap-2 group/Attachment",
-        bgClassNames[variant],
-        className
+        bgClassNames[variant]
       )}
-      {...rest}
+      {...props}
     >
       <div className="flex-1 flex flex-row gap-2 min-w-0">
         <div className="h-full aspect-square bg-background-tint-01 rounded-08 flex flex-col items-center justify-center shrink-0">
