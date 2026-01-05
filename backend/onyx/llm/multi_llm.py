@@ -14,6 +14,7 @@ from onyx.configs.model_configs import DEFAULT_REASONING_EFFORT
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.cost import calculate_llm_cost_cents
 from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
@@ -22,6 +23,7 @@ from onyx.llm.interfaces import ReasoningEffort
 from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.model_response import ModelResponseStream
+from onyx.llm.model_response import Usage
 from onyx.llm.models import OPENAI_REASONING_EFFORT
 from onyx.llm.utils import build_litellm_passthrough_kwargs
 from onyx.llm.utils import is_true_openai_model
@@ -222,6 +224,48 @@ class LitellmLLM(LLM):
                 category=_LLM_PROMPT_LONG_TERM_LOG_CATEGORY,
             )
 
+    def _track_llm_cost(self, usage: Usage) -> None:
+        """
+        Track LLM usage cost for Onyx-managed API keys.
+
+        This is called after every LLM call completes (streaming or non-streaming).
+        Cost is only tracked if:
+        1. Usage limits are enabled for this deployment
+        2. The API key is one of Onyx's managed default keys
+        """
+
+        from onyx.server.usage_limits import is_usage_limits_enabled
+
+        if not is_usage_limits_enabled():
+            return
+
+        from onyx.server.usage_limits import is_onyx_managed_api_key
+
+        if not is_onyx_managed_api_key(self._api_key):
+            return
+        # Import here to avoid circular imports
+        from onyx.db.engine.sql_engine import get_session_with_current_tenant
+        from onyx.db.usage import increment_usage
+        from onyx.db.usage import UsageType
+
+        # Calculate cost in cents
+        cost_cents = calculate_llm_cost_cents(
+            model_name=self._model_version,
+            prompt_tokens=usage.prompt_tokens,
+            completion_tokens=usage.completion_tokens,
+        )
+
+        if cost_cents <= 0:
+            return
+
+        try:
+            with get_session_with_current_tenant() as db_session:
+                increment_usage(db_session, UsageType.LLM_COST, cost_cents)
+                db_session.commit()
+        except Exception as e:
+            # Log but don't fail the LLM call if tracking fails
+            logger.warning(f"Failed to track LLM cost: {e}")
+
     def _completion(
         self,
         prompt: LanguageModelInput,
@@ -405,7 +449,13 @@ class LitellmLLM(LLM):
             ),
         )
 
-        return from_litellm_model_response(response)
+        model_response = from_litellm_model_response(response)
+
+        # Track LLM cost for Onyx-managed API keys
+        if model_response.usage:
+            self._track_llm_cost(model_response.usage)
+
+        return model_response
 
     def stream(
         self,
@@ -438,4 +488,10 @@ class LitellmLLM(LLM):
         )
 
         for chunk in response:
-            yield from_litellm_model_response_stream(chunk)
+            model_response = from_litellm_model_response_stream(chunk)
+
+            # Track LLM cost when usage info is available (typically in the last chunk)
+            if model_response.usage:
+                self._track_llm_cost(model_response.usage)
+
+            yield model_response

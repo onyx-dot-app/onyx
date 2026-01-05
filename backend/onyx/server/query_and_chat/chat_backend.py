@@ -566,33 +566,7 @@ def handle_send_chat_message(
                 external_state_container=state_container,
             )
             result = gather_stream_full(packets, state_container)
-
-            # Record LLM usage after processing completes
-            # Only track costs when using Onyx-managed API keys
-            if is_usage_limits_enabled():
-                from onyx.server.usage_limits import is_onyx_managed_api_key
-
-                prompt_tokens, completion_tokens, model_name, api_key = (
-                    state_container.get_llm_usage()
-                )
-                if is_onyx_managed_api_key(api_key) and (
-                    prompt_tokens > 0 or completion_tokens > 0
-                ):
-                    from onyx.llm.cost import calculate_llm_cost_cents
-
-                    cost_cents = calculate_llm_cost_cents(
-                        model_name=model_name or "unknown",
-                        prompt_tokens=prompt_tokens,
-                        completion_tokens=completion_tokens,
-                    )
-                    if cost_cents > 0:
-                        increment_usage(
-                            db_session=db_session,
-                            usage_type=UsageType.LLM_COST,
-                            amount=cost_cents,
-                        )
-                        db_session.commit()
-
+            # Note: LLM cost tracking is now handled in multi_llm.py
             return result
 
     # Streaming path, normal Onyx UI behavior
@@ -613,32 +587,7 @@ def handle_send_chat_message(
                     external_state_container=state_container,
                 ):
                     yield get_json_line(obj.model_dump())
-
-                # Record LLM usage after stream completes
-                # Only track costs when using Onyx-managed API keys
-                if is_usage_limits_enabled():
-                    from onyx.server.usage_limits import is_onyx_managed_api_key
-
-                    prompt_tokens, completion_tokens, model_name, api_key = (
-                        state_container.get_llm_usage()
-                    )
-                    if is_onyx_managed_api_key(api_key) and (
-                        prompt_tokens > 0 or completion_tokens > 0
-                    ):
-                        from onyx.llm.cost import calculate_llm_cost_cents
-
-                        cost_cents = calculate_llm_cost_cents(
-                            model_name=model_name or "unknown",
-                            prompt_tokens=prompt_tokens,
-                            completion_tokens=completion_tokens,
-                        )
-                        if cost_cents > 0:
-                            increment_usage(
-                                db_session=db_session,
-                                usage_type=UsageType.LLM_COST,
-                                amount=cost_cents,
-                            )
-                            db_session.commit()
+                # Note: LLM cost tracking is now handled in multi_llm.py
 
         except Exception as e:
             logger.exception("Error in chat message streaming")
