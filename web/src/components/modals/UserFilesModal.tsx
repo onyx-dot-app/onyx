@@ -22,6 +22,7 @@ import {
   SvgFiles,
   SvgFileText,
   SvgImage,
+  SvgTrash,
   SvgXCircle,
 } from "@opal/icons";
 
@@ -65,7 +66,7 @@ function FileAttachment({
     String(file.status) === UserFileStatus.UPLOADING ||
     String(file.status) === UserFileStatus.DELETING;
 
-  const LeftIcon = getIcon(file, isProcessing);
+  const Icon = getIcon(file, isProcessing);
   const description = getDescription(file);
   const rightText = file.last_accessed_at
     ? formatRelativeTime(file.last_accessed_at)
@@ -74,13 +75,14 @@ function FileAttachment({
   return (
     <AttachmentButton
       onClick={onClick}
-      leftIcon={LeftIcon}
+      icon={Icon}
       description={description}
       rightText={rightText}
       selected={isSelected}
       processing={isProcessing}
       onView={onView}
-      onDelete={onDelete}
+      actionIcon={SvgTrash}
+      onAction={onDelete}
     >
       {file.name}
     </AttachmentButton>

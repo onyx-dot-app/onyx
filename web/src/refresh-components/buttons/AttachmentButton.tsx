@@ -1,3 +1,68 @@
+/**
+ * AttachmentButton - A button component for displaying file attachments or similar items
+ *
+ * Displays an attachment item with an icon, title, description, metadata text,
+ * and optional action buttons. Commonly used for file lists, attachment pickers,
+ * and similar UI patterns where items can be viewed or acted upon.
+ *
+ * Features:
+ * - Three visual states: default, selected (shows checkbox), processing
+ * - Left icon that changes to checkbox when selected
+ * - Truncated title and description text
+ * - Right-aligned metadata text (e.g., file size, date)
+ * - Optional view button (external link icon) that appears on hover
+ * - Optional action button (custom icon) that appears on hover
+ * - Full-width button with hover states
+ * - Prevents event bubbling for nested action buttons
+ *
+ * @example
+ * ```tsx
+ * import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
+ * import { SvgFileText, SvgTrash } from "@opal/icons";
+ *
+ * // Basic attachment
+ * <AttachmentButton
+ *   icon={SvgFileText}
+ *   description="document.pdf"
+ *   rightText="2.4 MB"
+ * >
+ *   Project Proposal
+ * </AttachmentButton>
+ *
+ * // Selected state with view button
+ * <AttachmentButton
+ *   icon={SvgFileText}
+ *   selected
+ *   description="document.pdf"
+ *   rightText="2.4 MB"
+ *   onView={() => window.open('/view/doc')}
+ * >
+ *   Project Proposal
+ * </AttachmentButton>
+ *
+ * // With action button (delete)
+ * <AttachmentButton
+ *   icon={SvgFileText}
+ *   description="document.pdf"
+ *   rightText="2.4 MB"
+ *   actionIcon={SvgTrash}
+ *   onAction={() => handleDelete()}
+ * >
+ *   Project Proposal
+ * </AttachmentButton>
+ *
+ * // Processing state
+ * <AttachmentButton
+ *   icon={SvgFileText}
+ *   processing
+ *   description="Uploading..."
+ *   rightText="45%"
+ * >
+ *   Project Proposal
+ * </AttachmentButton>
+ * ```
+ */
+
 import React from "react";
 import { cn, noProp } from "@/lib/utils";
 import Truncated from "@/refresh-components/texts/Truncated";
@@ -5,7 +70,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
-import { SvgExternalLink, SvgTrash } from "@opal/icons";
+import { SvgExternalLink } from "@opal/icons";
 import { WithoutStyles } from "@/types";
 
 const bgClassNames = {
@@ -25,25 +90,29 @@ export interface AttachmentProps
   selected?: boolean;
   processing?: boolean;
 
-  leftIcon: React.FunctionComponent<IconProps>;
+  icon: React.FunctionComponent<IconProps>;
   children: string;
   description: string;
   rightText: string;
   onView?: () => void;
-  onDelete?: () => void;
+
+  // Action button: An optional secondary action button that appears on hover.
+  // Commonly used for actions like delete, download, or remove.
+  // Both `actionIcon` and `onAction` must be provided for the button to appear.
+  actionIcon?: React.FunctionComponent<IconProps>;
+  onAction?: () => void;
 }
 
 export default function AttachmentButton({
   selected,
   processing,
-
-  leftIcon: LeftIcon,
+  icon: Icon,
   children,
   description,
   rightText,
   onView,
-  onDelete,
-
+  actionIcon,
+  onAction,
   ...props
 }: AttachmentProps) {
   const variant = selected
@@ -66,7 +135,7 @@ export default function AttachmentButton({
           {selected ? (
             <Checkbox checked />
           ) : (
-            <LeftIcon
+            <Icon
               className={cn(iconClassNames[variant], "h-[1rem] w-[1rem]")}
             />
           )}
@@ -97,13 +166,10 @@ export default function AttachmentButton({
         <Text as="p" secondaryBody text03>
           {rightText}
         </Text>
-        {onDelete && (
-          <IconButton
-            icon={SvgTrash}
-            internal
-            className="invisible group-hover/Attachment:visible"
-            onClick={noProp(onDelete)}
-          />
+        {actionIcon && onAction && (
+          <div className="invisible group-hover/Attachment:visible">
+            <IconButton icon={actionIcon} onClick={noProp(onAction)} internal />
+          </div>
         )}
       </div>
     </button>

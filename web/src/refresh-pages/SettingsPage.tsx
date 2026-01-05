@@ -1129,10 +1129,11 @@ function AccountsAccessSettings() {
                 {filteredPats.map((pat) => (
                   <AttachmentButton
                     key={pat.id}
-                    leftIcon={SvgKey}
+                    icon={SvgKey}
                     description={pat.token_display}
                     rightText={humanReadableFormat(pat.created_at)}
-                    onDelete={() =>
+                    actionIcon={SvgTrash}
+                    onAction={() =>
                       setTokenToDelete({ id: pat.id, name: pat.name })
                     }
                   >
