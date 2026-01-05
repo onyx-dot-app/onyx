@@ -134,14 +134,15 @@ class BraintrustTracingProcessor(TracingProcessor):
         usage = span.span_data.usage or {}
         prompt_tokens = None
         completion_tokens = None
-        if (
-            prompt_tokens := usage.get("prompt_tokens") or usage.get("input_tokens")
-        ) is not None:
+        prompt_tokens = usage.get("prompt_tokens")
+        if prompt_tokens is None:
+            prompt_tokens = usage.get("input_tokens")
+        if prompt_tokens is not None:
             metrics["prompt_tokens"] = int(prompt_tokens)
-        if (
-            completion_tokens := usage.get("completion_tokens")
-            or usage.get("output_tokens")
-        ) is not None:
+        completion_tokens = usage.get("completion_tokens")
+        if completion_tokens is None:
+            completion_tokens = usage.get("output_tokens")
+        if completion_tokens is not None:
             metrics["completion_tokens"] = int(completion_tokens)
 
         if "total_tokens" in usage:
