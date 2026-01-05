@@ -5,6 +5,7 @@ CLI for running evaluations with local configurations.
 
 import argparse
 import json
+import logging
 import os
 from typing import Any
 
@@ -39,12 +40,38 @@ def load_data_local(
         return json.load(f)
 
 
+def configure_logging_for_evals(verbose: bool) -> None:
+    """Set logging level to WARNING to reduce noise during evals."""
+    if verbose:
+        return
+
+    # Set environment variable for any future logger creation
+    os.environ["LOG_LEVEL"] = "WARNING"
+
+    # Force WARNING level for root logger and its handlers
+    root = logging.getLogger()
+    root.setLevel(logging.WARNING)
+    for handler in root.handlers:
+        handler.setLevel(logging.WARNING)
+
+    # Force WARNING level for all existing loggers and their handlers
+    for name in list(logging.Logger.manager.loggerDict.keys()):
+        logger = logging.getLogger(name)
+        logger.setLevel(logging.WARNING)
+        for handler in logger.handlers:
+            handler.setLevel(logging.WARNING)
+
+    # Set a basic config to ensure new loggers also use WARNING
+    logging.basicConfig(level=logging.WARNING, force=True)
+
+
 def run_local(
     local_data_path: str | None,
     remote_dataset_name: str | None,
     search_permissions_email: str | None = None,
     no_send_logs: bool = False,
     local_only: bool = False,
+    verbose: bool = False,
 ) -> EvalationAck:
     """
     Run evaluation with local configurations.
@@ -65,7 +92,9 @@ def run_local(
         EvalationAck: The evaluation result
     """
     setup_session_factory()
-
+    configure_logging_for_evals(
+        verbose=verbose,
+    )
     # Only setup Braintrust if not running in local-only mode
     if not local_only:
         setup_braintrust_if_creds_available()
@@ -261,6 +290,7 @@ def main() -> None:
             search_permissions_email=args.search_permissions_email,
             no_send_logs=args.no_send_logs,
             local_only=args.local_only,
+            verbose=args.verbose,
         )
 
 
