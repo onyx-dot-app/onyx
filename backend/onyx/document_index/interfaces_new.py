@@ -1,6 +1,8 @@
 import abc
+from typing import Self
 
 from pydantic import BaseModel
+from pydantic import model_validator
 
 from onyx.access.models import DocumentAccess
 from onyx.configs.constants import PUBLIC_DOC_PAT
@@ -8,6 +10,7 @@ from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
 from onyx.db.enums import EmbeddingPrecision
+from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from shared_configs.model_server_models import Embedding
 
@@ -40,12 +43,20 @@ __all__ = [
 class TenantState(BaseModel):
     """
     Captures the tenant-related state for an instance of DocumentIndex.
+
+    NOTE: Tenant ID must be set in multitenant mode.
     """
 
     model_config = {"frozen": True}
 
-    tenant_id: str
+    tenant_id: str | None
     multitenant: bool
+
+    @model_validator(mode="after")
+    def check_tenant_id_is_set_in_multitenant_mode(self) -> Self:
+        if self.multitenant and not self.tenant_id:
+            raise ValueError("Bug: Tenant ID must be set in multitenant mode.")
+        return self
 
 
 class DocumentInsertionRecord(BaseModel):
@@ -72,6 +83,20 @@ class DocumentSectionRequest(BaseModel):
     document_id: str
     min_chunk_ind: int | None = None
     max_chunk_ind: int | None = None
+    # A given document can have multiple chunking strategies.
+    max_chunk_size: int = DEFAULT_MAX_CHUNK_SIZE
+
+    @model_validator(mode="after")
+    def check_chunk_index_range_is_valid(self) -> Self:
+        if (
+            self.min_chunk_ind is not None
+            and self.max_chunk_ind is not None
+            and self.min_chunk_ind > self.max_chunk_ind
+        ):
+            raise ValueError(
+                "Bug: Min chunk index must be less than or equal to max chunk index."
+            )
+        return self
 
 
 class IndexingMetadata(BaseModel):
@@ -223,7 +248,9 @@ class Deletable(abc.ABC):
         Hard deletes all of the chunks for the corresponding document in the
         document index.
 
-        No chunks will be deleted if the document does not exist.
+        TODO(andrei): Not a pressing issue now but think about what we want the
+        contract of this method to be in the event the specified document ID
+        does not exist.
 
         Args:
             document_id: The unique identifier for the document as represented

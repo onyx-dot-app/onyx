@@ -8,6 +8,7 @@ from onyx.configs.app_configs import OPENSEARCH_ADMIN_USERNAME
 from onyx.configs.app_configs import OPENSEARCH_HOST
 from onyx.configs.app_configs import OPENSEARCH_REST_API_PORT
 from onyx.document_index.opensearch.schema import DocumentChunk
+from onyx.document_index.opensearch.search import DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW
 from onyx.utils.logger import setup_logger
 
 
@@ -21,6 +22,10 @@ class OpenSearchClient:
     attempts to protect the rest of the codebase from this. As a consequence,
     most methods here return the minimum data needed for the rest of Onyx, and
     tend to rely on Exceptions to handle errors.
+
+    TODO(andrei): This class currently assumes the structure of the database
+    schema when it returns a DocumentChunk. Make the class, or at least the
+    search method, templated on the structure the caller can expect.
     """
 
     def __init__(
@@ -88,6 +93,17 @@ class OpenSearchClient:
             raise RuntimeError(f"Failed to delete index {self._index_name}.")
         return True
 
+    def index_exists(self) -> bool:
+        """Checks if the index exists.
+
+        Raises:
+            Exception: There was an error checking if the index exists.
+
+        Returns:
+            True if the index exists, False if it does not.
+        """
+        return self._client.indices.exists(index=self._index_name)
+
     def validate_index(self, expected_mappings: dict[str, Any]) -> bool:
         """Validates the index.
 
@@ -110,12 +126,13 @@ class OpenSearchClient:
         # OpenSearch's documentation makes no mention of what happens when you
         # invoke client.indices.get on an index that does not exist, so we check
         # for existence explicitly just to be sure.
-        exists_response = self._client.indices.exists(index=self._index_name)
+        exists_response = self.index_exists()
         if not exists_response:
             logger.warning(
                 f"Tried to validate index {self._index_name} but it does not exist."
             )
             return False
+
         get_result = self._client.indices.get(index=self._index_name)
         index_info: dict[str, Any] = get_result.get(self._index_name, {})
         if not index_info:
@@ -248,6 +265,38 @@ class OpenSearchClient:
                     f'Unknown OpenSearch deletion result: "{result_string}".'
                 )
 
+    def delete_by_query(self, query_body: dict[str, Any]) -> int:
+        """Deletes documents by a query.
+
+        Args:
+            query_body: The body of the query to delete documents by.
+
+        Raises:
+            Exception: There was an error deleting the documents.
+
+        Returns:
+            The number of documents deleted.
+        """
+        result = self._client.delete_by_query(index=self._index_name, body=query_body)
+        if result.get("timed_out", False):
+            raise RuntimeError(
+                f"Delete by query timed out for index {self._index_name}."
+            )
+        if len(result.get("failures", [])) > 0:
+            raise RuntimeError(
+                f"Failed to delete some or all of the documents for index {self._index_name}."
+            )
+
+        num_deleted = result.get("deleted", 0)
+        num_processed = result.get("total", 0)
+        if num_deleted != num_processed:
+            raise RuntimeError(
+                f"Failed to delete some or all of the documents for index {self._index_name}. "
+                f"{num_deleted} documents were deleted out of {num_processed} documents that were processed."
+            )
+
+        return num_deleted
+
     def update_document(self) -> None:
         # TODO(andrei): Implement this.
         raise NotImplementedError("Not implemented.")
@@ -322,6 +371,10 @@ class OpenSearchClient:
     ) -> list[DocumentChunk]:
         """Searches the index.
 
+        TODO(andrei): Ideally we could check that every field in the body is
+        present in the index, to avoid a class of runtime bugs that could easily
+        be caught during development.
+
         Args:
             body: The body of the search request. See the OpenSearch
                 documentation for more information on search request bodies.
@@ -334,6 +387,7 @@ class OpenSearchClient:
         Returns:
             List of document chunks that match the search request.
         """
+        result: dict[str, Any]
         if search_pipeline_id:
             result = self._client.search(
                 index=self._index_name, search_pipeline=search_pipeline_id, body=body
@@ -341,17 +395,10 @@ class OpenSearchClient:
         else:
             result = self._client.search(index=self._index_name, body=body)
 
-        if result.get("timed_out", False):
-            raise RuntimeError(f"Search timed out for index {self._index_name}.")
-        hits_first_layer: dict[str, Any] = result.get("hits", {})
-        if not hits_first_layer:
-            raise RuntimeError(
-                f"Hits field missing from response when trying to search index {self._index_name}."
-            )
-        hits_second_layer: list[Any] = hits_first_layer.get("hits", [])
+        hits = self._get_hits_from_search_result(result)
 
         result_chunks: list[DocumentChunk] = []
-        for hit in hits_second_layer:
+        for hit in hits:
             document_chunk_source: dict[str, Any] | None = hit.get("_source")
             if not document_chunk_source:
                 raise RuntimeError(
@@ -359,6 +406,57 @@ class OpenSearchClient:
                 )
             result_chunks.append(DocumentChunk.model_validate(document_chunk_source))
         return result_chunks
+
+    def search_for_document_ids(self, body: dict[str, Any]) -> list[str]:
+        """Searches the index and returns only document chunk IDs.
+
+        In order to take advantage of the performance benefits of only returning
+        IDs, the body should have a key, value pair of "_source": False.
+        Otherwise, OpenSearch will return the entire document body and this
+        method's performance will be the same as the search method's.
+
+        TODO(andrei): Ideally we could check that every field in the body is
+        present in the index, to avoid a class of runtime bugs that could easily
+        be caught during development.
+
+        Args:
+            body: The body of the search request. See the OpenSearch
+                documentation for more information on search request bodies.
+
+        Raises:
+            Exception: There was an error searching the index.
+
+        Returns:
+            List of document chunk IDs that match the search request.
+        """
+        if "_source" not in body or body["_source"] is not False:
+            logger.warning(
+                "The body of the search request for document chunk IDs is missing the key, value pair of "
+                + '"_source": False. This query will therefore be inefficient.'
+            )
+
+        result: dict[str, Any] = self._client.search(index=self._index_name, body=body)
+
+        hits = self._get_hits_from_search_result(result)
+
+        # TODO(andrei): Implement scroll/point in time for results so that we
+        # can return arbitrarily-many IDs.
+        if len(hits) == DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW:
+            logger.warning(
+                "The search request for document chunk IDs returned the maximum number of results. "
+                + "It is extremely likely that there are more hits in OpenSearch than the returned results."
+            )
+
+        # Extract only the _id field from each hit.
+        document_chunk_ids: list[str] = []
+        for hit in hits:
+            document_chunk_id = hit.get("_id")
+            if not document_chunk_id:
+                raise RuntimeError(
+                    "Received a hit from OpenSearch but the _id field is missing."
+                )
+            document_chunk_ids.append(document_chunk_id)
+        return document_chunk_ids
 
     def refresh_index(self) -> None:
         """Refreshes the index to make recent changes searchable.
@@ -386,3 +484,26 @@ class OpenSearchClient:
             Exception: There was an error closing the client.
         """
         self._client.close()
+
+    def _get_hits_from_search_result(self, result: dict[str, Any]) -> list[Any]:
+        """Extracts the hits from a search result.
+
+        Args:
+            result: The search result to extract the hits from.
+
+        Raises:
+            Exception: There was an error extracting the hits from the search
+                result. This includes the case where the search timed out.
+
+        Returns:
+            The hits from the search result.
+        """
+        if result.get("timed_out", False):
+            raise RuntimeError(f"Search timed out for index {self._index_name}.")
+        hits_first_layer: dict[str, Any] = result.get("hits", {})
+        if not hits_first_layer:
+            raise RuntimeError(
+                f"Hits field missing from response when trying to search index {self._index_name}."
+            )
+        hits_second_layer: list[Any] = hits_first_layer.get("hits", [])
+        return hits_second_layer

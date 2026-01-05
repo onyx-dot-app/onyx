@@ -1,9 +1,11 @@
 from datetime import datetime
 from datetime import timezone
 from typing import Any
+from typing import Self
 
 from pydantic import BaseModel
 from pydantic import field_serializer
+from pydantic import model_validator
 
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.document_index.opensearch.constants import EF_CONSTRUCTION
@@ -35,6 +37,20 @@ MAX_CHUNK_SIZE_FIELD_NAME = "max_chunk_size"
 TENANT_ID_FIELD_NAME = "tenant_id"
 
 
+def get_opensearch_doc_chunk_id(
+    document_id: str, chunk_index: int, max_chunk_size: int = DEFAULT_MAX_CHUNK_SIZE
+) -> str:
+    """
+    Returns a unique identifier for the chunk.
+
+    TODO(andrei): Add source type to this.
+    TODO(andrei): Add tenant ID to this.
+    TODO(andrei): Sanitize document_id in the event it contains characters that
+    are not allowed in OpenSearch IDs.
+    """
+    return f"{document_id}__{max_chunk_size}__{chunk_index}"
+
+
 class DocumentChunk(BaseModel):
     """
     Represents a chunk of a document in the OpenSearch index.
@@ -47,7 +63,10 @@ class DocumentChunk(BaseModel):
 
     document_id: str
     chunk_index: int
-    # The maximum number of tokens this chunk's content can hold.
+    # The maximum number of tokens this chunk's content can hold. Previously
+    # there was a concept of large chunks, this is a generic concept of that. We
+    # can choose to have any size of chunks in the index and they should be
+    # distinct from one another.
     max_chunk_size: int = DEFAULT_MAX_CHUNK_SIZE
 
     # Either both should be None or both should be non-None.
@@ -70,6 +89,7 @@ class DocumentChunk(BaseModel):
 
     global_boost: float = 1.0
 
+    # TODO(andrei): Make this non-nullable in a followup.
     semantic_identifier: str | None = None
     image_file_name: str | None = None
     source_links: list[str] | None = None
@@ -79,13 +99,22 @@ class DocumentChunk(BaseModel):
 
     tenant_id: str | None = None
 
-    # TODO(andrei): Semantic identifier?
+    @model_validator(mode="after")
+    def check_num_tokens_fits_within_max_chunk_size(self) -> Self:
+        if self.num_tokens > self.max_chunk_size:
+            raise ValueError(
+                "Bug: Num tokens must be less than or equal to max chunk size."
+            )
+        return self
 
-    def get_opensearch_doc_chunk_id(self) -> str:
-        """
-        Returns a unique identifier for the chunk.
-        """
-        return f"{self.source_type}__{self.document_id}__{self.max_chunk_size}__{self.chunk_index}"
+    @model_validator(mode="after")
+    def check_title_and_title_vector_are_consistent(self) -> Self:
+        # title and title_vector should both either be None or not.
+        if self.title is not None and self.title_vector is None:
+            raise ValueError("Bug: Title vector must not be None if title is not None.")
+        if self.title_vector is not None and self.title is None:
+            raise ValueError("Bug: Title must not be None if title vector is not None.")
+        return self
 
     @field_serializer("last_updated", "created_at", mode="plain")
     def serialize_datetime_fields_to_epoch_millis(
