@@ -13,6 +13,7 @@ from .framework.span_data import GenerationSpanData
 from .framework.span_data import SpanData
 from .framework.spans import Span
 from .framework.traces import Trace
+from onyx.llm.cost import calculate_llm_cost_cents
 
 
 def _span_type(span: Span[Any]) -> braintrust.SpanTypeAttribute:
@@ -131,20 +132,26 @@ class BraintrustTracingProcessor(TracingProcessor):
             metrics["total_latency_seconds"] = total_latency
 
         usage = span.span_data.usage or {}
-        if "prompt_tokens" in usage:
-            metrics["prompt_tokens"] = usage["prompt_tokens"]
-        elif "input_tokens" in usage:
-            metrics["prompt_tokens"] = usage["input_tokens"]
+        prompt_tokens = None
+        completion_tokens = None
+        if "prompt_tokens" in usage and usage["prompt_tokens"] is not None:
+            prompt_tokens = int(usage["prompt_tokens"])
+            metrics["prompt_tokens"] = prompt_tokens
+        elif "input_tokens" in usage and usage["input_tokens"] is not None:
+            prompt_tokens = int(usage["input_tokens"])
+            metrics["prompt_tokens"] = prompt_tokens
 
-        if "completion_tokens" in usage:
-            metrics["completion_tokens"] = usage["completion_tokens"]
-        elif "output_tokens" in usage:
-            metrics["completion_tokens"] = usage["output_tokens"]
+        if "completion_tokens" in usage and usage["completion_tokens"] is not None:
+            completion_tokens = int(usage["completion_tokens"])
+            metrics["completion_tokens"] = completion_tokens
+        elif "output_tokens" in usage and usage["output_tokens"] is not None:
+            completion_tokens = int(usage["output_tokens"])
+            metrics["completion_tokens"] = completion_tokens
 
         if "total_tokens" in usage:
             metrics["tokens"] = usage["total_tokens"]
-        elif "input_tokens" in usage and "output_tokens" in usage:
-            metrics["tokens"] = usage["input_tokens"] + usage["output_tokens"]
+        elif prompt_tokens is not None and completion_tokens is not None:
+            metrics["tokens"] = prompt_tokens + completion_tokens
 
         if "cache_read_input_tokens" in usage:
             metrics["prompt_cached_tokens"] = usage["cache_read_input_tokens"]
@@ -152,6 +159,16 @@ class BraintrustTracingProcessor(TracingProcessor):
             metrics["prompt_cache_creation_tokens"] = usage[
                 "cache_creation_input_tokens"
             ]
+
+        model_name = span.span_data.model
+        if model_name and prompt_tokens is not None and completion_tokens is not None:
+            cost_cents = calculate_llm_cost_cents(
+                model_name=model_name,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+            )
+            if cost_cents > 0:
+                metrics["cost_cents"] = cost_cents
 
         return {
             "input": span.span_data.input,
