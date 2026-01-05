@@ -43,6 +43,9 @@ interface AgentsSectionProps {
   agents: MinimalPersonaSnapshot[];
 }
 
+const getActionKey = (tool: { id: number; in_code_tool_id?: string | null }) =>
+  tool.in_code_tool_id ?? tool.id.toString();
+
 function AgentsSection({ title, description, agents }: AgentsSectionProps) {
   if (agents.length === 0) return null;
 
@@ -77,7 +80,7 @@ export default function AgentsNavigationPage() {
   const [selectedCreatorIds, setSelectedCreatorIds] = useState<Set<string>>(
     new Set()
   );
-  const [selectedActionIds, setSelectedActionIds] = useState<Set<number>>(
+  const [selectedActionIds, setSelectedActionIds] = useState<Set<string>>(
     new Set()
   );
   const [selectedMcpServerIds, setSelectedMcpServerIds] = useState<Set<number>>(
@@ -185,12 +188,13 @@ export default function AgentsNavigationPage() {
 
   const uniqueActions = useMemo(() => {
     const actionsMap = new Map<
-      number,
+      string,
       {
-        id: number;
+        id: string;
         name: string;
         display_name: string;
         mcp_server_id?: number | null;
+        in_code_tool_id?: string | null;
       }
     >();
     agents.forEach((agent) => {
@@ -202,11 +206,13 @@ export default function AgentsNavigationPage() {
         ) {
           return;
         }
-        actionsMap.set(tool.id, {
-          id: tool.id,
+        const actionKey = getActionKey(tool);
+        actionsMap.set(actionKey, {
+          id: actionKey,
           name: tool.name,
           display_name: tool.display_name,
           mcp_server_id: tool.mcp_server_id,
+          in_code_tool_id: tool.in_code_tool_id,
         });
       });
     });
@@ -260,16 +266,17 @@ export default function AgentsNavigationPage() {
     type ActionItem =
       | {
           type: "tool";
-          id: number;
+          id: string;
           name: string;
           display_name: string;
           mcp_server_id?: number | null;
+          in_code_tool_id?: string | null;
         }
       | {
           type: "mcp_group";
           mcp_server_id: number;
           server_name: string;
-          tools: Array<{ id: number; name: string; display_name: string }>;
+          tools: Array<{ id: string; name: string; display_name: string }>;
         };
 
     const mcpGroupItems: ActionItem[] = Array.from(mcpGroupsMap.entries()).map(
@@ -341,7 +348,7 @@ export default function AgentsNavigationPage() {
         (selectedActionIds.size === 0 && selectedMcpServerIds.size === 0) ||
         agent.tools.some(
           (tool) =>
-            selectedActionIds.has(tool.id) ||
+            selectedActionIds.has(getActionKey(tool)) ||
             (tool.mcp_server_id !== null &&
               tool.mcp_server_id !== undefined &&
               selectedMcpServerIds.has(tool.mcp_server_id))
