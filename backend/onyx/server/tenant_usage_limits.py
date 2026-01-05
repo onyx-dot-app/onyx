@@ -4,7 +4,7 @@ Non-EE version of tenant usage limit overrides.
 In non-EE deployments, there are no tenant-specific overrides - all tenants
 use the default limits from environment variables.
 
-The EE version (ee.onyx.server.tenants.usage_limits) fetches per-tenant
+The EE version (ee.onyx.server.tenant_usage_limits) fetches per-tenant
 overrides from the control plane.
 """
 

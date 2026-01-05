@@ -12,8 +12,8 @@ from onyx.configs.app_configs import OPENROUTER_DEFAULT_API_KEY
 from onyx.db.usage import check_usage_limit
 from onyx.db.usage import UsageLimitExceededError
 from onyx.db.usage import UsageType
-from onyx.server.tenants.usage_limits import TenantUsageLimitKeys
-from onyx.server.tenants.usage_limits import TenantUsageLimitOverrides
+from onyx.server.tenant_usage_limits import TenantUsageLimitKeys
+from onyx.server.tenant_usage_limits import TenantUsageLimitOverrides
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.configs import USAGE_LIMIT_API_CALLS_PAID
@@ -87,7 +87,7 @@ def _get_tenant_override(tenant_id: str, field_name: str) -> int | None:
     try:
         # Try to get EE version that has tenant overrides
         get_overrides_fn = fetch_versioned_implementation(
-            "onyx.server.tenants.usage_limits", "get_tenant_usage_limit_overrides"
+            "onyx.server.tenant_usage_limits", "get_tenant_usage_limit_overrides"
         )
         overrides: TenantUsageLimitOverrides | None = get_overrides_fn(tenant_id)
         if overrides is not None:
