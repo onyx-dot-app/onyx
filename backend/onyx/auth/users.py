@@ -335,7 +335,24 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
         # Check for disposable emails BEFORE provisioning tenant
         # This prevents creating tenants for throwaway email addresses
-        verify_email_domain(user_create.email)
+        try:
+            verify_email_domain(user_create.email)
+        except HTTPException as e:
+            # Log blocked disposable email attempts
+            if (
+                e.status_code == status.HTTP_400_BAD_REQUEST
+                and "Disposable email" in str(e.detail)
+            ):
+                domain = (
+                    user_create.email.split("@")[-1]
+                    if "@" in user_create.email
+                    else "unknown"
+                )
+                logger.warning(
+                    f"Blocked disposable email registration attempt: {domain}",
+                    extra={"email_domain": domain},
+                )
+            raise
 
         user_count: int | None = None
         referral_source = (
@@ -362,9 +379,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 if MULTI_TENANT:
                     # Multi-tenant: Only require invite for existing tenants
                     # New tenant creation (first user) doesn't require an invite
-                    from onyx.db.users import get_user_by_email
+                    from onyx.db.models import User as UserModel
 
-                    existing_user = get_user_by_email(user_create.email, db_session)
+                    result = await db_session.execute(
+                        select(UserModel).where(UserModel.email == user_create.email)
+                    )
+                    existing_user = result.scalar_one_or_none()
                     if existing_user:
                         # Existing user - shouldn't happen in normal signup flow
                         verify_email_is_invited(user_create.email)
