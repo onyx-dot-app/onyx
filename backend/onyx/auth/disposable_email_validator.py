@@ -28,7 +28,7 @@ class DisposableEmailValidator:
     _instance = None
     _lock = threading.Lock()
 
-    def __new__(cls):
+    def __new__(cls) -> "DisposableEmailValidator":
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
@@ -36,7 +36,7 @@ class DisposableEmailValidator:
                     cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self):
+    def __init__(self) -> None:
         if self._initialized:
             return
 
@@ -146,9 +146,15 @@ class DisposableEmailValidator:
         if not email or "@" not in email:
             return False
 
-        domain = email.split("@")[-1].lower().strip()
-        disposable_domains = self.get_domains()
+        parts = email.split("@")
+        if len(parts) != 2 or not parts[0]:  # Must have user@domain with non-empty user
+            return False
 
+        domain = parts[1].lower().strip()
+        if not domain:  # Domain part must not be empty
+            return False
+
+        disposable_domains = self.get_domains()
         return domain in disposable_domains
 
 
