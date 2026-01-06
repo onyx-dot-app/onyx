@@ -201,7 +201,7 @@ export default function Text({
         // complement the white-space implicit with line-height. We apply to the before
         // pseudo-element such that padding applied to the tag directly is additive making the
         // likelihood of 2px offsets with other text elements much lower.
-        "before:content-[''] before:px-[2px]",
+        "before:content-[''] before:pl-[2px] after:content-[''] after:pr-[2px]",
         className
       )}
     >
