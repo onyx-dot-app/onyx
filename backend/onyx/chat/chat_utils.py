@@ -703,7 +703,6 @@ def convert_chat_history(
                             "arguments": tool_call.tool_call_arguments,
                         }
                         tool_call_message = json.dumps(tool_call_data)
-
                         simple_messages.append(
                             ChatMessageSimple(
                                 message=tool_call_message,
@@ -713,6 +712,7 @@ def convert_chat_history(
                                 tool_call_id=tool_call.tool_call_id,
                             )
                         )
+
                         simple_messages.append(
                             ChatMessageSimple(
                                 message=TOOL_CALL_RESPONSE_CROSS_MESSAGE,

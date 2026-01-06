@@ -429,6 +429,9 @@ def run_research_agent_call(
                         msg_history.extend(failure_messages)
                         continue
 
+                    tool_call_messages: list[ChatMessageSimple] = []
+                    tool_response_messages: list[ChatMessageSimple] = []
+                    added_extra_reasoning_tokens = False
                     for tool_response in tool_responses:
                         # Extract tool_call from the response (set by run_tool_calls)
                         if tool_response.tool_call is None:
@@ -488,6 +491,11 @@ def run_research_agent_call(
                         # Store tool call with function name and arguments in separate layers
                         tool_call_message = tool_call.to_msg_str()
                         tool_call_token_count = token_counter(tool_call_message)
+                        if not added_extra_reasoning_tokens:
+                            tool_call_token_count += (
+                                llm_step_result.extra_reasoning_tokens
+                            )
+                            added_extra_reasoning_tokens = True
 
                         tool_call_msg = ChatMessageSimple(
                             message=tool_call_message,
@@ -495,8 +503,9 @@ def run_research_agent_call(
                             message_type=MessageType.TOOL_CALL,
                             tool_call_id=tool_call.tool_call_id,
                             image_files=None,
+                            extra_reasoning_details=llm_step_result.extra_reasoning_details,
                         )
-                        msg_history.append(tool_call_msg)
+                        tool_call_messages.append(tool_call_msg)
 
                         tool_response_message = tool_response.llm_facing_response
                         tool_response_token_count = token_counter(tool_response_message)
@@ -508,7 +517,10 @@ def run_research_agent_call(
                             tool_call_id=tool_call.tool_call_id,
                             image_files=None,
                         )
-                        msg_history.append(tool_response_msg)
+                        tool_response_messages.append(tool_response_msg)
+
+                    msg_history.extend(tool_call_messages)
+                    msg_history.extend(tool_response_messages)
 
                 # If it reached this point, it did not call reasoning, so here we wipe it to not save it to multiple turns
                 most_recent_reasoning = None

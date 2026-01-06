@@ -594,6 +594,7 @@ def run_deep_research_llm_loop(
 
                 citation_mapping = research_results.citation_mapping
 
+                added_extra_reasoning_tokens = False
                 for tab_index, report in enumerate(
                     research_results.intermediate_reports
                 ):
@@ -628,6 +629,9 @@ def run_deep_research_llm_loop(
 
                     tool_call_message = current_tool_call.to_msg_str()
                     tool_call_token_count = token_counter(tool_call_message)
+                    if not added_extra_reasoning_tokens:
+                        tool_call_token_count += llm_step_result.extra_reasoning_tokens
+                        added_extra_reasoning_tokens = True
 
                     tool_call_msg = ChatMessageSimple(
                         message=tool_call_message,
@@ -635,6 +639,7 @@ def run_deep_research_llm_loop(
                         message_type=MessageType.TOOL_CALL,
                         tool_call_id=current_tool_call.tool_call_id,
                         image_files=None,
+                        extra_reasoning_details=llm_step_result.extra_reasoning_details,
                     )
                     simple_chat_history.append(tool_call_msg)
 
