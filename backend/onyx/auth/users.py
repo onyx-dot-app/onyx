@@ -354,8 +354,22 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         try:
             async with get_async_session_context_manager(tenant_id) as db_session:
-                verify_email_is_invited(user_create.email)
+                # Check disposable emails first (before any other checks)
                 verify_email_domain(user_create.email)
+
+                # Only check invite list if user already exists in a tenant
+                # New tenant creation doesn't require an invite
+                if MULTI_TENANT:
+                    # Check if this is an existing user joining an existing tenant
+                    from onyx.db.users import get_user_by_email
+
+                    existing_user = get_user_by_email(user_create.email, db_session)
+                    if existing_user:
+                        # Existing user - shouldn't happen in normal signup flow
+                        verify_email_is_invited(user_create.email)
+                else:
+                    # Single tenant mode - always check invite list
+                    verify_email_is_invited(user_create.email)
                 if MULTI_TENANT:
                     tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
                         db_session, User, OAuthAccount
