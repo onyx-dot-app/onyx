@@ -11,6 +11,7 @@ from onyx.tools.tool_implementations.open_url.models import (
     WebContentProvider,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.rate_limiting import get_web_crawler_rate_limiter
 from onyx.utils.url import ssrf_safe_get
 from onyx.utils.url import SSRFException
 from onyx.utils.web_content import extract_pdf_text
@@ -20,8 +21,16 @@ from onyx.utils.web_content import title_from_url
 
 logger = setup_logger()
 
+# Global rate limiter shared across all OnyxWebCrawler instances
+# Prevents hammering external sites when DR subagents crawl in parallel
+_rate_limiter = get_web_crawler_rate_limiter()
+
 DEFAULT_TIMEOUT_SECONDS = 15
 DEFAULT_USER_AGENT = "OnyxWebCrawler/1.0 (+https://www.onyx.app)"
+
+# Maximum content length per page to prevent memory exhaustion
+# 100KB of text is typically more than enough for LLM context
+MAX_CONTENT_LENGTH = 100_000
 
 
 class OnyxWebCrawler(WebContentProvider):
@@ -49,6 +58,7 @@ class OnyxWebCrawler(WebContentProvider):
             results.append(self._fetch_url(url))
         return results
 
+    @_rate_limiter
     def _fetch_url(self, url: str) -> WebContent:
         try:
             # Use SSRF-safe request to prevent DNS rebinding attacks
@@ -115,6 +125,13 @@ class OnyxWebCrawler(WebContentProvider):
             )
             text_content = ""
             title = ""
+
+        # Truncate content to prevent memory exhaustion from large pages
+        if len(text_content) > MAX_CONTENT_LENGTH:
+            logger.info(
+                f"Truncating content from {url} ({len(text_content)} -> {MAX_CONTENT_LENGTH} chars)"
+            )
+            text_content = text_content[:MAX_CONTENT_LENGTH] + "\n\n[Content truncated]"
 
         return WebContent(
             title=title,

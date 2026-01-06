@@ -30,6 +30,7 @@ from onyx.tools.tool_implementations.web_search.utils import (
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from onyx.utils.timing import log_function_time
 from shared_configs.enums import WebSearchProviderType
 
 logger = setup_logger()
@@ -127,6 +128,7 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         """Execute a single search query and return results."""
         return list(provider.search(query))[:DEFAULT_MAX_RESULTS]
 
+    @log_function_time(print_only=True)
     def run(
         self,
         placement: Placement,

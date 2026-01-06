@@ -42,12 +42,17 @@ from onyx.tools.tool_implementations.web_search.utils import (
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from onyx.utils.timing import log_function_time
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
 URLS_FIELD = "urls"
+
+# Maximum URLs per OpenURL call to prevent resource exhaustion
+# When DR subagents request many URLs, this caps memory usage and crawl time
+MAX_URLS_PER_CALL = 10
 
 
 class IndexedDocumentRequest(BaseModel):
@@ -406,6 +411,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             )
         )
 
+    @log_function_time(print_only=True)
     def run(
         self,
         placement: Placement,
@@ -427,6 +433,13 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
 
         if not urls:
             raise ValueError("OpenURL requires at least one URL to run.")
+
+        # Cap URLs to prevent resource exhaustion from large batches
+        if len(urls) > MAX_URLS_PER_CALL:
+            logger.warning(
+                f"OpenURL called with {len(urls)} URLs, truncating to {MAX_URLS_PER_CALL}"
+            )
+            urls = urls[:MAX_URLS_PER_CALL]
 
         self.emitter.emit(
             Packet(

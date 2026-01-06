@@ -64,6 +64,7 @@ from onyx.tools.utils import generate_tools_description
 from onyx.tracing.framework.create import function_span
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
 
@@ -189,6 +190,7 @@ def generate_intermediate_report(
         return final_report
 
 
+@log_function_time(print_only=True)
 def run_research_agent_call(
     research_agent_call: ToolCallKickoff,
     parent_tool_call_id: str,
@@ -545,6 +547,7 @@ def run_research_agent_call(
             return None
 
 
+@log_function_time(print_only=True)
 def run_research_agent_calls(
     research_agent_calls: list[ToolCallKickoff],
     parent_tool_call_ids: list[str],
@@ -578,9 +581,12 @@ def run_research_agent_calls(
         )
     ]
 
+    # Enforce max 3 parallel subagents to prevent resource exhaustion
+    # This matches the prompt instruction but provides a hard code limit
     research_agent_call_results = run_functions_tuples_in_parallel(
         functions_with_args,
         allow_failures=False,
+        max_workers=3,
     )
 
     updated_citation_mapping = citation_mapping

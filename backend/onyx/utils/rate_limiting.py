@@ -107,3 +107,18 @@ _exa_rate_limiter = ThreadSafeRateLimiter(
 def get_exa_rate_limiter() -> ThreadSafeRateLimiter:
     """Get the global Exa API rate limiter."""
     return _exa_rate_limiter
+
+
+# Global rate limiter for web crawler
+# Limits outbound HTTP requests to prevent hammering external sites (e.g., GitHub)
+# and avoid 429 rate limit errors when DR subagents crawl in parallel
+_web_crawler_rate_limiter = ThreadSafeRateLimiter(
+    max_calls=10,
+    period=1.0,
+    name="web_crawler",
+)
+
+
+def get_web_crawler_rate_limiter() -> ThreadSafeRateLimiter:
+    """Get the global web crawler rate limiter."""
+    return _web_crawler_rate_limiter

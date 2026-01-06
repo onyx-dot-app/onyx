@@ -1,6 +1,7 @@
 import datetime
 import json
 import os
+import threading
 from collections.abc import Generator
 from datetime import timedelta
 from uuid import UUID
@@ -255,6 +256,9 @@ def get_chat_session(
     db_session: Session = Depends(get_session),
 ) -> ChatSessionDetailResponse:
     user_id = user.id if user is not None else None
+    logger.info(f"Getting chat session {session_id} for user {user_id}")
+    thread_get_ident = threading.get_ident()
+    logger.info(f"Thread ID: {thread_get_ident}")
     try:
         chat_session = get_chat_session_by_id(
             chat_session_id=session_id,

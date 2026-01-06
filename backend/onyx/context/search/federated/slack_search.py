@@ -1,3 +1,4 @@
+import hashlib
 import json
 import re
 import time
@@ -58,6 +59,9 @@ HIGHLIGHT_END_CHAR = "\ue001"
 
 CHANNEL_METADATA_CACHE_TTL = 60 * 60 * 24  # 24 hours
 USER_PROFILE_CACHE_TTL = 60 * 60 * 24  # 24 hours
+SLACK_QUERY_CACHE_TTL = (
+    1800  # 30 minutes - for deduplicating parallel DR subagent queries
+)
 SLACK_THREAD_CONTEXT_WINDOW = 3  # Number of messages before matched message to include
 CHANNEL_METADATA_MAX_RETRIES = 3  # Maximum retry attempts for channel metadata fetching
 CHANNEL_METADATA_RETRY_DELAY = 1  # Initial retry delay in seconds (exponential backoff)
@@ -458,6 +462,25 @@ def query_slack(
     # Detect if query asks for most recent results
     sort_by_time = is_recency_query(original_query.query)
 
+    # Build cache key from query parameters
+    # Include token hash to avoid cross-workspace cache pollution
+    token_hash = hashlib.sha256(access_token.encode()).hexdigest()[:8]
+    cache_params = f"{final_query}:{limit}:{sort_by_time}:{token_hash}"
+    cache_hash = hashlib.sha256(cache_params.encode()).hexdigest()[:16]
+    cache_key = f"slack_query_cache:{cache_hash}"
+
+    # Try cache first (for deduplicating parallel DR subagent queries)
+    redis_client = get_redis_client()
+    try:
+        cached = redis_client.get(cache_key)
+        if cached:
+            logger.info(f"Slack query cache HIT: {cache_key}")
+            cached_str = cached.decode("utf-8") if isinstance(cached, bytes) else cached
+            data = json.loads(cached_str)
+            return SlackQueryResult.model_validate(data)
+    except Exception as e:
+        logger.warning(f"Slack query cache read error: {e}")
+
     slack_client = WebClient(token=access_token)
     try:
         search_params: dict[str, Any] = {
@@ -582,9 +605,18 @@ def query_slack(
             )
         )
 
-    return SlackQueryResult(
+    result = SlackQueryResult(
         messages=slack_messages, filtered_channels=filtered_channels
     )
+
+    # Cache the result for parallel DR subagent deduplication
+    try:
+        redis_client.set(cache_key, result.model_dump_json(), ex=SLACK_QUERY_CACHE_TTL)
+        logger.info(f"Slack query cache SET: {cache_key}")
+    except Exception as e:
+        logger.warning(f"Slack query cache write error: {e}")
+
+    return result
 
 
 def merge_slack_messages(
