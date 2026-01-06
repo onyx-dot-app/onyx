@@ -51,9 +51,9 @@ class SerperClient(WebSearchProvider, WebContentProvider):
 
         return [
             WebSearchResult(
-                title=result["title"],
-                link=result["link"],
-                snippet=result["snippet"],
+                title=result.get("title"),
+                link=result.get("link"),
+                snippet=result.get("snippet", ""),
                 author=None,
                 published_date=None,
             )
