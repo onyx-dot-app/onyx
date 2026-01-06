@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
 
 # TODO: remove this once openapi fixes the anyof/none issues
-OPENAPI_VERSION = "3.0.3"
+OPENAPI_VERSION = "3.1.0"
 
 
 def generate_schema(output_path: str) -> bool:
