@@ -784,7 +784,7 @@ pyjwt==2.10.1
     #   simple-salesforce
 pympler==1.1
     # via onyx
-pynacl==1.6.1
+pynacl==1.6.2
     # via pygithub
 pyparsing==3.2.5
     # via httplib2
