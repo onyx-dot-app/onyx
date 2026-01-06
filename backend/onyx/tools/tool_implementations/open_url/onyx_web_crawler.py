@@ -1,12 +1,7 @@
 from __future__ import annotations
 
-import io
 from collections.abc import Sequence
-from urllib.parse import unquote
-from urllib.parse import urlparse
 
-from onyx.file_processing.extract_file_text import read_pdf_file
-from onyx.file_processing.file_types import PDF_MIME_TYPE
 from onyx.file_processing.html_utils import ParsedHTML
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.tools.tool_implementations.open_url.models import (
@@ -18,6 +13,10 @@ from onyx.tools.tool_implementations.open_url.models import (
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import ssrf_safe_get
 from onyx.utils.url import SSRFException
+from onyx.utils.web_content import extract_pdf_text
+from onyx.utils.web_content import is_pdf_resource
+from onyx.utils.web_content import title_from_pdf_metadata
+from onyx.utils.web_content import title_from_url
 
 logger = setup_logger()
 
@@ -93,8 +92,11 @@ class OnyxWebCrawler(WebContentProvider):
                 scrape_successful=False,
             )
 
-        if self._is_pdf_response(response, url):
-            text_content, title = self._extract_pdf_text(response, url)
+        content_type = response.headers.get("Content-Type", "")
+        content_sniff = response.content[:1024] if response.content else None
+        if is_pdf_resource(url, content_type, content_sniff):
+            text_content, metadata = extract_pdf_text(response.content)
+            title = title_from_pdf_metadata(metadata) or title_from_url(url)
             return WebContent(
                 title=title,
                 link=url,
@@ -121,47 +123,3 @@ class OnyxWebCrawler(WebContentProvider):
             published_date=None,
             scrape_successful=bool(text_content.strip()),
         )
-
-    def _is_pdf_response(self, response: object, url: str) -> bool:
-        content_type = ""
-        if hasattr(response, "headers"):
-            content_type = response.headers.get("Content-Type", "")
-        media_type = content_type.split(";", 1)[0].strip().lower()
-        if media_type == PDF_MIME_TYPE:
-            return True
-
-        parsed_url = urlparse(url)
-        if parsed_url.path.lower().endswith(".pdf"):
-            return True
-
-        if hasattr(response, "content"):
-            content = response.content
-            snippet = content[:1024].lstrip()
-            if snippet.startswith(b"%PDF-"):
-                return True
-
-        return False
-
-    def _extract_pdf_text(self, response: object, url: str) -> tuple[str, str]:
-        pdf_bytes = response.content if hasattr(response, "content") else b""
-        text_content, metadata, _ = read_pdf_file(io.BytesIO(pdf_bytes))
-        title = self._pdf_title(metadata) or self._title_from_url(url)
-        return text_content or "", title
-
-    @staticmethod
-    def _pdf_title(metadata: dict[str, object]) -> str:
-        if not metadata:
-            return ""
-        for key in ("Title", "title"):
-            value = metadata.get(key)
-            if isinstance(value, str) and value.strip():
-                return value.strip()
-        return ""
-
-    @staticmethod
-    def _title_from_url(url: str) -> str:
-        parsed = urlparse(url)
-        filename = parsed.path.rsplit("/", 1)[-1]
-        if not filename:
-            return ""
-        return unquote(filename)

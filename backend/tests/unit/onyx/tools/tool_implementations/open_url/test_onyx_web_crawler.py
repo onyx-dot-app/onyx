@@ -1,20 +1,20 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import pytest
+from pydantic import BaseModel
 
 import onyx.tools.tool_implementations.open_url.onyx_web_crawler as crawler_module
 from onyx.tools.tool_implementations.open_url.onyx_web_crawler import OnyxWebCrawler
 
 
-@dataclass
-class FakeResponse:
+class FakeResponse(BaseModel):
     status_code: int
     headers: dict[str, str]
     content: bytes
     text: str = ""
 
 
-def test_fetch_url_pdf_with_content_type(monkeypatch: object) -> None:
+def test_fetch_url_pdf_with_content_type(monkeypatch: pytest.MonkeyPatch) -> None:
     crawler = OnyxWebCrawler()
     response = FakeResponse(
         status_code=200,
@@ -29,8 +29,8 @@ def test_fetch_url_pdf_with_content_type(monkeypatch: object) -> None:
     )
     monkeypatch.setattr(
         crawler_module,
-        "read_pdf_file",
-        lambda *args, **kwargs: ("pdf text", {"Title": "Doc Title"}, []),
+        "extract_pdf_text",
+        lambda *args, **kwargs: ("pdf text", {"Title": "Doc Title"}),
     )
 
     result = crawler._fetch_url("https://example.com/report.pdf")
@@ -40,7 +40,7 @@ def test_fetch_url_pdf_with_content_type(monkeypatch: object) -> None:
     assert result.scrape_successful is True
 
 
-def test_fetch_url_pdf_with_signature(monkeypatch: object) -> None:
+def test_fetch_url_pdf_with_signature(monkeypatch: pytest.MonkeyPatch) -> None:
     crawler = OnyxWebCrawler()
     response = FakeResponse(
         status_code=200,
@@ -55,8 +55,8 @@ def test_fetch_url_pdf_with_signature(monkeypatch: object) -> None:
     )
     monkeypatch.setattr(
         crawler_module,
-        "read_pdf_file",
-        lambda *args, **kwargs: ("pdf text", {}, []),
+        "extract_pdf_text",
+        lambda *args, **kwargs: ("pdf text", {}),
     )
 
     result = crawler._fetch_url("https://example.com/files/file.pdf")
