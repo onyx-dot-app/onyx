@@ -1,20 +1,20 @@
 from __future__ import annotations
 
-import pytest
-from pydantic import BaseModel
+from dataclasses import dataclass
 
 import onyx.tools.tool_implementations.open_url.onyx_web_crawler as crawler_module
 from onyx.tools.tool_implementations.open_url.onyx_web_crawler import OnyxWebCrawler
 
 
-class FakeResponse(BaseModel):
+@dataclass
+class FakeResponse:
     status_code: int
     headers: dict[str, str]
     content: bytes
     text: str = ""
 
 
-def test_fetch_url_pdf_with_content_type(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fetch_url_pdf_with_content_type(monkeypatch: object) -> None:
     crawler = OnyxWebCrawler()
     response = FakeResponse(
         status_code=200,
@@ -40,7 +40,7 @@ def test_fetch_url_pdf_with_content_type(monkeypatch: pytest.MonkeyPatch) -> Non
     assert result.scrape_successful is True
 
 
-def test_fetch_url_pdf_with_signature(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fetch_url_pdf_with_signature(monkeypatch: object) -> None:
     crawler = OnyxWebCrawler()
     response = FakeResponse(
         status_code=200,
