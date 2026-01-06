@@ -145,6 +145,7 @@ def _validate_vertex_credentials_file(credentials_path: Path) -> None:
         ) from exc
 
 
+@pytest.mark.skip(reason="OpenAI prompt caching is unreliable")
 @pytest.mark.skipif(
     not os.environ.get("OPENAI_API_KEY"),
     reason="OpenAI API key not available",
