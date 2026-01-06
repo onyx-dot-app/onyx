@@ -182,10 +182,9 @@ export function ImageGenFormWrapper<T extends FormValues>({
           });
         }
       } else {
-        // New credentials mode - check if API key was changed from initial (masked) value
-        const initialApiKey = (mergedInitialValues as Record<string, unknown>)
-          .api_key as string | undefined;
-        const apiKeyChanged = apiKeyValue !== initialApiKey;
+        // New credentials mode - check if API key was changed from masked value
+        // A masked key contains "****", so if present, user hasn't entered a new key
+        const apiKeyChanged = !apiKeyValue?.includes("****");
 
         // Test the API key first (only if changed or creating new config)
         if (apiKeyChanged) {
