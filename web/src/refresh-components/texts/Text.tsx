@@ -198,8 +198,8 @@ export default function Text({
         inverted ? colors.inverted[color] : colors[color],
         nowrap && "whitespace-nowrap",
         // NOTE: We want a small, horizontal padding applied to text components to visually
-        // complement the white-space implicit with line-height. We apply to the before
-        // pseudo-element such that padding applied to the tag directly is additive making the
+        // complement the white-space implicit with line-height. We apply to the before and after
+        // pseudo-elements such that padding applied to the tag directly is additive making the
         // likelihood of 2px offsets with other text elements much lower.
         "before:content-[''] before:pl-[2px] after:content-[''] after:pr-[2px]",
         className
