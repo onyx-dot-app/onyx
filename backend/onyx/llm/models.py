@@ -39,8 +39,8 @@ OPENAI_REASONING_EFFORT: dict[ReasoningEffort | None, str] = {
 # These are used when LiteLLM's reasoning_effort -> thinking translation fails
 # (e.g., Vertex AI doesn't receive the required beta header from LiteLLM).
 # See: https://github.com/BerriAI/litellm/issues/18241
+# Note: OFF is not included because the thinking param is omitted entirely when OFF.
 CLAUDE_REASONING_BUDGET_TOKENS: dict[ReasoningEffort, int] = {
-    ReasoningEffort.OFF: 0,
     ReasoningEffort.LOW: 1024,
     ReasoningEffort.MEDIUM: 5000,
     ReasoningEffort.HIGH: 10000,
