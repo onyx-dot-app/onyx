@@ -355,6 +355,7 @@ def translate_assistant_message_to_packets(
                 tool_calls_by_turn[turn_num] = []
             tool_calls_by_turn[turn_num].append(tool_call)
 
+        tool_call_turns = set(tool_calls_by_turn.keys())
         # Process each turn in order
         for turn_num in sorted(tool_calls_by_turn.keys()):
             tool_calls_in_turn = tool_calls_by_turn[turn_num]
@@ -369,7 +370,10 @@ def translate_assistant_message_to_packets(
                 None,
             )
             if turn_reasoning:
-                reasoning_turn_index = turn_num - 1 if turn_num > 0 else 0
+                # Use the previous turn slot when free to preserve reasoning-before-tool ordering.
+                reasoning_turn_index = turn_num
+                if turn_num > 0 and (turn_num - 1) not in tool_call_turns:
+                    reasoning_turn_index = turn_num - 1
                 packet_list.extend(
                     create_reasoning_packets(
                         reasoning_text=turn_reasoning,
