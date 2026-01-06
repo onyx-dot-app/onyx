@@ -92,10 +92,17 @@ def _get_tenant_override(tenant_id: str, field_name: str) -> int | None:
         overrides: TenantUsageLimitOverrides | None = get_overrides_fn(tenant_id)
         if overrides is not None:
             # Get the field value - None means not set, use default
-            return getattr(overrides, field_name, None)
+            fv = getattr(overrides, field_name, None)
+            logger.debug(
+                "Using tenant override for %s.%s: %s", tenant_id, field_name, fv
+            )
+            return fv
     except Exception:
-        # EE module not available or error - fall back to defaults
-        pass
+        logger.exception(
+            "Error getting tenant override for %s.%s falling back to defaults",
+            tenant_id,
+            field_name,
+        )
     return None
 
 
