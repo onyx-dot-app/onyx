@@ -432,6 +432,8 @@ class OpenSearchClient:
         Args:
             body: The body of the search request. See the OpenSearch
                 documentation for more information on search request bodies.
+                TODO(andrei): Make this a more deep interface; callers shouldn't
+                need to know to set _source: False for example.
 
         Raises:
             Exception: There was an error searching the index.

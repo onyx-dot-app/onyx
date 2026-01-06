@@ -21,6 +21,8 @@ from onyx.document_index.opensearch.schema import TITLE_VECTOR_FIELD_NAME
 # The number and ordering of weights should match the query clauses. The values
 # of the weights should sum to 1.
 
+# TODO(andrei): Turn all magic dictionaries to pydantic models.
+
 MIN_MAX_NORMALIZATION_PIPELINE_NAME = "normalization_pipeline_min_max"
 MIN_MAX_NORMALIZATION_PIPELINE_CONFIG = {
     "description": "Normalization for keyword and vector scores using min-max",

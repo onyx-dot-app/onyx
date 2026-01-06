@@ -49,7 +49,7 @@ class TenantState(BaseModel):
 
     model_config = {"frozen": True}
 
-    tenant_id: str | None
+    tenant_id: str
     multitenant: bool
 
     @model_validator(mode="after")

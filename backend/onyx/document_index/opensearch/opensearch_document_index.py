@@ -121,6 +121,7 @@ def _convert_opensearch_chunk_to_inference_chunk_uncleaned(
 def _convert_inference_chunk_uncleaned_to_inference_chunk(
     inference_chunk_uncleaned: InferenceChunkUncleaned,
 ) -> InferenceChunk:
+    # TODO(andrei): Implement this.
     return inference_chunk_uncleaned.to_inference_chunk()
 
 
@@ -227,7 +228,7 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
             # TODO(andrei): Sus. Do not plug this into production until all
             # instances where tenant ID is passed into a method call get
             # refactored to passing this data in on class init.
-            tenant_state=TenantState(tenant_id=None, multitenant=multitenant),
+            tenant_state=TenantState(tenant_id="", multitenant=multitenant),
         )
 
     @staticmethod
