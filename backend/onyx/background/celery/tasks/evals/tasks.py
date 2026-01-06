@@ -5,6 +5,8 @@ from typing import Any
 from celery import shared_task
 from celery import Task
 
+from onyx.configs.app_configs import BRAINTRUST_API_KEY
+from onyx.configs.app_configs import BRAINTRUST_PROJECT
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.app_configs import SCHEDULED_EVAL_DATASET_NAMES
 from onyx.configs.app_configs import SCHEDULED_EVAL_PERMISSIONS_EMAIL
@@ -55,18 +57,14 @@ def scheduled_eval_task(self: Task, **kwargs: Any) -> None:
     Configure via environment variables (with defaults):
     - SCHEDULED_EVAL_DATASET_NAMES: Comma-separated list of Braintrust dataset names
     - SCHEDULED_EVAL_PERMISSIONS_EMAIL: Email for search permissions (default: roshan@onyx.app)
-    - SCHEDULED_EVAL_PROJECT: Braintrust project name (default: st-dev)
+    - SCHEDULED_EVAL_PROJECT: Braintrust project name
     """
-    import os
-
-    from onyx.configs.app_configs import BRAINTRUST_API_KEY
-
-    # Ensure BRAINTRUST_API_KEY is in the environment for the Braintrust SDK
-    if BRAINTRUST_API_KEY and not os.environ.get("BRAINTRUST_API_KEY"):
-        os.environ["BRAINTRUST_API_KEY"] = BRAINTRUST_API_KEY
-
-    if not os.environ.get("BRAINTRUST_API_KEY"):
+    if not BRAINTRUST_API_KEY:
         logger.error("BRAINTRUST_API_KEY is not configured, cannot run scheduled evals")
+        return
+
+    if not BRAINTRUST_PROJECT:
+        logger.error("BRAINTRUST_PROJECT is not configured, cannot run scheduled evals")
         return
 
     if not SCHEDULED_EVAL_DATASET_NAMES:
