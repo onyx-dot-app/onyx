@@ -174,6 +174,9 @@ export interface ImageGenerationConfigUpdateOptions {
   apiBase?: string;
   apiVersion?: string;
   deploymentName?: string;
+
+  // If true, apiKey was changed by user; if false, backend preserves existing key
+  apiKeyChanged?: boolean;
 }
 
 /**
@@ -197,6 +200,8 @@ export async function updateImageGenerationConfig(
       api_base: options.apiBase,
       api_version: options.apiVersion,
       deployment_name: options.deploymentName,
+      // If false, backend preserves existing API key
+      api_key_changed: options.apiKeyChanged ?? false,
     }),
   });
 

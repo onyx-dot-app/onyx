@@ -51,12 +51,13 @@ export function ImageGenFormWrapper<T extends FormValues>({
   const isEditMode = !!existingConfig;
 
   // Compute API key options from existing providers matching this image provider
+  // API keys from LLM providers are already masked by backend (first 4 + **** + last 4)
   const apiKeyOptions = useMemo(() => {
     return existingProviders
       .filter((p) => p.provider === imageProvider.provider_name)
       .map((provider) => ({
         value: `existing:${provider.id}:${provider.name}`,
-        label: `${provider.api_key || "****"}`,
+        label: provider.api_key || "****",
       }));
   }, [existingProviders, imageProvider.provider_name]);
 
@@ -181,20 +182,27 @@ export function ImageGenFormWrapper<T extends FormValues>({
           });
         }
       } else {
-        // New credentials mode - test the new API key first
-        const result = await testImageGenerationApiKey(payload.modelName, {
-          provider: payload.provider,
-          apiKey: payload.apiKey,
-          apiBase: payload.apiBase,
-          apiVersion: payload.apiVersion,
-          deploymentName: payload.deploymentName,
-        });
+        // New credentials mode - check if API key was changed from initial (masked) value
+        const initialApiKey = (mergedInitialValues as Record<string, unknown>)
+          .api_key as string | undefined;
+        const apiKeyChanged = apiKeyValue !== initialApiKey;
 
-        if (!result.ok) {
-          setApiStatus("error");
-          setErrorMessage(result.errorMessage || "API key validation failed");
-          setIsSubmitting(false);
-          return;
+        // Test the API key first (only if changed or creating new config)
+        if (apiKeyChanged) {
+          const result = await testImageGenerationApiKey(payload.modelName, {
+            provider: payload.provider,
+            apiKey: payload.apiKey,
+            apiBase: payload.apiBase,
+            apiVersion: payload.apiVersion,
+            deploymentName: payload.deploymentName,
+          });
+
+          if (!result.ok) {
+            setApiStatus("error");
+            setErrorMessage(result.errorMessage || "API key validation failed");
+            setIsSubmitting(false);
+            return;
+          }
         }
 
         // Create or update config
@@ -206,6 +214,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
             apiBase: payload.apiBase,
             apiVersion: payload.apiVersion,
             deploymentName: payload.deploymentName,
+            apiKeyChanged,
           });
         } else {
           await createImageGenerationConfig({
