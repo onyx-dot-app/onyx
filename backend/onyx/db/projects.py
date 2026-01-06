@@ -72,7 +72,6 @@ def create_user_files(
             id=new_id,
             user_id=user.id if user else None,
             file_id=file_path,
-            document_id=str(new_id),
             name=file.filename,
             token_count=categorized_files.acceptable_file_to_token_count[
                 file.filename or ""
