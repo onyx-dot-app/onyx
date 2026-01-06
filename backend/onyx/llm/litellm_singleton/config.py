@@ -13,7 +13,13 @@ def configure_litellm_settings() -> None:
     # parameters like frequency and presence, just ignore them
     litellm.drop_params = True
     litellm.telemetry = False
-    litellm.modify_params = True
+    # whuang: Claude 4-5 sonnet DR is emitting tool calls with NO thinking blocks like
+    # tool call (with thinking block) --> we send tool response with thinking block -->
+    # --> 2nd tool call (no thinking block) --> 2nd tool response no thinking block
+    # On our tool response message, litellm.modify_params=True drops the thinking param (forcing thinking=None)
+    # Anthropic then says 'thinking=None we can't accept thought signatures from your first tool call'
+    # Disabling this setting seems to completely fix this issue and I'm not yet sure why
+    # litellm.modify_params = False
     litellm.add_function_to_prompt = False
 
 
