@@ -15,6 +15,7 @@ from onyx.server.features.web_search.models import WebSearchToolResponse
 from onyx.server.features.web_search.models import WebSearchWithContentResponse
 from onyx.server.manage.web_search.models import WebContentProviderView
 from onyx.server.manage.web_search.models import WebSearchProviderView
+from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.tools.models import LlmOpenUrlResult
 from onyx.tools.models import LlmWebSearchResult
 from onyx.tools.tool_implementations.open_url.models import WebContentProvider
@@ -36,7 +37,7 @@ from onyx.utils.logger import setup_logger
 from shared_configs.enums import WebContentProviderType
 from shared_configs.enums import WebSearchProviderType
 
-router = APIRouter(prefix="/web-search")
+router = APIRouter(prefix="/web-search", tags=PUBLIC_API_TAGS)
 logger = setup_logger()
 
 

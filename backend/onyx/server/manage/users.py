@@ -89,6 +89,7 @@ from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
 from onyx.server.models import MinimalUserSnapshot
 from onyx.server.utils import BasicAuthenticationError
+from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from onyx.utils.variable_functionality import (
@@ -103,7 +104,7 @@ router = APIRouter()
 USERS_PAGE_SIZE = 10
 
 
-@router.patch("/manage/set-user-role")
+@router.patch("/manage/set-user-role", tags=PUBLIC_API_TAGS)
 def set_user_role(
     user_role_update_request: UserRoleUpdateRequest,
     current_user: User = Depends(current_admin_user),
@@ -159,7 +160,7 @@ async def test_upsert_user(
     return FullUserSnapshot.from_user_model(user) if user else None
 
 
-@router.get("/manage/users/accepted")
+@router.get("/manage/users/accepted", tags=PUBLIC_API_TAGS)
 def list_accepted_users(
     q: str | None = Query(default=None),
     page_num: int = Query(0, ge=0),
@@ -200,7 +201,7 @@ def list_accepted_users(
     )
 
 
-@router.get("/manage/users/invited")
+@router.get("/manage/users/invited", tags=PUBLIC_API_TAGS)
 def list_invited_users(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
@@ -216,7 +217,7 @@ def list_invited_users(
     return [InvitedUserSnapshot(email=email) for email in filtered_invited_emails]
 
 
-@router.get("/manage/users")
+@router.get("/manage/users", tags=PUBLIC_API_TAGS)
 def list_all_users(
     q: str | None = None,
     accepted_page: int | None = None,
@@ -355,7 +356,7 @@ def download_users_csv(
     )
 
 
-@router.put("/manage/admin/users")
+@router.put("/manage/admin/users", tags=PUBLIC_API_TAGS)
 def bulk_invite_users(
     emails: list[str] = Body(..., embed=True),
     current_user: User | None = Depends(current_admin_user),
@@ -430,7 +431,7 @@ def bulk_invite_users(
         raise e
 
 
-@router.patch("/manage/admin/remove-invited-user")
+@router.patch("/manage/admin/remove-invited-user", tags=PUBLIC_API_TAGS)
 def remove_invited_user(
     user_email: UserByEmail,
     _: User | None = Depends(current_admin_user),
@@ -458,7 +459,7 @@ def remove_invited_user(
     return number_of_invited_users
 
 
-@router.patch("/manage/admin/deactivate-user")
+@router.patch("/manage/admin/deactivate-user", tags=PUBLIC_API_TAGS)
 def deactivate_user_api(
     user_email: UserByEmail,
     current_user: User | None = Depends(current_admin_user),
@@ -485,7 +486,7 @@ def deactivate_user_api(
     deactivate_user(user_to_deactivate, db_session)
 
 
-@router.delete("/manage/admin/delete-user")
+@router.delete("/manage/admin/delete-user", tags=PUBLIC_API_TAGS)
 async def delete_user(
     user_email: UserByEmail,
     _: User | None = Depends(current_admin_user),
@@ -522,7 +523,7 @@ async def delete_user(
         raise HTTPException(status_code=500, detail="Error deleting user")
 
 
-@router.patch("/manage/admin/activate-user")
+@router.patch("/manage/admin/activate-user", tags=PUBLIC_API_TAGS)
 def activate_user_api(
     user_email: UserByEmail,
     _: User | None = Depends(current_admin_user),
@@ -550,7 +551,7 @@ def get_valid_domains(
 """Endpoints for all"""
 
 
-@router.get("/users")
+@router.get("/users", tags=PUBLIC_API_TAGS)
 def list_all_users_basic_info(
     _: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
@@ -559,7 +560,7 @@ def list_all_users_basic_info(
     return [MinimalUserSnapshot(id=user.id, email=user.email) for user in users]
 
 
-@router.get("/get-user-role")
+@router.get("/get-user-role", tags=PUBLIC_API_TAGS)
 async def get_user_role(user: User = Depends(current_user)) -> UserRoleResponse:
     if user is None:
         raise ValueError("Invalid or missing user.")
@@ -622,7 +623,7 @@ def get_current_token_creation(
         return None
 
 
-@router.get("/me")
+@router.get("/me", tags=PUBLIC_API_TAGS)
 def verify_user_logged_in(
     request: Request,
     user: User | None = Depends(optional_user),
