@@ -121,17 +121,17 @@ class DisposableEmailValidator:
         """
         # Fast path: return cached domains if still fresh
         if self._domains and not self._should_refresh():
-            return self._domains
+            return self._domains.copy()
 
         # Slow path: need to refresh
         with self._fetch_lock:
             # Double-check after acquiring lock
             if self._domains and not self._should_refresh():
-                return self._domains
+                return self._domains.copy()
 
             self._domains = self._fetch_domains()
             self._last_fetch_time = time.time()
-            return self._domains
+            return self._domains.copy()
 
     def is_disposable(self, email: str) -> bool:
         """
