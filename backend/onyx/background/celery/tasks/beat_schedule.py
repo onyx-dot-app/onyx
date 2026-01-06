@@ -199,7 +199,7 @@ if SCHEDULED_EVAL_DATASET_NAMES:
             "schedule": crontab(
                 hour=0,
                 minute=0,
-                day_of_week=6,
+                day_of_week=0,
             ),
             "options": {
                 "priority": OnyxCeleryPriority.LOW,
