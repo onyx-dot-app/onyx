@@ -154,6 +154,7 @@ def get_user_chat_sessions(
     db_session: Session = Depends(get_session),
     project_id: int | None = None,
     only_non_project_chats: bool = True,
+    include_failed_chats: bool = False,
 ) -> ChatSessionsResponse:
     user_id = user.id if user is not None else None
 
@@ -164,6 +165,7 @@ def get_user_chat_sessions(
             db_session=db_session,
             project_id=project_id,
             only_non_project_chats=only_non_project_chats,
+            include_failed_chats=include_failed_chats,
         )
 
     except ValueError:
