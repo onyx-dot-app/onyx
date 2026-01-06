@@ -32,12 +32,12 @@ def fetch_usage_limit_overrides() -> dict[str, TenantUsageLimitOverrides]:
         response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
 
-        data = response.json()
-        tenant_overrides = data.get("tenant_overrides", {})
+        tenant_overrides = response.json()
 
         # Parse each tenant's overrides
         result: dict[str, TenantUsageLimitOverrides] = {}
-        for tenant_id, override_data in tenant_overrides.items():
+        for override_data in tenant_overrides:
+            tenant_id = override_data["tenant_id"]
             try:
                 result[tenant_id] = TenantUsageLimitOverrides(**override_data)
             except Exception as e:
@@ -66,6 +66,9 @@ def load_usage_limit_overrides() -> dict[str, TenantUsageLimitOverrides]:
     logger.info("Loading tenant usage limit overrides from control plane...")
     overrides = fetch_usage_limit_overrides()
     _tenant_usage_limit_overrides = overrides
+    logger.debug(
+        "Loaded usage limit overrides for %s tenants: %s", len(overrides), overrides
+    )
 
     if overrides:
         logger.info(f"Loaded usage limit overrides for {len(overrides)} tenants")

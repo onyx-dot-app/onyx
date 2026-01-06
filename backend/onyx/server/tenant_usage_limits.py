@@ -34,6 +34,8 @@ class TenantUsageLimitOverrides(BaseModel):
     - Field set to a positive integer: Use that specific limit
     """
 
+    tenant_id: str | None = None
+
     llm_cost_cents_trial: int | None = None
     llm_cost_cents_paid: int | None = None
     chunks_indexed_trial: int | None = None
