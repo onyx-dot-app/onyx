@@ -5,6 +5,7 @@ import json
 from datetime import datetime
 from datetime import timezone
 
+from onyx.configs.model_configs import PROMPT_CACHE_REDIS_TTL_MULTIPLIER
 from onyx.key_value_store.store import PgRedisKVStore
 from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.prompt_cache.models import CacheMetadata
@@ -17,7 +18,8 @@ logger = setup_logger()
 REDIS_KEY_PREFIX = "prompt_cache:"
 # Cache TTL multiplier - store caches slightly longer than provider TTL
 # This allows for some clock skew and ensures we don't lose cache metadata prematurely
-CACHE_TTL_MULTIPLIER = 1.2
+# Value is configurable via PROMPT_CACHE_REDIS_TTL_MULTIPLIER env var (default: 1.2)
+CACHE_TTL_MULTIPLIER = PROMPT_CACHE_REDIS_TTL_MULTIPLIER
 
 
 class CacheManager:

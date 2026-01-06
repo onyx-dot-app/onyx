@@ -440,8 +440,8 @@ def translate_history_to_llm_format(
     if last_cacheable_msg_idx != -1:
         processed_messages, _ = process_with_prompt_cache(
             llm_config=llm_config,
-            cacheable_prefix=messages[:last_cacheable_msg_idx],
-            suffix=messages[last_cacheable_msg_idx:],
+            cacheable_prefix=messages[: last_cacheable_msg_idx + 1],
+            suffix=messages[last_cacheable_msg_idx + 1 :],
             continuation=False,
         )
         assert isinstance(processed_messages, list)  # for mypy
