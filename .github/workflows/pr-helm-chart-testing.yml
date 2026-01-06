@@ -41,7 +41,10 @@ jobs:
           version: v3.19.0
 
       - name: Set up chart-testing
-        uses: helm/chart-testing-action@6ec842c01de15ebb84c8627d2744a0c2f2755c9f # ratchet:helm/chart-testing-action@v2.8.0
+        # NOTE: This is Jamison's patch from https://github.com/helm/chart-testing-action/pull/194
+        uses: helm/chart-testing-action@8958a6ac472cbd8ee9a8fbb6f1acbc1b0e966e44 # zizmor: ignore[impostor-commit]
+        with:
+          uv_version: "0.9.9"
 
       # even though we specify chart-dirs in ct.yaml, it isn't used by ct for the list-changed command...
       - name: Run chart-testing (list-changed)
