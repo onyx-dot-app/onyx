@@ -380,11 +380,13 @@ def update_config(
         actual_api_key = config_update.api_key
         if config_update.source_llm_provider_id is None and old_provider:
             # Check if we should preserve existing API key:
-            # - api_key_changed=False AND provided key looks masked (contains "****")
+            # - api_key_changed=False AND (key is None/empty OR looks masked)
             provided_key_is_masked = (
                 config_update.api_key and "****" in config_update.api_key
             )
-            if not config_update.api_key_changed and provided_key_is_masked:
+            if not config_update.api_key_changed and (
+                not config_update.api_key or provided_key_is_masked
+            ):
                 # Preserve existing API key when user didn't change it
                 actual_api_key = old_provider.api_key
 
