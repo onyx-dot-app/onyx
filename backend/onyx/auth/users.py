@@ -333,6 +333,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             user_create.password, cast(schemas.UC, user_create)
         )
 
+        # Check for disposable emails BEFORE provisioning tenant
+        # This prevents creating tenants for throwaway email addresses
+        verify_email_domain(user_create.email)
+
         user_count: int | None = None
         referral_source = (
             request.cookies.get("referral_source", None)
@@ -354,9 +358,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         try:
             async with get_async_session_context_manager(tenant_id) as db_session:
-                # Check disposable emails first (before any other checks)
-                verify_email_domain(user_create.email)
-
                 # Check invite list based on deployment mode
                 if MULTI_TENANT:
                     # Multi-tenant: Only require invite for existing tenants
