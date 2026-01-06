@@ -66,9 +66,6 @@ def load_usage_limit_overrides() -> dict[str, TenantUsageLimitOverrides]:
     logger.info("Loading tenant usage limit overrides from control plane...")
     overrides = fetch_usage_limit_overrides()
     _tenant_usage_limit_overrides = overrides
-    logger.debug(
-        "Loaded usage limit overrides for %s tenants: %s", len(overrides), overrides
-    )
 
     if overrides:
         logger.info(f"Loaded usage limit overrides for {len(overrides)} tenants")
