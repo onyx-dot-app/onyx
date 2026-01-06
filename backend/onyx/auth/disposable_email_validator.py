@@ -33,11 +33,11 @@ class DisposableEmailValidator:
             with cls._lock:
                 if cls._instance is None:
                     cls._instance = super().__new__(cls)
-                    cls._instance._initialized = False
+                    cls._instance._initialized: bool = False
         return cls._instance
 
     def __init__(self) -> None:
-        if self._initialized:
+        if getattr(self, "_initialized", False):
             return
 
         self._domains: Set[str] = set()
