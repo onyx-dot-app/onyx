@@ -72,7 +72,7 @@ export function Citation({
       <Tooltip>
         <TooltipTrigger asChild>
           <a
-            href={document_info?.document?.link || "#"}
+            href={document_info?.document?.link || undefined}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
