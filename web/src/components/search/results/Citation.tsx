@@ -71,13 +71,16 @@ export function Citation({
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <span
-            onClick={() => {
+          <a
+            href={document_info?.document?.link || "#"}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
               document_info?.document
                 ? openDocument(
-                    document_info.document,
-                    document_info.updatePresentingDocument
-                  )
+                  document_info.document,
+                  document_info.updatePresentingDocument
+                )
                 : question_info?.question
                   ? question_info.openQuestion(question_info.question)
                   : null;
@@ -94,7 +97,7 @@ export function Citation({
                 {citationText}
               </Text>
             </span>
-          </span>
+          </a>
         </TooltipTrigger>
         <TooltipContent
           className="bg-transparent p-0 shadow-none"
