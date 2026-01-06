@@ -29,7 +29,7 @@ dependencies = [
 [project.optional-dependencies]
 # Main backend application dependencies
 backend = [
-    "aiohttp==3.13.2",
+    "aiohttp==3.13.3",
     "alembic==1.10.4",
     "asyncpg==0.30.0",
     "atlassian-python-api==3.41.16",

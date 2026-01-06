@@ -125,6 +125,9 @@ def construct_message_history(
     if history_token_budget < 0:
         raise ValueError("Not enough tokens available to construct message history")
 
+    if system_prompt:
+        system_prompt.should_cache = True
+
     # If no history, build minimal context
     if not simple_chat_history:
         result = [system_prompt] if system_prompt else []
@@ -199,6 +202,7 @@ def construct_message_history(
 
     for msg in reversed(history_before_last_user):
         if current_token_count + msg.token_count <= remaining_budget:
+            msg.should_cache = True
             truncated_history_before.insert(0, msg)
             current_token_count += msg.token_count
         else:

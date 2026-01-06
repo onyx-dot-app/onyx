@@ -233,6 +233,8 @@ def _get_attributes_from_generation_span_data(
         if base_url := param.get("base_url"):
             if "api.openai.com" in base_url:
                 yield LLM_PROVIDER, OpenInferenceLLMProviderValues.OPENAI.value
+    if obj.time_to_first_action_seconds is not None:
+        yield LLM_TIME_TO_FIRST_ACTION_SECONDS, obj.time_to_first_action_seconds
     yield from _get_attributes_from_chat_completions_input(obj.input)
     yield from _get_attributes_from_chat_completions_output(obj.output)
     yield from _get_attributes_from_chat_completions_usage(obj.usage)
@@ -427,6 +429,7 @@ TOOL_NAME = SpanAttributes.TOOL_NAME
 TOOL_PARAMETERS = SpanAttributes.TOOL_PARAMETERS
 GRAPH_NODE_ID = SpanAttributes.GRAPH_NODE_ID
 GRAPH_NODE_PARENT_ID = SpanAttributes.GRAPH_NODE_PARENT_ID
+LLM_TIME_TO_FIRST_ACTION_SECONDS = "llm.time_to_first_action_seconds"
 
 MESSAGE_CONTENT = MessageAttributes.MESSAGE_CONTENT
 MESSAGE_CONTENTS = MessageAttributes.MESSAGE_CONTENTS

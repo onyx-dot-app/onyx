@@ -66,7 +66,7 @@ export default function SidebarTab({
         )}
       >
         {LeftIcon && (
-          <div className="w-[1rem] h-[1rem] flex flex-col items-center justify-center">
+          <div className="w-[1rem] h-[1rem] flex items-center justify-center pointer-events-auto">
             <LeftIcon
               data-state={state}
               className={`h-[1rem] w-[1rem] sidebar-tab-icon-${variant}`}
@@ -87,7 +87,11 @@ export default function SidebarTab({
             children
           ))}
       </div>
-      {!folded && <div className="relative">{rightChildren}</div>}
+      {!folded && (
+        <div className="relative h-[1.5rem] flex items-center">
+          {rightChildren}
+        </div>
+      )}
     </div>
   );
 

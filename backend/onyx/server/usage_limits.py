@@ -12,6 +12,8 @@ from onyx.configs.app_configs import OPENROUTER_DEFAULT_API_KEY
 from onyx.db.usage import check_usage_limit
 from onyx.db.usage import UsageLimitExceededError
 from onyx.db.usage import UsageType
+from onyx.server.tenant_usage_limits import TenantUsageLimitKeys
+from onyx.server.tenant_usage_limits import TenantUsageLimitOverrides
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.configs import USAGE_LIMIT_API_CALLS_PAID
@@ -71,29 +73,99 @@ def is_tenant_on_trial_fn(tenant_id: str) -> bool:
     return fn(tenant_id)
 
 
-def get_limit_for_usage_type(usage_type: UsageType, is_trial: bool) -> int:
-    """Get the appropriate limit based on usage type and trial status."""
-    if usage_type == UsageType.LLM_COST:
-        return (
-            USAGE_LIMIT_LLM_COST_CENTS_TRIAL
-            if is_trial
-            else USAGE_LIMIT_LLM_COST_CENTS_PAID
+def _get_tenant_override(tenant_id: str, field_name: str) -> int | None:
+    """
+    Get a tenant-specific usage limit override if available.
+
+    Uses fetch_versioned_implementation to get EE version if available.
+
+    Returns:
+        - Positive int: Use this specific limit
+        - -1 (NO_LIMIT): No limit (unlimited)
+        - None: No override specified, use default env var value
+    """
+    try:
+        # Try to get EE version that has tenant overrides
+        get_overrides_fn = fetch_versioned_implementation(
+            "onyx.server.tenant_usage_limits", "get_tenant_usage_limit_overrides"
         )
-    if usage_type == UsageType.CHUNKS_INDEXED:
-        return (
-            USAGE_LIMIT_CHUNKS_INDEXED_TRIAL
-            if is_trial
-            else USAGE_LIMIT_CHUNKS_INDEXED_PAID
+        overrides: TenantUsageLimitOverrides | None = get_overrides_fn(tenant_id)
+
+        if overrides is not None:
+            # Get the field value - None means not set, use default
+            return getattr(overrides, field_name, None)
+    except Exception:
+        logger.exception(
+            "Error getting tenant override for %s.%s falling back to defaults",
+            tenant_id,
+            field_name,
         )
-    if usage_type == UsageType.API_CALLS:
-        return USAGE_LIMIT_API_CALLS_TRIAL if is_trial else USAGE_LIMIT_API_CALLS_PAID
-    if usage_type == UsageType.NON_STREAMING_API_CALLS:
-        return (
-            USAGE_LIMIT_NON_STREAMING_CALLS_TRIAL
-            if is_trial
-            else USAGE_LIMIT_NON_STREAMING_CALLS_PAID
-        )
-    return 0
+    return None
+
+
+# Special value meaning "no limit" (unlimited)
+NO_LIMIT = -1
+_FIELD_AND_DEFAULT = {
+    UsageType.LLM_COST: {
+        True: (
+            TenantUsageLimitKeys.LLM_COST_CENTS_TRIAL,
+            USAGE_LIMIT_LLM_COST_CENTS_TRIAL,
+        ),
+        False: (
+            TenantUsageLimitKeys.LLM_COST_CENTS_PAID,
+            USAGE_LIMIT_LLM_COST_CENTS_PAID,
+        ),
+    },
+    UsageType.CHUNKS_INDEXED: {
+        True: (
+            TenantUsageLimitKeys.CHUNKS_INDEXED_TRIAL,
+            USAGE_LIMIT_CHUNKS_INDEXED_TRIAL,
+        ),
+        False: (
+            TenantUsageLimitKeys.CHUNKS_INDEXED_PAID,
+            USAGE_LIMIT_CHUNKS_INDEXED_PAID,
+        ),
+    },
+    UsageType.API_CALLS: {
+        True: (TenantUsageLimitKeys.API_CALLS_TRIAL, USAGE_LIMIT_API_CALLS_TRIAL),
+        False: (TenantUsageLimitKeys.API_CALLS_PAID, USAGE_LIMIT_API_CALLS_PAID),
+    },
+    UsageType.NON_STREAMING_API_CALLS: {
+        True: (
+            TenantUsageLimitKeys.NON_STREAMING_CALLS_TRIAL,
+            USAGE_LIMIT_NON_STREAMING_CALLS_TRIAL,
+        ),
+        False: (
+            TenantUsageLimitKeys.NON_STREAMING_CALLS_PAID,
+            USAGE_LIMIT_NON_STREAMING_CALLS_PAID,
+        ),
+    },
+}
+
+
+def get_limit_for_usage_type(
+    usage_type: UsageType, is_trial: bool, tenant_id: str | None = None
+) -> int:
+    """
+    Get the appropriate limit based on usage type, trial status, and tenant overrides.
+
+    Returns:
+        - Positive int: The usage limit
+        - NO_LIMIT (-1): No limit (unlimited) for this tenant
+    """
+
+    field_name, default_value = _FIELD_AND_DEFAULT[usage_type][is_trial]
+    if tenant_id:
+        override = _get_tenant_override(tenant_id, field_name)
+        if override is not None:
+            logger.debug(
+                "Using tenant override for %s.%s: %s", tenant_id, field_name, override
+            )
+            return override
+    logger.debug(
+        "Using default value for %s.%s: %s", usage_type, is_trial, default_value
+    )
+    return default_value
 
 
 def check_llm_cost_limit_for_provider(
@@ -152,7 +224,12 @@ def check_usage_and_raise(
         return
 
     is_trial = is_tenant_on_trial_fn(tenant_id)
-    limit = get_limit_for_usage_type(usage_type, is_trial)
+    limit = get_limit_for_usage_type(usage_type, is_trial, tenant_id)
+    logger.debug("Checking usage limit for %s.%s: %s", usage_type, is_trial, limit)
+
+    # NO_LIMIT means this tenant has unlimited usage for this type
+    if limit == NO_LIMIT:
+        return
 
     try:
         check_usage_limit(

@@ -323,7 +323,9 @@ export default function IconButton({
       disabled={disabled}
       {...props}
     >
-      <Icon className={cn("h-[1rem] w-[1rem]", iconClass)} />
+      <div className="flex items-center justify-center h-5 w-5 p-0.5">
+        <Icon className={cn("h-[1rem] w-[1rem]", iconClass)} />
+      </div>
     </button>
   );
 

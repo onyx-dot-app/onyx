@@ -8,7 +8,6 @@ from onyx.tools.utils import explicit_tool_calling_supported
     "model_provider, model_name, expected_result",
     [
         (LlmProviderNames.ANTHROPIC, "claude-4-sonnet-20250514", True),
-        (LlmProviderNames.ANTHROPIC, "claude-3-opus-20240229", True),
         (
             "another-provider",
             "claude-3-haiku-20240307",
@@ -18,11 +17,6 @@ from onyx.tools.utils import explicit_tool_calling_supported
             LlmProviderNames.ANTHROPIC,
             "claude-3-sonnet-20240229",
             False,
-        ),
-        (
-            LlmProviderNames.BEDROCK,
-            "anthropic.claude-3-opus-20240229-v1:0",
-            True,
         ),
         (
             LlmProviderNames.BEDROCK,

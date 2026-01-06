@@ -197,7 +197,12 @@ def from_litellm_model_response_stream(
                 cache_creation_input_tokens=usage_data.get(
                     "cache_creation_input_tokens", 0
                 ),
-                cache_read_input_tokens=usage_data.get("cache_read_input_tokens", 0),
+                cache_read_input_tokens=usage_data.get(
+                    "cache_read_input_tokens",
+                    (usage_data.get("prompt_tokens_details") or {}).get(
+                        "cached_tokens", 0
+                    ),
+                ),
             )
             if usage_data
             else None
@@ -245,7 +250,12 @@ def from_litellm_model_response(
                 cache_creation_input_tokens=usage_data.get(
                     "cache_creation_input_tokens", 0
                 ),
-                cache_read_input_tokens=usage_data.get("cache_read_input_tokens", 0),
+                cache_read_input_tokens=usage_data.get(
+                    "cache_read_input_tokens",
+                    (usage_data.get("prompt_tokens_details") or {}).get(
+                        "cached_tokens", 0
+                    ),
+                ),
             )
             if usage_data
             else None

@@ -99,6 +99,7 @@ class GenerationSpanData(SpanData):
         "model",
         "model_config",
         "usage",
+        "time_to_first_action_seconds",
     )
 
     def __init__(
@@ -108,12 +109,14 @@ class GenerationSpanData(SpanData):
         model: str | None = None,
         model_config: Mapping[str, Any] | None = None,
         usage: dict[str, Any] | None = None,
+        time_to_first_action_seconds: float | None = None,
     ):
         self.input = input
         self.output = output
         self.model = model
         self.model_config = model_config
         self.usage = usage
+        self.time_to_first_action_seconds = time_to_first_action_seconds
 
     @property
     def type(self) -> str:
@@ -127,4 +130,5 @@ class GenerationSpanData(SpanData):
             "model": self.model,
             "model_config": self.model_config,
             "usage": self.usage,
+            "time_to_first_action_seconds": self.time_to_first_action_seconds,
         }

@@ -172,8 +172,8 @@ def test_get_config_credentials(
         user_performing_action=admin_user,
     )
 
-    # Credentials should contain the unmasked API key
-    assert credentials["api_key"] == test_api_key
+    # Credentials should contain the masked API key (first 4 + **** + last 4)
+    assert credentials["api_key"] == "sk-t****2345"
     assert "api_base" in credentials
     assert "api_version" in credentials
     assert "deployment_name" in credentials
@@ -223,12 +223,12 @@ def test_update_config_direct_key_entry(
     assert updated_config.image_provider_id == config.image_provider_id
     assert updated_config.model_name == "dall-e-3"
 
-    # Verify credentials were updated
+    # Verify credentials were updated (masked: first 4 + **** + last 4)
     credentials = ImageGenerationConfigManager.get_credentials(
         image_provider_id=config.image_provider_id,
         user_performing_action=admin_user,
     )
-    assert credentials["api_key"] == new_api_key
+    assert credentials["api_key"] == "sk-u****2345"
 
 
 def test_update_config_clone_mode(

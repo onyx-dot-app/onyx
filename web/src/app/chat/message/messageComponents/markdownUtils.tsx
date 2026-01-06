@@ -140,7 +140,7 @@ export const renderMarkdown = (
         components={markdownComponents}
         remarkPlugins={[
           remarkGfm,
-          [remarkMath, { singleDollarTextMath: false }],
+          [remarkMath, { singleDollarTextMath: true }],
         ]}
         rehypePlugins={[rehypeHighlight, rehypeKatex]}
         urlTransform={transformLinkUri}
