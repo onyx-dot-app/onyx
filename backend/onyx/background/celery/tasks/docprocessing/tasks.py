@@ -59,9 +59,6 @@ from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector_credential_pair import (
     fetch_indexable_standard_connector_credential_pair_ids,
 )
-from onyx.db.connector_credential_pair import (
-    fetch_indexable_user_file_connector_credential_pair_ids,
-)
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import set_cc_pair_repeated_error_state
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -540,12 +537,7 @@ def check_indexing_completion(
             ]:
                 # User file connectors must be paused on success
                 # NOTE: _run_indexing doesn't update connectors if the index attempt is the future embedding model
-                # TODO: figure out why this doesn't pause connectors during swap
-                cc_pair.status = (
-                    ConnectorCredentialPairStatus.PAUSED
-                    if cc_pair.is_user_file
-                    else ConnectorCredentialPairStatus.ACTIVE
-                )
+                cc_pair.status = ConnectorCredentialPairStatus.ACTIVE
                 db_session.commit()
 
             mt_cloud_telemetry(
@@ -811,13 +803,8 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                     db_session, active_cc_pairs_only=True
                 )
             )
-            user_file_cc_pair_ids = (
-                fetch_indexable_user_file_connector_credential_pair_ids(
-                    db_session, search_settings_id=current_search_settings.id
-                )
-            )
 
-            primary_cc_pair_ids = standard_cc_pair_ids + user_file_cc_pair_ids
+            primary_cc_pair_ids = standard_cc_pair_ids
 
             # Get CC pairs for secondary search settings
             secondary_cc_pair_ids: list[int] = []
@@ -833,14 +820,8 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         db_session, active_cc_pairs_only=not include_paused
                     )
                 )
-                user_file_cc_pair_ids = (
-                    fetch_indexable_user_file_connector_credential_pair_ids(
-                        db_session, search_settings_id=secondary_search_settings.id
-                    )
-                    or []
-                )
 
-                secondary_cc_pair_ids = standard_cc_pair_ids + user_file_cc_pair_ids
+                secondary_cc_pair_ids = standard_cc_pair_ids
 
         # Flag CC pairs in repeated error state for primary/current search settings
         with get_session_with_current_tenant() as db_session:
