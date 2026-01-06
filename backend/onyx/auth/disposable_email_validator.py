@@ -43,7 +43,6 @@ class DisposableEmailValidator:
         except AttributeError:
             pass
 
-        self._initialized: bool = True
         self._domains: Set[str] = set()
         self._last_fetch_time: float = 0
         self._fetch_lock = threading.Lock()
@@ -63,7 +62,8 @@ class DisposableEmailValidator:
             "getnada.com",
             "maildrop.cc",
         }
-        self._initialized = True
+        # Set initialized flag last to prevent race conditions
+        self._initialized: bool = True
 
     def _should_refresh(self) -> bool:
         """Check if the cached domains should be refreshed."""
