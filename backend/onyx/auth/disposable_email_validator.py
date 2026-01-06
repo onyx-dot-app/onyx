@@ -25,7 +25,7 @@ class DisposableEmailValidator:
     Fetches and caches the list of disposable domains, with periodic refresh.
     """
 
-    _instance = None
+    _instance: "DisposableEmailValidator | None" = None
     _lock = threading.Lock()
 
     def __new__(cls) -> "DisposableEmailValidator":
@@ -33,11 +33,11 @@ class DisposableEmailValidator:
             with cls._lock:
                 if cls._instance is None:
                     cls._instance = super().__new__(cls)
-                    cls._instance._initialized: bool = False
+                    cls._instance._initialized = False
         return cls._instance
 
     def __init__(self) -> None:
-        if getattr(self, "_initialized", False):
+        if hasattr(self, "_initialized") and self._initialized:
             return
 
         self._domains: Set[str] = set()
