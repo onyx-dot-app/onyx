@@ -18,6 +18,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.drop_column("user_file", "document_id")
+    op.drop_column("user_file", "document_id_migrated")
     op.drop_column("connector_credential_pair", "is_user_file")
 
 
@@ -29,4 +30,10 @@ def downgrade() -> None:
     op.add_column(
         "user_file",
         sa.Column("document_id", sa.String(), nullable=True),
+    )
+    op.add_column(
+        "user_file",
+        sa.Column(
+            "document_id_migrated", sa.Boolean(), nullable=False, server_default="true"
+        ),
     )

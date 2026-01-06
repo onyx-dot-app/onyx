@@ -3597,9 +3597,6 @@ class UserFile(Base):
 
     link_url: Mapped[str | None] = mapped_column(String, nullable=True)
     content_type: Mapped[str | None] = mapped_column(String, nullable=True)
-    document_id_migrated: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
 
     projects: Mapped[list["UserProject"]] = relationship(
         "UserProject",
