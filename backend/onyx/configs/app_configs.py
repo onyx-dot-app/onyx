@@ -800,6 +800,11 @@ ENTERPRISE_EDITION_ENABLED = (
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() == "true"
 )
 
+#####
+# Image Generation Configuration (DEPRECATED)
+# These environment variables will be deprecated soon.
+# To configure image generation, please visit the Image Generation page in the Admin Panel.
+#####
 # Azure Image Configurations
 AZURE_IMAGE_API_VERSION = os.environ.get("AZURE_IMAGE_API_VERSION") or os.environ.get(
     "AZURE_DALLE_API_VERSION"

@@ -90,12 +90,16 @@ def _get_tenant_override(tenant_id: str, field_name: str) -> int | None:
             "onyx.server.tenant_usage_limits", "get_tenant_usage_limit_overrides"
         )
         overrides: TenantUsageLimitOverrides | None = get_overrides_fn(tenant_id)
+
         if overrides is not None:
             # Get the field value - None means not set, use default
             return getattr(overrides, field_name, None)
     except Exception:
-        # EE module not available or error - fall back to defaults
-        pass
+        logger.exception(
+            "Error getting tenant override for %s.%s falling back to defaults",
+            tenant_id,
+            field_name,
+        )
     return None
 
 
@@ -154,7 +158,13 @@ def get_limit_for_usage_type(
     if tenant_id:
         override = _get_tenant_override(tenant_id, field_name)
         if override is not None:
+            logger.debug(
+                "Using tenant override for %s.%s: %s", tenant_id, field_name, override
+            )
             return override
+    logger.debug(
+        "Using default value for %s.%s: %s", usage_type, is_trial, default_value
+    )
     return default_value
 
 
@@ -215,6 +225,7 @@ def check_usage_and_raise(
 
     is_trial = is_tenant_on_trial_fn(tenant_id)
     limit = get_limit_for_usage_type(usage_type, is_trial, tenant_id)
+    logger.debug("Checking usage limit for %s.%s: %s", usage_type, is_trial, limit)
 
     # NO_LIMIT means this tenant has unlimited usage for this type
     if limit == NO_LIMIT:

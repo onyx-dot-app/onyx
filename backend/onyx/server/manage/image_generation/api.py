@@ -374,6 +374,22 @@ def update_config(
             old_provider.name = f"{old_provider.name}-old-{old_llm_provider_id}"
             db_session.flush()
 
+        # Determine actual API key to use:
+        # - Clone mode (source_llm_provider_id): API key comes from source provider
+        # - New credentials mode: Use provided api_key, or preserve existing if not changed
+        actual_api_key = config_update.api_key
+        if config_update.source_llm_provider_id is None and old_provider:
+            # Check if we should preserve existing API key:
+            # - api_key_changed=False AND (key is None/empty OR looks masked)
+            provided_key_is_masked = (
+                config_update.api_key and "****" in config_update.api_key
+            )
+            if not config_update.api_key_changed and (
+                not config_update.api_key or provided_key_is_masked
+            ):
+                # Preserve existing API key when user didn't change it
+                actual_api_key = old_provider.api_key
+
         # 3. Build and create new LLM provider
         provider_request = _build_llm_provider_request(
             db_session=db_session,
@@ -381,7 +397,7 @@ def update_config(
             model_name=config_update.model_name,
             source_llm_provider_id=config_update.source_llm_provider_id,
             provider=config_update.provider,
-            api_key=config_update.api_key,
+            api_key=actual_api_key,
             api_base=config_update.api_base,
             api_version=config_update.api_version,
             deployment_name=config_update.deployment_name,

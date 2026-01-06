@@ -1,4 +1,3 @@
-import io
 import ipaddress
 import random
 import socket
@@ -36,10 +35,11 @@ from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
-from onyx.file_processing.extract_file_text import read_pdf_file
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.utils.logger import setup_logger
 from onyx.utils.sitemap import list_pages_for_site
+from onyx.utils.web_content import extract_pdf_text
+from onyx.utils.web_content import is_pdf_resource
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
@@ -115,16 +115,6 @@ DEFAULT_HEADERS = {
     "Sec-CH-UA-Mobile": "?0",
     "Sec-CH-UA-Platform": '"macOS"',
 }
-
-# Common PDF MIME types
-PDF_MIME_TYPES = [
-    "application/pdf",
-    "application/x-pdf",
-    "application/acrobat",
-    "application/vnd.pdf",
-    "text/pdf",
-    "text/x-pdf",
-]
 
 
 class WEB_CONNECTOR_VALID_SETTINGS(str, Enum):
@@ -266,12 +256,6 @@ def get_internal_links(
         if _same_site(base_url, href):
             internal_links.add(href)
     return internal_links
-
-
-def is_pdf_content(response: requests.Response) -> bool:
-    """Check if the response contains PDF content based on content-type header"""
-    content_type = response.headers.get("content-type", "").lower()
-    return any(pdf_type in content_type for pdf_type in PDF_MIME_TYPES)
 
 
 def start_playwright() -> Tuple[Playwright, BrowserContext]:
@@ -529,14 +513,13 @@ class WebConnector(LoadConnector):
         head_response = requests.head(
             initial_url, headers=DEFAULT_HEADERS, allow_redirects=True
         )
-        is_pdf = is_pdf_content(head_response)
+        content_type = head_response.headers.get("content-type")
+        is_pdf = is_pdf_resource(initial_url, content_type)
 
-        if is_pdf or initial_url.lower().endswith(".pdf"):
+        if is_pdf:
             # PDF files are not checked for links
             response = requests.get(initial_url, headers=DEFAULT_HEADERS)
-            page_text, metadata, images = read_pdf_file(
-                file=io.BytesIO(response.content)
-            )
+            page_text, metadata = extract_pdf_text(response.content)
             last_modified = response.headers.get("Last-Modified")
 
             result.doc = Document(

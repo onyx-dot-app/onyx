@@ -45,6 +45,22 @@ export const IMAGE_PROVIDER_GROUPS: ProviderGroup[] = [
     name: "Azure OpenAI",
     providers: [
       {
+        image_provider_id: "azure_gpt_image_1_5",
+        model_name: "", // Extracted from deployment in target URI
+        provider_name: "azure",
+        title: "Azure OpenAI GPT Image 1.5",
+        description:
+          "GPT Image 1.5 image generation model hosted on Microsoft Azure.",
+      },
+      {
+        image_provider_id: "azure_gpt_image_1",
+        model_name: "", // Extracted from deployment in target URI
+        provider_name: "azure",
+        title: "Azure OpenAI GPT Image 1",
+        description:
+          "GPT Image 1 image generation model hosted on Microsoft Azure.",
+      },
+      {
         image_provider_id: "azure_dalle_3",
         model_name: "", // Extracted from deployment in target URI
         provider_name: "azure",

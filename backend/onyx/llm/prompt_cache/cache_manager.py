@@ -165,6 +165,28 @@ class CacheManager:
             logger.warning(f"Failed to delete cache metadata: {str(e)}")
 
 
+def _make_json_serializable(obj: object) -> object:
+    """Recursively convert objects to JSON-serializable types.
+
+    Handles Pydantic models, dicts, lists, and other common types.
+    """
+    if hasattr(obj, "model_dump"):
+        # Pydantic v2 model
+        return obj.model_dump(mode="json")
+    elif hasattr(obj, "dict"):
+        # Pydantic v1 model or similar
+        return _make_json_serializable(obj.dict())
+    elif isinstance(obj, dict):
+        return {k: _make_json_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [_make_json_serializable(item) for item in obj]
+    elif isinstance(obj, (str, int, float, bool, type(None))):
+        return obj
+    else:
+        # Fallback: convert to string representation
+        return str(obj)
+
+
 def generate_cache_key_hash(
     cacheable_prefix: LanguageModelInput,
     provider: str,
@@ -184,8 +206,8 @@ def generate_cache_key_hash(
     """
     # Normalize to Sequence[ChatCompletionMessage] for consistent hashing
     messages = normalize_language_model_input(cacheable_prefix)
-    # Convert to list of dicts for serialization
-    messages_dict = [dict(msg) for msg in messages]
+    # Convert to list of dicts for serialization, handling nested Pydantic models
+    messages_dict = [_make_json_serializable(dict(msg)) for msg in messages]
 
     # Serialize messages in a deterministic way
     # Include only content, roles, and order - exclude timestamps or dynamic fields
