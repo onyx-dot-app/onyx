@@ -48,19 +48,40 @@ def is_pdf_resource(
     )
 
 
-def extract_pdf_text(content: bytes) -> tuple[str, dict[str, object]]:
+def extract_pdf_text(content: bytes) -> tuple[str, dict[str, str | list[str]]]:
     text_content, metadata, _ = read_pdf_file(io.BytesIO(content))
-    return text_content or "", metadata
+    return text_content or "", normalize_metadata(metadata)
 
 
-def title_from_pdf_metadata(metadata: dict[str, object]) -> str:
+def title_from_pdf_metadata(metadata: dict[str, str | list[str]]) -> str:
     if not metadata:
         return ""
     for key in ("Title", "title"):
         value = metadata.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()
+        if isinstance(value, list):
+            items = [item.strip() for item in value if isinstance(item, str)]
+            if items:
+                return ", ".join(items)
     return ""
+
+
+def normalize_metadata(metadata: dict[str, object]) -> dict[str, str | list[str]]:
+    sanitized: dict[str, str | list[str]] = {}
+    for key, value in metadata.items():
+        if isinstance(value, str):
+            if value.strip():
+                sanitized[key] = value
+            continue
+        if isinstance(value, list):
+            items = [item.strip() for item in value if isinstance(item, str)]
+            if items:
+                sanitized[key] = items
+            continue
+        if value is not None:
+            sanitized[key] = str(value)
+    return sanitized
 
 
 def title_from_url(url: str) -> str:
