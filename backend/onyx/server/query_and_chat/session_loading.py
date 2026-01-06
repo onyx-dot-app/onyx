@@ -368,11 +368,12 @@ def translate_assistant_message_to_packets(
                 ),
                 None,
             )
-            if turn_reasoning and turn_num > 0:
+            if turn_reasoning:
+                reasoning_turn_index = turn_num - 1 if turn_num > 0 else 0
                 packet_list.extend(
                     create_reasoning_packets(
                         reasoning_text=turn_reasoning,
-                        turn_index=turn_num - 1,
+                        turn_index=reasoning_turn_index,
                     )
                 )
 
