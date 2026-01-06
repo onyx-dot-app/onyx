@@ -1545,11 +1545,6 @@
     "model_vendor": "anthropic",
     "model_version": "20240307"
   },
-  "claude-3-opus-latest": {
-    "display_name": "Claude Opus 3",
-    "model_vendor": "anthropic",
-    "model_version": "latest"
-  },
   "claude-4-opus-20250514": {
     "display_name": "Claude Opus 4",
     "model_vendor": "anthropic",
@@ -3274,10 +3269,6 @@
     "model_vendor": "anthropic",
     "model_version": "20240307"
   },
-  "openrouter/anthropic/claude-3-opus": {
-    "display_name": "Claude Opus 3",
-    "model_vendor": "anthropic"
-  },
   "openrouter/anthropic/claude-3-sonnet": {
     "display_name": "Claude Sonnet 3",
     "model_vendor": "anthropic"
@@ -3949,15 +3940,6 @@
     "display_name": "Claude Haiku 3",
     "model_vendor": "anthropic",
     "model_version": "20240307"
-  },
-  "vertex_ai/claude-3-opus": {
-    "display_name": "Claude Opus 3",
-    "model_vendor": "anthropic"
-  },
-  "vertex_ai/claude-3-opus@20240229": {
-    "display_name": "Claude Opus 3",
-    "model_vendor": "anthropic",
-    "model_version": "20240229"
   },
   "vertex_ai/claude-3-sonnet": {
     "display_name": "Claude Sonnet 3",
