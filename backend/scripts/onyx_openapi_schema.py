@@ -16,33 +16,40 @@ from onyx.main import app as app_fn
 OPENAPI_VERSION = "3.1.0"
 
 
-def go(filename: str) -> None:
-    with open(filename, "w") as f:
-        app: FastAPI = app_fn()
-        app.openapi_version = OPENAPI_VERSION
-        json.dump(
-            get_openapi(
-                title=app.title,
-                version=app.version,
-                openapi_version=app.openapi_version,
-                description=app.description,
-                routes=app.routes,
-            ),
-            f,
-        )
+def go(filename: str, tagged_for_docs: str | None = None) -> None:
+    """Generate OpenAPI schema.
 
+    By default outputs tag-stripped schema (for client generation).
+    If tagged_for_docs is provided, also outputs the original tagged version for docs.
+    """
+    app: FastAPI = app_fn()
+    app.openapi_version = OPENAPI_VERSION
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        openapi_version=app.openapi_version,
+        description=app.description,
+        routes=app.routes,
+    )
+
+    # Output tagged version for docs if requested
+    if tagged_for_docs:
+        with open(tagged_for_docs, "w") as f:
+            json.dump(schema, f)
+        print(f"Wrote tagged OpenAPI schema to {tagged_for_docs}")
+
+    # Output stripped version (default) for client generation
+    stripped = strip_tags_from_schema(schema)
+    with open(filename, "w") as f:
+        json.dump(stripped, f)
     print(f"Wrote OpenAPI schema to {filename}.")
 
 
-def strip_tags_from_schema(openapi_json_path: str) -> str:
-    """Strip tags from OpenAPI schema so openapi-generator puts all endpoints in DefaultApi.
+def strip_tags_from_schema(schema: dict) -> dict:
+    """Strip tags from OpenAPI schema so openapi-generator puts all endpoints in DefaultApi."""
+    import copy
 
-    Returns the path to a temporary file with tags stripped.
-    """
-    import tempfile
-
-    with open(openapi_json_path) as f:
-        schema = json.load(f)
+    schema = copy.deepcopy(schema)
 
     # Remove tags from all operations
     if "paths" in schema:
@@ -55,22 +62,24 @@ def strip_tags_from_schema(openapi_json_path: str) -> str:
     if "tags" in schema:
         del schema["tags"]
 
-    # Write to a temp file
-    fd, temp_path = tempfile.mkstemp(suffix=".json")
-    with os.fdopen(fd, "w") as f:
-        json.dump(schema, f)
-
-    return temp_path
+    return schema
 
 
 def generate_client(openapi_json_path: str, strip_tags: bool = True) -> None:
     """Generate Python client from OpenAPI schema using openapi-generator."""
+    import tempfile
+
     output_dir = os.path.join(os.path.dirname(openapi_json_path), "onyx_openapi_client")
 
     # Optionally strip tags so all endpoints go under DefaultApi
     schema_path = openapi_json_path
     if strip_tags:
-        schema_path = strip_tags_from_schema(openapi_json_path)
+        with open(openapi_json_path) as f:
+            schema = json.load(f)
+        stripped = strip_tags_from_schema(schema)
+        fd, schema_path = tempfile.mkstemp(suffix=".json")
+        with os.fdopen(fd, "w") as f:
+            json.dump(stripped, f)
         print(f"Stripped tags from schema, using temp file: {schema_path}")
 
     cmd = [
@@ -118,12 +127,17 @@ def main() -> None:
         action="store_true",
         help="Generate Python client schemas (needed for integration tests)",
     )
+    parser.add_argument(
+        "--tagged-for-docs",
+        help="Also output a tagged version for API docs (specify output path)",
+    )
 
     args = parser.parse_args()
-    go(args.filename)
+    go(args.filename, tagged_for_docs=args.tagged_for_docs)
 
     if args.generate_python_client:
-        generate_client(args.filename)
+        # Schema is already stripped by go(), no need to strip again
+        generate_client(args.filename, strip_tags=False)
 
 
 if __name__ == "__main__":
