@@ -28,5 +28,5 @@ def downgrade() -> None:
     )
     op.add_column(
         "user_file",
-        sa.Column("document_id", sa.String(), nullable=False),
+        sa.Column("document_id", sa.String(), nullable=True),
     )
