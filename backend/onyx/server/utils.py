@@ -2,6 +2,7 @@ import base64
 import json
 import os
 from datetime import datetime
+from enum import Enum
 from typing import Any
 from uuid import UUID
 
@@ -13,7 +14,7 @@ from onyx.connectors.google_utils.shared_constants import (
 )
 
 # Tag for endpoints that should be included in the public API documentation
-PUBLIC_API_TAGS: list[str] = ["public"]
+PUBLIC_API_TAGS: list[str | Enum] = ["public"]
 
 
 class BasicAuthenticationError(HTTPException):
