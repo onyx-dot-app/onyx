@@ -19,7 +19,7 @@ def get_provider_adapter(provider: str) -> PromptCacheProvider:
     """
     if provider == LlmProviderNames.OPENAI:
         return OpenAIPromptCacheProvider()
-    elif provider == LlmProviderNames.ANTHROPIC:
+    elif provider in [LlmProviderNames.ANTHROPIC, LlmProviderNames.BEDROCK]:
         return AnthropicPromptCacheProvider()
     elif provider == LlmProviderNames.VERTEX_AI:
         return VertexAIPromptCacheProvider()
