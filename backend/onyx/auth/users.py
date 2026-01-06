@@ -357,10 +357,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 # Check disposable emails first (before any other checks)
                 verify_email_domain(user_create.email)
 
-                # Only check invite list if user already exists in a tenant
-                # New tenant creation doesn't require an invite
+                # Check invite list based on deployment mode
                 if MULTI_TENANT:
-                    # Check if this is an existing user joining an existing tenant
+                    # Multi-tenant: Only require invite for existing tenants
+                    # New tenant creation (first user) doesn't require an invite
                     from onyx.db.users import get_user_by_email
 
                     existing_user = get_user_by_email(user_create.email, db_session)
@@ -368,7 +368,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         # Existing user - shouldn't happen in normal signup flow
                         verify_email_is_invited(user_create.email)
                 else:
-                    # Single tenant mode - always check invite list
+                    # Single-tenant: Check invite list (skips if SAML/OIDC or no list configured)
                     verify_email_is_invited(user_create.email)
                 if MULTI_TENANT:
                     tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
