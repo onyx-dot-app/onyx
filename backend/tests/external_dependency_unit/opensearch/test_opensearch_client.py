@@ -476,7 +476,7 @@ class TestOpenSearchClient:
             query_vector=query_vector,
             num_candidates=10,
             num_hits=5,
-            tenant_state=TenantState(tenant_id=None, multitenant=False),
+            tenant_state=TenantState(tenant_id="", multitenant=False),
         )
 
         # Under test.
@@ -530,7 +530,7 @@ class TestOpenSearchClient:
             query_vector=query_vector,
             num_candidates=10,
             num_hits=5,
-            tenant_state=TenantState(tenant_id=None, multitenant=False),
+            tenant_state=TenantState(tenant_id="", multitenant=False),
         )
 
         # Under test.
@@ -564,7 +564,7 @@ class TestOpenSearchClient:
             query_vector=query_vector,
             num_candidates=10,
             num_hits=5,
-            tenant_state=TenantState(tenant_id=None, multitenant=False),
+            tenant_state=TenantState(tenant_id="", multitenant=False),
         )
 
         # Under test.
@@ -774,7 +774,7 @@ class TestOpenSearchClient:
         # Build query for doc-1.
         query_body = DocumentQuery.get_from_document_id_query(
             document_id="doc-1",
-            tenant_state=TenantState(tenant_id=None, multitenant=False),
+            tenant_state=TenantState(tenant_id="", multitenant=False),
             max_chunk_size=DEFAULT_MAX_CHUNK_SIZE,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -921,7 +921,7 @@ class TestOpenSearchClient:
         # Build deletion query.
         query_body = DocumentQuery.get_from_document_id_query(
             document_id="nonexistent-doc",
-            tenant_state=TenantState(tenant_id=None, multitenant=False),
+            tenant_state=TenantState(tenant_id="", multitenant=False),
             max_chunk_size=DEFAULT_MAX_CHUNK_SIZE,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -964,7 +964,7 @@ class TestOpenSearchClient:
         # Build query for doc-1.
         query_body = DocumentQuery.get_from_document_id_query(
             document_id="doc-1",
-            tenant_state=TenantState(tenant_id=None, multitenant=False),
+            tenant_state=TenantState(tenant_id="", multitenant=False),
             max_chunk_size=DEFAULT_MAX_CHUNK_SIZE,
             min_chunk_index=None,
             max_chunk_index=None,
