@@ -33,13 +33,17 @@ class DisposableEmailValidator:
             with cls._lock:
                 if cls._instance is None:
                     cls._instance = super().__new__(cls)
-                    cls._instance._initialized = False
         return cls._instance
 
     def __init__(self) -> None:
-        if hasattr(self, "_initialized") and self._initialized:
-            return
+        # Check if already initialized using a try/except to avoid type issues
+        try:
+            if self._initialized:
+                return
+        except AttributeError:
+            pass
 
+        self._initialized: bool = True
         self._domains: Set[str] = set()
         self._last_fetch_time: float = 0
         self._fetch_lock = threading.Lock()
