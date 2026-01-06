@@ -49,6 +49,8 @@ class SerperClient(WebSearchProvider, WebContentProvider):
         results = response.json()
         organic_results = results["organic"]
 
+        organic_results = filter(lambda result: "link" in result, organic_results)
+
         return [
             WebSearchResult(
                 title=result.get("title", ""),
