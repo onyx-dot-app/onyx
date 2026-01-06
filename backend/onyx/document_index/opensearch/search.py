@@ -141,6 +141,7 @@ class DocumentQuery:
         ]
 
         if tenant_state.tenant_id is not None:
+            # TODO(andrei): Fix tenant stuff.
             filter_clauses.append(
                 {"term": {TENANT_ID_FIELD_NAME: {"value": tenant_state.tenant_id}}}
             )
