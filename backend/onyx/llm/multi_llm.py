@@ -24,6 +24,7 @@ from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.model_response import Usage
+from onyx.llm.models import CLAUDE_REASONING_BUDGET_TOKENS
 from onyx.llm.models import OPENAI_REASONING_EFFORT
 from onyx.llm.utils import build_litellm_passthrough_kwargs
 from onyx.llm.utils import is_true_openai_model
@@ -341,9 +342,17 @@ class LitellmLLM(LLM):
                         "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
                         "summary": "auto",
                     }
+            elif is_claude_model:
+                # Use explicit thinking param for Claude models.
+                # LiteLLM should auto-map reasoning_effort to thinking, but it fails
+                # to inject the required beta header for Vertex AI partner models.
+                # See: https://github.com/BerriAI/litellm/issues/18241
+                optional_kwargs["thinking"] = {
+                    "type": "enabled",
+                    "budget_tokens": CLAUDE_REASONING_BUDGET_TOKENS[reasoning_effort],
+                }
             else:
-                # Note that litellm auto maps reasoning_effort to thinking
-                # and budget_tokens for Anthropic Claude models
+                # For other providers, let litellm handle the translation
                 optional_kwargs["reasoning_effort"] = reasoning_effort
 
         if tools:

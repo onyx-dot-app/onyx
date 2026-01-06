@@ -35,6 +35,17 @@ OPENAI_REASONING_EFFORT: dict[ReasoningEffort | None, str] = {
     ReasoningEffort.HIGH: "high",
 }
 
+# Budget tokens for Claude extended thinking at each reasoning effort level.
+# These are used when LiteLLM's reasoning_effort -> thinking translation fails
+# (e.g., Vertex AI doesn't receive the required beta header from LiteLLM).
+# See: https://github.com/BerriAI/litellm/issues/18241
+CLAUDE_REASONING_BUDGET_TOKENS: dict[ReasoningEffort, int] = {
+    ReasoningEffort.OFF: 0,
+    ReasoningEffort.LOW: 1024,
+    ReasoningEffort.MEDIUM: 5000,
+    ReasoningEffort.HIGH: 10000,
+}
+
 
 # Content part structures for multimodal messages
 # The classes in this mirror the OpenAI Chat Completions message types and work well with routers like LiteLLM

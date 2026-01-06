@@ -17,6 +17,8 @@ from onyx.llm.models import LanguageModelInput
 from onyx.llm.models import ToolCall
 from onyx.llm.models import UserMessage
 from onyx.llm.multi_llm import LitellmLLM
+from onyx.llm.models import CLAUDE_REASONING_BUDGET_TOKENS
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.utils import get_max_input_tokens
 
 
@@ -554,3 +556,187 @@ def test_existing_metadata_pass_through_when_identity_disabled() -> None:
         kwargs = mock_completion.call_args.kwargs
         assert "user" not in kwargs
         assert kwargs["metadata"]["foo"] == "bar"
+
+
+@pytest.fixture
+def claude_vertex_ai_llm() -> LitellmLLM:
+    """Create a Claude model on Vertex AI for testing reasoning params."""
+    model_provider = LlmProviderNames.VERTEX_AI
+    model_name = "claude-opus-4-5"
+
+    return LitellmLLM(
+        api_key=None,  # Vertex AI uses credentials file, not API key
+        timeout=30,
+        model_provider=model_provider,
+        model_name=model_name,
+        max_input_tokens=200000,
+    )
+
+
+@pytest.fixture
+def claude_anthropic_llm() -> LitellmLLM:
+    """Create a Claude model on Anthropic API for testing reasoning params."""
+    model_provider = LlmProviderNames.ANTHROPIC
+    model_name = "claude-opus-4-5-20251101"
+
+    return LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=model_provider,
+        model_name=model_name,
+        max_input_tokens=200000,
+    )
+
+
+def test_claude_uses_thinking_param_instead_of_reasoning_effort(
+    claude_vertex_ai_llm: LitellmLLM,
+) -> None:
+    """Test that Claude models use the explicit 'thinking' parameter.
+
+    This is a workaround for LiteLLM not properly injecting the beta header
+    for Vertex AI when using reasoning_effort.
+    See: https://github.com/BerriAI/litellm/issues/18241
+    """
+    with patch("litellm.completion") as mock_completion:
+        mock_response = litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=litellm.Message(
+                        content="This is a thoughtful response.",
+                        role="assistant",
+                    ),
+                )
+            ],
+            model="claude-opus-4-5",
+        )
+        mock_completion.return_value = mock_response
+
+        messages: LanguageModelInput = [
+            UserMessage(content="Think carefully about this.")
+        ]
+
+        # Invoke with medium reasoning effort
+        claude_vertex_ai_llm.invoke(messages, reasoning_effort=ReasoningEffort.MEDIUM)
+
+        mock_completion.assert_called_once()
+        kwargs = mock_completion.call_args.kwargs
+
+        # Should use 'thinking' param with budget_tokens, NOT 'reasoning_effort'
+        assert "thinking" in kwargs
+        assert kwargs["thinking"]["type"] == "enabled"
+        assert (
+            kwargs["thinking"]["budget_tokens"]
+            == CLAUDE_REASONING_BUDGET_TOKENS[ReasoningEffort.MEDIUM]
+        )
+        assert "reasoning_effort" not in kwargs
+
+
+def test_claude_thinking_budget_tokens_for_all_effort_levels(
+    claude_anthropic_llm: LitellmLLM,
+) -> None:
+    """Test that Claude uses correct budget_tokens for each reasoning effort level."""
+    effort_levels = [ReasoningEffort.LOW, ReasoningEffort.MEDIUM, ReasoningEffort.HIGH]
+
+    for effort in effort_levels:
+        with patch("litellm.completion") as mock_completion:
+            mock_response = litellm.ModelResponse(
+                id="chatcmpl-123",
+                choices=[
+                    litellm.Choices(
+                        finish_reason="stop",
+                        index=0,
+                        message=litellm.Message(
+                            content="Response",
+                            role="assistant",
+                        ),
+                    )
+                ],
+                model="claude-opus-4-5-20251101",
+            )
+            mock_completion.return_value = mock_response
+
+            messages: LanguageModelInput = [UserMessage(content="Test")]
+            claude_anthropic_llm.invoke(messages, reasoning_effort=effort)
+
+            kwargs = mock_completion.call_args.kwargs
+            assert "thinking" in kwargs
+            assert (
+                kwargs["thinking"]["budget_tokens"]
+                == CLAUDE_REASONING_BUDGET_TOKENS[effort]
+            ), (
+                f"Expected budget_tokens={CLAUDE_REASONING_BUDGET_TOKENS[effort]} "
+                f"for {effort}, got {kwargs['thinking']['budget_tokens']}"
+            )
+
+
+def test_claude_no_thinking_when_reasoning_off(
+    claude_anthropic_llm: LitellmLLM,
+) -> None:
+    """Test that Claude doesn't use thinking param when reasoning is OFF."""
+    with patch("litellm.completion") as mock_completion:
+        mock_response = litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=litellm.Message(
+                        content="Response",
+                        role="assistant",
+                    ),
+                )
+            ],
+            model="claude-opus-4-5-20251101",
+        )
+        mock_completion.return_value = mock_response
+
+        messages: LanguageModelInput = [UserMessage(content="Test")]
+        claude_anthropic_llm.invoke(messages, reasoning_effort=ReasoningEffort.OFF)
+
+        kwargs = mock_completion.call_args.kwargs
+        assert "thinking" not in kwargs
+        assert "reasoning_effort" not in kwargs
+
+
+def test_non_claude_non_openai_reasoning_model_uses_reasoning_effort() -> None:
+    """Test that non-Claude, non-OpenAI reasoning models use reasoning_effort param."""
+    # Use DeepSeek which is a reasoning model but not Claude or OpenAI
+    model_provider = "deepseek"
+    model_name = "deepseek-reasoner"
+
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=model_provider,
+        model_name=model_name,
+        max_input_tokens=64000,
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_response = litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=litellm.Message(
+                        content="Response",
+                        role="assistant",
+                    ),
+                )
+            ],
+            model="deepseek-reasoner",
+        )
+        mock_completion.return_value = mock_response
+
+        messages: LanguageModelInput = [UserMessage(content="Test")]
+        llm.invoke(messages, reasoning_effort=ReasoningEffort.MEDIUM)
+
+        kwargs = mock_completion.call_args.kwargs
+        # DeepSeek should use reasoning_effort, not thinking
+        assert "reasoning_effort" in kwargs
+        assert kwargs["reasoning_effort"] == ReasoningEffort.MEDIUM
+        assert "thinking" not in kwargs
