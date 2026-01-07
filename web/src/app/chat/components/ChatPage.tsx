@@ -645,6 +645,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
                   liveAssistant={liveAssistant}
                   llmManager={llmManager}
                   currentMessageFiles={currentMessageFiles}
+                  deepResearchEnabled={deepResearchEnabled}
                   setPresentingDocument={setPresentingDocument}
                   onSubmit={onSubmit}
                   onMessageSelection={onMessageSelection}
