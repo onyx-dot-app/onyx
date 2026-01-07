@@ -43,7 +43,6 @@ export interface ChatUIProps {
   liveAssistant: MinimalPersonaSnapshot | undefined;
   llmManager: LlmManager;
   currentMessageFiles: ProjectFile[];
-  deepResearchEnabled: boolean; // Manually pass in because ChatUI is memo
   setPresentingDocument: (doc: MinimalOnyxDocument | null) => void;
   onSubmit: (args: {
     message: string;
@@ -72,7 +71,6 @@ const ChatUI = React.memo(
         liveAssistant,
         llmManager,
         currentMessageFiles,
-        deepResearchEnabled,
         setPresentingDocument,
         onSubmit,
         onMessageSelection,
@@ -83,6 +81,10 @@ const ChatUI = React.memo(
     ) => {
       const { user } = useUser();
       const { currentChatSessionId } = useChatSessions();
+      const { deepResearchEnabled } = useDeepResearchToggle({
+        chatSessionId: currentChatSessionId,
+        assistantId: liveAssistant?.id,
+      });
       const { isMobile } = useScreenSize();
       const loadError = useLoadingError();
       const messages = useCurrentMessageHistory();
