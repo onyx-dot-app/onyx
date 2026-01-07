@@ -119,7 +119,7 @@ def _convert_inference_chunk_uncleaned_to_inference_chunk(
 def _convert_onyx_chunk_to_opensearch_document(
     chunk: DocMetadataAwareIndexChunk,
 ) -> DocumentChunk:
-    os_document_chunk = DocumentChunk(
+    return DocumentChunk(
         document_id=chunk.source_document.id,
         chunk_index=chunk.chunk_id,
         title=chunk.source_document.title,
@@ -165,7 +165,6 @@ def _convert_onyx_chunk_to_opensearch_document(
         # bug in prod.
         tenant_id=chunk.tenant_id,
     )
-    return os_document_chunk
 
 
 def _enrich_chunk_info() -> None:  # pyright: ignore[reportUnusedFunction]
