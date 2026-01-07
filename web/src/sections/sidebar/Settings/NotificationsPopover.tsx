@@ -13,6 +13,7 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import { SvgSparkle, SvgRefreshCw, SvgX } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 
 function getNotificationIcon(
   notifType: string
@@ -35,10 +36,11 @@ export default function NotificationsPopover({
   onNavigate,
 }: NotificationsPopoverProps) {
   const router = useRouter();
-  const { data: notifications, mutate } = useSWR<Notification[]>(
-    "/api/notifications",
-    errorHandlingFetcher
-  );
+  const {
+    data: notifications,
+    mutate,
+    isLoading,
+  } = useSWR<Notification[]>("/api/notifications", errorHandlingFetcher);
 
   const handleNotificationClick = (notification: Notification) => {
     const link = notification.additional_data?.link;
@@ -78,7 +80,11 @@ export default function NotificationsPopover({
       </div>
 
       <div className="flex-1 overflow-y-auto overflow-x-hidden">
-        {!notifications || notifications.length === 0 ? (
+        {isLoading ? (
+          <div className="w-full h-48 flex flex-col justify-center items-center">
+            <SimpleLoader className="animate-spin" />
+          </div>
+        ) : !notifications || notifications.length === 0 ? (
           <div className="w-full h-48 flex flex-col justify-center items-center">
             <Text as="p" text03>
               No notifications
