@@ -42,7 +42,7 @@ def test_zip_metadata_handling(
     before = datetime.now(timezone.utc)
     # Create an admin user
     admin_user: DATestUser = UserManager.create(
-        email="admin@onyx-test.com",
+        email="admin@example.com",
     )
 
     # Upload the test zip file (simulate this happening from frontend)

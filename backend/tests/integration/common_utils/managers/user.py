@@ -16,12 +16,12 @@ from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestUser
 
-DOMAIN = "test.com"
+DOMAIN = "example.com"
 DEFAULT_PASSWORD = "TestPassword123!"
 
 
 def build_email(name: str) -> str:
-    return f"{name}@test.com"
+    return f"{name}@example.com"
 
 
 class UserManager:
