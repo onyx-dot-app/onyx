@@ -148,7 +148,6 @@ jobs:
     needs:
       - check-version-tag
     if: always() && needs.check-version-tag.result == 'failure' && github.event_name != 'workflow_dispatch'
-    environment: release
     runs-on: ubuntu-slim
     timeout-minutes: 10
     steps:
@@ -168,7 +167,6 @@ jobs:
   build-desktop:
     needs: determine-builds
     if: needs.determine-builds.outputs.build-desktop == 'true'
-    environment: release
     permissions:
       contents: write
       actions: read
@@ -301,7 +299,6 @@ jobs:
   build-web-amd64:
     needs: determine-builds
     if: needs.determine-builds.outputs.build-web == 'true'
-    environment: release
     runs-on:
       - runs-on
       - runner=4cpu-linux-x64
@@ -360,7 +357,6 @@ jobs:
   build-web-arm64:
     needs: determine-builds
     if: needs.determine-builds.outputs.build-web == 'true'
-    environment: release
     runs-on:
       - runs-on
       - runner=4cpu-linux-arm64
@@ -421,7 +417,6 @@ jobs:
       - determine-builds
       - build-web-amd64
       - build-web-arm64
-    environment: release
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
@@ -475,7 +470,6 @@ jobs:
       - runner=4cpu-linux-x64
       - run-id=${{ github.run_id }}-web-cloud-amd64
       - extras=ecr-cache
-    environment: release
     timeout-minutes: 90
     outputs:
       digest: ${{ steps.build.outputs.digest }}
@@ -537,7 +531,6 @@ jobs:
   build-web-cloud-arm64:
     needs: determine-builds
     if: needs.determine-builds.outputs.build-web-cloud == 'true'
-    environment: release
     runs-on:
       - runs-on
       - runner=4cpu-linux-arm64
@@ -606,7 +599,6 @@ jobs:
       - determine-builds
       - build-web-cloud-amd64
       - build-web-cloud-arm64
-    environment: release
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
@@ -652,7 +644,6 @@ jobs:
   build-backend-amd64:
     needs: determine-builds
     if: needs.determine-builds.outputs.build-backend == 'true'
-    environment: release
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
@@ -710,7 +701,6 @@ jobs:
   build-backend-arm64:
     needs: determine-builds
     if: needs.determine-builds.outputs.build-backend == 'true'
-    environment: release
     runs-on:
       - runs-on
       - runner=2cpu-linux-arm64
@@ -770,7 +760,6 @@ jobs:
       - determine-builds
       - build-backend-amd64
       - build-backend-arm64
-    environment: release
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
@@ -819,7 +808,6 @@ jobs:
   build-model-server-amd64:
     needs: determine-builds
     if: needs.determine-builds.outputs.build-model-server == 'true'
-    environment: release
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
@@ -884,7 +872,6 @@ jobs:
   build-model-server-arm64:
     needs: determine-builds
     if: needs.determine-builds.outputs.build-model-server == 'true'
-    environment: release
     runs-on:
       - runs-on
       - runner=2cpu-linux-arm64
@@ -951,7 +938,6 @@ jobs:
       - determine-builds
       - build-model-server-amd64
       - build-model-server-arm64
-    environment: release
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
@@ -1002,7 +988,6 @@ jobs:
       - determine-builds
       - merge-web
     if: needs.merge-web.result == 'success'
-    environment: release
     runs-on:
       - runs-on
       - runner=2cpu-linux-arm64
@@ -1043,7 +1028,6 @@ jobs:
       - determine-builds
       - merge-web-cloud
     if: needs.merge-web-cloud.result == 'success'
-    environment: release
     runs-on:
       - runs-on
       - runner=2cpu-linux-arm64
@@ -1084,7 +1068,6 @@ jobs:
       - determine-builds
       - merge-backend
     if: needs.merge-backend.result == 'success'
-    environment: release
     runs-on:
       - runs-on
       - runner=2cpu-linux-arm64
@@ -1132,7 +1115,6 @@ jobs:
       - determine-builds
       - merge-model-server
     if: needs.merge-model-server.result == 'success'
-    environment: release
     runs-on:
       - runs-on
       - runner=2cpu-linux-arm64
@@ -1185,7 +1167,6 @@ jobs:
       - build-model-server-arm64
       - merge-model-server
     if: always() && (needs.build-desktop.result == 'failure' || needs.build-web-amd64.result == 'failure' || needs.build-web-arm64.result == 'failure' || needs.merge-web.result == 'failure' || needs.build-web-cloud-amd64.result == 'failure' || needs.build-web-cloud-arm64.result == 'failure' || needs.merge-web-cloud.result == 'failure' || needs.build-backend-amd64.result == 'failure' || needs.build-backend-arm64.result == 'failure' || needs.merge-backend.result == 'failure' || needs.build-model-server-amd64.result == 'failure' || needs.build-model-server-arm64.result == 'failure' || needs.merge-model-server.result == 'failure') && needs.determine-builds.outputs.is-test-run != 'true'
-    environment: release
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
     timeout-minutes: 90
