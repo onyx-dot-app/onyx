@@ -70,7 +70,7 @@ test.describe("Default Assistant MCP Integration", () => {
     }
 
     // Create a basic user for testing
-    basicUserEmail = `pw-basic-user-${Date.now()}@test.com`;
+    basicUserEmail = `pw-basic-user-${Date.now()}@example.com`;
     basicUserPassword = "BasicUserPass123!";
     await adminClient.registerUser(basicUserEmail, basicUserPassword);
 

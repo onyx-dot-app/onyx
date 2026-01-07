@@ -37,6 +37,7 @@ from onyx.server.manage.models import BoostDoc
 from onyx.server.manage.models import BoostUpdateRequest
 from onyx.server.manage.models import HiddenUpdateRequest
 from onyx.server.models import StatusResponse
+from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -134,7 +135,7 @@ def validate_existing_genai_api_key(
     kv_store.store(KV_GEN_AI_KEY_CHECK_TIME, curr_time.timestamp())
 
 
-@router.post("/admin/deletion-attempt")
+@router.post("/admin/deletion-attempt", tags=PUBLIC_API_TAGS)
 def create_deletion_attempt_for_connector_id(
     connector_credential_pair_identifier: ConnectorCredentialPairIdentifier,
     user: User = Depends(current_curator_or_admin_user),

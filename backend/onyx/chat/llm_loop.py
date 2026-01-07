@@ -352,6 +352,7 @@ def run_llm_loop(
 
         reasoning_cycles = 0
         for llm_cycle_count in range(MAX_LLM_CYCLES):
+            out_of_cycles = llm_cycle_count == MAX_LLM_CYCLES - 1
             if forced_tool_id:
                 # Needs to be just the single one because the "required" currently doesn't have a specified tool, just a binary
                 final_tools = [tool for tool in tools if tool.id == forced_tool_id]
@@ -359,7 +360,7 @@ def run_llm_loop(
                     raise ValueError(f"Tool {forced_tool_id} not found in tools")
                 tool_choice = ToolChoiceOptions.REQUIRED
                 forced_tool_id = None
-            elif llm_cycle_count == MAX_LLM_CYCLES - 1 or ran_image_gen:
+            elif out_of_cycles or ran_image_gen:
                 # Last cycle, no tools allowed, just answer!
                 tool_choice = ToolChoiceOptions.NONE
                 final_tools = []
@@ -426,7 +427,7 @@ def run_llm_loop(
                 # This is to prevent it generating things like:
                 # [Cute Cat](attachment://a_cute_cat_sitting_playfully.png)
                 reminder_message_text = IMAGE_GEN_REMINDER
-            elif just_ran_web_search:
+            elif just_ran_web_search and not out_of_cycles:
                 reminder_message_text = OPEN_URL_REMINDER
             else:
                 # This is the default case, the LLM at this point may answer so it is important
@@ -437,6 +438,7 @@ def run_llm_loop(
                     ),
                     include_citation_reminder=should_cite_documents
                     or always_cite_documents,
+                    is_last_cycle=out_of_cycles,
                 )
 
             reminder_msg = (

@@ -20,13 +20,13 @@ def setup_test_tenants(reset_multitenant: None) -> dict[str, Any]:
     unique = uuid4().hex
     # Creating an admin user for Tenant 1
     admin_user1: DATestUser = UserManager.create(
-        email=f"admin+{unique}@onyx-test.com",
+        email=f"admin+{unique}@example.com",
     )
     assert UserManager.is_role(admin_user1, UserRole.ADMIN)
 
     # Create Tenant 2 and its Admin User
     admin_user2: DATestUser = UserManager.create(
-        email=f"admin2+{unique}@onyx-test.com",
+        email=f"admin2+{unique}@example.com",
     )
     assert UserManager.is_role(admin_user2, UserRole.ADMIN)
 

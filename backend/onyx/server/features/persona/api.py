@@ -58,6 +58,7 @@ from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.manage.llm.api import get_valid_model_names_for_persona
 from onyx.server.models import DisplayPriorityRequest
 from onyx.server.settings.store import load_settings
+from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from shared_configs.contextvars import get_current_tenant_id
@@ -173,7 +174,7 @@ def patch_agents_display_priorities(
         raise HTTPException(status_code=403, detail=str(e))
 
 
-@admin_router.get("")
+@admin_router.get("", tags=PUBLIC_API_TAGS)
 def list_personas_admin(
     user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
@@ -188,7 +189,7 @@ def list_personas_admin(
     )
 
 
-@admin_agents_router.get("")
+@admin_agents_router.get("", tags=PUBLIC_API_TAGS)
 def get_agents_admin_paginated(
     page_num: int = Query(0, ge=0, description="Page number (0-indexed)."),
     page_size: int = Query(10, ge=1, le=1000, description="Items per page."),
@@ -233,7 +234,7 @@ def get_agents_admin_paginated(
     )
 
 
-@admin_router.patch("/{persona_id}/undelete")
+@admin_router.patch("/{persona_id}/undelete", tags=PUBLIC_API_TAGS)
 def undelete_persona(
     persona_id: int,
     user: User | None = Depends(current_admin_user),
@@ -266,7 +267,7 @@ def upload_file(
 """Endpoints for all"""
 
 
-@basic_router.post("")
+@basic_router.post("", tags=PUBLIC_API_TAGS)
 def create_persona(
     persona_upsert_request: PersonaUpsertRequest,
     user: User | None = Depends(current_user),
@@ -294,7 +295,7 @@ def create_persona(
 # NOTE: This endpoint cannot update persona configuration options that
 # are core to the persona, such as its display priority and
 # whether or not the assistant is a built-in / default assistant
-@basic_router.patch("/{persona_id}")
+@basic_router.patch("/{persona_id}", tags=PUBLIC_API_TAGS)
 def update_persona(
     persona_id: int,
     persona_upsert_request: PersonaUpsertRequest,
@@ -399,7 +400,7 @@ def share_persona(
             )
 
 
-@basic_router.delete("/{persona_id}")
+@basic_router.delete("/{persona_id}", tags=PUBLIC_API_TAGS)
 def delete_persona(
     persona_id: int,
     user: User | None = Depends(current_user),
@@ -432,7 +433,7 @@ def list_personas(
     return personas
 
 
-@agents_router.get("")
+@agents_router.get("", tags=PUBLIC_API_TAGS)
 def get_agents_paginated(
     page_num: int = Query(0, ge=0, description="Page number (0-indexed)."),
     page_size: int = Query(10, ge=1, le=1000, description="Items per page."),
@@ -480,7 +481,7 @@ def get_agents_paginated(
     )
 
 
-@basic_router.get("/{persona_id}")
+@basic_router.get("/{persona_id}", tags=PUBLIC_API_TAGS)
 def get_persona(
     persona_id: int,
     user: User | None = Depends(current_limited_user),

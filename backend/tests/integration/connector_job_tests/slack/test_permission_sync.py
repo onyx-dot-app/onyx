@@ -40,17 +40,17 @@ def test_slack_permission_sync(
 
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(
-        email="admin@onyx-test.com",
+        email="admin@example.com",
     )
 
     # Creating a non-admin user
     test_user_1: DATestUser = UserManager.create(
-        email="test_user_1@onyx-test.com",
+        email="test_user_1@example.com",
     )
 
     # Creating a non-admin user
     test_user_2: DATestUser = UserManager.create(
-        email="test_user_2@onyx-test.com",
+        email="test_user_2@example.com",
     )
 
     slack_client = SlackManager.get_slack_client(os.environ["SLACK_BOT_TOKEN"])
@@ -244,12 +244,12 @@ def test_slack_group_permission_sync(
 
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(
-        email="admin@onyx-test.com",
+        email="admin@example.com",
     )
 
     # Creating a non-admin user
     test_user_1: DATestUser = UserManager.create(
-        email="test_user_1@onyx-test.com",
+        email="test_user_1@example.com",
     )
 
     # Create a user group and adding the non-admin user to it

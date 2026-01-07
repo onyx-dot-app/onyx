@@ -21,11 +21,12 @@ from onyx.auth.users import current_curator_or_admin_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.db.models import UserRole
+from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-router = APIRouter(prefix="/manage")
+router = APIRouter(prefix="/manage", tags=PUBLIC_API_TAGS)
 
 
 @router.get("/admin/user-group")

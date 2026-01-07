@@ -36,13 +36,14 @@ from onyx.server.documents.private_key_types import FILE_TYPE_TO_FILE_PROCESSOR
 from onyx.server.documents.private_key_types import PrivateKeyFileTypes
 from onyx.server.documents.private_key_types import ProcessPrivateKeyFileProtocol
 from onyx.server.models import StatusResponse
+from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 logger = setup_logger()
 
 
-router = APIRouter(prefix="/manage")
+router = APIRouter(prefix="/manage", tags=PUBLIC_API_TAGS)
 
 
 def _ignore_credential_permissions(source: DocumentSource) -> bool:
