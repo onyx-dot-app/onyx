@@ -450,7 +450,9 @@ export function useChatController({
           (agent) => agent.id === liveAssistant.id
         );
         if (!isAlreadyPinned) {
-          togglePinnedAgent(liveAssistant, true);
+          togglePinnedAgent(liveAssistant, true).catch((err) => {
+            console.error("Failed to auto-pin agent:", err);
+          });
         }
       }
 
