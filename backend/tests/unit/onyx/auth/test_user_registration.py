@@ -9,6 +9,7 @@ Tests cover:
 5. Case-insensitive email matching for existing user checks
 """
 
+from types import TracebackType
 from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 from unittest.mock import patch
@@ -43,6 +44,22 @@ def mock_async_session() -> MagicMock:
     session.commit = AsyncMock()
     session.rollback = AsyncMock()
     return session
+
+
+class _AsyncSessionContextManager:
+    def __init__(self, session: MagicMock) -> None:
+        self._session = session
+
+    async def __aenter__(self) -> MagicMock:
+        return self._session
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> bool:
+        return False
 
 
 class TestDisposableEmailValidation:
@@ -97,10 +114,9 @@ class TestDisposableEmailValidation:
         mock_is_disposable.return_value = False
         mock_verify_domain.return_value = None  # No exception = valid
         mock_fetch_ee.return_value = AsyncMock(return_value="default_schema")
-        mock_session_manager.return_value.__aenter__ = AsyncMock(
-            return_value=mock_async_session
+        mock_session_manager.return_value = _AsyncSessionContextManager(
+            mock_async_session
         )
-        mock_session_manager.return_value.__aexit__ = AsyncMock(return_value=None)
         mock_get_user_count.return_value = 0
 
         user_manager = UserManager(MagicMock())
@@ -151,10 +167,9 @@ class TestMultiTenantInviteLogic:
         # Setup: No existing users
         mock_get_user_count.return_value = 0
         mock_fetch_ee.return_value = AsyncMock(return_value="tenant_123")
-        mock_session_manager.return_value.__aenter__ = AsyncMock(
-            return_value=mock_async_session
+        mock_session_manager.return_value = _AsyncSessionContextManager(
+            mock_async_session
         )
-        mock_session_manager.return_value.__aexit__ = AsyncMock(return_value=None)
         mock_context_var.set.return_value = MagicMock()
 
         # Mock the user_db to avoid actual database operations
@@ -201,10 +216,9 @@ class TestMultiTenantInviteLogic:
         # Setup: Existing tenant with users
         mock_get_user_count.return_value = 5
         mock_fetch_ee.return_value = AsyncMock(return_value="tenant_123")
-        mock_session_manager.return_value.__aenter__ = AsyncMock(
-            return_value=mock_async_session
+        mock_session_manager.return_value = _AsyncSessionContextManager(
+            mock_async_session
         )
-        mock_session_manager.return_value.__aexit__ = AsyncMock(return_value=None)
         mock_context_var.set.return_value = MagicMock()
 
         # Mock the user_db to avoid actual database operations
@@ -252,10 +266,9 @@ class TestSingleTenantInviteLogic:
         """Single-tenant should always check invite list."""
         # Setup
         mock_fetch_ee.return_value = AsyncMock(return_value="default_schema")
-        mock_session_manager.return_value.__aenter__ = AsyncMock(
-            return_value=mock_async_session
+        mock_session_manager.return_value = _AsyncSessionContextManager(
+            mock_async_session
         )
-        mock_session_manager.return_value.__aexit__ = AsyncMock(return_value=None)
         mock_get_user_count.return_value = 0
         mock_context_var.set.return_value = MagicMock()
 
@@ -398,10 +411,9 @@ class TestCaseInsensitiveEmailMatching:
         # Setup
         mock_get_user_count.return_value = 0  # First user - no invite needed
         mock_fetch_ee.return_value = AsyncMock(return_value="tenant_123")
-        mock_session_manager.return_value.__aenter__ = AsyncMock(
-            return_value=mock_async_session
+        mock_session_manager.return_value = _AsyncSessionContextManager(
+            mock_async_session
         )
-        mock_session_manager.return_value.__aexit__ = AsyncMock(return_value=None)
         mock_context_var.set.return_value = MagicMock()
 
         # Create a result mock
@@ -461,10 +473,9 @@ class TestCaseInsensitiveEmailMatching:
         mock_verify_domain.return_value = None
         mock_get_user_count.return_value = 10  # Existing tenant
         mock_fetch_ee.return_value = AsyncMock(return_value="existing_tenant_789")
-        mock_session_manager.return_value.__aenter__ = AsyncMock(
-            return_value=mock_async_session
+        mock_session_manager.return_value = _AsyncSessionContextManager(
+            mock_async_session
         )
-        mock_session_manager.return_value.__aexit__ = AsyncMock(return_value=None)
         mock_context_var.set.return_value = MagicMock()
 
         user_manager = UserManager(MagicMock())
