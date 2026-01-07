@@ -189,10 +189,10 @@ export async function inviteAdmin2AsAdmin1(page: Page) {
   try {
     // Wait for the dropdown trigger to be visible and click it
     await page
-      .getByTestId("user-role-dropdown-trigger-admin2_user@test.com")
+      .getByTestId("user-role-dropdown-trigger-admin2_user@example.com")
       .waitFor({ state: "visible", timeout: 5000 });
     await page
-      .getByTestId("user-role-dropdown-trigger-admin2_user@test.com")
+      .getByTestId("user-role-dropdown-trigger-admin2_user@example.com")
       .click();
 
     // Wait for the admin option to be visible
@@ -208,7 +208,7 @@ export async function inviteAdmin2AsAdmin1(page: Page) {
 
     // Verify that the change was successful (you may need to adjust this based on your UI)
     const newRole = await page
-      .getByTestId("user-role-dropdown-trigger-admin2_user@test.com")
+      .getByTestId("user-role-dropdown-trigger-admin2_user@example.com")
       .textContent();
     if (newRole?.toLowerCase().includes("admin")) {
       console.log("Successfully invited admin2 as admin");
