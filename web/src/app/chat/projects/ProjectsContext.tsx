@@ -389,11 +389,10 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
           const rejected_files = uploaded.rejected_files || [];
 
           if (rejected_files.length > 0) {
-            const detailsParts: string[] = [];
-
-            rejected_files.forEach((rejected_file) => {
-              detailsParts.push(rejected_file.reason);
-            });
+            const uniqueReasons = new Set(
+              rejected_files.map((rejected_file) => rejected_file.reason)
+            );
+            const detailsParts = Array.from(uniqueReasons);
 
             setPopup?.({
               type: "warning",
