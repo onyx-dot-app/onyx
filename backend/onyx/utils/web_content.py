@@ -4,7 +4,7 @@ import io
 from urllib.parse import unquote
 from urllib.parse import urlparse
 
-from bs4 import UnicodeDammit
+from bs4.dammit import UnicodeDammit
 
 from onyx.file_processing.extract_file_text import read_pdf_file
 
@@ -41,9 +41,11 @@ def decode_html_bytes(
     if fallback_encoding and fallback_encoding not in override_encodings:
         override_encodings.append(fallback_encoding)
 
-    dammit = UnicodeDammit(content, override_encodings=override_encodings or None)
-    if dammit.unicode_markup is not None:
-        return dammit.unicode_markup
+    unicode_dammit = UnicodeDammit(
+        content, override_encodings=override_encodings or None
+    )
+    if unicode_dammit.unicode_markup is not None:
+        return unicode_dammit.unicode_markup
 
     encoding = override_encodings[0] if override_encodings else "utf-8"
     return content.decode(encoding, errors="replace")
