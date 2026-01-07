@@ -43,7 +43,7 @@ export function FailedReIndexAttempts({
   );
 
   return (
-    <div className="mt-6 mb-8 p-4 border border-red-300 rounded-lg bg-red-50">
+    <div className="mt-6 mb-8 p-4 border border-red-300 dark:border-red-500 rounded-lg bg-red-50 dark:bg-red-900/10">
       {pendingConnectorDeletion && (
         <ConfirmEntityModal
           danger
