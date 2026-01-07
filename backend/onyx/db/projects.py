@@ -21,6 +21,7 @@ from onyx.db.models import UserFile
 from onyx.db.models import UserProject
 from onyx.server.documents.connector import upload_files
 from onyx.server.features.projects.projects_file_utils import categorize_uploaded_files
+from onyx.server.features.projects.projects_file_utils import RejectedFile
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -29,8 +30,7 @@ logger = setup_logger()
 
 class CategorizedFilesResult(BaseModel):
     user_files: list[UserFile]
-    non_accepted_files: list[str]
-    unsupported_files: list[str]
+    rejected_files: list[RejectedFile]
     id_to_temp_id: dict[str, str]
     # Allow SQLAlchemy ORM models inside this result container
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -56,8 +56,7 @@ def create_user_files(
     # Should revisit to decide whether this should be a feature.
     upload_response = upload_files(categorized_files.acceptable, FileOrigin.USER_FILE)
     user_files = []
-    non_accepted_files = categorized_files.non_accepted
-    unsupported_files = categorized_files.unsupported
+    rejected_files = categorized_files.rejected
     id_to_temp_id: dict[str, str] = {}
     # Pair returned storage paths with the same set of acceptable files we uploaded
     for file_path, file in zip(
@@ -96,8 +95,7 @@ def create_user_files(
     db_session.commit()
     return CategorizedFilesResult(
         user_files=user_files,
-        non_accepted_files=non_accepted_files,
-        unsupported_files=unsupported_files,
+        rejected_files=rejected_files,
         id_to_temp_id=id_to_temp_id,
     )
 
@@ -122,17 +120,14 @@ def upload_files_to_user_files_with_indexing(
         temp_id_map=temp_id_map,
     )
     user_files = categorized_files_result.user_files
-    non_accepted_files = categorized_files_result.non_accepted_files
-    unsupported_files = categorized_files_result.unsupported_files
+    rejected_files = categorized_files_result.rejected_files
     id_to_temp_id = categorized_files_result.id_to_temp_id
     # Trigger per-file processing immediately for the current tenant
     tenant_id = get_current_tenant_id()
-    if non_accepted_files:
-        for filename in non_accepted_files:
-            logger.warning(f"Non-accepted file: {filename}")
-    if unsupported_files:
-        for filename in unsupported_files:
-            logger.warning(f"Unsupported file: {filename}")
+    for rejected_file in rejected_files:
+        logger.warning(
+            f"File {rejected_file.filename} rejected for {rejected_file.reason}"
+        )
     for user_file in user_files:
         task = client_app.send_task(
             OnyxCeleryTask.PROCESS_SINGLE_USER_FILE,
@@ -146,8 +141,7 @@ def upload_files_to_user_files_with_indexing(
 
     return CategorizedFilesResult(
         user_files=user_files,
-        non_accepted_files=non_accepted_files,
-        unsupported_files=unsupported_files,
+        rejected_files=rejected_files,
         id_to_temp_id=id_to_temp_id,
     )
 
