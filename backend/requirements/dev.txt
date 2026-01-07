@@ -330,7 +330,7 @@ pluggy==1.6.0
     #   pytest
 pre-commit==3.2.2
     # via onyx
-prometheus-client==0.21.0
+prometheus-client==0.23.1
     # via
     #   onyx
     #   prometheus-fastapi-instrumentator
