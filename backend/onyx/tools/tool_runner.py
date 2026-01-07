@@ -148,6 +148,9 @@ def run_tool_calls(
     user_info: str | None,
     citation_mapping: dict[int, str],
     next_citation_num: int,
+    # Max number of tools to run concurrently (and overall) in this batch.
+    # If set, tool calls beyond this limit are dropped.
+    max_concurrent_tools: int | None = None,
     # Skip query expansion for repeat search tool calls
     skip_search_query_expansion: bool = False,
 ) -> tuple[list[ToolResponse], dict[int, str]]:
@@ -165,6 +168,8 @@ def run_tool_calls(
         user_info: User information string, if available
         citation_mapping: Current citation number to URL mapping
         next_citation_num: Next citation number to use
+        max_concurrent_tools: Max number of tools to run in this batch. If set, any
+            tool calls after this limit are dropped (not queued).
         skip_search_query_expansion: Whether to skip query expansion for search tools
 
     Returns:
@@ -179,6 +184,20 @@ def run_tool_calls(
         return [], citation_mapping
 
     tools_by_name = {tool.name: tool for tool in tools}
+
+    # Drop unknown tools (and don't let them count against the cap)
+    filtered_tool_calls: list[ToolCallKickoff] = []
+    for tool_call in merged_tool_calls:
+        if tool_call.tool_name not in tools_by_name:
+            logger.warning(f"Tool {tool_call.tool_name} not found in tools list")
+            continue
+        filtered_tool_calls.append(tool_call)
+
+    # Apply safety cap (drop tool calls beyond the cap)
+    if max_concurrent_tools is not None:
+        if max_concurrent_tools <= 0:
+            return [], citation_mapping
+        filtered_tool_calls = filtered_tool_calls[:max_concurrent_tools]
 
     # Get starting citation number from citation processor to avoid conflicts with project files
     starting_citation_num = next_citation_num
@@ -203,11 +222,7 @@ def run_tool_calls(
     # Each tool gets a unique starting citation number to avoid conflicts when running in parallel
     tool_run_params: list[tuple[Tool, ToolCallKickoff, Any]] = []
 
-    for tool_call in merged_tool_calls:
-        if tool_call.tool_name not in tools_by_name:
-            logger.warning(f"Tool {tool_call.tool_name} not found in tools list")
-            continue
-
+    for tool_call in filtered_tool_calls:
         tool = tools_by_name[tool_call.tool_name]
 
         # Emit the tool start packet before running the tool
@@ -261,6 +276,7 @@ def run_tool_calls(
     tool_responses: list[ToolResponse] = run_functions_tuples_in_parallel(
         functions_with_args,
         allow_failures=True,  # Continue even if some tools fail
+        max_workers=max_concurrent_tools,
     )
 
     # Process results and update citation_mapping
