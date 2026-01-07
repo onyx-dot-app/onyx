@@ -73,10 +73,10 @@ export function FailedReIndexAttempts({
         />
       )}
 
-      <Text className="text-red-700 font-semibold mb-2">
+      <Text className="text-status-error-05 font-semibold mb-2">
         Failed Re-indexing Attempts
       </Text>
-      <Text className="text-red-600 mb-4">
+      <Text className="text-status-error-05 mb-4">
         The table below shows only the failed re-indexing attempts for existing
         connectors. These failures require immediate attention. Once all
         connectors have been re-indexed successfully, the new model will be used
