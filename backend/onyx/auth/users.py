@@ -54,7 +54,6 @@ from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 from httpx_oauth.oauth2 import BaseOAuth2
 from httpx_oauth.oauth2 import OAuth2Token
 from pydantic import BaseModel
-from sqlalchemy import func
 from sqlalchemy import nulls_last
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -380,16 +379,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 if MULTI_TENANT:
                     # Multi-tenant: Only require invite for existing tenants
                     # New tenant creation (first user) doesn't require an invite
-                    from onyx.db.models import User as UserModel
-
-                    result = await db_session.execute(
-                        select(UserModel).where(
-                            func.lower(UserModel.email) == func.lower(user_create.email)
-                        )
-                    )
-                    existing_user = result.scalar_one_or_none()
-                    if existing_user:
-                        # Existing user - shouldn't happen in normal signup flow
+                    user_count = await get_user_count()
+                    if user_count > 0:
+                        # Tenant already has users - require invite for new users
                         verify_email_is_invited(user_create.email)
                 else:
                     # Single-tenant: Check invite list (skips if SAML/OIDC or no list configured)
