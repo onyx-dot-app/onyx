@@ -49,6 +49,9 @@ CLAUDE.md
 # Local .terraform.lock.hcl file
 .terraform.lock.hcl
 
+# Local docker-compose overrides
+/deployment/docker_compose/docker-compose.local-backend.yml
+
 node_modules
 
 # MCP configs

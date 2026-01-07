@@ -214,6 +214,7 @@ class DocumentSource(str, Enum):
     IMAP = "imap"
     BITBUCKET = "bitbucket"
     TESTRAIL = "testrail"
+    AZURE_DEVOPS = "azure_devops"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
@@ -589,6 +590,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.GITBOOK: "gitbook data",
     DocumentSource.GITLAB: "gitlab data",
     DocumentSource.BITBUCKET: "bitbucket data",
+    DocumentSource.AZURE_DEVOPS: "azure devops data (code repositories, PRs)",
     DocumentSource.GURU: "guru data",
     DocumentSource.BOOKSTACK: "bookstack data",
     DocumentSource.OUTLINE: "outline data",
