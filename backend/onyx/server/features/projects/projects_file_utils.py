@@ -195,7 +195,7 @@ def categorize_uploaded_files(files: list[UploadFile]) -> CategorizedFiles:
                 )
                 if not text_content:
                     logger.warning(f"No text content extracted from '{filename}'")
-                    results.rejected(
+                    results.rejected.append(
                         RejectedFile(filename=filename, reason="Could not read file")
                     )
                     continue
