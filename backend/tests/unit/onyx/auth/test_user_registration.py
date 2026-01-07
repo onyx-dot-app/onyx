@@ -62,6 +62,11 @@ class _AsyncSessionContextManager:
         return False
 
 
+def _mock_user_manager_methods(user_manager: UserManager) -> None:
+    setattr(user_manager, "validate_password", AsyncMock())
+    setattr(user_manager, "_assign_default_pinned_assistants", AsyncMock())
+
+
 class TestDisposableEmailValidation:
     """Test disposable email validation before tenant provisioning."""
 
@@ -120,8 +125,7 @@ class TestDisposableEmailValidation:
         mock_get_user_count.return_value = 0
 
         user_manager = UserManager(MagicMock())
-        user_manager.validate_password = AsyncMock()
-        user_manager._assign_default_pinned_assistants = AsyncMock()
+        _mock_user_manager_methods(user_manager)
 
         # Mock the user_db to avoid actual database operations
         mock_user_db = MagicMock()
@@ -178,8 +182,7 @@ class TestMultiTenantInviteLogic:
         mock_sql_alchemy_db.return_value = mock_user_db
 
         user_manager = UserManager(MagicMock())
-        user_manager.validate_password = AsyncMock()
-        user_manager._assign_default_pinned_assistants = AsyncMock()
+        _mock_user_manager_methods(user_manager)
 
         try:
             await user_manager.create(mock_user_create)
@@ -227,8 +230,7 @@ class TestMultiTenantInviteLogic:
         mock_sql_alchemy_db.return_value = mock_user_db
 
         user_manager = UserManager(MagicMock())
-        user_manager.validate_password = AsyncMock()
-        user_manager._assign_default_pinned_assistants = AsyncMock()
+        _mock_user_manager_methods(user_manager)
 
         try:
             await user_manager.create(mock_user_create)
@@ -273,8 +275,7 @@ class TestSingleTenantInviteLogic:
         mock_context_var.set.return_value = MagicMock()
 
         user_manager = UserManager(MagicMock())
-        user_manager.validate_password = AsyncMock()
-        user_manager._assign_default_pinned_assistants = AsyncMock()
+        _mock_user_manager_methods(user_manager)
 
         # Mock the user_db to avoid actual database operations
         mock_user_db = MagicMock()
@@ -428,8 +429,7 @@ class TestCaseInsensitiveEmailMatching:
         )
 
         user_manager = UserManager(MagicMock())
-        user_manager.validate_password = AsyncMock()
-        user_manager._assign_default_pinned_assistants = AsyncMock()
+        _mock_user_manager_methods(user_manager)
 
         # Mock the user_db to avoid actual database operations
         mock_user_db = MagicMock()
@@ -479,8 +479,7 @@ class TestCaseInsensitiveEmailMatching:
         mock_context_var.set.return_value = MagicMock()
 
         user_manager = UserManager(MagicMock())
-        user_manager.validate_password = AsyncMock()
-        user_manager._assign_default_pinned_assistants = AsyncMock()
+        _mock_user_manager_methods(user_manager)
 
         # Mock the user_db to avoid actual database operations
         mock_user_db = MagicMock()
