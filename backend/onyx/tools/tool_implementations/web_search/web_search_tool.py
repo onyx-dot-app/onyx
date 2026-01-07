@@ -147,7 +147,7 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
 
             # Remove site: operator for Exa
             cleaned_query = re.sub(
-                r"site:\S+\s*", "", query, flags=re.IGNORECASE
+                r"site:\s*\S+\s*", "", query, flags=re.IGNORECASE
             ).strip()
             if not cleaned_query and site_domains:
                 cleaned_query = site_domains[0]
