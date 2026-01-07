@@ -258,9 +258,11 @@ jobs:
         if: runner.os == 'Windows'
         working-directory: ./desktop
         shell: pwsh
+        env:
+          IS_TEST_RUN: ${{ needs.determine-builds.outputs.is-test-run }}
         run: |
           # Windows MSI requires numeric-only build metadata, so we skip the SHA suffix
-          if ("${{ needs.determine-builds.outputs.is-test-run }}" -eq "true") {
+          if ($env:IS_TEST_RUN -eq "true") {
             $VERSION = "0.0.0"
           } else {
             # Strip 'v' prefix and any pre-release suffix (e.g., -beta.13) for MSI compatibility
