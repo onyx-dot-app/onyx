@@ -395,7 +395,10 @@ def retrieve_chunks(
                 (doc_index_retrieval, (q_copy, document_index, db_session))
             )
 
-    parallel_search_results = run_functions_tuples_in_parallel(run_queries)
+    parallel_search_results = run_functions_tuples_in_parallel(
+        run_queries,
+        max_workers=5,
+    )
     top_chunks = combine_retrieval_results(parallel_search_results)
 
     if not top_chunks:
@@ -495,7 +498,10 @@ def search_chunks(
             (_embed_and_search, (query_request, document_index, db_session))
         )
 
-    parallel_search_results = run_functions_tuples_in_parallel(run_queries)
+    parallel_search_results = run_functions_tuples_in_parallel(
+        run_queries,
+        max_workers=5,
+    )
     top_chunks = combine_retrieval_results(parallel_search_results)
 
     if not top_chunks:

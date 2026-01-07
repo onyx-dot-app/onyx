@@ -154,6 +154,7 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
             run_functions_tuples_in_parallel(
                 functions_with_args,
                 allow_failures=True,
+                max_workers=5,
             )
         )
 

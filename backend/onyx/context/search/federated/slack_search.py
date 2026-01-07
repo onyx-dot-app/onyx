@@ -1091,7 +1091,10 @@ def slack_retrieval(
             )
 
     # Execute searches in parallel
-    results = run_functions_tuples_in_parallel(search_tasks)
+    results = run_functions_tuples_in_parallel(
+        search_tasks,
+        max_workers=5,
+    )
 
     # Calculate stats for consolidated logging
     total_raw_messages = sum(len(r.messages) for r in results)

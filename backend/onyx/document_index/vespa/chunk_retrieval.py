@@ -303,7 +303,9 @@ def parallel_visit_api_retrieval(
     ]
 
     parallel_results = run_functions_tuples_in_parallel(
-        functions_with_args, allow_failures=True
+        functions_with_args,
+        allow_failures=True,
+        max_workers=5,
     )
 
     # Any failures to retrieve would give a None, drop the Nones and empty lists

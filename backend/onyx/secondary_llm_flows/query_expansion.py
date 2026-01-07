@@ -247,7 +247,10 @@ def multilingual_query_expansion(
             for language in languages
         ]
 
-        query_rephrases = run_functions_tuples_in_parallel(functions_with_args)
+        query_rephrases = run_functions_tuples_in_parallel(
+            functions_with_args,
+            max_workers=5,
+        )
         return query_rephrases
 
     else:

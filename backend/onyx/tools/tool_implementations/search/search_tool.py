@@ -563,7 +563,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 ]
 
                 expansion_results = run_functions_tuples_in_parallel(
-                    functions_with_args
+                    functions_with_args,
+                    max_workers=2,
                 )
 
                 # End timing for query expansion/rephrase
@@ -680,7 +681,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 search_weights.append(ORIGINAL_QUERY_WEIGHT)
 
             # Run all searches in parallel (Vespa queries + Slack)
-            all_search_results = run_functions_tuples_in_parallel(search_functions)
+            all_search_results = run_functions_tuples_in_parallel(
+                search_functions,
+                max_workers=5,
+            )
 
             # Merge results using weighted Reciprocal Rank Fusion
             # This intelligently combines rankings from different queries
@@ -805,7 +809,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             document_expansion_start_time = time.time()
 
             # Run all expansions in parallel
-            expanded_sections = run_functions_tuples_in_parallel(expansion_functions)
+            expanded_sections = run_functions_tuples_in_parallel(
+                expansion_functions,
+                max_workers=5,
+            )
 
             # End timing for document expansion
             document_expansion_elapsed = time.time() - document_expansion_start_time

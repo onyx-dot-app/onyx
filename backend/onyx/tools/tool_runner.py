@@ -261,6 +261,7 @@ def run_tool_calls(
     tool_responses: list[ToolResponse] = run_functions_tuples_in_parallel(
         functions_with_args,
         allow_failures=True,  # Continue even if some tools fail
+        max_workers=5,
     )
 
     # Process results and update citation_mapping

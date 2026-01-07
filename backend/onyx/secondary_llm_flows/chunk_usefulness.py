@@ -77,7 +77,9 @@ def llm_batch_eval_sections(
             "Running LLM usefulness eval in parallel (following logging may be out of order)"
         )
         parallel_results = run_functions_tuples_in_parallel(
-            functions_with_args, allow_failures=True
+            functions_with_args,
+            allow_failures=True,
+            max_workers=5,
         )
 
         # In case of failure/timeout, don't throw out the section
