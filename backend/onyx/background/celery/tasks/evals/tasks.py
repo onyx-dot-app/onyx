@@ -6,7 +6,6 @@ from celery import shared_task
 from celery import Task
 
 from onyx.configs.app_configs import BRAINTRUST_API_KEY
-from onyx.configs.app_configs import BRAINTRUST_PROJECT
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.app_configs import SCHEDULED_EVAL_DATASET_NAMES
 from onyx.configs.app_configs import SCHEDULED_EVAL_PERMISSIONS_EMAIL
@@ -63,8 +62,10 @@ def scheduled_eval_task(self: Task, **kwargs: Any) -> None:
         logger.error("BRAINTRUST_API_KEY is not configured, cannot run scheduled evals")
         return
 
-    if not BRAINTRUST_PROJECT:
-        logger.error("BRAINTRUST_PROJECT is not configured, cannot run scheduled evals")
+    if not SCHEDULED_EVAL_PROJECT:
+        logger.error(
+            "SCHEDULED_EVAL_PROJECT is not configured, cannot run scheduled evals"
+        )
         return
 
     if not SCHEDULED_EVAL_DATASET_NAMES:
