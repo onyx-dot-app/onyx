@@ -213,7 +213,7 @@ export default function Status() {
   });
 
   return (
-    <div className="container">
+    <>
       {popup}
       <AdminPageTitle
         icon={<NotebookIcon size={32} />}
@@ -224,6 +224,6 @@ export default function Status() {
       />
 
       <Main />
-    </div>
+    </>
   );
 }

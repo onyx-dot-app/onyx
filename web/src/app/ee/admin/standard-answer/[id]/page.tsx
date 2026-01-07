@@ -68,7 +68,7 @@ async function Page(props: { params: Promise<{ id: string }> }) {
   const standardAnswerCategories =
     (await standardAnswerCategoriesResponse.json()) as StandardAnswerCategory[];
   return (
-    <div className="container">
+    <>
       <BackButton />
       <AdminPageTitle
         title="Edit Standard Answer"
@@ -79,7 +79,7 @@ async function Page(props: { params: Promise<{ id: string }> }) {
         standardAnswerCategories={standardAnswerCategories}
         existingStandardAnswer={standardAnswer}
       />
-    </div>
+    </>
   );
 }
 

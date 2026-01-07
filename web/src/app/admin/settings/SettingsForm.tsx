@@ -220,7 +220,7 @@ export function SettingsForm() {
   }
 
   return (
-    <div className="flex flex-col pb-8">
+    <>
       {popup}
       <Title className="mb-4">Workspace Settings</Title>
       <label className="flex flex-col text-sm mb-4">
@@ -441,6 +441,6 @@ export function SettingsForm() {
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
