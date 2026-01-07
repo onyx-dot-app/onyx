@@ -13,6 +13,7 @@ import type { IconProps } from "@opal/types";
 import { SvgChevronRight, SvgKey, SvgSettings, SvgSlash } from "@opal/icons";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 
 export interface ActionItemProps {
   tool?: ToolSnapshot;
@@ -22,6 +23,9 @@ export interface ActionItemProps {
   isForced: boolean;
   isUnavailable?: boolean;
   unavailableReason?: string;
+  showAdminConfigure?: boolean;
+  adminConfigureHref?: string;
+  adminConfigureTooltip?: string;
   onToggle: () => void;
   onForceToggle: () => void;
   onSourceManagementOpen?: () => void;
@@ -39,6 +43,9 @@ export default function ActionLineItem({
   isForced,
   isUnavailable = false,
   unavailableReason,
+  showAdminConfigure = false,
+  adminConfigureHref,
+  adminConfigureTooltip = "Configure",
   onToggle,
   onForceToggle,
   onSourceManagementOpen,
@@ -121,6 +128,17 @@ export default function ActionLineItem({
                     !disabled && "invisible group-hover/LineItem:visible"
                   )}
                   tooltip={disabled ? "Enable" : "Disable"}
+                />
+              )}
+              {isUnavailable && showAdminConfigure && adminConfigureHref && (
+                <IconButton
+                  icon={SvgSettings}
+                  onClick={noProp(() => {
+                    router.push(adminConfigureHref as Route);
+                    onClose?.();
+                  })}
+                  internal
+                  tooltip={adminConfigureTooltip}
                 />
               )}
               {isSearchToolAndNotInProject && (

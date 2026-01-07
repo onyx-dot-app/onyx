@@ -553,6 +553,10 @@ export default function ActionsPopover({
             const isToolAvailable = availableToolIdSet.has(tool.id);
             const isUnavailable =
               !isToolAvailable && tool.in_code_tool_id !== SEARCH_TOOL_ID;
+            const showImageGenConfigure =
+              isUnavailable &&
+              tool.in_code_tool_id === IMAGE_GENERATION_TOOL_ID &&
+              (isAdmin || isCurator);
             return (
               <ActionLineItem
                 key={tool.id}
@@ -565,6 +569,9 @@ export default function ActionsPopover({
                     ? getUnavailableToolTooltip(tool.in_code_tool_id)
                     : undefined
                 }
+                showAdminConfigure={showImageGenConfigure}
+                adminConfigureHref="/admin/configuration/image-generation"
+                adminConfigureTooltip="Configure Image Generation"
                 onToggle={() => toggleToolForCurrentAssistant(tool.id)}
                 onForceToggle={() => toggleForcedTool(tool.id)}
                 onSourceManagementOpen={() =>
