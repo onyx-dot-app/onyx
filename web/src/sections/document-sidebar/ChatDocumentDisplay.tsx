@@ -11,6 +11,7 @@ import { ValidSources } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import Truncated from "@/refresh-components/texts/Truncated";
 import Text from "@/refresh-components/texts/Text";
+import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 
 interface DocumentMetadataBlockProps {
   modal?: boolean;
@@ -82,11 +83,11 @@ export default function ChatDocumentDisplay({
     <div
       onClick={() => openDocument(document, setPresentingDocument)}
       className={cn(
-        "flex w-full flex-col p-3 gap-2 rounded-12 hover:bg-background-tint-00 cursor-pointer",
+        "group flex w-full flex-col p-3 gap-2 rounded-12 hover:bg-background-tint-00 cursor-pointer relative",
         isSelected && "bg-action-link-02"
       )}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 pr-8">
         {document.is_internet || document.source_type === ValidSources.Web ? (
           <WebResultIcon url={document.link} />
         ) : (
@@ -95,6 +96,16 @@ export default function ChatDocumentDisplay({
         <Truncated className="line-clamp-2" side="left">
           {title}
         </Truncated>
+      </div>
+
+      <div
+        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <CopyIconButton
+          getCopyText={() => document.link || title}
+          tooltip="Copy Link"
+        />
       </div>
 
       {hasMetadata && (

@@ -59,8 +59,7 @@ export default function CitedSourcesToggle({
     return { sourceKey, iconElement };
   };
 
-  // Get unique icons by creating a unique identifier for each source
-  const getUniqueIcons = () => {
+  const getSourceData = () => {
     const seenSources = new Set<string>();
     const uniqueIcons: Array<{
       id: string;
@@ -71,17 +70,15 @@ export default function CitedSourcesToggle({
     const documentsToProcess =
       citations.length > 0
         ? citations.map((citation) => ({
-            documentId: citation.document_id,
-            doc: documentMap.get(citation.document_id),
-          }))
+          documentId: citation.document_id,
+          doc: documentMap.get(citation.document_id),
+        }))
         : Array.from(documentMap.entries()).map(([documentId, doc]) => ({
-            documentId,
-            doc,
-          }));
+          documentId,
+          doc,
+        }));
 
     for (const { documentId, doc } of documentsToProcess) {
-      if (uniqueIcons.length >= 2) break;
-
       let sourceKey: string;
       let iconElement: React.ReactNode;
 
@@ -97,20 +94,27 @@ export default function CitedSourcesToggle({
 
       if (!seenSources.has(sourceKey)) {
         seenSources.add(sourceKey);
-        uniqueIcons.push({
-          id: sourceKey,
-          element: iconElement,
-        });
+        // Show up to 3 icons (as supported by Tag)
+        if (uniqueIcons.length < 3) {
+          uniqueIcons.push({
+            id: sourceKey,
+            element: iconElement,
+          });
+        }
       }
     }
 
-    return uniqueIcons;
+    return { uniqueIcons, totalCount: seenSources.size };
   };
 
-  const uniqueIcons = getUniqueIcons();
+  const { uniqueIcons, totalCount } = getSourceData();
 
   return (
-    <Tag label="Sources" onClick={() => onToggle(nodeId)}>
+    <Tag
+      label="Sources"
+      onClick={() => onToggle(nodeId)}
+      count={totalCount}
+    >
       {uniqueIcons.map((icon) => (() => icon.element) as any)}
     </Tag>
   );

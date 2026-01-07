@@ -17,12 +17,14 @@ export interface TagProps {
   // Tag content:
   label: string;
   className?: string;
+  count?: number;
   children: React.FunctionComponent<SVGProps<SVGSVGElement>>[];
   onClick?: React.MouseEventHandler;
 }
 
 export default function Tag({
   active,
+  count,
 
   label,
   className,
@@ -63,7 +65,7 @@ export default function Tag({
           active ? "max-w-[10rem] opacity-100" : "max-w-0 opacity-0"
         )}
       >
-        <Text as="p">{children.length}</Text>
+        <Text as="p">{count !== undefined ? count : children.length}</Text>
       </div>
 
       <Text as="p">{label}</Text>

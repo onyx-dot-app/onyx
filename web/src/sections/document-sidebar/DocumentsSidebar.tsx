@@ -13,6 +13,7 @@ import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgSearchMenu, SvgX } from "@opal/icons";
 import Separator from "@/refresh-components/Separator";
+import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 
 // Build an OnyxDocument from basic file info
 const buildOnyxDocumentFromFile = (
@@ -41,24 +42,36 @@ const buildOnyxDocumentFromFile = (
 interface HeaderProps {
   children: string;
   onClose: () => void;
+  onCopyAll?: () => void;
+  copyAllText?: string;
 }
 
-function Header({ children, onClose }: HeaderProps) {
+function Header({ children, onClose, onCopyAll, copyAllText }: HeaderProps) {
   return (
     <div className="sticky top-0 z-sticky bg-background-tint-01">
       <div className="flex flex-row w-full items-center justify-between gap-2 py-3">
-        <div className="flex items-center gap-2 w-full px-3">
-          <SvgSearchMenu className="w-[1.3rem] h-[1.3rem] stroke-text-03" />
-          <Text as="p" headingH3 text03>
+        <div className="flex items-center gap-2 w-full px-3 overflow-hidden">
+          <SvgSearchMenu className="flex-shrink-0 w-[1.3rem] h-[1.3rem] stroke-text-03" />
+          <Text as="p" headingH3 text03 className="truncate">
             {children}
           </Text>
         </div>
-        <IconButton
-          icon={SvgX}
-          tertiary
-          onClick={onClose}
-          tooltip="Close Sidebar"
-        />
+        <div className="flex items-center gap-1 flex-shrink-0 pr-1">
+          {onCopyAll && (
+            <div onClick={(e) => e.stopPropagation()}>
+              <CopyIconButton
+                getCopyText={() => copyAllText || ""}
+                tooltip="Copy All Sources"
+              />
+            </div>
+          )}
+          <IconButton
+            icon={SvgX}
+            tertiary
+            onClick={onClose}
+            tooltip="Close Sidebar"
+          />
+        </div>
       </div>
       <Separator noPadding />
     </div>
@@ -144,15 +157,30 @@ const DocumentsSidebar = memo(
     const hasCited = citedDocuments.length > 0;
     const hasOther = otherDocuments.length > 0;
 
+    const buildCopyAllText = (docs: OnyxDocument[]) => {
+      return docs
+        .map((doc) => {
+          const title = doc.semantic_identifier || doc.document_id;
+          return doc.link ? `${title}: ${doc.link}` : title;
+        })
+        .join("\n");
+    };
+
     return (
       <div
         id="onyx-chat-sidebar"
-        className="bg-background-tint-01 overflow-y-scroll h-full w-full border-l"
+        className="bg-background-tint-01 overflow-y-scroll h-full w-full border-l px-3"
       >
-        <div className="flex flex-col px-3 gap-6">
+        <div className="flex flex-col gap-6">
           {hasCited && (
             <div>
-              <Header onClose={closeSidebar}>Cited Sources</Header>
+              <Header
+                onClose={closeSidebar}
+                onCopyAll={() => { }}
+                copyAllText={buildCopyAllText(citedDocuments)}
+              >
+                Cited Sources
+              </Header>
               <ChatDocumentDisplayWrapper>
                 {citedDocuments.map((document) => (
                   <ChatDocumentDisplay
@@ -171,7 +199,11 @@ const DocumentsSidebar = memo(
 
           {hasOther && (
             <div>
-              <Header onClose={closeSidebar}>
+              <Header
+                onClose={closeSidebar}
+                onCopyAll={() => { }}
+                copyAllText={buildCopyAllText(otherDocuments)}
+              >
                 {citedDocuments.length > 0 ? "More" : "Found Sources"}
               </Header>
               <ChatDocumentDisplayWrapper>
@@ -192,7 +224,15 @@ const DocumentsSidebar = memo(
 
           {humanFileDescriptors && humanFileDescriptors.length > 0 && (
             <div>
-              <Header onClose={closeSidebar}>User Files</Header>
+              <Header
+                onClose={closeSidebar}
+                onCopyAll={() => { }}
+                copyAllText={humanFileDescriptors
+                  .map((file) => file.name || file.id)
+                  .join("\n")}
+              >
+                User Files
+              </Header>
               <ChatDocumentDisplayWrapper>
                 {humanFileDescriptors.map((file) => (
                   <ChatDocumentDisplay
