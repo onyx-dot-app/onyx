@@ -237,6 +237,7 @@ class NotificationType(str, Enum):
     REINDEX = "reindex"
     PERSONA_SHARED = "persona_shared"
     TRIAL_ENDS_TWO_DAYS = "two_day_trial_ending"  # 2 days left in trial
+    RELEASE_NOTES = "release_notes"
 
 
 class BlobType(str, Enum):

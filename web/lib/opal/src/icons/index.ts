@@ -148,3 +148,4 @@ export { default as SvgZoomOut } from "@opal/icons/zoom-out";
 export { default as SvgMcp } from "@opal/icons/mcp";
 export { default as SvgPaintBrush } from "@opal/icons/paint-brush";
 export { default as SvgRevert } from "@opal/icons/revert";
+export { default as SvgNotificationBubble } from "@opal/icons/notification-bubble";

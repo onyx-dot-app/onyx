@@ -14,6 +14,8 @@ def create_notification(
     user_id: UUID | None,
     notif_type: NotificationType,
     db_session: Session,
+    title: str,
+    description: str | None = None,
     additional_data: dict | None = None,
 ) -> Notification:
     # Check if an undismissed notification of the same type and data exists
@@ -38,6 +40,8 @@ def create_notification(
     notification = Notification(
         user_id=user_id,
         notif_type=notif_type,
+        title=title,
+        description=description,
         dismissed=False,
         last_shown=func.now(),
         first_shown=func.now(),
