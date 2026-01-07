@@ -68,6 +68,7 @@ from onyx.server.query_and_chat.models import TagResponse
 from onyx.server.usage_limits import check_usage_and_raise
 from onyx.server.usage_limits import is_usage_limits_enabled
 from onyx.server.utils import get_json_line
+from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -101,7 +102,7 @@ def _normalize_pagination(limit: int | None, offset: int | None) -> tuple[int, i
     return resolved_limit, resolved_offset
 
 
-@basic_router.post("/document-search")
+@basic_router.post("/document-search", tags=PUBLIC_API_TAGS)
 def handle_search_request(
     search_request: DocumentSearchRequest,
     user: User | None = Depends(current_user),
