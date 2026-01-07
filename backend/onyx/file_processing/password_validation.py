@@ -1,5 +1,4 @@
 from collections.abc import Callable
-from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any
 from typing import IO
@@ -18,7 +17,7 @@ PASSWORD_PROTECTED_FILES = [
 
 
 @contextmanager
-def preserve_position(file: IO[Any]) -> Generator[IO[Any], None, None]:
+def preserve_position(file: IO[Any]):
     """Preserves the file's cursor position"""
     pos = file.tell()
     try:
@@ -50,7 +49,7 @@ def is_xlsx_protected(file: IO[Any]) -> bool:
 
 
 def is_office_file_protected(file: IO[Any]) -> bool:
-    import msoffcrypto  # type: ignore[import-untyped]
+    import msoffcrypto
 
     with preserve_position(file):
         office = msoffcrypto.OfficeFile(file)
