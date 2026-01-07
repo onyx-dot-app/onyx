@@ -463,7 +463,7 @@ typing-inspection==0.4.2
     # via pydantic
 tzdata==2025.2
     # via kombu
-urllib3==2.6.2
+urllib3==2.6.3
     # via
     #   botocore
     #   requests
