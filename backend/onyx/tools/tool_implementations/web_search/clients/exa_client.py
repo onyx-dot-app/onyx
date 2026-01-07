@@ -26,7 +26,9 @@ class ExaClient(WebSearchProvider, WebContentProvider):
         self._num_results = num_results
 
     @retry_builder(tries=3, delay=1, backoff=2)
-    def search(self, query: str) -> list[WebSearchResult]:
+    def search(
+        self, query: str, include_domains: list[str] | None = None
+    ) -> list[WebSearchResult]:
         response = self.exa.search_and_contents(
             query,
             type="auto",
@@ -35,6 +37,7 @@ class ExaClient(WebSearchProvider, WebContentProvider):
                 highlights_per_url=1,
             ),
             num_results=self._num_results,
+            include_domains=include_domains if include_domains else None,
         )
 
         return [
