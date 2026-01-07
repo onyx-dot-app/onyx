@@ -22,6 +22,7 @@ class LlmProviderNames(str, Enum):
     OPENROUTER = "openrouter"
     AZURE = "azure"
     OLLAMA_CHAT = "ollama_chat"
+    MISTRAL = "mistral"
     LITELLM_PROXY = "litellm_proxy"
 
     def __str__(self) -> str:
@@ -59,7 +60,7 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     "anyscale": "Anyscale",
     "deepseek": "DeepSeek",
     "xai": "xAI",
-    "mistral": "Mistral",
+    LlmProviderNames.MISTRAL: "Mistral",
     "mistralai": "Mistral",  # Alias used by some providers
     "cohere": "Cohere",
     "perplexity": "Perplexity",
