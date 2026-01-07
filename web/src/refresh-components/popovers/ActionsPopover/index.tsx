@@ -1,6 +1,12 @@
 "use client";
 
-import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
+import {
+  IMAGE_GENERATION_TOOL_ID,
+  PYTHON_TOOL_ID,
+  SEARCH_TOOL_ID,
+  SYSTEM_TOOL_ICONS,
+  WEB_SEARCH_TOOL_ID,
+} from "@/app/chat/components/tools/constants";
 import { useState, useEffect } from "react";
 import {
   Popover,
@@ -38,6 +44,21 @@ import MCPLineItem, {
 } from "@/refresh-components/popovers/ActionsPopover/MCPLineItem";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import { SvgActions, SvgChevronRight, SvgKey, SvgSliders } from "@opal/icons";
+
+const SYSTEM_TOOL_IDS = new Set(Object.keys(SYSTEM_TOOL_ICONS));
+const UNAVAILABLE_TOOL_TOOLTIP_FALLBACK =
+  "This action is not configured yet. Ask an admin to enable it.";
+const UNAVAILABLE_TOOL_TOOLTIPS: Record<string, string> = {
+  [IMAGE_GENERATION_TOOL_ID]:
+    "Image generation requires a configured model. If you have access, set one up under Settings > Image Generation, or ask an admin.",
+  [WEB_SEARCH_TOOL_ID]:
+    "Web search requires a configured provider. If you have access, set one up under Settings > Web Search, or ask an admin.",
+  [PYTHON_TOOL_ID]:
+    "Code Interpreter requires the service to be configured with a valid base URL. Ask an admin to set it up.",
+};
+const getUnavailableToolTooltip = (inCodeToolId?: string | null) =>
+  (inCodeToolId && UNAVAILABLE_TOOL_TOOLTIPS[inCodeToolId]) ??
+  UNAVAILABLE_TOOL_TOOLTIP_FALLBACK;
 
 // Get source metadata for configured sources - deduplicated by source type
 function getConfiguredSources(
@@ -144,7 +165,7 @@ export default function ActionsPopover({
   const { tools: availableTools } = useAvailableTools();
   const { ccPairs } = useCCPairs();
   const { currentProjectId, allCurrentProjectFiles } = useProjectsContext();
-  const availableToolIds = availableTools.map((tool) => tool.id);
+  const availableToolIdSet = new Set(availableTools.map((tool) => tool.id));
 
   // Check if there are any connectors available
   const hasNoConnectors = !ccPairs || ccPairs.length === 0;
@@ -180,6 +201,10 @@ export default function ActionsPopover({
   // Also filter out internal search tool for basic users when there are no connectors
   // Also filter out tools that are not chat-selectable (e.g., OpenURL)
   const displayTools = selectedAssistant.tools.filter((tool) => {
+    const isSystemTool =
+      !!tool.in_code_tool_id && SYSTEM_TOOL_IDS.has(tool.in_code_tool_id);
+    const isToolAvailable = availableToolIdSet.has(tool.id);
+
     // Filter out MCP tools
     if (tool.mcp_server_id) return false;
 
@@ -203,7 +228,7 @@ export default function ActionsPopover({
     }
 
     // Filter out tools that are not available
-    if (!availableToolIds.includes(tool.id)) return false;
+    if (!isToolAvailable && !isSystemTool) return false;
 
     // Filter out internal search tool for non-admin/curator users when there are no connectors
     if (
@@ -523,21 +548,36 @@ export default function ActionsPopover({
         />,
 
         // Actions
-        ...filteredTools.map((tool) => (
-          <ActionLineItem
-            key={tool.id}
-            tool={tool}
-            disabled={disabledToolIds.includes(tool.id)}
-            isForced={forcedToolIds.includes(tool.id)}
-            onToggle={() => toggleToolForCurrentAssistant(tool.id)}
-            onForceToggle={() => toggleForcedTool(tool.id)}
-            onSourceManagementOpen={() => setSecondaryView({ type: "sources" })}
-            hasNoConnectors={hasNoConnectors}
-            toolAuthStatus={getToolAuthStatus(tool)}
-            onOAuthAuthenticate={() => authenticateTool(tool)}
-            onClose={() => setOpen(false)}
-          />
-        )),
+        ...filteredTools.map((tool) =>
+          (() => {
+            const isToolAvailable = availableToolIdSet.has(tool.id);
+            const isUnavailable =
+              !isToolAvailable && tool.in_code_tool_id !== SEARCH_TOOL_ID;
+            return (
+              <ActionLineItem
+                key={tool.id}
+                tool={tool}
+                disabled={disabledToolIds.includes(tool.id)}
+                isForced={forcedToolIds.includes(tool.id)}
+                isUnavailable={isUnavailable}
+                unavailableReason={
+                  isUnavailable
+                    ? getUnavailableToolTooltip(tool.in_code_tool_id)
+                    : undefined
+                }
+                onToggle={() => toggleToolForCurrentAssistant(tool.id)}
+                onForceToggle={() => toggleForcedTool(tool.id)}
+                onSourceManagementOpen={() =>
+                  setSecondaryView({ type: "sources" })
+                }
+                hasNoConnectors={hasNoConnectors}
+                toolAuthStatus={getToolAuthStatus(tool)}
+                onOAuthAuthenticate={() => authenticateTool(tool)}
+                onClose={() => setOpen(false)}
+              />
+            );
+          })()
+        ),
 
         // MCP Servers
         ...filteredMCPServers.map((server) => {

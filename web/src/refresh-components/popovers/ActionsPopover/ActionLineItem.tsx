@@ -20,6 +20,8 @@ export interface ActionItemProps {
   label?: string;
   disabled: boolean;
   isForced: boolean;
+  isUnavailable?: boolean;
+  unavailableReason?: string;
   onToggle: () => void;
   onForceToggle: () => void;
   onSourceManagementOpen?: () => void;
@@ -35,6 +37,8 @@ export default function ActionLineItem({
   label: providedLabel,
   disabled,
   isForced,
+  isUnavailable = false,
+  unavailableReason,
   onToggle,
   onForceToggle,
   onSourceManagementOpen,
@@ -62,12 +66,18 @@ export default function ActionLineItem({
   const isSearchToolAndNotInProject =
     tool?.in_code_tool_id === SEARCH_TOOL_ID && !currentProjectId;
 
+  const tooltipText = isUnavailable ? unavailableReason : tool?.description;
+
   return (
-    <SimpleTooltip tooltip={tool?.description} className="max-w-[30rem]">
+    <SimpleTooltip tooltip={tooltipText} className="max-w-[30rem]">
       <div data-testid={`tool-option-${toolName}`}>
         <LineItem
           onClick={() => {
             if (isSearchToolWithNoConnectors) return;
+            if (isUnavailable) {
+              if (isForced) onForceToggle();
+              return;
+            }
             if (disabled) onToggle();
             onForceToggle();
             if (isSearchToolAndNotInProject && !isForced)
@@ -75,11 +85,13 @@ export default function ActionLineItem({
             else onClose?.();
           }}
           selected={isForced}
-          strikethrough={disabled || isSearchToolWithNoConnectors}
+          strikethrough={
+            disabled || isSearchToolWithNoConnectors || isUnavailable
+          }
           icon={Icon}
           rightChildren={
             <div className="flex flex-row items-center gap-1">
-              {tool?.oauth_config_id && toolAuthStatus && (
+              {!isUnavailable && tool?.oauth_config_id && toolAuthStatus && (
                 <IconButton
                   icon={({ className }) => (
                     <SvgKey
@@ -100,7 +112,7 @@ export default function ActionLineItem({
                 />
               )}
 
-              {!isSearchToolWithNoConnectors && (
+              {!isSearchToolWithNoConnectors && !isUnavailable && (
                 <IconButton
                   icon={SvgSlash}
                   onClick={noProp(onToggle)}
