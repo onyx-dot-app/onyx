@@ -90,7 +90,7 @@ export default function NotificationsPopover({
               <LineItem
                 key={notification.id}
                 icon={getNotificationIcon(notification.notif_type)}
-                description={notification.description}
+                description={notification.description ?? undefined}
                 onClick={() => handleNotificationClick(notification)}
                 rightChildren={
                   <IconButton

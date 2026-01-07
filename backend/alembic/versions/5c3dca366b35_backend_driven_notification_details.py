@@ -1,7 +1,7 @@
 """backend driven notification details
 
 Revision ID: 5c3dca366b35
-Revises: 9a0296d7421e
+Revises: 9087b548dd69
 Create Date: 2026-01-06 16:03:11.413724
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "5c3dca366b35"
-down_revision = "9a0296d7421e"
+down_revision = "9087b548dd69"
 branch_labels = None
 depends_on = None
 

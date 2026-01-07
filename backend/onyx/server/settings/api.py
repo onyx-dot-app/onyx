@@ -100,6 +100,8 @@ def get_settings_notifications(
 
         if len(reindex_notifs) > 1:
             logger.error("User has multiple reindex notifications")
+        elif not reindex_notifs:
+            return notifications
 
         reindex_notif = reindex_notifs[0]
         update_notification_last_shown(

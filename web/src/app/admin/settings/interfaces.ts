@@ -51,7 +51,7 @@ export interface Notification {
   id: number;
   notif_type: string;
   title: string;
-  description: string;
+  description: string | null;
   dismissed: boolean;
   additional_data?: {
     persona_id?: number;
