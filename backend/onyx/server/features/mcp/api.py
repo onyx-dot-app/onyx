@@ -852,9 +852,13 @@ def _db_mcp_server_to_api_mcp_server(
                         client_info_raw
                     )
                 if client_info:
+                    if not client_info.client_id or not client_info.client_secret:
+                        raise ValueError(
+                            "Stored client info had empty client ID or secret"
+                        )
                     admin_credentials = {
                         "client_id": client_info.client_id,
-                        "client_secret": client_info.client_secret or "",
+                        "client_secret": client_info.client_secret,
                     }
                 else:
                     admin_credentials = {}
@@ -884,9 +888,11 @@ def _db_mcp_server_to_api_mcp_server(
             if client_info_raw:
                 client_info = OAuthClientInformationFull.model_validate(client_info_raw)
             if client_info:
+                if not client_info.client_id or not client_info.client_secret:
+                    raise ValueError("Stored client info had empty client ID or secret")
                 admin_credentials = {
                     "client_id": client_info.client_id,
-                    "client_secret": client_info.client_secret or "",
+                    "client_secret": client_info.client_secret,
                 }
             else:
                 admin_credentials = {}
