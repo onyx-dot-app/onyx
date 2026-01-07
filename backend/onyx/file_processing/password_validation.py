@@ -62,7 +62,7 @@ def is_file_password_protected(
     file_name: str,
     extension: str | None = None,
 ) -> bool:
-    extension_to_function: dict[str, Callable[[IO[Any]], str]] = {
+    extension_to_function: dict[str, Callable[[IO[Any]], bool]] = {
         ".pdf": is_pdf_protected,
         ".docx": is_docx_protected,
         ".pptx": is_pptx_protected,
