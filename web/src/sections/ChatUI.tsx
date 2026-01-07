@@ -43,7 +43,7 @@ export interface ChatUIProps {
   liveAssistant: MinimalPersonaSnapshot | undefined;
   llmManager: LlmManager;
   currentMessageFiles: ProjectFile[];
-  deepResearchEnabled: boolean; // ChatUI being memo means we can't access inside, so pass in
+  deepResearchEnabled: boolean; // useDeepResearchToggle won't stay up-to-date if in memo'd function. We pass in instead
   setPresentingDocument: (doc: MinimalOnyxDocument | null) => void;
   onSubmit: (args: {
     message: string;
