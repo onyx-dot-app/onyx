@@ -54,6 +54,7 @@ from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 from httpx_oauth.oauth2 import BaseOAuth2
 from httpx_oauth.oauth2 import OAuth2Token
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy import nulls_last
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -382,7 +383,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     from onyx.db.models import User as UserModel
 
                     result = await db_session.execute(
-                        select(UserModel).where(UserModel.email == user_create.email)
+                        select(UserModel).where(
+                            func.lower(UserModel.email) == func.lower(user_create.email)
+                        )
                     )
                     existing_user = result.scalar_one_or_none()
                     if existing_user:
