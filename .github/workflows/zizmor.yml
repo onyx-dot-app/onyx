@@ -42,6 +42,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload SARIF file
+        if: steps.filter.outputs.zizmor == 'true' || github.ref_name == 'main'
         uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab # ratchet:github/codeql-action/upload-sarif@codeql-bundle-v2.23.5
         with:
           sarif_file: results.sarif
