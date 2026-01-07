@@ -12,6 +12,8 @@ class FakeResponse(BaseModel):
     headers: dict[str, str]
     content: bytes
     text: str = ""
+    apparent_encoding: str | None = None
+    encoding: str | None = None
 
 
 def test_fetch_url_pdf_with_content_type(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -63,4 +65,26 @@ def test_fetch_url_pdf_with_signature(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert result.full_content == "pdf text"
     assert result.title == "file.pdf"
+    assert result.scrape_successful is True
+
+
+def test_fetch_url_decodes_html_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
+    crawler = OnyxWebCrawler()
+    html_bytes = b"<html><body>caf\xe9</body></html>"
+    response = FakeResponse(
+        status_code=200,
+        headers={"Content-Type": "text/html; charset=iso-8859-1"},
+        content=html_bytes,
+        text="caf\u00ef\u00bf\u00bd",
+    )
+
+    monkeypatch.setattr(
+        crawler_module,
+        "ssrf_safe_get",
+        lambda *args, **kwargs: response,
+    )
+
+    result = crawler._fetch_url("https://example.com/page.html")
+
+    assert "caf\u00e9" in result.full_content
     assert result.scrape_successful is True
