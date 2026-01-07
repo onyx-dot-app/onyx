@@ -1,6 +1,7 @@
 import datetime
 import json
 import os
+import re
 from collections.abc import Generator
 from datetime import timedelta
 from uuid import UUID
@@ -105,6 +106,25 @@ from onyx.utils.telemetry import mt_cloud_telemetry
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+
+def sanitize_filename_for_header(filename: str) -> str:
+    """Sanitize a filename for use in Content-Disposition header.
+
+    Prevents HTTP header injection by:
+    - Removing control characters (could enable header injection via \\r\\n)
+    - Escaping double quotes (could break the header format)
+
+    Args:
+        filename: The original filename to sanitize
+
+    Returns:
+        A sanitized filename safe for use in HTTP headers
+    """
+    sanitized = re.sub(r"[\x00-\x1f\x7f]", "", filename)
+    sanitized = sanitized.replace('"', '\\"')
+    return sanitized
+
 
 router = APIRouter(prefix="/chat")
 
@@ -880,10 +900,13 @@ def fetch_chat_file(
     # Files served here are immutable (content-addressed by file_id), so allow long-lived caching.
     # Use `private` because this is behind auth / tenant scoping.
     etag = f'"{file_id}"'
+    sanitized_filename = sanitize_filename_for_header(original_file_name)
+
     cache_headers = {
         "Cache-Control": "private, max-age=31536000, immutable",
         "ETag": etag,
         "Vary": "Cookie",
+        "Content-Disposition": f'attachment; filename="{sanitized_filename}"',
     }
 
     if request.headers.get("if-none-match") == etag:
