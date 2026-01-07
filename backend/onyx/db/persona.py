@@ -205,7 +205,7 @@ def make_persona_private(
                 create_notification(
                     user_id=user_uuid,
                     notif_type=NotificationType.PERSONA_SHARED,
-                    title="An agent you had access to was made private by the owner.",
+                    title="A new agent was shared with you!",
                     db_session=db_session,
                     additional_data=PersonaSharedNotificationData(
                         persona_id=persona_id,
