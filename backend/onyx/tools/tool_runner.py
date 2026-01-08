@@ -255,7 +255,10 @@ def run_tool_calls(
     # Apply safety cap (drop tool calls beyond the cap)
     if max_concurrent_tools is not None:
         if max_concurrent_tools <= 0:
-            return [], citation_mapping
+            return ParallelToolCallResponse(
+                tool_responses=[],
+                updated_citation_mapping=citation_mapping,
+            )
         filtered_tool_calls = filtered_tool_calls[:max_concurrent_tools]
 
     # Get starting citation number from citation processor to avoid conflicts with project files

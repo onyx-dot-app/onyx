@@ -28,6 +28,9 @@ from onyx.tools.tool_implementations.web_search.providers import (
     build_search_provider_from_config,
 )
 from onyx.tools.tool_implementations.web_search.utils import (
+    filter_web_search_results_with_no_title_or_snippet,
+)
+from onyx.tools.tool_implementations.web_search.utils import (
     inference_section_from_internet_search_result,
 )
 from onyx.utils.logger import setup_logger
@@ -138,7 +141,11 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
             If failed, results is None and error_message contains the error.
         """
         try:
-            results = list(provider.search(query))[:DEFAULT_MAX_RESULTS]
+            raw_results = list(provider.search(query))
+            filtered_results = filter_web_search_results_with_no_title_or_snippet(
+                raw_results
+            )
+            results = filtered_results[:DEFAULT_MAX_RESULTS]
             return (results, None)
         except Exception as e:
             error_msg = str(e)

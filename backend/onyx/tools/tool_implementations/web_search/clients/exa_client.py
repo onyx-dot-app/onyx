@@ -40,20 +40,11 @@ class ExaClient(WebSearchProvider, WebContentProvider):
             num_results=self._num_results,
         )
 
-        # Exa can return results without a title and/or highlight snippet.
-        # Downstream uses these for display + prompting; skip empty ones rather than
-        # returning WebSearchResult objects with empty strings.
-        valid_results: list[WebSearchResult] = []
+        results: list[WebSearchResult] = []
         for result in response.results:
             title = (result.title or "").strip()
-            snippet = (
-                (result.highlights[0] if result.highlights else "") or ""
-            ).strip()
-
-            if not title and not snippet:
-                continue
-
-            valid_results.append(
+            snippet = (result.highlights[0] if result.highlights else "").strip()
+            results.append(
                 WebSearchResult(
                     title=title,
                     link=result.url,
@@ -67,7 +58,7 @@ class ExaClient(WebSearchProvider, WebContentProvider):
                 )
             )
 
-        return valid_results
+        return results
 
     def test_connection(self) -> dict[str, str]:
         try:
@@ -108,15 +99,11 @@ class ExaClient(WebSearchProvider, WebContentProvider):
 
         # Exa can return partial/empty content entries; skip those to avoid
         # downstream prompt + UI pollution.
-        valid_contents: list[WebContent] = []
+        contents: list[WebContent] = []
         for result in response.results:
             title = (result.title or "").strip()
             full_content = (result.text or "").strip()
-
-            if not title and not full_content:
-                continue
-
-            valid_contents.append(
+            contents.append(
                 WebContent(
                     title=title,
                     link=result.url,
@@ -129,4 +116,4 @@ class ExaClient(WebSearchProvider, WebContentProvider):
                 )
             )
 
-        return valid_contents
+        return contents

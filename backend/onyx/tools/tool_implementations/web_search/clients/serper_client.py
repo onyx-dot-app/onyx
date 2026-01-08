@@ -57,8 +57,6 @@ class SerperClient(WebSearchProvider, WebContentProvider):
 
             title = (result.get("title") or "").strip()
             snippet = (result.get("snippet") or "").strip()
-            if not title and not snippet:
-                continue
 
             validated_results.append(
                 WebSearchResult(
