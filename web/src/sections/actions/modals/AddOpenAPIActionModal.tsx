@@ -371,7 +371,7 @@ export default function AddOpenAPIActionModal({
                     className="p-4 w-full"
                   />
 
-                  <Modal.Body className="bg-background-tint-01 p-4 flex flex-col gap-4 overflow-y-auto">
+                  <Modal.Body twoTone>
                     <FormField
                       id="openapi-schema"
                       name="definition"

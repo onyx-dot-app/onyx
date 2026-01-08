@@ -37,7 +37,7 @@ export default function ConfirmationModalLayout({
           description={description}
           onClose={onClose}
         />
-        <Modal.Body className="p-4 bg-background-tint-01">
+        <Modal.Body twoTone>
           {typeof children === "string" ? (
             <Text as="p" text03>
               {children}

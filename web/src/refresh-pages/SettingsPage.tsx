@@ -10,8 +10,10 @@ import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import { Formik, Form } from "formik";
 import {
   SvgActivity,
+  SvgExpand,
   SvgExternalLink,
   SvgKey,
+  SvgLightbulbSimple,
   SvgLock,
   SvgMinusCircle,
   SvgSliders,
@@ -21,6 +23,7 @@ import Card from "@/refresh-components/cards/Card";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
+import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import Button from "@/refresh-components/buttons/Button";
 import Switch from "@/refresh-components/inputs/Switch";
 import { useUser } from "@/components/user/UserProvider";
@@ -52,6 +55,7 @@ import { useInputPrompts } from "@/hooks/useInputPrompts";
 import ColorSwatch from "@/refresh-components/ColorSwatch";
 import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
+import Modal from "@/refresh-components/Modal";
 
 interface PAT {
   id: number;
@@ -632,6 +636,142 @@ function PromptShortcuts() {
   );
 }
 
+interface MemoriesModalProps {
+  showMemoriesModal: boolean;
+  setShowMemoriesModal: (show: boolean) => void;
+  personalizationValues: {
+    memories: string[];
+  };
+  handleSavePersonalization: () => Promise<any>;
+}
+
+function MemoriesModal({
+  showMemoriesModal,
+  setShowMemoriesModal,
+  personalizationValues,
+  handleSavePersonalization,
+}: MemoriesModalProps) {
+  const [isSaving, setIsSaving] = useState(false);
+
+  interface MemoriesFormValues {
+    newMemory: string;
+    existingMemories: string[];
+  }
+
+  const initialValues: MemoriesFormValues = {
+    newMemory: "",
+    existingMemories: [...personalizationValues.memories],
+  };
+
+  async function handleSubmit(values: MemoriesFormValues, formikHelpers: any) {
+    setIsSaving(true);
+
+    try {
+      // Combine new memory (if not empty) with existing memories
+      const allMemories: string[] = [];
+
+      if (values.newMemory.trim().length > 0) {
+        allMemories.push(values.newMemory.trim());
+      }
+
+      // Add all non-empty existing memories
+      values.existingMemories.forEach((memory) => {
+        if (memory.trim().length > 0) {
+          allMemories.push(memory.trim());
+        }
+      });
+
+      // Update personalizationValues.memories by replacing the entire array
+      // We need to do this before calling handleSavePersonalization
+      // because that function reads from personalizationValues.memories
+      const originalMemories = personalizationValues.memories;
+      personalizationValues.memories = allMemories;
+
+      const result = await handleSavePersonalization();
+
+      if (result) {
+        // Save was successful - update form with saved memories and empty newMemory field
+        // Use resetForm with new values to reset both values AND dirty state
+        formikHelpers.resetForm({
+          values: {
+            newMemory: "",
+            existingMemories: allMemories,
+          },
+        });
+      } else {
+        // Save failed - restore original memories
+        personalizationValues.memories = originalMemories;
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  function handleClose(resetForm: () => void) {
+    // Reset to original memories on close without saving
+    resetForm();
+    setShowMemoriesModal(false);
+  }
+
+  return (
+    <Formik initialValues={initialValues} onSubmit={handleSubmit}>
+      {({ values, dirty, resetForm }) => {
+        return (
+          <Form>
+            <Modal open={showMemoriesModal} onOpenChange={setShowMemoriesModal}>
+              <Modal.Content tall preventAccidentalClose={false}>
+                <Modal.Header
+                  icon={SvgLightbulbSimple}
+                  title="Memory"
+                  description="Let Onyx reference these stored notes and memories in chats."
+                />
+
+                <Modal.Body>
+                  <GeneralLayouts.Section gap={0.5}>
+                    {/* New memory input - always at the top */}
+                    <InputTextAreaField
+                      name="newMemory"
+                      placeholder="Type or paste in text content"
+                      rows={3}
+                    />
+
+                    {/* Existing memories */}
+                    {values.existingMemories && (
+                      <>
+                        <Separator noPadding />
+                        {values.existingMemories.map((_, index) => (
+                          <InputTextAreaField
+                            key={index}
+                            name={`existingMemories.${index}`}
+                            rows={3}
+                          />
+                        ))}
+                      </>
+                    )}
+                  </GeneralLayouts.Section>
+                </Modal.Body>
+
+                <Modal.Footer>
+                  <Button
+                    secondary
+                    type="button"
+                    onClick={() => handleClose(resetForm)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={isSaving || !dirty}>
+                    {isSaving ? "Saving..." : "Save Memory"}
+                  </Button>
+                </Modal.Footer>
+              </Modal.Content>
+            </Modal>
+          </Form>
+        );
+      }}
+    </Formik>
+  );
+}
+
 function ChatPreferencesSettings() {
   const {
     user,
@@ -642,6 +782,7 @@ function ChatPreferencesSettings() {
   } = useUser();
   const { popup, setPopup } = usePopup();
   const llmManager = useLlmManager();
+  const [showMemoriesModal, setShowMemoriesModal] = useState(false);
 
   const {
     personalizationValues,
@@ -754,23 +895,50 @@ function ChatPreferencesSettings() {
               />
             </InputLayouts.Horizontal>
 
-            <div className="space-y-3">
-              {personalizationValues.memories.map((memory, index) => (
-                <InputTextArea
-                  key={index}
-                  value={memory}
-                  placeholder="Write something Onyx should remember"
-                  onChange={(event) =>
-                    updateMemoryAtIndex(index, event.target.value)
-                  }
-                />
-              ))}
-              <Button tertiary onClick={addMemory} className="w-full">
+            {personalizationValues.memories.length === 0 ? (
+              <Button
+                tertiary
+                onClick={() => setShowMemoriesModal(true)}
+                className="w-full"
+              >
                 Add Memory
               </Button>
-            </div>
+            ) : (
+              <GeneralLayouts.Section horizontal gap={0.5}>
+                {personalizationValues.memories
+                  .slice(0, 2)
+                  .map((memory, index) => {
+                    const getMemoryTitle = (content: string) => {
+                      if (!content) return "New Memory";
+                      return content.length > 40
+                        ? content.substring(0, 40)
+                        : content;
+                    };
+
+                    return (
+                      <AttachmentButton
+                        key={index}
+                        icon={SvgLightbulbSimple}
+                        description={memory}
+                        rightText=""
+                        actionIcon={SvgExpand}
+                        onAction={() => setShowMemoriesModal(true)}
+                      >
+                        {getMemoryTitle(memory)}
+                      </AttachmentButton>
+                    );
+                  })}
+              </GeneralLayouts.Section>
+            )}
           </Card>
         </GeneralLayouts.Section>
+
+        <MemoriesModal
+          showMemoriesModal={showMemoriesModal}
+          setShowMemoriesModal={setShowMemoriesModal}
+          personalizationValues={personalizationValues}
+          handleSavePersonalization={handleSavePersonalization}
+        />
       </GeneralLayouts.Section>
     </>
   );

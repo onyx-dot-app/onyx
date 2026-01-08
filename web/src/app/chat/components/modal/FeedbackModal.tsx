@@ -111,7 +111,7 @@ export default function FeedbackModal({
               ))}
             </div>
           )}
-          <Modal.Body className="items-center justify-center bg-background-tint-01">
+          <Modal.Body twoTone>
             <FieldInput
               label="Feedback"
               placeholder={`What did you ${feedbackType} about this response?`}

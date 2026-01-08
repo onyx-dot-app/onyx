@@ -360,7 +360,7 @@ export function InlineFileManagement({
             description="When you save these changes, the following will happen:"
           />
 
-          <Modal.Body className="px-6 space-y-3">
+          <Modal.Body>
             {selectedFilesToRemove.size > 0 && (
               <div className="p-3 bg-red-50 dark:bg-red-900/10 rounded-md">
                 <Text

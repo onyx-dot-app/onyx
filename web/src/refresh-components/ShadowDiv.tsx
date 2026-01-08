@@ -105,7 +105,7 @@ export default function ShadowDiv({
   }, [containerRef, checkScroll]);
 
   return (
-    <div className="relative">
+    <div className="relative h-full">
       <div
         ref={containerRef}
         className={cn("overflow-y-auto", className)}

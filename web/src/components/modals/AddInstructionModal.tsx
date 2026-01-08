@@ -38,7 +38,7 @@ export default function AddInstructionModal() {
           description="Instruct specific behaviors, focus, tones, or formats for the response in this project."
           onClose={() => modal.toggle(false)}
         />
-        <Modal.Body className="bg-background-tint-01 p-4">
+        <Modal.Body twoTone>
           <InputTextarea
             value={instructionText}
             onChange={(event) => setInstructionText(event.target.value)}

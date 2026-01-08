@@ -212,7 +212,7 @@ export default function UserFilesModal({
             </div>
           </Modal.Header>
 
-          <Modal.Body className="flex flex-col flex-1 overflow-hidden bg-background-tint-01">
+          <Modal.Body twoTone>
             {/* File display section */}
             {filtered.length === 0 ? (
               <div className="p-4 flex w-full h-full items-center justify-center">

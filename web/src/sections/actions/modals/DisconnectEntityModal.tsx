@@ -56,7 +56,7 @@ export default function DisconnectEntityModal({
           onClose={onClose}
         />
 
-        <Modal.Body className="p-4 flex flex-col gap-2 bg-background-tint-01">
+        <Modal.Body twoTone>
           <Text as="p" text03 mainUiBody>
             All tools connected to {name} will stop working. You can reconnect
             to this server later if needed.
