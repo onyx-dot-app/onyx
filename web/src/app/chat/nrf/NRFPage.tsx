@@ -257,6 +257,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const resetInputBar = useCallback(() => {
     setMessage("");
     setCurrentMessageFiles([]);
+    chatInputBarRef.current?.reset();
     if (endPaddingRef.current) {
       // Reduced padding for NRF since input is inside the container
       endPaddingRef.current.style.height = `16px`;
