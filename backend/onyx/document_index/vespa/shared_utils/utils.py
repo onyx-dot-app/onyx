@@ -1,4 +1,3 @@
-import re
 import time
 from typing import cast
 
@@ -51,15 +50,6 @@ def replace_invalid_doc_id_characters(text: str) -> str:
     # There may be a more complete set of replacements that need to be made but Vespa docs are unclear
     # and users only seem to be running into this error with single quotes
     return text.replace("'", "_")
-
-
-def remove_invalid_unicode_chars(text: str) -> str:
-    """Vespa does not take in unicode chars that aren't valid for XML.
-    This removes them."""
-    _illegal_xml_chars_RE: re.Pattern = re.compile(
-        "[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff\ufdd0-\ufdef\ufffe\uffff]"
-    )
-    return _illegal_xml_chars_RE.sub("", text)
 
 
 def get_vespa_http_client(no_timeout: bool = False, http2: bool = True) -> httpx.Client:

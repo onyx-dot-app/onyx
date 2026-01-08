@@ -1292,10 +1292,10 @@ def _check_chunk_usage_limit(tenant_id: str) -> None:
     from onyx.db.usage import check_usage_limit
     from onyx.db.usage import UsageType
     from onyx.server.usage_limits import get_limit_for_usage_type
-    from onyx.server.usage_limits import is_tenant_on_trial
+    from onyx.server.usage_limits import is_tenant_on_trial_fn
 
-    is_trial = is_tenant_on_trial(tenant_id)
-    limit = get_limit_for_usage_type(UsageType.CHUNKS_INDEXED, is_trial)
+    is_trial = is_tenant_on_trial_fn(tenant_id)
+    limit = get_limit_for_usage_type(UsageType.CHUNKS_INDEXED, is_trial, tenant_id)
 
     with get_session_with_current_tenant() as db_session:
         check_usage_limit(
