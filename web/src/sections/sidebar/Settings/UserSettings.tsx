@@ -85,7 +85,7 @@ export default function UserSettings() {
   const {
     connectors: federatedConnectors,
     refetch: refetchFederatedConnectors,
-    loading: isFederatedLoading,
+    isLoading: isFederatedLoading,
   } = useFederatedOAuthStatus();
 
   const { ccPairs, isLoading: isCCPairsLoading } = useCCPairs();

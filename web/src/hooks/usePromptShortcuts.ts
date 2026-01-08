@@ -69,7 +69,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
  * ```
  */
 export default function usePromptShortcuts() {
-  const { data, error, mutate } = useSWR<InputPrompt[]>(
+  const { data, error, isLoading, mutate } = useSWR<InputPrompt[]>(
     "/api/input_prompt",
     errorHandlingFetcher
   );
@@ -79,7 +79,7 @@ export default function usePromptShortcuts() {
 
   return {
     promptShortcuts,
-    isLoading: !error && !data,
+    isLoading,
     error,
     refetch: mutate,
   };
