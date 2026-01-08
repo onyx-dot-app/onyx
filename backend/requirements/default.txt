@@ -54,7 +54,7 @@ attrs==25.4.0
     #   jsonschema
     #   referencing
     #   zeep
-authlib==1.6.5
+authlib==1.6.6
     # via fastmcp
 babel==2.17.0
     # via courlan
