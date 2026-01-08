@@ -51,8 +51,8 @@ class SerperClient(WebSearchProvider, WebContentProvider):
 
         validated_results: list[WebSearchResult] = []
         for result in organic_results:
-            link = result.get("link")
-            if not link or not str(link).strip():
+            link = (result.get("link") or "").strip()
+            if not link:
                 continue
 
             title = (result.get("title") or "").strip()
