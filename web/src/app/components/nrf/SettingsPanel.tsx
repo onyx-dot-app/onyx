@@ -1,7 +1,7 @@
 "use client";
 
 import Switch from "@/refresh-components/inputs/Switch";
-import { useNRFPreferences } from "../../../components/context/NRFPreferencesContext";
+import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
 import {
   darkExtensionImages,
   lightExtensionImages,

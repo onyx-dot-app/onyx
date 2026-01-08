@@ -24,8 +24,8 @@ import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 import Dropzone from "react-dropzone";
 import { useSendMessageToParent } from "@/lib/extension/utils";
 import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
-import { SettingsPanel } from "../../components/nrf/SettingsPanel";
-import LoginPage from "../../auth/login/LoginPage";
+import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
+import LoginPage from "@/app/auth/login/LoginPage";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { useAgents } from "@/hooks/useAgents";
@@ -37,11 +37,8 @@ import { useChatSessionController } from "@/app/chat/hooks/useChatSessionControl
 import { useAssistantController } from "@/app/chat/hooks/useAssistantController";
 import {
   useChatSessionStore,
-  useUncaughtError,
   useCurrentChatState,
-  useCurrentMessageTree,
   useCurrentMessageHistory,
-  useLoadingError,
 } from "@/app/chat/stores/useChatSessionStore";
 import ChatUI from "@/sections/ChatUI";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -182,10 +179,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   // Access chat state from store
   const currentChatState = useCurrentChatState();
   const chatSessionId = useChatSessionStore((state) => state.currentSessionId);
-  const uncaughtError = useUncaughtError();
-  const completeMessageTree = useCurrentMessageTree();
   const messageHistory = useCurrentMessageHistory();
-  const loadingError = useLoadingError();
   const updateHasPerformedInitialScroll = useChatSessionStore(
     (state) => state.updateHasPerformedInitialScroll
   );
@@ -587,43 +581,45 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       )}
 
       {!user &&
-      authTypeMetadata.authType !== AuthType.DISABLED &&
-      showLoginModal ? (
-        <Modal open onOpenChange={() => setShowLoginModal(false)}>
-          <Modal.Content small>
-            <Modal.Header
-              icon={SvgUser}
-              title="Welcome to Onyx"
-              onClose={() => setShowLoginModal(false)}
-            />
-            <Modal.Body>
-              {authTypeMetadata.authType === AuthType.BASIC ? (
-                <LoginPage
-                  authUrl={null}
-                  authTypeMetadata={authTypeMetadata}
-                  nextUrl="/nrf"
-                />
-              ) : (
-                <div className="flex flex-col items-center">
-                  <Button
-                    className="w-full"
-                    secondary
-                    onClick={() => {
-                      if (window.top) {
-                        window.top.location.href = "/auth/login";
-                      } else {
-                        window.location.href = "/auth/login";
-                      }
-                    }}
-                  >
-                    Log in
-                  </Button>
-                </div>
-              )}
-            </Modal.Body>
-          </Modal.Content>
-        </Modal>
-      ) : (
+        authTypeMetadata.authType !== AuthType.DISABLED &&
+        showLoginModal && (
+          <Modal open onOpenChange={() => setShowLoginModal(false)}>
+            <Modal.Content small>
+              <Modal.Header
+                icon={SvgUser}
+                title="Welcome to Onyx"
+                onClose={() => setShowLoginModal(false)}
+              />
+              <Modal.Body>
+                {authTypeMetadata.authType === AuthType.BASIC ? (
+                  <LoginPage
+                    authUrl={null}
+                    authTypeMetadata={authTypeMetadata}
+                    nextUrl="/nrf"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center">
+                    <Button
+                      className="w-full"
+                      secondary
+                      onClick={() => {
+                        if (window.top) {
+                          window.top.location.href = "/auth/login";
+                        } else {
+                          window.location.href = "/auth/login";
+                        }
+                      }}
+                    >
+                      Log in
+                    </Button>
+                  </div>
+                )}
+              </Modal.Body>
+            </Modal.Content>
+          </Modal>
+        )}
+
+      {user && !llmManager.isLoadingProviders && !llmManager.hasAnyProvider && (
         <Button
           className="w-full"
           secondary
