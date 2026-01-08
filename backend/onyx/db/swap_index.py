@@ -126,7 +126,7 @@ def check_and_perform_index_swap(db_session: Session) -> SearchSettings | None:
     did change.
     """
     # Default CC-pair created for Ingestion API unused here
-    all_cc_pairs = get_connector_credential_pairs(db_session, include_user_files=True)
+    all_cc_pairs = get_connector_credential_pairs(db_session)
     cc_pair_count = max(len(all_cc_pairs) - 1, 0)
     new_search_settings = get_secondary_search_settings(db_session)
 

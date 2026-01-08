@@ -375,10 +375,10 @@ const AddUserButton = ({
 
 const Page = () => {
   return (
-    <div className="container">
+    <>
       <AdminPageTitle title="Manage Users" icon={SvgUser} />
       <SearchableTables />
-    </div>
+    </>
   );
 };
 

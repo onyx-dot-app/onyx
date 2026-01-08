@@ -98,8 +98,5 @@ for bootstep in base_bootsteps:
 celery_app.autodiscover_tasks(
     [
         "onyx.background.celery.tasks.docfetching",
-        # Ensure the user files indexing worker registers the doc_id migration task
-        # TODO(subash): remove this once the doc_id migration is complete
-        "onyx.background.celery.tasks.user_file_processing",
     ]
 )
