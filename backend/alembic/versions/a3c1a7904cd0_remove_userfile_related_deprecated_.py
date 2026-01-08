@@ -1,7 +1,7 @@
 """remove userfile related deprecated fields
 
 Revision ID: a3c1a7904cd0
-Revises: 9087b548dd69
+Revises: 5c3dca366b35
 Create Date: 2026-01-06 13:00:30.634396
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "a3c1a7904cd0"
-down_revision = "9087b548dd69"
+down_revision = "5c3dca366b35"
 branch_labels = None
 depends_on = None
 
