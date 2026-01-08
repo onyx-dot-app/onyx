@@ -23,6 +23,7 @@ from onyx.prompts.tool_prompts import PYTHON_TOOL_GUIDANCE
 from onyx.prompts.tool_prompts import TOOL_DESCRIPTION_SEARCH_GUIDANCE
 from onyx.prompts.tool_prompts import TOOL_SECTION_HEADER
 from onyx.prompts.tool_prompts import WEB_SEARCH_GUIDANCE
+from onyx.prompts.tool_prompts import WEB_SEARCH_SITE_DISABLED_GUIDANCE
 from onyx.tools.interface import Tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
@@ -173,7 +174,9 @@ def build_system_prompt(
             TOOL_SECTION_HEADER
             + TOOL_DESCRIPTION_SEARCH_GUIDANCE
             + INTERNAL_SEARCH_GUIDANCE
-            + WEB_SEARCH_GUIDANCE
+            + WEB_SEARCH_GUIDANCE.format(
+                site_colon_disabled=WEB_SEARCH_SITE_DISABLED_GUIDANCE
+            )
             + OPEN_URLS_GUIDANCE
             + GENERATE_IMAGE_GUIDANCE
             + PYTHON_TOOL_GUIDANCE
@@ -199,7 +202,16 @@ def build_system_prompt(
             system_prompt += INTERNAL_SEARCH_GUIDANCE
 
         if has_web_search or include_all_guidance:
-            system_prompt += WEB_SEARCH_GUIDANCE
+            site_disabled_guidance = ""
+            if has_web_search:
+                web_search_tool = next(
+                    (t for t in tools if isinstance(t, WebSearchTool)), None
+                )
+                if web_search_tool and not web_search_tool.supports_site_filter:
+                    site_disabled_guidance = WEB_SEARCH_SITE_DISABLED_GUIDANCE
+            system_prompt += WEB_SEARCH_GUIDANCE.format(
+                site_colon_disabled=site_disabled_guidance
+            )
 
         if has_open_urls or include_all_guidance:
             system_prompt += OPEN_URLS_GUIDANCE

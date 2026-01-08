@@ -71,7 +71,7 @@ spec:
               "--loglevel=INFO",
               "--hostname=docfetching@%n",
               "-Q",
-              "connector_doc_fetching,user_files_indexing",
+              "connector_doc_fetching",
             ]
           resources:
             {{- toYaml .Values.celery_worker_docfetching.resources | nindent 12 }}

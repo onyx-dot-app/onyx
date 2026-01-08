@@ -9,7 +9,7 @@ export default async function Page(props: {
   const { connectors, documentSets } = await fetchValidFilterInfo();
 
   return (
-    <div className="container">
+    <>
       <AdminPageTitle
         icon={<SvgZoomIn className="stroke-text-04 h-8 w-8" />}
         title="Document Explorer"
@@ -20,6 +20,6 @@ export default async function Page(props: {
         connectors={connectors}
         documentSets={documentSets}
       />
-    </div>
+    </>
   );
 }

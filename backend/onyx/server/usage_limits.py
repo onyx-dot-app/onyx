@@ -144,7 +144,7 @@ _FIELD_AND_DEFAULT = {
 
 
 def get_limit_for_usage_type(
-    usage_type: UsageType, is_trial: bool, tenant_id: str | None = None
+    usage_type: UsageType, is_trial: bool, tenant_id: str | None
 ) -> int:
     """
     Get the appropriate limit based on usage type, trial status, and tenant overrides.

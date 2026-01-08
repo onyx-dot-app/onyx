@@ -98,8 +98,8 @@ export default function Page({
   params: Promise<{ "bot-id": string }>;
 }) {
   return (
-    <div className="container">
+    <>
       <SlackBotEditPage params={params} />
-    </div>
+    </>
   );
 }

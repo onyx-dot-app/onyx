@@ -513,6 +513,7 @@ def run_llm_loop(
                 user_info=None,  # TODO, this is part of memories right now, might want to separate it out
                 citation_mapping=citation_mapping,
                 next_citation_num=citation_processor.get_next_citation_number(),
+                max_concurrent_tools=None,
                 skip_search_query_expansion=has_called_search_tool,
             )
 
