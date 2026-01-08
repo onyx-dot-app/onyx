@@ -140,7 +140,3 @@ To use **KEDA ScaledObjects** instead:
    autoscaling:
      engine: keda
    ```
-
----
-
-Questions? Reach out on [Slack](https://onyx.app/slack).
