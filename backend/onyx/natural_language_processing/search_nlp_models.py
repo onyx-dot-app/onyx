@@ -987,7 +987,11 @@ class EmbeddingModel:
 
         # Remove invalid Unicode characters (e.g., unpaired surrogates from malformed documents)
         # that would cause UTF-8 encoding errors when sent to embedding providers
-        texts = [remove_invalid_unicode_chars(text) for text in texts]
+        texts = [
+            clean_text
+            for text in texts
+            if (clean_text := remove_invalid_unicode_chars(text))
+        ]
 
         batch_size = (
             api_embedding_batch_size
