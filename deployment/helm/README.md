@@ -1,70 +1,143 @@
-# Dependency updates (when subchart versions are bumped)
-* If updating subcharts, you need to run this before committing!
-* cd charts/onyx
-* helm dependency update .
+# Helm Chart for Onyx
 
-# Local testing
+## Updating Dependencies
 
-## One time setup
-* brew install kind
-* Ensure you have no config at ~/.kube/config
-* kind create cluster
-* mv ~/.kube/config ~/.kube/kind-config
+When subchart versions are bumped, rebuild the dependency lock file before committing:
 
-## Automated install and test with ct
-* export KUBECONFIG=~/.kube/kind-config
-* kubectl config use-context kind-kind
-* from source root run the following. This does a very basic test against the web server
-  * ct install --all --helm-extra-set-args="--set=nginx.enabled=false" --debug --config ct.yaml
+```bash
+cd deployment/helm/charts/onyx
+helm dependency update .
+```
 
-## Output template to file and inspect
-* cd charts/onyx
-* helm template test-output . > test-output.yaml
+---
 
-## Test the entire cluster manually
-* cd charts/onyx
-* helm install onyx . -n onyx --set postgresql.primary.persistence.enabled=false
-  * the postgres flag is to keep the storage ephemeral for testing. You probably don't want to set that in prod.
-  * no flag for ephemeral vespa storage yet, might be good for testing
-* kubectl -n onyx port-forward service/onyx-nginx 8080:80
-  * this will forward the local port 8080 to the installed chart for you to run tests, etc.
-* When you are finished
-  * helm uninstall onyx -n onyx
-  * Vespa leaves behind a PVC. Delete it if you are completely done.
-    * k -n onyx get pvc
-    * k -n onyx delete pvc vespa-storage-da-vespa-0
-  * If you didn't disable Postgres persistence earlier, you may want to delete that PVC too.
+# Local Testing with Kind
 
-## Run as non-root user
-By default, some onyx containers run as root. If you'd like to explicitly run the onyx containers as a non-root user, update the values.yaml file for the following components:
-  * `celery_shared`, `api`, `webserver`, `indexCapability`, `inferenceCapability`
-    ```yaml
-    securityContext:
-      runAsNonRoot: true
-      runAsUser: 1001
-    ```
-  * `vespa`
-    ```yaml
-    podSecurityContext:
-      fsGroup: 1000
-    securityContext:
-      privileged: false
-      runAsUser: 1000
-    ```
+## One-Time Setup
 
-## Resourcing
-In the helm charts, we have resource suggestions for all Onyx-owned components. 
-These are simply initial suggestions, and may need to be tuned for your specific use case.
+Install [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker) and create a local cluster:
 
-Please talk to us in Slack if you have any questions!
+```bash
+# macOS
+brew install kind
 
-## Autoscaling options
-The chart renders Kubernetes HorizontalPodAutoscalers by default. To keep this behavior, leave
-`autoscaling.engine` as `hpa` and adjust the per-component `autoscaling.*` values as needed.
+# Linux (amd64) - see https://kind.sigs.k8s.io/docs/user/quick-start for other architectures
+curl -Lo ./kind https://kind.sigs.k8s.io/releases/latest/download/kind-linux-amd64
+chmod +x ./kind
+sudo mv ./kind /usr/local/bin/kind
+```
 
-If you would like to use KEDA ScaledObjects instead:
+Create a cluster:
 
-1. Install and manage the KEDA operator in your cluster yourself (for example via the official KEDA Helm chart). KEDA is no longer packaged as a dependency of the Onyx chart.
-2. Set `autoscaling.engine: keda` in your `values.yaml` and enable autoscaling for the components you want to scale.
+```bash
+kind create cluster --name onyx
+```
 
-When `autoscaling.engine` is set to `keda`, the chart will render the existing ScaledObject templates; otherwise HPAs will be rendered.
+## Automated Testing with chart-testing (ct)
+
+From the repo root, run the chart-testing tool:
+
+```bash
+ct install --all --helm-extra-set-args="--set=nginx.enabled=false" --debug --config ct.yaml
+```
+
+> **Note:** nginx is disabled because kind lacks LoadBalancer support.
+
+## Render Templates Locally
+
+Preview the rendered Kubernetes manifests without installing:
+
+```bash
+cd deployment/helm/charts/onyx
+helm template test-output . > test-output.yaml
+```
+
+## Manual Cluster Testing
+
+Install the chart into your kind cluster:
+
+```bash
+cd deployment/helm/charts/onyx
+helm install onyx . -n onyx --create-namespace
+```
+
+Forward the nginx service to access the UI locally:
+
+```bash
+kubectl -n onyx port-forward service/onyx-nginx 8080:80
+```
+
+Then open http://localhost:8080 in your browser.
+
+### Cleanup
+
+Uninstall the release:
+
+```bash
+helm uninstall onyx -n onyx
+```
+
+PVCs are not automatically deleted. Remove them if you're done testing:
+
+```bash
+kubectl -n onyx delete pvc --all
+```
+
+Or delete the entire namespace:
+
+```bash
+kubectl delete namespace onyx
+```
+
+To tear down the kind cluster entirely:
+
+```bash
+kind delete cluster --name onyx
+```
+
+---
+
+# Configuration
+
+## Running as Non-Root
+
+By default, some containers run as root. To run as a non-root user, add to your `values.yaml`:
+
+For `api`, `webserver`, `indexCapability`, `inferenceCapability`, and `celery_shared`:
+
+```yaml
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+```
+
+For `vespa`:
+
+```yaml
+podSecurityContext:
+  fsGroup: 1000
+securityContext:
+  privileged: false
+  runAsUser: 1000
+```
+
+## Resource Tuning
+
+The chart includes resource requests/limits for all Onyx components. These are starting points—tune them based on your workload and cluster capacity.
+
+## Autoscaling
+
+The chart renders **HorizontalPodAutoscalers** by default (`autoscaling.engine: hpa`).
+
+To use **KEDA ScaledObjects** instead:
+
+1. Install the [KEDA operator](https://keda.sh/) separately (it's not bundled with this chart)
+2. Set in your `values.yaml`:
+   ```yaml
+   autoscaling:
+     engine: keda
+   ```
+
+---
+
+Questions? Reach out on [Slack](https://onyx.app/slack).
