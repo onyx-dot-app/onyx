@@ -94,7 +94,7 @@ export function Section({
   ...rest
 }: SectionProps) {
   // Determine direction: horizontal overrides vertical, default is vertical
-  const isHorizontal = horizontal && !vertical;
+  const isHorizontal = horizontal ? true : vertical ? false : false;
   const direction = isHorizontal ? "flex-row" : "flex-col";
   const width = fit ? "w-fit" : "w-full";
 
