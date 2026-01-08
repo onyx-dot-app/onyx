@@ -11,8 +11,8 @@ import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import { InputPrompt } from "@/app/chat/interfaces";
 import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
-import { useInputPrompts } from "@/lib/hooks/useInputPrompts";
-import { useCCPairs } from "@/lib/hooks/useCCPairs";
+import usePromptShortcuts from "@/hooks/usePromptShortcuts";
+import useCCPairs from "@/hooks/useCCPairs";
 import { DocumentIcon2, FileIcon } from "@/components/icons/icons";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ChatState } from "@/app/chat/interfaces";
@@ -256,7 +256,7 @@ const ChatInputBar = React.memo(
         [setCurrentMessageFiles]
       );
 
-      const { inputPrompts } = useInputPrompts();
+      const { promptShortcuts } = usePromptShortcuts();
       const { ccPairs, isLoading: ccPairsLoading } = useCCPairs();
       const { data: federatedConnectorsData, isLoading: federatedLoading } =
         useFederatedConnectors();
@@ -272,7 +272,7 @@ const ChatInputBar = React.memo(
       // Memoize availableSources to prevent unnecessary re-renders
       const memoizedAvailableSources = useMemo(
         () => [
-          ...(ccPairs ?? []).map((ccPair) => ccPair.source),
+          ...ccPairs.map((ccPair) => ccPair.source),
           ...(federatedConnectorsData?.map((connector) => connector.source) ||
             []),
         ],
@@ -332,12 +332,12 @@ const ChatInputBar = React.memo(
 
       const filteredPrompts = useMemo(
         () =>
-          inputPrompts.filter(
+          promptShortcuts.filter(
             (prompt) =>
               prompt.active &&
               prompt.prompt.toLowerCase().startsWith(startFilterSlash)
           ),
-        [inputPrompts, startFilterSlash]
+        [promptShortcuts, startFilterSlash]
       );
 
       // Determine if we should hide processing state based on context limits
