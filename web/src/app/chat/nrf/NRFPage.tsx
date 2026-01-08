@@ -458,6 +458,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                         onMessageSelection={onMessageSelection}
                         stopGenerating={stopGenerating}
                         handleResubmitLastMessage={handleResubmitLastMessage}
+                        deepResearchEnabled={deepResearchEnabled}
                       />
                     </div>
                   </div>
