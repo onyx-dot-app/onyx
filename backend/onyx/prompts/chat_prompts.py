@@ -51,6 +51,10 @@ Remember to provide inline citations in the format [1], [2], [3], etc. based on 
 Do not acknowledge this hint in your response.
 """.strip()
 
+LAST_CYCLE_CITATION_REMINDER = """
+You are on your last cycle and no longer have any tool calls available. You must answer the query now to the best of your ability.
+""".strip()
+
 
 # Reminder message that replaces the usual reminder if web_search was the last tool call
 OPEN_URL_REMINDER = """

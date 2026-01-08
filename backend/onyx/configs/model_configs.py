@@ -128,3 +128,17 @@ if _LITELLM_EXTRA_BODY_RAW:
         LITELLM_EXTRA_BODY = json.loads(_LITELLM_EXTRA_BODY_RAW)
     except Exception:
         pass
+
+#####
+# Prompt Caching Configs
+#####
+# Enable prompt caching framework
+ENABLE_PROMPT_CACHING = (
+    os.environ.get("ENABLE_PROMPT_CACHING", "true").lower() != "false"
+)
+
+# Cache TTL multiplier - store caches slightly longer than provider TTL
+# This allows for some clock skew and ensures we don't lose cache metadata prematurely
+PROMPT_CACHE_REDIS_TTL_MULTIPLIER = float(
+    os.environ.get("PROMPT_CACHE_REDIS_TTL_MULTIPLIER") or 1.2
+)

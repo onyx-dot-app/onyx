@@ -264,6 +264,12 @@ class ChatMessageSimple(BaseModel):
     image_files: list[ChatLoadedFile] | None = None
     # Only for TOOL_CALL_RESPONSE type messages
     tool_call_id: str | None = None
+    # The last message for which this is true
+    # AND is true for all previous messages
+    # (counting from the start of the history)
+    # represents the end of the cacheable prefix
+    # used for prompt caching
+    should_cache: bool = False
 
 
 class ProjectFileMetadata(BaseModel):

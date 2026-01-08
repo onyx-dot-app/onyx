@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ANONYMOUS_USER_NAME, LOGOUT_DISABLED } from "@/lib/constants";
 import { Notification } from "@/app/admin/settings/interfaces";
-import useSWR, { preload } from "swr";
+import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { checkUserIsNoAuthUser, logout } from "@/lib/user";
 import { useUser } from "@/components/user/UserProvider";
@@ -19,13 +19,13 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import NotificationsPopover from "@/sections/sidebar/NotificationsPopover";
 import {
   SvgBell,
   SvgExternalLink,
   SvgLogOut,
   SvgUser,
-  SvgX,
+  SvgNotificationBubble,
 } from "@opal/icons";
 
 function getDisplayName(email?: string, personalName?: string): string {
@@ -126,47 +126,6 @@ function SettingsPopover({
   );
 }
 
-interface NotificationsPopoverProps {
-  onClose: () => void;
-}
-
-function NotificationsPopover({ onClose }: NotificationsPopoverProps) {
-  const { data: notifications } = useSWR<Notification[]>(
-    "/api/notifications",
-    errorHandlingFetcher
-  );
-
-  return (
-    <div className="w-[20rem] h-[30rem] flex flex-col">
-      <div className="flex flex-row justify-between items-center p-4">
-        <Text as="p" headingH2>
-          Notifications
-        </Text>
-        <SvgX
-          className="stroke-text-05 w-[1.2rem] h-[1.2rem] hover:stroke-text-04 cursor-pointer"
-          onClick={onClose}
-        />
-      </div>
-
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 flex flex-col gap-2 items-center">
-        {!notifications || notifications.length === 0 ? (
-          <div className="w-full h-full flex flex-col justify-center items-center">
-            <Text as="p">No notifications</Text>
-          </div>
-        ) : (
-          <div className="w-full flex flex-col gap-2">
-            {notifications?.map((notification, index) => (
-              <Text as="p" key={index}>
-                {notification.notif_type}
-              </Text>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export interface UserAvatarPopoverProps {
   folded?: boolean;
 }
@@ -178,7 +137,13 @@ export default function UserAvatarPopover({ folded }: UserAvatarPopoverProps) {
   const { user } = useUser();
   const router = useRouter();
 
+  const { data: notifications } = useSWR<Notification[]>(
+    "/api/notifications",
+    errorHandlingFetcher
+  );
+
   const displayName = getDisplayName(user?.email, user?.personalization?.name);
+  const hasNotifications = notifications && notifications.length > 0;
 
   const handlePopoverOpen = (state: boolean) => {
     if (state) {
@@ -206,6 +171,13 @@ export default function UserAvatarPopover({ folded }: UserAvatarPopoverProps) {
                 </Text>
               </InputAvatar>
             )}
+            rightChildren={
+              hasNotifications && (
+                <div className="w-6 h-6 flex items-center justify-center">
+                  <SvgNotificationBubble size={6} />
+                </div>
+              )
+            }
             transient={!!popupState}
             folded={folded}
           >
@@ -224,7 +196,10 @@ export default function UserAvatarPopover({ folded }: UserAvatarPopoverProps) {
           />
         )}
         {popupState === "Notifications" && (
-          <NotificationsPopover onClose={() => setPopupState("Settings")} />
+          <NotificationsPopover
+            onClose={() => setPopupState("Settings")}
+            onNavigate={() => setPopupState(undefined)}
+          />
         )}
       </PopoverContent>
     </Popover>

@@ -1070,7 +1070,7 @@ test.describe("MCP OAuth flows", () => {
 
     const basePassword = "TestPassword123!";
     curatorCredentials = {
-      email: `pw-curator-${Date.now()}@test.com`,
+      email: `pw-curator-${Date.now()}@example.com`,
       password: basePassword,
     };
     await adminClient.registerUser(
@@ -1091,7 +1091,7 @@ test.describe("MCP OAuth flows", () => {
       true
     );
     curatorTwoCredentials = {
-      email: `pw-curator-${Date.now()}-b@test.com`,
+      email: `pw-curator-${Date.now()}-b@example.com`,
       password: basePassword,
     };
     await adminClient.registerUser(

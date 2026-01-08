@@ -65,6 +65,7 @@ from onyx.server.documents.models import IndexAttemptSnapshot
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.documents.models import PermissionSyncAttemptSnapshot
 from onyx.server.models import StatusResponse
+from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.contextvars import get_current_tenant_id
@@ -73,7 +74,7 @@ logger = setup_logger()
 router = APIRouter(prefix="/manage")
 
 
-@router.get("/admin/cc-pair/{cc_pair_id}/index-attempts")
+@router.get("/admin/cc-pair/{cc_pair_id}/index-attempts", tags=PUBLIC_API_TAGS)
 def get_cc_pair_index_attempts(
     cc_pair_id: int,
     page_num: int = Query(0, ge=0),
@@ -147,7 +148,7 @@ def get_cc_pair_permission_sync_attempts(
     )
 
 
-@router.get("/admin/cc-pair/{cc_pair_id}")
+@router.get("/admin/cc-pair/{cc_pair_id}", tags=PUBLIC_API_TAGS)
 def get_cc_pair_full_info(
     cc_pair_id: int,
     user: User | None = Depends(current_curator_or_admin_user),
@@ -240,7 +241,7 @@ def get_cc_pair_full_info(
     )
 
 
-@router.put("/admin/cc-pair/{cc_pair_id}/status")
+@router.put("/admin/cc-pair/{cc_pair_id}/status", tags=PUBLIC_API_TAGS)
 def update_cc_pair_status(
     cc_pair_id: int,
     status_update_request: CCStatusUpdateRequest,
@@ -414,7 +415,7 @@ def get_cc_pair_last_pruned(
     return cc_pair.last_pruned
 
 
-@router.post("/admin/cc-pair/{cc_pair_id}/prune")
+@router.post("/admin/cc-pair/{cc_pair_id}/prune", tags=PUBLIC_API_TAGS)
 def prune_cc_pair(
     cc_pair_id: int,
     user: User = Depends(current_curator_or_admin_user),
@@ -480,7 +481,7 @@ def get_docs_sync_status(
     return [DocumentSyncStatus.from_model(doc) for doc in all_docs_for_cc_pair]
 
 
-@router.get("/admin/cc-pair/{cc_pair_id}/errors")
+@router.get("/admin/cc-pair/{cc_pair_id}/errors", tags=PUBLIC_API_TAGS)
 def get_cc_pair_indexing_errors(
     cc_pair_id: int,
     include_resolved: bool = Query(False),
@@ -521,7 +522,9 @@ def get_cc_pair_indexing_errors(
     )
 
 
-@router.put("/connector/{connector_id}/credential/{credential_id}")
+@router.put(
+    "/connector/{connector_id}/credential/{credential_id}", tags=PUBLIC_API_TAGS
+)
 def associate_credential_to_connector(
     connector_id: int,
     credential_id: int,
@@ -600,7 +603,9 @@ def associate_credential_to_connector(
         raise HTTPException(status_code=500, detail="Unexpected error")
 
 
-@router.delete("/connector/{connector_id}/credential/{credential_id}")
+@router.delete(
+    "/connector/{connector_id}/credential/{credential_id}", tags=PUBLIC_API_TAGS
+)
 def dissociate_credential_from_connector(
     connector_id: int,
     credential_id: int,

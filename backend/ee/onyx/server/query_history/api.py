@@ -48,6 +48,7 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.query_and_chat.models import ChatSessionDetails
 from onyx.server.query_and_chat.models import ChatSessionsResponse
+from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.utils.threadpool_concurrency import parallel_yield
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -294,7 +295,7 @@ def list_all_query_history_exports(
         )
 
 
-@router.post("/admin/query-history/start-export")
+@router.post("/admin/query-history/start-export", tags=PUBLIC_API_TAGS)
 def start_query_history_export(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
@@ -340,7 +341,7 @@ def start_query_history_export(
     return {"request_id": task_id}
 
 
-@router.get("/admin/query-history/export-status")
+@router.get("/admin/query-history/export-status", tags=PUBLIC_API_TAGS)
 def get_query_history_export_status(
     request_id: str,
     _: User | None = Depends(current_admin_user),
@@ -374,7 +375,7 @@ def get_query_history_export_status(
     return {"status": TaskStatus.SUCCESS}
 
 
-@router.get("/admin/query-history/download")
+@router.get("/admin/query-history/download", tags=PUBLIC_API_TAGS)
 def download_query_history_csv(
     request_id: str,
     _: User | None = Depends(current_admin_user),

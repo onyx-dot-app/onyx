@@ -120,6 +120,14 @@ VALID_EMAIL_DOMAINS = (
     if _VALID_EMAIL_DOMAINS_STR
     else []
 )
+
+# Disposable email blocking - blocks temporary/throwaway email addresses
+# Set to empty string to disable disposable email blocking
+DISPOSABLE_EMAIL_DOMAINS_URL = os.environ.get(
+    "DISPOSABLE_EMAIL_DOMAINS_URL",
+    "https://disposable.github.io/disposable-email-domains/domains.json",
+)
+
 # OAuth Login Flow
 # Used for both Google OAuth2 and OIDC flows
 OAUTH_CLIENT_ID = (
@@ -191,6 +199,10 @@ OPENSEARCH_HOST = os.environ.get("OPENSEARCH_HOST") or "localhost"
 OPENSEARCH_REST_API_PORT = int(os.environ.get("OPENSEARCH_REST_API_PORT") or 9200)
 OPENSEARCH_ADMIN_USERNAME = os.environ.get("OPENSEARCH_ADMIN_USERNAME", "admin")
 OPENSEARCH_ADMIN_PASSWORD = os.environ.get("OPENSEARCH_ADMIN_PASSWORD", "")
+
+ENABLE_OPENSEARCH_FOR_ONYX = (
+    os.environ.get("ENABLE_OPENSEARCH_FOR_ONYX", "").lower() == "true"
+)
 
 VESPA_HOST = os.environ.get("VESPA_HOST") or "localhost"
 # NOTE: this is used if and only if the vespa config server is accessible via a
@@ -742,7 +754,27 @@ BRAINTRUST_PROJECT = os.environ.get("BRAINTRUST_PROJECT", "Onyx")
 # Braintrust API key - if provided, Braintrust tracing will be enabled
 BRAINTRUST_API_KEY = os.environ.get("BRAINTRUST_API_KEY") or ""
 # Maximum concurrency for Braintrust evaluations
-BRAINTRUST_MAX_CONCURRENCY = int(os.environ.get("BRAINTRUST_MAX_CONCURRENCY") or 5)
+# None means unlimited concurrency, otherwise specify a number
+_braintrust_concurrency = os.environ.get("BRAINTRUST_MAX_CONCURRENCY")
+BRAINTRUST_MAX_CONCURRENCY = (
+    int(_braintrust_concurrency) if _braintrust_concurrency else None
+)
+
+#####
+# Scheduled Evals Configuration
+#####
+# Comma-separated list of Braintrust dataset names to run on schedule
+SCHEDULED_EVAL_DATASET_NAMES = [
+    name.strip()
+    for name in os.environ.get("SCHEDULED_EVAL_DATASET_NAMES", "").split(",")
+    if name.strip()
+]
+# Email address to use for search permissions during scheduled evals
+SCHEDULED_EVAL_PERMISSIONS_EMAIL = os.environ.get(
+    "SCHEDULED_EVAL_PERMISSIONS_EMAIL", "roshan@onyx.app"
+)
+# Braintrust project name to use for scheduled evals
+SCHEDULED_EVAL_PROJECT = os.environ.get("SCHEDULED_EVAL_PROJECT", "st-dev")
 
 #####
 # Langfuse Configuration
@@ -800,6 +832,11 @@ ENTERPRISE_EDITION_ENABLED = (
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() == "true"
 )
 
+#####
+# Image Generation Configuration (DEPRECATED)
+# These environment variables will be deprecated soon.
+# To configure image generation, please visit the Image Generation page in the Admin Panel.
+#####
 # Azure Image Configurations
 AZURE_IMAGE_API_VERSION = os.environ.get("AZURE_IMAGE_API_VERSION") or os.environ.get(
     "AZURE_DALLE_API_VERSION"

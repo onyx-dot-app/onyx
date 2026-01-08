@@ -360,9 +360,8 @@ const ChatInputBar = React.memo(
         availableContextTokens,
       ]);
 
-      // Detect if there are any non-image files to determine if images should be compact
       const shouldCompactImages = useMemo(() => {
-        return hasNonImageFiles(currentMessageFiles);
+        return currentMessageFiles.length > 1;
       }, [currentMessageFiles]);
 
       // Check if the assistant has search tools available (internal search or web search)
@@ -469,7 +468,7 @@ const ChatInputBar = React.memo(
           >
             {/* Attached Files */}
             {currentMessageFiles.length > 0 && (
-              <div className="p-1 rounded-t-16 flex flex-wrap gap-2">
+              <div className="p-2 rounded-t-16 flex flex-wrap gap-1">
                 {currentMessageFiles.map((file) => (
                   <FileCard
                     key={file.id}
@@ -637,7 +636,7 @@ const ChatInputBar = React.memo(
                       action
                       folded
                       disabled={disabled}
-                      className={disabled ? "bg-transparent" : ""}
+                      className="bg-transparent"
                     >
                       Deep Research
                     </SelectButton>
@@ -664,7 +663,7 @@ const ChatInputBar = React.memo(
                           engaged
                           action
                           disabled={disabled}
-                          className={disabled ? "bg-transparent" : ""}
+                          className="bg-transparent"
                         >
                           {tool.display_name}
                         </SelectButton>

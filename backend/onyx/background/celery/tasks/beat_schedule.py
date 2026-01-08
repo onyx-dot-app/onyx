@@ -2,9 +2,12 @@ import copy
 from datetime import timedelta
 from typing import Any
 
+from celery.schedules import crontab
+
 from onyx.configs.app_configs import AUTO_LLM_CONFIG_URL
 from onyx.configs.app_configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS
 from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
+from onyx.configs.app_configs import SCHEDULED_EVAL_DATASET_NAMES
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
@@ -182,6 +185,25 @@ if AUTO_LLM_CONFIG_URL:
             "options": {
                 "priority": OnyxCeleryPriority.LOW,
                 "expires": AUTO_LLM_UPDATE_INTERVAL_SECONDS,
+            },
+        }
+    )
+
+# Add scheduled eval task if datasets are configured
+if SCHEDULED_EVAL_DATASET_NAMES:
+    beat_task_templates.append(
+        {
+            "name": "scheduled-eval-pipeline",
+            "task": OnyxCeleryTask.SCHEDULED_EVAL_TASK,
+            # run every Sunday at midnight UTC
+            "schedule": crontab(
+                hour=0,
+                minute=0,
+                day_of_week=0,
+            ),
+            "options": {
+                "priority": OnyxCeleryPriority.LOW,
+                "expires": BEAT_EXPIRES_DEFAULT,
             },
         }
     )

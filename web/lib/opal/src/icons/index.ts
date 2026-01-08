@@ -89,6 +89,7 @@ export { default as SvgMinusCircle } from "@opal/icons/minus-circle";
 export { default as SvgMoon } from "@opal/icons/moon";
 export { default as SvgMoreHorizontal } from "@opal/icons/more-horizontal";
 export { default as SvgMusicSmall } from "@opal/icons/music-small";
+export { default as SvgNotificationBubble } from "@opal/icons/notification-bubble";
 export { default as SvgOllama } from "@opal/icons/ollama";
 export { default as SvgOnyxLogo } from "@opal/icons/onyx-logo";
 export { default as SvgOnyxOctagon } from "@opal/icons/onyx-octagon";

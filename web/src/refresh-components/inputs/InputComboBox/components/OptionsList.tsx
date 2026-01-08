@@ -97,7 +97,8 @@ export const OptionsList: React.FC<OptionsListProps> = ({
       {/* Matched/Filtered Options */}
       {matchedOptions.map((option, idx) => {
         const globalIndex = idx + indexOffset;
-        const isExact = isExactMatch(option);
+        // Only highlight first exact match, not all matches
+        const isExact = idx === 0 && isExactMatch(option);
         return (
           <OptionItem
             key={option.value}

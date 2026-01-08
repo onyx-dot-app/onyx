@@ -25,6 +25,10 @@ class ExaClient(WebSearchProvider, WebContentProvider):
         self.exa = Exa(api_key=api_key)
         self._num_results = num_results
 
+    @property
+    def supports_site_filter(self) -> bool:
+        return False
+
     @retry_builder(tries=3, delay=1, backoff=2)
     def search(self, query: str) -> list[WebSearchResult]:
         response = self.exa.search_and_contents(

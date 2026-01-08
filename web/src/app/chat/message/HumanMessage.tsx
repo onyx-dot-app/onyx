@@ -137,7 +137,6 @@ const HumanMessage = React.memo(function HumanMessage({
   // Fix this later.
   const [content, setContent] = useState(initialContent);
 
-  const [isHovered, setIsHovered] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
   // Use nodeId for switching (finding position in siblings)
@@ -173,9 +172,7 @@ const HumanMessage = React.memo(function HumanMessage({
   return (
     <div
       id="onyx-human-message"
-      className="flex flex-col justify-end pt-5 pb-1 w-full -mr-6 relative"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      className="group flex flex-col justify-end pt-5 pb-1 w-full -mr-6 relative"
     >
       <FileDisplay alignBubble files={files || []} />
       <div className="flex flex-wrap justify-end break-words">
@@ -201,55 +198,57 @@ const HumanMessage = React.memo(function HumanMessage({
                 className={
                   "max-w-[25rem] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3"
                 }
+                onCopy={(e) => {
+                  const selection = window.getSelection();
+                  if (selection) {
+                    e.preventDefault();
+                    const text = selection
+                      .toString()
+                      .replace(/\n{2,}/g, "\n")
+                      .trim();
+                    e.clipboardData.setData("text/plain", text);
+                  }
+                }}
               >
                 <Text as="p" mainContentBody>
                   {content}
                 </Text>
               </div>
             </div>
-            {onEdit &&
-              isHovered &&
-              !isEditing &&
-              (!files || files.length === 0) && (
-                <div className="flex flex-row gap-1 p-1">
-                  <CopyIconButton
-                    getCopyText={() => content}
-                    tertiary
-                    data-testid="HumanMessage/copy-button"
-                  />
-                  <IconButton
-                    icon={SvgEdit}
-                    tertiary
-                    tooltip="Edit"
-                    onClick={() => {
-                      setIsEditing(true);
-                      setIsHovered(false);
-                    }}
-                    data-testid="HumanMessage/edit-button"
-                  />
-                </div>
-              )}
+            {onEdit && !isEditing && (!files || files.length === 0) && (
+              <div className="flex flex-row gap-1 p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <CopyIconButton
+                  getCopyText={() => content}
+                  tertiary
+                  data-testid="HumanMessage/copy-button"
+                />
+                <IconButton
+                  icon={SvgEdit}
+                  tertiary
+                  tooltip="Edit"
+                  onClick={() => setIsEditing(true)}
+                  data-testid="HumanMessage/edit-button"
+                />
+              </div>
+            )}
           </>
         ) : (
           <>
-            {onEdit &&
-            isHovered &&
-            !isEditing &&
-            (!files || files.length === 0) ? (
-              <div className="my-auto">
-                <IconButton
-                  icon={SvgEdit}
-                  onClick={() => {
-                    setIsEditing(true);
-                    setIsHovered(false);
-                  }}
-                  tertiary
-                  tooltip="Edit"
-                />
-              </div>
-            ) : (
-              <div className="h-[27px]" />
-            )}
+            <div
+              className={cn(
+                "my-auto",
+                onEdit && !isEditing && (!files || files.length === 0)
+                  ? "opacity-0 group-hover:opacity-100 transition-opacity"
+                  : "invisible"
+              )}
+            >
+              <IconButton
+                icon={SvgEdit}
+                onClick={() => setIsEditing(true)}
+                tertiary
+                tooltip="Edit"
+              />
+            </div>
             <div className="ml-auto rounded-lg p-1">{content}</div>
           </>
         )}

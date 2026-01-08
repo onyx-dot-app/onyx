@@ -50,5 +50,5 @@ func NewRootCommand() *cobra.Command {
 }
 
 func rootCmd(cmd *cobra.Command, args []string) {
-	log.Debug("Debug log in rootCmd")
+	_ = cmd.Help()
 }

@@ -81,6 +81,11 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
     def display_name(self) -> str:
         return self.DISPLAY_NAME
 
+    @property
+    def supports_site_filter(self) -> bool:
+        """Whether the underlying provider supports site: operator."""
+        return self._provider.supports_site_filter
+
     @override
     @classmethod
     def is_available(cls, db_session: Session) -> bool:

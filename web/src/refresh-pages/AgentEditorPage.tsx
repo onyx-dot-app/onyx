@@ -38,6 +38,7 @@ import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import InputSelectField from "@/refresh-components/form/InputSelectField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
@@ -513,6 +514,10 @@ export default function AgentEditorPage({
   const codeInterpreterTool = availableTools?.find(
     (t) => t.in_code_tool_id === PYTHON_TOOL_ID
   );
+  const isImageGenerationAvailable = !!imageGenTool;
+  const imageGenerationDisabledTooltip = isImageGenerationAvailable
+    ? undefined
+    : "Image generation requires a configured model. If you have access, set one up under Settings > Image Generation, or ask an admin.";
 
   // Group MCP server tools from availableTools by server ID
   const mcpServersWithTools = mcpServers.map((server) => {
@@ -1238,18 +1243,23 @@ export default function AgentEditorPage({
                         }
                       >
                         <GeneralLayouts.Section gap={0.5}>
-                          <Card>
-                            <InputLayouts.Horizontal
-                              name="image_generation"
-                              label="Image Generation"
-                              description="Generate and manipulate images using AI-powered tools."
-                            >
-                              <SwitchField
+                          <SimpleTooltip
+                            tooltip={imageGenerationDisabledTooltip}
+                            side="top"
+                          >
+                            <Card disabled={isImageGenerationAvailable}>
+                              <InputLayouts.Horizontal
                                 name="image_generation"
-                                disabled={!imageGenTool}
-                              />
-                            </InputLayouts.Horizontal>
-                          </Card>
+                                label="Image Generation"
+                                description="Generate and manipulate images using AI-powered tools."
+                              >
+                                <SwitchField
+                                  name="image_generation"
+                                  disabled={!isImageGenerationAvailable}
+                                />
+                              </InputLayouts.Horizontal>
+                            </Card>
+                          </SimpleTooltip>
 
                           <Card>
                             <InputLayouts.Horizontal

@@ -23,6 +23,8 @@ import Button from "@/refresh-components/buttons/Button";
 import {
   SEARCH_TOOL_ID,
   IMAGE_GENERATION_TOOL_ID,
+  OPEN_URL_TOOL_ID,
+  OPEN_URL_TOOL_NAME,
   WEB_SEARCH_TOOL_ID,
   SYSTEM_TOOL_ICONS,
 } from "@/app/chat/components/tools/constants";
@@ -193,6 +195,13 @@ export default function AgentsNavigationPage() {
     >();
     agents.forEach((agent) => {
       agent.tools.forEach((tool) => {
+        if (
+          tool.in_code_tool_id === OPEN_URL_TOOL_ID ||
+          tool.name === OPEN_URL_TOOL_ID ||
+          tool.name === OPEN_URL_TOOL_NAME
+        ) {
+          return;
+        }
         actionsMap.set(tool.id, {
           id: tool.id,
           name: tool.name,

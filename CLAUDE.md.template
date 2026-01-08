@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - If you run into any missing python dependency errors, try running your command with `source .venv/bin/activate` \
 to assume the python venv.
 - To make tests work, check the `.env` file at the root of the project to find an OpenAI key.
-- If using `playwright` to explore the frontend, you can usually log in with username `a@test.com` and password
+- If using `playwright` to explore the frontend, you can usually log in with username `a@example.com` and password
 `a`. The app can be accessed at `http://localhost:3000`.
 - You should assume that all Onyx services are running. To verify, you can check the `backend/log` directory to
 make sure we see logs coming out from the relevant service.

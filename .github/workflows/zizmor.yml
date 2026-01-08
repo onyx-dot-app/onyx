@@ -21,18 +21,29 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Detect changes
+        id: filter
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # ratchet:dorny/paths-filter@v3
+        with:
+          filters: |
+            zizmor:
+              - '.github/**'
+
       - name: Install the latest version of uv
+        if: steps.filter.outputs.zizmor == 'true' || github.ref_name == 'main'
         uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a # ratchet:astral-sh/setup-uv@v7
         with:
           enable-cache: false
           version: "0.9.9"
 
       - name: Run zizmor
+        if: steps.filter.outputs.zizmor == 'true' || github.ref_name == 'main'
         run: uv run --no-sync --with zizmor zizmor --format=sarif . > results.sarif
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload SARIF file
+        if: steps.filter.outputs.zizmor == 'true' || github.ref_name == 'main'
         uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab # ratchet:github/codeql-action/upload-sarif@codeql-bundle-v2.23.5
         with:
           sarif_file: results.sarif

@@ -39,24 +39,36 @@
 import { WithoutStyles } from "@/types";
 import { cn } from "@/lib/utils";
 
+const classNames = {
+  main: ["bg-background-tint-00 border"],
+  translucent: ["bg-transparent border border-dashed"],
+  disabled: ["cursor-not-allowed pointer-events-none opacity-50"],
+} as const;
+
 export interface CardProps
   extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
-  padding?: number;
+  // card variants
   translucent?: boolean;
+  disabled?: boolean;
+
+  padding?: number;
 }
 
 export default function Card({
+  translucent,
+  disabled,
+
   padding = 1,
-  translucent = false,
+
   ...props
 }: CardProps) {
+  const variant = translucent ? "translucent" : disabled ? "disabled" : "main";
+
   return (
     <div
       className={cn(
         "flex flex-col gap-4 rounded-16 w-full h-full",
-        translucent
-          ? "bg-transparent border border-dashed"
-          : "bg-background-tint-00 border"
+        classNames[variant]
       )}
       style={{
         padding: `${padding}rem`,

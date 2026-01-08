@@ -418,6 +418,9 @@ def run_research_agent_call(
                         user_info=None,
                         citation_mapping=citation_mapping,
                         next_citation_num=citation_processor.get_next_citation_number(),
+                        # Packets currently cannot differentiate between parallel calls in a nested level
+                        # so we just cannot show parallel calls in the UI. This should not happen for deep research anyhow.
+                        max_concurrent_tools=1,
                         # May be better to not do this step, hard to say, needs to be tested
                         skip_search_query_expansion=False,
                     )
