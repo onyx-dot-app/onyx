@@ -1,3 +1,5 @@
+"use client";
+
 import useSWR from "swr";
 import { InputPrompt } from "@/app/chat/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
