@@ -8,10 +8,7 @@ import {
 } from "@/lib/extension/constants";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { SvgX } from "@opal/icons";
-import { SvgSettings } from "@opal/icons";
-import { SvgSun } from "@opal/icons";
-import { SvgMoon } from "@opal/icons";
+import { SvgX, SvgSettings, SvgSun, SvgMoon, SvgCheck } from "@opal/icons";
 import { cn } from "@/lib/utils";
 
 interface SettingRowProps {
@@ -21,13 +18,13 @@ interface SettingRowProps {
 }
 
 const SettingRow = ({ label, description, children }: SettingRowProps) => (
-  <div className="flex justify-between items-center py-3">
-    <div className="flex flex-col gap-0.5">
-      <Text mainUiBody textLight05>
+  <div className="nrf-settings-row">
+    <div className="nrf-settings-row-label">
+      <Text mainUiBody text04>
         {label}
       </Text>
       {description && (
-        <Text secondaryBody textLight03>
+        <Text secondaryBody text03>
           {description}
         </Text>
       )}
@@ -47,44 +44,22 @@ const BackgroundThumbnail = ({
   isSelected,
   onClick,
 }: BackgroundThumbnailProps) => (
-  <button
-    onClick={onClick}
-    className={cn(
-      "relative overflow-hidden rounded-12 transition-all duration-200",
-      "aspect-[16/9]",
-      "group"
-    )}
-  >
+  <button onClick={onClick} className="nrf-background-thumbnail group">
     <div
-      className="absolute inset-0 bg-cover bg-center transition-transform duration-300 group-hover:scale-105"
+      className="nrf-background-thumbnail-image"
       style={{ backgroundImage: `url(${url})` }}
     />
     <div
       className={cn(
-        "absolute inset-0 transition-all duration-200",
+        "nrf-background-thumbnail-ring",
         isSelected
-          ? "ring-2 ring-inset ring-white/80"
-          : "ring-1 ring-inset ring-white/20 group-hover:ring-white/40"
+          ? "nrf-background-thumbnail-ring--selected"
+          : "nrf-background-thumbnail-ring--unselected"
       )}
-      style={{ borderRadius: "inherit" }}
     />
     {isSelected && (
-      <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white flex items-center justify-center">
-        <svg
-          width="12"
-          height="12"
-          viewBox="0 0 12 12"
-          fill="none"
-          className="text-background-800"
-        >
-          <path
-            d="M10 3L4.5 8.5L2 6"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+      <div className="nrf-background-thumbnail-check">
+        <SvgCheck className="w-3 h-3 stroke-text-inverted-05" />
       </div>
     )}
   </button>
@@ -131,10 +106,10 @@ export const SettingsPanel = ({
       {/* Backdrop overlay */}
       <div
         className={cn(
-          "fixed inset-0 bg-black/40 backdrop-blur-sm z-40 transition-opacity duration-300",
+          "nrf-settings-overlay",
           settingsOpen
-            ? "opacity-100 pointer-events-auto"
-            : "opacity-0 pointer-events-none"
+            ? "nrf-settings-overlay--open"
+            : "nrf-settings-overlay--closed"
         )}
         onClick={toggleSettings}
       />
@@ -142,67 +117,52 @@ export const SettingsPanel = ({
       {/* Settings panel */}
       <div
         className={cn(
-          "fixed top-0 right-0 w-[400px] h-full z-50",
-          "bg-gradient-to-b from-background-900/95 to-background-800/95",
-          "backdrop-blur-xl",
-          "border-l border-white/10",
-          "overflow-y-auto",
-          "transition-transform duration-300 ease-out",
-          settingsOpen ? "translate-x-0" : "translate-x-full"
+          "nrf-settings-panel",
+          settingsOpen
+            ? "nrf-settings-panel--open"
+            : "nrf-settings-panel--closed"
         )}
       >
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-gradient-to-b from-background-900/95 to-transparent pb-4">
-          <div className="flex items-center justify-between p-6 pb-2">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center w-10 h-10 rounded-12 bg-white/10">
-                <SvgSettings size={20} className="text-white" />
+        <div className="nrf-settings-header">
+          <div className="nrf-settings-header-content">
+            <div className="nrf-settings-title-group">
+              <div className="nrf-settings-icon-container">
+                <SvgSettings className="w-5 h-5 stroke-text-03" />
               </div>
-              <Text headingH3 textLight05>
+              <Text headingH3 text04>
                 Settings
               </Text>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="nrf-settings-actions">
               {/* Theme Toggle */}
-              <button
+              <IconButton
+                icon={theme === "light" ? SvgSun : SvgMoon}
                 onClick={() =>
                   toggleTheme(theme === "light" ? "dark" : "light")
                 }
-                className={cn(
-                  "flex items-center gap-2 px-3 py-1.5 rounded-full transition-all duration-200",
-                  "bg-white/10 hover:bg-white/15 border border-white/10"
-                )}
-                aria-label={`Switch to ${
+                tertiary
+                tooltip={`Switch to ${
                   theme === "light" ? "dark" : "light"
                 } theme`}
-              >
-                {theme === "light" ? (
-                  <SvgSun size={16} className="text-white" />
-                ) : (
-                  <SvgMoon size={16} className="text-white" />
-                )}
-              </button>
+              />
               <IconButton
                 icon={SvgX}
                 onClick={toggleSettings}
                 tertiary
-                className="hover:bg-white/10"
+                tooltip="Close settings"
               />
             </div>
           </div>
         </div>
 
-        <div className="px-6 pb-8 space-y-8">
+        <div className="nrf-settings-content">
           {/* General Section */}
-          <section>
-            <Text
-              secondaryAction
-              textLight03
-              className="uppercase tracking-wider mb-3"
-            >
+          <section className="nrf-settings-section">
+            <Text secondaryAction text03 className="nrf-settings-section-title">
               General
             </Text>
-            <div className="space-y-1 bg-white/5 rounded-16 px-4">
+            <div className="nrf-settings-section-content">
               <SettingRow label="Use Onyx as new tab page">
                 <Switch
                   checked={useOnyxAsNewTab}
@@ -213,15 +173,11 @@ export const SettingsPanel = ({
           </section>
 
           {/* Background Section */}
-          <section>
-            <Text
-              secondaryAction
-              textLight03
-              className="uppercase tracking-wider mb-3"
-            >
+          <section className="nrf-settings-section">
+            <Text secondaryAction text03 className="nrf-settings-section-title">
               Background
             </Text>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="nrf-background-grid">
               {backgroundImages.map((bg: string) => (
                 <BackgroundThumbnail
                   key={bg}

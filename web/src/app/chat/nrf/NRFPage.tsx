@@ -11,20 +11,13 @@ import { useSearchParams } from "next/navigation";
 import { useUser } from "@/components/user/UserProvider";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { AuthType } from "@/lib/constants";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import Button from "@/refresh-components/buttons/Button";
 import ChatInputBar, {
   ChatInputBarHandle,
 } from "@/app/chat/components/input/ChatInputBar";
-import { Menu, ExternalLink } from "lucide-react";
+import IconButton from "@/refresh-components/buttons/IconButton";
 import Modal from "@/refresh-components/Modal";
+import Text from "@/refresh-components/texts/Text";
 import { useNightTime } from "@/lib/dateUtils";
 import { useFilters, useLlmManager } from "@/lib/hooks";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
@@ -50,7 +43,7 @@ import {
   useCurrentMessageHistory,
   useLoadingError,
 } from "@/app/chat/stores/useChatSessionStore";
-import ChatPage from "@/app/chat/components/ChatPage";
+import ChatUI from "@/sections/ChatUI";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useScrollonStream } from "@/app/chat/services/lib";
 import { cn } from "@/lib/utils";
@@ -59,7 +52,12 @@ import useScreenSize from "@/hooks/useScreenSize";
 import TextView from "@/components/chat/TextView";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
 import DEFAULT_CONTEXT_TOKENS from "@/app/chat/components/ChatPage";
-import { SvgUser } from "@opal/icons";
+import {
+  SvgUser,
+  SvgMenu,
+  SvgExternalLink,
+  SvgAlertTriangle,
+} from "@opal/icons";
 
 interface NRFPageProps {
   isSidePanel?: boolean;
@@ -389,10 +387,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   return (
     <div
       className={cn(
-        "relative w-full h-full flex flex-col min-h-screen overflow-hidden",
-        isSidePanel
-          ? "bg-background"
-          : "bg-cover bg-center bg-no-repeat transition-[background-image] duration-150 ease-in-out"
+        "nrf-page",
+        isSidePanel ? "nrf-page--side-panel" : "nrf-page--with-background"
       )}
       style={
         isSidePanel ? undefined : { backgroundImage: `url(${backgroundUrl})` }
@@ -402,33 +398,30 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
       {/* Side panel header */}
       {isSidePanel && (
-        <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-background">
-          <div className="flex items-center gap-2">
+        <header className="nrf-side-panel-header">
+          <div className="nrf-logo-container">
             <Logo />
           </div>
-          <button
+          <Button
+            tertiary
+            rightIcon={SvgExternalLink}
             onClick={handleOpenInOnyx}
-            className="flex items-center gap-1.5 text-sm text-text-600 hover:text-text-900 transition-colors"
           >
             Open in Onyx
-            <ExternalLink size={14} />
-          </button>
+          </Button>
         </header>
       )}
 
       {/* Settings button */}
       {!isSidePanel && (
-        <div className="absolute top-0 right-0 p-4 z-10">
-          <button
-            aria-label="Open settings"
+        <div className="nrf-settings-button-container">
+          <IconButton
+            icon={SvgMenu}
             onClick={toggleSettings}
-            className="bg-white/70 dark:bg-neutral-500/70 backdrop-blur-md rounded-full p-2.5 cursor-pointer hover:bg-white/80 dark:hover:bg-neutral-700/80 transition-colors duration-200 shadow-lg"
-          >
-            <Menu
-              size={12}
-              className={theme === "light" ? "text-text-900" : "text-white"}
-            />
-          </button>
+            tertiary
+            tooltip="Open settings"
+            className="nrf-settings-button"
+          />
         </div>
       )}
 
@@ -442,41 +435,35 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
       <Dropzone onDrop={handleFileUpload} noClick>
         {({ getRootProps }) => (
-          <div
-            {...getRootProps()}
-            className="flex-1 flex flex-col overflow-hidden"
-          >
+          <div {...getRootProps()} className="nrf-dropzone">
             {/* Chat area with messages - centered container with background */}
             {hasMessages ? (
               <div
                 className={cn(
-                  "flex-1 flex justify-center min-h-0",
-                  isSidePanel ? "p-0" : "py-4 px-4 md:px-8 lg:px-16"
+                  "nrf-chat-area",
+                  isSidePanel && "nrf-chat-area--side-panel"
                 )}
               >
                 {/* Centered chat container with semi-transparent background */}
                 <div
                   className={cn(
-                    "flex flex-col w-full max-h-full overflow-hidden",
-                    isSidePanel
-                      ? "max-w-full"
-                      : "max-w-4xl bg-white/60 dark:bg-neutral-900/60 backdrop-blur-md rounded-2xl shadow-lg"
+                    "nrf-chat-container",
+                    isSidePanel && "nrf-chat-container--side-panel"
                   )}
                 >
                   {/* Scrollable messages area */}
-                  <div
-                    ref={scrollableDivRef}
-                    onScroll={() => {
-                      const scrollDistance =
-                        (endDivRef?.current?.getBoundingClientRect()?.top ??
-                          0) -
-                        (inputRef?.current?.getBoundingClientRect()?.top ?? 0);
-                      scrollDist.current = scrollDistance;
-                    }}
-                    className="flex-1 w-full flex flex-col default-scrollbar overflow-y-auto overflow-x-hidden relative"
-                  >
-                    <div className="relative w-full px-4">
-                      <ChatPage firstMessage={message || undefined} />
+                  <div ref={scrollableDivRef} className="nrf-messages-scroll">
+                    <div className="nrf-messages-content">
+                      <ChatUI
+                        liveAssistant={liveAssistant ?? undefined}
+                        llmManager={llmManager}
+                        currentMessageFiles={currentMessageFiles}
+                        setPresentingDocument={setPresentingDocument}
+                        onSubmit={onSubmit}
+                        onMessageSelection={onMessageSelection}
+                        stopGenerating={stopGenerating}
+                        handleResubmitLastMessage={handleResubmitLastMessage}
+                      />
                     </div>
                   </div>
 
@@ -484,10 +471,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   <div
                     ref={inputRef}
                     className={cn(
-                      "p-4 border-t",
-                      isSidePanel
-                        ? "border-border"
-                        : "border-white/20 dark:border-neutral-700/50"
+                      "nrf-input-area",
+                      isSidePanel && "nrf-input-area--side-panel"
                     )}
                   >
                     <ChatInputBar
@@ -525,26 +510,23 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
               <div
                 ref={inputRef}
                 className={cn(
-                  "text-center",
-                  isSidePanel
-                    ? "flex-1 flex flex-col justify-center px-4"
-                    : "absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] lg:max-w-3xl"
+                  "nrf-welcome",
+                  isSidePanel && "nrf-welcome--side-panel"
                 )}
               >
-                <h1
+                <Text
+                  headingH3
                   className={cn(
-                    "pl-2 text-xl text-left w-full mb-4",
-                    isSidePanel
-                      ? "text-text-800"
-                      : theme === "light"
-                        ? "text-text-800"
-                        : "text-white"
+                    "nrf-welcome-heading",
+                    isSidePanel || theme === "light"
+                      ? "text-text-04"
+                      : "text-text-light-05"
                   )}
                 >
                   {isNight
                     ? "End your day with Onyx"
                     : "Start your day with Onyx"}
-                </h1>
+                </Text>
 
                 <ChatInputBar
                   ref={chatInputBarRef}
@@ -583,27 +565,24 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
             handleUseOnyxToggle={handleUseOnyxToggle}
           />
 
-          <Dialog open={showTurnOffModal} onOpenChange={setShowTurnOffModal}>
-            <DialogContent className="w-fit max-w-[95%]">
-              <DialogHeader>
-                <DialogTitle>Turn off Onyx new tab page?</DialogTitle>
-                <DialogDescription>
-                  You&apos;ll see your browser&apos;s default new tab page
-                  instead.
-                  <br />
-                  You can turn it back on anytime in your Onyx settings.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter className="flex gap-2 justify-center">
+          <Modal open={showTurnOffModal} onOpenChange={setShowTurnOffModal}>
+            <Modal.Content mini>
+              <Modal.Header
+                icon={SvgAlertTriangle}
+                title="Turn off Onyx new tab page?"
+                description="You'll see your browser's default new tab page instead. You can turn it back on anytime in your Onyx settings."
+                onClose={() => setShowTurnOffModal(false)}
+              />
+              <Modal.Footer>
                 <Button secondary onClick={() => setShowTurnOffModal(false)}>
                   Cancel
                 </Button>
                 <Button danger onClick={confirmTurnOff}>
                   Turn off
                 </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+              </Modal.Footer>
+            </Modal.Content>
+          </Modal>
         </>
       )}
 
