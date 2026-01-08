@@ -775,6 +775,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             text_stripped = content.full_content.strip()
             is_insufficient = (
                 not text_stripped
+                # TODO: Likely a behavior of our scraper, understand why this special pattern occurs
                 or text_stripped.lower() == "loading..."
                 or len(text_stripped) < 50
             )
@@ -786,6 +787,9 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             ):
                 sections.append(inference_section_from_internet_page_scrape(content))
             else:
+                # TODO: Slight improvement - if failed URL reasons are passed back to the LLM
+                # for example, if it tries to crawl Reddit and fails, it should know (probably) that this error would
+                # happen again if it tried to crawl Reddit again.
                 failed_urls.append(content.link or "")
 
         return sections, failed_urls
