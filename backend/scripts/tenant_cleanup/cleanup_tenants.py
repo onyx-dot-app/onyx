@@ -465,12 +465,12 @@ def cleanup_tenant(tenant_id: str, pod_name: str, force: bool = False) -> bool:
         # Tenant/table not found in control plane
         error_str = str(e)
         print(f"⚠️  WARNING: Tenant not found in control plane: {error_str}")
+        tenant_not_found_in_control_plane = True
 
         if force:
             print(
                 "[FORCE MODE] Tenant not found in control plane - continuing with dataplane cleanup only"
             )
-            tenant_not_found_in_control_plane = True
         else:
             response = input("Continue anyway? Type 'yes' to confirm: ")
             if response.lower() != "yes":
