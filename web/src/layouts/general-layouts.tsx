@@ -105,8 +105,8 @@ export function Section({
   //   - top/bottom/vCenter control justify-content (main axis)
   //   - left/right/hCenter control align-items (cross axis)
 
-  let justifyContent: string;
-  let alignItems: string;
+  let justifyContent = "justify-center";
+  let alignItems = "items-center";
 
   if (isHorizontal) {
     // Horizontal layout: left/right/hCenter → justify-content
