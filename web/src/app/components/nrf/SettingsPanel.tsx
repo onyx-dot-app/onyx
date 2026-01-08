@@ -99,7 +99,7 @@ export const SettingsPanel = ({
   const currentBackgroundUrl =
     theme === "light" ? defaultLightBackgroundUrl : defaultDarkBackgroundUrl;
   const backgroundImages =
-    theme === "dark" ? darkExtensionImages : lightExtensionImages;
+    theme === "light" ? lightExtensionImages : darkExtensionImages;
 
   return (
     <>

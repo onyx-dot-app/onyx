@@ -48,7 +48,7 @@ import Logo from "@/refresh-components/Logo";
 import useScreenSize from "@/hooks/useScreenSize";
 import TextView from "@/components/chat/TextView";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
-import DEFAULT_CONTEXT_TOKENS from "@/app/chat/components/ChatPage";
+import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import {
   SvgUser,
   SvgMenu,
