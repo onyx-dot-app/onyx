@@ -305,7 +305,13 @@ function AppHeader() {
       )}
 
       {(isMobile || customHeaderContent || currentChatSessionId) && (
-        <header className="w-full flex flex-row justify-center items-center py-3 px-4 h-16">
+        <header
+          className={cn(
+            "w-full flex flex-row justify-center items-center py-3 px-4 h-16",
+            !customHeaderContent &&
+              "2xl:absolute 2xl:top-0 2xl:left-0 2xl:right-0 2xl:bg-transparent 2xl:z-chat-header"
+          )}
+        >
           {/* Left - contains the icon-button to fold the AppSidebar on mobile */}
           <div className="flex-1">
             <IconButton
@@ -444,7 +450,7 @@ export interface AppRootProps {
 
 function AppRoot({ children }: AppRootProps) {
   return (
-    <div className="flex flex-col h-full w-full">
+    <div className="flex flex-col h-full w-full 2xl:relative">
       <AppHeader />
       <div className="flex-1 overflow-auto h-full w-full">{children}</div>
       <AppFooter />
