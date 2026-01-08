@@ -3825,7 +3825,7 @@ requires-dist = [
     { name = "numpy", marker = "extra == 'model-server'", specifier = "==1.26.4" },
     { name = "oauthlib", marker = "extra == 'backend'", specifier = "==3.2.2" },
     { name = "office365-rest-python-client", marker = "extra == 'backend'", specifier = "==2.5.9" },
-    { name = "onyx-devtools", marker = "extra == 'dev'", specifier = "==0.2.0" },
+    { name = "onyx-devtools", marker = "extra == 'dev'", specifier = "==0.2.2" },
     { name = "openai", specifier = "==2.14.0" },
     { name = "openapi-generator-cli", marker = "extra == 'dev'", specifier = "==7.17.0" },
     { name = "openinference-instrumentation", marker = "extra == 'backend'", specifier = "==0.1.42" },
@@ -3928,20 +3928,20 @@ requires-dist = [{ name = "onyx", extras = ["backend", "dev", "ee"], editable = 
 
 [[package]]
 name = "onyx-devtools"
-version = "0.2.0"
+version = "0.2.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastapi" },
     { name = "openapi-generator-cli" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/27/ab/ba2a77c9b6663573b28a14fb1928ce882ef820a818fb9a7631cc0deccbcf/onyx_devtools-0.2.0-py3-none-any.whl", hash = "sha256:f68d5e8c5f606d8e178d5ea25b952c1ebcc887fceb44804f1a7792f754367a58", size = 1195396, upload-time = "2025-12-16T03:35:22.989Z" },
-    { url = "https://files.pythonhosted.org/packages/03/54/89aa299a4fd4ef4124ef699183c4d5bfbb7877485475d8affc439476f021/onyx_devtools-0.2.0-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:a97cc7b093c86f691cd94668c09ea9f857e9e551f0003dededf6fbaf598d0b40", size = 1194762, upload-time = "2025-12-16T03:35:19.23Z" },
-    { url = "https://files.pythonhosted.org/packages/a1/63/ffbebcacbaaa81859be894cf628f7e73328d1123d482e7a53393cd681520/onyx_devtools-0.2.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:034908351c27f8df5beffdd47ce2ddd4f524099c18ca23893a484ff69feca9d7", size = 1135431, upload-time = "2025-12-16T03:35:18.215Z" },
-    { url = "https://files.pythonhosted.org/packages/9e/79/ad1dba4f9c90057cfcafc143641b4f706410b95d5b0be884ec5d97901b25/onyx_devtools-0.2.0-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:2b23d21019c8b83905a2fa7c31f781c172e599bbc527bb274a56998981e11661", size = 1103558, upload-time = "2025-12-16T03:35:18.17Z" },
-    { url = "https://files.pythonhosted.org/packages/3c/b0/1da3f0e6e59dedbaeb9775d43976c83dd0068def3b2b71d8545e53f3c932/onyx_devtools-0.2.0-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:31b51b48ec848f2c4f7c766051d9794141e8759f1d7ce32bb5a0224ac103a66c", size = 1195411, upload-time = "2025-12-16T03:35:18.819Z" },
-    { url = "https://files.pythonhosted.org/packages/b7/6c/523d14b43104b12fc41d38a60d9179cb5ed5c8295b4ec97427ae883f315b/onyx_devtools-0.2.0-py3-none-win_amd64.whl", hash = "sha256:2457c1a7d819b1456eac34b400b8a979af1d41ba91ec4d6a4c4c11051ed23997", size = 1291910, upload-time = "2025-12-16T03:35:19.642Z" },
-    { url = "https://files.pythonhosted.org/packages/ec/a9/7b6e632c66d454ba2cac7e797e8dd88ec5cb1bd558df3231931947c0d42d/onyx_devtools-0.2.0-py3-none-win_arm64.whl", hash = "sha256:a9c748e17a1b0925631b9683ad0baef5389f5596e394d86cb55a16f5918487e5", size = 1183025, upload-time = "2025-12-16T03:35:16.586Z" },
+    { url = "https://files.pythonhosted.org/packages/85/a9/7774e47fb7e7f70f0d97db30569dfde98f426d22aa38e548fe8b2a6a1b79/onyx_devtools-0.2.2-py3-none-any.whl", hash = "sha256:b0f5ba7ddb3b7c7c17bc4dc2fb27e6075ec3eb4b51e1ae48aef2f4cfa6d368c7", size = 1202169, upload-time = "2026-01-08T07:36:44.866Z" },
+    { url = "https://files.pythonhosted.org/packages/95/21/abfaa7644d45aa80051a0b1527b8b68d357aa3f7f5d44bdfef44b803797c/onyx_devtools-0.2.2-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:e55e704347faf8ebf86fc1cfe54855e2c420aad3ba2b77958173262552cd6905", size = 1201660, upload-time = "2026-01-08T07:36:43.088Z" },
+    { url = "https://files.pythonhosted.org/packages/1e/07/7dd5cc581c82a66d7bfb55a33b3ddac7904d54838b3010d21cefe5d5562b/onyx_devtools-0.2.2-py3-none-macosx_11_0_arm64.whl", hash = "sha256:dfee5ca5e4b9452298c6b199ba7661ebd5ad80fab9458d0588e40ddc0a52bf07", size = 1142483, upload-time = "2026-01-08T07:36:50.697Z" },
+    { url = "https://files.pythonhosted.org/packages/72/9c/9089085200177b6db67ec29a4a04144882e6f6b79e510857b6faa9244663/onyx_devtools-0.2.2-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:65f87c38a5039f6263522b13401898c5951912591c2cdfab5bb621401da819c8", size = 1110294, upload-time = "2026-01-08T07:36:45.366Z" },
+    { url = "https://files.pythonhosted.org/packages/eb/b3/4ff7edcbb63932db289b342976c6cc2e1ba0cb04157a75105579e9ab97c8/onyx_devtools-0.2.2-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:12d8a7e008cb00f6c642d8c2597c8af5c065f74de9e5ddb45a7efc60cac9ebb7", size = 1202189, upload-time = "2026-01-08T07:36:47.31Z" },
+    { url = "https://files.pythonhosted.org/packages/27/a8/8fdc3436d0feb5ff2cbe7a95cbd0883624800e0e8da89b8b705209fc23b8/onyx_devtools-0.2.2-py3-none-win_amd64.whl", hash = "sha256:3eefe141cb4927f32cbdb1a1e1f5dc4cc61772d95a420042ba8bfbd26f8eb7b5", size = 1298481, upload-time = "2026-01-08T07:36:45.018Z" },
+    { url = "https://files.pythonhosted.org/packages/f7/51/7ec9503ad192a706ba1eb2c786c2cd1ed5e91490718b0c7e25ec97502058/onyx_devtools-0.2.2-py3-none-win_arm64.whl", hash = "sha256:7d3b85f19e24da9f7c6e07402c4bf2c7ce7f27b98b02fd02708e0fec4961cadc", size = 1189995, upload-time = "2026-01-08T07:36:51.83Z" },
 ]
 
 [[package]]
