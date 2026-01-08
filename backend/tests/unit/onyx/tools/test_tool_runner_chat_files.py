@@ -5,37 +5,14 @@ These tests verify that chat files are properly passed to PythonTool
 through the PythonToolOverrideKwargs mechanism.
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
-
 import pytest
 
-from onyx.chat.models import ChatMessageSimple
-from onyx.configs.constants import MessageType
-from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.models import ChatFile
 from onyx.tools.models import PythonToolOverrideKwargs
-from onyx.tools.models import ToolCallKickoff
-from onyx.tools.tool_implementations.python.python_tool import PythonTool
-from onyx.tools.tool_runner import run_tool_calls
 
 
 class TestChatFilesPassingToPythonTool:
     """Tests for passing chat_files to PythonTool."""
-
-    @pytest.fixture
-    def mock_python_tool(self) -> MagicMock:
-        """Create a mock PythonTool."""
-        mock_tool = MagicMock(spec=PythonTool)
-        mock_tool.name = "python"
-        mock_tool.id = 1
-        mock_tool.emit_start = MagicMock()
-        mock_tool.run = MagicMock(return_value=MagicMock(
-            rich_response=None,
-            llm_facing_response="execution result",
-            tool_call=None,
-        ))
-        return mock_tool
 
     @pytest.fixture
     def sample_chat_files(self) -> list[ChatFile]:
@@ -45,45 +22,12 @@ class TestChatFilesPassingToPythonTool:
             ChatFile(filename="data.csv", content=b"col1,col2\n1,2\n3,4"),
         ]
 
-    @pytest.fixture
-    def sample_message_history(self) -> list[ChatMessageSimple]:
-        """Create sample message history."""
-        return [
-            ChatMessageSimple(
-                message="Analyze this file",
-                token_count=3,
-                message_type=MessageType.USER,
-            )
-        ]
-
-    @pytest.fixture
-    def python_tool_call(self) -> ToolCallKickoff:
-        """Create a tool call for PythonTool."""
-        return ToolCallKickoff(
-            tool_call_id="test-call-1",
-            tool_name="python",
-            tool_args={"code": "import pandas as pd\ndf = pd.read_excel('test.xlsx')"},
-            placement=Placement(turn_index=0, tab_index=0),
-        )
-
-    def test_chat_files_passed_to_python_tool(
+    def test_chat_files_passed_to_python_tool_override_kwargs(
         self,
-        mock_python_tool: MagicMock,
         sample_chat_files: list[ChatFile],
-        sample_message_history: list[ChatMessageSimple],
-        python_tool_call: ToolCallKickoff,
     ) -> None:
-        """Test that chat_files are properly passed to PythonTool via override_kwargs."""
-        # Make mock_python_tool return True for isinstance check
-        with patch(
-            "onyx.tools.tool_runner.isinstance",
-            side_effect=lambda obj, cls: cls == PythonTool if obj is mock_python_tool else isinstance(obj, cls),
-        ):
-            # This won't work because isinstance is a builtin
-            pass
-
-        # Instead, let's verify the behavior by checking the override_kwargs structure
-        # Create a real PythonToolOverrideKwargs
+        """Test that PythonToolOverrideKwargs correctly stores chat_files."""
+        # Verify the override_kwargs structure stores chat_files correctly
         override_kwargs = PythonToolOverrideKwargs(chat_files=sample_chat_files)
 
         assert override_kwargs.chat_files == sample_chat_files
@@ -97,12 +41,23 @@ class TestChatFilesPassingToPythonTool:
         override_kwargs = PythonToolOverrideKwargs()
         assert override_kwargs.chat_files == []
 
-    def test_none_chat_files_uses_empty_list(self) -> None:
-        """Test that None chat_files are handled gracefully."""
-        # When chat_files=None is passed to run_tool_calls,
-        # PythonToolOverrideKwargs should receive an empty list
-        override_kwargs = PythonToolOverrideKwargs(chat_files=None or [])
+    def test_none_chat_files_handled_in_tool_runner(self) -> None:
+        """Test that None chat_files are handled gracefully in the tool_runner code path.
+
+        The tool_runner.py uses `chat_files or []` pattern when creating
+        PythonToolOverrideKwargs, so we verify this pattern works correctly.
+        """
+        # Simulate the pattern used in tool_runner.py:
+        # override_kwargs = PythonToolOverrideKwargs(chat_files=chat_files or [])
+        chat_files_param: list[ChatFile] | None = None
+
+        # This is the exact pattern used in tool_runner.py
+        override_kwargs = PythonToolOverrideKwargs(
+            chat_files=chat_files_param or [],
+        )
+
         assert override_kwargs.chat_files == []
+        assert isinstance(override_kwargs.chat_files, list)
 
 
 class TestChatFileConversion:
