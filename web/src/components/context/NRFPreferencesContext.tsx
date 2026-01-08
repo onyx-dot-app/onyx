@@ -8,10 +8,11 @@ import {
   lightExtensionImages,
   LocalStorageKeys,
 } from "@/lib/extension/constants";
+import { ThemePreference } from "@/lib/types";
 
 interface NRFPreferencesContextValue {
-  theme: string;
-  setTheme: (t: string) => void;
+  theme: ThemePreference;
+  setTheme: (t: ThemePreference) => void;
   defaultLightBackgroundUrl: string;
   setDefaultLightBackgroundUrl: (val: string) => void;
   defaultDarkBackgroundUrl: string;
@@ -55,9 +56,9 @@ export function NRFPreferencesProvider({
   children: React.ReactNode;
 }) {
   const { setTheme: setNextThemesTheme } = useTheme();
-  const [theme, setThemeState] = useLocalStorageState<string>(
+  const [theme, setThemeState] = useLocalStorageState<ThemePreference>(
     LocalStorageKeys.THEME,
-    "dark"
+    ThemePreference.DARK
   );
   const [defaultLightBackgroundUrl, setDefaultLightBackgroundUrl] =
     useLocalStorageState<string>(
@@ -81,13 +82,13 @@ export function NRFPreferencesProvider({
   }, [theme, setNextThemesTheme]);
 
   // Wrapper function to update both local state and next-themes
-  const setTheme = (newTheme: string) => {
+  const setTheme = (newTheme: ThemePreference) => {
     setThemeState(newTheme);
     setNextThemesTheme(newTheme);
   };
 
   useEffect(() => {
-    if (theme === "dark") {
+    if (theme === ThemePreference.DARK) {
       notifyExtensionOfThemeChange(theme, defaultDarkBackgroundUrl);
     } else {
       notifyExtensionOfThemeChange(theme, defaultLightBackgroundUrl);

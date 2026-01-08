@@ -10,6 +10,7 @@ import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgX, SvgSettings, SvgSun, SvgMoon, SvgCheck } from "@opal/icons";
 import { cn } from "@/lib/utils";
+import { ThemePreference } from "@/lib/types";
 
 interface SettingRowProps {
   label: string;
@@ -84,12 +85,12 @@ export const SettingsPanel = ({
     useOnyxAsNewTab,
   } = useNRFPreferences();
 
-  const toggleTheme = (newTheme: string) => {
+  const toggleTheme = (newTheme: ThemePreference) => {
     setTheme(newTheme);
   };
 
   const updateBackgroundUrl = (url: string) => {
-    if (theme === "light") {
+    if (theme === ThemePreference.LIGHT) {
       setDefaultLightBackgroundUrl(url);
     } else {
       setDefaultDarkBackgroundUrl(url);
@@ -97,9 +98,13 @@ export const SettingsPanel = ({
   };
 
   const currentBackgroundUrl =
-    theme === "light" ? defaultLightBackgroundUrl : defaultDarkBackgroundUrl;
+    theme === ThemePreference.LIGHT
+      ? defaultLightBackgroundUrl
+      : defaultDarkBackgroundUrl;
   const backgroundImages =
-    theme === "light" ? lightExtensionImages : darkExtensionImages;
+    theme === ThemePreference.LIGHT
+      ? lightExtensionImages
+      : darkExtensionImages;
 
   return (
     <>
@@ -137,13 +142,19 @@ export const SettingsPanel = ({
             <div className="nrf-settings-actions">
               {/* Theme Toggle */}
               <IconButton
-                icon={theme === "light" ? SvgSun : SvgMoon}
+                icon={theme === ThemePreference.LIGHT ? SvgSun : SvgMoon}
                 onClick={() =>
-                  toggleTheme(theme === "light" ? "dark" : "light")
+                  toggleTheme(
+                    theme === ThemePreference.LIGHT
+                      ? ThemePreference.DARK
+                      : ThemePreference.LIGHT
+                  )
                 }
                 tertiary
                 tooltip={`Switch to ${
-                  theme === "light" ? "dark" : "light"
+                  theme === ThemePreference.LIGHT
+                    ? ThemePreference.DARK
+                    : ThemePreference.LIGHT
                 } theme`}
               />
               <IconButton
