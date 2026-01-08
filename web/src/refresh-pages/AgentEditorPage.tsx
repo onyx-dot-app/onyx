@@ -937,6 +937,20 @@ export default function AgentEditorPage({
           initialStatus={{ warnings: {} }}
         >
           {({ isSubmitting, isValid, dirty, values, setFieldValue }) => {
+            const fileStatusMap = new Map(
+              allRecentFiles.map((f) => [f.id, f.status])
+            );
+
+            const hasUploadingFiles = values.user_file_ids.some(
+              (fileId: string) =>
+                fileStatusMap.get(fileId) === UserFileStatus.UPLOADING
+            );
+
+            const hasProcessingFiles = values.user_file_ids.some(
+              (fileId: string) =>
+                fileStatusMap.get(fileId) === UserFileStatus.PROCESSING
+            );
+
             return (
               <>
                 <FormWarningsEffect />
@@ -1004,7 +1018,12 @@ export default function AgentEditorPage({
                           </Button>
                           <Button
                             type="submit"
-                            disabled={isSubmitting || !isValid || !dirty}
+                            disabled={
+                              isSubmitting ||
+                              !isValid ||
+                              !dirty ||
+                              hasUploadingFiles
+                            }
                           >
                             {existingAgent ? "Save" : "Create"}
                           </Button>
@@ -1229,6 +1248,13 @@ export default function AgentEditorPage({
                                         );
                                       })}
                                     </GeneralLayouts.Section>
+                                  )}
+                                  {hasProcessingFiles && (
+                                    <Text as="p" text03 secondaryBody>
+                                      Onyx is still processing your uploaded
+                                      files, the agent can be used but it will
+                                      not have access to all the files.
+                                    </Text>
                                   )}
                                 </GeneralLayouts.Section>
                               )}
