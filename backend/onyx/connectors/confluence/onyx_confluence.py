@@ -961,14 +961,20 @@ def get_user_email_from_username__server(
         try:
             response = confluence_client.get_mobile_parameters(user_name)
             email = response.get("email")
-        except Exception:
-            logger.warning(f"failed to get confluence email for {user_name}")
+        except HTTPError as e:
+            status_code = e.response.status_code if e.response is not None else "N/A"
+            logger.warning(
+                f"Failed to get confluence email for {user_name}: "
+                f"HTTP {status_code} - {e}"
+            )
             # For now, we'll just return None and log a warning. This means
             # we will keep retrying to get the email every group sync.
             email = None
-            # We may want to just return a string that indicates failure so we dont
-            # keep retrying
-            # email = f"FAILED TO GET CONFLUENCE EMAIL FOR {user_name}"
+        except Exception as e:
+            logger.warning(
+                f"Failed to get confluence email for {user_name}: {type(e).__name__} - {e}"
+            )
+            email = None
         _USER_EMAIL_CACHE[user_name] = email
     return _USER_EMAIL_CACHE[user_name]
 
