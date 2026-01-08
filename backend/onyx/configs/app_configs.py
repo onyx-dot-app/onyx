@@ -754,7 +754,27 @@ BRAINTRUST_PROJECT = os.environ.get("BRAINTRUST_PROJECT", "Onyx")
 # Braintrust API key - if provided, Braintrust tracing will be enabled
 BRAINTRUST_API_KEY = os.environ.get("BRAINTRUST_API_KEY") or ""
 # Maximum concurrency for Braintrust evaluations
-BRAINTRUST_MAX_CONCURRENCY = int(os.environ.get("BRAINTRUST_MAX_CONCURRENCY") or 5)
+# None means unlimited concurrency, otherwise specify a number
+_braintrust_concurrency = os.environ.get("BRAINTRUST_MAX_CONCURRENCY")
+BRAINTRUST_MAX_CONCURRENCY = (
+    int(_braintrust_concurrency) if _braintrust_concurrency else None
+)
+
+#####
+# Scheduled Evals Configuration
+#####
+# Comma-separated list of Braintrust dataset names to run on schedule
+SCHEDULED_EVAL_DATASET_NAMES = [
+    name.strip()
+    for name in os.environ.get("SCHEDULED_EVAL_DATASET_NAMES", "").split(",")
+    if name.strip()
+]
+# Email address to use for search permissions during scheduled evals
+SCHEDULED_EVAL_PERMISSIONS_EMAIL = os.environ.get(
+    "SCHEDULED_EVAL_PERMISSIONS_EMAIL", "roshan@onyx.app"
+)
+# Braintrust project name to use for scheduled evals
+SCHEDULED_EVAL_PROJECT = os.environ.get("SCHEDULED_EVAL_PROJECT", "st-dev")
 
 #####
 # Langfuse Configuration

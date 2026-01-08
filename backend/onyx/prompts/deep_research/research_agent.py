@@ -42,6 +42,8 @@ Your job is now to organize the findings to return a comprehensive report that p
 The report will be seen by another agent instead of a user so keep it free of formatting or commentary and instead focus on the facts only. \
 Do not give it a title, do not break it down into sections, and do not provide any of your own conclusions/analysis.
 
+You may see a list of tool calls in the history but you do not have access to tools anymore. You should only use the information in the history to create the report.
+
 CRITICAL - This report should be as long as necessary to return ALL of the information that the researcher has gathered. It should be several pages long so as to capture as much detail as possible from the research. \
 It cannot be stressed enough that this report must be EXTREMELY THOROUGH and COMPREHENSIVE. Only this report is going to be returned, so it's CRUCIAL that you don't lose any details from the raw messages.
 

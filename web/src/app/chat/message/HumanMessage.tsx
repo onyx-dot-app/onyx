@@ -198,6 +198,17 @@ const HumanMessage = React.memo(function HumanMessage({
                 className={
                   "max-w-[25rem] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3"
                 }
+                onCopy={(e) => {
+                  const selection = window.getSelection();
+                  if (selection) {
+                    e.preventDefault();
+                    const text = selection
+                      .toString()
+                      .replace(/\n{2,}/g, "\n")
+                      .trim();
+                    e.clipboardData.setData("text/plain", text);
+                  }
+                }}
               >
                 <Text as="p" mainContentBody>
                   {content}

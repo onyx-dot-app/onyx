@@ -1,3 +1,5 @@
+import json
+
 import httpx
 
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
@@ -53,15 +55,9 @@ def _convert_opensearch_chunk_to_inference_chunk_uncleaned(
 ) -> InferenceChunkUncleaned:
     return InferenceChunkUncleaned(
         chunk_id=chunk.chunk_index,
-        # TODO(andrei): Do this in a followup. This is the top of the doc, we
-        # use it in the UI so it's needed for now but we should show match
-        # highlights instead really.
-        blurb="",
+        blurb=chunk.blurb,
         content=chunk.content,
-        # TODO(andrei): Same comment as in
-        # _convert_onyx_chunk_to_opensearch_document, just do this in a
-        # followup.
-        source_links=None,
+        source_links=json.loads(chunk.source_links) if chunk.source_links else None,
         image_file_id=chunk.image_file_name,
         # TODO(andrei) Yuhong says he doesn't think we need that anymore. Used
         # if a section needed to be split into diff chunks. A section is a part
@@ -70,11 +66,7 @@ def _convert_opensearch_chunk_to_inference_chunk_uncleaned(
         section_continuation=False,
         document_id=chunk.document_id,
         source_type=DocumentSource(chunk.source_type),
-        # TODO(andrei): Yuhong says this should never be None. I'll followup up
-        # on that later.
-        semantic_identifier=(
-            chunk.semantic_identifier if chunk.semantic_identifier else ""
-        ),
+        semantic_identifier=chunk.semantic_identifier,
         title=chunk.title,
         # TODO(andrei): Same comment as in
         # _convert_onyx_chunk_to_opensearch_document. Yuhong thinks OpenSearch
@@ -99,8 +91,9 @@ def _convert_opensearch_chunk_to_inference_chunk_uncleaned(
         # OpenSearch can from the documentation I've seen till now, look at this
         # in a followup.
         match_highlights=[],
-        # TODO(andrei) Summary of the entire doc, specifically if you enable
-        # contextual retrieval. Look at this in a followup.
+        # TODO(andrei) This content is not queried on, it is only used to clean
+        # appended content to chunks. Consider storing a chunk content index
+        # instead of a full string when working on chunk content augmentation.
         doc_summary="",
         # TODO(andrei) Same thing as contx ret above, LLM gens context for each
         # chunk.
@@ -109,8 +102,6 @@ def _convert_opensearch_chunk_to_inference_chunk_uncleaned(
         # primary_owners TODO(andrei)
         # secondary_owners TODO(andrei)
         # large_chunk_reference_ids TODO(andrei): Don't worry about this one.
-        # TODO(andrei): Slack is special.
-        is_federated=False,
         # TODO(andrei): This is the suffix appended to the end of the chunk
         # content to assist querying. There are better ways we can do this, for
         # ex. keeping an index of where to string split from.
@@ -155,9 +146,6 @@ def _convert_onyx_chunk_to_opensearch_document(
         # methods in OpenSearchDocumentIndex support it anyway. Always defaults
         # to None for now.
         # access_control_list=chunk.access.to_acl(),
-        # TODO(andrei): Look at this in a followup. Always defaults to False for
-        # now.
-        hidden=False,
         # TODO(andrei): This doesn't work bc global_boost is float, presumably
         # between 0.0 and inf (check this) and chunk.boost is an int from -inf
         # to +inf. Look at how the scaling compares between these in a followup.
@@ -167,10 +155,8 @@ def _convert_onyx_chunk_to_opensearch_document(
         # TODO(andrei): Ask Chris more about this later. Always defaults to None
         # for now.
         # image_file_name=None,
-        # TODO(andrei): Look at this in a followup. Don't think it'll be too
-        # crazy just that source_document represents source links a bit
-        # differently than we expect here. Always defaults to None for now.
-        # source_links=chunk.source_document.source_links,
+        source_links=json.dumps(chunk.source_links) if chunk.source_links else None,
+        blurb=chunk.blurb,
         document_sets=list(chunk.document_sets) if chunk.document_sets else None,
         project_ids=list(chunk.user_project) if chunk.user_project else None,
         # TODO(andrei): Consider not even getting this from

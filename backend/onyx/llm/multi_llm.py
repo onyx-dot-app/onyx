@@ -296,6 +296,7 @@ class LitellmLLM(LLM):
             self.config.model_provider, self.config.model_name
         )
         is_ollama = self._model_provider == LlmProviderNames.OLLAMA_CHAT
+        is_mistral = self._model_provider == LlmProviderNames.MISTRAL
 
         #########################
         # Build arguments
@@ -353,9 +354,10 @@ class LitellmLLM(LLM):
         if structured_response_format:
             optional_kwargs["response_format"] = structured_response_format
 
-        if not (is_claude_model or is_ollama):
+        if not (is_claude_model or is_ollama or is_mistral):
             # Litellm bug: tool_choice is dropped silently if not specified here for OpenAI
-            # However, this param breaks Anthropic models, so it must be conditionally included
+            # However, this param breaks Anthropic and Mistral models,
+            # so it must be conditionally included.
             # Additionally, tool_choice is not supported by Ollama and causes warnings if included.
             # See also, https://github.com/ollama/ollama/issues/11171
             optional_kwargs["allowed_openai_params"] = ["tool_choice"]

@@ -59,6 +59,7 @@ import {
   useSearchParams,
 } from "next/navigation";
 import useChatSessions from "@/hooks/useChatSessions";
+import { usePinnedAgents } from "@/hooks/useAgents";
 import {
   useChatSessionStore,
   useCurrentMessageTree,
@@ -126,6 +127,7 @@ export function useChatController({
   const searchParams = useSearchParams();
   const params = useAppParams();
   const { refreshChatSessions } = useChatSessions();
+  const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const { assistantPreferences } = useAssistantPreferences();
   const { forcedToolIds } = useForcedTools();
   const { fetchProjects, setCurrentMessageFiles, beginUpload } =
@@ -440,6 +442,18 @@ export function useChatController({
         }
 
         return;
+      }
+
+      // Auto-pin the agent to sidebar when sending a message if not already pinned
+      if (liveAssistant) {
+        const isAlreadyPinned = pinnedAgents.some(
+          (agent) => agent.id === liveAssistant.id
+        );
+        if (!isAlreadyPinned) {
+          togglePinnedAgent(liveAssistant, true).catch((err) => {
+            console.error("Failed to auto-pin agent:", err);
+          });
+        }
       }
 
       let currChatSessionId: string;
@@ -887,6 +901,9 @@ export function useChatController({
       // Keep tool preference-derived values fresh
       assistantPreferences,
       fetchProjects,
+      // For auto-pinning agents
+      pinnedAgents,
+      togglePinnedAgent,
     ]
   );
 

@@ -237,6 +237,7 @@ class NotificationType(str, Enum):
     REINDEX = "reindex"
     PERSONA_SHARED = "persona_shared"
     TRIAL_ENDS_TWO_DAYS = "two_day_trial_ending"  # 2 days left in trial
+    RELEASE_NOTES = "release_notes"
 
 
 class BlobType(str, Enum):
@@ -542,6 +543,7 @@ class OnyxCeleryTask:
     GENERATE_USAGE_REPORT_TASK = "generate_usage_report_task"
 
     EVAL_RUN_TASK = "eval_run_task"
+    SCHEDULED_EVAL_TASK = "scheduled_eval_task"
 
     EXPORT_QUERY_HISTORY_TASK = "export_query_history_task"
     EXPORT_QUERY_HISTORY_CLEANUP_TASK = "export_query_history_cleanup_task"

@@ -297,7 +297,7 @@ function DefaultAssistantConfig() {
 
 export default function Page() {
   return (
-    <div className="w-full max-w-4xl mr-auto">
+    <>
       <AdminPageTitle
         title="Default Assistant"
         icon={
@@ -309,6 +309,6 @@ export default function Page() {
         }
       />
       <DefaultAssistantConfig />
-    </div>
+    </>
   );
 }

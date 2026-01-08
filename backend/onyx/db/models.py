@@ -369,6 +369,8 @@ class Notification(Base):
     dismissed: Mapped[bool] = mapped_column(Boolean, default=False)
     last_shown: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
     first_shown: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
+    title: Mapped[str] = mapped_column(String)
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
 
     user: Mapped[User] = relationship("User", back_populates="notifications")
     additional_data: Mapped[dict | None] = mapped_column(
