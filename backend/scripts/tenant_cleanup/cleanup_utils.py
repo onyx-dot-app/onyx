@@ -159,20 +159,18 @@ def get_tenant_status(tenant_id: str) -> str | None:
             return status
         else:
             print("⚠ Tenant not found in control plane")
-            return None
-
+            raise TenantNotFoundInControlPlaneError(
+                f"Tenant {tenant_id} not found in control plane database"
+            )
+    except TenantNotFoundInControlPlaneError:
+        # Re-raise without wrapping
+        raise
     except subprocess.CalledProcessError as e:
         error_msg = e.stderr if e.stderr else str(e)
         print(
             f"✗ Failed to get tenant status for {tenant_id}: {error_msg}",
             file=sys.stderr,
         )
-        # Check if this is a "not found" error (tenant table doesn't exist)
-        error_str = str(error_msg).lower()
-        if 'relation "tenant" does not exist' in error_str:
-            raise TenantNotFoundInControlPlaneError(
-                f"Tenant table/relation not found in control plane: {error_msg}"
-            )
         return None
 
 

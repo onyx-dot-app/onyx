@@ -229,8 +229,7 @@ def get_tenant_status(pod_name: str, tenant_id: str, context: str) -> str | None
         Tenant status string (e.g., 'GATED_ACCESS', 'ACTIVE') or None if not found
 
     Raises:
-        TenantNotFoundInControlPlaneError: If the tenant table/relation does not exist,
-            or if the tenant record is not found in the table
+        TenantNotFoundInControlPlaneError: If the tenant record is not found in the table
     """
     print(f"Fetching tenant status for tenant: {tenant_id}")
 
