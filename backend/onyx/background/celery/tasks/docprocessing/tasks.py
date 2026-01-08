@@ -12,6 +12,7 @@ from celery import Celery
 from celery import shared_task
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
+from fastapi import HTTPException
 from pydantic import BaseModel
 from redis import Redis
 from redis.lock import Lock as RedisLock
@@ -83,7 +84,6 @@ from onyx.db.models import SearchSettings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
-from onyx.db.usage import UsageLimitExceededError
 from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
@@ -1270,19 +1270,14 @@ def _check_chunk_usage_limit(tenant_id: str) -> None:
     if not USAGE_LIMITS_ENABLED:
         return
 
-    from onyx.db.usage import check_usage_limit
     from onyx.db.usage import UsageType
-    from onyx.server.usage_limits import get_limit_for_usage_type
-    from onyx.server.usage_limits import is_tenant_on_trial_fn
-
-    is_trial = is_tenant_on_trial_fn(tenant_id)
-    limit = get_limit_for_usage_type(UsageType.CHUNKS_INDEXED, is_trial, tenant_id)
+    from onyx.server.usage_limits import check_usage_and_raise
 
     with get_session_with_current_tenant() as db_session:
-        check_usage_limit(
+        check_usage_and_raise(
             db_session=db_session,
             usage_type=UsageType.CHUNKS_INDEXED,
-            limit=limit,
+            tenant_id=tenant_id,
             pending_amount=0,  # Just check current usage
         )
 
@@ -1302,7 +1297,7 @@ def _docprocessing_task(
     if USAGE_LIMITS_ENABLED:
         try:
             _check_chunk_usage_limit(tenant_id)
-        except UsageLimitExceededError as e:
+        except HTTPException as e:
             # Log the error and fail the indexing attempt
             task_logger.error(
                 f"Chunk indexing usage limit exceeded for tenant {tenant_id}: {e}"
