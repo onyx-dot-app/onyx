@@ -92,8 +92,8 @@ export interface AttachmentProps
 
   icon: React.FunctionComponent<IconProps>;
   children: string;
-  description: string;
-  rightText: string;
+  description?: string;
+  rightText?: string;
   onView?: () => void;
 
   // Action button: An optional secondary action button that appears on hover.
@@ -156,16 +156,20 @@ export default function AttachmentButton({
               />
             )}
           </div>
-          <Truncated secondaryBody text03 className="w-full">
-            {description}
-          </Truncated>
+          {description && (
+            <Truncated secondaryBody text03 className="w-full">
+              {description}
+            </Truncated>
+          )}
         </div>
       </div>
 
       <div className="flex flex-row self-stretch justify-end items-center gap-2 p-1 shrink-0">
-        <Text as="p" secondaryBody text03>
-          {rightText}
-        </Text>
+        {rightText && (
+          <Text as="p" secondaryBody text03>
+            {rightText}
+          </Text>
+        )}
         {actionIcon && onAction && (
           <div className="invisible group-hover/Attachment:visible">
             <IconButton icon={actionIcon} onClick={noProp(onAction)} internal />
