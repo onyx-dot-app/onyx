@@ -209,7 +209,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
   const noAssistants = liveAssistant === null || liveAssistant === undefined;
 
   const availableSources: ValidSources[] = useMemo(() => {
-    return (ccPairs ?? []).map((ccPair) => ccPair.source);
+    return ccPairs.map((ccPair) => ccPair.source);
   }, [ccPairs]);
 
   const sources: SourceMetadata[] = useMemo(() => {

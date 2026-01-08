@@ -102,9 +102,7 @@ export default function UserSettings() {
   // Use currentDefaultModel for display, falling back to defaultModel
   const displayModel = currentDefaultModel ?? defaultModel;
 
-  const hasConnectors =
-    (ccPairs && ccPairs.length > 0) ||
-    (federatedConnectors && federatedConnectors.length > 0);
+  const hasConnectors = ccPairs.length > 0 || federatedConnectors.length > 0;
 
   const isLoadingConnectors = isCCPairsLoading || isFederatedLoading;
 
