@@ -84,8 +84,8 @@ export default function useFederatedOAuthStatus() {
 
   const connectors = data ?? [];
   const needsAuth = useMemo(
-    () => connectors.filter((c) => !c.has_oauth_token),
-    [connectors]
+    () => (data ?? []).filter((c) => !c.has_oauth_token),
+    [data]
   );
   const hasUnauthenticatedConnectors = needsAuth.length > 0;
 
