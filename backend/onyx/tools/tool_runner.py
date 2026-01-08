@@ -221,6 +221,8 @@ def run_tool_calls(
         citation_mapping: Current citation number to URL mapping. May be updated with
             new citations produced by search tools.
         next_citation_num: The next citation number to allocate from.
+        max_concurrent_tools: Max number of tools to run in this batch. If set, any
+            tool calls after this limit are dropped (not queued).
         skip_search_query_expansion: Whether to skip query expansion for `SearchTool`
             (intended for repeated search calls within the same chat turn).
 
