@@ -1,9 +1,11 @@
+"use client";
+
 import { useMemo } from "react";
 import useSWR from "swr";
 import { FederatedConnectorOAuthStatus } from "@/components/chat/FederatedOAuthModal";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
-export function useFederatedOAuthStatus() {
+export default function useFederatedOAuthStatus() {
   const { data, error, mutate } = useSWR<FederatedConnectorOAuthStatus[]>(
     "/api/federated/oauth-status",
     errorHandlingFetcher

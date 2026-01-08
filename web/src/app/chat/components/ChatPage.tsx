@@ -19,7 +19,7 @@ import ChatInputBar, {
   ChatInputBarHandle,
 } from "@/app/chat/components/input/ChatInputBar";
 import useChatSessions from "@/hooks/useChatSessions";
-import { useCCPairs } from "@/lib/hooks/useCCPairs";
+import useCCPairs from "@/hooks/useCCPairs";
 import { useTags } from "@/lib/hooks/useTags";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useAgents } from "@/hooks/useAgents";

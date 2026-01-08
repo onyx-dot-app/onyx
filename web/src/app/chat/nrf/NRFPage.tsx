@@ -25,7 +25,7 @@ import { useNightTime } from "@/lib/dateUtils";
 import { useFilters } from "@/lib/hooks";
 import { uploadFilesForChat } from "../services/lib";
 import { ChatFileType, FileDescriptor } from "../interfaces";
-import { useCCPairs } from "@/lib/hooks/useCCPairs";
+import useCCPairs from "@/hooks/useCCPairs";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useTags } from "@/lib/hooks/useTags";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";

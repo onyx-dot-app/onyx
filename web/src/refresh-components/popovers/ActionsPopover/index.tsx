@@ -26,7 +26,7 @@ import { ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
-import { useCCPairs } from "@/lib/hooks/useCCPairs";
+import useCCPairs from "@/hooks/useCCPairs";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
