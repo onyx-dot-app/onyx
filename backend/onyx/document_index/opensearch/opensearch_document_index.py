@@ -58,7 +58,7 @@ def _convert_opensearch_chunk_to_inference_chunk_uncleaned(
         blurb=chunk.blurb,
         content=chunk.content,
         source_links=json.loads(chunk.source_links) if chunk.source_links else None,
-        image_file_id=chunk.image_file_name,
+        image_file_id=chunk.image_file_id,
         # TODO(andrei) Yuhong says he doesn't think we need that anymore. Used
         # if a section needed to be split into diff chunks. A section is a part
         # of a doc that a link will take you to. But don't chunks have their own
@@ -68,12 +68,9 @@ def _convert_opensearch_chunk_to_inference_chunk_uncleaned(
         source_type=DocumentSource(chunk.source_type),
         semantic_identifier=chunk.semantic_identifier,
         title=chunk.title,
-        # TODO(andrei): Same comment as in
-        # _convert_onyx_chunk_to_opensearch_document. Yuhong thinks OpenSearch
-        # has some thing out of the box for this. Just need to look at it in a
-        # followup.
-        boost=1,
-        # TODO(andrei): Do in a followup.
+        boost=chunk.global_boost,
+        # TODO(andrei): Do in a followup. We should be able to get this from
+        # OpenSearch.
         recency_bias=1.0,
         # TODO(andrei): This is how good the match is, we need this, key insight
         # is we can order chunks by this. Should not be hard to plumb this from
@@ -83,10 +80,9 @@ def _convert_opensearch_chunk_to_inference_chunk_uncleaned(
         # TODO(andrei): Don't worry about these for now.
         # is_relevant
         # relevance_explanation
-        # metadata
         # TODO(andrei): Same comment as in
         # _convert_onyx_chunk_to_opensearch_document.
-        metadata={},
+        metadata=json.loads(chunk.metadata),
         # TODO(andrei): The vector DB needs to supply this. I vaguely know
         # OpenSearch can from the documentation I've seen till now, look at this
         # in a followup.
@@ -132,29 +128,19 @@ def _convert_onyx_chunk_to_opensearch_document(
         # value for now.
         num_tokens=0,
         source_type=chunk.source_document.source.value,
-        # TODO(andrei): This is just represented a bit differently in
-        # DocumentBase than how we expect it in the schema currently. Look at
-        # this closer in a followup. Always defaults to None for now.
-        # metadata=chunk.source_document.metadata,
+        metadata=json.dumps(chunk.source_document.metadata),
         last_updated=chunk.source_document.doc_updated_at,
         # TODO(andrei): Don't currently see an easy way of porting this, and
         # besides some connectors genuinely don't have this data. Look at this
         # closer in a followup. Always defaults to None for now.
         # created_at=None,
         public=chunk.access.is_public,
-        # TODO(andrei): Implement ACL in a followup, currently none of the
-        # methods in OpenSearchDocumentIndex support it anyway. Always defaults
-        # to None for now.
-        # access_control_list=chunk.access.to_acl(),
-        # TODO(andrei): This doesn't work bc global_boost is float, presumably
-        # between 0.0 and inf (check this) and chunk.boost is an int from -inf
-        # to +inf. Look at how the scaling compares between these in a followup.
-        # Always defaults to 1.0 for now.
-        # global_boost=chunk.boost,
+        access_control_list=list(chunk.access.to_acl()),
+        global_boost=chunk.boost,
         semantic_identifier=chunk.source_document.semantic_identifier,
         # TODO(andrei): Ask Chris more about this later. Always defaults to None
         # for now.
-        # image_file_name=None,
+        image_file_id=None,
         source_links=json.dumps(chunk.source_links) if chunk.source_links else None,
         blurb=chunk.blurb,
         document_sets=list(chunk.document_sets) if chunk.document_sets else None,
