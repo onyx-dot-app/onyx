@@ -64,6 +64,7 @@ from onyx.db.connector_credential_pair import (
 )
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import set_cc_pair_repeated_error_state
+from onyx.db.connector_credential_pair import update_connector_credential_pair_from_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import ConnectorCredentialPairStatus
@@ -858,8 +859,11 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                     # NOTE: only for Cloud, since most self-hosted users use self-hosted embedding
                     # models. Also, they are more prone to repeated failures -> eventual success.
                     if AUTH_TYPE == AuthType.CLOUD:
-                        cc_pair.status = ConnectorCredentialPairStatus.PAUSED
-                        db_session.commit()
+                        update_connector_credential_pair_from_id(
+                            db_session=db_session,
+                            cc_pair_id=cc_pair.id,
+                            status=ConnectorCredentialPairStatus.PAUSED,
+                        )
 
         # NOTE: At this point, we haven't done heavy checks on whether or not the CC pairs should actually be indexed
         # Heavy check, should_index(), is called in _kickoff_indexing_tasks
