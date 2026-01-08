@@ -58,7 +58,10 @@ Install the chart into your kind cluster:
 
 ```bash
 cd deployment/helm/charts/onyx
-helm install onyx . -n onyx --create-namespace
+helm install onyx . \
+  --namespace onyx \
+  --create-namespace \
+  --set=postgresql.nameOverride=cloudnative-pg
 ```
 
 Forward the nginx service to access the UI locally:
