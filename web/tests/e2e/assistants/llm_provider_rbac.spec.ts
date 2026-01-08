@@ -71,7 +71,7 @@ test("Restricted LLM Provider should not appear for unauthorized users", async (
     await loginAsRandomUser(page);
 
     // Step 5: Navigate to the assistant creation page
-    await page.goto("http://localhost:3000/assistants/new");
+    await page.goto("/chat/agents/create");
     await page.waitForLoadState("networkidle");
 
     // Step 6: Scroll to the Default Model section
@@ -125,7 +125,7 @@ test("Default Model selector shows available models", async ({ page }) => {
   await loginAsRandomUser(page);
 
   // Navigate to the assistant creation page
-  await page.goto("http://localhost:3000/assistants/new");
+  await page.goto("/chat/agents/create");
   await page.waitForLoadState("networkidle");
 
   // Scroll to the Default Model section

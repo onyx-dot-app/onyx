@@ -7,6 +7,7 @@ import {
   AuthTypeMetadata,
 } from "@/lib/userSS";
 import { redirect } from "next/navigation";
+import type { Route } from "next";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import LoginPage from "./LoginPage";
 import { AuthType } from "@/lib/constants";
@@ -69,7 +70,7 @@ export default async function Page(props: PageProps) {
   }
 
   if (authTypeMetadata?.autoRedirect && authUrl && !autoRedirectDisabled) {
-    return redirect(authUrl);
+    return redirect(authUrl as Route);
   }
 
   const ssoLoginFooterContent =

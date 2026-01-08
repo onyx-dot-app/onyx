@@ -4,6 +4,7 @@ import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { useUser } from "@/components/user/UserProvider";
 import { redirect, useRouter } from "next/navigation";
+import type { Route } from "next";
 import { Formik, Form, FormikHelpers } from "formik";
 import * as Yup from "yup";
 import { usePopup } from "@/components/admin/connectors/Popup";
@@ -26,7 +27,7 @@ export default function ImpersonatePage() {
   }
 
   if (!isCloudSuperuser) {
-    redirect("/search");
+    redirect("/chat" as Route);
   }
 
   const handleImpersonate = async (
@@ -53,7 +54,7 @@ export default function ImpersonatePage() {
         helpers.setSubmitting(false);
       } else {
         helpers.setSubmitting(false);
-        router.push("/search");
+        router.push("/chat" as Route);
       }
     } catch (error) {
       setPopup({
@@ -74,7 +75,7 @@ export default function ImpersonatePage() {
 
       <div className="flex flex-col w-full justify-center">
         <div className="w-full flex flex-col items-center justify-center">
-          <Text headingH3 className="mb-6 text-center">
+          <Text as="p" headingH3 className="mb-6 text-center">
             Impersonate User
           </Text>
         </div>
@@ -108,6 +109,7 @@ export default function ImpersonatePage() {
         </Formik>
 
         <Text
+          as="p"
           mainUiMuted
           text03
           className="mt-4 text-center px-4"

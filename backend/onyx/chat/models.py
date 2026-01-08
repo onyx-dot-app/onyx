@@ -3,6 +3,7 @@ from collections.abc import Iterator
 from datetime import datetime
 from enum import Enum
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import Field
@@ -16,7 +17,9 @@ from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
 from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.tools.models import SearchToolUsage
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
 
@@ -132,6 +135,13 @@ class ToolConfig(BaseModel):
     id: int
 
 
+class ProjectSearchConfig(BaseModel):
+    """Configuration for search tool availability in project context."""
+
+    search_usage: SearchToolUsage
+    disable_forced_tool: bool
+
+
 class PromptOverrideConfig(BaseModel):
     name: str
     description: str = ""
@@ -171,6 +181,10 @@ AnswerQuestionPossibleReturn = (
 )
 
 
+class CreateChatSessionID(BaseModel):
+    chat_session_id: UUID
+
+
 AnswerQuestionStreamReturn = Iterator[AnswerQuestionPossibleReturn]
 
 
@@ -181,12 +195,14 @@ class LLMMetricsContainer(BaseModel):
 
 StreamProcessor = Callable[[Iterator[str]], AnswerQuestionStreamReturn]
 
+
 AnswerStreamPart = (
     Packet
     | StreamStopInfo
     | MessageResponseIDInfo
     | StreamingError
     | UserKnowledgeFilePacket
+    | CreateChatSessionID
 )
 
 AnswerStream = Iterator[AnswerStreamPart]
@@ -204,6 +220,37 @@ class ChatBasicResponse(BaseModel):
     citation_info: list[CitationInfo]
 
 
+class ToolCallResponse(BaseModel):
+    """Tool call with full details for non-streaming response."""
+
+    tool_name: str
+    tool_arguments: dict[str, Any]
+    tool_result: str
+    search_docs: list[SearchDoc] | None = None
+    generated_images: list[GeneratedImage] | None = None
+    # Reasoning that led to the tool call
+    pre_reasoning: str | None = None
+
+
+class ChatFullResponse(BaseModel):
+    """Complete non-streaming response with all available data."""
+
+    # Core response fields
+    answer: str
+    answer_citationless: str
+    pre_answer_reasoning: str | None = None
+    tool_calls: list[ToolCallResponse] = []
+
+    # Documents & citations
+    top_documents: list[SearchDoc]
+    citation_info: list[CitationInfo]
+
+    # Metadata
+    message_id: int
+    chat_session_id: UUID | None = None
+    error_msg: str | None = None
+
+
 class ChatLoadedFile(InMemoryChatFile):
     content_text: str | None
     token_count: int
@@ -217,6 +264,12 @@ class ChatMessageSimple(BaseModel):
     image_files: list[ChatLoadedFile] | None = None
     # Only for TOOL_CALL_RESPONSE type messages
     tool_call_id: str | None = None
+    # The last message for which this is true
+    # AND is true for all previous messages
+    # (counting from the start of the history)
+    # represents the end of the cacheable prefix
+    # used for prompt caching
+    should_cache: bool = False
 
 
 class ProjectFileMetadata(BaseModel):
@@ -234,6 +287,8 @@ class ExtractedProjectFiles(BaseModel):
     total_token_count: int
     # Metadata for project files to enable citations
     project_file_metadata: list[ProjectFileMetadata]
+    # None if not a project
+    project_uncapped_token_count: int | None
 
 
 class LlmStepResult(BaseModel):

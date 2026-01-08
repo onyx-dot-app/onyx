@@ -1,0 +1,8 @@
+# Exclude these commits from git blame (e.g. mass reformatting).
+# These are ignored by GitHub automatically.
+# To enable this locally, run:
+#
+#    git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+3134e5f840c12c8f32613ce520101a047c89dcc2  # refactor(whitespace): rm temporary react fragments (#7161)
+ed3f72bc75f3e3a9ae9e4d8cd38278f9c97e78b4  # refactor(whitespace): rm react fragment #7190

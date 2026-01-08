@@ -7,31 +7,29 @@ import {
   TableCell,
   TableHeader,
 } from "@/components/ui/table";
-import Text from "@/components/ui/text";
-
-import { FiDownload } from "react-icons/fi";
+import Text from "@/refresh-components/texts/Text";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { ChatSessionMinimal } from "../usage/types";
+import { ChatSessionMinimal } from "@/app/ee/admin/performance/usage/types";
 import { timestampToReadableDate } from "@/lib/dateUtils";
-import { FiFrown, FiMinus, FiSmile, FiMeh } from "react-icons/fi";
 import { Dispatch, SetStateAction, useCallback, useState } from "react";
 import { Feedback, TaskStatus } from "@/lib/types";
 import {
   DateRange,
   AdminDateRangeSelector,
-} from "../../../../../components/dateRangeSelectors/AdminDateRangeSelector";
+} from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { PageSelector } from "@/components/PageSelector";
 import Link from "next/link";
-import { FeedbackBadge } from "./FeedbackBadge";
-import KickoffCSVExport from "./KickoffCSVExport";
+import type { Route } from "next";
+import { FeedbackBadge } from "@/app/ee/admin/performance/query-history/FeedbackBadge";
+import KickoffCSVExport from "@/app/ee/admin/performance/query-history/KickoffCSVExport";
 import CardSection from "@/components/admin/CardSection";
 import usePaginatedFetch from "@/hooks/usePaginatedFetch";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR from "swr";
-import { TaskQueueState } from "./types";
-import { withRequestId } from "./utils";
+import { TaskQueueState } from "@/app/ee/admin/performance/query-history/types";
+import { withRequestId } from "@/app/ee/admin/performance/query-history/utils";
 import {
   DOWNLOAD_QUERY_HISTORY_URL,
   LIST_QUERY_HISTORY_URL,
@@ -39,13 +37,15 @@ import {
   ITEMS_PER_PAGE,
   PAGES_PER_BATCH,
   PREVIOUS_CSV_TASK_BUTTON_NAME,
-} from "./constants";
+} from "@/app/ee/admin/performance/query-history/constants";
 import { humanReadableFormatWithTime } from "@/lib/time";
 import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import { Badge } from "@/components/ui/badge";
 import {
+  SvgDownloadCloud,
   SvgFileText,
+  SvgMinus,
   SvgMinusCircle,
   SvgThumbsDown,
   SvgThumbsUp,
@@ -61,14 +61,14 @@ function QueryHistoryTableRow({
       className="hover:bg-accent-background cursor-pointer relative select-none"
     >
       <TableCell>
-        <Text className="whitespace-normal line-clamp-5">
+        <Text as="p" className="whitespace-normal line-clamp-5">
           {chatSessionMinimal.first_user_message ||
             chatSessionMinimal.name ||
             "-"}
         </Text>
       </TableCell>
       <TableCell>
-        <Text className="whitespace-normal line-clamp-5">
+        <Text as="p" className="whitespace-normal line-clamp-5">
           {chatSessionMinimal.first_ai_message || "-"}
         </Text>
       </TableCell>
@@ -83,7 +83,9 @@ function QueryHistoryTableRow({
       {/* Wrapping in <td> to avoid console warnings */}
       <td className="w-0 p-0">
         <Link
-          href={`/admin/performance/query-history/${chatSessionMinimal.id}`}
+          href={
+            `/ee/admin/performance/query-history/${chatSessionMinimal.id}` as Route
+          }
           className="absolute w-full h-full left-0"
         ></Link>
       </td>
@@ -100,7 +102,9 @@ function SelectFeedbackType({
 }) {
   return (
     <div>
-      <Text className="my-auto mr-2 font-medium mb-1">Feedback Type</Text>
+      <Text as="p" className="my-auto mr-2 font-medium mb-1">
+        Feedback Type
+      </Text>
       <div className="max-w-sm space-y-6">
         <InputSelect
           value={value}
@@ -118,7 +122,7 @@ function SelectFeedbackType({
             <InputSelect.Item value="dislike" icon={SvgThumbsDown}>
               Dislike
             </InputSelect.Item>
-            <InputSelect.Item value="mixed" icon={FiMeh}>
+            <InputSelect.Item value="mixed" icon={SvgMinus}>
               Mixed
             </InputSelect.Item>
           </InputSelect.Content>
@@ -206,17 +210,17 @@ function PreviousQueryHistoryExportsModal({
                       </TableCell>
                       <TableCell>
                         {task.status === "SUCCESS" ? (
-                          <Link
+                          <a
                             className="flex justify-center"
                             href={withRequestId(
                               DOWNLOAD_QUERY_HISTORY_URL,
                               task.taskId
                             )}
                           >
-                            <FiDownload color="primary" />
-                          </Link>
+                            <SvgDownloadCloud className="h-4 w-4 text-action-link-05" />
+                          </a>
                         ) : (
-                          <FiDownload color="primary" className="opacity-20" />
+                          <SvgDownloadCloud className="h-4 w-4 text-action-link-05 opacity-20" />
                         )}
                       </TableCell>
                     </TableRow>

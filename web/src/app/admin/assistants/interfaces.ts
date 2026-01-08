@@ -40,6 +40,7 @@ export interface Persona extends MinimalPersonaSnapshot {
 
   // Embedded prompt fields on persona
   system_prompt: string | null;
+  replace_base_system_prompt: boolean;
   task_prompt: string | null;
   datetime_aware: boolean;
 }

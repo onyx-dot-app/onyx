@@ -33,6 +33,9 @@ from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import Packet
 
 
+AUTO_PLACE_AFTER_LATEST_MESSAGE = -1
+
+
 if TYPE_CHECKING:
     pass
 
@@ -63,10 +66,6 @@ class ChatSessionCreationRequest(BaseModel):
     project_id: int | None = None
 
 
-class CreateChatSessionID(BaseModel):
-    chat_session_id: UUID
-
-
 class ChatFeedbackRequest(BaseModel):
     chat_message_id: int
     is_positive: bool | None = None
@@ -77,6 +76,50 @@ class ChatFeedbackRequest(BaseModel):
     def check_is_positive_or_feedback_text(self) -> "ChatFeedbackRequest":
         if self.is_positive is None and self.feedback_text is None:
             raise ValueError("Empty feedback received.")
+        return self
+
+
+class SendMessageRequest(BaseModel):
+    message: str
+
+    llm_override: LLMOverride | None = None
+
+    allowed_tool_ids: list[int] | None = None
+    forced_tool_id: int | None = None
+
+    file_descriptors: list[FileDescriptor] = []
+
+    internal_search_filters: BaseFilters | None = None
+
+    deep_research: bool = False
+
+    # Placement information for the message in the conversation tree:
+    # - -1: auto-place after latest message in chain
+    # - null: regeneration from root (first message)
+    # - positive int: place after that specific parent message
+    # NOTE: for regeneration, this is the only case currently where there is branching on the user message.
+    # If the message of parent_message_id is a user message, the message will be ignored and it will use the
+    # original user message for regeneration.
+    parent_message_id: int | None = AUTO_PLACE_AFTER_LATEST_MESSAGE
+    chat_session_id: UUID | None = None
+    chat_session_info: ChatSessionCreationRequest | None = None
+
+    # When True (default), returns StreamingResponse with SSE
+    # When False, returns ChatFullResponse with complete data
+    stream: bool = True
+
+    @model_validator(mode="after")
+    def check_chat_session_id_or_info(self) -> "SendMessageRequest":
+        # If neither is provided, default to creating a new chat session using the
+        # default ChatSessionCreationRequest values.
+        if self.chat_session_id is None and self.chat_session_info is None:
+            return self.model_copy(
+                update={"chat_session_info": ChatSessionCreationRequest()}
+            )
+        if self.chat_session_id is not None and self.chat_session_info is not None:
+            raise ValueError(
+                "Only one of chat_session_id or chat_session_info should be provided, not both."
+            )
         return self
 
 
@@ -130,10 +173,6 @@ class CreateChatMessageRequest(ChunkContext):
     # https://platform.openai.com/docs/guides/structured-outputs/introduction
     structured_response_format: dict | None = None
 
-    # If true, ignores most of the search options and uses pro search instead.
-    # TODO: decide how many of the above options we want to pass through to pro search
-    use_agentic_search: bool = False
-
     skip_gen_ai_answer_generation: bool = False
 
     # List of allowed tool IDs to restrict tool usage. If not provided, all tools available to the persona will be used.
@@ -142,6 +181,8 @@ class CreateChatMessageRequest(ChunkContext):
     # List of tool IDs we MUST use.
     # TODO: make this a single one since unclear how to force this for multiple at a time.
     forced_tool_ids: list[int] | None = None
+
+    deep_research: bool = False
 
     @model_validator(mode="after")
     def check_search_doc_ids_or_retrieval_options(self) -> "CreateChatMessageRequest":
@@ -346,9 +387,6 @@ class OneShotQARequest(ChunkContext):
 
     # If True, skips generating an AI response to the search query
     skip_gen_ai_answer_generation: bool = False
-
-    # If True, uses agentic search instead of basic search
-    use_agentic_search: bool = False
 
     @model_validator(mode="after")
     def check_persona_fields(self) -> "OneShotQARequest":

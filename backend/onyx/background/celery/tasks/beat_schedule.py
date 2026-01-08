@@ -2,8 +2,12 @@ import copy
 from datetime import timedelta
 from typing import Any
 
+from celery.schedules import crontab
+
+from onyx.configs.app_configs import AUTO_LLM_CONFIG_URL
+from onyx.configs.app_configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS
 from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
-from onyx.configs.app_configs import LLM_MODEL_UPDATE_API_URL
+from onyx.configs.app_configs import SCHEDULED_EVAL_DATASET_NAMES
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
@@ -171,13 +175,32 @@ if ENTERPRISE_EDITION_ENABLED:
         ]
     )
 
-# Only add the LLM model update task if the API URL is configured
-if LLM_MODEL_UPDATE_API_URL:
+# Add the Auto LLM update task if the config URL is set (has a default)
+if AUTO_LLM_CONFIG_URL:
     beat_task_templates.append(
         {
-            "name": "check-for-llm-model-update",
-            "task": OnyxCeleryTask.CHECK_FOR_LLM_MODEL_UPDATE,
-            "schedule": timedelta(hours=1),  # Check every hour
+            "name": "check-for-auto-llm-update",
+            "task": OnyxCeleryTask.CHECK_FOR_AUTO_LLM_UPDATE,
+            "schedule": timedelta(seconds=AUTO_LLM_UPDATE_INTERVAL_SECONDS),
+            "options": {
+                "priority": OnyxCeleryPriority.LOW,
+                "expires": AUTO_LLM_UPDATE_INTERVAL_SECONDS,
+            },
+        }
+    )
+
+# Add scheduled eval task if datasets are configured
+if SCHEDULED_EVAL_DATASET_NAMES:
+    beat_task_templates.append(
+        {
+            "name": "scheduled-eval-pipeline",
+            "task": OnyxCeleryTask.SCHEDULED_EVAL_TASK,
+            # run every Sunday at midnight UTC
+            "schedule": crontab(
+                hour=0,
+                minute=0,
+                day_of_week=0,
+            ),
             "options": {
                 "priority": OnyxCeleryPriority.LOW,
                 "expires": BEAT_EXPIRES_DEFAULT,

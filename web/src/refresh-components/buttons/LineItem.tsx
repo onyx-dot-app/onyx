@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import type { IconProps } from "@opal/types";
 import Truncated from "@/refresh-components/texts/Truncated";
 import Link from "next/link";
+import type { Route } from "next";
 
 const buttonClassNames = {
   main: {
@@ -77,7 +78,7 @@ export interface LineItemProps extends React.HTMLAttributes<HTMLButtonElement> {
  * </LineItem>
  *
  * // With right content
- * <LineItem icon={SvgKey} rightChildren={<Text text03>⌘K</Text>}>
+ * <LineItem icon={SvgKey} rightChildren={<Text as="p" text03>⌘K</Text>}>
  *   Keyboard Shortcuts
  * </LineItem>
  *
@@ -159,7 +160,7 @@ const LineItem = React.forwardRef<HTMLButtonElement, LineItemProps>(
               </>
             )}
 
-            <Text secondaryBody text03>
+            <Text as="p" secondaryBody text03>
               {description}
             </Text>
           </div>
@@ -168,7 +169,7 @@ const LineItem = React.forwardRef<HTMLButtonElement, LineItemProps>(
     );
 
     if (!href) return content;
-    return <Link href={href}>{content}</Link>;
+    return <Link href={href as Route}>{content}</Link>;
   }
 );
 LineItem.displayName = "LineItem";

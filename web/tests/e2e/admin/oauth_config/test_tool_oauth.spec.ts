@@ -68,7 +68,7 @@ test("Tool OAuth Configuration: Creation, Selection, and Assistant Integration",
     `"title": "${toolName}"`
   );
 
-  await page.goto("http://localhost:3000/admin/actions/open-api");
+  await page.goto("/admin/actions/open-api");
   await page.waitForLoadState("networkidle");
 
   // Click "Add OpenAPI Action" button to open modal
@@ -177,7 +177,7 @@ test("Tool OAuth Configuration: Creation, Selection, and Assistant Integration",
 
   // --- Step 6: Create Assistant and Verify Tool Availability ---
   // Navigate to the assistant creation page
-  await page.goto("http://localhost:3000/assistants/new");
+  await page.goto("/chat/agents/create");
   await page.waitForLoadState("networkidle");
 
   // Fill in basic assistant details
@@ -186,9 +186,9 @@ test("Tool OAuth Configuration: Creation, Selection, and Assistant Integration",
   const assistantInstructions = "Use the tool when needed";
 
   await page.locator('input[name="name"]').fill(assistantName);
-  await page.locator('input[name="description"]').fill(assistantDescription);
+  await page.locator('textarea[name="description"]').fill(assistantDescription);
   await page
-    .locator('textarea[name="system_prompt"]')
+    .locator('textarea[name="instructions"]')
     .fill(assistantInstructions);
 
   // Scroll down to the Actions section (tools are listed there)

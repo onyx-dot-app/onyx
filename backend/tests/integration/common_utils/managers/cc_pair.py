@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import requests
 
-import generated.onyx_openapi_client.onyx_openapi_client as api  # type: ignore[import]
+import generated.onyx_openapi_client.onyx_openapi_client as api  # type: ignore[import-untyped,unused-ignore]
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus

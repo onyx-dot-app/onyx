@@ -63,7 +63,7 @@ def get_live_users_count(db_session: Session) -> int:
     This does NOT include invited users, "users" pulled in
     from external connectors, or API keys.
     """
-    count_stmt = func.count(User.id)  # type: ignore
+    count_stmt = func.count(User.id)
     select_stmt = select(count_stmt)
     select_stmt_w_filters = _add_live_user_count_where_clause(select_stmt, False)
     user_count = db_session.scalar(select_stmt_w_filters)
@@ -74,7 +74,7 @@ def get_live_users_count(db_session: Session) -> int:
 
 async def get_user_count(only_admin_users: bool = False) -> int:
     async with get_async_session_context_manager() as session:
-        count_stmt = func.count(User.id)  # type: ignore
+        count_stmt = func.count(User.id)
         stmt = select(count_stmt)
         stmt_w_filters = _add_live_user_count_where_clause(stmt, only_admin_users)
         user_count = await session.scalar(stmt_w_filters)
@@ -100,10 +100,10 @@ class SQLAlchemyUserAdminDB(SQLAlchemyUserDatabase[UP, ID]):
 async def get_user_db(
     session: AsyncSession = Depends(get_async_session),
 ) -> AsyncGenerator[SQLAlchemyUserAdminDB, None]:
-    yield SQLAlchemyUserAdminDB(session, User, OAuthAccount)  # type: ignore
+    yield SQLAlchemyUserAdminDB(session, User, OAuthAccount)
 
 
 async def get_access_token_db(
     session: AsyncSession = Depends(get_async_session),
 ) -> AsyncGenerator[SQLAlchemyAccessTokenDatabase, None]:
-    yield SQLAlchemyAccessTokenDatabase(session, AccessToken)  # type: ignore
+    yield SQLAlchemyAccessTokenDatabase(session, AccessToken)

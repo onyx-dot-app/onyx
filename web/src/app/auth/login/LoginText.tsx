@@ -8,11 +8,11 @@ export default function LoginText() {
   const settings = useContext(SettingsContext);
   return (
     <div className="w-full flex flex-col ">
-      <Text headingH2 text05>
+      <Text as="p" headingH2 text05>
         Welcome to{" "}
         {(settings && settings?.enterpriseSettings?.application_name) || "Onyx"}
       </Text>
-      <Text text03 mainUiMuted>
+      <Text as="p" text03 mainUiMuted>
         Your open source AI platform for work
       </Text>
     </div>

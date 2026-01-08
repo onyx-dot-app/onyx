@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
+from onyx.llm.constants import LlmProviderNames
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 
 
@@ -19,7 +20,7 @@ def ensure_default_llm_provider(db_session: Session) -> None:
     try:
         llm_provider_request = LLMProviderUpsertRequest(
             name="test-provider",
-            provider="openai",
+            provider=LlmProviderNames.OPENAI,
             api_key=os.environ.get("OPENAI_API_KEY", "test"),
             is_public=True,
             default_model_name="gpt-4o-mini",

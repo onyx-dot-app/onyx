@@ -31,7 +31,7 @@ def blob_connector(request: pytest.FixtureRequest) -> BlobStorageConnector:
       )
     """
     try:
-        bucket_type, bucket_name, *rest = request.param  # type: ignore[misc]
+        bucket_type, bucket_name, *rest = request.param
     except Exception as e:
         raise AssertionError(
             "blob_connector requires (BlobType, bucket_name, [init_kwargs])"

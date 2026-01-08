@@ -28,14 +28,14 @@ function ImageFileCard({
     removeFile(file.id);
   };
 
-  const sizeClass = compact ? "h-14 w-14" : "h-20 w-20";
+  const sizeClass = compact ? "h-11 w-11" : "h-20 w-20";
   const loaderSize = compact ? "h-5 w-5" : "h-8 w-8";
 
   const doneUploading = String(file.status) !== UserFileStatus.UPLOADING;
 
   return (
     <div
-      className={`relative group ${sizeClass} rounded-12 border border-border-01 ${
+      className={`relative group ${sizeClass} rounded-08 border border-border-01 ${
         isProcessing ? "bg-background-neutral-02" : ""
       } ${
         onFileClick && !isProcessing ? "cursor-pointer hover:opacity-90" : ""
@@ -56,12 +56,12 @@ function ImageFileCard({
             "-left-2",
             "-top-2",
             "z-10",
-            "h-5",
-            "w-5",
+            "h-4",
+            "w-4",
             "flex",
             "items-center",
             "justify-center",
-            "rounded-[4px]",
+            "rounded-04",
             "border",
             "border-border",
             "text-[11px]",
@@ -79,7 +79,7 @@ function ImageFileCard({
             "hover:opacity-90"
           )}
         >
-          <SvgX className="h-4 w-4 stroke-text-inverted-03" />
+          <SvgX className="h-3 w-3 stroke-text-inverted-03" />
         </button>
       )}
       {!doneUploading || !imageUrl ? (
@@ -90,7 +90,7 @@ function ImageFileCard({
         <img
           src={imageUrl}
           alt={file.name}
-          className="h-full w-full object-cover rounded-12"
+          className="h-full w-full object-cover rounded-08"
           onError={(e) => {
             // Fallback to regular file card if image fails to load
             const target = e.target as HTMLImageElement;
@@ -108,12 +108,14 @@ export function FileCard({
   hideProcessingState = false,
   onFileClick,
   compactImages = false,
+  className,
 }: {
   file: ProjectFile;
   removeFile: (fileId: string) => void;
   hideProcessingState?: boolean;
   onFileClick?: (file: ProjectFile) => void;
   compactImages?: boolean;
+  className?: string;
 }) {
   const typeLabel = useMemo(() => {
     const name = String(file.name || "");
@@ -161,16 +163,17 @@ export function FileCard({
     );
   }
 
-  // Regular file card layout for non-images or processing files
   return (
     <div
-      className={`relative group flex items-center gap-3 border border-border-01 rounded-12 ${
-        isProcessing ? "bg-background-neutral-02" : "bg-background-tint-00"
-      } p-1 h-14 w-40 pl-2 ${
-        onFileClick && !isProcessing
-          ? "cursor-pointer hover:bg-accent-background"
-          : ""
-      }`}
+      className={cn(
+        "relative group flex items-center gap-1 border border-border-01 rounded-08",
+        isProcessing ? "bg-background-neutral-02" : "bg-background-tint-00",
+        "p-1 h-11 min-w-[120px] max-w-[240px]",
+        onFileClick &&
+          !isProcessing &&
+          "cursor-pointer hover:bg-accent-background",
+        className
+      )}
       onClick={() => {
         if (onFileClick && !isProcessing) {
           onFileClick(file);
@@ -182,13 +185,13 @@ export function FileCard({
           onClick={handleRemoveFile}
           title="Delete file"
           aria-label="Delete file"
-          className="absolute -left-2 -top-2 z-10 h-5 w-5 flex items-center justify-center rounded-[4px] border border-border text-[11px] bg-background-neutral-inverted-01 text-text-inverted-05 shadow-sm opacity-0 group-hover:opacity-100 focus:opacity-100 pointer-events-none group-hover:pointer-events-auto focus:pointer-events-auto transition-opacity duration-150 hover:opacity-90"
+          className="absolute -left-[5px] -top-[5px] z-10 h-4 w-4 flex items-center justify-center rounded-04 border border-border text-[11px] bg-background-neutral-inverted-01 text-text-inverted-05 shadow-sm opacity-0 group-hover:opacity-100 focus:opacity-100 pointer-events-none group-hover:pointer-events-auto focus:pointer-events-auto transition-opacity duration-150 hover:opacity-90"
         >
-          <SvgX className="h-4 w-4 stroke-text-inverted-03" />
+          <SvgX className="h-3 w-3 stroke-text-inverted-03" />
         </button>
       )}
       <div
-        className={`flex h-9 w-9 items-center justify-center rounded-08 p-2
+        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-04 p-2
       ${isProcessing ? "bg-background-neutral-03" : "bg-background-tint-01"}`}
       >
         {isProcessing ? (
@@ -197,7 +200,7 @@ export function FileCard({
           <SvgFileText className="h-5 w-5 stroke-text-02" />
         )}
       </div>
-      <div className="flex flex-col overflow-hidden">
+      <div className="flex flex-col overflow-hidden pr-1">
         <Truncated
           className={`font-secondary-action truncate
           ${isProcessing ? "text-text-03" : "text-text-04"}`}
@@ -205,7 +208,7 @@ export function FileCard({
         >
           {file.name}
         </Truncated>
-        <Text text03 secondaryBody nowrap className="truncate">
+        <Text as="p" text03 secondaryBody nowrap className="truncate">
           {isProcessing
             ? file.status === UserFileStatus.UPLOADING
               ? "Uploading..."
@@ -219,5 +222,5 @@ export function FileCard({
 
 // Skeleton loading component for file cards
 export const FileCardSkeleton = () => (
-  <div className="w-40 h-14 rounded-12 bg-background-tint-02 animate-pulse" />
+  <div className="min-w-[120px] max-w-[240px] h-11 rounded-08 bg-background-tint-02 animate-pulse" />
 );

@@ -4,7 +4,13 @@
  */
 
 import React from "react";
-import { render, screen, waitFor, setupUser } from "@tests/setup/test-utils";
+import {
+  act,
+  render,
+  screen,
+  waitFor,
+  setupUser,
+} from "@tests/setup/test-utils";
 import MultiToolRenderer from "./MultiToolRenderer";
 import {
   createToolGroups,
@@ -198,8 +204,11 @@ describe("MultiToolRenderer - Streaming Mode", () => {
     jest.useFakeTimers();
   });
 
-  afterEach(() => {
-    jest.runOnlyPendingTimers();
+  afterEach(async () => {
+    // Wrap timer execution in act() since it triggers React state updates
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+    });
     jest.useRealTimers();
   });
 
@@ -227,7 +236,9 @@ describe("MultiToolRenderer - Streaming Mode", () => {
       isComplete: false,
     });
 
-    expect(screen.getByText("Tool executing")).toBeInTheDocument();
+    // With all tools shown, there will be multiple "Tool executing" texts
+    const statuses = screen.getAllByText("Tool executing");
+    expect(statuses.length).toBeGreaterThan(0);
   });
 
   test("clicking tool status expands to show all tools in streaming", async () => {
@@ -237,13 +248,14 @@ describe("MultiToolRenderer - Streaming Mode", () => {
       isComplete: false,
     });
 
-    // Find the tool status
-    const toolStatus = screen.getByText("Tool executing");
+    // Find a tool status (there will be multiple since all tools are shown)
+    const toolStatuses = screen.getAllByText("Tool executing");
+    expect(toolStatuses.length).toBeGreaterThan(0);
 
     // Click to expand
-    await user.click(toolStatus);
+    await user.click(toolStatuses[0]!);
 
-    // More tools should be visible
+    // Tools should be visible
     await waitFor(() => {
       const toolContents = screen.getAllByTestId("tool-content");
       expect(toolContents.length).toBeGreaterThanOrEqual(1);
@@ -256,8 +268,9 @@ describe("MultiToolRenderer - Streaming Mode", () => {
       isComplete: false,
     });
 
-    // Should show tool executing status
-    expect(screen.getByText("Tool executing")).toBeInTheDocument();
+    // Should show tool executing status (multiple expected since all tools shown)
+    const statuses = screen.getAllByText("Tool executing");
+    expect(statuses.length).toBeGreaterThan(0);
 
     // Tool content should be visible
     const toolContents = screen.getAllByTestId("tool-content");
@@ -314,10 +327,12 @@ describe("MultiToolRenderer - State Transitions", () => {
     expect(onAllToolsDisplayed).not.toHaveBeenCalled();
   });
 
-  test("shows Done node only when allToolsDisplayed=true", async () => {
+  test("shows Done node when allToolsDisplayed=true", async () => {
     const user = setupUser();
 
-    // Without final answer coming
+    // With isComplete=true, all tools are visible and completed, so Done should appear
+    // Note: allToolsDisplayed is now independent of isFinalAnswerComing to avoid
+    // circular dependency (parent uses onAllToolsDisplayed to set finalAnswerComing)
     const { rerender } = render(
       <MultiToolRenderer
         packetGroups={createToolGroups(2)}
@@ -331,10 +346,12 @@ describe("MultiToolRenderer - State Transitions", () => {
     // Expand
     await user.click(screen.getByText("2 steps"));
 
-    // Done should not appear
-    expect(screen.queryByText("Done")).not.toBeInTheDocument();
+    // Done should appear because all tools are complete (regardless of isFinalAnswerComing)
+    await waitFor(() => {
+      expect(screen.getByText("Done")).toBeInTheDocument();
+    });
 
-    // Now with final answer coming
+    // Remains visible after setting final answer coming
     rerender(
       <MultiToolRenderer
         packetGroups={createToolGroups(2)}
@@ -345,7 +362,7 @@ describe("MultiToolRenderer - State Transitions", () => {
       />
     );
 
-    // Done should appear
+    // Done should still appear
     await waitFor(() => {
       expect(screen.getByText("Done")).toBeInTheDocument();
     });
@@ -455,24 +472,21 @@ describe("MultiToolRenderer - Parallel Tools", () => {
         tab_index: 0,
         packets: [
           {
-            turn_index: 0,
-            tab_index: 0,
+            placement: { turn_index: 0, tab_index: 0 },
             obj: {
               type: "search_tool_start",
               is_internet_search: false,
             },
           },
           {
-            turn_index: 0,
-            tab_index: 0,
+            placement: { turn_index: 0, tab_index: 0 },
             obj: {
               type: "search_tool_queries_delta",
               queries: ["test query"],
             },
           },
           {
-            turn_index: 0,
-            tab_index: 0,
+            placement: { turn_index: 0, tab_index: 0 },
             obj: {
               type: "search_tool_documents_delta",
               documents: [
@@ -481,8 +495,7 @@ describe("MultiToolRenderer - Parallel Tools", () => {
             },
           },
           {
-            turn_index: 0,
-            tab_index: 0,
+            placement: { turn_index: 0, tab_index: 0 },
             obj: {
               type: "section_end",
             },
@@ -494,24 +507,21 @@ describe("MultiToolRenderer - Parallel Tools", () => {
         tab_index: 1,
         packets: [
           {
-            turn_index: 0,
-            tab_index: 1,
+            placement: { turn_index: 0, tab_index: 1 },
             obj: {
               type: "search_tool_start",
               is_internet_search: true,
             },
           },
           {
-            turn_index: 0,
-            tab_index: 1,
+            placement: { turn_index: 0, tab_index: 1 },
             obj: {
               type: "search_tool_queries_delta",
               queries: ["web query"],
             },
           },
           {
-            turn_index: 0,
-            tab_index: 1,
+            placement: { turn_index: 0, tab_index: 1 },
             obj: {
               type: "search_tool_documents_delta",
               documents: [
@@ -520,8 +530,7 @@ describe("MultiToolRenderer - Parallel Tools", () => {
             },
           },
           {
-            turn_index: 0,
-            tab_index: 1,
+            placement: { turn_index: 0, tab_index: 1 },
             obj: {
               type: "section_end",
             },
@@ -552,11 +561,13 @@ describe("MultiToolRenderer - Parallel Tools", () => {
         tab_index: 0,
         packets: [
           {
-            turn_index: 0,
-            tab_index: 0,
+            placement: { turn_index: 0, tab_index: 0 },
             obj: { type: "search_tool_start", is_internet_search: false },
           },
-          { turn_index: 0, tab_index: 0, obj: { type: "section_end" } },
+          {
+            placement: { turn_index: 0, tab_index: 0 },
+            obj: { type: "section_end" },
+          },
         ],
       },
       {
@@ -564,11 +575,13 @@ describe("MultiToolRenderer - Parallel Tools", () => {
         tab_index: 1,
         packets: [
           {
-            turn_index: 0,
-            tab_index: 1,
+            placement: { turn_index: 0, tab_index: 1 },
             obj: { type: "search_tool_start", is_internet_search: true },
           },
-          { turn_index: 0, tab_index: 1, obj: { type: "section_end" } },
+          {
+            placement: { turn_index: 0, tab_index: 1 },
+            obj: { type: "section_end" },
+          },
         ],
       },
     ];
@@ -597,11 +610,13 @@ describe("MultiToolRenderer - Parallel Tools", () => {
         tab_index: 0,
         packets: [
           {
-            turn_index: 0,
-            tab_index: 0,
+            placement: { turn_index: 0, tab_index: 0 },
             obj: { type: "search_tool_start", is_internet_search: false },
           },
-          { turn_index: 0, tab_index: 0, obj: { type: "section_end" } },
+          {
+            placement: { turn_index: 0, tab_index: 0 },
+            obj: { type: "section_end" },
+          },
         ],
       },
       {
@@ -609,11 +624,13 @@ describe("MultiToolRenderer - Parallel Tools", () => {
         tab_index: 1,
         packets: [
           {
-            turn_index: 0,
-            tab_index: 1,
+            placement: { turn_index: 0, tab_index: 1 },
             obj: { type: "search_tool_start", is_internet_search: true },
           },
-          { turn_index: 0, tab_index: 1, obj: { type: "section_end" } },
+          {
+            placement: { turn_index: 0, tab_index: 1 },
+            obj: { type: "section_end" },
+          },
         ],
       },
     ];
@@ -645,16 +662,17 @@ describe("MultiToolRenderer - Parallel Tools", () => {
         tab_index: 0,
         packets: [
           {
-            turn_index: 0,
-            tab_index: 0,
+            placement: { turn_index: 0, tab_index: 0 },
             obj: { type: "search_tool_start", is_internet_search: false },
           },
           {
-            turn_index: 0,
-            tab_index: 0,
+            placement: { turn_index: 0, tab_index: 0 },
             obj: { type: "search_tool_queries_delta", queries: ["test"] },
           },
-          { turn_index: 0, tab_index: 0, obj: { type: "section_end" } },
+          {
+            placement: { turn_index: 0, tab_index: 0 },
+            obj: { type: "section_end" },
+          },
         ],
       },
       {
@@ -662,11 +680,13 @@ describe("MultiToolRenderer - Parallel Tools", () => {
         tab_index: 1,
         packets: [
           {
-            turn_index: 0,
-            tab_index: 1,
+            placement: { turn_index: 0, tab_index: 1 },
             obj: { type: "search_tool_start", is_internet_search: true },
           },
-          { turn_index: 0, tab_index: 1, obj: { type: "section_end" } },
+          {
+            placement: { turn_index: 0, tab_index: 1 },
+            obj: { type: "section_end" },
+          },
         ],
       },
     ];
@@ -695,11 +715,13 @@ describe("MultiToolRenderer - Parallel Tools", () => {
         tab_index: 0,
         packets: [
           {
-            turn_index: 0,
-            tab_index: 0,
+            placement: { turn_index: 0, tab_index: 0 },
             obj: { type: "search_tool_start", is_internet_search: false },
           },
-          { turn_index: 0, tab_index: 0, obj: { type: "section_end" } },
+          {
+            placement: { turn_index: 0, tab_index: 0 },
+            obj: { type: "section_end" },
+          },
         ],
       },
       {
@@ -707,11 +729,13 @@ describe("MultiToolRenderer - Parallel Tools", () => {
         tab_index: 1,
         packets: [
           {
-            turn_index: 0,
-            tab_index: 1,
+            placement: { turn_index: 0, tab_index: 1 },
             obj: { type: "search_tool_start", is_internet_search: true },
           },
-          { turn_index: 0, tab_index: 1, obj: { type: "section_end" } },
+          {
+            placement: { turn_index: 0, tab_index: 1 },
+            obj: { type: "section_end" },
+          },
         ],
       },
     ];
@@ -767,11 +791,13 @@ describe("MultiToolRenderer - Parallel Tools", () => {
         tab_index: 0,
         packets: [
           {
-            turn_index: 0,
-            tab_index: 0,
+            placement: { turn_index: 0, tab_index: 0 },
             obj: { type: "search_tool_start", is_internet_search: false },
           },
-          { turn_index: 0, tab_index: 0, obj: { type: "section_end" } },
+          {
+            placement: { turn_index: 0, tab_index: 0 },
+            obj: { type: "section_end" },
+          },
         ],
       },
       {
@@ -779,11 +805,13 @@ describe("MultiToolRenderer - Parallel Tools", () => {
         tab_index: 1,
         packets: [
           {
-            turn_index: 0,
-            tab_index: 1,
+            placement: { turn_index: 0, tab_index: 1 },
             obj: { type: "search_tool_start", is_internet_search: true },
           },
-          { turn_index: 0, tab_index: 1, obj: { type: "section_end" } },
+          {
+            placement: { turn_index: 0, tab_index: 1 },
+            obj: { type: "section_end" },
+          },
         ],
       },
     ];

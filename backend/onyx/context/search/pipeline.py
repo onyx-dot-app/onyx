@@ -19,7 +19,6 @@ from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.llm.interfaces import LLM
-from onyx.onyxbot.slack.models import SlackContext
 from onyx.secondary_llm_flows.source_filter import extract_source_filter
 from onyx.secondary_llm_flows.time_filter import extract_time_filter
 from onyx.utils.logger import setup_logger
@@ -90,6 +89,16 @@ def _build_index_filters(
     if not source_filter and detected_source_filter:
         source_filter = detected_source_filter
 
+    # CRITICAL FIX: If user_file_ids are present, we must ensure "user_file"
+    # source type is included in the filter, otherwise user files will be excluded!
+    if user_file_ids and source_filter:
+        from onyx.configs.constants import DocumentSource
+
+        # Add user_file to the source filter if not already present
+        if DocumentSource.USER_FILE not in source_filter:
+            source_filter = list(source_filter) + [DocumentSource.USER_FILE]
+            logger.debug("Added USER_FILE to source_filter for user knowledge search")
+
     user_acl_filters = (
         None if bypass_acl else build_access_filters_for_user(user, db_session)
     )
@@ -104,6 +113,7 @@ def _build_index_filters(
         access_control_list=user_acl_filters,
         tenant_id=get_current_tenant_id() if MULTI_TENANT else None,
     )
+
     return final_filters
 
 
@@ -238,8 +248,6 @@ def search_pipeline(
     db_session: Session,
     auto_detect_filters: bool = False,
     llm: LLM | None = None,
-    # Needed for federated Slack search
-    slack_context: SlackContext | None = None,
     # If a project ID is provided, it will be exclusively scoped to that project
     project_id: int | None = None,
 ) -> list[InferenceChunk]:
@@ -280,11 +288,9 @@ def search_pipeline(
 
     retrieved_chunks = search_chunks(
         query_request=query_request,
-        # Needed for federated Slack search
         user_id=user.id if user else None,
         document_index=document_index,
         db_session=db_session,
-        slack_context=slack_context,
     )
 
     # For some specific connectors like Salesforce, a user that has access to an object doesn't mean

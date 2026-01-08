@@ -101,7 +101,7 @@ export default function ChatDocumentDisplay({
         <DocumentMetadataBlock modal={modal} document={document} />
       )}
 
-      <Text className="line-clamp-2 text-left" secondaryBody text03>
+      <Text as="p" className="line-clamp-2 text-left" secondaryBody text03>
         {buildDocumentSummaryDisplay(document.match_highlights, document.blurb)}
       </Text>
     </div>

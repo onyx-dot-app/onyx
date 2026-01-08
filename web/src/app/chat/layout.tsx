@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import type { Route } from "next";
 import { unstable_noStore as noStore } from "next/cache";
 import { requireAuth } from "@/lib/auth/requireAuth";
 import { ProjectsProvider } from "./projects/ProjectsContext";
@@ -15,7 +16,7 @@ export default async function Layout({ children }: LayoutProps) {
   const authResult = await requireAuth();
 
   if (authResult.redirect) {
-    redirect(authResult.redirect);
+    redirect(authResult.redirect as Route);
   }
 
   return (

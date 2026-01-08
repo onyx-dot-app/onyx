@@ -19,6 +19,7 @@ function constructCurrentReasoningState(packets: ReasoningPacket[]) {
   const hasEnd = packets.some(
     (p) =>
       p.obj.type === PacketType.SECTION_END ||
+      p.obj.type === PacketType.ERROR ||
       // Support reasoning_done from backend
       (p.obj as any).type === PacketType.REASONING_DONE
   );

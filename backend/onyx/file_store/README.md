@@ -101,7 +101,7 @@ The `FileStore` abstract base class defines the following methods:
 - `read_file(file_id, mode, use_tempfile)`: Read file content
 - `read_file_record(file_id)`: Get file metadata from database
 - `delete_file(file_id)`: Delete a file and its metadata
-- `get_file_with_mime_type(filename)`: Get file with parsed MIME type
+- `get_file_with_mime_type(file_id)`: Get file with parsed MIME type
 
 ## Usage Example
 

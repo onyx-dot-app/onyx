@@ -1,0 +1,75 @@
+/* Background classes */
+.sidebar-tab-background-defaulted[data-state="active"] {
+  background-color: var(--background-tint-00);
+}
+.sidebar-tab-background-defaulted[data-state="inactive"] {
+  background-color: transparent;
+}
+.sidebar-tab-background-defaulted:hover {
+  background-color: var(--background-tint-03);
+}
+
+.sidebar-tab-background-lowlight[data-state="active"] {
+  background-color: var(--background-tint-00);
+}
+.sidebar-tab-background-lowlight[data-state="inactive"] {
+  background-color: transparent;
+}
+.sidebar-tab-background-lowlight:hover {
+  background-color: var(--background-tint-03);
+}
+
+.sidebar-tab-background-focused {
+  border: 2px solid var(--background-tint-04);
+  background-color: var(--background-neutral-00);
+}
+
+/* Text classes */
+.sidebar-tab-text-defaulted[data-state="active"] {
+  color: var(--text-04);
+}
+.sidebar-tab-text-defaulted[data-state="inactive"] {
+  color: var(--text-03);
+}
+.group\/SidebarTab:hover .sidebar-tab-text-defaulted {
+  color: var(--text-04);
+}
+
+.sidebar-tab-text-lowlight[data-state="active"] {
+  color: var(--text-03);
+}
+.sidebar-tab-text-lowlight[data-state="inactive"] {
+  color: var(--text-02);
+}
+.group\/SidebarTab:hover .sidebar-tab-text-lowlight {
+  color: var(--text-03);
+}
+
+.sidebar-tab-text-focused {
+  color: var(--text-03);
+}
+
+/* Icon classes */
+.sidebar-tab-icon-defaulted[data-state="active"] {
+  stroke: var(--text-04);
+}
+.sidebar-tab-icon-defaulted[data-state="inactive"] {
+  stroke: var(--text-03);
+}
+.group\/SidebarTab:hover .sidebar-tab-icon-defaulted {
+  stroke: var(--text-04);
+}
+
+.sidebar-tab-icon-lowlight[data-state="active"] {
+  stroke: var(--text-03);
+}
+.sidebar-tab-icon-lowlight[data-state="inactive"] {
+  stroke: var(--text-02);
+}
+.group\/SidebarTab:hover .sidebar-tab-icon-lowlight {
+  stroke: var(--text-03);
+}
+
+.sidebar-tab-icon-focused {
+  stroke: var(--text-02);
+}

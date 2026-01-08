@@ -71,6 +71,13 @@ def time_str_to_utc(datetime_str: str) -> datetime:
     raise ValueError(f"Unable to parse datetime string: {datetime_str}")
 
 
+# TODO: use this function in other connectors
+def datetime_from_utc_timestamp(timestamp: int) -> datetime:
+    """Convert a Unix timestamp to a datetime object in UTC"""
+
+    return datetime.fromtimestamp(timestamp, tz=timezone.utc)
+
+
 def basic_expert_info_representation(info: BasicExpertInfo) -> str | None:
     if info.first_name and info.last_name:
         return f"{info.first_name} {info.middle_initial} {info.last_name}"

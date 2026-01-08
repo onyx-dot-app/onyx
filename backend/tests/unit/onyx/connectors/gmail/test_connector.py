@@ -79,12 +79,12 @@ def test_time_str_to_utc() -> None:
 def test_gmail_checkpoint_progression() -> None:
     connector = GmailConnector()
     connector._creds = MagicMock()
-    connector._primary_admin_email = "admin@test.com"
+    connector._primary_admin_email = "admin@example.com"
 
-    user_emails = ["user1@test.com", "user2@test.com"]
+    user_emails = ["user1@example.com", "user2@example.com"]
 
     thread_list_responses: dict[str, dict[str | None, dict[str, Any]]] = {
-        "user1@test.com": {
+        "user1@example.com": {
             None: {
                 "threads": [{"id": "t1"}, {"id": "t2"}],
                 "nextPageToken": "token-user1-page2",
@@ -94,7 +94,7 @@ def test_gmail_checkpoint_progression() -> None:
                 "nextPageToken": None,
             },
         },
-        "user2@test.com": {
+        "user2@example.com": {
             None: {
                 "threads": [{"id": "t4"}],
                 "nextPageToken": None,
@@ -103,12 +103,12 @@ def test_gmail_checkpoint_progression() -> None:
     }
 
     full_thread_responses = {
-        "user1@test.com": {
+        "user1@example.com": {
             "t1": {"id": "t1"},
             "t2": {"id": "t2"},
             "t3": {"id": "t3"},
         },
-        "user2@test.com": {
+        "user2@example.com": {
             "t4": {"id": "t4"},
         },
     }
@@ -212,10 +212,10 @@ def test_gmail_checkpoint_progression() -> None:
     ]
 
     assert document_ids == [
-        "user2@test.com:t4",
-        "user1@test.com:t1",
-        "user1@test.com:t2",
-        "user1@test.com:t3",
+        "user2@example.com:t4",
+        "user1@example.com:t1",
+        "user1@example.com:t2",
+        "user1@example.com:t3",
     ]
 
     assert mock_thread_to_document.call_count == 4

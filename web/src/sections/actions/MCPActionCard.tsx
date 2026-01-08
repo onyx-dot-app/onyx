@@ -18,7 +18,7 @@ import {
   MCPServerStatus,
   MCPServer,
 } from "@/lib/tools/interfaces";
-import { useServerTools } from "@/sections/actions/useServerTools";
+import useServerTools from "@/hooks/useServerTools";
 import { KeyedMutator } from "swr";
 import type { IconProps } from "@opal/types";
 import { SvgRefreshCw, SvgServer, SvgTrash } from "@opal/icons";
@@ -131,11 +131,7 @@ export default function MCPActionCard({
   }, [server.status]);
 
   // Lazy load tools only when expanded
-  const { tools, isLoading, mutate } = useServerTools({
-    serverId,
-    server,
-    isExpanded: isToolsExpanded,
-  });
+  const { tools, isLoading, mutate } = useServerTools(server, isToolsExpanded);
 
   // Retry tools fetch when server transitions from FETCHING_TOOLS to CONNECTED
   useEffect(() => {
@@ -260,7 +256,7 @@ export default function MCPActionCard({
           className={cn(isToolsRefreshing && "animate-spin")}
         />
         {lastRefreshedText && (
-          <Text text03 mainUiBody className="whitespace-nowrap">
+          <Text as="p" text03 mainUiBody className="whitespace-nowrap">
             Tools last refreshed {lastRefreshedText}
           </Text>
         )}
@@ -354,11 +350,13 @@ export default function MCPActionCard({
           }
         >
           <div className="flex flex-col gap-4">
-            <Text text03>
+            <Text as="p" text03>
               All tools connected to <b>{title}</b> will be removed. Deletion is
               irreversible.
             </Text>
-            <Text text03>Are you sure you want to delete this MCP server?</Text>
+            <Text as="p" text03>
+              Are you sure you want to delete this MCP server?
+            </Text>
           </div>
         </Modal>
       )}

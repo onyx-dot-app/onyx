@@ -62,6 +62,11 @@ def upgrade() -> None:
     )
     """
     )
+
+    # Drop the temporary table to avoid conflicts if migration runs again
+    # (e.g., during upgrade -> downgrade -> upgrade cycles in tests)
+    op.execute("DROP TABLE IF EXISTS temp_connector_credential")
+
     # If no exception was raised, alter the column
     op.alter_column("credential", "source", nullable=True)  # TODO modify
     # # ### end Alembic commands ###

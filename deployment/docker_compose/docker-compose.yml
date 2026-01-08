@@ -82,6 +82,12 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 25s
     # Optional, only for debugging purposes
     volumes:
       - api_server_logs:/var/log/onyx
@@ -165,45 +171,46 @@ services:
     environment:
       - INTERNAL_URL=${INTERNAL_URL:-http://api_server:8080}
 
-  mcp_server:
-    image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
-    build:
-      context: ../../backend
-      dockerfile: Dockerfile
-    command: >
-      /bin/sh -c "if [ \"${MCP_SERVER_ENABLED:-}\" != \"True\" ] && [ \"${MCP_SERVER_ENABLED:-}\" != \"true\" ]; then
-        echo 'MCP server is disabled (MCP_SERVER_ENABLED=false), skipping...';
-        exit 0;
-      else
-        exec python -m onyx.mcp_server_main;
-      fi"
-    env_file:
-      - path: .env
-        required: false
-    depends_on:
-      - relational_db
-      - cache
-    restart: "no"
-    environment:
-      - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
-      - REDIS_HOST=${REDIS_HOST:-cache}
-      # MCP Server Configuration
-      - MCP_SERVER_ENABLED=${MCP_SERVER_ENABLED:-false}
-      - MCP_SERVER_PORT=${MCP_SERVER_PORT:-8090}
-      - MCP_SERVER_CORS_ORIGINS=${MCP_SERVER_CORS_ORIGINS:-}
-      - API_SERVER_PROTOCOL=${API_SERVER_PROTOCOL:-http}
-      - API_SERVER_HOST=${API_SERVER_HOST:-api_server}
-      - API_SERVER_PORT=${API_SERVER_PORT:-8080}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    logging:
-      driver: json-file
-      options:
-        max-size: "50m"
-        max-file: "6"
-    # Optional, only for debugging purposes
-    volumes:
-      - mcp_server_logs:/var/log/onyx
+  # Uncomment the block below to enable the MCP server for Onyx.
+  # mcp_server:
+  #   image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
+  #   build:
+  #     context: ../../backend
+  #     dockerfile: Dockerfile
+  #   command: >
+  #     /bin/sh -c "if [ \"${MCP_SERVER_ENABLED:-}\" != \"True\" ] && [ \"${MCP_SERVER_ENABLED:-}\" != \"true\" ]; then
+  #       echo 'MCP server is disabled (MCP_SERVER_ENABLED=false), skipping...';
+  #       exit 0;
+  #     else
+  #       exec python -m onyx.mcp_server_main;
+  #     fi"
+  #   env_file:
+  #     - path: .env
+  #       required: false
+  #   depends_on:
+  #     - relational_db
+  #     - cache
+  #   restart: "no"
+  #   environment:
+  #     - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
+  #     - REDIS_HOST=${REDIS_HOST:-cache}
+  #     # MCP Server Configuration
+  #     - MCP_SERVER_ENABLED=${MCP_SERVER_ENABLED:-false}
+  #     - MCP_SERVER_PORT=${MCP_SERVER_PORT:-8090}
+  #     - MCP_SERVER_CORS_ORIGINS=${MCP_SERVER_CORS_ORIGINS:-}
+  #     - API_SERVER_PROTOCOL=${API_SERVER_PROTOCOL:-http}
+  #     - API_SERVER_HOST=${API_SERVER_HOST:-api_server}
+  #     - API_SERVER_PORT=${API_SERVER_PORT:-8080}
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
+  #   logging:
+  #     driver: json-file
+  #     options:
+  #       max-size: "50m"
+  #       max-file: "6"
+  #   # Optional, only for debugging purposes
+  #   volumes:
+  #     - mcp_server_logs:/var/log/onyx
 
   inference_model_server:
     image: ${ONYX_MODEL_SERVER_IMAGE:-onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}}
@@ -296,6 +303,11 @@ services:
     # 2. Uncomment the ports below
     # ports:
     #   - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     volumes:
       - db_volume:/var/lib/postgresql/data
 
@@ -456,6 +468,6 @@ volumes:
   # Logs preserved across container restarts
   api_server_logs:
   background_logs:
-  mcp_server_logs:
+  # mcp_server_logs:
   inference_model_server_logs:
   indexing_model_server_logs:

@@ -52,8 +52,6 @@ import {
 } from "@opal/icons";
 import useOnMount from "@/hooks/useOnMount";
 
-// (no local constants; use shared constants/imports)
-
 export interface PopoverSearchInputProps {
   setShowMoveOptions: (show: boolean) => void;
   onSearch: (term: string) => void;
@@ -103,7 +101,7 @@ export function PopoverSearchInput({
   );
 }
 
-interface ChatButtonProps {
+export interface ChatButtonProps {
   chatSession: ChatSession;
   project?: Project;
   draggable?: boolean;
@@ -115,9 +113,8 @@ const ChatButton = memo(
     const activeSidebarTab = useAppFocus();
     const active = useMemo(
       () =>
-        typeof activeSidebarTab === "object" &&
-        activeSidebarTab.type === "chat" &&
-        activeSidebarTab.id === chatSession.id,
+        activeSidebarTab.isChat() &&
+        activeSidebarTab.getId() === chatSession.id,
       [activeSidebarTab, chatSession.id]
     );
     const mounted = useOnMount();
@@ -270,7 +267,7 @@ const ChatButton = memo(
                     handleCreateProjectAndMove(searchTerm.trim())
                   )}
                 >
-                  <Text text03 mainUiMuted className="-mr-1">
+                  <Text as="p" text03 mainUiMuted className="-mr-1">
                     Create
                   </Text>
                   <Truncated text03 mainUiAction>
@@ -437,8 +434,8 @@ const ChatButton = memo(
       >
         <PopoverAnchor>
           <SidebarTab
-            onClick={() => route({ chatSessionId: chatSession.id })}
-            active={active}
+            href={`/chat?chatId=${chatSession.id}`}
+            transient={active}
             rightChildren={rightMenu}
             focused={renaming}
           >

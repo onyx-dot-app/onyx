@@ -20,7 +20,9 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import Button from "@/refresh-components/buttons/Button";
-import ChatInputBar from "@/app/chat/components/input/ChatInputBar";
+import ChatInputBar, {
+  ChatInputBarHandle,
+} from "@/app/chat/components/input/ChatInputBar";
 import { Menu, ExternalLink } from "lucide-react";
 import Modal from "@/refresh-components/Modal";
 import { useNightTime } from "@/lib/dateUtils";
@@ -32,7 +34,6 @@ import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
 import { SettingsPanel } from "../../components/nrf/SettingsPanel";
 import LoginPage from "../../auth/login/LoginPage";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
-import ApiKeyModal from "@/components/llm/ApiKeyModal";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { useAgents } from "@/hooks/useAgents";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
@@ -43,11 +44,11 @@ import { useChatSessionController } from "@/app/chat/hooks/useChatSessionControl
 import { useAssistantController } from "@/app/chat/hooks/useAssistantController";
 import {
   useChatSessionStore,
-  useChatPageLayout,
   useUncaughtError,
   useCurrentChatState,
   useCurrentMessageTree,
-  useHasPerformedInitialScroll,
+  useCurrentMessageHistory,
+  useLoadingError,
 } from "@/app/chat/stores/useChatSessionStore";
 import ChatPage from "@/app/chat/components/ChatPage";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -171,7 +172,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const inputRef = useRef<HTMLDivElement>(null);
   const endDivRef = useRef<HTMLDivElement>(null);
   const endPaddingRef = useRef<HTMLDivElement>(null);
-  const textAreaRef = useRef<HTMLTextAreaElement>(null);
+  const chatInputBarRef = useRef<ChatInputBarHandle | null>(null);
   const waitForScrollRef = useRef(false);
   const scrollDist = useRef<number>(0);
   const scrollInitialized = useRef(false);
@@ -185,12 +186,11 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const chatSessionId = useChatSessionStore((state) => state.currentSessionId);
   const uncaughtError = useUncaughtError();
   const completeMessageTree = useCurrentMessageTree();
-  const hasPerformedInitialScroll = useHasPerformedInitialScroll();
+  const messageHistory = useCurrentMessageHistory();
+  const loadingError = useLoadingError();
   const updateHasPerformedInitialScroll = useChatSessionStore(
     (state) => state.updateHasPerformedInitialScroll
   );
-  const { showCenteredInput, loadingError, messageHistory } =
-    useChatPageLayout();
 
   // Determine if we should show centered welcome or messages
   const hasMessages = messageHistory.length > 0;
@@ -298,7 +298,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       setCurrentMessageFiles,
       chatSessionIdRef,
       loadedIdSessionRef,
-      textAreaRef,
+      chatInputBarRef,
       isInitialLoad,
       submitOnLoadPerformed,
       refreshChatSessions,
@@ -338,14 +338,17 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   );
 
   // Handle submit from ChatInputBar
-  const handleChatInputSubmit = useCallback(() => {
-    if (!message.trim()) return;
-    onSubmit({
-      message: message,
-      currentMessageFiles: currentMessageFiles,
-      useAgentSearch: deepResearchEnabled,
-    });
-  }, [message, onSubmit, currentMessageFiles, deepResearchEnabled]);
+  const handleChatInputSubmit = useCallback(
+    (submittedMessage: string) => {
+      if (!submittedMessage.trim()) return;
+      onSubmit({
+        message: submittedMessage,
+        currentMessageFiles: currentMessageFiles,
+        deepResearch: deepResearchEnabled,
+      });
+    },
+    [onSubmit, currentMessageFiles, deepResearchEnabled]
+  );
 
   // Handle resubmit last message on error
   const handleResubmitLastMessage = useCallback(() => {
@@ -364,7 +367,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     onSubmit({
       message: lastUserMsg.message,
       currentMessageFiles: currentMessageFiles,
-      useAgentSearch: deepResearchEnabled,
+      deepResearch: deepResearchEnabled,
       messageIdToResend: lastUserMsg.messageId,
     });
   }, [
@@ -473,13 +476,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                     className="flex-1 w-full flex flex-col default-scrollbar overflow-y-auto overflow-x-hidden relative"
                   >
                     <div className="relative w-full px-4">
-                      <ChatPage
-                        firstMessage={message || undefined}
-                        headerData={{
-                          settings: settings,
-                          chatSession: null,
-                        }}
-                      />
+                      <ChatPage firstMessage={message || undefined} />
                     </div>
                   </div>
 
@@ -494,6 +491,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                     )}
                   >
                     <ChatInputBar
+                      ref={chatInputBarRef}
                       deepResearchEnabled={deepResearchEnabled}
                       toggleDeepResearch={toggleDeepResearch}
                       toggleDocumentSidebar={toggleDocumentSidebar}
@@ -502,8 +500,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                       removeDocs={() => setSelectedDocuments([])}
                       retrievalEnabled={false}
                       selectedDocuments={selectedDocuments}
-                      message={message}
-                      setMessage={setMessage}
+                      initialMessage={message}
                       stopGenerating={stopGenerating}
                       onSubmit={handleChatInputSubmit}
                       chatState={currentChatState}
@@ -515,7 +512,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                       }
                       selectedAssistant={liveAssistant ?? undefined}
                       handleFileUpload={handleFileUpload}
-                      textAreaRef={textAreaRef}
                       disabled={
                         !llmManager.isLoadingProviders &&
                         !llmManager.hasAnyProvider
@@ -551,6 +547,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 </h1>
 
                 <ChatInputBar
+                  ref={chatInputBarRef}
                   deepResearchEnabled={deepResearchEnabled}
                   toggleDeepResearch={toggleDeepResearch}
                   toggleDocumentSidebar={toggleDocumentSidebar}
@@ -559,8 +556,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   removeDocs={() => setSelectedDocuments([])}
                   retrievalEnabled={false}
                   selectedDocuments={selectedDocuments}
-                  message={message}
-                  setMessage={setMessage}
+                  initialMessage={message}
                   stopGenerating={stopGenerating}
                   onSubmit={handleChatInputSubmit}
                   chatState={currentChatState}
@@ -568,7 +564,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   availableContextTokens={Number(DEFAULT_CONTEXT_TOKENS) * 0.5}
                   selectedAssistant={liveAssistant ?? undefined}
                   handleFileUpload={handleFileUpload}
-                  textAreaRef={textAreaRef}
                   disabled={
                     !llmManager.isLoadingProviders && !llmManager.hasAnyProvider
                   }
@@ -650,9 +645,15 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           </Modal.Content>
         </Modal>
       ) : (
-        (!llmProviders || llmProviders.length === 0) && (
-          <ApiKeyModal setPopup={setPopup} />
-        )
+        <Button
+          className="w-full"
+          secondary
+          onClick={() => {
+            window.location.href = "/admin/configuration/llm";
+          }}
+        >
+          Set up an LLM.
+        </Button>
       )}
     </div>
   );

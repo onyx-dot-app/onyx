@@ -57,11 +57,11 @@ export default function DisconnectEntityModal({
         />
 
         <Modal.Body className="p-4 flex flex-col gap-2 bg-background-tint-01">
-          <Text text03 mainUiBody>
+          <Text as="p" text03 mainUiBody>
             All tools connected to {name} will stop working. You can reconnect
             to this server later if needed.
           </Text>
-          <Text text03 mainUiBody>
+          <Text as="p" text03 mainUiBody>
             Are you sure you want to proceed?
           </Text>
         </Modal.Body>

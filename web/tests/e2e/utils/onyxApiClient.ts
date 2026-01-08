@@ -28,7 +28,8 @@ import { Page, expect, APIResponse } from "@playwright/test";
  * **Tool Providers:**
  * - `createWebSearchProvider(type, name)` - Creates and activates a web search provider
  * - `deleteWebSearchProvider(id)` - Deletes a web search provider
- * - `createImageGenProvider(name)` - Creates an OpenAI LLM provider for image generation
+ * - `createImageGenerationConfig(id, model, provider, isDefault)` - Creates an image generation config (enables image gen tool)
+ * - `deleteImageGenerationConfig(id)` - Deletes an image generation config
  *
  * **Usage Example:**
  * ```typescript
@@ -42,7 +43,7 @@ import { Page, expect, APIResponse } from "@playwright/test";
  * @param page - Playwright Page instance with authenticated session
  */
 export class OnyxApiClient {
-  private baseUrl = "http://localhost:3000/api";
+  private baseUrl = `${process.env.BASE_URL || "http://localhost:3000"}/api`;
 
   constructor(private page: Page) {}
 
@@ -651,39 +652,61 @@ export class OnyxApiClient {
   }
 
   /**
-   * Create an OpenAI LLM provider to enable image generation.
-   * Image generation requires an OpenAI provider with an API key.
+   * Creates an image generation configuration for testing.
+   * This enables the image generation tool in assistants.
    *
-   * @param name - Optional name for the provider (defaults to "Test Image Gen Provider")
-   * @returns The provider ID
-   * @throws Error if the provider creation fails
+   * API: POST /api/admin/image-generation/config
+   * Schema (ImageGenerationConfigCreate):
+   *   - image_provider_id: string (required) - unique key
+   *   - model_name: string (required) - e.g., "dall-e-3"
+   *   - provider: string - e.g., "openai"
+   *   - api_key: string
+   *   - is_default: boolean
+   *
+   * @param imageProviderId - Unique identifier for the image generation config
+   * @param modelName - Model name (defaults to "dall-e-3")
+   * @param provider - Provider name (defaults to "openai")
+   * @param isDefault - Whether this should be the default config (defaults to true)
+   * @returns The image_provider_id
    */
-  async createImageGenProvider(
-    name: string = "Test Image Gen Provider"
-  ): Promise<number> {
-    const response = await this.page.request.put(
-      `${this.baseUrl}/admin/llm/provider?is_creation=true`,
-      {
-        data: {
-          name,
-          provider: "openai",
-          api_key: "test-image-gen-key",
-          default_model_name: "gpt-4o",
-          is_public: true,
-          groups: [],
-          personas: [],
-        },
-      }
-    );
+  async createImageGenerationConfig(
+    imageProviderId: string,
+    modelName: string = "dall-e-3",
+    provider: string = "openai",
+    isDefault: boolean = true
+  ): Promise<string> {
+    const response = await this.post("/admin/image-generation/config", {
+      image_provider_id: imageProviderId,
+      model_name: modelName,
+      provider: provider,
+      api_key: "test-api-key", // Dummy key - enables tool visibility
+      is_default: isDefault,
+    });
 
-    const responseData = await this.handleResponse<{ id: number }>(
+    await this.handleResponse(
       response,
-      "Failed to create image generation provider"
+      "Failed to create image generation config"
     );
 
-    this.log(
-      `Created image generation provider: ${name} (ID: ${responseData.id})`
+    this.log(`Created image generation config: ${imageProviderId}`);
+    return imageProviderId;
+  }
+
+  /**
+   * Deletes an image generation configuration.
+   *
+   * @param imageProviderId - The image_provider_id to delete
+   */
+  async deleteImageGenerationConfig(imageProviderId: string): Promise<void> {
+    const response = await this.delete(
+      `/admin/image-generation/config/${imageProviderId}`
     );
-    return responseData.id;
+
+    await this.handleResponseSoft(
+      response,
+      `Failed to delete image generation config ${imageProviderId}`
+    );
+
+    this.log(`Deleted image generation config: ${imageProviderId}`);
   }
 }

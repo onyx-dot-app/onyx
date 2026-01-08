@@ -4,6 +4,7 @@ import React, { useMemo } from "react";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import type { Route } from "next";
 import type { IconProps } from "@opal/types";
 
 const variantClasses = (transient?: boolean) =>
@@ -360,7 +361,9 @@ function ButtonInner(
           <LeftIcon className={cn("w-[1rem] h-[1rem]", iconClass)} />
         </div>
       )}
-      <div className={cn(LeftIcon && "pr-1", RightIcon && "pl-1")}>
+      <div
+        className={cn("leading-none", LeftIcon && "pr-1", RightIcon && "pl-1")}
+      >
         {typeof children === "string" ? (
           <Text
             className={cn(
@@ -383,7 +386,7 @@ function ButtonInner(
   );
 
   if (!href) return content;
-  return <Link href={href}>{content}</Link>;
+  return <Link href={href as Route}>{content}</Link>;
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(ButtonInner);

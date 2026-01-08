@@ -19,13 +19,8 @@ export function FormErrorFocus() {
       try {
         let target: HTMLElement | null = null;
 
-        // 1) Try by id, then data-testid
         for (const key of keys) {
-          target =
-            (document.getElementById(key) as HTMLElement | null) ||
-            (document.querySelector(
-              `[data-testid="${key}"]`
-            ) as HTMLElement | null);
+          target = document.getElementById(key) as HTMLElement | null;
           if (target) break;
         }
 

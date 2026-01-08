@@ -27,6 +27,7 @@ import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile } from "../projects/projectsService";
 import { getSessionProjectTokenCount } from "../projects/projectsService";
 import { getProjectFilesForSession } from "../projects/projectsService";
+import { ChatInputBarHandle } from "../components/input/ChatInputBar";
 
 interface UseChatSessionControllerProps {
   existingChatSessionId: string | null;
@@ -44,7 +45,7 @@ interface UseChatSessionControllerProps {
   // Refs
   chatSessionIdRef: React.RefObject<string | null>;
   loadedIdSessionRef: React.RefObject<string | null>;
-  textAreaRef: React.RefObject<HTMLTextAreaElement | null>;
+  chatInputBarRef: React.RefObject<ChatInputBarHandle | null>;
   isInitialLoad: React.RefObject<boolean>;
   submitOnLoadPerformed: React.RefObject<boolean>;
 
@@ -53,7 +54,7 @@ interface UseChatSessionControllerProps {
   onSubmit: (params: {
     message: string;
     currentMessageFiles: ProjectFile[];
-    useAgentSearch: boolean;
+    deepResearch: boolean;
     isSeededChat?: boolean;
   }) => Promise<void>;
 }
@@ -68,7 +69,7 @@ export function useChatSessionController({
   setCurrentMessageFiles,
   chatSessionIdRef,
   loadedIdSessionRef,
-  textAreaRef,
+  chatInputBarRef,
   isInitialLoad,
   submitOnLoadPerformed,
   refreshChatSessions,
@@ -114,7 +115,7 @@ export function useChatSessionController({
     chatSessionIdRef.current = existingChatSessionId;
     loadedIdSessionRef.current = existingChatSessionId;
 
-    textAreaRef.current?.focus();
+    chatInputBarRef.current?.focus();
 
     const isCreatingNewSession =
       priorChatSessionId === null && existingChatSessionId !== null;
@@ -166,7 +167,7 @@ export function useChatSessionController({
           await onSubmit({
             message: firstMessage || "",
             currentMessageFiles: [],
-            useAgentSearch: false,
+            deepResearch: false,
           });
         }
         return;
@@ -264,14 +265,14 @@ export function useChatSessionController({
           message: seededMessage,
           isSeededChat: true,
           currentMessageFiles: [],
-          useAgentSearch: false,
+          deepResearch: false,
         });
         // Force re-name if the chat session doesn't have one
         if (!chatSession.description) {
           await nameChatSession(existingChatSessionId);
           refreshChatSessions();
         }
-      } else if (newMessageHistory.length === 2 && !chatSession.description) {
+      } else if (newMessageHistory.length >= 2 && !chatSession.description) {
         await nameChatSession(existingChatSessionId);
         refreshChatSessions();
       }

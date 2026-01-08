@@ -513,6 +513,21 @@
       }
     },
     {
+      "name": "Clear and Restart OpenSearch Container",
+      // Generic debugger type, required arg but has no bearing on bash.
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "${workspaceFolder}/backend/scripts/restart_opensearch_container.sh"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "presentation": {
+        "group": "3"
+      }
+    },
+    {
       "name": "Eval CLI",
       "type": "debugpy",
       "request": "launch",

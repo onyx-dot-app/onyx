@@ -38,7 +38,18 @@ def get_federated_retrieval_functions(
     source_types: list[DocumentSource] | None,
     document_set_names: list[str] | None,
     slack_context: SlackContext | None = None,
+    user_file_ids: list[UUID] | None = None,
 ) -> list[FederatedRetrievalInfo]:
+    # When User Knowledge (user files) is the only knowledge source enabled,
+    # skip federated connectors entirely. User Knowledge mode means the agent
+    # should ONLY use uploaded files, not team connectors like Slack.
+    if user_file_ids and not document_set_names:
+        logger.debug(
+            "Skipping all federated connectors: User Knowledge mode enabled "
+            f"with {len(user_file_ids)} user files and no document sets"
+        )
+        return []
+
     # Check for Slack bot context first (regardless of user_id)
     if slack_context:
         logger.debug("Slack context detected, checking for Slack bot setup...")
@@ -210,6 +221,17 @@ def get_federated_retrieval_functions(
     federated_retrieval_infos: list[FederatedRetrievalInfo] = []
     federated_oauth_tokens = list_federated_connector_oauth_tokens(db_session, user_id)
     for oauth_token in federated_oauth_tokens:
+        # Slack is handled separately inside SearchTool
+        if (
+            oauth_token.federated_connector.source
+            == FederatedConnectorSource.FEDERATED_SLACK
+        ):
+            logger.debug(
+                "Skipping Slack federated connector in user OAuth path - "
+                "handled by SearchTool"
+            )
+            continue
+
         if (
             oauth_token.federated_connector.source.to_non_federated_source()
             not in source_types

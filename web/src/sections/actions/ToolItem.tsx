@@ -210,7 +210,7 @@ const ToolItem: React.FC<ToolItemProps> = ({
             <div className="flex items-center min-h-[20px] px-0 py-0.5">
               <div className="flex gap-0.5 items-center">
                 <div className="flex items-center px-0.5">
-                  <Text text03 secondaryBody className="text-right">
+                  <Text as="p" text03 secondaryBody className="text-right">
                     Tool unavailable
                   </Text>
                 </div>
@@ -238,6 +238,7 @@ const ToolItem: React.FC<ToolItemProps> = ({
               className={cn("rounded-04 border border-transparent", methodBg)}
             >
               <Text
+                as="p"
                 figureSmallLabel
                 className={cn("uppercase tracking-wide p-0.5 ", methodText)}
               >

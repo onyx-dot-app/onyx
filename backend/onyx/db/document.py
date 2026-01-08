@@ -225,6 +225,38 @@ def get_documents_by_ids(
     return list(documents)
 
 
+def filter_existing_document_ids(
+    db_session: Session,
+    document_ids: list[str],
+) -> set[str]:
+    """Filter a list of document IDs to only those that exist in the database.
+
+    Args:
+        db_session: Database session
+        document_ids: List of document IDs to check for existence
+
+    Returns:
+        Set of document IDs from the input list that exist in the database
+    """
+    if not document_ids:
+        return set()
+    stmt = select(DbDocument.id).where(DbDocument.id.in_(document_ids))
+    return set(db_session.execute(stmt).scalars().all())
+
+
+def fetch_document_ids_by_links(
+    db_session: Session,
+    links: list[str],
+) -> dict[str, str]:
+    """Fetch document IDs for documents whose link matches any of the provided values."""
+    if not links:
+        return {}
+
+    stmt = select(DbDocument.link, DbDocument.id).where(DbDocument.link.in_(links))
+    rows = db_session.execute(stmt).all()
+    return {link: doc_id for link, doc_id in rows if link}
+
+
 def get_document_connector_count(
     db_session: Session,
     document_id: str,
@@ -290,7 +322,7 @@ def get_document_counts_for_cc_pairs(
             )
         )
 
-        for connector_id, credential_id, cnt in db_session.execute(stmt).all():  # type: ignore
+        for connector_id, credential_id, cnt in db_session.execute(stmt).all():
             aggregated_counts[(connector_id, credential_id)] = cnt
 
     # Convert aggregated results back to the expected sequence of tuples
@@ -1098,7 +1130,7 @@ def reset_all_document_kg_stages(db_session: Session) -> int:
 
     # The hasattr check is needed for type checking, even though rowcount
     # is guaranteed to exist at runtime for UPDATE operations
-    return result.rowcount if hasattr(result, "rowcount") else 0  # type: ignore
+    return result.rowcount if hasattr(result, "rowcount") else 0
 
 
 def update_document_kg_stages(
@@ -1121,7 +1153,7 @@ def update_document_kg_stages(
     result = db_session.execute(stmt)
     # The hasattr check is needed for type checking, even though rowcount
     # is guaranteed to exist at runtime for UPDATE operations
-    return result.rowcount if hasattr(result, "rowcount") else 0  # type: ignore
+    return result.rowcount if hasattr(result, "rowcount") else 0
 
 
 def get_skipped_kg_documents(db_session: Session) -> list[str]:

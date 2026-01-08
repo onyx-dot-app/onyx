@@ -2393,6 +2393,8 @@ class LLMProvider(Base):
     default_vision_model: Mapped[str | None] = mapped_column(String, nullable=True)
     # EE only
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Auto mode: models, visibility, and defaults are managed by GitHub config
+    is_auto_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     groups: Mapped[list["UserGroup"]] = relationship(
         "UserGroup",
         secondary="llm_provider__user_group",
@@ -2448,6 +2450,29 @@ class ModelConfiguration(Base):
     llm_provider: Mapped["LLMProvider"] = relationship(
         "LLMProvider",
         back_populates="model_configurations",
+    )
+
+
+class ImageGenerationConfig(Base):
+    __tablename__ = "image_generation_config"
+
+    image_provider_id: Mapped[str] = mapped_column(String, primary_key=True)
+    model_configuration_id: Mapped[int] = mapped_column(
+        ForeignKey("model_configuration.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    model_configuration: Mapped["ModelConfiguration"] = relationship(
+        "ModelConfiguration"
+    )
+
+    __table_args__ = (
+        Index("ix_image_generation_config_is_default", "is_default"),
+        Index(
+            "ix_image_generation_config_model_configuration_id",
+            "model_configuration_id",
+        ),
     )
 
 
@@ -2959,7 +2984,7 @@ class SlackChannelConfig(Base):
             "slack_bot_id",
             "is_default",
             unique=True,
-            postgresql_where=(is_default is True),  #   type: ignore
+            postgresql_where=(is_default is True),
         ),
     )
 
@@ -3936,4 +3961,46 @@ class License(Base):
     )
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class TenantUsage(Base):
+    """
+    Tracks per-tenant usage statistics within a time window for cloud usage limits.
+
+    Each row represents usage for a specific tenant during a specific time window.
+    A new row is created when the window rolls over (typically weekly).
+    """
+
+    __tablename__ = "tenant_usage"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # The start of the usage tracking window (e.g., start of the week in UTC)
+    window_start: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+
+    # Cumulative LLM usage cost in cents for the window
+    llm_cost_cents: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    # Number of chunks indexed during the window
+    chunks_indexed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # Number of API calls using API keys or Personal Access Tokens
+    api_calls: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # Number of non-streaming API calls (more expensive operations)
+    non_streaming_api_calls: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+
+    # Last updated timestamp for tracking freshness
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        # Ensure only one row per window start (tenant_id is in the schema name)
+        UniqueConstraint("window_start", name="uq_tenant_usage_window"),
     )

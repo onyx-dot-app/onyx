@@ -1,11 +1,13 @@
 import threading
+import time
 from collections.abc import Callable
 from collections.abc import Generator
 from queue import Empty
 from typing import Any
 
+from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.emitter import Emitter
-from onyx.context.search.models import SearchDoc
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketException
@@ -27,13 +29,17 @@ class ChatStateContainer:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
+        # These are collected at the end after the entire tool call is completed
         self.tool_calls: list[ToolCallInfo] = []
+        # This is accumulated during the streaming
         self.reasoning_tokens: str | None = None
+        # This is accumulated during the streaming of the answer
         self.answer_tokens: str | None = None
         # Store citation mapping for building citation_docs_info during partial saves
-        self.citation_to_doc: dict[int, SearchDoc] = {}
+        self.citation_to_doc: CitationMapping = {}
         # True if this turn is a clarification question (deep research flow)
         self.is_clarification: bool = False
+        # Note: LLM cost tracking is now handled in multi_llm.py
 
     def add_tool_call(self, tool_call: ToolCallInfo) -> None:
         """Add a tool call to the accumulated state."""
@@ -50,7 +56,7 @@ class ChatStateContainer:
         with self._lock:
             self.answer_tokens = answer
 
-    def set_citation_mapping(self, citation_to_doc: dict[int, Any]) -> None:
+    def set_citation_mapping(self, citation_to_doc: CitationMapping) -> None:
         """Set the citation mapping from citation processor."""
         with self._lock:
             self.citation_to_doc = citation_to_doc
@@ -75,7 +81,7 @@ class ChatStateContainer:
         with self._lock:
             return self.tool_calls.copy()
 
-    def get_citation_to_doc(self) -> dict[int, SearchDoc]:
+    def get_citation_to_doc(self) -> CitationMapping:
         """Thread-safe getter for citation_to_doc (returns a copy)."""
         with self._lock:
             return self.citation_to_doc.copy()
@@ -86,7 +92,7 @@ class ChatStateContainer:
             return self.is_clarification
 
 
-def run_chat_llm_with_state_containers(
+def run_chat_loop_with_state_containers(
     func: Callable[..., None],
     is_connected: Callable[[], bool],
     emitter: Emitter,
@@ -110,7 +116,7 @@ def run_chat_llm_with_state_containers(
         **kwargs: Additional keyword arguments for func
 
     Usage:
-        packets = run_chat_llm_with_state_containers(
+        packets = run_chat_loop_with_state_containers(
             my_func,
             emitter=emitter,
             state_container=state_container,
@@ -131,7 +137,7 @@ def run_chat_llm_with_state_containers(
             # If execution fails, emit an exception packet
             emitter.emit(
                 Packet(
-                    turn_index=0,
+                    placement=Placement(turn_index=0),
                     obj=PacketException(type="error", exception=e),
                 )
             )
@@ -140,6 +146,9 @@ def run_chat_llm_with_state_containers(
     thread = run_in_background(run_with_exception_capture)
 
     pkt: Packet | None = None
+    last_turn_index = 0  # Track the highest turn_index seen for stop packet
+    last_cancel_check = time.monotonic()
+    cancel_check_interval = 0.3  # Check for cancellation every 300ms
     try:
         while True:
             # Poll queue with 300ms timeout for natural stop signal checking
@@ -148,18 +157,40 @@ def run_chat_llm_with_state_containers(
                 pkt = emitter.bus.get(timeout=0.3)
             except Empty:
                 if not is_connected():
-                    # Stop signal detected, kill the thread
+                    # Stop signal detected
+                    yield Packet(
+                        placement=Placement(turn_index=last_turn_index + 1),
+                        obj=OverallStop(type="stop", stop_reason="user_cancelled"),
+                    )
                     break
+                last_cancel_check = time.monotonic()
                 continue
 
             if pkt is not None:
-                if pkt.obj == OverallStop(type="stop"):
+                # Track the highest turn_index for the stop packet
+                if pkt.placement and pkt.placement.turn_index > last_turn_index:
+                    last_turn_index = pkt.placement.turn_index
+
+                if isinstance(pkt.obj, OverallStop):
                     yield pkt
                     break
                 elif isinstance(pkt.obj, PacketException):
                     raise pkt.obj.exception
                 else:
                     yield pkt
+
+                # Check for cancellation periodically even when packets are flowing
+                # This ensures stop signal is checked during active streaming
+                current_time = time.monotonic()
+                if current_time - last_cancel_check >= cancel_check_interval:
+                    if not is_connected():
+                        # Stop signal detected during streaming
+                        yield Packet(
+                            placement=Placement(turn_index=last_turn_index + 1),
+                            obj=OverallStop(type="stop", stop_reason="user_cancelled"),
+                        )
+                        break
+                    last_cancel_check = current_time
     finally:
         # Wait for thread to complete on normal exit to propagate exceptions and ensure cleanup.
         # Skip waiting if user disconnected to exit quickly.

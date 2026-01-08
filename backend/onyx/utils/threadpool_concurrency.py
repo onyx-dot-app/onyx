@@ -221,7 +221,7 @@ def run_functions_tuples_in_parallel(
                 results.append((index, future.result()))
             except Exception as e:
                 logger.exception(f"Function at index {index} failed due to {e}")
-                results.append((index, None))  # type: ignore
+                results.append((index, None))
 
                 if not allow_failures:
                     raise
@@ -336,7 +336,7 @@ def run_with_timeout(
     if task.is_alive():
         task.end()
 
-    return task.result  # type: ignore
+    return task.result
 
 
 # NOTE: this function should really only be used when run_functions_tuples_in_parallel is
@@ -352,7 +352,7 @@ def run_in_background(
     """
     context = contextvars.copy_context()
     # Timeout not used in the non-blocking case
-    task = TimeoutThread(-1, context.run, func, *args, **kwargs)  # type: ignore
+    task = TimeoutThread(-1, context.run, func, *args, **kwargs)
     task.start()
     return cast(TimeoutThread[R], task)
 

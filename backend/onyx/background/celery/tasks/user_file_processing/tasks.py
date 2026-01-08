@@ -51,9 +51,6 @@ from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.adapters.user_file_indexing_adapter import UserFileIndexingAdapter
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
-from onyx.natural_language_processing.search_nlp_models import (
-    InformationContentClassificationModel,
-)
 from onyx.redis.redis_pool import get_redis_client
 
 
@@ -257,10 +254,6 @@ def process_single_user_file(self: Task, *, user_file_id: str, tenant_id: str) -
                     search_settings=current_search_settings,
                 )
 
-                information_content_classification_model = (
-                    InformationContentClassificationModel()
-                )
-
                 document_index = get_default_document_index(
                     current_search_settings,
                     None,
@@ -275,7 +268,6 @@ def process_single_user_file(self: Task, *, user_file_id: str, tenant_id: str) -
                 # real work happens here!
                 index_pipeline_result = run_indexing_pipeline(
                     embedder=embedding_model,
-                    information_content_classification_model=information_content_classification_model,
                     document_index=document_index,
                     ignore_time_skip=True,
                     db_session=db_session,
@@ -597,7 +589,7 @@ def process_single_user_file_project_sync(
                 return None
 
             project_ids = [project.id for project in user_file.projects]
-            chunks_affected = retry_index.update_single(
+            retry_index.update_single(
                 doc_id=str(user_file.id),
                 tenant_id=tenant_id,
                 chunk_count=user_file.chunk_count,
@@ -606,7 +598,7 @@ def process_single_user_file_project_sync(
             )
 
             task_logger.info(
-                f"process_single_user_file_project_sync - Chunks affected id={user_file_id} chunks={chunks_affected}"
+                f"process_single_user_file_project_sync - User file id={user_file_id}"
             )
 
             user_file.needs_project_sync = False
@@ -874,7 +866,10 @@ def user_file_docid_migration_task(self: Task, *, tenant_id: str) -> bool:
                     )
 
                     # Now update Vespa chunks with the found chunk count using retry_index
-                    updated_chunks = retry_index.update_single(
+                    # WARNING: In the future this will error; we no longer want
+                    # to support changing document ID.
+                    # TODO(andrei): Delete soon.
+                    retry_index.update_single(
                         doc_id=str(normalized_doc_id),
                         tenant_id=tenant_id,
                         chunk_count=chunk_count,
@@ -883,7 +878,7 @@ def user_file_docid_migration_task(self: Task, *, tenant_id: str) -> bool:
                             user_projects=user_project_ids
                         ),
                     )
-                    user_file.chunk_count = updated_chunks
+                    user_file.chunk_count = chunk_count
 
                     # Update the SearchDocs
                     actual_doc_id = str(user_file.document_id)

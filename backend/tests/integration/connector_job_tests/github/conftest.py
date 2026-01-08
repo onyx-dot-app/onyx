@@ -35,15 +35,15 @@ def _get_github_test_tokens() -> list[str]:
     Returns a list of GitHub tokens to run the GitHub connector suite against.
 
     Minimal setup:
-    - Set GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN (token1)
+    - Set ONYX_GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN (token1)
     Optional:
-    - Set GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN_CLASSIC (token2 / classic)
+    - Set ONYX_GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN_CLASSIC (token2 / classic)
 
     If the classic token is provided, the GitHub suite will run twice (once per token).
     """
-    token_1 = os.environ.get("GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN")
+    token_1 = os.environ.get("ONYX_GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN")
     # Prefer the new "classic" name, but keep backward compatibility.
-    token_2 = os.environ.get("GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN_CLASSIC")
+    token_2 = os.environ.get("ONYX_GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN_CLASSIC")
 
     tokens: list[str] = []
     if token_1:
@@ -59,8 +59,8 @@ def github_access_token(request: pytest.FixtureRequest) -> str:
     if not tokens:
         pytest.skip(
             "Skipping GitHub tests due to missing env vars "
-            "GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN and "
-            "GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN_CLASSIC"
+            "ONYX_GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN and "
+            "ONYX_GITHUB_PERMISSION_SYNC_TEST_ACCESS_TOKEN_CLASSIC"
         )
     return request.param
 
@@ -83,9 +83,13 @@ def github_test_env_setup(
     reset_all()
 
     # Get user emails from environment (with fallbacks)
-    admin_email = os.environ.get("GITHUB_ADMIN_EMAIL")
-    test_user_1_email = os.environ.get("GITHUB_TEST_USER_1_EMAIL")
-    test_user_2_email = os.environ.get("GITHUB_TEST_USER_2_EMAIL")
+    admin_email = os.environ.get("ONYX_GITHUB_ADMIN_EMAIL", "admin@example.com")
+    test_user_1_email = os.environ.get(
+        "ONYX_GITHUB_TEST_USER_1_EMAIL", "subash@onyx.app"
+    )
+    test_user_2_email = os.environ.get(
+        "ONYX_GITHUB_TEST_USER_2_EMAIL", "msubash203@gmail.com"
+    )
 
     if not admin_email or not test_user_1_email or not test_user_2_email:
         pytest.skip(

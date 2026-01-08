@@ -86,6 +86,7 @@ from onyx.db.models import SearchSettings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
+from onyx.db.usage import UsageLimitExceededError
 from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
@@ -96,9 +97,6 @@ from onyx.indexing.adapters.document_indexing_adapter import (
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
-from onyx.natural_language_processing.search_nlp_models import (
-    InformationContentClassificationModel,
-)
 from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_pool import get_redis_client
@@ -115,6 +113,7 @@ from onyx.utils.telemetry import RecordType
 from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
 from shared_configs.configs import INDEXING_MODEL_SERVER_PORT
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import USAGE_LIMITS_ENABLED
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
 
@@ -1282,6 +1281,31 @@ def docprocessing_task(
         INDEX_ATTEMPT_INFO_CONTEXTVAR.reset(token)
 
 
+def _check_chunk_usage_limit(tenant_id: str) -> None:
+    """Check if chunk indexing usage limit has been exceeded.
+
+    Raises UsageLimitExceededError if the limit is exceeded.
+    """
+    if not USAGE_LIMITS_ENABLED:
+        return
+
+    from onyx.db.usage import check_usage_limit
+    from onyx.db.usage import UsageType
+    from onyx.server.usage_limits import get_limit_for_usage_type
+    from onyx.server.usage_limits import is_tenant_on_trial
+
+    is_trial = is_tenant_on_trial(tenant_id)
+    limit = get_limit_for_usage_type(UsageType.CHUNKS_INDEXED, is_trial)
+
+    with get_session_with_current_tenant() as db_session:
+        check_usage_limit(
+            db_session=db_session,
+            usage_type=UsageType.CHUNKS_INDEXED,
+            limit=limit,
+            pending_amount=0,  # Just check current usage
+        )
+
+
 def _docprocessing_task(
     index_attempt_id: int,
     cc_pair_id: int,
@@ -1292,6 +1316,25 @@ def _docprocessing_task(
 
     if tenant_id:
         CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+
+    # Check if chunk indexing usage limit has been exceeded before processing
+    if USAGE_LIMITS_ENABLED:
+        try:
+            _check_chunk_usage_limit(tenant_id)
+        except UsageLimitExceededError as e:
+            # Log the error and fail the indexing attempt
+            task_logger.error(
+                f"Chunk indexing usage limit exceeded for tenant {tenant_id}: {e}"
+            )
+            with get_session_with_current_tenant() as db_session:
+                from onyx.db.index_attempt import mark_attempt_failed
+
+                mark_attempt_failed(
+                    index_attempt_id=index_attempt_id,
+                    db_session=db_session,
+                    failure_reason=str(e),
+                )
+            raise
 
     task_logger.info(
         f"Processing document batch: "
@@ -1391,10 +1434,6 @@ def _docprocessing_task(
                 callback=callback,
             )
 
-            information_content_classification_model = (
-                InformationContentClassificationModel()
-            )
-
             document_index = get_default_document_index(
                 index_attempt.search_settings,
                 None,
@@ -1412,8 +1451,13 @@ def _docprocessing_task(
             )
 
             # Process documents through indexing pipeline
+            connector_source = (
+                index_attempt.connector_credential_pair.connector.source.value
+            )
             task_logger.info(
-                f"Processing {len(documents)} documents through indexing pipeline"
+                f"Processing {len(documents)} documents through indexing pipeline: "
+                f"cc_pair_id={cc_pair_id}, source={connector_source}, "
+                f"batch_num={batch_num}"
             )
 
             adapter = DocumentIndexingBatchAdapter(
@@ -1427,7 +1471,6 @@ def _docprocessing_task(
             # real work happens here!
             index_pipeline_result = run_indexing_pipeline(
                 embedder=embedding_model,
-                information_content_classification_model=information_content_classification_model,
                 document_index=document_index,
                 ignore_time_skip=True,  # Documents are already filtered during extraction
                 db_session=db_session,
@@ -1436,6 +1479,23 @@ def _docprocessing_task(
                 request_id=index_attempt_metadata.request_id,
                 adapter=adapter,
             )
+
+        # Track chunk indexing usage for cloud usage limits
+        if USAGE_LIMITS_ENABLED and index_pipeline_result.total_chunks > 0:
+            try:
+                from onyx.db.usage import increment_usage
+                from onyx.db.usage import UsageType
+
+                with get_session_with_current_tenant() as usage_db_session:
+                    increment_usage(
+                        db_session=usage_db_session,
+                        usage_type=UsageType.CHUNKS_INDEXED,
+                        amount=index_pipeline_result.total_chunks,
+                    )
+                    usage_db_session.commit()
+            except Exception as e:
+                # Log but don't fail indexing if usage tracking fails
+                task_logger.warning(f"Failed to track chunk indexing usage: {e}")
 
         # Update batch completion and document counts atomically using database coordination
 
@@ -1503,6 +1563,8 @@ def _docprocessing_task(
 
         # FIX: Explicitly clear document batch from memory and force garbage collection
         # This helps prevent memory accumulation across multiple batches
+        # NOTE: Thread-local event loops in embedding threads are cleaned up automatically
+        # via the _cleanup_thread_local decorator in search_nlp_models.py
         del documents
         gc.collect()
 

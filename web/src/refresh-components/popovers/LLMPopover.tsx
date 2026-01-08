@@ -32,6 +32,7 @@ import {
   SvgChevronRight,
   SvgRefreshCw,
 } from "@opal/icons";
+import { IconProps } from "@/components/icons/icons";
 
 interface LLMOption {
   name: string;
@@ -173,7 +174,7 @@ export default function LLMPopover({
       {
         displayName: string;
         options: LLMOption[];
-        icon: { provider: string; modelName?: string };
+        Icon: React.FunctionComponent<IconProps>;
       }
     >();
 
@@ -191,7 +192,6 @@ export default function LLMPopover({
       if (!groups.has(groupKey)) {
         // Build display name
         let displayName: string;
-        let iconProvider: string;
 
         if (isAggregator && option.vendor) {
           // Flattened format: "Amazon Bedrock/Anthropic"
@@ -201,14 +201,12 @@ export default function LLMPopover({
         } else {
           displayName = option.providerDisplayName;
         }
-        // Always use the top-level provider icon (e.g., AWS for Bedrock)
-        iconProvider = provider;
 
         groups.set(groupKey, {
           displayName,
           options: [],
-          // Don't pass modelName for group icon - we want the provider icon (e.g., AWS for Bedrock)
-          icon: { provider: iconProvider },
+          // Get the icon component - use provider for the icon lookup
+          Icon: getProviderIcon(provider),
         });
       }
 
@@ -226,14 +224,20 @@ export default function LLMPopover({
         key,
         displayName: group.displayName,
         options: group.options,
-        icon: group.icon,
+        Icon: group.Icon,
       };
     });
   }, [filteredOptions]);
 
-  // Get display name for the currently selected model
+  // Get display name for the model to show in the button
+  // Use currentModelName prop if provided (e.g., for regenerate showing the model used),
+  // otherwise fall back to the globally selected model
   const currentLlmDisplayName = useMemo(() => {
-    const currentModel = llmManager.currentLlm.modelName;
+    // Only use currentModelName if it's a non-empty string
+    const currentModel =
+      currentModelName && currentModelName.trim()
+        ? currentModelName
+        : llmManager.currentLlm.modelName;
     if (!llmProviders) return currentModel;
 
     for (const provider of llmProviders) {
@@ -245,7 +249,7 @@ export default function LLMPopover({
       }
     }
     return currentModel;
-  }, [llmProviders, llmManager.currentLlm.modelName]);
+  }, [llmProviders, currentModelName, llmManager.currentLlm.modelName]);
 
   // Determine which group the current model belongs to (for auto-expand)
   const currentGroupKey = useMemo(() => {
@@ -404,7 +408,7 @@ export default function LLMPopover({
           {/* Model List with Vendor Groups */}
           <PopoverMenu
             scrollContainerRef={scrollContainerRef}
-            className="w-full"
+            className="w-full max-h-[22.5rem]"
           >
             {isLoadingProviders
               ? [
@@ -459,10 +463,7 @@ export default function LLMPopover({
                               <AccordionTrigger className="flex items-center rounded-08 hover:no-underline hover:bg-background-tint-02 group [&>svg]:hidden w-full py-1 px-1.5">
                                 <div className="flex items-center gap-1 shrink-0">
                                   <div className="flex items-center justify-center size-5 shrink-0">
-                                    {getProviderIcon(
-                                      group.icon.provider,
-                                      group.icon.modelName
-                                    )({ size: 16 })}
+                                    <group.Icon size={16} />
                                   </div>
                                   <Text
                                     secondaryBody

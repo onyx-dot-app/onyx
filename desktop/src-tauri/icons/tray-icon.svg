@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none">
+  <!-- Medium inset/scale for balanced menu bar size -->
+  <g transform="translate(6 6) scale(0.9)">
+    <path
+      fill="black"
+      fill-rule="evenodd"
+      clip-rule="evenodd"
+      d="M28 0 10.869 7.77 28 15.539l17.131-7.77L28 0ZM28 40.461 10.869 48.23 28 56l17.131-7.77L28 40.46ZM48.231 10.869 56 28 48.231 45.131 40.462 28l7.769-17.131ZM15.539 28 7.77 10.869 0 28l7.769 17.131L15.539 28Z"
+    />
+  </g>
+</svg>

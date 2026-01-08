@@ -13,23 +13,10 @@ RUN uv pip install --system --no-cache-dir --upgrade \
         -r /tmp/requirements.txt && \
     rm -rf ~/.cache/uv /tmp/*.txt
 
-# Stage for downloading tokenizers
-FROM base AS tokenizers
-RUN python -c "from transformers import AutoTokenizer; \
-AutoTokenizer.from_pretrained('distilbert-base-uncased'); \
-AutoTokenizer.from_pretrained('mixedbread-ai/mxbai-rerank-xsmall-v1');"
-
-# Stage for downloading Onyx models
-FROM base AS onyx-models
-RUN python -c "from huggingface_hub import snapshot_download; \
-snapshot_download(repo_id='onyx-dot-app/hybrid-intent-token-classifier'); \
-snapshot_download(repo_id='onyx-dot-app/information-content-model');"
-
-# Stage for downloading embedding and reranking models
+# Stage for downloading embedding models
 FROM base AS embedding-models
 RUN python -c "from huggingface_hub import snapshot_download; \
-snapshot_download('nomic-ai/nomic-embed-text-v1'); \
-snapshot_download('mixedbread-ai/mxbai-rerank-xsmall-v1');"
+snapshot_download('nomic-ai/nomic-embed-text-v1');"
 
 # Initialize SentenceTransformer to cache the custom architecture
 RUN python -c "from sentence_transformers import SentenceTransformer; \
@@ -54,8 +41,6 @@ RUN groupadd -g 1001 onyx && \
 # In case the user has volumes mounted to /app/.cache/huggingface that they've downloaded while
 # running Onyx, move the current contents of the cache folder to a temporary location to ensure
 # it's preserved in order to combine with the user's cache contents
-COPY --chown=onyx:onyx --from=tokenizers /app/.cache/huggingface /app/.cache/temp_huggingface
-COPY --chown=onyx:onyx --from=onyx-models /app/.cache/huggingface /app/.cache/temp_huggingface
 COPY --chown=onyx:onyx --from=embedding-models /app/.cache/huggingface /app/.cache/temp_huggingface
 
 WORKDIR /app

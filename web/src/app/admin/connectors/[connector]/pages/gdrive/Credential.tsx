@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { useSWRConfig } from "swr";
 import * as Yup from "yup";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { adminDeleteCredential } from "@/lib/credential";
 import { setupGoogleDriveOAuth } from "@/lib/googleDrive";
 import {
@@ -645,7 +646,7 @@ export const DriveAuthSection = ({
               });
 
               if (authUrl) {
-                router.push(authUrl);
+                router.push(authUrl as Route);
               } else {
                 setPopup({
                   message: errorMsg,

@@ -502,11 +502,11 @@ export default function MCPAuthenticationModal({
 
                       {/* Info Text */}
                       <div className="flex flex-col gap-2">
-                        <Text text03 secondaryBody>
+                        <Text as="p" text03 secondaryBody>
                           Client ID and secret are optional if the server
                           connection supports Dynamic Client Registration (DCR).
                         </Text>
-                        <Text text03 secondaryBody>
+                        <Text as="p" text03 secondaryBody>
                           If your server does not support DCR, you need register
                           your Onyx instance with the server provider to obtain
                           these credentials first. Make sure to grant Onyx
@@ -516,6 +516,7 @@ export default function MCPAuthenticationModal({
                         {/* Redirect URI */}
                         <div className="flex items-center gap-1 w-full">
                           <Text
+                            as="p"
                             text03
                             secondaryBody
                             className="whitespace-nowrap"
@@ -527,6 +528,7 @@ export default function MCPAuthenticationModal({
                             :
                           </Text>
                           <Text
+                            as="p"
                             text04
                             className="font-mono text-[12px] leading-[16px] truncate"
                           >

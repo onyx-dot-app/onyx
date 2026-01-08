@@ -3,19 +3,18 @@ from collections import defaultdict
 from typing import Any
 
 import onyx.tracing.framework._error_tracing as _error_tracing
-from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.models import ChatMessageSimple
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import SectionEnd
+from onyx.tools.interface import Tool
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tools.models import OpenURLToolOverrideKwargs
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
 from onyx.tools.models import WebSearchToolOverrideKwargs
-from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -27,13 +26,22 @@ from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 logger = setup_logger()
 
 QUERIES_FIELD = "queries"
+URLS_FIELD = "urls"
+
+# Mapping of tool name to the field that should be merged when multiple calls exist
+MERGEABLE_TOOL_FIELDS: dict[str, str] = {
+    SearchTool.NAME: QUERIES_FIELD,
+    WebSearchTool.NAME: QUERIES_FIELD,
+    OpenURLTool.NAME: URLS_FIELD,
+}
 
 
 def _merge_tool_calls(tool_calls: list[ToolCallKickoff]) -> list[ToolCallKickoff]:
-    """Merge multiple tool calls for SearchTool or WebSearchTool into a single call.
+    """Merge multiple tool calls for SearchTool, WebSearchTool, or OpenURLTool into a single call.
 
     For SearchTool (internal_search) and WebSearchTool (web_search), if there are
     multiple calls, their queries are merged into a single tool call.
+    For OpenURLTool (open_url), multiple calls have their urls merged.
     Other tool calls are left unchanged.
 
     Args:
@@ -42,9 +50,6 @@ def _merge_tool_calls(tool_calls: list[ToolCallKickoff]) -> list[ToolCallKickoff
     Returns:
         List of merged tool calls
     """
-    # Tool names that support query merging
-    MERGEABLE_TOOLS = {SearchTool.NAME, WebSearchTool.NAME}
-
     # Group tool calls by tool name
     tool_calls_by_name: dict[str, list[ToolCallKickoff]] = defaultdict(list)
     merged_calls: list[ToolCallKickoff] = []
@@ -54,28 +59,29 @@ def _merge_tool_calls(tool_calls: list[ToolCallKickoff]) -> list[ToolCallKickoff
 
     # Process each tool name group
     for tool_name, calls in tool_calls_by_name.items():
-        if tool_name in MERGEABLE_TOOLS and len(calls) > 1:
-            # Merge queries from all calls
-            all_queries: list[str] = []
-            for call in calls:
-                queries = call.tool_args.get(QUERIES_FIELD, [])
-                if isinstance(queries, list):
-                    all_queries.extend(queries)
-                elif queries:
-                    # Handle case where it might be a single string
-                    all_queries.append(str(queries))
+        if tool_name in MERGEABLE_TOOL_FIELDS and len(calls) > 1:
+            merge_field = MERGEABLE_TOOL_FIELDS[tool_name]
 
-            # Create a merged tool call using the first call's ID and merging queries
+            # Merge field values from all calls
+            all_values: list[str] = []
+            for call in calls:
+                values = call.tool_args.get(merge_field, [])
+                if isinstance(values, list):
+                    all_values.extend(values)
+                elif values:
+                    # Handle case where it might be a single string
+                    all_values.append(str(values))
+
+            # Create a merged tool call using the first call's ID and merging the field
             merged_args = calls[0].tool_args.copy()
-            merged_args[QUERIES_FIELD] = all_queries
+            merged_args[merge_field] = all_values
 
             merged_call = ToolCallKickoff(
                 tool_call_id=calls[0].tool_call_id,  # Use first call's ID
                 tool_name=tool_name,
                 tool_args=merged_args,
-                turn_index=calls[0].turn_index,
-                # Use first call's tab_index since merged calls become a single call
-                tab_index=calls[0].tab_index,
+                # Use first call's placement since merged calls become a single call
+                placement=calls[0].placement,
             )
             merged_calls.append(merged_call)
         else:
@@ -94,16 +100,12 @@ def _run_single_tool(
 
     This function is designed to be run in parallel via run_functions_tuples_in_parallel.
     """
-    turn_index = tool_call.turn_index
-    tab_index = tool_call.tab_index
-
     with function_span(tool.name) as span_fn:
         span_fn.span_data.input = str(tool_call.tool_args)
         try:
             tool_response = tool.run(
-                turn_index=turn_index,
+                placement=tool_call.placement,
                 override_kwargs=override_kwargs,
-                tab_index=tab_index,
                 **tool_call.tool_args,
             )
             span_fn.span_data.output = tool_response.llm_facing_response
@@ -111,7 +113,7 @@ def _run_single_tool(
             logger.error(f"Error running tool {tool.name}: {e}")
             tool_response = ToolResponse(
                 rich_response=None,
-                llm_facing_response=str(e),
+                llm_facing_response="Tool execution failed with: " + str(e),
             )
             _error_tracing.attach_error_to_current_span(
                 SpanError(
@@ -127,8 +129,7 @@ def _run_single_tool(
     # Emit SectionEnd after tool completes (success or failure)
     tool.emitter.emit(
         Packet(
-            turn_index=turn_index,
-            tab_index=tab_index,
+            placement=tool_call.placement,
             obj=SectionEnd(),
         )
     )
@@ -146,13 +147,13 @@ def run_tool_calls(
     memories: list[str] | None,
     user_info: str | None,
     citation_mapping: dict[int, str],
-    citation_processor: DynamicCitationProcessor,
+    next_citation_num: int,
     # Skip query expansion for repeat search tool calls
     skip_search_query_expansion: bool = False,
 ) -> tuple[list[ToolResponse], dict[int, str]]:
     """Run multiple tool calls in parallel and update citation mappings.
 
-    Merges tool calls for SearchTool and WebSearchTool before execution.
+    Merges tool calls for SearchTool, WebSearchTool, and OpenURLTool before execution.
     All tools are executed in parallel, and citation mappings are updated
     from search tool responses.
 
@@ -163,7 +164,7 @@ def run_tool_calls(
         memories: User memories, if available
         user_info: User information string, if available
         citation_mapping: Current citation number to URL mapping
-        citation_processor: Processor for managing citations
+        next_citation_num: Next citation number to use
         skip_search_query_expansion: Whether to skip query expansion for search tools
 
     Returns:
@@ -180,7 +181,7 @@ def run_tool_calls(
     tools_by_name = {tool.name: tool for tool in tools}
 
     # Get starting citation number from citation processor to avoid conflicts with project files
-    starting_citation_num = citation_processor.get_next_citation_number()
+    starting_citation_num = next_citation_num
 
     # Prepare minimal history for SearchTool (computed once, shared by all)
     minimal_history = [
@@ -210,7 +211,7 @@ def run_tool_calls(
         tool = tools_by_name[tool_call.tool_name]
 
         # Emit the tool start packet before running the tool
-        tool.emit_start(turn_index=tool_call.turn_index, tab_index=tool_call.tab_index)
+        tool.emit_start(placement=tool_call.placement)
 
         override_kwargs: (
             SearchToolOverrideKwargs

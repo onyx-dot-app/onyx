@@ -7,7 +7,7 @@ import useSWR, { preload } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { checkUserIsNoAuthUser, logout } from "@/lib/user";
 import { useUser } from "@/components/user/UserProvider";
-import { Avatar } from "@/components/ui/avatar";
+import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import Text from "@/refresh-components/texts/Text";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import {
@@ -21,7 +21,13 @@ import { cn } from "@/lib/utils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import UserSettings from "@/sections/sidebar/Settings/UserSettings";
-import { SvgBell, SvgLogOut, SvgUser, SvgX } from "@opal/icons";
+import {
+  SvgBell,
+  SvgExternalLink,
+  SvgLogOut,
+  SvgUser,
+  SvgX,
+} from "@opal/icons";
 
 function getDisplayName(email?: string, personalName?: string): string {
   // Prioritize custom personal name if set
@@ -104,6 +110,13 @@ function SettingsPopover({
                 : ""
             }`}
           </LineItem>,
+          <LineItem
+            key="help-faq"
+            icon={SvgExternalLink}
+            onClick={() => window.open("https://docs.onyx.app", "_blank")}
+          >
+            Help & FAQ
+          </LineItem>,
           null,
           showLogout && (
             <LineItem
@@ -134,7 +147,9 @@ function NotificationsPopover({ onClose }: NotificationsPopoverProps) {
   return (
     <div className="w-[20rem] h-[30rem] flex flex-col">
       <div className="flex flex-row justify-between items-center p-4">
-        <Text headingH2>Notifications</Text>
+        <Text as="p" headingH2>
+          Notifications
+        </Text>
         <SvgX
           className="stroke-text-05 w-[1.2rem] h-[1.2rem] hover:stroke-text-04 cursor-pointer"
           onClick={onClose}
@@ -144,12 +159,14 @@ function NotificationsPopover({ onClose }: NotificationsPopoverProps) {
       <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 flex flex-col gap-2 items-center">
         {!notifications || notifications.length === 0 ? (
           <div className="w-full h-full flex flex-col justify-center items-center">
-            <Text>No notifications</Text>
+            <Text as="p">No notifications</Text>
           </div>
         ) : (
           <div className="w-full flex flex-col gap-2">
             {notifications?.map((notification, index) => (
-              <Text key={index}>{notification.notif_type}</Text>
+              <Text as="p" key={index}>
+                {notification.notif_type}
+              </Text>
             ))}
           </div>
         )}
@@ -195,19 +212,19 @@ export default function Settings({ folded }: SettingsProps) {
           <div id="onyx-user-dropdown">
             <SidebarTab
               leftIcon={({ className }) => (
-                <Avatar
+                <InputAvatar
                   className={cn(
                     "flex items-center justify-center bg-background-neutral-inverted-00",
                     className,
                     "w-5 h-5"
                   )}
                 >
-                  <Text inverted secondaryBody>
+                  <Text as="p" inverted secondaryBody>
                     {displayName[0]?.toUpperCase()}
                   </Text>
-                </Avatar>
+                </InputAvatar>
               )}
-              active={!!popupState}
+              transient={!!popupState}
               folded={folded}
             >
               {displayName}

@@ -115,17 +115,17 @@ function SourceTileTooltipWrapper({
         </TooltipTrigger>
         <TooltipContent side="top" className="max-w-sm">
           {existingFederatedConnector && !hasExistingSlackCredentials ? (
-            <Text textLight05 secondaryBody>
+            <Text as="p" textLight05 secondaryBody>
               <strong>Federated connector already configured.</strong> Click to
               edit the existing connector.
             </Text>
           ) : hasExistingSlackCredentials ? (
-            <Text textLight05 secondaryBody>
+            <Text as="p" textLight05 secondaryBody>
               <strong>Existing Slack credentials found.</strong> Click to manage
               the traditional Slack connector.
             </Text>
           ) : sourceMetadata.federated ? (
-            <Text textLight05 secondaryBody>
+            <Text as="p" textLight05 secondaryBody>
               {sourceMetadata.federatedTooltip ? (
                 sourceMetadata.federatedTooltip
               ) : (
@@ -290,7 +290,9 @@ export default function Page() {
 
       {dedupedPopular.length > 0 && (
         <div className="pt-8">
-          <Text headingH3>Popular</Text>
+          <Text as="p" headingH3>
+            Popular
+          </Text>
           <div className="flex flex-wrap gap-4 p-4">
             {dedupedPopular.map((source) => (
               <SourceTileTooltipWrapper
@@ -309,7 +311,9 @@ export default function Page() {
         .filter(([_, sources]) => sources.length > 0)
         .map(([category, sources], categoryInd) => (
           <div key={category} className="pt-8">
-            <Text headingH3>{category}</Text>
+            <Text as="p" headingH3>
+              {category}
+            </Text>
             <div className="flex flex-wrap gap-4 p-4">
               {sources.map((source, sourceInd) => (
                 <SourceTileTooltipWrapper

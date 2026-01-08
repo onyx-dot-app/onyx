@@ -2,13 +2,19 @@ from onyx.prompts.constants import GENERAL_SEP_PAT
 
 # ruff: noqa: E501, W605 start
 
+DATETIME_REPLACEMENT_PAT = "{{CURRENT_DATETIME}}"
+CITATION_GUIDANCE_REPLACEMENT_PAT = "{{CITATION_GUIDANCE}}"
+ALT_DATETIME_REPLACEMENT_PAT = "[[CURRENT_DATETIME]]"
+ALT_CITATION_GUIDANCE_REPLACEMENT_PAT = "[[CITATION_GUIDANCE]]"
+
+
 # Note this uses a string pattern replacement so the user can also include it in their custom prompts. Keeps the replacement logic simple
 # This is editable by the user in the admin UI.
 # The first line is intended to help guide the general feel/behavior of the system.
-DEFAULT_SYSTEM_PROMPT = """
+DEFAULT_SYSTEM_PROMPT = f"""
 You are a highly capable, thoughtful, and precise assistant. Your goal is to deeply understand the user's intent, ask clarifying questions when needed, think step-by-step through complex problems, provide clear and accurate answers, and proactively anticipate helpful follow-up information. Always prioritize being truthful, nuanced, insightful, and efficient.
 
-The current date is [[CURRENT_DATETIME]].[[CITATION_GUIDANCE]]
+The current date is {DATETIME_REPLACEMENT_PAT}.{CITATION_GUIDANCE_REPLACEMENT_PAT}
 
 # Response Style
 You use different text styles, bolding, emojis (sparingly), block quotes, and other formatting to make your responses more readable and engaging.
@@ -45,11 +51,15 @@ Remember to provide inline citations in the format [1], [2], [3], etc. based on 
 Do not acknowledge this hint in your response.
 """.strip()
 
+LAST_CYCLE_CITATION_REMINDER = """
+You are on your last cycle and no longer have any tool calls available. You must answer the query now to the best of your ability.
+""".strip()
+
 
 # Reminder message that replaces the usual reminder if web_search was the last tool call
 OPEN_URL_REMINDER = """
 Remember that after using web_search, you are encouraged to open some pages to get more context unless the query is completely answered by the snippets.
-Open the pages that look the most promising and high quality by calling the open_urls tool with an array of URLs. Open as many as you want.
+Open the pages that look the most promising and high quality by calling the open_url tool with an array of URLs. Open as many as you want.
 
 If you do have enough to answer, remember to provide INLINE citations using the "document" field in the format [1], [2], [3], etc.
 

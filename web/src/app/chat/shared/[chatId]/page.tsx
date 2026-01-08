@@ -1,10 +1,10 @@
 import { fetchSS } from "@/lib/utilsSS";
 import { redirect } from "next/navigation";
+import type { Route } from "next";
 import { requireAuth } from "@/lib/auth/requireAuth";
 import SharedChatDisplay from "@/app/chat/shared/[chatId]/SharedChatDisplay";
-import AppPageLayout from "@/layouts/AppPageLayout";
+import * as AppLayouts from "@/layouts/app-layouts";
 import { Persona } from "@/app/admin/assistants/interfaces";
-import { fetchHeaderDataSS } from "@/lib/headers/fetchHeaderDataSS";
 
 // This is used for rendering a persona in the shared chat display
 export function constructMiniFiedPersona(name: string, id: number): Persona {
@@ -27,6 +27,7 @@ export function constructMiniFiedPersona(name: string, id: number): Persona {
     system_prompt: null,
     task_prompt: null,
     datetime_aware: true,
+    replace_base_system_prompt: false,
   };
 }
 
@@ -49,7 +50,7 @@ export default async function Page(props: PageProps) {
 
   const authResult = await requireAuth();
   if (authResult.redirect) {
-    return redirect(authResult.redirect);
+    return redirect(authResult.redirect as Route);
   }
 
   // Catch cases where backend is completely unreachable
@@ -61,11 +62,9 @@ export default async function Page(props: PageProps) {
     chatSession?.persona_id ?? 0
   );
 
-  const headerData = await fetchHeaderDataSS();
-
   return (
-    <AppPageLayout {...headerData}>
+    <AppLayouts.Root>
       <SharedChatDisplay chatSession={chatSession} persona={persona} />
-    </AppPageLayout>
+    </AppLayouts.Root>
   );
 }

@@ -1730,12 +1730,12 @@ def get_mcp_server_db_tools(
 
 
 @admin_router.post("/servers/create", response_model=MCPServerCreateResponse)
-def upsert_mcp_server_with_tools(
+def upsert_mcp_server(
     request: MCPToolCreateRequest,
     db_session: Session = Depends(get_session),
     user: User | None = Depends(current_curator_or_admin_user),
 ) -> MCPServerCreateResponse:
-    """Create or update an MCP server and associated tools"""
+    """Create or update an MCP server (no tools yet)"""
 
     # Validate auth_performer for non-none auth types
     if request.auth_type != MCPAuthenticationType.NONE and not request.auth_performer:
@@ -1851,14 +1851,8 @@ def create_mcp_server_simple(
 ) -> MCPServer:
     """Create MCP server with minimal information - auth to be configured later"""
 
-    if not user:
-        raise HTTPException(
-            status_code=401,
-            detail="Must be logged in as a curator or admin to create MCP server",
-        )
-
     mcp_server = create_mcp_server__no_commit(
-        owner_email=user.email,
+        owner_email=user.email if user else "",
         name=request.name,
         description=request.description,
         server_url=request.server_url,

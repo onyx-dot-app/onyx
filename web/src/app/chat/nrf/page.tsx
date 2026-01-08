@@ -1,20 +1,20 @@
 import { unstable_noStore as noStore } from "next/cache";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
+import { cookies } from "next/headers";
 import NRFPage from "./NRFPage";
 import { NRFPreferencesProvider } from "../../../components/context/NRFPreferencesContext";
-import AppPageLayout from "@/layouts/AppPageLayout";
-import { fetchHeaderDataSS } from "@/lib/headers/fetchHeaderDataSS";
+import * as AppLayouts from "@/layouts/app-layouts";
 
 export default async function Page() {
   noStore();
-  const headerData = await fetchHeaderDataSS();
+  const requestCookies = await cookies();
 
   return (
-    <AppPageLayout {...headerData} className="h-full w-full" hideShareChat>
+    <AppLayouts.Root>
       <InstantSSRAutoRefresh />
       <NRFPreferencesProvider>
         <NRFPage />
       </NRFPreferencesProvider>
-    </AppPageLayout>
+    </AppLayouts.Root>
   );
 }

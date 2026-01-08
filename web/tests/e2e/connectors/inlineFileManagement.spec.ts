@@ -69,7 +69,7 @@ test.describe("InlineFileManagement", () => {
   });
 
   test("should display files section on connector page", async ({ page }) => {
-    await page.goto(`http://localhost:3000/admin/connector/${testCcPairId}`);
+    await page.goto(`/admin/connector/${testCcPairId}`);
     await page.waitForLoadState("networkidle");
 
     await expect(page.getByText(/Files \(/)).toBeVisible({ timeout: 10000 });
@@ -77,7 +77,7 @@ test.describe("InlineFileManagement", () => {
   });
 
   test("should enter and exit edit mode", async ({ page }) => {
-    await page.goto(`http://localhost:3000/admin/connector/${testCcPairId}`);
+    await page.goto(`/admin/connector/${testCcPairId}`);
     await page.waitForLoadState("networkidle");
 
     await page.getByRole("button", { name: /edit/i }).click();
@@ -93,7 +93,7 @@ test.describe("InlineFileManagement", () => {
   });
 
   test("should add files and show them as pending", async ({ page }) => {
-    await page.goto(`http://localhost:3000/admin/connector/${testCcPairId}`);
+    await page.goto(`/admin/connector/${testCcPairId}`);
     await page.waitForLoadState("networkidle");
 
     await page.getByRole("button", { name: /edit/i }).click();
@@ -109,7 +109,7 @@ test.describe("InlineFileManagement", () => {
   });
 
   test("should remove pending file before saving", async ({ page }) => {
-    await page.goto(`http://localhost:3000/admin/connector/${testCcPairId}`);
+    await page.goto(`/admin/connector/${testCcPairId}`);
     await page.waitForLoadState("networkidle");
 
     await page.getByRole("button", { name: /edit/i }).click();
@@ -125,7 +125,7 @@ test.describe("InlineFileManagement", () => {
   });
 
   test("should show confirmation modal when saving", async ({ page }) => {
-    await page.goto(`http://localhost:3000/admin/connector/${testCcPairId}`);
+    await page.goto(`/admin/connector/${testCcPairId}`);
     await page.waitForLoadState("networkidle");
 
     await page.getByRole("button", { name: /edit/i }).click();
@@ -154,7 +154,7 @@ test.describe("InlineFileManagement", () => {
   });
 
   test("should cancel edit mode and discard changes", async ({ page }) => {
-    await page.goto(`http://localhost:3000/admin/connector/${testCcPairId}`);
+    await page.goto(`/admin/connector/${testCcPairId}`);
     await page.waitForLoadState("networkidle");
 
     await page.getByRole("button", { name: /edit/i }).click();

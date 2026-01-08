@@ -292,6 +292,68 @@
   --theme-primary-05: var(--onyx-ink-95);
   --theme-primary-04: var(--onyx-ink-90);
 
+  /* Theme / Gradient */
+  --theme-gradient-05: var(--tint-50);
+  --theme-gradient-00: var(--grey-00);
+
+  /* Theme / Red */
+  --theme-red-05: var(--red-50);
+  --theme-red-04: var(--red-50);
+  --theme-red-02: var(--red-20);
+  --theme-red-01: var(--red-05);
+
+  /* Theme / Orange */
+  --theme-orange-05: var(--orange-55);
+  --theme-orange-04: var(--orange-50);
+  --theme-orange-02: var(--orange-20);
+  --theme-orange-01: var(--orange-05);
+
+  /* Theme / Amber */
+  --theme-amber-05: var(--neon-amber);
+  --theme-amber-04: var(--neon-amber);
+  --theme-amber-02: var(--neon-amber-30);
+  --theme-amber-01: var(--neon-amber-30);
+
+  /* Theme / Yellow */
+  --theme-yellow-05: var(--neon-yellow);
+  --theme-yellow-02: var(--neon-yellow-30);
+  --theme-yellow-01: var(--neon-yellow-30);
+
+  /* Theme / Green */
+  --theme-green-05: var(--green-60);
+  --theme-green-02: var(--green-20);
+  --theme-green-01: var(--green-05);
+
+  /* Theme / Lime */
+  --theme-lime-05: var(--neon-lime-60);
+  --theme-lime-02: var(--neon-lime-30);
+  --theme-lime-01: var(--neon-lime-30);
+
+  /* Theme / Cyan */
+  --theme-cyan-05: var(--neon-cyan);
+  --theme-cyan-02: var(--neon-cyan-30);
+  --theme-cyan-01: var(--neon-cyan-30);
+
+  /* Theme / Sky */
+  --theme-sky-05: var(--neon-sky);
+  --theme-sky-02: var(--neon-sky-30);
+  --theme-sky-01: var(--neon-sky-30);
+
+  /* Theme / Blue */
+  --theme-blue-05: var(--blue-50);
+  --theme-blue-02: var(--blue-20);
+  --theme-blue-01: var(--blue-05);
+
+  /* Theme / Purple */
+  --theme-purple-05: var(--purple-50);
+  --theme-purple-02: var(--purple-20);
+  --theme-purple-01: var(--purple-05);
+
+  /* Theme / Magenta */
+  --theme-magenta-05: var(--neon-magenta);
+  --theme-magenta-02: var(--neon-magenta-30);
+  --theme-magenta-01: var(--neon-magenta-30);
+
   /* Status */
   --status-success-05: var(--green-50);
   --status-success-02: var(--green-20);
@@ -323,6 +385,7 @@
   --action-link-03: var(--blue-20);
   --action-link-02: var(--blue-10);
   --action-link-01: var(--blue-05);
+  --action-link-00: var(--blue-01);
   --action-danger-06: var(--red-60);
   --action-danger-05: var(--red-50);
   --action-danger-04: var(--red-40);
@@ -425,6 +488,68 @@
   --theme-primary-05: var(--onyx-chrome-10);
   --theme-primary-04: var(--onyx-chrome-20);
 
+  /* Theme / Gradient */
+  --theme-gradient-05: var(--grey-100);
+  --theme-gradient-00: var(--grey-00);
+
+  /* Theme / Red */
+  --theme-red-05: var(--red-45);
+  --theme-red-04: var(--red-50);
+  --theme-red-02: var(--red-80);
+  --theme-red-01: var(--red-90);
+
+  /* Theme / Orange */
+  --theme-orange-05: var(--orange-40);
+  --theme-orange-04: var(--orange-50);
+  --theme-orange-02: var(--orange-80);
+  --theme-orange-01: var(--orange-90);
+
+  /* Theme / Amber */
+  --theme-amber-05: var(--neon-amber);
+  --theme-amber-04: var(--neon-amber-60);
+  --theme-amber-02: var(--neon-amber-60);
+  --theme-amber-01: var(--neon-amber-60);
+
+  /* Theme / Yellow */
+  --theme-yellow-05: var(--neon-yellow);
+  --theme-yellow-02: var(--neon-yellow-60);
+  --theme-yellow-01: var(--neon-yellow-60);
+
+  /* Theme / Green */
+  --theme-green-05: var(--green-50);
+  --theme-green-02: var(--green-80);
+  --theme-green-01: var(--green-90);
+
+  /* Theme / Lime */
+  --theme-lime-05: var(--neon-lime);
+  --theme-lime-02: var(--neon-lime-60);
+  --theme-lime-01: var(--neon-lime-60);
+
+  /* Theme / Cyan */
+  --theme-cyan-05: var(--neon-cyan);
+  --theme-cyan-02: var(--neon-cyan-60);
+  --theme-cyan-01: var(--neon-cyan-60);
+
+  /* Theme / Sky */
+  --theme-sky-05: var(--neon-sky);
+  --theme-sky-02: var(--neon-sky-60);
+  --theme-sky-01: var(--neon-sky-60);
+
+  /* Theme / Blue */
+  --theme-blue-05: var(--blue-45);
+  --theme-blue-02: var(--blue-80);
+  --theme-blue-01: var(--blue-90);
+
+  /* Theme / Purple */
+  --theme-purple-05: var(--purple-45);
+  --theme-purple-02: var(--purple-80);
+  --theme-purple-01: var(--purple-90);
+
+  /* Theme / Magenta */
+  --theme-magenta-05: var(--neon-magenta);
+  --theme-magenta-02: var(--neon-magenta-60);
+  --theme-magenta-01: var(--neon-magenta-60);
+
   /* Status */
   --status-success-05: var(--green-50);
   --status-success-02: var(--green-80);
@@ -456,6 +581,7 @@
   --action-link-03: var(--blue-80);
   --action-link-02: var(--blue-85);
   --action-link-01: var(--blue-90);
+  --action-link-00: var(--blue-95);
   --action-danger-06: var(--red-40);
   --action-danger-05: var(--red-50);
   --action-danger-04: var(--red-60);

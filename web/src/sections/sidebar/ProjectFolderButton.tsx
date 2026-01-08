@@ -33,11 +33,12 @@ import {
   SvgMoreHorizontal,
   SvgTrash,
 } from "@opal/icons";
-interface ProjectFolderProps {
+
+export interface ProjectFolderButtonProps {
   project: Project;
 }
 
-function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
+const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
   const route = useAppRouter();
   const [open, setOpen] = useState(false);
   const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] =
@@ -152,10 +153,9 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
                 onClick={noProp(handleIconClick)}
               />
             )}
-            active={
-              typeof activeSidebar === "object" &&
-              activeSidebar.type === "project" &&
-              activeSidebar.id === String(project.id)
+            transient={
+              activeSidebar.isProject() &&
+              activeSidebar.getId() === String(project.id)
             }
             onClick={noProp(handleTextClick)}
             focused={isEditing}
@@ -206,7 +206,7 @@ function ProjectFolderButtonInner({ project }: ProjectFolderProps) {
         ))}
     </div>
   );
-}
+});
+ProjectFolderButton.displayName = "ProjectFolderButton";
 
-const ProjectFolderButton = memo(ProjectFolderButtonInner);
 export default ProjectFolderButton;

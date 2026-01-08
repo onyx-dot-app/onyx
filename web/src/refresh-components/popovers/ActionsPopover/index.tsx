@@ -25,7 +25,7 @@ import MCPApiKeyModal from "@/components/chat/MCPApiKeyModal";
 import { ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
-import { useAvailableTools } from "@/lib/hooks/useAvailableTools";
+import { useAvailableTools } from "@/hooks/useAvailableTools";
 import { useCCPairs } from "@/lib/hooks/useCCPairs";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";

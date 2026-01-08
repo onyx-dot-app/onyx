@@ -2,7 +2,7 @@
 
 import React, { memo } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import { usePinnedAgentsWithDetails } from "@/hooks/useAgents";
+import { usePinnedAgents } from "@/hooks/useAgents";
 import { useAppRouter } from "@/hooks/appNavigation";
 import { cn, noProp } from "@/lib/utils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
@@ -44,14 +44,14 @@ function SortableItem({ id, children }: SortableItemProps) {
   );
 }
 
-interface AgentButtonProps {
+export interface AgentButtonProps {
   agent: MinimalPersonaSnapshot;
 }
 
-function AgentButtonInner({ agent }: AgentButtonProps) {
+const AgentButton = memo(({ agent }: AgentButtonProps) => {
   const route = useAppRouter();
   const activeSidebarTab = useAppFocus();
-  const { pinnedAgents, togglePinnedAgent } = usePinnedAgentsWithDetails();
+  const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const pinned = pinnedAgents.some(
     (pinnedAgent) => pinnedAgent.id === agent.id
   );
@@ -63,10 +63,9 @@ function AgentButtonInner({ agent }: AgentButtonProps) {
           key={agent.id}
           leftIcon={() => <AgentAvatar agent={agent} />}
           onClick={() => route({ agentId: agent.id })}
-          active={
-            typeof activeSidebarTab === "object" &&
-            activeSidebarTab.type === "agent" &&
-            activeSidebarTab.id === String(agent.id)
+          transient={
+            activeSidebarTab.isAgent() &&
+            activeSidebarTab.getId() === String(agent.id)
           }
           rightChildren={
             <IconButton
@@ -83,7 +82,7 @@ function AgentButtonInner({ agent }: AgentButtonProps) {
       </div>
     </SortableItem>
   );
-}
+});
+AgentButton.displayName = "AgentButton";
 
-const AgentButton = memo(AgentButtonInner);
 export default AgentButton;

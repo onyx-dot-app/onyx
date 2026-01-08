@@ -6,7 +6,7 @@ from onyx.tools.tool_implementations.web_search.models import WEB_SEARCH_PREFIX
 from onyx.tools.tool_implementations.web_search.models import WebSearchResult
 
 
-def truncate_search_result_content(content: str, max_chars: int = 20000) -> str:
+def truncate_search_result_content(content: str, max_chars: int = 15000) -> str:
     """Truncate search result content to a maximum number of characters"""
     if len(content) <= max_chars:
         return content

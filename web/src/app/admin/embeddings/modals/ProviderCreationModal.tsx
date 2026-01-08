@@ -202,7 +202,7 @@ export default function ProviderCreationModal({
           >
             {({ isSubmitting, handleSubmit, setFieldValue }) => (
               <Form onSubmit={handleSubmit} className="space-y-4">
-                <Text>
+                <Text as="p">
                   You are setting the credentials for this provider. To access
                   this information, follow the instructions{" "}
                   <a

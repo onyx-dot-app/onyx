@@ -96,7 +96,7 @@ export default function AttachmentButton({
       </div>
 
       <div className="flex flex-row self-stretch justify-end items-center gap-2 p-1 shrink-0">
-        <Text secondaryBody text03>
+        <Text as="p" secondaryBody text03>
           {rightText}
         </Text>
         {onDelete && (

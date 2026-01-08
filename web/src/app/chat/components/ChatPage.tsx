@@ -15,7 +15,9 @@ import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import Dropzone from "react-dropzone";
-import ChatInputBar from "@/app/chat/components/input/ChatInputBar";
+import ChatInputBar, {
+  ChatInputBarHandle,
+} from "@/app/chat/components/input/ChatInputBar";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useCCPairs } from "@/lib/hooks/useCCPairs";
 import { useTags } from "@/lib/hooks/useTags";
@@ -41,7 +43,7 @@ import { useDeepResearchToggle } from "@/app/chat/hooks/useDeepResearchToggle";
 import { useIsDefaultAgent } from "@/app/chat/hooks/useIsDefaultAgent";
 import {
   useChatSessionStore,
-  useChatPageLayout,
+  useCurrentMessageHistory,
 } from "@/app/chat/stores/useChatSessionStore";
 import {
   useCurrentChatState,
@@ -61,20 +63,18 @@ import ProjectChatSessionList from "@/app/chat/components/projects/ProjectChatSe
 import { cn } from "@/lib/utils";
 import Suggestions from "@/sections/Suggestions";
 import OnboardingFlow from "@/refresh-components/onboarding/OnboardingFlow";
-import { useOnboardingState } from "@/refresh-components/onboarding/useOnboardingState";
 import { OnboardingStep } from "@/refresh-components/onboarding/types";
-import AppPageLayout from "@/layouts/AppPageLayout";
-import { HeaderData } from "@/lib/headers/fetchHeaderDataSS";
+import { useShowOnboarding } from "@/hooks/useShowOnboarding";
+import * as AppLayouts from "@/layouts/app-layouts";
 import { SvgFileText } from "@opal/icons";
 import Spacer from "@/refresh-components/Spacer";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 
 export interface ChatPageProps {
   firstMessage?: string;
-  headerData: HeaderData;
 }
 
-export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
+export default function ChatPage({ firstMessage }: ChatPageProps) {
   // Performance tracking
   // Keeping this here in case we need to track down slow renders in the future
   // const renderCount = useRef(0);
@@ -96,8 +96,13 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
   const searchParams = useSearchParams();
 
   // Use SWR hooks for data fetching
-  const { refreshChatSessions, currentChatSession, currentChatSessionId } =
-    useChatSessions();
+  const {
+    chatSessions,
+    refreshChatSessions,
+    currentChatSession,
+    currentChatSessionId,
+    isLoading: isLoadingChatSessions,
+  } = useChatSessions();
   const { ccPairs } = useCCPairs();
   const { tags } = useTags();
   const { documentSets } = useDocumentSets();
@@ -151,7 +156,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
       onSubmit({
         message,
         currentMessageFiles,
-        useAgentSearch: deepResearchEnabled,
+        deepResearch: deepResearchEnabled,
       });
     }
   }
@@ -179,32 +184,27 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
 
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-
-  // Initialize onboarding state
-  const {
-    state: onboardingState,
-    actions: onboardingActions,
-    llmDescriptors,
-    isLoading: isLoadingOnboarding,
-  } = useOnboardingState(liveAssistant);
 
   const llmManager = useLlmManager(
     currentChatSession ?? undefined,
     liveAssistant
   );
 
-  // On first render, open onboarding if there are no configured LLM providers.
-  // Wait until providers have loaded before making this decision.
-  const hasCheckedOnboarding = useRef(false);
-  useEffect(() => {
-    // Only check once, and only after data has loaded
-    if (hasCheckedOnboarding.current || llmManager.isLoadingProviders) {
-      return;
-    }
-    hasCheckedOnboarding.current = true;
-    setShowOnboarding(llmManager.hasAnyProvider === false);
-  }, [llmManager.isLoadingProviders, llmManager.hasAnyProvider]);
+  const {
+    showOnboarding,
+    onboardingState,
+    onboardingActions,
+    llmDescriptors,
+    isLoadingOnboarding,
+    finishOnboarding,
+    hideOnboarding,
+  } = useShowOnboarding({
+    liveAssistant,
+    isLoadingProviders: llmManager.isLoadingProviders,
+    hasAnyProvider: llmManager.hasAnyProvider,
+    isLoadingChatSessions,
+    chatSessionsCount: chatSessions.length,
+  });
 
   const noAssistants = liveAssistant === null || liveAssistant === undefined;
 
@@ -254,11 +254,8 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
     }
   }, [lastFailedFiles, setPopup, clearLastFailedFiles]);
 
-  const [message, setMessage] = useState(
-    searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) || ""
-  );
-
   const [projectPanelVisible, setProjectPanelVisible] = useState(true);
+  const chatInputBarRef = useRef<ChatInputBarHandle>(null);
 
   const filterManager = useFilters();
 
@@ -270,37 +267,22 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
   });
 
   const chatUiRef = useRef<ChatUIHandle>(null);
-  const inputRef = useRef<HTMLDivElement>(null);
+  const autoScrollEnabled = user?.preferences?.auto_scroll ?? false;
 
-  const previousHeight = useRef<number>(
-    inputRef.current?.getBoundingClientRect().height!
+  // Handle input bar height changes for scroll adjustment
+  const handleInputHeightChange = useCallback(
+    (delta: number) => {
+      if (autoScrollEnabled && delta > 0) {
+        chatUiRef.current?.scrollBy(delta);
+      }
+    },
+    [autoScrollEnabled]
   );
 
-  function handleInputResize() {
-    setTimeout(() => {
-      if (inputRef.current) {
-        const newHeight: number =
-          inputRef.current?.getBoundingClientRect().height!;
-        const heightDifference = newHeight - previousHeight.current;
-        if (previousHeight.current && heightDifference != 0) {
-          if (autoScrollEnabled) {
-            chatUiRef.current?.scrollBy(Math.max(heightDifference, 0));
-          }
-        }
-        previousHeight.current = newHeight;
-      }
-    }, 100);
-  }
-
-  useEffect(handleInputResize, [message]);
-
   const resetInputBar = useCallback(() => {
-    setMessage("");
+    chatInputBarRef.current?.reset();
     setCurrentMessageFiles([]);
-  }, [setMessage, setCurrentMessageFiles]);
-
-  // handle re-sizing of the text area
-  const textAreaRef = useRef<HTMLTextAreaElement>(null);
+  }, [setCurrentMessageFiles]);
 
   // Add refs needed by useChatSessionController
   const chatSessionIdRef = useRef<string | null>(currentChatSessionId);
@@ -344,7 +326,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
   const updateCurrentDocumentSidebarVisible = useChatSessionStore(
     (state) => state.updateCurrentDocumentSidebarVisible
   );
-  const { messageHistory } = useChatPageLayout();
+  const messageHistory = useCurrentMessageHistory();
 
   const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
     useChatController({
@@ -371,14 +353,12 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
       setCurrentMessageFiles,
       chatSessionIdRef,
       loadedIdSessionRef,
-      textAreaRef,
+      chatInputBarRef,
       isInitialLoad,
       submitOnLoadPerformed,
       refreshChatSessions,
       onSubmit,
     });
-
-  const autoScrollEnabled = user?.preferences?.auto_scroll ?? false;
 
   useSendMessageToParent();
 
@@ -406,7 +386,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
     string | null
   >(null);
 
-  function handleResubmitLastMessage() {
+  const handleResubmitLastMessage = useCallback(() => {
     // Grab the last user-type message
     const lastUserMsg = messageHistory
       .slice()
@@ -424,10 +404,16 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
     onSubmit({
       message: lastUserMsg.message,
       currentMessageFiles: currentMessageFiles,
-      useAgentSearch: deepResearchEnabled,
+      deepResearch: deepResearchEnabled,
       messageIdToResend: lastUserMsg.messageId,
     });
-  }
+  }, [
+    messageHistory,
+    setPopup,
+    onSubmit,
+    currentMessageFiles,
+    deepResearchEnabled,
+  ]);
 
   const toggleDocumentSidebar = useCallback(() => {
     if (!documentSidebarVisible) {
@@ -441,14 +427,25 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
     redirect("/auth/login");
   }
 
-  const handleChatInputSubmit = useCallback(() => {
-    onSubmit({
-      message: message,
-      currentMessageFiles: currentMessageFiles,
-      useAgentSearch: deepResearchEnabled,
-    });
-    setShowOnboarding(false);
-  }, [message, onSubmit, currentMessageFiles, deepResearchEnabled]);
+  const handleChatInputSubmit = useCallback(
+    (message: string) => {
+      onSubmit({
+        message,
+        currentMessageFiles: currentMessageFiles,
+        deepResearch: deepResearchEnabled,
+      });
+      if (showOnboarding) {
+        finishOnboarding();
+      }
+    },
+    [
+      onSubmit,
+      currentMessageFiles,
+      deepResearchEnabled,
+      showOnboarding,
+      finishOnboarding,
+    ]
+  );
 
   // Memoized callbacks for DocumentsSidebar
   const handleMobileDocumentSidebarClose = useCallback(() => {
@@ -620,10 +617,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
 
       <FederatedOAuthModal />
 
-      <AppPageLayout
-        settings={headerData.settings}
-        chatSession={headerData.chatSession}
-      >
+      <AppLayouts.Root>
         <Dropzone
           onDrop={(acceptedFiles) =>
             handleMessageSpecificFileUpload(acceptedFiles)
@@ -670,16 +664,13 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
               )}
 
               {/* ChatInputBar container */}
-              <div
-                ref={inputRef}
-                className="max-w-[50rem] w-full pointer-events-auto z-sticky flex flex-col px-4 md:px-0 justify-center items-center"
-              >
+              <div className="w-[min(50rem,100%)] pointer-events-auto z-sticky flex flex-col px-4 justify-center items-center">
                 {(showOnboarding ||
                   (user?.role !== UserRole.ADMIN &&
                     !user?.personalization?.name)) &&
                   currentProjectId === null && (
                     <OnboardingFlow
-                      handleHideOnboarding={() => setShowOnboarding(false)}
+                      handleHideOnboarding={hideOnboarding}
                       state={onboardingState}
                       actions={onboardingActions}
                       llmDescriptors={llmDescriptors}
@@ -687,6 +678,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
                   )}
 
                 <ChatInputBar
+                  ref={chatInputBarRef}
                   deepResearchEnabled={deepResearchEnabled}
                   toggleDeepResearch={toggleDeepResearch}
                   toggleDocumentSidebar={toggleDocumentSidebar}
@@ -695,10 +687,12 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
                   removeDocs={() => setSelectedDocuments([])}
                   retrievalEnabled={retrievalEnabled}
                   selectedDocuments={selectedDocuments}
-                  message={message}
-                  setMessage={setMessage}
+                  initialMessage={
+                    searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) || ""
+                  }
                   stopGenerating={stopGenerating}
                   onSubmit={handleChatInputSubmit}
+                  onHeightChange={handleInputHeightChange}
                   chatState={currentChatState}
                   currentSessionFileTokenCount={
                     currentChatSessionId
@@ -708,7 +702,6 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
                   availableContextTokens={availableContextTokens}
                   selectedAssistant={selectedAssistant || liveAssistant}
                   handleFileUpload={handleMessageSpecificFileUpload}
-                  textAreaRef={textAreaRef}
                   setPresentingDocument={setPresentingDocument}
                   disabled={
                     (!llmManager.isLoadingProviders &&
@@ -718,7 +711,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
                   }
                 />
 
-                <Spacer />
+                <Spacer rem={0.5} />
 
                 {!!currentProjectId && <ProjectChatSessionList />}
               </div>
@@ -740,7 +733,7 @@ export default function ChatPage({ firstMessage, headerData }: ChatPageProps) {
             </div>
           )}
         </Dropzone>
-      </AppPageLayout>
+      </AppLayouts.Root>
 
       {desktopDocumentSidebar}
     </>

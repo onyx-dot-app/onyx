@@ -1,4 +1,3 @@
-from enum import Enum
 from typing import cast
 from uuid import UUID
 
@@ -7,16 +6,10 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import OAuthTokenManager
 from onyx.chat.emitter import Emitter
-from onyx.configs.app_configs import AZURE_IMAGE_API_BASE
-from onyx.configs.app_configs import AZURE_IMAGE_API_KEY
-from onyx.configs.app_configs import AZURE_IMAGE_API_VERSION
-from onyx.configs.app_configs import AZURE_IMAGE_DEPLOYMENT_NAME
-from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.models import BaseFilters
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
-from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.mcp import get_all_mcp_tools_for_server
 from onyx.db.mcp import get_mcp_server_by_id
 from onyx.db.mcp import get_user_connection_config
@@ -26,12 +19,14 @@ from onyx.db.oauth_config import get_oauth_config
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tools import get_builtin_tool
 from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.interfaces import DocumentIndex
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
+from onyx.tools.interface import Tool
 from onyx.tools.models import DynamicSchemaInfo
-from onyx.tools.tool import Tool
+from onyx.tools.models import SearchToolUsage
 from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
 )
@@ -67,60 +62,34 @@ class CustomToolConfig(BaseModel):
     additional_headers: dict[str, str] | None = None
 
 
-class SearchToolUsage(str, Enum):
-    DISABLED = "disabled"
-    ENABLED = "enabled"
-    AUTO = "auto"
-
-
 def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
-    """Helper function to get image generation LLM config based on available providers"""
-    if llm and llm.config.api_key and llm.config.model_provider == "openai":
-        return LLMConfig(
-            model_provider=llm.config.model_provider,
-            model_name=IMAGE_MODEL_NAME,
-            temperature=GEN_AI_TEMPERATURE,
-            api_key=llm.config.api_key,
-            api_base=llm.config.api_base,
-            api_version=llm.config.api_version,
-            max_input_tokens=llm.config.max_input_tokens,
-        )
+    """Get image generation LLM config from the default image generation configuration."""
+    from onyx.db.image_generation import get_default_image_generation_config
 
-    if llm.config.model_provider == "azure" and AZURE_IMAGE_API_KEY is not None:
-        return LLMConfig(
-            model_provider="azure",
-            model_name=f"azure/{AZURE_IMAGE_DEPLOYMENT_NAME}",
-            temperature=GEN_AI_TEMPERATURE,
-            api_key=AZURE_IMAGE_API_KEY,
-            api_base=AZURE_IMAGE_API_BASE,
-            api_version=AZURE_IMAGE_API_VERSION,
-            deployment_name=AZURE_IMAGE_DEPLOYMENT_NAME,
-            max_input_tokens=llm.config.max_input_tokens,
-        )
+    default_config = get_default_image_generation_config(db_session)
+    if (
+        not default_config
+        or not default_config.model_configuration
+        or not default_config.model_configuration.llm_provider
+    ):
+        raise ValueError("No default image generation configuration found")
 
-    # Fallback to checking for OpenAI provider in database
-    llm_providers = fetch_existing_llm_providers(db_session)
-    openai_provider = next(
-        iter(
-            [
-                llm_provider
-                for llm_provider in llm_providers
-                if llm_provider.provider == "openai"
-            ]
-        ),
-        None,
-    )
+    llm_provider = default_config.model_configuration.llm_provider
 
-    if not openai_provider or not openai_provider.api_key:
-        raise ValueError("Image generation tool requires an OpenAI API key")
+    # For Azure, format model name as azure/<deployment_name> for LiteLLM
+    model_name = default_config.model_configuration.name
+    if llm_provider.provider == "azure":
+        deployment = llm_provider.deployment_name or model_name
+        model_name = f"azure/{deployment}"
 
     return LLMConfig(
-        model_provider=openai_provider.provider,
-        model_name=IMAGE_MODEL_NAME,
+        model_provider=llm_provider.provider,
+        model_name=model_name,
         temperature=GEN_AI_TEMPERATURE,
-        api_key=openai_provider.api_key,
-        api_base=openai_provider.api_base,
-        api_version=openai_provider.api_version,
+        api_key=llm_provider.api_key,
+        api_base=llm_provider.api_base,
+        api_version=llm_provider.api_version,
+        deployment_name=llm_provider.deployment_name,
         max_input_tokens=llm.config.max_input_tokens,
     )
 
@@ -152,6 +121,19 @@ def construct_tools(
     user_oauth_token = None
     if user and user.oauth_accounts:
         user_oauth_token = user.oauth_accounts[0].access_token
+
+    document_index_cache: DocumentIndex | None = None
+    search_settings_cache = None
+
+    def _get_document_index() -> DocumentIndex:
+        nonlocal document_index_cache, search_settings_cache
+        if document_index_cache is None:
+            if search_settings_cache is None:
+                search_settings_cache = get_current_search_settings(db_session)
+            document_index_cache = get_default_document_index(
+                search_settings_cache, None
+            )
+        return document_index_cache
 
     added_search_tool = False
     for db_tool_model in persona.tools:
@@ -186,9 +168,7 @@ def construct_tools(
                 if not search_tool_config:
                     search_tool_config = SearchToolConfig()
 
-                search_settings = get_current_search_settings(db_session)
-                document_index = get_default_document_index(search_settings, None)
-
+                # TODO concerning passing the db_session here.
                 search_tool = SearchTool(
                     tool_id=db_tool_model.id,
                     db_session=db_session,
@@ -196,7 +176,7 @@ def construct_tools(
                     user=user,
                     persona=persona,
                     llm=llm,
-                    document_index=document_index,
+                    document_index=_get_document_index(),
                     user_selected_filters=search_tool_config.user_selected_filters,
                     project_id=search_tool_config.project_id,
                     bypass_acl=search_tool_config.bypass_acl,
@@ -238,7 +218,12 @@ def construct_tools(
             elif tool_cls.__name__ == OpenURLTool.__name__:
                 try:
                     tool_dict[db_tool_model.id] = [
-                        OpenURLTool(tool_id=db_tool_model.id, emitter=emitter)
+                        OpenURLTool(
+                            tool_id=db_tool_model.id,
+                            emitter=emitter,
+                            document_index=_get_document_index(),
+                            user=user,
+                        )
                     ]
                 except RuntimeError as e:
                     logger.error(f"Failed to initialize Open URL Tool: {e}")
@@ -391,6 +376,7 @@ def construct_tools(
 
         search_settings = get_current_search_settings(db_session)
         document_index = get_default_document_index(search_settings, None)
+
         search_tool = SearchTool(
             tool_id=search_tool_db_model.id,
             db_session=db_session,

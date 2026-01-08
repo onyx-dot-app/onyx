@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import type { Route } from "next";
 import { requireAdminAuth } from "@/lib/auth/requireAuth";
 import { ClientLayout } from "./ClientLayout";
 import {
@@ -17,7 +18,7 @@ export default async function Layout({ children }: LayoutProps) {
 
   // If auth check returned a redirect, redirect immediately
   if (authResult.redirect) {
-    return redirect(authResult.redirect);
+    return redirect(authResult.redirect as Route);
   }
 
   return (

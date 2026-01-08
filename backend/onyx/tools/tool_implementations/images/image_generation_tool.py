@@ -8,18 +8,18 @@ from sqlalchemy.orm import Session
 from typing_extensions import override
 
 from onyx.chat.emitter import Emitter
-from onyx.configs.app_configs import AZURE_IMAGE_API_KEY
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
-from onyx.db.llm import fetch_existing_llm_providers
+from onyx.db.image_generation import get_default_image_generation_config
 from onyx.file_store.utils import build_frontend_file_url
 from onyx.file_store.utils import save_files
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolHeartbeat
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.tools.interface import Tool
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
 )
@@ -81,14 +81,14 @@ class ImageGenerationTool(Tool[None]):
     @override
     @classmethod
     def is_available(cls, db_session: Session) -> bool:
-        """Available if an OpenAI LLM provider is configured in the system."""
+        """Available if a default image generation config exists with valid credentials."""
         try:
-            providers = fetch_existing_llm_providers(db_session)
-            return any(
-                (provider.provider == "openai" and provider.api_key is not None)
-                or (provider.provider == "azure" and AZURE_IMAGE_API_KEY is not None)
-                for provider in providers
-            )
+            config = get_default_image_generation_config(db_session)
+            if not config or not config.model_configuration:
+                return False
+
+            llm_provider = config.model_configuration.llm_provider
+            return llm_provider is not None and llm_provider.api_key is not None
         except Exception:
             logger.exception("Error checking if image generation is available")
             return False
@@ -120,11 +120,10 @@ class ImageGenerationTool(Tool[None]):
             },
         }
 
-    def emit_start(self, turn_index: int, tab_index: int) -> None:
+    def emit_start(self, placement: Placement) -> None:
         self.emitter.emit(
             Packet(
-                turn_index=turn_index,
-                tab_index=tab_index,
+                placement=placement,
                 obj=ImageGenerationToolStart(),
             )
         )
@@ -132,7 +131,7 @@ class ImageGenerationTool(Tool[None]):
     def _generate_image(
         self, prompt: str, shape: ImageShape
     ) -> tuple[ImageGenerationResponse, Any]:
-        from litellm import image_generation  # type: ignore
+        from litellm import image_generation
 
         if shape == ImageShape.LANDSCAPE:
             if "gpt-image-1" in self.model:
@@ -209,8 +208,7 @@ class ImageGenerationTool(Tool[None]):
 
     def run(
         self,
-        turn_index: int,
-        tab_index: int,
+        placement: Placement,
         override_kwargs: None = None,
         **llm_kwargs: Any,
     ) -> ToolResponse:
@@ -259,8 +257,7 @@ class ImageGenerationTool(Tool[None]):
             # Emit a heartbeat packet to prevent timeout
             self.emitter.emit(
                 Packet(
-                    turn_index=turn_index,
-                    tab_index=tab_index,
+                    placement=placement,
                     obj=ImageGenerationToolHeartbeat(),
                 )
             )
@@ -304,8 +301,7 @@ class ImageGenerationTool(Tool[None]):
         # Emit final packet with generated images
         self.emitter.emit(
             Packet(
-                turn_index=turn_index,
-                tab_index=tab_index,
+                placement=placement,
                 obj=ImageGenerationFinal(images=generated_images_metadata),
             )
         )

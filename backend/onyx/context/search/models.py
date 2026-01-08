@@ -253,7 +253,7 @@ class RetrievalDetails(ChunkContext):
     # Use LLM to determine whether to do a retrieval or only rely on existing history
     # If the Persona is configured to not run search (0 chunks), this is bypassed
     # If no Prompt is configured, the only search results are shown, this is bypassed
-    run_search: OptionalSearchSetting = OptionalSearchSetting.ALWAYS
+    run_search: OptionalSearchSetting = OptionalSearchSetting.AUTO
     # Is this a real-time/streaming call or a question where Onyx can take more time?
     # Used to determine reranking flow
     real_time: bool = True
