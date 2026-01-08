@@ -441,9 +441,16 @@ def set_cc_pair_repeated_error_state(
             db_session=db_session,
             cc_pair_id=cc_pair_id,
         )
-        # Only pause if there's no manual indexing trigger active
         if cc_pair and cc_pair.indexing_trigger is None:
-            values["status"] = ConnectorCredentialPairStatus.PAUSED
+            # Don't re-pause if user explicitly unpaused the connector.
+            # When unpausing, the in_repeated_error_state flag is cleared,
+            # so if status is ACTIVE and flag is False, user just unpaused.
+            user_just_unpaused = (
+                cc_pair.status == ConnectorCredentialPairStatus.ACTIVE
+                and not cc_pair.in_repeated_error_state
+            )
+            if not user_just_unpaused:
+                values["status"] = ConnectorCredentialPairStatus.PAUSED
 
     stmt = (
         update(ConnectorCredentialPair)

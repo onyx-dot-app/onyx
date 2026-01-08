@@ -28,6 +28,9 @@ from onyx.db.connector_credential_pair import (
 )
 from onyx.db.connector_credential_pair import remove_credential_from_connector
 from onyx.db.connector_credential_pair import (
+    set_cc_pair_repeated_error_state,
+)
+from onyx.db.connector_credential_pair import (
     update_connector_credential_pair_from_id,
 )
 from onyx.db.connector_credential_pair import verify_user_has_access_to_cc_pair
@@ -304,6 +307,15 @@ def update_cc_pair_status(
 
     else:
         redis_connector.stop.set_fence(False)
+
+        # Clear the repeated error state when unpausing so the connector
+        # doesn't immediately get re-paused by CHECK_FOR_INDEXING
+        if cc_pair.in_repeated_error_state:
+            set_cc_pair_repeated_error_state(
+                db_session=db_session,
+                cc_pair_id=cc_pair_id,
+                in_repeated_error_state=False,
+            )
 
     update_connector_credential_pair_from_id(
         db_session=db_session,
