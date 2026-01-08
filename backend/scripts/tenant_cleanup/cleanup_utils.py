@@ -7,6 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+class TenantNotFoundInControlPlaneError(Exception):
+    """Exception raised when tenant/table is not found in control plane."""
+
+
 @dataclass
 class ControlPlaneConfig:
     """Configuration for connecting to the control plane database."""
@@ -136,6 +140,9 @@ def get_tenant_status(tenant_id: str) -> str | None:
 
     Returns:
         Tenant status string (e.g., 'GATED_ACCESS', 'ACTIVE') or None if not found
+
+    Raises:
+        TenantNotFoundInControlPlaneError: If the tenant table/relation does not exist
     """
     print(f"Fetching tenant status for tenant: {tenant_id}")
 
@@ -155,12 +162,17 @@ def get_tenant_status(tenant_id: str) -> str | None:
             return None
 
     except subprocess.CalledProcessError as e:
+        error_msg = e.stderr if e.stderr else str(e)
         print(
-            f"✗ Failed to get tenant status for {tenant_id}: {e}",
+            f"✗ Failed to get tenant status for {tenant_id}: {error_msg}",
             file=sys.stderr,
         )
-        if e.stderr:
-            print(f"  Error details: {e.stderr}", file=sys.stderr)
+        # Check if this is a "not found" error (tenant table doesn't exist)
+        error_str = str(error_msg).lower()
+        if 'relation "tenant" does not exist' in error_str:
+            raise TenantNotFoundInControlPlaneError(
+                f"Tenant table/relation not found in control plane: {error_msg}"
+            )
         return None
 
 

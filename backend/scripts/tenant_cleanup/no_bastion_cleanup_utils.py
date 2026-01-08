@@ -10,6 +10,10 @@ import sys
 from pathlib import Path
 
 
+class TenantNotFoundInControlPlaneError(Exception):
+    """Exception raised when tenant/table is not found in control plane."""
+
+
 def find_worker_pod(context: str | None = None) -> str:
     """Find a user file processing worker pod using kubectl.
 
@@ -233,6 +237,9 @@ def get_tenant_status(
 
     Returns:
         Tenant status string (e.g., 'GATED_ACCESS', 'ACTIVE') or None if not found
+
+    Raises:
+        TenantNotFoundInControlPlaneError: If the tenant table/relation does not exist
     """
     print(f"Fetching tenant status for tenant: {tenant_id}")
 
@@ -241,10 +248,17 @@ def get_tenant_status(
     result = execute_control_plane_query_from_pod(pod_name, query, context)
 
     if not result["success"]:
+        error_msg = result.get("error", "Unknown error")
         print(
-            f"✗ Failed to get tenant status for {tenant_id}: {result.get('error', 'Unknown error')}",
+            f"✗ Failed to get tenant status for {tenant_id}: {error_msg}",
             file=sys.stderr,
         )
+        # Check if this is a "not found" error (tenant table doesn't exist)
+        error_str = str(error_msg).lower()
+        if 'relation "tenant" does not exist' in error_str:
+            raise TenantNotFoundInControlPlaneError(
+                f"Tenant table/relation not found in control plane: {error_msg}"
+            )
         return None
 
     try:
