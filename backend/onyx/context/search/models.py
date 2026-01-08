@@ -414,9 +414,7 @@ class SearchDoc(BaseModel):
                     )
                 ).document_id,
                 chunk_ind=chunk.chunk_id,
-                semantic_identifier=chunk.semantic_identifier
-                or (chunk.source_links[0] if chunk.source_links else "Unknown"),
-                link=chunk.source_links[0] if chunk.source_links else None,
+                semantic_identifier=chunk.semantic_identifier or "Unknown",
                 blurb=chunk.blurb,
                 source_type=chunk.source_type,
                 boost=chunk.boost,
