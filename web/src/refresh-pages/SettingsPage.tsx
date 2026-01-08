@@ -9,7 +9,6 @@ import * as GeneralLayouts from "@/layouts/general-layouts";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import { Formik, Form } from "formik";
 import {
-  SvgActivity,
   SvgExpand,
   SvgExternalLink,
   SvgKey,
@@ -22,7 +21,6 @@ import {
 import Card from "@/refresh-components/cards/Card";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import Button from "@/refresh-components/buttons/Button";
 import Switch from "@/refresh-components/inputs/Switch";
@@ -715,57 +713,80 @@ function MemoriesModal({
 
   return (
     <Formik initialValues={initialValues} onSubmit={handleSubmit}>
-      {({ values, dirty, resetForm }) => {
-        return (
-          <Form>
-            <Modal open={showMemoriesModal} onOpenChange={setShowMemoriesModal}>
-              <Modal.Content tall preventAccidentalClose={false}>
-                <Modal.Header
-                  icon={SvgLightbulbSimple}
-                  title="Memory"
-                  description="Let Onyx reference these stored notes and memories in chats."
-                />
+      {({ values, dirty, resetForm, submitForm, setFieldValue }) => {
+        const handleDeleteMemory = (index: number) => {
+          const newMemories = values.existingMemories.filter(
+            (_, i) => i !== index
+          );
+          setFieldValue("existingMemories", newMemories);
+        };
 
-                <Modal.Body>
-                  <GeneralLayouts.Section gap={0.5}>
-                    {/* New memory input - always at the top */}
+        return (
+          <Modal open={showMemoriesModal} onOpenChange={setShowMemoriesModal}>
+            <Modal.Content tall preventAccidentalClose={false}>
+              <Modal.Header
+                icon={SvgLightbulbSimple}
+                title="Memory"
+                description="Let Onyx reference these stored notes and memories in chats."
+              />
+              <Modal.Body>
+                <GeneralLayouts.Section gap={0.5}>
+                  {/* New memory input - always at the top */}
+                  <GeneralLayouts.Section horizontal gap={0.5} top>
                     <InputTextAreaField
                       name="newMemory"
                       placeholder="Type or paste in text content"
                       rows={3}
                     />
+                    <IconButton icon={SvgMinusCircle} internal disabled />
+                  </GeneralLayouts.Section>
 
-                    {/* Existing memories */}
-                    {values.existingMemories && (
+                  {/* Existing memories */}
+                  {values.existingMemories &&
+                    values.existingMemories.length > 0 && (
                       <>
                         <Separator noPadding />
                         {values.existingMemories.map((_, index) => (
-                          <InputTextAreaField
+                          <GeneralLayouts.Section
+                            horizontal
+                            gap={0.5}
                             key={index}
-                            name={`existingMemories.${index}`}
-                            rows={3}
-                          />
+                            top
+                          >
+                            <InputTextAreaField
+                              name={`existingMemories.${index}`}
+                              rows={3}
+                            />
+                            <IconButton
+                              icon={SvgMinusCircle}
+                              internal
+                              onClick={() => handleDeleteMemory(index)}
+                            />
+                          </GeneralLayouts.Section>
                         ))}
                       </>
                     )}
-                  </GeneralLayouts.Section>
-                </Modal.Body>
+                </GeneralLayouts.Section>
+              </Modal.Body>
 
-                <Modal.Footer>
-                  <Button
-                    secondary
-                    type="button"
-                    onClick={() => handleClose(resetForm)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={isSaving || !dirty}>
-                    {isSaving ? "Saving..." : "Save Memory"}
-                  </Button>
-                </Modal.Footer>
-              </Modal.Content>
-            </Modal>
-          </Form>
+              <Modal.Footer>
+                <Button
+                  secondary
+                  type="button"
+                  onClick={() => handleClose(resetForm)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={submitForm}
+                  disabled={isSaving || !dirty}
+                >
+                  {isSaving ? "Saving..." : "Save Memory"}
+                </Button>
+              </Modal.Footer>
+            </Modal.Content>
+          </Modal>
         );
       }}
     </Formik>
@@ -884,16 +905,18 @@ function ChatPreferencesSettings() {
 
         <GeneralLayouts.Section gap={0.75}>
           <InputLayouts.Label label="Personalization" />
-          <Card>
-            <InputLayouts.Horizontal
-              label="Reference Stored Memories"
-              description="Let Onyx reference stored memories in chats."
-            >
-              <Switch
-                checked={personalizationValues.use_memories}
-                onCheckedChange={(checked) => toggleUseMemories(checked)}
-              />
-            </InputLayouts.Horizontal>
+          <Card gap={0} padding={0.25}>
+            <GeneralLayouts.Section padding={0.75}>
+              <InputLayouts.Horizontal
+                label="Reference Stored Memories"
+                description="Let Onyx reference stored memories in chats."
+              >
+                <Switch
+                  checked={personalizationValues.use_memories}
+                  onCheckedChange={(checked) => toggleUseMemories(checked)}
+                />
+              </InputLayouts.Horizontal>
+            </GeneralLayouts.Section>
 
             {personalizationValues.memories.length === 0 ? (
               <Button
@@ -904,30 +927,17 @@ function ChatPreferencesSettings() {
                 Add Memory
               </Button>
             ) : (
-              <GeneralLayouts.Section horizontal gap={0.5}>
-                {personalizationValues.memories
-                  .slice(0, 2)
-                  .map((memory, index) => {
-                    const getMemoryTitle = (content: string) => {
-                      if (!content) return "New Memory";
-                      return content.length > 40
-                        ? content.substring(0, 40)
-                        : content;
-                    };
-
-                    return (
-                      <AttachmentButton
-                        key={index}
-                        icon={SvgLightbulbSimple}
-                        description={memory}
-                        rightText=""
-                        actionIcon={SvgExpand}
-                        onAction={() => setShowMemoriesModal(true)}
-                      >
-                        {getMemoryTitle(memory)}
-                      </AttachmentButton>
-                    );
-                  })}
+              <GeneralLayouts.Section gap={0}>
+                {personalizationValues.memories.map((memory, index) => (
+                  <AttachmentButton
+                    key={index}
+                    icon={SvgLightbulbSimple}
+                    actionIcon={SvgExpand}
+                    onAction={() => setShowMemoriesModal(true)}
+                  >
+                    {memory}
+                  </AttachmentButton>
+                ))}
               </GeneralLayouts.Section>
             )}
           </Card>
