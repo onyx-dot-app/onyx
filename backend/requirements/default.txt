@@ -1248,7 +1248,7 @@ websockets==15.0.1
     # via
     #   fastmcp
     #   google-genai
-werkzeug==3.1.4
+werkzeug==3.1.5
     # via sendgrid
 wrapt==1.17.3
     # via
