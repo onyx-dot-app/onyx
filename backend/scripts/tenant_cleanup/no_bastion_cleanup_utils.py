@@ -229,7 +229,8 @@ def get_tenant_status(pod_name: str, tenant_id: str, context: str) -> str | None
         Tenant status string (e.g., 'GATED_ACCESS', 'ACTIVE') or None if not found
 
     Raises:
-        TenantNotFoundInControlPlaneError: If the tenant table/relation does not exist
+        TenantNotFoundInControlPlaneError: If the tenant table/relation does not exist,
+            or if the tenant record is not found in the table
     """
     print(f"Fetching tenant status for tenant: {tenant_id}")
 
@@ -243,12 +244,6 @@ def get_tenant_status(pod_name: str, tenant_id: str, context: str) -> str | None
             f"✗ Failed to get tenant status for {tenant_id}: {error_msg}",
             file=sys.stderr,
         )
-        # Check if this is a "not found" error (tenant table doesn't exist)
-        error_str = str(error_msg).lower()
-        if 'relation "tenant" does not exist' in error_str:
-            raise TenantNotFoundInControlPlaneError(
-                f"Tenant table/relation not found in control plane: {error_msg}"
-            )
         return None
 
     try:
@@ -261,9 +256,15 @@ def get_tenant_status(pod_name: str, tenant_id: str, context: str) -> str | None
                 print(f"✓ Tenant status: {status}")
                 return status
 
+        # Tenant record not found in control plane table
         print("⚠ Tenant not found in control plane")
-        return None
+        raise TenantNotFoundInControlPlaneError(
+            f"Tenant {tenant_id} not found in control plane database"
+        )
 
+    except TenantNotFoundInControlPlaneError:
+        # Re-raise without wrapping
+        raise
     except (json.JSONDecodeError, KeyError, IndexError) as e:
         print(f"✗ Failed to parse tenant status: {e}", file=sys.stderr)
         return None
