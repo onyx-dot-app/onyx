@@ -308,7 +308,7 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
             ),
         )
 
-        return self._real_index.update([update_request], old_doc_id_to_new_doc_id={})
+        return self._real_index.update([update_request])
 
     def update(
         self,
@@ -516,10 +516,6 @@ class OpenSearchDocumentIndex(DocumentIndex):
     def update(
         self,
         update_requests: list[MetadataUpdateRequest],
-        # TODO(andrei), WARNING: Very temporary, this is not the interface we
-        # want in Updatable, we only have this to continue supporting
-        # user_file_docid_migration_task for Vespa which should be done soon.
-        old_doc_id_to_new_doc_id: dict[str, str],
     ) -> None:
         logger.info("[ANDREI]: Updating documents...")
         # TODO(andrei): This needs to be implemented. I explicitly do not raise

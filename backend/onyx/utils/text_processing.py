@@ -165,3 +165,26 @@ def count_punctuation(text: str) -> int:
 def remove_markdown_image_references(text: str) -> str:
     """Remove markdown-style image references like ![alt text](url)"""
     return re.sub(r"!\[[^\]]*\]\([^\)]+\)", "", text)
+
+
+# Regex to match invalid Unicode characters that cause UTF-8 encoding errors:
+# - \x00-\x08: Control characters (except tab \x09)
+# - \x0b-\x0c: Vertical tab and form feed
+# - \x0e-\x1f: More control characters (except newline \x0a, carriage return \x0d)
+# - \ud800-\udfff: Surrogate pairs (invalid when unpaired, causes "surrogates not allowed" errors)
+# - \ufdd0-\ufdef: Non-characters
+# - \ufffe-\uffff: Non-characters
+_INVALID_UNICODE_CHARS_RE = re.compile(
+    "[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff\ufdd0-\ufdef\ufffe\uffff]"
+)
+
+
+def remove_invalid_unicode_chars(text: str) -> str:
+    """Remove Unicode characters that are invalid in UTF-8 or cause encoding issues.
+
+    This handles:
+    - Control characters (except tab, newline, carriage return)
+    - Unpaired UTF-16 surrogates (e.g. \udc00) that cause 'surrogates not allowed' errors
+    - Unicode non-characters
+    """
+    return _INVALID_UNICODE_CHARS_RE.sub("", text)

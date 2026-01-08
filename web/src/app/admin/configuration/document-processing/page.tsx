@@ -149,12 +149,12 @@ function Main() {
 
 export default function Page() {
   return (
-    <div className="container">
+    <>
       <AdminPageTitle
         title="Document Processing"
         icon={<DocumentIcon2 size={32} className="my-auto" />}
       />
       <Main />
-    </div>
+    </>
   );
 }

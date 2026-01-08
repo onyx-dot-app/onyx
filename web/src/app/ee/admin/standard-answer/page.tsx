@@ -429,13 +429,13 @@ const Main = () => {
 
 const Page = () => {
   return (
-    <div className="container">
+    <>
       <AdminPageTitle
         icon={<ClipboardIcon size={32} />}
         title="Standard Answers"
       />
       <Main />
-    </div>
+    </>
   );
 };
 

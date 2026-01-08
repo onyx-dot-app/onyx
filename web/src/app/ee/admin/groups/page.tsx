@@ -81,11 +81,11 @@ const Main = () => {
 
 const Page = () => {
   return (
-    <div className="container">
+    <>
       <AdminPageTitle title="Manage User Groups" icon={SvgUsers} />
 
       <Main />
-    </div>
+    </>
   );
 };
 

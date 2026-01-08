@@ -406,7 +406,7 @@ export default function UsageReports() {
   return (
     <>
       {isWaitingForReport && <Spinner />}
-      <div className="container">
+      <>
         <GenerateReportInput
           onReportGenerated={handleReportGenerated}
           isWaitingForReport={isWaitingForReport}
@@ -446,7 +446,7 @@ export default function UsageReports() {
           isWaitingForReport={isWaitingForReport}
           onNewReportDetected={handleNewReportDetected}
         />
-      </div>
+      </>
     </>
   );
 }
