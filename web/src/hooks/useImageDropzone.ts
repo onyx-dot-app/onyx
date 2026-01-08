@@ -1,3 +1,4 @@
+"use client";
 import { useCallback } from "react";
 import { useDropzone, DropzoneOptions, FileRejection } from "react-dropzone";
 
