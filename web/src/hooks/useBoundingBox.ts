@@ -1,4 +1,5 @@
 "use client";
+
 import { useRef, useEffect, useCallback, useState } from "react";
 
 export function useBoundingBox() {
