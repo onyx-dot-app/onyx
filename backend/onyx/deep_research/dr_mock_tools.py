@@ -17,8 +17,13 @@ GENERATE_PLAN_TOOL_DESCRIPTION = {
         "description": "No clarification needed, generate a research plan for the user's query.",
         "parameters": {
             "type": "object",
-            "properties": {},
-            "required": [],
+            "properties": {
+                "reasoning": {
+                    "type": "string",
+                    "description": "Briefly explain why you are ready to generate a research plan.",
+                }
+            },
+            "required": ["reasoning"],
         },
     },
 }
@@ -50,8 +55,13 @@ GENERATE_REPORT_TOOL_DESCRIPTION = {
         "description": "Generate the final research report from all of the findings. Should be called when all aspects of the user's query have been researched, or maximum cycles are reached.",
         "parameters": {
             "type": "object",
-            "properties": {},
-            "required": [],
+            "properties": {
+                "reasoning": {
+                    "type": "string",
+                    "description": "Briefly explain why you are ready to generate the final report.",
+                }
+            },
+            "required": ["reasoning"],
         },
     },
 }
@@ -102,8 +112,13 @@ RESEARCH_AGENT_GENERATE_REPORT_TOOL_DESCRIPTION = {
         "description": "Generate the final research report from all findings. Should be called when research is complete.",
         "parameters": {
             "type": "object",
-            "properties": {},
-            "required": [],
+            "properties": {
+                "reasoning": {
+                    "type": "string",
+                    "description": "Briefly explain why you have finished this research task.",
+                }
+            },
+            "required": ["reasoning"],
         },
     },
 }
