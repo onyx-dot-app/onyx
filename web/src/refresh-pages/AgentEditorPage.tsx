@@ -1247,7 +1247,7 @@ export default function AgentEditorPage({
                             tooltip={imageGenerationDisabledTooltip}
                             side="top"
                           >
-                            <Card disabled={isImageGenerationAvailable}>
+                            <Card disabled={!isImageGenerationAvailable}>
                               <InputLayouts.Horizontal
                                 name="image_generation"
                                 label="Image Generation"

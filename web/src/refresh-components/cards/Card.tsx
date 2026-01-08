@@ -42,7 +42,9 @@ import * as GeneralLayouts from "@/layouts/general-layouts";
 const classNames = {
   main: ["bg-background-tint-00 border"],
   translucent: ["bg-transparent border border-dashed"],
-  disabled: ["cursor-not-allowed pointer-events-none opacity-50"],
+  disabled: [
+    "cursor-not-allowed pointer-events-none bg-background-tint-00 border opacity-50",
+  ],
 } as const;
 
 export interface CardProps extends GeneralLayouts.SectionProps {
