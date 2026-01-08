@@ -34,7 +34,7 @@ function useLocalStorageState<T>(
       const storedValue = localStorage.getItem(key);
       return storedValue ? JSON.parse(storedValue) : defaultValue;
     }
-    return undefined;
+    return defaultValue;
   });
 
   const setValue = (value: T) => {
