@@ -619,7 +619,6 @@ async def handle_send_chat_message(
         """
         try:
             while True:
-                # Await the next item from the buffer
                 item = await buffer.get()
                 if item is None:
                     # End of stream signal
