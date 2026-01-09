@@ -1,5 +1,6 @@
 """Anthropic provider adapter for prompt caching."""
 
+from collections.abc import Callable
 from collections.abc import Sequence
 
 from onyx.llm.interfaces import LanguageModelInput
@@ -41,6 +42,20 @@ class AnthropicPromptCacheProvider(PromptCacheProvider):
     def supports_caching(self) -> bool:
         """Anthropic supports explicit prompt caching."""
         return True
+
+    def is_cacheable(
+        self,
+        input: LanguageModelInput,
+        token_counter: Callable[[str], int],
+    ) -> bool:
+        """Anthropic requires at least 1024 tokens for caching."""
+        from onyx.llm.prompt_cache.utils import normalize_language_model_input
+
+        msgs = normalize_language_model_input(input)
+        total_tokens = sum(token_counter(str(m.content)) for m in msgs)
+        # Note: Claude 3.5 Sonnet requires 2048, but 1024 is the general minimum.
+        # We'll use 1024 as the conservative threshold.
+        return total_tokens >= 1024
 
     def prepare_messages_for_caching(
         self,

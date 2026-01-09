@@ -9,6 +9,7 @@ from onyx.llm.models import LanguageModelInput
 from onyx.llm.prompt_cache.cache_manager import generate_cache_key_hash
 from onyx.llm.prompt_cache.models import CacheMetadata
 from onyx.llm.prompt_cache.providers.factory import get_provider_adapter
+from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -70,6 +71,30 @@ def process_with_prompt_cache(
         logger.debug(
             f"Provider {llm_config.model_provider} does not support caching, "
             "combining messages without caching"
+        )
+        # Use no-op adapter to combine messages
+        from onyx.llm.prompt_cache.providers.noop import NoOpPromptCacheProvider
+
+        noop_adapter = NoOpPromptCacheProvider()
+        combined = noop_adapter.prepare_messages_for_caching(
+            cacheable_prefix=cacheable_prefix,
+            suffix=suffix,
+            continuation=continuation,
+            cache_metadata=None,
+        )
+        return combined, None
+
+    # Check if input meets provider-specific cacheability requirements (e.g. token threshold)
+    tokenizer = get_tokenizer(
+        model_name=llm_config.model_name,
+        provider_type=llm_config.model_provider,
+    )
+    token_counter = lambda text: len(tokenizer.encode(text))
+
+    if not provider_adapter.is_cacheable(cacheable_prefix, token_counter):
+        logger.debug(
+            f"Input is not cacheable for provider {llm_config.model_provider} "
+            "(likely below token threshold)"
         )
         # Use no-op adapter to combine messages
         from onyx.llm.prompt_cache.providers.noop import NoOpPromptCacheProvider

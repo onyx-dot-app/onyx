@@ -191,18 +191,16 @@ def from_litellm_model_response_stream(
         choice=streaming_choice,
         usage=(
             Usage(
-                completion_tokens=usage_data.get("completion_tokens", 0),
-                prompt_tokens=usage_data.get("prompt_tokens", 0),
-                total_tokens=usage_data.get("total_tokens", 0),
+                completion_tokens=usage_data.get("completion_tokens") or 0,
+                prompt_tokens=usage_data.get("prompt_tokens") or 0,
+                total_tokens=usage_data.get("total_tokens") or 0,
                 cache_creation_input_tokens=usage_data.get(
-                    "cache_creation_input_tokens", 0
-                ),
-                cache_read_input_tokens=usage_data.get(
-                    "cache_read_input_tokens",
-                    (usage_data.get("prompt_tokens_details") or {}).get(
-                        "cached_tokens", 0
-                    ),
-                ),
+                    "cache_creation_input_tokens"
+                )
+                or 0,
+                cache_read_input_tokens=usage_data.get("cache_read_input_tokens")
+                or (usage_data.get("prompt_tokens_details") or {}).get("cached_tokens")
+                or 0,
             )
             if usage_data
             else None
@@ -244,18 +242,16 @@ def from_litellm_model_response(
         choice=choice,
         usage=(
             Usage(
-                completion_tokens=usage_data.get("completion_tokens", 0),
-                prompt_tokens=usage_data.get("prompt_tokens", 0),
-                total_tokens=usage_data.get("total_tokens", 0),
+                completion_tokens=usage_data.get("completion_tokens") or 0,
+                prompt_tokens=usage_data.get("prompt_tokens") or 0,
+                total_tokens=usage_data.get("total_tokens") or 0,
                 cache_creation_input_tokens=usage_data.get(
-                    "cache_creation_input_tokens", 0
-                ),
-                cache_read_input_tokens=usage_data.get(
-                    "cache_read_input_tokens",
-                    (usage_data.get("prompt_tokens_details") or {}).get(
-                        "cached_tokens", 0
-                    ),
-                ),
+                    "cache_creation_input_tokens"
+                )
+                or 0,
+                cache_read_input_tokens=usage_data.get("cache_read_input_tokens")
+                or (usage_data.get("prompt_tokens_details") or {}).get("cached_tokens")
+                or 0,
             )
             if usage_data
             else None

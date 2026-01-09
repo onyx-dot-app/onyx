@@ -13,6 +13,10 @@ class NoOpPromptCacheProvider(PromptCacheProvider):
         """No-op providers don't support caching."""
         return False
 
+    def is_cacheable(self, **kwargs: any) -> bool:
+        """No-op providers never cache."""
+        return False
+
     def prepare_messages_for_caching(
         self,
         cacheable_prefix: LanguageModelInput | None,

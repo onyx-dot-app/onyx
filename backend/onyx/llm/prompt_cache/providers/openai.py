@@ -1,5 +1,7 @@
 """OpenAI provider adapter for prompt caching."""
 
+from collections.abc import Callable
+
 from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.prompt_cache.models import CacheMetadata
 from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
@@ -12,6 +14,21 @@ class OpenAIPromptCacheProvider(PromptCacheProvider):
     def supports_caching(self) -> bool:
         """OpenAI supports automatic prompt caching."""
         return True
+
+    def is_cacheable(
+        self,
+        input: LanguageModelInput,
+        token_counter: Callable[[str], int],
+    ) -> bool:
+        """OpenAI automatically caches prefixes > 1024 tokens."""
+        # Note: We could just return True here because OpenAI manages this itself
+        # and doesn't error if below 1024. But for consistency and future-proofing,
+        # we can perform the check.
+        from onyx.llm.prompt_cache.utils import normalize_language_model_input
+
+        msgs = normalize_language_model_input(input)
+        total_tokens = sum(token_counter(str(m.content)) for m in msgs)
+        return total_tokens >= 1024
 
     def prepare_messages_for_caching(
         self,
