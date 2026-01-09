@@ -45,6 +45,7 @@ class MessageOrigin(str, Enum):
     API = "api"
     SLACKBOT = "slackbot"
     UNKNOWN = "unknown"
+    UNSET = "unset"
 
 
 if TYPE_CHECKING:
@@ -105,8 +106,7 @@ class SendMessageRequest(BaseModel):
     deep_research: bool = False
 
     # Origin of the message for telemetry tracking
-    # Defaults to UNKNOWN - callers should set this explicitly
-    origin: MessageOrigin = MessageOrigin.UNKNOWN
+    origin: MessageOrigin = MessageOrigin.UNSET
 
     # Placement information for the message in the conversation tree:
     # - -1: auto-place after latest message in chain
