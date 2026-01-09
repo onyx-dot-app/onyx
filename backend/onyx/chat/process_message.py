@@ -671,9 +671,6 @@ def llm_loop_completion_handle(
     assistant_message: ChatMessage,
 ) -> None:
     completed_normally = is_connected()
-    if not completed_normally:
-        logger.debug(f"Chat session {chat_session_id} stopped by user")
-
     # Build final answer based on completion status
     if completed_normally:
         if state_container.answer_tokens is None:
@@ -683,6 +680,7 @@ def llm_loop_completion_handle(
         final_answer = state_container.answer_tokens
     else:
         # Stopped by user - append stop message
+        logger.debug(f"Chat session {chat_session_id} stopped by user")
         if state_container.answer_tokens:
             final_answer = (
                 state_container.answer_tokens
