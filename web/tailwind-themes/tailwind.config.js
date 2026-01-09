@@ -352,6 +352,7 @@ module.exports = {
     require("@tailwindcss/typography"),
     require("@headlessui/tailwindcss"),
     require("tailwindcss-animate"),
+    require("@tailwindcss/container-queries"),
     plugin(({ addVariant }) => {
       addVariant("focus-within-nonactive", "&:focus-within:not(:active)");
     }),
