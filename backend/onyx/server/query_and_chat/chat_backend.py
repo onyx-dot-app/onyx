@@ -590,6 +590,7 @@ async def handle_send_chat_message(
         """
         state_container = ChatStateContainer()
         try:
+            logger.debug("Producer started")
             with get_session_with_current_tenant() as db_session:
                 for obj in handle_stream_message_objects(
                     new_msg_req=chat_message_req,
@@ -599,7 +600,6 @@ async def handle_send_chat_message(
                     custom_tool_additional_headers=custom_tool_headers,
                     external_state_container=state_container,
                 ):
-                    logger.debug(f"Streaming object: {obj.model_dump()}")
                     # Thread-safe put into the asyncio queue
                     loop.call_soon_threadsafe(
                         buffer.put_nowait, get_json_line(obj.model_dump())
