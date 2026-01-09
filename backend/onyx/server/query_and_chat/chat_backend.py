@@ -577,7 +577,7 @@ async def handle_send_chat_message(
 
     # Use prod-cons pattern to continue processing even if request stops yielding
     buffer: asyncio.Queue[str | None] = asyncio.Queue()
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     # Capture headers before spawning thread
     litellm_headers = extract_headers(request.headers, LITELLM_PASS_THROUGH_HEADERS)
