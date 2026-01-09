@@ -935,7 +935,6 @@ export default function Page() {
                                 provider
                               );
                             }}
-                            className="h-6 w-6 opacity-70 hover:opacity-100"
                             aria-label={`Edit ${label}`}
                           />
                         )}
@@ -1134,7 +1133,6 @@ export default function Page() {
                                 provider
                               );
                             }}
-                            className="h-6 w-6 opacity-70 hover:opacity-100"
                             aria-label={`Edit ${label}`}
                           />
                         )}

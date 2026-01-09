@@ -277,7 +277,7 @@ export default function UserFilesModal({
                   icon={SvgEye}
                   internal
                   onClick={() => setShowOnlySelected(!showOnlySelected)}
-                  className={showOnlySelected ? "bg-background-tint-02" : ""}
+                  transient={showOnlySelected}
                 />
                 <IconButton
                   icon={SvgXCircle}
