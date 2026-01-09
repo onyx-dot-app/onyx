@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect, useMemo } from "react";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { ProjectFile } from "@/app/chat/projects/ProjectsContext";
 import { formatRelativeTime } from "@/app/chat/components/projects/project_utils";
@@ -146,10 +146,15 @@ export default function UserFilesModal({
     setSelectedIds(new Set());
   };
 
-  const { query, setQuery, filtered } = useFilter(
-    recentFiles,
-    (file) => file.name
+  const files = useMemo(
+    () =>
+      showOnlySelected
+        ? recentFiles.filter((projectFile) => selectedIds.has(projectFile.id))
+        : recentFiles,
+    [showOnlySelected, recentFiles]
   );
+
+  const { query, setQuery, filtered } = useFilter(files, (file) => file.name);
 
   return (
     <>
