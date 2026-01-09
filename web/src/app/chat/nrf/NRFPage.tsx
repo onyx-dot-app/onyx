@@ -1,12 +1,5 @@
 "use client";
-import React, {
-  useState,
-  useEffect,
-  useRef,
-  useContext,
-  useMemo,
-  useCallback,
-} from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { useUser } from "@/components/user/UserProvider";
 import { usePopup } from "@/components/admin/connectors/Popup";
@@ -20,17 +13,14 @@ import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
 import { useNightTime } from "@/lib/dateUtils";
 import { useFilters, useLlmManager } from "@/lib/hooks";
-import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 import Dropzone from "react-dropzone";
 import { useSendMessageToParent } from "@/lib/extension/utils";
 import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
 import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
 import LoginPage from "@/app/auth/login/LoginPage";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
-import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { useAgents } from "@/hooks/useAgents";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { useDeepResearchToggle } from "@/app/chat/hooks/useDeepResearchToggle";
 import { useChatController } from "@/app/chat/hooks/useChatController";
 import { useChatSessionController } from "@/app/chat/hooks/useChatSessionController";
@@ -43,8 +33,6 @@ import ChatUI from "@/sections/ChatUI";
 import useChatSessions from "@/hooks/useChatSessions";
 import { cn } from "@/lib/utils";
 import Logo from "@/refresh-components/Logo";
-import useScreenSize from "@/hooks/useScreenSize";
-import TextView from "@/components/chat/TextView";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import {
@@ -53,10 +41,14 @@ import {
   SvgExternalLink,
   SvgAlertTriangle,
 } from "@opal/icons";
+import { ThemePreference } from "@/lib/types";
 
 interface NRFPageProps {
   isSidePanel?: boolean;
 }
+
+// Reserve half of the context window for the model's response output
+const AVAILABLE_CONTEXT_TOKENS = Number(DEFAULT_CONTEXT_TOKENS) * 0.5;
 
 export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const {
@@ -70,8 +62,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const filterManager = useFilters();
   const { isNight } = useNightTime();
   const { user, authTypeMetadata } = useUser();
-  const settings = useContext(SettingsContext);
-  const { height: screenHeight } = useScreenSize();
   const { setFolded } = useAppSidebarContext();
 
   const { popup, setPopup } = usePopup();
@@ -120,7 +110,13 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       onAssistantSelect: () => {},
     });
 
-  // LLM manager for model selection
+  // LLM manager for model selection.
+  // - currentChatSession: undefined because NRF always starts new chats
+  // - liveAssistant: uses the selected assistant, or undefined to fall back
+  //   to system-wide default LLM provider.
+  //
+  // If no LLM provider is configured (e.g., fresh signup), the input bar is
+  // disabled and a "Set up an LLM" button is shown (see bottom of component).
   const llmManager = useLlmManager(undefined, liveAssistant ?? undefined);
 
   // Deep research toggle
@@ -146,17 +142,16 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   }, []);
 
   const [backgroundUrl, setBackgroundUrl] = useState<string>(
-    theme === "light" ? defaultLightBackgroundUrl : defaultDarkBackgroundUrl
+    theme === ThemePreference.LIGHT
+      ? defaultLightBackgroundUrl
+      : defaultDarkBackgroundUrl
   );
-  const [presentingDocument, setPresentingDocument] =
-    useState<MinimalOnyxDocument | null>(null);
 
   // Modals
   const [showTurnOffModal, setShowTurnOffModal] = useState<boolean>(false);
 
   // Refs
   const inputRef = useRef<HTMLDivElement>(null);
-  const endPaddingRef = useRef<HTMLDivElement>(null);
   const chatInputBarRef = useRef<ChatInputBarHandle | null>(null);
   const submitOnLoadPerformed = useRef<boolean>(false);
 
@@ -167,18 +162,16 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   // Determine if we should show centered welcome or messages
   const hasMessages = messageHistory.length > 0;
 
+  // Resolved assistant to use throughout the component
+  const resolvedAssistant = liveAssistant ?? undefined;
+
   useEffect(() => {
     setBackgroundUrl(
-      theme === "light" ? defaultLightBackgroundUrl : defaultDarkBackgroundUrl
+      theme === ThemePreference.LIGHT
+        ? defaultLightBackgroundUrl
+        : defaultDarkBackgroundUrl
     );
   }, [theme, defaultLightBackgroundUrl, defaultDarkBackgroundUrl]);
-
-  // Set reduced bottom padding for NRF (input is inside container)
-  useEffect(() => {
-    if (hasMessages && endPaddingRef.current) {
-      endPaddingRef.current.style.height = `16px`;
-    }
-  }, [hasMessages]);
 
   useSendMessageToParent();
 
@@ -207,10 +200,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     setMessage("");
     setCurrentMessageFiles([]);
     chatInputBarRef.current?.reset();
-    if (endPaddingRef.current) {
-      // Reduced padding for NRF since input is inside the container
-      endPaddingRef.current.style.height = `16px`;
-    }
   }, [setMessage, setCurrentMessageFiles]);
 
   // Chat controller for submitting messages
@@ -295,10 +284,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     setPopup,
   ]);
 
-  const toggleDocumentSidebar = () => {
-    // No-op for NRF page - document sidebar not applicable
-  };
-
   const handleOpenInOnyx = () => {
     window.open(`${window.location.origin}/chat`, "_blank");
   };
@@ -344,14 +329,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
         </div>
       )}
 
-      {/* Text view modal for viewing documents */}
-      {presentingDocument && (
-        <TextView
-          presentingDocument={presentingDocument}
-          onClose={() => setPresentingDocument(null)}
-        />
-      )}
-
       <Dropzone onDrop={handleFileUpload} noClick>
         {({ getRootProps }) => (
           <div {...getRootProps()} className="nrf-dropzone">
@@ -374,10 +351,10 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   <div className="nrf-messages-scroll">
                     <div className="nrf-messages-content">
                       <ChatUI
-                        liveAssistant={liveAssistant ?? undefined}
+                        liveAssistant={resolvedAssistant}
                         llmManager={llmManager}
                         currentMessageFiles={currentMessageFiles}
-                        setPresentingDocument={setPresentingDocument}
+                        setPresentingDocument={() => {}}
                         onSubmit={onSubmit}
                         onMessageSelection={() => {}}
                         stopGenerating={stopGenerating}
@@ -399,7 +376,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                       ref={chatInputBarRef}
                       deepResearchEnabled={deepResearchEnabled}
                       toggleDeepResearch={toggleDeepResearch}
-                      toggleDocumentSidebar={toggleDocumentSidebar}
+                      toggleDocumentSidebar={() => {}}
                       filterManager={filterManager}
                       llmManager={llmManager}
                       removeDocs={() => {}}
@@ -412,10 +389,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                       currentSessionFileTokenCount={
                         currentSessionFileTokenCount
                       }
-                      availableContextTokens={
-                        Number(DEFAULT_CONTEXT_TOKENS) * 0.5
-                      }
-                      selectedAssistant={liveAssistant ?? undefined}
+                      availableContextTokens={AVAILABLE_CONTEXT_TOKENS}
+                      selectedAssistant={resolvedAssistant}
                       handleFileUpload={handleFileUpload}
                       disabled={
                         !llmManager.isLoadingProviders &&
@@ -452,7 +427,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   ref={chatInputBarRef}
                   deepResearchEnabled={deepResearchEnabled}
                   toggleDeepResearch={toggleDeepResearch}
-                  toggleDocumentSidebar={toggleDocumentSidebar}
+                  toggleDocumentSidebar={() => {}}
                   filterManager={filterManager}
                   llmManager={llmManager}
                   removeDocs={() => {}}
@@ -463,7 +438,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   onSubmit={handleChatInputSubmit}
                   chatState={currentChatState}
                   currentSessionFileTokenCount={currentSessionFileTokenCount}
-                  availableContextTokens={Number(DEFAULT_CONTEXT_TOKENS) * 0.5}
+                  availableContextTokens={AVAILABLE_CONTEXT_TOKENS}
                   selectedAssistant={liveAssistant ?? undefined}
                   handleFileUpload={handleFileUpload}
                   disabled={
