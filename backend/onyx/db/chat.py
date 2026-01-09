@@ -182,9 +182,9 @@ def get_chat_sessions_by_user(
             .correlate(ChatSession)
         )
 
-        # 5 minute leeway for newly created chats that don't have messages yet
-        five_minutes_ago = datetime.now(timezone.utc) - timedelta(minutes=5)
-        recently_created = ChatSession.time_created >= five_minutes_ago
+        # Leeway for newly created chats that don't have messages yet
+        time = datetime.now(timezone.utc) - timedelta(minutes=5)
+        recently_created = ChatSession.time_created >= time
 
         stmt = stmt.where(or_(non_system_message_exists_subq, recently_created))
 
