@@ -9,6 +9,9 @@ import React, {
 import { FiPlus } from "react-icons/fi";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
+import MultiModelSelector from "@/refresh-components/popovers/MultiModelSelector";
+import { useMultiModelEnabled } from "@/app/chat/hooks/useMultiModelEnabled";
+import { LlmDescriptor } from "@/lib/hooks";
 import { InputPrompt } from "@/app/chat/interfaces";
 import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
 import { useInputPrompts } from "@/lib/hooks/useInputPrompts";
@@ -36,7 +39,13 @@ import {
   getIconForAction,
   hasSearchToolsAvailable,
 } from "@/app/chat/services/actionUtils";
-import { SvgArrowUp, SvgHourglass, SvgPlusCircle, SvgStop } from "@opal/icons";
+import {
+  SvgArrowUp,
+  SvgHourglass,
+  SvgPlusCircle,
+  SvgSliders,
+  SvgStop,
+} from "@opal/icons";
 
 const MAX_INPUT_HEIGHT = 200;
 
@@ -89,7 +98,7 @@ export interface ChatInputBarProps {
   selectedDocuments: OnyxDocument[];
   initialMessage?: string;
   stopGenerating: () => void;
-  onSubmit: (message: string) => void;
+  onSubmit: (message: string, selectedModels?: LlmDescriptor[]) => void;
   onHeightChange?: (delta: number) => void;
   llmManager: LlmManager;
   chatState: ChatState;
@@ -158,6 +167,11 @@ const ChatInputBar = React.memo(
       const { forcedToolIds, setForcedToolIds } = useForcedTools();
       const { currentMessageFiles, setCurrentMessageFiles } =
         useProjectsContext();
+
+      // Multi-model chat feature flag and state
+      const multiModelEnabled = useMultiModelEnabled();
+      const [multiModelMode, setMultiModelMode] = useState(false);
+      const [selectedModels, setSelectedModels] = useState<LlmDescriptor[]>([]);
 
       const currentIndexingFiles = useMemo(() => {
         return currentMessageFiles.filter(
@@ -519,7 +533,12 @@ const ChatInputBar = React.memo(
                 ) {
                   event.preventDefault();
                   if (message) {
-                    onSubmit(message);
+                    // Pass selected models if in multi-model mode with 2+ models selected
+                    const models =
+                      multiModelMode && selectedModels.length >= 2
+                        ? selectedModels
+                        : undefined;
+                    onSubmit(message, models);
                   }
                 }
               }}
@@ -674,16 +693,46 @@ const ChatInputBar = React.memo(
 
               {/* Bottom right controls */}
               <div className="flex flex-row items-center gap-1">
-                {/* LLM popover - loads when ready */}
+                {/* Multi-model toggle - only shown when feature flag is enabled */}
+                {multiModelEnabled && (
+                  <SelectButton
+                    leftIcon={SvgSliders}
+                    onClick={() => {
+                      setMultiModelMode(!multiModelMode);
+                      if (multiModelMode) {
+                        setSelectedModels([]);
+                      }
+                    }}
+                    engaged={multiModelMode}
+                    action
+                    folded
+                    disabled={disabled}
+                    className="bg-transparent"
+                  >
+                    Multi-model
+                  </SelectButton>
+                )}
+
+                {/* LLM popover or Multi-model selector - loads when ready */}
                 <div
                   data-testid="ChatInputBar/llm-popover-trigger"
                   className={cn(controlsLoading && "invisible")}
                 >
-                  <LLMPopover
-                    llmManager={llmManager}
-                    requiresImageGeneration={false}
-                    disabled={disabled}
-                  />
+                  {multiModelMode ? (
+                    <MultiModelSelector
+                      llmManager={llmManager}
+                      selectedModels={selectedModels}
+                      onModelsChange={setSelectedModels}
+                      maxModels={3}
+                      disabled={disabled}
+                    />
+                  ) : (
+                    <LLMPopover
+                      llmManager={llmManager}
+                      requiresImageGeneration={false}
+                      disabled={disabled}
+                    />
+                  )}
                 </div>
 
                 {/* Submit button - always visible */}
@@ -697,7 +746,12 @@ const ChatInputBar = React.memo(
                     if (chatState == "streaming") {
                       stopGenerating();
                     } else if (message) {
-                      onSubmit(message);
+                      // Pass selected models if in multi-model mode with 2+ models selected
+                      const models =
+                        multiModelMode && selectedModels.length >= 2
+                          ? selectedModels
+                          : undefined;
+                      onSubmit(message, models);
                     }
                   }}
                 />

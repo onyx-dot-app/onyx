@@ -17,6 +17,11 @@ import { ErrorBanner } from "@/app/chat/message/Resubmit";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import AIMessage from "@/app/chat/message/messageComponents/AIMessage";
+import MultiModelResponseView, {
+  MultiModelResponse,
+} from "@/app/chat/message/MultiModelResponseView";
+import { useMultiModelEnabled } from "@/app/chat/hooks/useMultiModelEnabled";
+import { patchMessageToBeLatest } from "@/app/chat/services/lib";
 import { ProjectFile } from "@/app/chat/projects/projectsService";
 import { useScrollonStream } from "@/app/chat/services/lib";
 import useScreenSize from "@/hooks/useScreenSize";
@@ -89,6 +94,7 @@ const ChatUI = React.memo(
       const error = useUncaughtError();
       const messageTree = useCurrentMessageTree();
       const currentChatState = useCurrentChatState();
+      const isMultiModelEnabled = useMultiModelEnabled();
 
       // Stable fallbacks to avoid changing prop identities on each render
       const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
@@ -141,6 +147,54 @@ const ChatUI = React.memo(
           });
         },
         [] // Stable - uses refs for latest values
+      );
+
+      // Handle multi-model response highlight change
+      const handleMultiModelHighlightChange = useCallback(
+        async (nodeId: number) => {
+          // Find the message to get its messageId
+          const message = messageTree?.get(nodeId);
+          if (message?.messageId) {
+            // Update the backend to set this message as the latest
+            await patchMessageToBeLatest(message.messageId);
+          }
+          // Also trigger local message selection
+          onMessageSelection(nodeId);
+        },
+        [messageTree, onMessageSelection]
+      );
+
+      // Helper to check if a user message has multi-model responses
+      const getMultiModelResponses = useCallback(
+        (userMessage: Message): MultiModelResponse[] | null => {
+          if (!isMultiModelEnabled || !messageTree) return null;
+
+          const childrenNodeIds = userMessage.childrenNodeIds || [];
+          // Multi-model mode creates 2 or 3 assistant children
+          if (childrenNodeIds.length < 2) return null;
+
+          const childMessages = childrenNodeIds
+            .map((nodeId) => messageTree.get(nodeId))
+            .filter(
+              (msg): msg is Message =>
+                msg !== undefined && msg.type === "assistant"
+            );
+
+          // Need at least 2 assistant messages for multi-model view
+          if (childMessages.length < 2) return null;
+
+          const latestChildNodeId = userMessage.latestChildNodeId;
+
+          return childMessages.map((msg) => ({
+            nodeId: msg.nodeId,
+            messageId: msg.messageId,
+            modelName: msg.overridden_model || "Model",
+            packets: msg.packets || [],
+            isHighlighted: msg.nodeId === latestChildNodeId,
+            currentFeedback: msg.currentFeedback,
+          }));
+        },
+        [isMultiModelEnabled, messageTree]
       );
 
       const handleScroll = useCallback(() => {
@@ -260,6 +314,9 @@ const ChatUI = React.memo(
                   const nextMessage =
                     messages.length > i + 1 ? messages[i + 1] : null;
 
+                  // Check for multi-model responses
+                  const multiModelResponses = getMultiModelResponses(message);
+
                   return (
                     <div
                       id={messageReactComponentKey}
@@ -280,6 +337,24 @@ const ChatUI = React.memo(
                         }
                         onMessageSelection={onMessageSelection}
                       />
+
+                      {/* Render MultiModelResponseView if this user message has multi-model responses */}
+                      {multiModelResponses && (
+                        <MultiModelResponseView
+                          responses={multiModelResponses}
+                          chatState={{
+                            assistant: liveAssistant,
+                            docs: emptyDocs,
+                            citations: undefined,
+                            setPresentingDocument,
+                            overriddenModel: llmManager.currentLlm?.modelName,
+                          }}
+                          llmManager={llmManager}
+                          parentMessage={message}
+                          onHighlightChange={handleMultiModelHighlightChange}
+                          onRegenerate={createRegenerator}
+                        />
+                      )}
                     </div>
                   );
                 } else if (message.type === "assistant") {
@@ -302,6 +377,16 @@ const ChatUI = React.memo(
                   // since this is a "parsed" version of the message tree
                   // so the previous message is guaranteed to be the parent of the current message
                   const previousMessage = i !== 0 ? messages[i - 1] : null;
+
+                  // Check if this assistant message is part of a multi-model response
+                  // If so, skip rendering since it's already rendered in MultiModelResponseView
+                  if (
+                    previousMessage?.type === "user" &&
+                    getMultiModelResponses(previousMessage)
+                  ) {
+                    return null;
+                  }
+
                   const chatStateData = {
                     assistant: liveAssistant,
                     docs: message.documents ?? emptyDocs,

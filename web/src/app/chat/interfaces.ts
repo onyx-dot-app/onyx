@@ -209,6 +209,12 @@ export interface MessageResponseIDInfo {
   reserved_assistant_message_id: number;
 }
 
+export interface MultiModelMessageResponseIDInfo {
+  user_message_id: number | null;
+  reserved_assistant_message_ids: number[];
+  model_names: string[];
+}
+
 export interface UserKnowledgeFilePacket {
   user_files: FileDescriptor[];
 }

@@ -317,6 +317,7 @@ export interface Placement {
   turn_index: number;
   tab_index?: number; // For parallel tool calls - tools with same turn_index but different tab_index run in parallel
   sub_turn_index?: number | null;
+  model_index?: number; // For multi-model chat - identifies which model's response (0, 1, or 2)
 }
 
 // Packet wrapper for streaming objects

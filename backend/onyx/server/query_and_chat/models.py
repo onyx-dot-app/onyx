@@ -83,7 +83,7 @@ class SendMessageRequest(BaseModel):
     message: str
 
     llm_override: LLMOverride | None = None
-    # For multi-model chat: list of LLM overrides to compare (exactly 3 required)
+    # For multi-model chat: list of LLM overrides to compare (2-3 models supported)
     llm_overrides: list[LLMOverride] | None = None
 
     allowed_tool_ids: list[int] | None = None

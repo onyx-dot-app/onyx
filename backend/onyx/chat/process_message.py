@@ -684,9 +684,9 @@ def handle_stream_message_objects(
         def check_is_connected() -> bool:
             return check_stop_signal(chat_session.id, redis_client)
 
-        # Check for multi-model chat mode
-        if new_msg_req.llm_overrides and len(new_msg_req.llm_overrides) == 3:
-            # Multi-model chat: run 3 models in parallel
+        # Check for multi-model chat mode (2 or more models)
+        if new_msg_req.llm_overrides and len(new_msg_req.llm_overrides) >= 2:
+            # Multi-model chat: run N models in parallel
             if new_msg_req.deep_research:
                 raise RuntimeError(
                     "Deep research is not supported for multi-model chat"
@@ -710,9 +710,10 @@ def handle_stream_message_objects(
                     or f"Model {len(llms)}"
                 )
 
-            # Reserve message IDs for all 3 assistant responses (all have same parent)
+            # Reserve message IDs for all N assistant responses (all have same parent)
+            num_models = len(new_msg_req.llm_overrides)
             assistant_responses = []
-            for _ in range(3):
+            for _ in range(num_models):
                 assistant_response = reserve_message_id(
                     db_session=db_session,
                     chat_session_id=chat_session.id,
@@ -728,9 +729,9 @@ def handle_stream_message_objects(
             )
 
             # Create state containers for each model
-            state_containers = [ChatStateContainer() for _ in range(3)]
+            state_containers = [ChatStateContainer() for _ in range(num_models)]
 
-            # Run all 3 models in parallel
+            # Run all N models in parallel
             yield from _run_multi_model_chat_loops(
                 llms=llms,
                 model_names=model_names,

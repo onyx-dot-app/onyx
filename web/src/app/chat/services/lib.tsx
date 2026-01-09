@@ -13,6 +13,7 @@ import {
   FileChatDisplay,
   Message,
   MessageResponseIDInfo,
+  MultiModelMessageResponseIDInfo,
   ResearchType,
   RetrievalType,
   StreamingError,
@@ -97,9 +98,17 @@ export type PacketType =
   | FileChatDisplay
   | StreamingError
   | MessageResponseIDInfo
+  | MultiModelMessageResponseIDInfo
   | StreamStopInfo
   | UserKnowledgeFilePacket
   | Packet;
+
+// LLM override for multi-model chat
+export interface LLMOverrideParams {
+  model_provider: string;
+  model_version: string;
+  temperature?: number;
+}
 
 export interface SendMessageParams {
   message: string;
@@ -112,10 +121,12 @@ export interface SendMessageParams {
   enabledToolIds?: number[];
   // Single forced tool ID (new API uses singular, not array)
   forcedToolId?: number | null;
-  // LLM override parameters
+  // LLM override parameters (single model)
   modelProvider?: string;
   modelVersion?: string;
   temperature?: number;
+  // Multi-model overrides (up to 3 models)
+  llmOverrides?: LLMOverrideParams[];
 }
 
 export async function* sendMessage({
@@ -131,6 +142,7 @@ export async function* sendMessage({
   modelProvider,
   modelVersion,
   temperature,
+  llmOverrides,
 }: SendMessageParams): AsyncGenerator<PacketType, void, unknown> {
   // Build payload for new send-chat-message API
   const payload = {
@@ -142,14 +154,16 @@ export async function* sendMessage({
     deep_research: deepResearch ?? false,
     allowed_tool_ids: enabledToolIds,
     forced_tool_id: forcedToolId ?? null,
+    // Use llm_overrides if provided (multi-model mode), otherwise use single llm_override
     llm_override:
-      temperature || modelVersion
+      !llmOverrides && (temperature || modelVersion)
         ? {
             temperature,
             model_provider: modelProvider,
             model_version: modelVersion,
           }
         : null,
+    llm_overrides: llmOverrides ?? null,
   };
 
   const body = JSON.stringify(payload);

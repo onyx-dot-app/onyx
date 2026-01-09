@@ -9,7 +9,12 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
-import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
+import {
+  useFederatedConnectors,
+  useFilters,
+  useLlmManager,
+  LlmDescriptor,
+} from "@/lib/hooks";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
@@ -428,11 +433,12 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
   }
 
   const handleChatInputSubmit = useCallback(
-    (message: string) => {
+    (message: string, selectedModels?: LlmDescriptor[]) => {
       onSubmit({
         message,
         currentMessageFiles: currentMessageFiles,
         deepResearch: deepResearchEnabled,
+        selectedModels,
       });
       if (showOnboarding) {
         finishOnboarding();
