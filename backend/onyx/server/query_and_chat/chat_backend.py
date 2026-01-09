@@ -625,6 +625,8 @@ async def handle_send_chat_message(
                     # End of stream signal
                     break
                 yield item
+        except asyncio.CancelledError:
+            logger.warning("Stream cancelled (Consumer disconnected)")
         finally:
             logger.debug("Stream consumer finished")
 
