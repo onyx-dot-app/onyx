@@ -285,6 +285,13 @@ def get_chat_session(
         prefetch_top_two_level_tool_calls=True,
     )
 
+    is_processing = is_chat_session_processing(session_id, get_redis_client())
+    # Edit the last message to indicate loading (Overriding default message value)
+    if is_processing and session_messages:
+        session_messages[-1].message = (
+            "Message is loading... Please refresh the page soon."
+        )
+
     # Convert messages to ChatMessageDetail format
     chat_message_details = [
         translate_db_message_to_chat_message_detail(msg) for msg in session_messages
@@ -301,12 +308,6 @@ def get_chat_session(
                 )
             )
             # msg_packet_list.append(Packet(ind=end_step_nr, obj=OverallStop()))
-
-    is_processing = is_chat_session_processing(session_id, get_redis_client())
-    if is_processing and chat_message_details:
-        chat_message_details[-1].message = (
-            "Message is loading... Please refresh the page soon."
-        )
 
     return ChatSessionDetailResponse(
         chat_session_id=session_id,
