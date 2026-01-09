@@ -9,6 +9,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.chat.chat_processing_checker import set_processing_status
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_state import run_chat_loop_with_state_containers
 from onyx.chat.chat_utils import convert_chat_history
@@ -528,6 +529,12 @@ def handle_stream_message_objects(
         def check_is_connected() -> bool:
             return check_stop_signal(chat_session.id, redis_client)
 
+        set_processing_status(
+            chat_session.id,
+            redis_client,
+            True,
+        )
+
         # Use external state container if provided, otherwise create internal one
         # External container allows non-streaming callers to access accumulated state
         state_container = external_state_container or ChatStateContainer()
@@ -674,7 +681,16 @@ def handle_stream_message_objects(
             )
 
         db_session.rollback()
-        return
+    finally:
+        try:
+            if redis_client is not None:
+                set_processing_status(
+                    chat_session.id,
+                    redis_client,
+                    False,
+                )
+        except Exception as e:
+            logger.exception("Error in setting processing status", e)
 
 
 def stream_chat_message_objects(

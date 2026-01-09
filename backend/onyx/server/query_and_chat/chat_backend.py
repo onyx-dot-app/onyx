@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_user
+from onyx.chat.chat_processing_checker import is_chat_session_processing
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import create_chat_history_chain
 from onyx.chat.chat_utils import create_chat_session_from_request
@@ -300,6 +301,12 @@ def get_chat_session(
                 )
             )
             # msg_packet_list.append(Packet(ind=end_step_nr, obj=OverallStop()))
+
+    is_processing = is_chat_session_processing(session_id, get_redis_client())
+    if is_processing and chat_message_details:
+        chat_message_details[-1].message = (
+            "Message is loading... Please refresh the page soon."
+        )
 
     return ChatSessionDetailResponse(
         chat_session_id=session_id,
