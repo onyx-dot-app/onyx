@@ -139,6 +139,7 @@ def test_send_message_disconnect_and_cleanup(
     # Every 5 seconds, check if we have the latest state of the chat session up to a minute
     increment_seconds = 1
     max_seconds = 60
+    msg = TERMINATED_RESPONSE_MESSAGE
 
     for _ in range(max_seconds // increment_seconds):
         time.sleep(increment_seconds)
@@ -151,9 +152,9 @@ def test_send_message_disconnect_and_cleanup(
 
         # Find the assistant message
         assistant_message = None
-        for msg in chat_history:
-            if msg.message_type == MessageType.ASSISTANT:
-                assistant_message = msg
+        for chat_obj in chat_history:
+            if chat_obj.message_type == MessageType.ASSISTANT:
+                assistant_message = chat_obj
                 break
 
         assert assistant_message is not None, "Assistant message should exist"
