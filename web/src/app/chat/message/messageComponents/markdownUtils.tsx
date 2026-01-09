@@ -13,7 +13,7 @@ import {
 } from "@/app/chat/message/MemoizedTextComponents";
 import { extractCodeText, preprocessLaTeX } from "@/app/chat/message/codeUtils";
 import { CodeBlock } from "@/app/chat/message/CodeBlock";
-import { transformLinkUri } from "@/lib/utils";
+import { transformLinkUri, cn } from "@/lib/utils";
 
 /**
  * Processes content for markdown rendering by handling code blocks and LaTeX
@@ -107,6 +107,15 @@ export const useMarkdownComponents = (
           <li className={className} {...props}>
             {children}
           </li>
+        );
+      },
+      table: ({ node, className, children, ...props }: any) => {
+        return (
+          <div className="markdown-table-breakout">
+            <table className={cn(className, "min-w-full")} {...props}>
+              {children}
+            </table>
+          </div>
         );
       },
       code: ({ node, className, children }: any) => {

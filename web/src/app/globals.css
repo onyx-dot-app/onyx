@@ -12,6 +12,7 @@
 @import "css/square-button.css";
 @import "css/switch.css";
 @import "css/z-index.css";
+@import "css/nrf.css";
 
 @tailwind base;
 @tailwind components;
