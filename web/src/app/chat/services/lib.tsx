@@ -101,7 +101,8 @@ export type PacketType =
   | UserKnowledgeFilePacket
   | Packet;
 
-// Origin of the message for telemetry tracking
+// Origin of the message for telemetry tracking.
+// Keep in sync with backend: backend/onyx/server/query_and_chat/models.py::MessageOrigin
 export type MessageOrigin =
   | "webapp"
   | "chrome_extension"
@@ -161,7 +162,8 @@ export async function* sendMessage({
             model_version: modelVersion,
           }
         : null,
-    origin: origin ?? "webapp",
+    // Default to "unknown" for consistency with backend; callers should set explicitly
+    origin: origin ?? "unknown",
   };
 
   const body = JSON.stringify(payload);

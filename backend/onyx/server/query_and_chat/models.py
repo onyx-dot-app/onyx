@@ -105,7 +105,8 @@ class SendMessageRequest(BaseModel):
     deep_research: bool = False
 
     # Origin of the message for telemetry tracking
-    origin: MessageOrigin = MessageOrigin.WEBAPP
+    # Defaults to UNKNOWN - callers should set this explicitly
+    origin: MessageOrigin = MessageOrigin.UNKNOWN
 
     # Placement information for the message in the conversation tree:
     # - -1: auto-place after latest message in chain

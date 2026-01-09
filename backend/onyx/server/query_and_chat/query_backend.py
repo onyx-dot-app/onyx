@@ -252,6 +252,7 @@ def get_answer_stream(
     )
 
     # Also creates a new chat session
+    # Origin is hardcoded to API since this endpoint is only accessible via API calls
     request = prepare_chat_message_request(
         message_text=combined_message,
         user=user,
