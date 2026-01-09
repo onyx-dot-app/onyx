@@ -8,3 +8,5 @@ class Placement(BaseModel):
     tab_index: int = 0
     # Used for tools/agents that call other tools, this currently doesn't support nested agents but can be added later
     sub_turn_index: int | None = None
+    # For multi-model chat: identifies which model's response this packet belongs to (0, 1, or 2)
+    model_index: int | None = None
