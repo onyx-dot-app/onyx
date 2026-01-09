@@ -26,7 +26,7 @@ import { ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
-import { useCCPairs } from "@/lib/hooks/useCCPairs";
+import useCCPairs from "@/hooks/useCCPairs";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
@@ -147,7 +147,7 @@ export default function ActionsPopover({
   const availableToolIds = availableTools.map((tool) => tool.id);
 
   // Check if there are any connectors available
-  const hasNoConnectors = !ccPairs || ccPairs.length === 0;
+  const hasNoConnectors = ccPairs.length === 0;
 
   const assistantPreference = assistantPreferences?.[selectedAssistant.id];
   const disabledToolIds = assistantPreference?.disabled_tool_ids || [];

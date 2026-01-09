@@ -1,3 +1,5 @@
+"use client";
+
 import useSWR, { KeyedMutator } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
