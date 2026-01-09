@@ -240,7 +240,7 @@ function GeneralSettings() {
             </Button>
           }
         >
-          <GeneralLayouts.Section gap={0.5} left>
+          <GeneralLayouts.Section gap={0.5} alignItems="start">
             <Text>
               All your chat sessions and history will be permanently deleted.
               Deletion cannot be undone.
@@ -598,7 +598,7 @@ function PromptShortcuts() {
 
         return (
           <div key={shortcut.id}>
-            <GeneralLayouts.Section horizontal gap={0.25}>
+            <GeneralLayouts.Section flexDirection="row" gap={0.25}>
               <div className="w-[60%]">
                 <InputTypeIn
                   placeholder="/Shortcut"
@@ -732,7 +732,11 @@ function MemoriesModal({
               <Modal.Body>
                 <GeneralLayouts.Section gap={0.5}>
                   {/* New memory input - always at the top */}
-                  <GeneralLayouts.Section horizontal gap={0.5} top>
+                  <GeneralLayouts.Section
+                    flexDirection="row"
+                    alignItems="start"
+                    gap={0.5}
+                  >
                     <InputTextAreaField
                       name="newMemory"
                       placeholder="Type or paste in text content"
@@ -748,10 +752,10 @@ function MemoriesModal({
                         <Separator noPadding />
                         {values.existingMemories.map((_, index) => (
                           <GeneralLayouts.Section
-                            horizontal
+                            flexDirection="row"
+                            alignItems="start"
                             gap={0.5}
                             key={index}
-                            top
                           >
                             <InputTextAreaField
                               name={`existingMemories.${index}`}
@@ -1163,7 +1167,7 @@ function AccountsAccessSettings() {
             </Button>
           }
         >
-          <GeneralLayouts.Section gap={0.5} left>
+          <GeneralLayouts.Section gap={0.5} alignItems="start">
             <Text>
               Any application using this token will lose access to Onyx. This
               action cannot be undone.
@@ -1277,7 +1281,11 @@ function AccountsAccessSettings() {
             <Card padding={0.25}>
               <GeneralLayouts.Section gap={0}>
                 {/* Header with search/empty state and create button */}
-                <GeneralLayouts.Section horizontal padding={0.25} gap={0.5}>
+                <GeneralLayouts.Section
+                  flexDirection="row"
+                  padding={0.25}
+                  gap={0.5}
+                >
                   {pats.length === 0 ? (
                     <Text as="span" text03 secondaryBody className="flex-1">
                       {isLoading

@@ -147,7 +147,7 @@ export default function ActionsPopover({
   const availableToolIds = availableTools.map((tool) => tool.id);
 
   // Check if there are any connectors available
-  const hasNoConnectors = !ccPairs || ccPairs.length === 0;
+  const hasNoConnectors = ccPairs.length === 0;
 
   const assistantPreference = assistantPreferences?.[selectedAssistant.id];
   const disabledToolIds = assistantPreference?.disabled_tool_ids || [];

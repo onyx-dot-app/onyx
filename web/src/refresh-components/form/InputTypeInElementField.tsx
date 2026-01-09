@@ -1,6 +1,5 @@
 "use client";
 
-import * as GeneralLayouts from "@/layouts/general-layouts";
 import { useField } from "formik";
 import InputTypeIn, {
   InputTypeInProps,
@@ -8,6 +7,7 @@ import InputTypeIn, {
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgMinusCircle } from "@opal/icons";
 import { useOnChangeEvent, useOnBlurEvent } from "@/hooks/formHooks";
+import { Section } from "@/layouts/general-layouts";
 
 export interface InputTypeInElementFieldProps
   extends Omit<InputTypeInProps, "value" | "onClear"> {
@@ -30,7 +30,7 @@ export default function InputTypeInElementField({
   const isEmpty = !field.value || field.value.trim() === "";
 
   return (
-    <GeneralLayouts.Section horizontal gap={0.25}>
+    <Section flexDirection="row" gap={0.25}>
       {/* Input */}
       <InputTypeIn
         {...inputProps}
@@ -49,6 +49,6 @@ export default function InputTypeInElementField({
         onClick={onRemove}
         tooltip="Remove"
       />
-    </GeneralLayouts.Section>
+    </Section>
   );
 }

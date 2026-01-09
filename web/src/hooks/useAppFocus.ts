@@ -11,8 +11,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 export type AppFocusType =
   | { type: "agent" | "project" | "chat"; id: string }
   | "new-session"
-  | "more-agents"
-  | "settings";
+  | "more-agents";
 
 export class AppFocus {
   constructor(public value: AppFocusType) {}
@@ -37,21 +36,11 @@ export class AppFocus {
     return this.value === "more-agents";
   }
 
-  isSettings(): boolean {
-    return this.value === "settings";
-  }
-
   getId(): string | null {
     return typeof this.value === "object" ? this.value.id : null;
   }
 
-  getType():
-    | "agent"
-    | "project"
-    | "chat"
-    | "new-session"
-    | "more-agents"
-    | "settings" {
+  getType(): "agent" | "project" | "chat" | "new-session" | "more-agents" {
     return typeof this.value === "object" ? this.value.type : this.value;
   }
 }
@@ -59,11 +48,6 @@ export class AppFocus {
 export default function useAppFocus(): AppFocus {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-
-  // Check if we're on the settings page
-  if (pathname.startsWith("/chat/settings")) {
-    return new AppFocus("settings");
-  }
 
   // Check if we're on the agents page
   if (pathname.startsWith("/chat/agents")) {
