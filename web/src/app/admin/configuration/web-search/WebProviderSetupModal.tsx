@@ -239,7 +239,7 @@ export const WebProviderSetupModal = memo(
               </FormField>
             )}
           </Modal.Body>
-          <Modal.Footer className="gap-2">
+          <Modal.Footer>
             <Button type="button" main secondary onClick={onClose}>
               Cancel
             </Button>

@@ -158,7 +158,7 @@ export const OAuthConfigForm = ({
         >
           {({ isSubmitting }) => (
             <Form className="w-full overflow-visible">
-              <Modal.Body className="overflow-y-auto px-6 w-full">
+              <Modal.Body>
                 <Separator noPadding />
 
                 <Text>
@@ -251,7 +251,7 @@ export const OAuthConfigForm = ({
                   autoCompleteDisabled={true}
                 />
               </Modal.Body>
-              <Modal.Footer className="w-full">
+              <Modal.Footer>
                 <Button
                   type="button"
                   onClick={onClose}

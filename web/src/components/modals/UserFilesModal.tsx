@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState, useEffect, useMemo } from "react";
+import React, { useMemo, useRef, useState, useEffect } from "react";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { ProjectFile } from "@/app/chat/projects/ProjectsContext";
 import { formatRelativeTime } from "@/app/chat/components/projects/project_utils";
@@ -17,7 +17,6 @@ import Modal from "@/refresh-components/Modal";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import CounterSeparator from "@/refresh-components/CounterSeparator";
-import useFilter from "@/hooks/useFilter";
 import {
   SvgEye,
   SvgFiles,
@@ -118,6 +117,7 @@ export default function UserFilesModal({
   onUnpickRecent,
 }: UserFilesModalProps) {
   const { isOpen, toggle } = useModal();
+  const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
     () => new Set(selectedFileIds || [])
   );
@@ -146,15 +146,22 @@ export default function UserFilesModal({
     setSelectedIds(new Set());
   };
 
-  const files = useMemo(
-    () =>
-      showOnlySelected
-        ? recentFiles.filter((projectFile) => selectedIds.has(projectFile.id))
-        : recentFiles,
-    [showOnlySelected, recentFiles, selectedIds]
-  );
+  const filtered = useMemo(() => {
+    let files = recentFiles;
 
-  const { query, setQuery, filtered } = useFilter(files, (file) => file.name);
+    // Filter by search term
+    const s = search.trim().toLowerCase();
+    if (s) {
+      files = files.filter((f) => f.name.toLowerCase().includes(s));
+    }
+
+    // Filter by selected status
+    if (showOnlySelected) {
+      files = files.filter((f) => selectedIds.has(f.id));
+    }
+
+    return files;
+  }, [recentFiles, search, showOnlySelected, selectedIds]);
 
   return (
     <>
@@ -184,8 +191,8 @@ export default function UserFilesModal({
               <InputTypeIn
                 ref={searchInputRef}
                 placeholder="Search files..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
                 leftSearchIcon
                 autoComplete="off"
                 tabIndex={0}
@@ -205,7 +212,7 @@ export default function UserFilesModal({
             </div>
           </Modal.Header>
 
-          <Modal.Body className="flex flex-col flex-1 overflow-hidden bg-background-tint-01">
+          <Modal.Body twoTone>
             {/* File display section */}
             {filtered.length === 0 ? (
               <div className="p-4 flex w-full h-full items-center justify-center">
@@ -252,7 +259,7 @@ export default function UserFilesModal({
                 })}
 
                 {/* File count divider - only show when not searching or filtering */}
-                {!query.trim() && !showOnlySelected && (
+                {!search.trim() && !showOnlySelected && (
                   <CounterSeparator
                     count={recentFiles.length}
                     text={recentFiles.length === 1 ? "File" : "Files"}
@@ -262,7 +269,7 @@ export default function UserFilesModal({
             )}
           </Modal.Body>
 
-          <Modal.Footer className="flex items-center justify-between p-4">
+          <Modal.Footer>
             {/* Left side: file count and controls */}
             {onPickRecent && (
               <div className="flex items-center gap-2">

@@ -366,7 +366,7 @@ export default function UserSettings() {
             title="Settings"
             onClose={() => modal.toggle(false)}
           />
-          <Modal.Body className="flex flex-col gap-4 px-4 pb-4">
+          <Modal.Body twoTone={false}>
             {sections.length > 1 && (
               <nav>
                 <ul className="flex flex-row gap-1">

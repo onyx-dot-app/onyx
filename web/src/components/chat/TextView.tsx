@@ -242,7 +242,7 @@ export default function TextView({
           </div>
         </div>
 
-        <Modal.Body className="p-0 flex-1 min-h-0 overflow-hidden bg-background-tint-01">
+        <Modal.Body>
           {isLoading ? (
             <div className="flex flex-col items-center justify-center flex-1 min-h-0 p-6 gap-4">
               <SimpleLoader className="h-8 w-8" />

@@ -8,6 +8,8 @@ import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgX } from "@opal/icons";
 import Truncated from "@/refresh-components/texts/Truncated";
+import { WithoutStyles } from "@/types";
+import { Section } from "@/layouts/general-layouts";
 
 /**
  * Modal Root Component
@@ -37,15 +39,14 @@ const ModalRoot = DialogPrimitive.Root;
  */
 const ModalOverlay = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Overlay>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
->(({ className, ...props }, ref) => (
+  WithoutStyles<React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>>
+>(({ ...props }, ref) => (
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
       "fixed inset-0 z-modal-overlay bg-mask-03 backdrop-blur-03 pointer-events-none",
       "data-[state=open]:animate-in data-[state=closed]:animate-out",
-      "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
-      className
+      "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0"
     )}
     {...props}
   />
@@ -53,12 +54,13 @@ const ModalOverlay = React.forwardRef<
 ModalOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
 /**
- * Modal Context for managing close button ref and warning state
+ * Modal Context for managing close button ref, warning state, and size variant
  */
 interface ModalContextValue {
   closeButtonRef: React.RefObject<HTMLDivElement | null>;
   hasAttemptedClose: boolean;
   setHasAttemptedClose: (value: boolean) => void;
+  sizeVariant: "large" | "medium" | "small" | "tall" | "mini";
 }
 
 const ModalContext = React.createContext<ModalContextValue | null>(null);
@@ -268,7 +270,12 @@ const ModalContent = React.forwardRef<
 
     return (
       <ModalContext.Provider
-        value={{ closeButtonRef, hasAttemptedClose, setHasAttemptedClose }}
+        value={{
+          closeButtonRef,
+          hasAttemptedClose,
+          setHasAttemptedClose,
+          sizeVariant: variant,
+        }}
       >
         <DialogPrimitive.Portal>
           {!skipOverlay && <ModalOverlay />}
@@ -284,10 +291,10 @@ const ModalContent = React.forwardRef<
               contentRef(node);
             }}
             className={cn(
-              "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
+              "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden",
               "z-modal",
               "bg-background-tint-00 border rounded-16 shadow-2xl",
-              "flex flex-col overflow-auto",
+              "flex flex-col",
               // Never exceed viewport on small screens
               "max-w-[calc(100dvw-2rem)] max-h-[calc(100dvh-2rem)]",
               "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
@@ -330,11 +337,11 @@ ModalContent.displayName = DialogPrimitive.Content.displayName;
  *
  * @example
  * ```tsx
- * <Modal.Header icon={SvgWarning} title="Confirm Action" description="Are you sure?" withBottomShadow />
+ * <Modal.Header icon={SvgWarning} title="Confirm Action" description="Are you sure?" />
  *
  * // With custom content
  * // Children render below the provided title/description stack.
- * <Modal.Header icon={SvgFile} title="Select Files" withBottomShadow>
+ * <Modal.Header icon={SvgFile} title="Select Files">
  *   <InputTypeIn placeholder="Search..." />
  * </Modal.Header>
  * ```
@@ -345,12 +352,10 @@ interface ModalHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
   titleClassName?: string;
   description?: string;
   onClose?: () => void;
-  withBottomShadow?: boolean;
 }
 const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
   (
     {
-      withBottomShadow = false,
       icon: Icon,
       title,
       titleClassName,
@@ -368,8 +373,7 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
       <div
         ref={ref}
         className={cn(
-          "relative z-10 flex flex-col gap-4 p-4",
-          withBottomShadow && "shadow-01",
+          "relative z-10 flex flex-col gap-4 p-4 w-full",
           className
         )}
         {...props}
@@ -394,7 +398,7 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
             </Truncated>
           </DialogPrimitive.Title>
           {description && (
-            <DialogPrimitive.Description>
+            <DialogPrimitive.Description asChild>
               <Text secondaryBody text03 as="span">
                 {description}
               </Text>
@@ -425,13 +429,28 @@ ModalHeader.displayName = "ModalHeader";
  * </Modal.Body>
  * ```
  */
-interface ModalBodyProps extends React.HTMLAttributes<HTMLDivElement> {}
+interface ModalBodyProps
+  extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
+  twoTone?: boolean;
+}
 const ModalBody = React.forwardRef<HTMLDivElement, ModalBodyProps>(
-  ({ className, children, ...props }, ref) => {
+  ({ twoTone = true, children, ...props }, ref) => {
+    const { sizeVariant } = useModalContext();
+
+    // Apply overflow-auto for fixed height variants (large, small, tall)
+    const hasFixedHeight =
+      sizeVariant === "large" ||
+      sizeVariant === "small" ||
+      sizeVariant === "tall";
+
     return (
       <div
         ref={ref}
-        className={cn("pb-4 px-4 flex flex-col gap-4", className)}
+        className={cn(
+          "flex flex-col gap-4 w-full p-4",
+          twoTone && "bg-background-tint-01",
+          hasFixedHeight && "overflow-auto min-h-0"
+        )}
         {...props}
       >
         {children}
@@ -449,35 +468,33 @@ ModalBody.displayName = "ModalBody";
  * @example
  * ```tsx
  * // Right-aligned buttons
- * <Modal.Footer className="flex justify-end gap-2 p-4">
+ * <Modal.Footer>
  *   <Button secondary>Cancel</Button>
  *   <Button primary>Confirm</Button>
  * </Modal.Footer>
  *
  * // Space-between layout
- * <Modal.Footer className="flex justify-between p-4">
+ * <Modal.Footer>
  *   <Text as="p">3 files selected</Text>
  *   <Button>Done</Button>
  * </Modal.Footer>
  * ```
  */
-interface ModalFooterProps extends React.HTMLAttributes<HTMLDivElement> {}
-const ModalFooter = React.forwardRef<HTMLDivElement, ModalFooterProps>(
-  ({ className, children, ...props }, ref) => {
-    return (
-      <div
-        ref={ref}
-        className={cn(
-          "flex flex-row items-center justify-end gap-1 p-4 w-full",
-          className
-        )}
-        {...props}
-      >
-        {children}
-      </div>
-    );
-  }
-);
+const ModalFooter = React.forwardRef<
+  HTMLDivElement,
+  WithoutStyles<React.HTMLAttributes<HTMLDivElement>>
+>(({ ...props }, ref) => {
+  return (
+    <Section
+      ref={ref}
+      flexDirection="row"
+      justifyContent="end"
+      gap={0.5}
+      padding={1}
+      {...props}
+    />
+  );
+});
 ModalFooter.displayName = "ModalFooter";
 
 export default Object.assign(ModalRoot, {

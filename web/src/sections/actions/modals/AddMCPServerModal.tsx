@@ -155,7 +155,7 @@ export default function AddMCPServerModal({
                 onClose={() => handleModalClose(false)}
               />
 
-              <Modal.Body className="flex flex-col bg-background-tint-01 p-4 gap-4">
+              <Modal.Body twoTone>
                 <FormField
                   id="name"
                   name="name"
@@ -302,7 +302,7 @@ export default function AddMCPServerModal({
                   )}
               </Modal.Body>
 
-              <Modal.Footer className="gap-2">
+              <Modal.Footer>
                 <Button
                   secondary
                   type="button"
