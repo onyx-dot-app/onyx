@@ -215,7 +215,7 @@ export function TextFormField({
   includeRevert,
   isTextArea = false,
   disabled = false,
-  autoCompleteDisabled = true,
+  autoCompleteEnabled = false,
   error,
   defaultHeight,
   isCode = false,
@@ -244,7 +244,7 @@ export function TextFormField({
   type?: string;
   isTextArea?: boolean;
   disabled?: boolean;
-  autoCompleteDisabled?: boolean;
+  autoCompleteEnabled?: boolean;
   error?: string;
   defaultHeight?: string;
   isCode?: boolean;
@@ -365,7 +365,7 @@ export function TextFormField({
           `}
           disabled={disabled}
           placeholder={placeholder}
-          autoComplete={autoCompleteDisabled ? "off" : undefined}
+          autoComplete={autoCompleteEnabled ? undefined : "off"}
         />
         {!isTextArea && isPasswordField && showPasswordToggle && (
           <button
