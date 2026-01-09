@@ -1,6 +1,7 @@
 export type WebContentProviderType =
   | "firecrawl"
   | "onyx_web_crawler"
+  | "exa"
   | (string & {});
 
 export const CONTENT_PROVIDERS_URL = "/api/admin/web-search/content-providers";
@@ -22,6 +23,13 @@ export const CONTENT_PROVIDER_DETAILS: Record<
     description:
       "Connect Firecrawl to fetch and summarize page content from search results.",
     logoSrc: "/firecrawl.svg",
+  },
+  exa: {
+    label: "Exa",
+    subtitle: "Exa.ai",
+    description:
+      "Use Exa to fetch and summarize page content from search results.",
+    logoSrc: "/Exa.svg",
   },
 };
 
@@ -64,6 +72,7 @@ const CONTENT_PROVIDER_CAPABILITIES: Record<
       base_url: ["base_url", "api_base_url"],
     },
   },
+  // exa uses default capabilities
 };
 
 const DEFAULT_CONTENT_PROVIDER_CAPABILITIES: ContentProviderCapabilities = {

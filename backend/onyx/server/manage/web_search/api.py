@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.models import InternetContentProvider
+from onyx.db.models import InternetSearchProvider
 from onyx.db.models import User
 from onyx.db.web_search import deactivate_web_content_provider
 from onyx.db.web_search import deactivate_web_search_provider
@@ -93,6 +95,27 @@ def upsert_search_provider_endpoint(
         activate=request.activate,
         db_session=db_session,
     )
+
+    # Sync Exa key to content provider - create if doesn't exist, update if exists
+    if (
+        request.provider_type == WebSearchProviderType.EXA
+        and request.api_key_changed
+        and request.api_key
+    ):
+        exa_content_provider = fetch_web_content_provider_by_type(
+            WebContentProviderType.EXA, db_session
+        )
+        if exa_content_provider is not None:
+            exa_content_provider.api_key = request.api_key
+        else:
+            # Create Exa content provider with the same key
+            exa_content_provider = InternetContentProvider()
+            exa_content_provider.name = "Exa"
+            exa_content_provider.provider_type = WebContentProviderType.EXA.value
+            exa_content_provider.api_key = request.api_key
+            exa_content_provider.is_active = False
+            db_session.add(exa_content_provider)
+        db_session.flush()
 
     db_session.commit()
     return WebSearchProviderView(
@@ -244,6 +267,27 @@ def upsert_content_provider_endpoint(
         activate=request.activate,
         db_session=db_session,
     )
+
+    # Sync Exa key to search provider - create if doesn't exist, update if exists
+    if (
+        request.provider_type == WebContentProviderType.EXA
+        and request.api_key_changed
+        and request.api_key
+    ):
+        exa_search_provider = fetch_web_search_provider_by_type(
+            WebSearchProviderType.EXA, db_session
+        )
+        if exa_search_provider is not None:
+            exa_search_provider.api_key = request.api_key
+        else:
+            # Create Exa search provider with the same key
+            exa_search_provider = InternetSearchProvider()
+            exa_search_provider.name = "Exa"
+            exa_search_provider.provider_type = WebSearchProviderType.EXA.value
+            exa_search_provider.api_key = request.api_key
+            exa_search_provider.is_active = False
+            db_session.add(exa_search_provider)
+        db_session.flush()
 
     db_session.commit()
     return WebContentProviderView(

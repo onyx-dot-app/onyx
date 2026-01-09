@@ -98,6 +98,9 @@ def build_content_provider_from_config(
             timeout_seconds=config.timeout_seconds,
         )
 
+    if provider_type == WebContentProviderType.EXA:
+        return ExaClient(api_key=api_key)
+
 
 def get_default_provider() -> WebSearchProvider | None:
     with get_session_with_current_tenant() as db_session:
