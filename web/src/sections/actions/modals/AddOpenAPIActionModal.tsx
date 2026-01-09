@@ -368,7 +368,6 @@ export default function AddOpenAPIActionModal({
                     title={modalTitle}
                     description={modalDescription}
                     onClose={handleClose}
-                    className="p-4 w-full"
                   />
 
                   <Modal.Body twoTone>

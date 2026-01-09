@@ -320,7 +320,6 @@ export default function OpenAPIAuthenticationModal({
           title={title}
           description={description}
           onClose={onClose}
-          className="p-4"
         />
 
         <Formik

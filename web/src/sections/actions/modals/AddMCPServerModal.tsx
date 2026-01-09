@@ -151,7 +151,6 @@ export default function AddMCPServerModal({
                     ? "Update your MCP server configuration and manage authentication."
                     : "Connect MCP (Model Context Protocol) server to add custom actions."
                 }
-                className="p-4 w-full"
                 onClose={() => handleModalClose(false)}
               />
 

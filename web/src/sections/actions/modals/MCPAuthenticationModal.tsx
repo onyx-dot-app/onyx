@@ -327,7 +327,6 @@ export default function MCPAuthenticationModal({
           icon={SvgArrowExchange}
           title={`Authenticate ${mcpServer?.name || "MCP Server"}`}
           description="Authenticate your connection to start using the MCP server."
-          className="p-4"
         />
 
         <Formik<MCPAuthFormValues>

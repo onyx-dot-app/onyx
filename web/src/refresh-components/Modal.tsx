@@ -346,7 +346,8 @@ ModalContent.displayName = DialogPrimitive.Content.displayName;
  * </Modal.Header>
  * ```
  */
-interface ModalHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
+interface ModalHeaderProps
+  extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
   icon: React.FunctionComponent<IconProps>;
   title: string;
   titleClassName?: string;
@@ -361,7 +362,6 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
       titleClassName,
       description,
       onClose,
-      className,
       children,
       ...props
     },
@@ -372,10 +372,7 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
     return (
       <div
         ref={ref}
-        className={cn(
-          "relative z-10 flex flex-col gap-4 p-4 w-full",
-          className
-        )}
+        className="relative z-10 flex flex-col gap-4 p-4 w-full"
         {...props}
       >
         <div className="flex flex-col gap-1">
@@ -447,13 +444,14 @@ const ModalBody = React.forwardRef<HTMLDivElement, ModalBodyProps>(
       <div
         ref={ref}
         className={cn(
-          "flex flex-col gap-4 w-full p-4",
           twoTone && "bg-background-tint-01",
           hasFixedHeight && "overflow-auto min-h-0"
         )}
         {...props}
       >
-        {children}
+        <Section alignItems="start" padding={1}>
+          {children}
+        </Section>
       </div>
     );
   }

@@ -52,7 +52,6 @@ export default function DisconnectEntityModal({
             <SvgUnplug className={cn(className, "stroke-action-danger-05")} />
           )}
           title={`Disconnect ${name}`}
-          className="p-4"
           onClose={onClose}
         />
 
