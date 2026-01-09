@@ -12,8 +12,11 @@ from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketException
 from onyx.tools.models import ToolCallInfo
+from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_in_background
 from onyx.utils.threadpool_concurrency import wait_on_background
+
+logger = setup_logger()
 
 
 class ChatStateContainer:
@@ -197,4 +200,7 @@ def run_chat_loop_with_state_containers(
         # Skip waiting if user disconnected to exit quickly.
         if is_connected():
             wait_on_background(thread)
-        completion_callback(state_container)
+        try:
+            completion_callback(state_container)
+        except Exception as e:
+            logger.exception(f"Failed to call completion callback: {e}")
