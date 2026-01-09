@@ -11,6 +11,7 @@ import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import * as GeneralLayouts from "@/layouts/general-layouts";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 
 export function AnonymousUserPath({
   setPopup,
@@ -107,34 +108,40 @@ export function AnonymousUserPath({
             in your workspace. Anonymous users will not be able to access
             private or restricted content.
           </Text>
-          <GeneralLayouts.Section flexDirection="row" gap={0.5}>
-            <Text mainContentBody text03>
-              {settings?.webDomain}/anonymous/
-            </Text>
-            <InputTypeIn
-              placeholder="your-custom-path"
-              value={customPath ?? anonymousUserPath ?? ""}
-              onChange={(e) => setCustomPath(e.target.value)}
-              showClearButton={false}
-              className=""
-            />
-          </GeneralLayouts.Section>
         </GeneralLayouts.Section>
 
-        <GeneralLayouts.Section
-          flexDirection="row"
-          gap={0.5}
-          justifyContent="start"
-        >
-          <Button onClick={handleCustomPathUpdate}>Update Path</Button>
-          <CopyIconButton
-            getCopyText={() =>
-              `${settings?.webDomain}/anonymous/${anonymousUserPath}`
-            }
-            tooltip="Copy invite link"
-            secondary
-          />
-        </GeneralLayouts.Section>
+        {isLoading ? (
+          <SimpleLoader className="self-center animate-spin mt-4" />
+        ) : (
+          <>
+            <GeneralLayouts.Section flexDirection="row" gap={0.5}>
+              <Text mainContentBody text03>
+                {settings?.webDomain}/anonymous/
+              </Text>
+              <InputTypeIn
+                placeholder="your-custom-path"
+                value={customPath ?? anonymousUserPath ?? ""}
+                onChange={(e) => setCustomPath(e.target.value)}
+                showClearButton={false}
+              />
+            </GeneralLayouts.Section>
+
+            <GeneralLayouts.Section
+              flexDirection="row"
+              gap={0.5}
+              justifyContent="start"
+            >
+              <Button onClick={handleCustomPathUpdate}>Update Path</Button>
+              <CopyIconButton
+                getCopyText={() =>
+                  `${settings?.webDomain}/anonymous/${anonymousUserPath ?? ""}`
+                }
+                tooltip="Copy invite link"
+                secondary
+              />
+            </GeneralLayouts.Section>
+          </>
+        )}
       </Card>
     </div>
   );
