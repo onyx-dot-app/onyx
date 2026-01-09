@@ -42,15 +42,8 @@ export function AnonymousUserPath({
 
   async function handleCustomPathUpdate() {
     try {
-      if (!customPath) {
-        setPopup({
-          message: "Custom path cannot be empty",
-          type: "error",
-        });
-        return;
-      }
       // Validate custom path
-      if (!customPath.trim()) {
+      if (!customPath || !customPath.trim()) {
         setPopup({
           message: "Custom path cannot be empty",
           type: "error",
