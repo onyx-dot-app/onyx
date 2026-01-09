@@ -65,7 +65,7 @@ export default function Card({
 
   return (
     <div className={cn("rounded-16 w-full h-full", classNames[variant])}>
-      <GeneralLayouts.Section padding={padding} {...props} />
+      <GeneralLayouts.Section alignItems="start" padding={padding} {...props} />
     </div>
   );
 }
