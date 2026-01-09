@@ -5,7 +5,7 @@ import Text from "@/refresh-components/texts/Text";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
 import { useField, useFormikContext } from "formik";
 
-export interface VandHLayoutProps extends LabelLayoutProps {
+export interface OrientationLayoutProps extends LabelLayoutProps {
   name?: string;
   children?: React.ReactNode;
 }
