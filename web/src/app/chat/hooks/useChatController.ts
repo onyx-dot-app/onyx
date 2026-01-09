@@ -846,7 +846,11 @@ export function useChatController({
                   modelIndex < packetsPerModel.length &&
                   packetsPerModel[modelIndex]
                 ) {
-                  packetsPerModel[modelIndex]!.push(typedPacket);
+                  // Create new array to ensure React detects the change
+                  packetsPerModel[modelIndex] = [
+                    ...packetsPerModel[modelIndex]!,
+                    typedPacket,
+                  ];
 
                   // Check if the packet contains document information
                   const packetObj = typedPacket.obj;
