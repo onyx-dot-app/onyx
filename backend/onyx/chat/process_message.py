@@ -605,10 +605,10 @@ def handle_stream_message_objects(
             if state_container.answer_tokens:
                 final_answer = (
                     state_container.answer_tokens
-                    + " ... The generation was stopped by the user here."
+                    + " ... \n\nGeneration was stopped by the user."
                 )
             else:
-                final_answer = "The generation was stopped by the user."
+                final_answer = "Generation was stopped by the user."
 
         # Build citation_docs_info from accumulated citations in state container
         citation_docs_info: list[CitationDocInfo] = []
