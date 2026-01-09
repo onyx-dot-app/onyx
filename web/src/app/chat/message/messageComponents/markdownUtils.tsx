@@ -111,20 +111,18 @@ export const useMarkdownComponents = (
       },
       table: ({ node, className, children, ...props }: any) => {
         return (
-          <div className="@container w-full">
-            <div
-              className="overflow-x-auto"
-              style={{
-                width: "100cqw",
-                marginLeft: "calc((100% - 100cqw) / 2)",
-                paddingLeft: "calc((100cqw - 100%) / 2)",
-                paddingRight: "calc((100cqw - 100%) / 2)",
-              }}
-            >
-              <table className={cn(className, "min-w-full")} {...props}>
-                {children}
-              </table>
-            </div>
+          <div
+            className="overflow-x-auto"
+            style={{
+              width: "100cqw",
+              marginLeft: "calc((100% - 100cqw) / 2)",
+              paddingLeft: "calc((100cqw - 100%) / 2)",
+              paddingRight: "calc((100cqw - 100%) / 2)",
+            }}
+          >
+            <table className={cn(className, "min-w-full")} {...props}>
+              {children}
+            </table>
           </div>
         );
       },
