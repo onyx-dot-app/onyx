@@ -5,6 +5,9 @@ An overview can be found in the README.md file in this directory.
 
 import re
 import traceback
+from collections.abc import Callable
+from collections.abc import Generator
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -17,6 +20,7 @@ from onyx.chat.chat_utils import create_chat_session_from_request
 from onyx.chat.chat_utils import get_custom_agent_prompt
 from onyx.chat.chat_utils import is_last_assistant_message_clarification
 from onyx.chat.chat_utils import load_all_chat_files
+from onyx.chat.emitter import Emitter
 from onyx.chat.emitter import get_default_emitter
 from onyx.chat.llm_loop import run_llm_loop
 from onyx.chat.models import AnswerStream
@@ -26,6 +30,7 @@ from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import CreateChatSessionID
 from onyx.chat.models import ExtractedProjectFiles
 from onyx.chat.models import MessageResponseIDInfo
+from onyx.chat.models import MultiModelMessageResponseIDInfo
 from onyx.chat.models import ProjectFileMetadata
 from onyx.chat.models import ProjectSearchConfig
 from onyx.chat.models import StreamingError
@@ -63,10 +68,13 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.server.query_and_chat.models import AUTO_PLACE_AFTER_LATEST_MESSAGE
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.query_and_chat.models import SendMessageRequest
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import PacketException
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tools.constants import SEARCH_TOOL_ID
 from onyx.tools.interface import Tool
@@ -262,6 +270,159 @@ def _get_project_search_availability(
     return ProjectSearchConfig(
         search_usage=SearchToolUsage.ENABLED, disable_forced_tool=False
     )
+
+
+def _run_multi_model_chat_loops(
+    llms: list[LLM],
+    model_names: list[str],
+    emitter: "Emitter",
+    state_containers: list[ChatStateContainer],
+    check_is_connected: Callable[[], bool],
+    simple_chat_history: list,
+    tools: list[Tool],
+    custom_agent_prompt: str | None,
+    extracted_project_files: "ExtractedProjectFiles",
+    persona: Any,
+    memories: list,
+    token_counter: Callable,
+    db_session: Session,
+    forced_tool_id: int | None,
+    user_identity: "LLMUserIdentity",
+    chat_session_id: str,
+) -> Generator[Packet, None, None]:
+    """
+    Run multiple LLM loops in parallel for multi-model chat.
+    Each model's packets are tagged with a model_index in their placement.
+    """
+    import queue
+    import threading
+
+    # Shared queue for all model outputs
+    shared_queue: queue.Queue[tuple[int, Packet | None]] = queue.Queue()
+    [threading.Event() for _ in llms]
+
+    def run_model_loop(
+        model_index: int, llm: LLM, state_container: ChatStateContainer
+    ) -> None:
+        """Run a single model's LLM loop and emit packets to shared queue with model_index."""
+        try:
+            # Create a model-specific emitter that tags packets with model_index
+            class ModelIndexEmitter:
+                def __init__(self, model_idx: int, shared_q: queue.Queue):
+                    self.model_idx = model_idx
+                    self.shared_q = shared_q
+                    self.bus = queue.Queue()  # Compatibility with existing code
+
+                def emit(self, packet: Packet) -> None:
+                    # Clone the placement with model_index added
+                    new_placement = Placement(
+                        turn_index=packet.placement.turn_index,
+                        tab_index=packet.placement.tab_index,
+                        sub_turn_index=packet.placement.sub_turn_index,
+                        model_index=self.model_idx,
+                    )
+                    tagged_packet = Packet(placement=new_placement, obj=packet.obj)
+                    self.shared_q.put((self.model_idx, tagged_packet))
+
+            model_emitter = ModelIndexEmitter(model_index, shared_queue)
+
+            # Run the LLM loop for this model
+            run_llm_loop(
+                model_emitter,
+                simple_chat_history=simple_chat_history,
+                tools=tools,
+                custom_agent_prompt=custom_agent_prompt,
+                project_files=extracted_project_files,
+                persona=persona,
+                memories=memories,
+                llm=llm,
+                token_counter=token_counter,
+                db_session=db_session,
+                forced_tool_id=forced_tool_id,
+                user_identity=user_identity,
+                chat_session_id=chat_session_id,
+                state_container=state_container,
+            )
+
+            # Signal completion for this model
+            shared_queue.put((model_index, None))
+
+        except Exception as e:
+            logger.exception(
+                f"Error in model {model_index} ({model_names[model_index]}): {e}"
+            )
+            # Emit error packet for this model
+            error_packet = Packet(
+                placement=Placement(turn_index=0, model_index=model_index),
+                obj=PacketException(type="error", exception=e),
+            )
+            shared_queue.put((model_index, error_packet))
+            shared_queue.put((model_index, None))  # Signal completion
+
+    # Start all model loops in parallel
+    threads = []
+    for i, (llm, state_container) in enumerate(zip(llms, state_containers)):
+        thread = threading.Thread(target=run_model_loop, args=(i, llm, state_container))
+        thread.start()
+        threads.append(thread)
+
+    # Track completion status for each model
+    completed = [False] * len(llms)
+    last_turn_indices = [0] * len(llms)
+
+    try:
+        while not all(completed):
+            try:
+                model_idx, packet = shared_queue.get(timeout=0.3)
+
+                if packet is None:
+                    # Model completed
+                    completed[model_idx] = True
+                    continue
+
+                # Track turn index for stop packet
+                if packet.placement.turn_index > last_turn_indices[model_idx]:
+                    last_turn_indices[model_idx] = packet.placement.turn_index
+
+                # Check for stop packet or exception
+                if isinstance(packet.obj, OverallStop):
+                    yield packet
+                    completed[model_idx] = True
+                elif isinstance(packet.obj, PacketException):
+                    # Don't raise - just emit error for this model and continue others
+                    yield Packet(
+                        placement=Placement(
+                            turn_index=last_turn_indices[model_idx],
+                            model_index=model_idx,
+                        ),
+                        obj=OverallStop(type="stop", stop_reason="error"),
+                    )
+                    completed[model_idx] = True
+                else:
+                    yield packet
+
+            except queue.Empty:
+                # Check for user cancellation
+                if not check_is_connected():
+                    # Emit stop packets for all incomplete models
+                    for i, is_completed in enumerate(completed):
+                        if not is_completed:
+                            yield Packet(
+                                placement=Placement(
+                                    turn_index=last_turn_indices[i] + 1,
+                                    model_index=i,
+                                ),
+                                obj=OverallStop(
+                                    type="stop", stop_reason="user_cancelled"
+                                ),
+                            )
+                            completed[i] = True
+                    break
+
+    finally:
+        # Wait for all threads to complete
+        for thread in threads:
+            thread.join(timeout=5.0)
 
 
 def handle_stream_message_objects(
@@ -494,19 +655,6 @@ def handle_stream_message_objects(
 
         # TODO Need to think of some way to support selected docs from the sidebar
 
-        # Reserve a message id for the assistant response for frontend to track packets
-        assistant_response = reserve_message_id(
-            db_session=db_session,
-            chat_session_id=chat_session.id,
-            parent_message=user_message.id,
-            message_type=MessageType.ASSISTANT,
-        )
-
-        yield MessageResponseIDInfo(
-            user_message_id=user_message.id,
-            reserved_assistant_message_id=assistant_response.id,
-        )
-
         # Convert the chat history into a simple format that is free of any DB objects
         # and is easy to parse for the agent loop
         simple_chat_history = convert_chat_history(
@@ -528,51 +676,66 @@ def handle_stream_message_objects(
         def check_is_connected() -> bool:
             return check_stop_signal(chat_session.id, redis_client)
 
-        # Use external state container if provided, otherwise create internal one
-        # External container allows non-streaming callers to access accumulated state
-        state_container = external_state_container or ChatStateContainer()
+        # Check for multi-model chat mode (2 or more models)
+        if new_msg_req.llm_overrides and len(new_msg_req.llm_overrides) >= 2:
+            # Multi-model chat: run N models in parallel
+            if new_msg_req.deep_research:
+                raise RuntimeError(
+                    "Deep research is not supported for multi-model chat"
+                )
 
-        # Run the LLM loop with explicit wrapper for stop signal handling
-        # The wrapper runs run_llm_loop in a background thread and polls every 300ms
-        # for stop signals. run_llm_loop itself doesn't know about stopping.
-        # Note: DB session is not thread safe but nothing else uses it and the
-        # reference is passed directly so it's ok.
-        if new_msg_req.deep_research:
-            if chat_session.project_id:
-                raise RuntimeError("Deep research is not supported for projects")
+            # Create LLM instances for each model override
+            llms: list[LLM] = []
+            model_names: list[str] = []
+            for llm_override in new_msg_req.llm_overrides:
+                model_llm = get_llm_for_persona(
+                    persona=persona,
+                    user=user,
+                    llm_override=llm_override,
+                    additional_headers=litellm_additional_headers,
+                    long_term_logger=long_term_logger,
+                )
+                llms.append(model_llm)
+                model_names.append(
+                    llm_override.model_version
+                    or llm_override.model_provider
+                    or f"Model {len(llms)}"
+                )
 
-            # Skip clarification if the last assistant message was a clarification
-            # (user has already responded to a clarification question)
-            skip_clarification = is_last_assistant_message_clarification(chat_history)
+            # Reserve message IDs for all N assistant responses (all have same parent)
+            num_models = len(new_msg_req.llm_overrides)
+            assistant_responses = []
+            for _ in range(num_models):
+                assistant_response = reserve_message_id(
+                    db_session=db_session,
+                    chat_session_id=chat_session.id,
+                    parent_message=user_message.id,
+                    message_type=MessageType.ASSISTANT,
+                )
+                assistant_responses.append(assistant_response)
 
-            yield from run_chat_loop_with_state_containers(
-                run_deep_research_llm_loop,
-                is_connected=check_is_connected,
-                emitter=emitter,
-                state_container=state_container,
-                simple_chat_history=simple_chat_history,
-                tools=tools,
-                custom_agent_prompt=custom_agent_prompt,
-                llm=llm,
-                token_counter=token_counter,
-                db_session=db_session,
-                skip_clarification=skip_clarification,
-                user_identity=user_identity,
-                chat_session_id=str(chat_session.id),
+            yield MultiModelMessageResponseIDInfo(
+                user_message_id=user_message.id,
+                reserved_assistant_message_ids=[ar.id for ar in assistant_responses],
+                model_names=model_names,
             )
-        else:
-            yield from run_chat_loop_with_state_containers(
-                run_llm_loop,
-                is_connected=check_is_connected,  # Not passed through to run_llm_loop
+
+            # Create state containers for each model
+            state_containers = [ChatStateContainer() for _ in range(num_models)]
+
+            # Run all N models in parallel
+            yield from _run_multi_model_chat_loops(
+                llms=llms,
+                model_names=model_names,
                 emitter=emitter,
-                state_container=state_container,
+                state_containers=state_containers,
+                check_is_connected=check_is_connected,
                 simple_chat_history=simple_chat_history,
                 tools=tools,
                 custom_agent_prompt=custom_agent_prompt,
-                project_files=extracted_project_files,
+                extracted_project_files=extracted_project_files,
                 persona=persona,
                 memories=memories,
-                llm=llm,
                 token_counter=token_counter,
                 db_session=db_session,
                 forced_tool_id=forced_tool_id,
@@ -580,50 +743,163 @@ def handle_stream_message_objects(
                 chat_session_id=str(chat_session.id),
             )
 
-        # Determine if stopped by user
-        completed_normally = check_is_connected()
-        if not completed_normally:
-            logger.debug(f"Chat session {chat_session.id} stopped by user")
+            # Save each model's response
+            completed_normally = check_is_connected()
+            for i, (assistant_response, state_container) in enumerate(
+                zip(assistant_responses, state_containers)
+            ):
+                if completed_normally:
+                    if state_container.answer_tokens is None:
+                        final_answer = (
+                            f"Model {model_names[i]} did not return an answer."
+                        )
+                    else:
+                        final_answer = state_container.answer_tokens
+                else:
+                    if state_container.answer_tokens:
+                        final_answer = (
+                            state_container.answer_tokens
+                            + " ... The generation was stopped by the user here."
+                        )
+                    else:
+                        final_answer = "The generation was stopped by the user."
 
-        # Build final answer based on completion status
-        if completed_normally:
-            if state_container.answer_tokens is None:
-                raise RuntimeError(
-                    "LLM run completed normally but did not return an answer."
+                # Build citation_docs_info from accumulated citations
+                citation_docs_info: list[CitationDocInfo] = []
+                seen_citation_nums: set[int] = set()
+                for citation_num, search_doc in state_container.citation_to_doc.items():
+                    if citation_num not in seen_citation_nums:
+                        seen_citation_nums.add(citation_num)
+                        citation_docs_info.append(
+                            CitationDocInfo(
+                                search_doc=search_doc,
+                                citation_number=citation_num,
+                            )
+                        )
+
+                save_chat_turn(
+                    message_text=final_answer,
+                    reasoning_tokens=state_container.reasoning_tokens,
+                    citation_docs_info=citation_docs_info,
+                    tool_calls=state_container.tool_calls,
+                    db_session=db_session,
+                    assistant_message=assistant_response,
+                    is_clarification=state_container.is_clarification,
                 )
-            final_answer = state_container.answer_tokens
+
         else:
-            # Stopped by user - append stop message
-            if state_container.answer_tokens:
-                final_answer = (
-                    state_container.answer_tokens
-                    + " ... The generation was stopped by the user here."
+            # Single-model chat (existing flow)
+            # Reserve a message id for the assistant response for frontend to track packets
+            assistant_response = reserve_message_id(
+                db_session=db_session,
+                chat_session_id=chat_session.id,
+                parent_message=user_message.id,
+                message_type=MessageType.ASSISTANT,
+            )
+
+            yield MessageResponseIDInfo(
+                user_message_id=user_message.id,
+                reserved_assistant_message_id=assistant_response.id,
+            )
+
+            # Use external state container if provided, otherwise create internal one
+            # External container allows non-streaming callers to access accumulated state
+            state_container = external_state_container or ChatStateContainer()
+
+            # Run the LLM loop with explicit wrapper for stop signal handling
+            # The wrapper runs run_llm_loop in a background thread and polls every 300ms
+            # for stop signals. run_llm_loop itself doesn't know about stopping.
+            # Note: DB session is not thread safe but nothing else uses it and the
+            # reference is passed directly so it's ok.
+            if new_msg_req.deep_research:
+                if chat_session.project_id:
+                    raise RuntimeError("Deep research is not supported for projects")
+
+                # Skip clarification if the last assistant message was a clarification
+                # (user has already responded to a clarification question)
+                skip_clarification = is_last_assistant_message_clarification(
+                    chat_history
+                )
+
+                yield from run_chat_loop_with_state_containers(
+                    run_deep_research_llm_loop,
+                    is_connected=check_is_connected,
+                    emitter=emitter,
+                    state_container=state_container,
+                    simple_chat_history=simple_chat_history,
+                    tools=tools,
+                    custom_agent_prompt=custom_agent_prompt,
+                    llm=llm,
+                    token_counter=token_counter,
+                    db_session=db_session,
+                    skip_clarification=skip_clarification,
+                    user_identity=user_identity,
+                    chat_session_id=str(chat_session.id),
                 )
             else:
-                final_answer = "The generation was stopped by the user."
-
-        # Build citation_docs_info from accumulated citations in state container
-        citation_docs_info: list[CitationDocInfo] = []
-        seen_citation_nums: set[int] = set()
-        for citation_num, search_doc in state_container.citation_to_doc.items():
-            if citation_num not in seen_citation_nums:
-                seen_citation_nums.add(citation_num)
-                citation_docs_info.append(
-                    CitationDocInfo(
-                        search_doc=search_doc,
-                        citation_number=citation_num,
-                    )
+                yield from run_chat_loop_with_state_containers(
+                    run_llm_loop,
+                    is_connected=check_is_connected,  # Not passed through to run_llm_loop
+                    emitter=emitter,
+                    state_container=state_container,
+                    simple_chat_history=simple_chat_history,
+                    tools=tools,
+                    custom_agent_prompt=custom_agent_prompt,
+                    project_files=extracted_project_files,
+                    persona=persona,
+                    memories=memories,
+                    llm=llm,
+                    token_counter=token_counter,
+                    db_session=db_session,
+                    forced_tool_id=forced_tool_id,
+                    user_identity=user_identity,
+                    chat_session_id=str(chat_session.id),
                 )
 
-        save_chat_turn(
-            message_text=final_answer,
-            reasoning_tokens=state_container.reasoning_tokens,
-            citation_docs_info=citation_docs_info,
-            tool_calls=state_container.tool_calls,
-            db_session=db_session,
-            assistant_message=assistant_response,
-            is_clarification=state_container.is_clarification,
-        )
+            # Determine if stopped by user
+            completed_normally = check_is_connected()
+            if not completed_normally:
+                logger.debug(f"Chat session {chat_session.id} stopped by user")
+
+            # Build final answer based on completion status
+            if completed_normally:
+                if state_container.answer_tokens is None:
+                    raise RuntimeError(
+                        "LLM run completed normally but did not return an answer."
+                    )
+                final_answer = state_container.answer_tokens
+            else:
+                # Stopped by user - append stop message
+                if state_container.answer_tokens:
+                    final_answer = (
+                        state_container.answer_tokens
+                        + " ... The generation was stopped by the user here."
+                    )
+                else:
+                    final_answer = "The generation was stopped by the user."
+
+            # Build citation_docs_info from accumulated citations in state container
+            citation_docs_info: list[CitationDocInfo] = []
+            seen_citation_nums: set[int] = set()
+            for citation_num, search_doc in state_container.citation_to_doc.items():
+                if citation_num not in seen_citation_nums:
+                    seen_citation_nums.add(citation_num)
+                    citation_docs_info.append(
+                        CitationDocInfo(
+                            search_doc=search_doc,
+                            citation_number=citation_num,
+                        )
+                    )
+
+            save_chat_turn(
+                message_text=final_answer,
+                reasoning_tokens=state_container.reasoning_tokens,
+                citation_docs_info=citation_docs_info,
+                tool_calls=state_container.tool_calls,
+                db_session=db_session,
+                assistant_message=assistant_response,
+                is_clarification=state_container.is_clarification,
+            )
 
     except ValueError as e:
         logger.exception("Failed to process chat message.")

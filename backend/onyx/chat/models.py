@@ -102,6 +102,14 @@ class MessageResponseIDInfo(BaseModel):
     reserved_assistant_message_id: int
 
 
+class MultiModelMessageResponseIDInfo(BaseModel):
+    """Response info for multi-model chat: one user message, multiple assistant messages."""
+
+    user_message_id: int | None
+    reserved_assistant_message_ids: list[int]  # One per model
+    model_names: list[str]  # Display names for UI
+
+
 class StreamingError(BaseModel):
     error: str
     stack_trace: str | None = None
@@ -200,6 +208,7 @@ AnswerStreamPart = (
     Packet
     | StreamStopInfo
     | MessageResponseIDInfo
+    | MultiModelMessageResponseIDInfo
     | StreamingError
     | UserKnowledgeFilePacket
     | CreateChatSessionID
