@@ -46,13 +46,15 @@ function getDisplayName(email?: string, personalName?: string): string {
 }
 
 interface SettingsPopoverProps {
-  onUserSettingsClick: () => void;
-  onNotificationsClick: () => void;
+  onClose: () => void;
+  onOpenUserSettings: () => void;
+  onOpenNotifications: () => void;
 }
 
 function SettingsPopover({
-  onUserSettingsClick,
-  onNotificationsClick,
+  onClose,
+  onOpenUserSettings,
+  onOpenNotifications,
 }: SettingsPopoverProps) {
   const { user } = useUser();
   const { data: notifications } = useSWR<Notification[]>(
@@ -89,22 +91,21 @@ function SettingsPopover({
     <>
       <PopoverMenu>
         {[
-          // TODO (@raunakab):
-          // Not sure what this does; leave it out for now.
-          // ...dropdownItems.map((item, index) => (
-          //   <NavigationTab key={index} href={item.link}>
-          //     {item.title}
-          //   </NavigationTab>
-          // )),
           <div key="user-settings" data-testid="Settings/user-settings">
-            <LineItem icon={SvgUser} onClick={onUserSettingsClick}>
+            <LineItem
+              icon={SvgUser}
+              onClick={() => {
+                onClose();
+                onOpenUserSettings();
+              }}
+            >
               User Settings
             </LineItem>
           </div>,
           <LineItem
             key="notifications"
             icon={SvgBell}
-            onClick={onNotificationsClick}
+            onClick={onOpenNotifications}
           >
             {`Notifications ${
               notifications && notifications.length > 0
@@ -147,6 +148,8 @@ export default function Settings({ folded }: SettingsProps) {
   const { user } = useUser();
   const userSettingsModal = useCreateModal();
 
+  // Fetch notifications for display
+  // The GET endpoint also triggers a refresh if release notes are stale
   const { data: notifications } = useSWR<Notification[]>(
     "/api/notifications",
     errorHandlingFetcher
@@ -208,11 +211,9 @@ export default function Settings({ folded }: SettingsProps) {
         <PopoverContent align="end" side="right">
           {popupState === "Settings" && (
             <SettingsPopover
-              onUserSettingsClick={() => {
-                setPopupState(undefined);
-                userSettingsModal.toggle(true);
-              }}
-              onNotificationsClick={() => setPopupState("Notifications")}
+              onClose={() => setPopupState(undefined)}
+              onOpenUserSettings={() => userSettingsModal.toggle(true)}
+              onOpenNotifications={() => setPopupState("Notifications")}
             />
           )}
           {popupState === "Notifications" && (
