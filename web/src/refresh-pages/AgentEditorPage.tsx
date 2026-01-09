@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
+import * as GeneralLayouts from "@/layouts/general-layouts";
 import Button from "@/refresh-components/buttons/Button";
 import { FullPersona } from "@/app/admin/assistants/interfaces";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
-import { cn } from "@/lib/utils";
 import { Formik, Form, FieldArray } from "formik";
 import * as Yup from "yup";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -261,15 +261,6 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
   );
 }
 
-function Section({
-  className,
-  ...rest
-}: React.HtmlHTMLAttributes<HTMLDivElement>) {
-  return (
-    <div className={cn("flex flex-col gap-4 w-full", className)} {...rest} />
-  );
-}
-
 interface OpenApiToolCardProps {
   tool: ToolSnapshot;
 }
@@ -329,7 +320,7 @@ function MCPServerCard({
           description={server.description ?? server.server_url}
           icon={getActionIcon(server.server_url, server.name)}
           rightChildren={
-            <div className="flex flex-row gap-2 items-center justify-center">
+            <GeneralLayouts.Section flexDirection="row" gap={0.5}>
               <EnabledCount
                 enabledCount={enabledCount}
                 totalCount={enabledTools.length}
@@ -347,10 +338,10 @@ function MCPServerCard({
                   actionsLayouts.setIsFolded(false);
                 }}
               />
-            </div>
+            </GeneralLayouts.Section>
           }
         >
-          <div className="flex flex-row gap-2 items-center justify-center">
+          <GeneralLayouts.Section flexDirection="row" gap={0.5}>
             <InputTypeIn
               placeholder="Search tools..."
               internal
@@ -365,7 +356,7 @@ function MCPServerCard({
             >
               {actionsLayouts.isFolded ? "Expand" : "Fold"}
             </Button>
-          </div>
+          </GeneralLayouts.Section>
         </ActionsLayouts.Header>
         <ActionsLayouts.Content>
           {isLoading ? (
@@ -421,7 +412,7 @@ function StarterMessages() {
   return (
     <FieldArray name="starter_messages">
       {(arrayHelpers) => (
-        <div className="flex flex-col gap-2">
+        <GeneralLayouts.Section gap={0.5}>
           {Array.from({ length: visibleCount }, (_, i) => (
             <InputTypeInElementField
               key={`starter_messages.${i}`}
@@ -433,7 +424,7 @@ function StarterMessages() {
               onRemove={() => arrayHelpers.remove(i)}
             />
           ))}
-        </div>
+        </GeneralLayouts.Section>
       )}
     </FieldArray>
   );
@@ -1025,8 +1016,12 @@ export default function AgentEditorPage({
 
                     {/* Agent Form Content */}
                     <SettingsLayouts.Body>
-                      <div className="flex flex-row gap-10 justify-between items-start w-full">
-                        <Section>
+                      <GeneralLayouts.Section
+                        flexDirection="row"
+                        gap={2.5}
+                        alignItems="start"
+                      >
+                        <GeneralLayouts.Section>
                           <InputLayouts.Vertical name="name" label="Name">
                             <InputTypeInField
                               name="name"
@@ -1044,22 +1039,22 @@ export default function AgentEditorPage({
                               placeholder="What does this agent do?"
                             />
                           </InputLayouts.Vertical>
-                        </Section>
+                        </GeneralLayouts.Section>
 
-                        <Section className="w-fit">
+                        <GeneralLayouts.Section fit>
                           <InputLayouts.Vertical
                             name="agent_avatar"
                             label="Agent Avatar"
-                            className="items-center"
+                            center
                           >
                             <AgentIconEditor existingAgent={existingAgent} />
                           </InputLayouts.Vertical>
-                        </Section>
-                      </div>
+                        </GeneralLayouts.Section>
+                      </GeneralLayouts.Section>
 
                       <Separator noPadding />
 
-                      <Section>
+                      <GeneralLayouts.Section>
                         <InputLayouts.Vertical
                           name="instructions"
                           label="Instructions"
@@ -1080,12 +1075,12 @@ export default function AgentEditorPage({
                         >
                           <StarterMessages />
                         </InputLayouts.Vertical>
-                      </Section>
+                      </GeneralLayouts.Section>
 
                       <Separator noPadding />
 
-                      <Section>
-                        <div className="flex flex-col gap-4">
+                      <GeneralLayouts.Section>
+                        <GeneralLayouts.Section gap={1}>
                           <InputLayouts.Label
                             name="knowledge"
                             label="Knowledge"
@@ -1096,6 +1091,7 @@ export default function AgentEditorPage({
                             <InputLayouts.Horizontal
                               name="enable_knowledge"
                               label="Enable Knowledge"
+                              center
                             >
                               <SwitchField name="enable_knowledge" />
                             </InputLayouts.Horizontal>
@@ -1105,6 +1101,7 @@ export default function AgentEditorPage({
                                 name="knowledge_source"
                                 label="Knowledge Source"
                                 description="Choose the sources of truth this agent refers to."
+                                center
                               >
                                 <InputSelectField
                                   name="knowledge_source"
@@ -1126,7 +1123,7 @@ export default function AgentEditorPage({
                             {values.enable_knowledge &&
                               values.knowledge_source === "team_knowledge" &&
                               ((documentSets?.length ?? 0) > 0 ? (
-                                <div className="flex gap-2 flex-wrap">
+                                <GeneralLayouts.Section gap={0.5}>
                                   {documentSets!.map((documentSet) => (
                                     <DocumentSetSelectable
                                       key={documentSet.id}
@@ -1157,7 +1154,7 @@ export default function AgentEditorPage({
                                       }}
                                     />
                                   ))}
-                                </div>
+                                </GeneralLayouts.Section>
                               ) : (
                                 <CreateButton href="/admin/documents/sets/new">
                                   Create a Document Set
@@ -1166,7 +1163,7 @@ export default function AgentEditorPage({
 
                             {values.enable_knowledge &&
                               values.knowledge_source === "user_knowledge" && (
-                                <div className="flex flex-col gap-2">
+                                <GeneralLayouts.Section gap={0.5}>
                                   <FilePickerPopover
                                     trigger={(open) => (
                                       <CreateButton transient={open}>
@@ -1199,7 +1196,11 @@ export default function AgentEditorPage({
                                   />
 
                                   {values.user_file_ids.length > 0 && (
-                                    <div className="flex flex-wrap gap-2">
+                                    <GeneralLayouts.Section
+                                      flexDirection="row"
+                                      wrap
+                                      gap={0.5}
+                                    >
                                       {values.user_file_ids.map((fileId) => {
                                         const file = allRecentFiles.find(
                                           (f) => f.id === fileId
@@ -1227,13 +1228,13 @@ export default function AgentEditorPage({
                                           />
                                         );
                                       })}
-                                    </div>
+                                    </GeneralLayouts.Section>
                                   )}
-                                </div>
+                                </GeneralLayouts.Section>
                               )}
                           </Card>
-                        </div>
-                      </Section>
+                        </GeneralLayouts.Section>
+                      </GeneralLayouts.Section>
 
                       <Separator noPadding />
 
@@ -1245,38 +1246,23 @@ export default function AgentEditorPage({
                           />
                         }
                       >
-                        <Section className="gap-2">
+                        <GeneralLayouts.Section gap={0.5}>
                           <SimpleTooltip
                             tooltip={imageGenerationDisabledTooltip}
                             side="top"
                           >
-                            <div
-                              className={cn(
-                                "w-full",
-                                !isImageGenerationAvailable &&
-                                  "cursor-not-allowed"
-                              )}
-                            >
-                              <div
-                                className={cn(
-                                  !isImageGenerationAvailable &&
-                                    "pointer-events-none opacity-50"
-                                )}
+                            <Card disabled={!isImageGenerationAvailable}>
+                              <InputLayouts.Horizontal
+                                name="image_generation"
+                                label="Image Generation"
+                                description="Generate and manipulate images using AI-powered tools."
                               >
-                                <Card>
-                                  <InputLayouts.Horizontal
-                                    name="image_generation"
-                                    label="Image Generation"
-                                    description="Generate and manipulate images using AI-powered tools."
-                                  >
-                                    <SwitchField
-                                      name="image_generation"
-                                      disabled={!isImageGenerationAvailable}
-                                    />
-                                  </InputLayouts.Horizontal>
-                                </Card>
-                              </div>
-                            </div>
+                                <SwitchField
+                                  name="image_generation"
+                                  disabled={!isImageGenerationAvailable}
+                                />
+                              </InputLayouts.Horizontal>
+                            </Card>
                           </SimpleTooltip>
 
                           <Card>
@@ -1305,7 +1291,7 @@ export default function AgentEditorPage({
                             </InputLayouts.Horizontal>
                           </Card>
 
-                          <Card>
+                          <Card disabled={!codeInterpreterTool}>
                             <InputLayouts.Horizontal
                               name="code_interpreter"
                               label="Code Interpreter"
@@ -1328,7 +1314,7 @@ export default function AgentEditorPage({
 
                             {/* MCP tools */}
                             {mcpServersWithTools.length > 0 && (
-                              <div className="flex flex-col gap-2">
+                              <GeneralLayouts.Section gap={0.5}>
                                 {mcpServersWithTools.map(
                                   ({ server, tools, isLoading }) => (
                                     <MCPServerCard
@@ -1339,19 +1325,19 @@ export default function AgentEditorPage({
                                     />
                                   )
                                 )}
-                              </div>
+                              </GeneralLayouts.Section>
                             )}
 
                             {/* OpenAPI tools */}
                             {openApiTools.length > 0 && (
-                              <div className="flex flex-col gap-2">
+                              <GeneralLayouts.Section gap={0.5}>
                                 {openApiTools.map((tool) => (
                                   <OpenApiToolCard key={tool.id} tool={tool} />
                                 ))}
-                              </div>
+                              </GeneralLayouts.Section>
                             )}
                           </>
-                        </Section>
+                        </GeneralLayouts.Section>
                       </SimpleCollapsible>
 
                       <Separator noPadding />
@@ -1364,12 +1350,13 @@ export default function AgentEditorPage({
                           />
                         }
                       >
-                        <Section>
+                        <GeneralLayouts.Section>
                           <Card>
                             <InputLayouts.Horizontal
                               name="llm_model"
                               label="Default Model"
                               description="Select the LLM model to use for this agent. If not set, the user's default model will be used."
+                              center
                             >
                               <LLMSelector
                                 llmProviders={llmProviders ?? []}
@@ -1383,6 +1370,7 @@ export default function AgentEditorPage({
                               name="knowledge_cutoff_date"
                               label="Knowledge Cutoff Date"
                               description="Set the knowledge cutoff date for this agent. The agent will only use information up to this date."
+                              center
                             >
                               <InputDatePickerField name="knowledge_cutoff_date" />
                             </InputLayouts.Horizontal>
@@ -1395,7 +1383,7 @@ export default function AgentEditorPage({
                             </InputLayouts.Horizontal>
                           </Card>
 
-                          <div className="flex flex-col gap-1">
+                          <GeneralLayouts.Section gap={0.25}>
                             <InputLayouts.Vertical
                               name="reminders"
                               label="Reminders"
@@ -1412,8 +1400,8 @@ export default function AgentEditorPage({
                               progresses. This should be brief and not interfere
                               with the user messages.
                             </Text>
-                          </div>
-                        </Section>
+                          </GeneralLayouts.Section>
+                        </GeneralLayouts.Section>
                       </SimpleCollapsible>
                     </SettingsLayouts.Body>
                   </SettingsLayouts.Root>

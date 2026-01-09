@@ -5,8 +5,8 @@ import Text from "@/refresh-components/texts/Text";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
 import { useField, useFormikContext } from "formik";
 
-export interface VerticalLayoutProps extends FieldLabelLayoutProps {
-  name: string;
+export interface OrientationLayoutProps extends LabelLayoutProps {
+  name?: string;
   children?: React.ReactNode;
 }
 
@@ -37,20 +37,21 @@ function VerticalInputLayout({
 
   name,
   ...fieldLabelProps
-}: VerticalLayoutProps) {
+}: OrientationLayoutProps) {
   return (
     <div className="flex flex-col w-full h-full gap-1">
       <LabelLayout name={name} {...fieldLabelProps} />
       {children}
-      <ErrorLayout name={name} />
+      {name && <ErrorLayout name={name} />}
     </div>
   );
 }
 
-export interface HorizontalLayoutProps extends FieldLabelLayoutProps {
-  name: string;
-  children?: React.ReactNode;
-  className?: string;
+export interface HorizontalLayoutProps extends OrientationLayoutProps {
+  /** Align input to the start (top) of the label/description */
+  start?: boolean;
+  /** Align input to the center (middle) of the label/description */
+  center?: boolean;
 }
 
 /**
@@ -66,10 +67,30 @@ export interface HorizontalLayoutProps extends FieldLabelLayoutProps {
  * ```tsx
  * import { Horizontal } from "@/layouts/input-layouts";
  *
+ * // Default behavior (center-aligned when no description, start-aligned when description exists)
  * <Horizontal
  *   name="notifications"
  *   label="Enable Notifications"
  *   description="Receive updates about your account"
+ * >
+ *   <Switch name="notifications" />
+ * </Horizontal>
+ *
+ * // Force top alignment
+ * <Horizontal
+ *   name="notifications"
+ *   label="Enable Notifications"
+ *   start
+ * >
+ *   <Switch name="notifications" />
+ * </Horizontal>
+ *
+ * // Force center alignment (even with description)
+ * <Horizontal
+ *   name="notifications"
+ *   label="Enable Notifications"
+ *   description="Receive updates about your account"
+ *   center
  * >
  *   <Switch name="notifications" />
  * </Horizontal>
@@ -78,34 +99,50 @@ export interface HorizontalLayoutProps extends FieldLabelLayoutProps {
 function HorizontalInputLayout({
   children,
 
+  start,
+  center,
+
   name,
   ...fieldLabelProps
 }: HorizontalLayoutProps) {
+  // Determine alignment:
+  // - If `center` is explicitly true, use center alignment
+  // - If `start` is explicitly true, use start alignment
+  // - Otherwise, use default behavior: start if description exists, center if not
+  const alignment = center
+    ? "items-center"
+    : start
+      ? "items-start"
+      : fieldLabelProps.description
+        ? "items-start"
+        : "items-center";
+
   return (
     <div className="flex flex-col gap-1 h-full w-full">
       <label
         htmlFor={name}
         className={cn(
           "flex flex-row justify-between gap-4 cursor-pointer",
-          fieldLabelProps.description ? "items-start" : "items-center"
+          alignment
         )}
       >
-        <div className="min-w-[70%]">
+        <div className="w-[70%]">
           <LabelLayout {...fieldLabelProps} />
         </div>
-        {children}
+        <div className="flex flex-col items-end min-w-[12rem]">{children}</div>
       </label>
-      <ErrorLayout name={name} />
+      {name && <ErrorLayout name={name} />}
     </div>
   );
 }
 
-export interface FieldLabelLayoutProps {
+export interface LabelLayoutProps {
   name?: string;
   label?: string;
   optional?: boolean;
   description?: string;
-  className?: string;
+  start?: boolean;
+  center?: boolean;
 }
 
 /**
@@ -139,9 +176,15 @@ function LabelLayout({
   label,
   optional,
   description,
-  className,
-}: FieldLabelLayoutProps) {
-  const finalClassName = cn("flex flex-col w-full", className);
+  start,
+  center,
+}: LabelLayoutProps) {
+  const alignment = start
+    ? "items-start"
+    : center
+      ? "items-center"
+      : "items-start";
+  const className = cn("flex flex-col w-full", alignment);
   const content = label ? (
     <>
       <div className="flex flex-row gap-1.5">
@@ -163,11 +206,11 @@ function LabelLayout({
   ) : null;
 
   return name ? (
-    <label htmlFor={name} className={finalClassName}>
+    <label htmlFor={name} className={className}>
       {content}
     </label>
   ) : (
-    <div className={finalClassName}>{content}</div>
+    <div className={className}>{content}</div>
   );
 }
 

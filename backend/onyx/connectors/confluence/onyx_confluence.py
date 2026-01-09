@@ -901,13 +901,16 @@ class OnyxConfluence:
         space_key: str,
     ) -> list[dict[str, Any]]:
         """
-        This is a confluence server specific method that can be used to
+        This is a confluence server/data center specific method that can be used to
         fetch the permissions of a space.
-        This is better logging than calling the get_space_permissions method
-        because it returns a jsonrpc response.
-        TODO: Make this call these endpoints for newer confluence versions:
-        - /rest/api/space/{spaceKey}/permissions
-        - /rest/api/space/{spaceKey}/permissions/anonymous
+
+        NOTE: This uses the JSON-RPC API which is the ONLY way to get space permissions
+        on Confluence Server/Data Center. The REST API equivalent (expand=permissions)
+        is Cloud-only and not available on Data Center as of version 8.9.x.
+
+        If this fails with 401 Unauthorized, the customer needs to enable JSON-RPC:
+        Confluence Admin -> General Configuration -> Further Configuration
+        -> Enable "Remote API (XML-RPC & SOAP)"
         """
         url = "rpc/json-rpc/confluenceservice-v2"
         data = {
@@ -916,7 +919,18 @@ class OnyxConfluence:
             "id": 7,
             "params": [space_key],
         }
-        response = self.post(url, data=data)
+        try:
+            response = self.post(url, data=data)
+        except HTTPError as e:
+            if e.response is not None and e.response.status_code == 401:
+                raise HTTPError(
+                    "Unauthorized (401) when calling JSON-RPC API for space permissions. "
+                    "This is likely because the Remote API is disabled. "
+                    "To fix: Confluence Admin -> General Configuration -> Further Configuration "
+                    "-> Enable 'Remote API (XML-RPC & SOAP)'",
+                    response=e.response,
+                ) from e
+            raise
         logger.debug(f"jsonrpc response: {response}")
         if not response.get("result"):
             logger.warning(

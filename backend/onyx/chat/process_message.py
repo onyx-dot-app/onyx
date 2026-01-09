@@ -86,14 +86,6 @@ logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
 
 
-class ToolCallException(Exception):
-    """Exception raised for errors during tool calls."""
-
-    def __init__(self, message: str, tool_name: str | None = None):
-        super().__init__(message)
-        self.tool_name = tool_name
-
-
 def _extract_project_file_texts_and_images(
     project_id: int | None,
     user_id: UUID | None,
@@ -620,15 +612,7 @@ def handle_stream_message_objects(
         error_msg = str(e)
         stack_trace = traceback.format_exc()
 
-        if isinstance(e, ToolCallException):
-            yield StreamingError(
-                error=error_msg,
-                stack_trace=stack_trace,
-                error_code="TOOL_CALL_FAILED",
-                is_retryable=True,
-                details={"tool_name": e.tool_name} if e.tool_name else None,
-            )
-        elif llm:
+        if llm:
             client_error_msg, error_code, is_retryable = litellm_exception_to_error_msg(
                 e, llm
             )
@@ -670,6 +654,7 @@ def llm_loop_completion_handle(
     chat_session_id: str,
     assistant_message: ChatMessage,
 ) -> None:
+    # Determine if stopped by user
     completed_normally = is_connected()
     # Build final answer based on completion status
     if completed_normally:
@@ -684,7 +669,7 @@ def llm_loop_completion_handle(
         if state_container.answer_tokens:
             final_answer = (
                 state_container.answer_tokens
-                + " ... The generation was stopped by the user here."
+                + " ... \n\nGeneration was stopped by the user."
             )
         else:
             final_answer = "The generation was stopped by the user."

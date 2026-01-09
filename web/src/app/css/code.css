@@ -1,0 +1,24 @@
+.code-block {
+  display: block;
+  padding: 0.5rem;
+  background-color: var(--background-tint-00);
+  border: 1px solid var(--border-01);
+  border-radius: var(--border-radius-12);
+  word-break: break-all;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--text-03);
+}
+
+.code-copy-button {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  opacity: 0;
+  transition: opacity 150ms ease-in-out;
+}
+
+.code-wrapper:hover .code-copy-button {
+  opacity: 1;
+}

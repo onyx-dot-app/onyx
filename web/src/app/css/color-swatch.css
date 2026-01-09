@@ -1,0 +1,25 @@
+.color-swatch {
+  /* Base styles */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--border-01);
+  border-radius: var(--border-radius-08);
+  padding: 0.12rem 0.25rem;
+  background-color: var(--background-tint-light-01);
+  gap: 0.1rem;
+}
+
+.color-swatch[data-state="dark"] {
+  background-color: var(--background-tint-dark-01);
+}
+
+.color-swatch__text {
+  font-size: 0.5rem;
+  font-weight: 500;
+  color: var(--text-dark-05);
+}
+
+.color-swatch[data-state="dark"] .color-swatch__text {
+  color: var(--text-light-05);
+}
