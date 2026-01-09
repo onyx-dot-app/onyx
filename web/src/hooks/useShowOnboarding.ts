@@ -11,6 +11,7 @@ interface UseShowOnboardingParams {
   hasAnyProvider: boolean | undefined;
   isLoadingChatSessions: boolean;
   chatSessionsCount: number;
+  userId: string | undefined;
 }
 
 export function useShowOnboarding({
@@ -19,6 +20,7 @@ export function useShowOnboarding({
   hasAnyProvider,
   isLoadingChatSessions,
   chatSessionsCount,
+  userId,
 }: UseShowOnboardingParams) {
   const [showOnboarding, setShowOnboarding] = useState(false);
 
@@ -30,17 +32,23 @@ export function useShowOnboarding({
     isLoading: isLoadingOnboarding,
   } = useOnboardingState(liveAssistant);
 
+  // Create a per-user localStorage key to avoid cross-user pollution
+  const onboardingKey = userId
+    ? `${HAS_FINISHED_ONBOARDING_KEY}_${userId}`
+    : HAS_FINISHED_ONBOARDING_KEY;
+
   // On first render, open onboarding if there are no configured LLM providers
   // OR if the user hasn't explicitly finished onboarding yet.
   // Wait until both providers AND chat sessions have loaded before making this decision.
   // Skip onboarding entirely if the user has any existing chat sessions.
   const hasCheckedOnboarding = useRef(false);
   useEffect(() => {
-    // Only check once, and only after both providers and chat sessions have loaded
+    // Only check once, and only after both providers, chat sessions, and user have loaded
     if (
       hasCheckedOnboarding.current ||
       isLoadingProviders ||
-      isLoadingChatSessions
+      isLoadingChatSessions ||
+      userId === undefined
     ) {
       return;
     }
@@ -52,9 +60,9 @@ export function useShowOnboarding({
       return;
     }
 
-    // Check if user has explicitly finished onboarding
+    // Check if user has explicitly finished onboarding (per-user key)
     const hasFinishedOnboarding =
-      localStorage.getItem(HAS_FINISHED_ONBOARDING_KEY) === "true";
+      localStorage.getItem(onboardingKey) === "true";
 
     // Show onboarding if:
     // 1. No LLM providers configured, OR
@@ -65,6 +73,8 @@ export function useShowOnboarding({
     isLoadingChatSessions,
     hasAnyProvider,
     chatSessionsCount,
+    userId,
+    onboardingKey,
   ]);
 
   const hideOnboarding = () => {
@@ -72,7 +82,7 @@ export function useShowOnboarding({
   };
 
   const finishOnboarding = () => {
-    localStorage.setItem(HAS_FINISHED_ONBOARDING_KEY, "true");
+    localStorage.setItem(onboardingKey, "true");
     setShowOnboarding(false);
   };
 
