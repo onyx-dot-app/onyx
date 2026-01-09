@@ -151,7 +151,7 @@ export default function UserFilesModal({
       showOnlySelected
         ? recentFiles.filter((projectFile) => selectedIds.has(projectFile.id))
         : recentFiles,
-    [showOnlySelected, recentFiles]
+    [showOnlySelected, recentFiles, selectedIds]
   );
 
   const { query, setQuery, filtered } = useFilter(files, (file) => file.name);
