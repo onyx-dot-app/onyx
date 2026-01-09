@@ -121,30 +121,18 @@
   width: 100%;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   position: relative;
-  scrollbar-width: thin;
-  scrollbar-color: var(--text-02) transparent;
-}
-
-.nrf-messages-scroll::-webkit-scrollbar {
-  width: 6px;
-}
-
-.nrf-messages-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.nrf-messages-scroll::-webkit-scrollbar-thumb {
-  background: var(--text-02);
-  border-radius: 4px;
+  min-height: 0;
 }
 
 .nrf-messages-content {
   position: relative;
   width: 100%;
-  padding: 0 1rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 /* Input area */

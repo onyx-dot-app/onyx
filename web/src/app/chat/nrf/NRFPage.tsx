@@ -30,19 +30,17 @@ import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { useAgents } from "@/hooks/useAgents";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
+import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { useDeepResearchToggle } from "@/app/chat/hooks/useDeepResearchToggle";
 import { useChatController } from "@/app/chat/hooks/useChatController";
 import { useChatSessionController } from "@/app/chat/hooks/useChatSessionController";
 import { useAssistantController } from "@/app/chat/hooks/useAssistantController";
 import {
-  useChatSessionStore,
   useCurrentChatState,
   useCurrentMessageHistory,
 } from "@/app/chat/stores/useChatSessionStore";
 import ChatUI from "@/sections/ChatUI";
 import useChatSessions from "@/hooks/useChatSessions";
-import { useScrollonStream } from "@/app/chat/services/lib";
 import { cn } from "@/lib/utils";
 import Logo from "@/refresh-components/Logo";
 import useScreenSize from "@/hooks/useScreenSize";
@@ -72,7 +70,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const filterManager = useFilters();
   const { isNight } = useNightTime();
   const { user, authTypeMetadata } = useUser();
-  const { llmProviders } = useLLMProviders();
   const settings = useContext(SettingsContext);
   const { height: screenHeight } = useScreenSize();
   const { setFolded } = useAppSidebarContext();
@@ -151,38 +148,21 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const [backgroundUrl, setBackgroundUrl] = useState<string>(
     theme === "light" ? defaultLightBackgroundUrl : defaultDarkBackgroundUrl
   );
-  const [selectedDocuments, setSelectedDocuments] = useState<OnyxDocument[]>(
-    []
-  );
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
 
   // Modals
   const [showTurnOffModal, setShowTurnOffModal] = useState<boolean>(false);
-  const [showLoginModal, setShowLoginModal] = useState<boolean>(!user);
 
-  // Refs for scrolling
-  const scrollableDivRef = useRef<HTMLDivElement>(null);
-  const lastMessageRef = useRef<HTMLDivElement>(null);
+  // Refs
   const inputRef = useRef<HTMLDivElement>(null);
-  const endDivRef = useRef<HTMLDivElement>(null);
   const endPaddingRef = useRef<HTMLDivElement>(null);
   const chatInputBarRef = useRef<ChatInputBarHandle | null>(null);
-  const waitForScrollRef = useRef(false);
-  const scrollDist = useRef<number>(0);
-  const scrollInitialized = useRef(false);
-  const isInitialLoad = useRef(true);
-  const chatSessionIdRef = useRef<string | null>(existingChatSessionId);
-  const loadedIdSessionRef = useRef<string | null>(existingChatSessionId);
   const submitOnLoadPerformed = useRef<boolean>(false);
 
   // Access chat state from store
   const currentChatState = useCurrentChatState();
-  const chatSessionId = useChatSessionStore((state) => state.currentSessionId);
   const messageHistory = useCurrentMessageHistory();
-  const updateHasPerformedInitialScroll = useChatSessionStore(
-    (state) => state.updateHasPerformedInitialScroll
-  );
 
   // Determine if we should show centered welcome or messages
   const hasMessages = messageHistory.length > 0;
@@ -222,37 +202,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     sendSetDefaultNewTabMessage(false);
   };
 
-  // Scroll to bottom
-  const clientScrollToBottom = useCallback(
-    (fast?: boolean) => {
-      waitForScrollRef.current = true;
-
-      setTimeout(() => {
-        if (!endDivRef.current || !scrollableDivRef.current) {
-          return;
-        }
-
-        const rect = endDivRef.current.getBoundingClientRect();
-        const isVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
-
-        if (isVisible) return;
-
-        endDivRef.current.scrollIntoView({
-          behavior: fast ? "auto" : "smooth",
-        });
-
-        if (chatSessionIdRef.current) {
-          updateHasPerformedInitialScroll(chatSessionIdRef.current, true);
-        }
-      }, 50);
-
-      setTimeout(() => {
-        waitForScrollRef.current = false;
-      }, 1500);
-    },
-    [updateHasPerformedInitialScroll]
-  );
-
   // Reset input bar after sending
   const resetInputBar = useCallback(() => {
     setMessage("");
@@ -272,7 +221,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       availableAssistants: availableAssistants || [],
       liveAssistant,
       existingChatSessionId,
-      selectedDocuments,
+      selectedDocuments: [],
       searchParams: searchParams!,
       setPopup,
       resetInputBar,
@@ -280,47 +229,22 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     });
 
   // Chat session controller for loading sessions
-  const { onMessageSelection, currentSessionFileTokenCount } =
-    useChatSessionController({
-      existingChatSessionId,
-      searchParams: searchParams!,
-      filterManager,
-      firstMessage: undefined,
-      setSelectedAssistantFromId,
-      setSelectedDocuments,
-      setCurrentMessageFiles,
-      chatSessionIdRef,
-      loadedIdSessionRef,
-      chatInputBarRef,
-      isInitialLoad,
-      submitOnLoadPerformed,
-      refreshChatSessions,
-      onSubmit,
-    });
-
-  // Auto scroll on stream
-  const autoScrollEnabled = user?.preferences?.auto_scroll ?? false;
-  const debounceNumber = 100;
-
-  useScrollonStream({
-    chatState: currentChatState,
-    scrollableDivRef,
-    scrollDist,
-    endDivRef,
-    debounceNumber,
-    mobile: settings?.isMobile,
-    enableAutoScroll: autoScrollEnabled,
+  const { currentSessionFileTokenCount } = useChatSessionController({
+    existingChatSessionId,
+    searchParams: searchParams!,
+    filterManager,
+    firstMessage: undefined,
+    setSelectedAssistantFromId,
+    setSelectedDocuments: () => {}, // No-op: NRF doesn't support document selection
+    setCurrentMessageFiles,
+    chatSessionIdRef: { current: null },
+    loadedIdSessionRef: { current: null },
+    chatInputBarRef,
+    isInitialLoad: { current: false },
+    submitOnLoadPerformed,
+    refreshChatSessions,
+    onSubmit,
   });
-
-  // Container height for messages
-  const getContainerHeight = useMemo(() => {
-    return () => {
-      if (autoScrollEnabled) return undefined;
-      if (screenHeight < 600) return "40vh";
-      if (screenHeight < 1200) return "50vh";
-      return "60vh";
-    };
-  }, [autoScrollEnabled, screenHeight]);
 
   // Handle file upload
   const handleFileUpload = useCallback(
@@ -447,7 +371,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   )}
                 >
                   {/* Scrollable messages area */}
-                  <div ref={scrollableDivRef} className="nrf-messages-scroll">
+                  <div className="nrf-messages-scroll">
                     <div className="nrf-messages-content">
                       <ChatUI
                         liveAssistant={liveAssistant ?? undefined}
@@ -455,7 +379,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                         currentMessageFiles={currentMessageFiles}
                         setPresentingDocument={setPresentingDocument}
                         onSubmit={onSubmit}
-                        onMessageSelection={onMessageSelection}
+                        onMessageSelection={() => {}}
                         stopGenerating={stopGenerating}
                         handleResubmitLastMessage={handleResubmitLastMessage}
                         deepResearchEnabled={deepResearchEnabled}
@@ -478,9 +402,9 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                       toggleDocumentSidebar={toggleDocumentSidebar}
                       filterManager={filterManager}
                       llmManager={llmManager}
-                      removeDocs={() => setSelectedDocuments([])}
+                      removeDocs={() => {}}
                       retrievalEnabled={false}
-                      selectedDocuments={selectedDocuments}
+                      selectedDocuments={[]}
                       initialMessage={message}
                       stopGenerating={stopGenerating}
                       onSubmit={handleChatInputSubmit}
@@ -531,9 +455,9 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   toggleDocumentSidebar={toggleDocumentSidebar}
                   filterManager={filterManager}
                   llmManager={llmManager}
-                  removeDocs={() => setSelectedDocuments([])}
+                  removeDocs={() => {}}
                   retrievalEnabled={false}
-                  selectedDocuments={selectedDocuments}
+                  selectedDocuments={[]}
                   initialMessage={message}
                   stopGenerating={stopGenerating}
                   onSubmit={handleChatInputSubmit}
@@ -582,44 +506,42 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
         </>
       )}
 
-      {!user &&
-        authTypeMetadata.authType !== AuthType.DISABLED &&
-        showLoginModal && (
-          <Modal open onOpenChange={() => setShowLoginModal(false)}>
-            <Modal.Content small>
-              <Modal.Header
-                icon={SvgUser}
-                title="Welcome to Onyx"
-                onClose={() => setShowLoginModal(false)}
-              />
-              <Modal.Body>
-                {authTypeMetadata.authType === AuthType.BASIC ? (
-                  <LoginPage
-                    authUrl={null}
-                    authTypeMetadata={authTypeMetadata}
-                    nextUrl="/nrf"
-                  />
-                ) : (
-                  <div className="flex flex-col items-center">
-                    <Button
-                      className="w-full"
-                      secondary
-                      onClick={() => {
-                        if (window.top) {
-                          window.top.location.href = "/auth/login";
-                        } else {
-                          window.location.href = "/auth/login";
-                        }
-                      }}
-                    >
-                      Log in
-                    </Button>
-                  </div>
-                )}
-              </Modal.Body>
-            </Modal.Content>
-          </Modal>
-        )}
+      {!user && authTypeMetadata.authType !== AuthType.DISABLED && (
+        <Modal open onOpenChange={() => {}}>
+          <Modal.Content small>
+            <Modal.Header
+              icon={SvgUser}
+              title="Welcome to Onyx"
+              onClose={() => {}}
+            />
+            <Modal.Body>
+              {authTypeMetadata.authType === AuthType.BASIC ? (
+                <LoginPage
+                  authUrl={null}
+                  authTypeMetadata={authTypeMetadata}
+                  nextUrl="/nrf"
+                />
+              ) : (
+                <div className="flex flex-col items-center">
+                  <Button
+                    className="w-full"
+                    secondary
+                    onClick={() => {
+                      if (window.top) {
+                        window.top.location.href = "/auth/login";
+                      } else {
+                        window.location.href = "/auth/login";
+                      }
+                    }}
+                  >
+                    Log in
+                  </Button>
+                </div>
+              )}
+            </Modal.Body>
+          </Modal.Content>
+        </Modal>
+      )}
 
       {user && !llmManager.isLoadingProviders && !llmManager.hasAnyProvider && (
         <Button
