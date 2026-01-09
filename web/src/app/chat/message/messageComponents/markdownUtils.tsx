@@ -111,15 +111,7 @@ export const useMarkdownComponents = (
       },
       table: ({ node, className, children, ...props }: any) => {
         return (
-          <div
-            className="overflow-x-auto"
-            style={{
-              width: "100cqw",
-              marginLeft: "calc((100% - 100cqw) / 2)",
-              paddingLeft: "calc((100cqw - 100%) / 2)",
-              paddingRight: "calc((100cqw - 100%) / 2)",
-            }}
-          >
+          <div className="markdown-table-breakout">
             <table className={cn(className, "min-w-full")} {...props}>
               {children}
             </table>
