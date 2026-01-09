@@ -63,10 +63,13 @@ export interface ChatUIProps {
     forceSearch?: boolean;
     queryOverride?: string;
     isSeededChat?: boolean;
+    selectedModels?: LlmDescriptor[];
   }) => Promise<void>;
   onMessageSelection: (nodeId: number) => void;
   stopGenerating: () => void;
   handleResubmitLastMessage: () => void;
+  // Multi-model selection from parent
+  selectedModels: LlmDescriptor[];
 }
 
 const ChatUI = React.memo(
@@ -82,6 +85,7 @@ const ChatUI = React.memo(
         onMessageSelection,
         stopGenerating,
         handleResubmitLastMessage,
+        selectedModels,
       }: ChatUIProps,
       ref: ForwardedRef<ChatUIHandle>
     ) => {
@@ -111,9 +115,11 @@ const ChatUI = React.memo(
       const onSubmitRef = useRef(onSubmit);
       const deepResearchEnabledRef = useRef(deepResearchEnabled);
       const currentMessageFilesRef = useRef(currentMessageFiles);
+      const selectedModelsRef = useRef(selectedModels);
       onSubmitRef.current = onSubmit;
       deepResearchEnabledRef.current = deepResearchEnabled;
       currentMessageFilesRef.current = currentMessageFiles;
+      selectedModelsRef.current = selectedModels;
 
       const createRegenerator = useCallback(
         (regenerationRequest: {
@@ -143,6 +149,11 @@ const ChatUI = React.memo(
             messageIdToResend: msgId,
             currentMessageFiles: [],
             deepResearch: deepResearchEnabledRef.current,
+            // Preserve multi-model selection when editing
+            selectedModels:
+              selectedModelsRef.current.length >= 2
+                ? selectedModelsRef.current
+                : undefined,
           });
         },
         [] // Stable - uses refs for latest values

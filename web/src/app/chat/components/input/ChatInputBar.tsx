@@ -116,6 +116,12 @@ export interface ChatInputBarProps {
   setPresentingDocument?: (document: MinimalOnyxDocument) => void;
   toggleDeepResearch: () => void;
   disabled: boolean;
+
+  // Multi-model selection (lifted to parent)
+  selectedModels: LlmDescriptor[];
+  setSelectedModels: (models: LlmDescriptor[]) => void;
+  multiModelMode: boolean;
+  setMultiModelMode: (mode: boolean) => void;
 }
 
 const ChatInputBar = React.memo(
@@ -143,6 +149,11 @@ const ChatInputBar = React.memo(
         toggleDeepResearch,
         setPresentingDocument,
         disabled,
+        // Multi-model selection
+        selectedModels,
+        setSelectedModels,
+        multiModelMode,
+        setMultiModelMode,
       },
       ref
     ) => {
@@ -168,10 +179,8 @@ const ChatInputBar = React.memo(
       const { currentMessageFiles, setCurrentMessageFiles } =
         useProjectsContext();
 
-      // Multi-model chat feature flag and state
+      // Multi-model chat feature flag
       const multiModelEnabled = useMultiModelEnabled();
-      const [multiModelMode, setMultiModelMode] = useState(false);
-      const [selectedModels, setSelectedModels] = useState<LlmDescriptor[]>([]);
 
       const currentIndexingFiles = useMemo(() => {
         return currentMessageFiles.filter(

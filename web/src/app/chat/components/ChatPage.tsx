@@ -262,6 +262,10 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
   const [projectPanelVisible, setProjectPanelVisible] = useState(true);
   const chatInputBarRef = useRef<ChatInputBarHandle>(null);
 
+  // Multi-model selection state (lifted from ChatInputBar for sharing with ChatUI)
+  const [multiModelMode, setMultiModelMode] = useState(false);
+  const [selectedModels, setSelectedModels] = useState<LlmDescriptor[]>([]);
+
   const filterManager = useFilters();
 
   const isDefaultAgent = useIsDefaultAgent({
@@ -657,6 +661,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
                   onMessageSelection={onMessageSelection}
                   stopGenerating={stopGenerating}
                   handleResubmitLastMessage={handleResubmitLastMessage}
+                  selectedModels={selectedModels}
                 />
               )}
 
@@ -716,6 +721,10 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
                     (!isLoadingOnboarding &&
                       onboardingState.currentStep !== OnboardingStep.Complete)
                   }
+                  selectedModels={selectedModels}
+                  setSelectedModels={setSelectedModels}
+                  multiModelMode={multiModelMode}
+                  setMultiModelMode={setMultiModelMode}
                 />
 
                 <Spacer rem={0.5} />
