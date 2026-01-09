@@ -37,22 +37,24 @@ export function useShowOnboarding({
     ? `${HAS_FINISHED_ONBOARDING_KEY}_${userId}`
     : HAS_FINISHED_ONBOARDING_KEY;
 
-  // On first render, open onboarding if there are no configured LLM providers
-  // OR if the user hasn't explicitly finished onboarding yet.
-  // Wait until both providers AND chat sessions have loaded before making this decision.
-  // Skip onboarding entirely if the user has any existing chat sessions.
-  const hasCheckedOnboarding = useRef(false);
+  // Track which user we've already evaluated onboarding for.
+  // Re-check when userId changes (logout/login, account switching without full reload).
+  const hasCheckedOnboardingForUserId = useRef<string | undefined>(undefined);
+
+  // Evaluate onboarding once per user after data loads.
+  // Show onboarding if no LLM providers OR user hasn't finished onboarding.
+  // Skip entirely if user has existing chat sessions.
   useEffect(() => {
-    // Only check once, and only after both providers, chat sessions, and user have loaded
-    if (
-      hasCheckedOnboarding.current ||
-      isLoadingProviders ||
-      isLoadingChatSessions ||
-      userId === undefined
-    ) {
+    // Wait for data to load
+    if (isLoadingProviders || isLoadingChatSessions || userId === undefined) {
       return;
     }
-    hasCheckedOnboarding.current = true;
+
+    // Only check once per user
+    if (hasCheckedOnboardingForUserId.current === userId) {
+      return;
+    }
+    hasCheckedOnboardingForUserId.current = userId;
 
     // Skip onboarding if user has any chat sessions
     if (chatSessionsCount > 0) {
