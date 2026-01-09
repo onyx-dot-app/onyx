@@ -28,7 +28,7 @@
 .button-main-primary-icon {
   stroke: var(--text-inverted-05);
 }
-.button-main-primary-icon:disabled {
+.button-main-primary:disabled .button-main-primary-icon {
   stroke: var(--text-inverted-04);
 }
 
