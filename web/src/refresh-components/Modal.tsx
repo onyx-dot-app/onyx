@@ -468,12 +468,6 @@ ModalBody.displayName = "ModalBody";
  *   <Button secondary>Cancel</Button>
  *   <Button primary>Confirm</Button>
  * </Modal.Footer>
- *
- * // Space-between layout
- * <Modal.Footer>
- *   <Text as="p">3 files selected</Text>
- *   <Button>Done</Button>
- * </Modal.Footer>
  * ```
  */
 const ModalFooter = React.forwardRef<
