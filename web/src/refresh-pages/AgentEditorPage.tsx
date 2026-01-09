@@ -320,7 +320,7 @@ function MCPServerCard({
           description={server.description ?? server.server_url}
           icon={getActionIcon(server.server_url, server.name)}
           rightChildren={
-            <GeneralLayouts.Section horizontal gap={0.5}>
+            <GeneralLayouts.Section flexDirection="row" gap={0.5}>
               <EnabledCount
                 enabledCount={enabledCount}
                 totalCount={enabledTools.length}
@@ -341,7 +341,7 @@ function MCPServerCard({
             </GeneralLayouts.Section>
           }
         >
-          <GeneralLayouts.Section horizontal gap={0.5}>
+          <GeneralLayouts.Section flexDirection="row" gap={0.5}>
             <InputTypeIn
               placeholder="Search tools..."
               internal
@@ -1016,7 +1016,11 @@ export default function AgentEditorPage({
 
                     {/* Agent Form Content */}
                     <SettingsLayouts.Body>
-                      <GeneralLayouts.Section horizontal gap={2.5} top>
+                      <GeneralLayouts.Section
+                        flexDirection="row"
+                        gap={2.5}
+                        alignItems="start"
+                      >
                         <GeneralLayouts.Section>
                           <InputLayouts.Vertical name="name" label="Name">
                             <InputTypeInField
@@ -1193,7 +1197,7 @@ export default function AgentEditorPage({
 
                                   {values.user_file_ids.length > 0 && (
                                     <GeneralLayouts.Section
-                                      horizontal
+                                      flexDirection="row"
                                       wrap
                                       gap={0.5}
                                     >
@@ -1287,7 +1291,7 @@ export default function AgentEditorPage({
                             </InputLayouts.Horizontal>
                           </Card>
 
-                          <Card>
+                          <Card disabled={!codeInterpreterTool}>
                             <InputLayouts.Horizontal
                               name="code_interpreter"
                               label="Code Interpreter"

@@ -30,7 +30,7 @@ export default function InputTypeInElementField({
   const isEmpty = !field.value || field.value.trim() === "";
 
   return (
-    <Section horizontal gap={0.25}>
+    <Section flexDirection="row" gap={0.25}>
       {/* Input */}
       <InputTypeIn
         {...inputProps}
