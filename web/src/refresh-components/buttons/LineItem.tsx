@@ -127,7 +127,8 @@ const LineItem = React.forwardRef<HTMLButtonElement, LineItemProps>(
       <button
         ref={ref}
         className={cn(
-          "flex flex-row w-full justify-start items-start p-2 rounded-08 group/LineItem gap-2",
+          "flex flex-row w-full items-start p-2 rounded-08 group/LineItem gap-2",
+          !!description ? "items-start" : "items-center",
           buttonClassNames[variant][emphasisKey],
           className
         )}
@@ -136,7 +137,12 @@ const LineItem = React.forwardRef<HTMLButtonElement, LineItemProps>(
         {...props}
       >
         {Icon && (
-          <div className="flex flex-col justify-center items-center h-[1rem] min-w-[1rem] mt-0.5">
+          <div
+            className={cn(
+              "flex flex-col justify-center items-center h-[1rem] min-w-[1rem]",
+              !!description && "mt-0.5"
+            )}
+          >
             <Icon
               className={cn("h-[1rem] w-[1rem]", iconClassNames[variant])}
             />
