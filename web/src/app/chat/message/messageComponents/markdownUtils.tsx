@@ -109,6 +109,15 @@ export const useMarkdownComponents = (
           </li>
         );
       },
+      table: ({ node, className, children, ...props }: any) => {
+        return (
+          <div className="overflow-x-auto">
+            <table className={className} {...props}>
+              {children}
+            </table>
+          </div>
+        );
+      },
       code: ({ node, className, children }: any) => {
         const codeText = extractCodeText(node, processedContent, children);
 

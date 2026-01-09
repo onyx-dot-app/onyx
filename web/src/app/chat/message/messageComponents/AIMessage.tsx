@@ -535,7 +535,7 @@ const AIMessage = React.memo(function AIMessage({
         <div className="max-w-message-max break-words pl-4 w-full">
           <div
             ref={markdownRef}
-            className="overflow-x-visible max-w-content-max focus:outline-none select-text"
+            className="max-w-content-max select-text"
             onCopy={(e) => {
               if (markdownRef.current) {
                 handleCopy(e, markdownRef as RefObject<HTMLDivElement>);
