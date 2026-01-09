@@ -1,19 +1,20 @@
-"""sync exa api key to content provider
+"""sync_exa_api_key_to_content_provider
 
-Revision ID: b2c3d4e5f6a7
+Revision ID: d1b637d7050a
 Revises: a3c1a7904cd0
-Create Date: 2026-01-09 15:00:00.000000
+Create Date: 2026-01-09 15:54:15.646249
 
 """
 
 from alembic import op
 from sqlalchemy import text
 
+
 # revision identifiers, used by Alembic.
-revision = "b2c3d4e5f6a7"
+revision = "d1b637d7050a"
 down_revision = "a3c1a7904cd0"
-branch_labels: None = None
-depends_on: None = None
+branch_labels = None
+depends_on = None
 
 
 def upgrade() -> None:
@@ -61,7 +62,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # We don't remove the content provider on downgrade since it may have been
-    # intentionally created by the user. The migration is purely additive for
-    # backwards compatibility.
     pass
