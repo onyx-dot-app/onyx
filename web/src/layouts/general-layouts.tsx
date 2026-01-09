@@ -3,7 +3,7 @@ import { WithoutStyles } from "@/types";
 import React, { forwardRef } from "react";
 
 export type FlexDirection = "row" | "column";
-export type JustifyContent = "start" | "center" | "end";
+export type JustifyContent = "start" | "center" | "end" | "between";
 export type AlignItems = "start" | "center" | "end";
 
 const directionClassMap: Record<FlexDirection, string> = {
@@ -14,6 +14,7 @@ const justifyClassMap: Record<JustifyContent, string> = {
   start: "justify-start",
   center: "justify-center",
   end: "justify-end",
+  between: "justify-between",
 };
 const alignClassMap: Record<AlignItems, string> = {
   start: "items-start",

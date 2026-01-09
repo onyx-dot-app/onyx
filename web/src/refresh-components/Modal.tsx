@@ -346,8 +346,7 @@ ModalContent.displayName = DialogPrimitive.Content.displayName;
  * </Modal.Header>
  * ```
  */
-interface ModalHeaderProps
-  extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
+interface ModalHeaderProps extends WithoutStyles<SectionProps> {
   icon: React.FunctionComponent<IconProps>;
   title: string;
   titleClassName?: string;
@@ -370,13 +369,14 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
     const { closeButtonRef } = useModalContext();
 
     return (
-      <div
-        ref={ref}
-        className="relative z-10 flex flex-col gap-4 p-4 w-full"
-        {...props}
-      >
-        <div className="flex flex-col gap-1">
-          <div className="flex flex-row items-center justify-between">
+      <Section ref={ref} padding={1} alignItems="start" {...props}>
+        <Section gap={0.25} alignItems="start">
+          <Section
+            gap={0}
+            padding={0}
+            flexDirection="row"
+            justifyContent="between"
+          >
             <Icon className={"w-[1.5rem] h-[1.5rem] stroke-text-04"} />
             {onClose && (
               <div
@@ -388,7 +388,7 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
                 </DialogPrimitive.Close>
               </div>
             )}
-          </div>
+          </Section>
           <DialogPrimitive.Title asChild>
             <Truncated headingH3 as="span" className={titleClassName}>
               {title}
@@ -401,9 +401,9 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
               </Text>
             </DialogPrimitive.Description>
           )}
-        </div>
+        </Section>
         {children}
-      </div>
+      </Section>
     );
   }
 );

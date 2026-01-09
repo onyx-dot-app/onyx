@@ -187,7 +187,7 @@ export default function UserFilesModal({
         >
           <Modal.Header icon={SvgFiles} title={title} description={description}>
             {/* Search bar section */}
-            <div className="flex flex-row items-center gap-2">
+            <Section flexDirection="row" gap={0.5}>
               <InputTypeIn
                 ref={searchInputRef}
                 placeholder="Search files..."
@@ -209,7 +209,7 @@ export default function UserFilesModal({
                   Add Files
                 </CreateButton>
               )}
-            </div>
+            </Section>
           </Modal.Header>
 
           <Modal.Body padding={0.5} gap={0.5} alignItems="center">
@@ -268,7 +268,6 @@ export default function UserFilesModal({
           <Modal.Footer>
             {/* Left side: file count and controls */}
             {onPickRecent && (
-              // <div className="flex items-center gap-2">
               <Section flexDirection="row" justifyContent="start" gap={2}>
                 <Text as="p" text03>
                   {selectedCount} {selectedCount === 1 ? "file" : "files"}{" "}
