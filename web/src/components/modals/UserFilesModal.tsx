@@ -268,7 +268,7 @@ export default function UserFilesModal({
           <Modal.Footer>
             {/* Left side: file count and controls */}
             {onPickRecent && (
-              <Section flexDirection="row" justifyContent="start" gap={2}>
+              <Section flexDirection="row" justifyContent="start" gap={0.5}>
                 <Text as="p" text03>
                   {selectedCount} {selectedCount === 1 ? "file" : "files"}{" "}
                   selected
