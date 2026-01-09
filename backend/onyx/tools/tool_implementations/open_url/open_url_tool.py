@@ -523,6 +523,11 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             )
             return ToolResponse(rich_response=None, llm_facing_response=failure_msg)
 
+        for section in inference_sections:
+            chunk = section.center_chunk
+            if not chunk.semantic_identifier and chunk.source_links:
+                chunk.semantic_identifier = chunk.source_links[0]
+
         # Convert sections to search docs, preserving source information
         search_docs = convert_inference_sections_to_search_docs(
             inference_sections, is_internet=False

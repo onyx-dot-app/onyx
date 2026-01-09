@@ -235,7 +235,11 @@ export function useChatController({
     );
 
     // Navigate immediately if still on chat page
-    if (pathname === "/chat" && !navigatingAway.current) {
+    // For NRF pages (/chat/nrf, /chat/nrf/side-panel), don't navigate immediately
+    // Let the streaming complete inline, then the user can continue chatting there
+    const isOnChatPage = pathname === "/chat";
+
+    if (isOnChatPage && !navigatingAway.current) {
       router.push(newUrl as Route, { scroll: false });
     }
 
@@ -457,7 +461,10 @@ export function useChatController({
       }
 
       let currChatSessionId: string;
-      const isNewSession = existingChatSessionId === null;
+      // Check both the prop and the store's currentSessionId to determine if this is a new session
+      // For pages like NRF where existingChatSessionId is always null, we need to check if
+      // we already have a session from a previous message
+      const isNewSession = existingChatSessionId === null && !currentSessionId;
 
       const searchParamBasedChatSessionName =
         searchParams?.get(SEARCH_PARAM_NAMES.TITLE) || null;
@@ -473,7 +480,9 @@ export function useChatController({
           projectId ? parseInt(projectId) : null
         );
       } else {
-        currChatSessionId = existingChatSessionId as string;
+        // Use the existing session ID from props or from the store
+        currChatSessionId =
+          existingChatSessionId || (currentSessionId as string);
       }
       frozenSessionId = currChatSessionId;
       // update the selected model for the chat session if one is specified so that

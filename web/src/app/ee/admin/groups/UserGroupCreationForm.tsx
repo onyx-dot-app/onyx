@@ -87,7 +87,6 @@ export default function UserGroupCreationForm({
                   label="Name:"
                   placeholder="A name for the User Group"
                   disabled={isUpdate}
-                  autoCompleteDisabled={true}
                 />
 
                 <Separator />

@@ -539,9 +539,18 @@ def translate_assistant_message_to_packets(
         if citation_info_list:
             final_turn_index = max(final_turn_index, citation_turn_index)
 
+    # Determine stop reason - check if message indicates user cancelled
+    stop_reason: str | None = None
+    if chat_message.message:
+        if "Generation was stopped" in chat_message.message:
+            stop_reason = "user_cancelled"
+
     # Add overall stop packet at the end
     packet_list.append(
-        Packet(placement=Placement(turn_index=final_turn_index), obj=OverallStop())
+        Packet(
+            placement=Placement(turn_index=final_turn_index),
+            obj=OverallStop(stop_reason=stop_reason),
+        )
     )
 
     return packet_list

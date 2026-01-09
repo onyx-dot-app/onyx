@@ -1,8 +1,5 @@
 """EE Usage limits - trial detection via billing information."""
 
-from datetime import datetime
-from datetime import timezone
-
 from ee.onyx.server.tenants.billing import fetch_billing_information
 from ee.onyx.server.tenants.models import BillingInformation
 from ee.onyx.server.tenants.models import SubscriptionStatusResponse
@@ -31,13 +28,7 @@ def is_tenant_on_trial(tenant_id: str) -> bool:
             return True
 
         if isinstance(billing_info, BillingInformation):
-            # Check if trial is active
-            if billing_info.trial_end is not None:
-                now = datetime.now(timezone.utc)
-                # Trial active if trial_end is in the future
-                # and subscription status indicates trialing
-                if billing_info.trial_end > now and billing_info.status == "trialing":
-                    return True
+            return billing_info.status == "trialing"
 
         return False
 
