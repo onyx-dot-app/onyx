@@ -54,7 +54,7 @@ attrs==25.4.0
     #   jsonschema
     #   referencing
     #   zeep
-authlib==1.6.5
+authlib==1.6.6
     # via fastmcp
 babel==2.17.0
     # via courlan
@@ -1248,7 +1248,7 @@ websockets==15.0.1
     # via
     #   fastmcp
     #   google-genai
-werkzeug==3.1.4
+werkzeug==3.1.5
     # via sendgrid
 wrapt==1.17.3
     # via

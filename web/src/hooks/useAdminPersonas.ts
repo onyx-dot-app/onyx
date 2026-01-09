@@ -1,3 +1,5 @@
+"use client";
+
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildApiPath } from "@/lib/urlBuilder";
