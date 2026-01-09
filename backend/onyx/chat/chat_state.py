@@ -202,7 +202,7 @@ def run_chat_loop_with_state_containers(
         except Exception as e:
             emitter.emit(
                 Packet(
-                    placement=Placement(turn_index=0),
+                    placement=Placement(turn_index=last_turn_index + 1),
                     obj=PacketException(type="error", exception=e),
                 )
             )
