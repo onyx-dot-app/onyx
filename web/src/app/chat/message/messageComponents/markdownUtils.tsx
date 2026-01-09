@@ -13,7 +13,7 @@ import {
 } from "@/app/chat/message/MemoizedTextComponents";
 import { extractCodeText, preprocessLaTeX } from "@/app/chat/message/codeUtils";
 import { CodeBlock } from "@/app/chat/message/CodeBlock";
-import { transformLinkUri } from "@/lib/utils";
+import { transformLinkUri, cn } from "@/lib/utils";
 
 /**
  * Processes content for markdown rendering by handling code blocks and LaTeX
@@ -111,10 +111,20 @@ export const useMarkdownComponents = (
       },
       table: ({ node, className, children, ...props }: any) => {
         return (
-          <div className="overflow-x-auto">
-            <table className={className} {...props}>
-              {children}
-            </table>
+          <div className="@container w-full">
+            <div
+              className="overflow-x-auto"
+              style={{
+                width: "100cqw",
+                marginLeft: "calc((100% - 100cqw) / 2)",
+                paddingLeft: "calc((100cqw - 100%) / 2)",
+                paddingRight: "calc((100cqw - 100%) / 2)",
+              }}
+            >
+              <table className={cn(className, "min-w-full")} {...props}>
+                {children}
+              </table>
+            </div>
           </div>
         );
       },
