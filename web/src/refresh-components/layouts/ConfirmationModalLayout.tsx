@@ -30,7 +30,7 @@ export default function ConfirmationModalLayout({
 
   return (
     <Modal open onOpenChange={(isOpen) => !isOpen && onClose?.()}>
-      <Modal.Content mini className="z-confirmation">
+      <Modal.Content mini>
         <Modal.Header
           icon={icon}
           title={title}

@@ -60,7 +60,7 @@ export const OAuthConfigForm = ({
         }
       }}
     >
-      <Modal.Content medium className="w-[60%] max-h-[80vh]">
+      <Modal.Content medium>
         <Modal.Header
           icon={SvgKey}
           title={

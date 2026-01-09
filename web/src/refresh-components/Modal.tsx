@@ -120,7 +120,9 @@ const sizeClassNames = {
  * ```
  */
 interface ModalContentProps
-  extends React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> {
+  extends WithoutStyles<
+    React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
+  > {
   large?: boolean;
   medium?: boolean;
   small?: boolean;
@@ -135,7 +137,6 @@ const ModalContent = React.forwardRef<
 >(
   (
     {
-      className,
       children,
       large,
       medium,
@@ -302,8 +303,7 @@ const ModalContent = React.forwardRef<
               "data-[state=open]:slide-in-from-top-1/2 data-[state=closed]:slide-out-to-top-1/2",
               "duration-200",
               // Size variants
-              sizeClassNames[variant],
-              className
+              sizeClassNames[variant]
             )}
             onOpenAutoFocus={(e) => {
               // Reset typing detection when modal opens
