@@ -7,6 +7,7 @@ import type { IconProps } from "@opal/types";
 import Truncated from "@/refresh-components/texts/Truncated";
 import Link from "next/link";
 import type { Route } from "next";
+import { Section } from "@/layouts/general-layouts";
 
 const buttonClassNames = {
   main: {
@@ -148,8 +149,8 @@ const LineItem = React.forwardRef<HTMLButtonElement, LineItemProps>(
             />
           </div>
         )}
-        <div className="flex flex-col items-start justify-start w-full min-w-0">
-          <div className="flex flex-row items-center justify-start w-full gap-2">
+        <Section flexDirection="column" alignItems="start" gap={0}>
+          <Section flexDirection="row" gap={0.5}>
             <Truncated
               mainUiMuted
               className={cn("text-left w-full", textClassNames[variant])}
@@ -157,13 +158,13 @@ const LineItem = React.forwardRef<HTMLButtonElement, LineItemProps>(
               {children}
             </Truncated>
             {rightChildren}
-          </div>
+          </Section>
           {description && (
             <Text as="p" secondaryBody text03>
               {description}
             </Text>
           )}
-        </div>
+        </Section>
       </button>
     );
 
