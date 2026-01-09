@@ -12,7 +12,6 @@ from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.configs.constants import NotificationType
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
-from onyx.db.notification import create_notification
 from onyx.db.notification import dismiss_all_notifications
 from onyx.db.notification import get_notifications
 from onyx.db.notification import update_notification_last_shown
@@ -99,20 +98,10 @@ def get_settings_notifications(
             user=user, notif_type=NotificationType.REINDEX, db_session=db_session
         )
 
-        if not reindex_notifs:
-            notif = create_notification(
-                user_id=user.id if user else None,
-                notif_type=NotificationType.REINDEX,
-                db_session=db_session,
-            )
-            db_session.flush()
-            db_session.commit()
-
-            notifications.append(Notification.from_model(notif))
-            return notifications
-
         if len(reindex_notifs) > 1:
             logger.error("User has multiple reindex notifications")
+        elif not reindex_notifs:
+            return notifications
 
         reindex_notif = reindex_notifs[0]
         update_notification_last_shown(

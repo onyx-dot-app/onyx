@@ -369,7 +369,7 @@ export default function Page() {
         : undefined);
 
     return (
-      <div className="container">
+      <>
         <AdminPageTitle
           title="Web Search"
           icon={SvgGlobe}
@@ -383,13 +383,13 @@ export default function Page() {
             </Text>
           )}
         </Callout>
-      </div>
+      </>
     );
   }
 
   if (isLoading) {
     return (
-      <div className="container">
+      <>
         <AdminPageTitle
           title="Web Search"
           icon={SvgGlobe}
@@ -398,7 +398,7 @@ export default function Page() {
         <div className="mt-8">
           <ThreeDotsLoader />
         </div>
-      </div>
+      </>
     );
   }
 
@@ -765,7 +765,7 @@ export default function Page() {
 
   return (
     <>
-      <div className="container">
+      <>
         <AdminPageTitle icon={SvgGlobe} title="Web Search" />
         <div className="pt-4 pb-4">
           <Text as="p" className="text-text-dark">
@@ -1184,7 +1184,7 @@ export default function Page() {
             </div>
           </div>
         </div>
-      </div>
+      </>
 
       <WebProviderSetupModal
         isOpen={selectedProviderType !== null}

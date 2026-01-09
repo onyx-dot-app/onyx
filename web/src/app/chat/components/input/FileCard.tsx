@@ -108,12 +108,14 @@ export function FileCard({
   hideProcessingState = false,
   onFileClick,
   compactImages = false,
+  className,
 }: {
   file: ProjectFile;
   removeFile: (fileId: string) => void;
   hideProcessingState?: boolean;
   onFileClick?: (file: ProjectFile) => void;
   compactImages?: boolean;
+  className?: string;
 }) {
   const typeLabel = useMemo(() => {
     const name = String(file.name || "");
@@ -163,13 +165,15 @@ export function FileCard({
 
   return (
     <div
-      className={`relative group flex items-center gap-1 border border-border-01 rounded-08 ${
-        isProcessing ? "bg-background-neutral-02" : "bg-background-tint-00"
-      } p-1 h-11 min-w-[120px] max-w-[240px] ${
-        onFileClick && !isProcessing
-          ? "cursor-pointer hover:bg-accent-background"
-          : ""
-      }`}
+      className={cn(
+        "relative group flex items-center gap-1 border border-border-01 rounded-08",
+        isProcessing ? "bg-background-neutral-02" : "bg-background-tint-00",
+        "p-1 h-11 min-w-[120px] max-w-[240px]",
+        onFileClick &&
+          !isProcessing &&
+          "cursor-pointer hover:bg-accent-background",
+        className
+      )}
       onClick={() => {
         if (onFileClick && !isProcessing) {
           onFileClick(file);

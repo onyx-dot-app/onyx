@@ -1,3 +1,5 @@
+"use client";
+
 import useSWR from "swr";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";

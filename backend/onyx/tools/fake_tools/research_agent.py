@@ -410,7 +410,7 @@ def run_research_agent_call(
                     most_recent_reasoning = llm_step_result.reasoning
                     continue
                 else:
-                    tool_responses, citation_mapping = run_tool_calls(
+                    parallel_tool_call_results = run_tool_calls(
                         tool_calls=tool_calls,
                         tools=current_tools,
                         message_history=msg_history,
@@ -418,8 +418,15 @@ def run_research_agent_call(
                         user_info=None,
                         citation_mapping=citation_mapping,
                         next_citation_num=citation_processor.get_next_citation_number(),
+                        # Packets currently cannot differentiate between parallel calls in a nested level
+                        # so we just cannot show parallel calls in the UI. This should not happen for deep research anyhow.
+                        max_concurrent_tools=1,
                         # May be better to not do this step, hard to say, needs to be tested
                         skip_search_query_expansion=False,
+                    )
+                    tool_responses = parallel_tool_call_results.tool_responses
+                    citation_mapping = (
+                        parallel_tool_call_results.updated_citation_mapping
                     )
 
                     if tool_calls and not tool_responses:

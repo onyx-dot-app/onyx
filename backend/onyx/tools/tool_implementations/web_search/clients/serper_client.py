@@ -47,20 +47,28 @@ class SerperClient(WebSearchProvider, WebContentProvider):
         response.raise_for_status()
 
         results = response.json()
-        organic_results = results["organic"]
+        organic_results = results.get("organic") or []
 
-        organic_results = filter(lambda result: "link" in result, organic_results)
+        validated_results: list[WebSearchResult] = []
+        for result in organic_results:
+            link = (result.get("link") or "").strip()
+            if not link:
+                continue
 
-        return [
-            WebSearchResult(
-                title=result.get("title", ""),
-                link=result.get("link"),
-                snippet=result.get("snippet", ""),
-                author=None,
-                published_date=None,
+            title = (result.get("title") or "").strip()
+            snippet = (result.get("snippet") or "").strip()
+
+            validated_results.append(
+                WebSearchResult(
+                    title=title,
+                    link=link,
+                    snippet=snippet,
+                    author=None,
+                    published_date=None,
+                )
             )
-            for result in organic_results
-        ]
+
+        return validated_results
 
     def test_connection(self) -> dict[str, str]:
         try:

@@ -12,8 +12,9 @@ from onyx.db.token_limit import update_token_rate_limit
 from onyx.server.query_and_chat.token_limit import any_rate_limit_exists
 from onyx.server.token_rate_limits.models import TokenRateLimitArgs
 from onyx.server.token_rate_limits.models import TokenRateLimitDisplay
+from onyx.server.utils import PUBLIC_API_TAGS
 
-router = APIRouter(prefix="/admin/token-rate-limits")
+router = APIRouter(prefix="/admin/token-rate-limits", tags=PUBLIC_API_TAGS)
 
 
 """

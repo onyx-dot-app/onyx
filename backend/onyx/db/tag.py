@@ -52,7 +52,7 @@ def create_or_add_document_tag(
         is_list=False,
     )
     insert_stmt = insert_stmt.on_conflict_do_nothing(
-        index_elements=["tag_key", "tag_value", "source", "is_list"]
+        constraint="_tag_key_value_source_list_uc"
     )
     db_session.execute(insert_stmt)
 
@@ -98,7 +98,7 @@ def create_or_add_document_tag_list(
             is_list=True,
         )
         insert_stmt = insert_stmt.on_conflict_do_nothing(
-            index_elements=["tag_key", "tag_value", "source", "is_list"]
+            constraint="_tag_key_value_source_list_uc"
         )
         db_session.execute(insert_stmt)
 

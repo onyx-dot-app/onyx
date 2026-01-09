@@ -59,6 +59,7 @@ import {
   useSearchParams,
 } from "next/navigation";
 import useChatSessions from "@/hooks/useChatSessions";
+import { usePinnedAgents } from "@/hooks/useAgents";
 import {
   useChatSessionStore,
   useCurrentMessageTree,
@@ -126,6 +127,7 @@ export function useChatController({
   const searchParams = useSearchParams();
   const params = useAppParams();
   const { refreshChatSessions } = useChatSessions();
+  const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const { assistantPreferences } = useAssistantPreferences();
   const { forcedToolIds } = useForcedTools();
   const { fetchProjects, setCurrentMessageFiles, beginUpload } =
@@ -233,7 +235,11 @@ export function useChatController({
     );
 
     // Navigate immediately if still on chat page
-    if (pathname === "/chat" && !navigatingAway.current) {
+    // For NRF pages (/chat/nrf, /chat/nrf/side-panel), don't navigate immediately
+    // Let the streaming complete inline, then the user can continue chatting there
+    const isOnChatPage = pathname === "/chat";
+
+    if (isOnChatPage && !navigatingAway.current) {
       router.push(newUrl as Route, { scroll: false });
     }
 
@@ -442,8 +448,23 @@ export function useChatController({
         return;
       }
 
+      // Auto-pin the agent to sidebar when sending a message if not already pinned
+      if (liveAssistant) {
+        const isAlreadyPinned = pinnedAgents.some(
+          (agent) => agent.id === liveAssistant.id
+        );
+        if (!isAlreadyPinned) {
+          togglePinnedAgent(liveAssistant, true).catch((err) => {
+            console.error("Failed to auto-pin agent:", err);
+          });
+        }
+      }
+
       let currChatSessionId: string;
-      const isNewSession = existingChatSessionId === null;
+      // Check both the prop and the store's currentSessionId to determine if this is a new session
+      // For pages like NRF where existingChatSessionId is always null, we need to check if
+      // we already have a session from a previous message
+      const isNewSession = existingChatSessionId === null && !currentSessionId;
 
       const searchParamBasedChatSessionName =
         searchParams?.get(SEARCH_PARAM_NAMES.TITLE) || null;
@@ -459,7 +480,9 @@ export function useChatController({
           projectId ? parseInt(projectId) : null
         );
       } else {
-        currChatSessionId = existingChatSessionId as string;
+        // Use the existing session ID from props or from the store
+        currChatSessionId =
+          existingChatSessionId || (currentSessionId as string);
       }
       frozenSessionId = currChatSessionId;
       // update the selected model for the chat session if one is specified so that
@@ -887,6 +910,9 @@ export function useChatController({
       // Keep tool preference-derived values fresh
       assistantPreferences,
       fetchProjects,
+      // For auto-pinning agents
+      pinnedAgents,
+      togglePinnedAgent,
     ]
   );
 

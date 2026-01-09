@@ -139,7 +139,7 @@ export default function Page() {
   });
 
   return (
-    <div className="container">
+    <>
       <AdminPageTitle icon={SvgOnyxOctagon} title="Assistants" />
 
       {isLoading && <ThreeDotsLoader />}
@@ -164,6 +164,6 @@ export default function Page() {
           refreshPersonas={refresh}
         />
       )}
-    </div>
+    </>
   );
 }

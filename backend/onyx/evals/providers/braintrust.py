@@ -122,11 +122,12 @@ class BraintrustEvalProvider(EvalProvider):
                 return multi_turn_task(eval_input)
             return task(eval_input)
 
+        project_name = configuration.braintrust_project or BRAINTRUST_PROJECT
+        experiment_name = configuration.experiment_name
+
         eval_data: Any = None
         if remote_dataset_name is not None:
-            eval_data = init_dataset(
-                project=BRAINTRUST_PROJECT, name=remote_dataset_name
-            )
+            eval_data = init_dataset(project=project_name, name=remote_dataset_name)
         else:
             if data:
                 eval_data = [
@@ -150,7 +151,8 @@ class BraintrustEvalProvider(EvalProvider):
         metadata = configuration.model_dump()
 
         Eval(  # type: ignore[misc]
-            name=BRAINTRUST_PROJECT,
+            name=project_name,
+            experiment_name=experiment_name,
             data=eval_data,
             task=dispatch_task,
             scores=[tool_assertion_scorer],

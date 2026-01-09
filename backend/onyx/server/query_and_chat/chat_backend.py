@@ -99,6 +99,7 @@ from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.server.usage_limits import check_usage_and_raise
 from onyx.server.usage_limits import is_usage_limits_enabled
 from onyx.server.utils import get_json_line
+from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
@@ -148,7 +149,7 @@ def _get_available_tokens_for_persona(
     )
 
 
-@router.get("/get-user-chat-sessions")
+@router.get("/get-user-chat-sessions", tags=PUBLIC_API_TAGS)
 def get_user_chat_sessions(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
@@ -245,7 +246,7 @@ def update_chat_session_model(
     db_session.commit()
 
 
-@router.get("/get-chat-session/{session_id}")
+@router.get("/get-chat-session/{session_id}", tags=PUBLIC_API_TAGS)
 def get_chat_session(
     session_id: UUID,
     is_shared: bool = False,
@@ -317,7 +318,7 @@ def get_chat_session(
     )
 
 
-@router.post("/create-chat-session")
+@router.post("/create-chat-session", tags=PUBLIC_API_TAGS)
 def create_new_chat_session(
     chat_session_creation_request: ChatSessionCreationRequest,
     user: User | None = Depends(current_chat_accessible_user),
@@ -409,7 +410,7 @@ def patch_chat_session(
     return None
 
 
-@router.delete("/delete-all-chat-sessions")
+@router.delete("/delete-all-chat-sessions", tags=PUBLIC_API_TAGS)
 def delete_all_chat_sessions(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
@@ -420,7 +421,7 @@ def delete_all_chat_sessions(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.delete("/delete-chat-session/{session_id}")
+@router.delete("/delete-chat-session/{session_id}", tags=PUBLIC_API_TAGS)
 def delete_chat_session_by_id(
     session_id: UUID,
     hard_delete: bool | None = None,
@@ -505,7 +506,7 @@ def handle_new_chat_message(
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
 
-@router.post("/send-chat-message", response_model=None)
+@router.post("/send-chat-message", response_model=None, tags=PUBLIC_API_TAGS)
 def handle_send_chat_message(
     chat_message_req: SendMessageRequest,
     request: Request,
@@ -759,7 +760,7 @@ class ChatSeedResponse(BaseModel):
     redirect_url: str
 
 
-@router.post("/seed-chat-session")
+@router.post("/seed-chat-session", tags=PUBLIC_API_TAGS)
 def seed_chat(
     chat_seed_request: ChatSeedRequest,
     # NOTE: This endpoint is designed for programmatic access (API keys, external services)
@@ -844,7 +845,7 @@ def seed_chat_from_slack(
     )
 
 
-@router.get("/file/{file_id:path}")
+@router.get("/file/{file_id:path}", tags=PUBLIC_API_TAGS)
 def fetch_chat_file(
     file_id: str,
     request: Request,
@@ -892,7 +893,7 @@ def fetch_chat_file(
     return StreamingResponse(file_io, media_type=media_type, headers=cache_headers)
 
 
-@router.get("/search")
+@router.get("/search", tags=PUBLIC_API_TAGS)
 async def search_chats(
     query: str | None = Query(None),
     page: int = Query(1),
@@ -972,7 +973,7 @@ async def search_chats(
     )
 
 
-@router.post("/stop-chat-session/{chat_session_id}")
+@router.post("/stop-chat-session/{chat_session_id}", tags=PUBLIC_API_TAGS)
 def stop_chat_session(
     chat_session_id: UUID,
     user: User | None = Depends(current_user),

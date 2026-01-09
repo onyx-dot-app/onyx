@@ -1,3 +1,5 @@
+"use client";
+
 import useSWR from "swr";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {

@@ -71,10 +71,10 @@ class TestOnyxWebCrawler:
         assert response.status_code == 200, response.text
         data = response.json()
 
-        # Should return a result but with empty content
-        assert len(data["results"]) == 1
-        result = data["results"][0]
-        assert result["content"] == ""
+        assert data["provider_type"] == WebContentProviderType.ONYX_WEB_CRAWLER.value
+
+        # The API filters out docs with no title/content, so unreachable domains return no results
+        assert data["results"] == []
 
     def test_handles_404_page(self, admin_user: DATestUser) -> None:
         """Test that the crawler handles 404 responses gracefully."""
@@ -86,8 +86,10 @@ class TestOnyxWebCrawler:
         assert response.status_code == 200, response.text
         data = response.json()
 
-        # Should return a result (possibly with empty content for 404)
-        assert len(data["results"]) == 1
+        assert data["provider_type"] == WebContentProviderType.ONYX_WEB_CRAWLER.value
+
+        # Non-200 responses are treated as non-content and filtered out
+        assert data["results"] == []
 
     def test_https_url_with_path(self, admin_user: DATestUser) -> None:
         """Test that the crawler handles HTTPS URLs with paths correctly."""
