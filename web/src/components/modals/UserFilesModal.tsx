@@ -14,7 +14,6 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
 import Modal from "@/refresh-components/Modal";
-import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import CounterSeparator from "@/refresh-components/CounterSeparator";
 import {
@@ -25,6 +24,7 @@ import {
   SvgTrash,
   SvgXCircle,
 } from "@opal/icons";
+import { Section } from "@/layouts/general-layouts";
 
 function getIcon(
   file: ProjectFile,
@@ -212,16 +212,12 @@ export default function UserFilesModal({
             </div>
           </Modal.Header>
 
-          <Modal.Body>
+          <Modal.Body padding={0.5} gap={0.5} alignItems="center">
             {/* File display section */}
             {filtered.length === 0 ? (
-              <div className="p-4 flex w-full h-full items-center justify-center">
-                <Text as="p" text03>
-                  No files found
-                </Text>
-              </div>
+              <Text text03>No files found</Text>
             ) : (
-              <ScrollIndicatorDiv className="p-2 gap-2" variant="shadow">
+              <>
                 {filtered.map((projectFle) => {
                   const isSelected = selectedIds.has(projectFle.id);
                   return (
@@ -265,14 +261,15 @@ export default function UserFilesModal({
                     text={recentFiles.length === 1 ? "File" : "Files"}
                   />
                 )}
-              </ScrollIndicatorDiv>
+              </>
             )}
           </Modal.Body>
 
           <Modal.Footer>
             {/* Left side: file count and controls */}
             {onPickRecent && (
-              <div className="flex items-center gap-2">
+              // <div className="flex items-center gap-2">
+              <Section flexDirection="row" justifyContent="start" gap={2}>
                 <Text as="p" text03>
                   {selectedCount} {selectedCount === 1 ? "file" : "files"}{" "}
                   selected
@@ -289,11 +286,11 @@ export default function UserFilesModal({
                   onClick={handleDeselectAll}
                   disabled={selectedCount === 0}
                 />
-              </div>
+              </Section>
             )}
 
             {/* Right side: Done button */}
-            <Button secondary onClick={() => toggle(false)} className="ml-auto">
+            <Button secondary onClick={() => toggle(false)}>
               Done
             </Button>
           </Modal.Footer>

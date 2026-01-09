@@ -4,6 +4,7 @@ import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import Modal from "@/refresh-components/Modal";
 import { useModalClose } from "../contexts/ModalContext";
+import { Section } from "@/layouts/general-layouts";
 
 export interface ConfirmationModalProps {
   icon: React.FunctionComponent<IconProps>;

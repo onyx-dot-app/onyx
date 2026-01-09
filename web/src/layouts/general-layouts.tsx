@@ -101,7 +101,7 @@ const Section = forwardRef<HTMLDivElement, SectionProps>(
       <div
         ref={ref}
         className={cn(
-          "flex w-full",
+          "flex",
           wrap && "flex-wrap",
           justifyClassMap[justifyContent],
           alignClassMap[alignItems],

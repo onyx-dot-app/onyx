@@ -9,7 +9,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgX } from "@opal/icons";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { WithoutStyles } from "@/types";
-import { Section } from "@/layouts/general-layouts";
+import { Section, SectionProps } from "@/layouts/general-layouts";
 
 /**
  * Modal Root Component
@@ -426,8 +426,7 @@ ModalHeader.displayName = "ModalHeader";
  * </Modal.Body>
  * ```
  */
-interface ModalBodyProps
-  extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
+interface ModalBodyProps extends WithoutStyles<SectionProps> {
   twoTone?: boolean;
 }
 const ModalBody = React.forwardRef<HTMLDivElement, ModalBodyProps>(
@@ -447,9 +446,8 @@ const ModalBody = React.forwardRef<HTMLDivElement, ModalBodyProps>(
           twoTone && "bg-background-tint-01",
           hasFixedHeight && "overflow-auto min-h-0"
         )}
-        {...props}
       >
-        <Section alignItems="start" padding={1}>
+        <Section padding={1} gap={1} alignItems="start" {...props}>
           {children}
         </Section>
       </div>
@@ -480,7 +478,7 @@ ModalBody.displayName = "ModalBody";
  */
 const ModalFooter = React.forwardRef<
   HTMLDivElement,
-  WithoutStyles<React.HTMLAttributes<HTMLDivElement>>
+  WithoutStyles<SectionProps>
 >(({ ...props }, ref) => {
   return (
     <Section
