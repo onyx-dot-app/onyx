@@ -239,7 +239,7 @@ export function setMessageAsLatest(
   }
 
   const newMessages = new Map(currentMessages);
-  const updatedParent = {
+  const updatedParent: Message = {
     ...parent,
     latestChildNodeId: nodeId,
   };

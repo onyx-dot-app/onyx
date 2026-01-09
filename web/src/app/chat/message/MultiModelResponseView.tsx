@@ -12,6 +12,7 @@ import AIMessage, {
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import { SvgCheck } from "@opal/icons";
+import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 
 export interface MultiModelResponse {
   nodeId: number;
@@ -47,33 +48,41 @@ export default function MultiModelResponseView({
   );
 
   return (
-    <div className="w-full flex flex-col gap-4">
-      {/* Header */}
-      <div className="flex items-center gap-2 px-2">
-        <Text as="p" secondaryBody text03>
-          Comparing {responses.length} models - click to select
-        </Text>
+    <div className="w-full flex gap-4 pb-5 md:pt-5">
+      {/* Single Onyx icon on the left */}
+      <div className="flex-shrink-0">
+        <AgentAvatar agent={chatState.assistant} size={24} />
       </div>
 
-      {/* Responses Grid - dynamic columns based on number of models */}
-      <div
-        className={cn(
-          "grid grid-cols-1 gap-4",
-          responses.length === 2 ? "md:grid-cols-2" : "md:grid-cols-3"
-        )}
-      >
-        {responses.map((response, index) => (
-          <MultiModelResponseCard
-            key={response.nodeId}
-            response={response}
-            chatState={chatState}
-            llmManager={llmManager}
-            parentMessage={parentMessage}
-            onSelect={() => handleSelectResponse(response.nodeId)}
-            onRegenerate={onRegenerate}
-            index={index}
-          />
-        ))}
+      {/* Content area */}
+      <div className="flex-1 flex flex-col gap-4">
+        {/* Header */}
+        <div className="flex items-center gap-2">
+          <Text as="p" secondaryBody text03>
+            Answering with {responses.length} models - click to select
+          </Text>
+        </div>
+
+        {/* Responses Grid - dynamic columns based on number of models */}
+        <div
+          className={cn(
+            "grid grid-cols-1 gap-4",
+            responses.length === 2 ? "md:grid-cols-2" : "md:grid-cols-3"
+          )}
+        >
+          {responses.map((response, index) => (
+            <MultiModelResponseCard
+              key={response.nodeId}
+              response={response}
+              chatState={chatState}
+              llmManager={llmManager}
+              parentMessage={parentMessage}
+              onSelect={() => handleSelectResponse(response.nodeId)}
+              onRegenerate={onRegenerate}
+              index={index}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -142,10 +151,7 @@ function MultiModelResponseCard({
       </div>
 
       {/* Response Content */}
-      <div
-        className="flex-1 overflow-auto p-2"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="flex-1 overflow-auto p-2">
         <AIMessage
           rawPackets={packets}
           chatState={chatState}
@@ -155,6 +161,7 @@ function MultiModelResponseCard({
           llmManager={llmManager}
           parentMessage={parentMessage}
           onRegenerate={onRegenerate}
+          hideAvatar
         />
       </div>
     </div>

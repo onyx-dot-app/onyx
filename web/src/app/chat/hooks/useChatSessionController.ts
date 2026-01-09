@@ -323,6 +323,10 @@ export function useChatSessionController({
 
   const onMessageSelection = useCallback(
     (nodeId: number) => {
+      console.log(
+        "[MultiModel] onMessageSelection called with nodeId:",
+        nodeId
+      );
       updateCurrentSelectedNodeForDocDisplay(nodeId);
       const currentMessageTree = useChatSessionStore
         .getState()
@@ -330,14 +334,34 @@ export function useChatSessionController({
         ?.messageTree;
 
       if (currentMessageTree) {
+        const message = currentMessageTree.get(nodeId);
+        const parent = message?.parentNodeId
+          ? currentMessageTree.get(message.parentNodeId)
+          : null;
+        console.log(
+          "[MultiModel] Message found:",
+          !!message,
+          "Parent found:",
+          !!parent
+        );
+        console.log(
+          "[MultiModel] Parent childrenNodeIds:",
+          parent?.childrenNodeIds
+        );
+        console.log(
+          "[MultiModel] Parent latestChildNodeId before:",
+          parent?.latestChildNodeId
+        );
+
         const newMessageTree = setMessageAsLatest(currentMessageTree, nodeId);
+        const treeChanged = newMessageTree !== currentMessageTree;
+        console.log("[MultiModel] Tree changed:", treeChanged);
+
         const currentSessionId =
           useChatSessionStore.getState().currentSessionId;
         if (currentSessionId) {
           updateSessionMessageTree(currentSessionId, newMessageTree);
         }
-
-        const message = currentMessageTree.get(nodeId);
 
         if (message?.messageId) {
           // Makes actual API call to set message as latest in the DB so we can
@@ -346,6 +370,8 @@ export function useChatSessionController({
         } else {
           console.error("Message has no messageId", nodeId);
         }
+      } else {
+        console.log("[MultiModel] No currentMessageTree found!");
       }
     },
     [updateCurrentSelectedNodeForDocDisplay, updateSessionMessageTree]

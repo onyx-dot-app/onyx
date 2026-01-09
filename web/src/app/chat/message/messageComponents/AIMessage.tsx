@@ -82,6 +82,8 @@ export interface AIMessageProps {
   onRegenerate?: RegenerationFactory;
   // Parent message needed to construct regeneration request
   parentMessage?: Message | null;
+  // Hide the avatar icon (used in multi-model view where a single icon is shown outside)
+  hideAvatar?: boolean;
 }
 
 // TODO: Consider more robust comparisons:
@@ -104,7 +106,9 @@ function arePropsEqual(prev: AIMessageProps, next: AIMessageProps): boolean {
     prev.otherMessagesCanSwitchTo === next.otherMessagesCanSwitchTo &&
     prev.onRegenerate === next.onRegenerate &&
     prev.parentMessage?.messageId === next.parentMessage?.messageId &&
-    prev.llmManager?.isLoadingProviders === next.llmManager?.isLoadingProviders
+    prev.llmManager?.isLoadingProviders ===
+      next.llmManager?.isLoadingProviders &&
+    prev.hideAvatar === next.hideAvatar
     // Skip: chatState.regenerate, chatState.setPresentingDocument,
     //       most of llmManager, onMessageSelection (function/object props)
   );
@@ -121,6 +125,7 @@ const AIMessage = React.memo(function AIMessage({
   onMessageSelection,
   onRegenerate,
   parentMessage,
+  hideAvatar = false,
 }: AIMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
   const finalAnswerRef = useRef<HTMLDivElement>(null);
@@ -530,7 +535,7 @@ const AIMessage = React.memo(function AIMessage({
         data-testid={displayComplete ? "onyx-ai-message" : undefined}
         className="flex items-start pb-5 md:pt-5"
       >
-        <AgentAvatar agent={chatState.assistant} size={24} />
+        {!hideAvatar && <AgentAvatar agent={chatState.assistant} size={24} />}
         {/* w-full ensures the MultiToolRenderer non-expanded state takes up the full width */}
         <div className="max-w-message-max break-words pl-4 w-full">
           <div

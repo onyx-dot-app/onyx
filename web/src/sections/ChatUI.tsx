@@ -21,7 +21,6 @@ import MultiModelResponseView, {
   MultiModelResponse,
 } from "@/app/chat/message/MultiModelResponseView";
 import { useMultiModelEnabled } from "@/app/chat/hooks/useMultiModelEnabled";
-import { patchMessageToBeLatest } from "@/app/chat/services/lib";
 import { ProjectFile } from "@/app/chat/projects/projectsService";
 import { useScrollonStream } from "@/app/chat/services/lib";
 import useScreenSize from "@/hooks/useScreenSize";
@@ -151,17 +150,15 @@ const ChatUI = React.memo(
 
       // Handle multi-model response highlight change
       const handleMultiModelHighlightChange = useCallback(
-        async (nodeId: number) => {
-          // Find the message to get its messageId
-          const message = messageTree?.get(nodeId);
-          if (message?.messageId) {
-            // Update the backend to set this message as the latest
-            await patchMessageToBeLatest(message.messageId);
-          }
-          // Also trigger local message selection
+        (nodeId: number) => {
+          console.log(
+            "[MultiModel] handleMultiModelHighlightChange called with nodeId:",
+            nodeId
+          );
+          // Update local state immediately for responsive UI
           onMessageSelection(nodeId);
         },
-        [messageTree, onMessageSelection]
+        [onMessageSelection]
       );
 
       // Helper to check if a user message has multi-model responses
