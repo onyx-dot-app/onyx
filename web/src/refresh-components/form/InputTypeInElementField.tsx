@@ -7,6 +7,7 @@ import InputTypeIn, {
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgMinusCircle } from "@opal/icons";
 import { useOnChangeEvent, useOnBlurEvent } from "@/hooks/formHooks";
+import { Section } from "@/layouts/general-layouts";
 
 export interface InputTypeInElementFieldProps
   extends Omit<InputTypeInProps, "value" | "onClear"> {
@@ -29,7 +30,7 @@ export default function InputTypeInElementField({
   const isEmpty = !field.value || field.value.trim() === "";
 
   return (
-    <div className="flex flex-row items-center gap-1">
+    <Section flexDirection="row" gap={0.25}>
       {/* Input */}
       <InputTypeIn
         {...inputProps}
@@ -48,6 +49,6 @@ export default function InputTypeInElementField({
         onClick={onRemove}
         tooltip="Remove"
       />
-    </div>
+    </Section>
   );
 }

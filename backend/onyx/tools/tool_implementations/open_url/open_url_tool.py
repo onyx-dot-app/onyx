@@ -34,6 +34,9 @@ from onyx.tools.tool_implementations.open_url.url_normalization import (
     _default_url_normalizer,
 )
 from onyx.tools.tool_implementations.open_url.url_normalization import normalize_url
+from onyx.tools.tool_implementations.open_url.utils import (
+    filter_web_contents_with_no_title_or_content,
+)
 from onyx.tools.tool_implementations.web_search.providers import (
     get_default_content_provider,
 )
@@ -766,15 +769,23 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         if not urls:
             return [], []
 
-        web_contents = self._provider.contents(urls)
+        raw_web_contents = self._provider.contents(urls)
+        # Treat "no title and no content" as a failure for that URL, but don't
+        # include the empty entry in downstream prompting/sections.
+        failed_urls: list[str] = [
+            content.link
+            for content in raw_web_contents
+            if not content.title.strip() and not content.full_content.strip()
+        ]
+        web_contents = filter_web_contents_with_no_title_or_content(raw_web_contents)
         sections: list[InferenceSection] = []
-        failed_urls: list[str] = []
 
         for content in web_contents:
             # Check if content is insufficient (e.g., "Loading..." or too short)
             text_stripped = content.full_content.strip()
             is_insufficient = (
                 not text_stripped
+                # TODO: Likely a behavior of our scraper, understand why this special pattern occurs
                 or text_stripped.lower() == "loading..."
                 or len(text_stripped) < 50
             )
@@ -786,6 +797,9 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             ):
                 sections.append(inference_section_from_internet_page_scrape(content))
             else:
+                # TODO: Slight improvement - if failed URL reasons are passed back to the LLM
+                # for example, if it tries to crawl Reddit and fails, it should know (probably) that this error would
+                # happen again if it tried to crawl Reddit again.
                 failed_urls.append(content.link or "")
 
         return sections, failed_urls

@@ -12,6 +12,7 @@ from celery import Celery
 from celery import shared_task
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
+from fastapi import HTTPException
 from pydantic import BaseModel
 from redis import Redis
 from redis.lock import Lock as RedisLock
@@ -40,9 +41,11 @@ from onyx.background.indexing.checkpointing_utils import (
 )
 from onyx.background.indexing.index_attempt_utils import cleanup_index_attempts
 from onyx.background.indexing.index_attempt_utils import get_old_index_attempts
+from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
 from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
+from onyx.configs.constants import AuthType
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_INDEXING_LOCK_TIMEOUT
 from onyx.configs.constants import MilestoneRecordType
@@ -59,11 +62,9 @@ from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector_credential_pair import (
     fetch_indexable_standard_connector_credential_pair_ids,
 )
-from onyx.db.connector_credential_pair import (
-    fetch_indexable_user_file_connector_credential_pair_ids,
-)
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import set_cc_pair_repeated_error_state
+from onyx.db.connector_credential_pair import update_connector_credential_pair_from_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import ConnectorCredentialPairStatus
@@ -86,7 +87,6 @@ from onyx.db.models import SearchSettings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
-from onyx.db.usage import UsageLimitExceededError
 from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
@@ -540,12 +540,7 @@ def check_indexing_completion(
             ]:
                 # User file connectors must be paused on success
                 # NOTE: _run_indexing doesn't update connectors if the index attempt is the future embedding model
-                # TODO: figure out why this doesn't pause connectors during swap
-                cc_pair.status = (
-                    ConnectorCredentialPairStatus.PAUSED
-                    if cc_pair.is_user_file
-                    else ConnectorCredentialPairStatus.ACTIVE
-                )
+                cc_pair.status = ConnectorCredentialPairStatus.ACTIVE
                 db_session.commit()
 
             mt_cloud_telemetry(
@@ -811,13 +806,8 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                     db_session, active_cc_pairs_only=True
                 )
             )
-            user_file_cc_pair_ids = (
-                fetch_indexable_user_file_connector_credential_pair_ids(
-                    db_session, search_settings_id=current_search_settings.id
-                )
-            )
 
-            primary_cc_pair_ids = standard_cc_pair_ids + user_file_cc_pair_ids
+            primary_cc_pair_ids = standard_cc_pair_ids
 
             # Get CC pairs for secondary search settings
             secondary_cc_pair_ids: list[int] = []
@@ -833,30 +823,47 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         db_session, active_cc_pairs_only=not include_paused
                     )
                 )
-                user_file_cc_pair_ids = (
-                    fetch_indexable_user_file_connector_credential_pair_ids(
-                        db_session, search_settings_id=secondary_search_settings.id
-                    )
-                    or []
-                )
 
-                secondary_cc_pair_ids = standard_cc_pair_ids + user_file_cc_pair_ids
+                secondary_cc_pair_ids = standard_cc_pair_ids
 
         # Flag CC pairs in repeated error state for primary/current search settings
         with get_session_with_current_tenant() as db_session:
             for cc_pair_id in primary_cc_pair_ids:
                 lock_beat.reacquire()
 
-                if is_in_repeated_error_state(
-                    cc_pair_id=cc_pair_id,
-                    search_settings_id=current_search_settings.id,
+                cc_pair = get_connector_credential_pair_from_id(
                     db_session=db_session,
+                    cc_pair_id=cc_pair_id,
+                )
+
+                # if already in repeated error state, don't do anything
+                # this is important so that we don't keep pausing the connector
+                # immediately upon a user un-pausing it to manually re-trigger and
+                # recover.
+                if (
+                    cc_pair
+                    and not cc_pair.in_repeated_error_state
+                    and is_in_repeated_error_state(
+                        cc_pair=cc_pair,
+                        search_settings_id=current_search_settings.id,
+                        db_session=db_session,
+                    )
                 ):
                     set_cc_pair_repeated_error_state(
                         db_session=db_session,
                         cc_pair_id=cc_pair_id,
                         in_repeated_error_state=True,
                     )
+                    # When entering repeated error state, also pause the connector
+                    # to prevent continued indexing retry attempts burning through embedding credits.
+                    # NOTE: only for Cloud, since most self-hosted users use self-hosted embedding
+                    # models. Also, they are more prone to repeated failures -> eventual success.
+                    if AUTH_TYPE == AuthType.CLOUD:
+                        update_connector_credential_pair_from_id(
+                            db_session=db_session,
+                            cc_pair_id=cc_pair.id,
+                            status=ConnectorCredentialPairStatus.PAUSED,
+                        )
 
         # NOTE: At this point, we haven't done heavy checks on whether or not the CC pairs should actually be indexed
         # Heavy check, should_index(), is called in _kickoff_indexing_tasks
@@ -1289,19 +1296,14 @@ def _check_chunk_usage_limit(tenant_id: str) -> None:
     if not USAGE_LIMITS_ENABLED:
         return
 
-    from onyx.db.usage import check_usage_limit
     from onyx.db.usage import UsageType
-    from onyx.server.usage_limits import get_limit_for_usage_type
-    from onyx.server.usage_limits import is_tenant_on_trial
-
-    is_trial = is_tenant_on_trial(tenant_id)
-    limit = get_limit_for_usage_type(UsageType.CHUNKS_INDEXED, is_trial)
+    from onyx.server.usage_limits import check_usage_and_raise
 
     with get_session_with_current_tenant() as db_session:
-        check_usage_limit(
+        check_usage_and_raise(
             db_session=db_session,
             usage_type=UsageType.CHUNKS_INDEXED,
-            limit=limit,
+            tenant_id=tenant_id,
             pending_amount=0,  # Just check current usage
         )
 
@@ -1321,7 +1323,7 @@ def _docprocessing_task(
     if USAGE_LIMITS_ENABLED:
         try:
             _check_chunk_usage_limit(tenant_id)
-        except UsageLimitExceededError as e:
+        except HTTPException as e:
             # Log the error and fail the indexing attempt
             task_logger.error(
                 f"Chunk indexing usage limit exceeded for tenant {tenant_id}: {e}"

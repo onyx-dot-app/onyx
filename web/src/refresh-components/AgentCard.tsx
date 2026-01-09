@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useCallback } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Button from "@/refresh-components/buttons/Button";
@@ -59,6 +59,14 @@ export default function AgentCard({ agent }: AgentCardProps) {
   const isOwnedByUser = checkUserOwnsAssistant(user, agent);
   const [hovered, setHovered] = React.useState(false);
 
+  // Start chat and auto-pin unpinned agents to the sidebar
+  const handleStartChat = useCallback(() => {
+    if (!pinned) {
+      togglePinnedAgent(agent, true);
+    }
+    route({ agentId: agent.id });
+  }, [pinned, togglePinnedAgent, agent, route]);
+
   return (
     <Card
       className="group/AgentCard"
@@ -67,7 +75,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
     >
       <div
         className="flex flex-col w-full text-left cursor-pointer"
-        onClick={() => route({ agentId: agent.id })}
+        onClick={handleStartChat}
       >
         {/* Main Body */}
         <div className="flex flex-col items-center gap-1 p-1">
@@ -142,7 +150,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
             <Button
               tertiary
               rightIcon={SvgBubbleText}
-              onClick={noProp(() => route({ agentId: agent.id }))}
+              onClick={noProp(handleStartChat)}
             >
               Start Chat
             </Button>

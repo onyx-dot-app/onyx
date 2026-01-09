@@ -17,6 +17,47 @@ import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 // Tool-related test selectors now imported from shared utils
 
 test.describe("Default Assistant Tests", () => {
+  let imageGenConfigId: string | null = null;
+
+  test.beforeAll(async ({ browser }) => {
+    // Create image generation config as admin so ImageGenerationTool becomes available
+    // This is needed because the Create Agent form enables Image Generation by default
+    const adminContext = await browser.newContext({
+      storageState: "admin_auth.json",
+    });
+    const adminPage = await adminContext.newPage();
+    await adminPage.goto("http://localhost:3000/chat");
+    await adminPage.waitForLoadState("networkidle");
+
+    const apiClient = new OnyxApiClient(adminPage);
+    try {
+      imageGenConfigId = await apiClient.createImageGenerationConfig(
+        `test-default-assistant-${Date.now()}`
+      );
+    } catch (error) {
+      console.warn(`Failed to create image generation config: ${error}`);
+    }
+
+    await adminContext.close();
+  });
+
+  test.afterAll(async ({ browser }) => {
+    // Cleanup the image generation config
+    if (imageGenConfigId) {
+      const adminContext = await browser.newContext({
+        storageState: "admin_auth.json",
+      });
+      const adminPage = await adminContext.newPage();
+      await adminPage.goto("http://localhost:3000/chat");
+      await adminPage.waitForLoadState("networkidle");
+
+      const apiClient = new OnyxApiClient(adminPage);
+      await apiClient.deleteImageGenerationConfig(imageGenConfigId);
+
+      await adminContext.close();
+    }
+  });
+
   test.beforeEach(async ({ page }) => {
     // Clear cookies and log in as a random user
     await page.context().clearCookies();

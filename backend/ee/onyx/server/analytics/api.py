@@ -21,8 +21,9 @@ from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
+from onyx.server.utils import PUBLIC_API_TAGS
 
-router = APIRouter(prefix="/analytics")
+router = APIRouter(prefix="/analytics", tags=PUBLIC_API_TAGS)
 
 
 _DEFAULT_LOOKBACK_DAYS = 30

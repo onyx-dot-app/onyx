@@ -36,15 +36,36 @@
  * ```
  */
 
-import { WithoutStyles } from "@/types";
+import { cn } from "@/lib/utils";
+import * as GeneralLayouts from "@/layouts/general-layouts";
 
-export type CardProps = WithoutStyles<React.HTMLAttributes<HTMLDivElement>>;
+const classNames = {
+  main: ["bg-background-tint-00 border"],
+  translucent: ["bg-transparent border border-dashed"],
+  disabled: [
+    "cursor-not-allowed pointer-events-none bg-background-tint-00 border opacity-50",
+  ],
+} as const;
 
-export default function Card(props: CardProps) {
+export interface CardProps extends GeneralLayouts.SectionProps {
+  // card variants
+  translucent?: boolean;
+  disabled?: boolean;
+}
+
+export default function Card({
+  translucent,
+  disabled,
+
+  padding = 1,
+
+  ...props
+}: CardProps) {
+  const variant = translucent ? "translucent" : disabled ? "disabled" : "main";
+
   return (
-    <div
-      className="bg-background-tint-00 p-4 flex flex-col gap-4 border rounded-16"
-      {...props}
-    />
+    <div className={cn("rounded-16 w-full h-full", classNames[variant])}>
+      <GeneralLayouts.Section alignItems="start" padding={padding} {...props} />
+    </div>
   );
 }

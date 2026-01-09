@@ -79,7 +79,7 @@ const Main = () => {
 
 const Page = () => {
   return (
-    <div className="container">
+    <>
       <AdminPageTitle
         icon={<SourceIcon iconSize={36} sourceType={ValidSources.Slack} />}
         title="Slack Bots"
@@ -87,7 +87,7 @@ const Page = () => {
       <InstantSSRAutoRefresh />
 
       <Main />
-    </div>
+    </>
   );
 };
 

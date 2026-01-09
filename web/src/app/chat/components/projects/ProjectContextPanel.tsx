@@ -271,7 +271,7 @@ export default function ProjectContextPanel({
               </div>
 
               {/* Desktop / larger screens: show previews with optional View All */}
-              <div className="hidden sm:flex gap-1 relative">
+              <div className="hidden sm:flex gap-1 relative items-center">
                 {(() => {
                   return allCurrentProjectFiles.slice(0, 4).map((f) => (
                     <div key={f.id}>
@@ -283,6 +283,7 @@ export default function ProjectContextPanel({
                         }}
                         onFileClick={handleOnView}
                         compactImages={shouldCompactImages}
+                        className="w-40"
                       />
                     </div>
                   ));

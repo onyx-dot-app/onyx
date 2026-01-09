@@ -13,6 +13,7 @@ from onyx.tools.tool_implementations.open_url.models import (
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import ssrf_safe_get
 from onyx.utils.url import SSRFException
+from onyx.utils.web_content import decode_html_bytes
 from onyx.utils.web_content import extract_pdf_text
 from onyx.utils.web_content import is_pdf_resource
 from onyx.utils.web_content import title_from_pdf_metadata
@@ -106,7 +107,12 @@ class OnyxWebCrawler(WebContentProvider):
             )
 
         try:
-            parsed: ParsedHTML = web_html_cleanup(response.text)
+            decoded_html = decode_html_bytes(
+                response.content,
+                content_type=content_type,
+                fallback_encoding=response.apparent_encoding or response.encoding,
+            )
+            parsed: ParsedHTML = web_html_cleanup(decoded_html)
             text_content = parsed.cleaned_text or ""
             title = parsed.title or ""
         except Exception as exc:
